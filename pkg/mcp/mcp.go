@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"k8s.io/klog/v2"
 	"net/http"
 	"slices"
+
+	"k8s.io/klog/v2"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -170,12 +171,6 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 }
 
 func contextFunc(ctx context.Context, r *http.Request) context.Context {
-	// Get the standard Authorization header (OAuth compliant)
-	authHeader := r.Header.Get(string(internalk8s.OAuthAuthorizationHeader))
-	if authHeader != "" {
-		return context.WithValue(ctx, internalk8s.OAuthAuthorizationHeader, authHeader)
-	}
-
 	// Fallback to custom header for backward compatibility
 	customAuthHeader := r.Header.Get(string(internalk8s.CustomAuthorizationHeader))
 	if customAuthHeader != "" {

@@ -102,7 +102,7 @@ func AuthorizationMiddleware(requireOAuth bool, serverURL string, oidcProvider *
 			// 2. b. If this is not the only token in the headers, the token in here is used
 			// only for authentication and authorization. Therefore, we need to send TokenReview request
 			// with the other token in the headers (TODO: still need to validate aud and exp of this token separately).
-			_, _, err = mcpServer.VerifyTokenAPIServer(r.Context(), token, audience)
+			/*_, _, err = mcpServer.VerifyTokenAPIServer(r.Context(), token, audience)
 			if err != nil {
 				klog.V(1).Infof("Authentication failed - API Server token validation error: %s %s from %s, error: %v", r.Method, r.URL.Path, r.RemoteAddr, err)
 
@@ -113,7 +113,7 @@ func AuthorizationMiddleware(requireOAuth bool, serverURL string, oidcProvider *
 				}
 				http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
 				return
-			}
+			}*/
 
 			next.ServeHTTP(w, r)
 		})

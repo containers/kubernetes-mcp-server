@@ -2,7 +2,6 @@ package kubernetes
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -146,9 +145,6 @@ func (m *Manager) ToRESTMapper() (meta.RESTMapper, error) {
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	authorization, ok := ctx.Value(OAuthAuthorizationHeader).(string)
 	if !ok || !strings.HasPrefix(authorization, "Bearer ") {
-		if m.staticConfig.RequireOAuth {
-			return nil, errors.New("oauth token required")
-		}
 		return &Kubernetes{manager: m}, nil
 	}
 	klog.V(5).Infof("%s header found (Bearer), using provided bearer token", OAuthAuthorizationHeader)
@@ -172,10 +168,6 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	}
 	clientCmdApiConfig, err := m.clientCmdConfig.RawConfig()
 	if err != nil {
-		if m.staticConfig.RequireOAuth {
-			klog.Errorf("failed to get kubeconfig: %v", err)
-			return nil, errors.New("failed to get kubeconfig")
-		}
 		return &Kubernetes{manager: m}, nil
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
@@ -186,10 +178,6 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	}}
 	derived.manager.accessControlClientSet, err = NewAccessControlClientset(derived.manager.cfg, derived.manager.staticConfig)
 	if err != nil {
-		if m.staticConfig.RequireOAuth {
-			klog.Errorf("failed to get kubeconfig: %v", err)
-			return nil, errors.New("failed to get kubeconfig")
-		}
 		return &Kubernetes{manager: m}, nil
 	}
 	derived.manager.discoveryClient = memory.NewMemCacheClient(derived.manager.accessControlClientSet.DiscoveryClient())
@@ -199,10 +187,6 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	)
 	derived.manager.dynamicClient, err = dynamic.NewForConfig(derived.manager.cfg)
 	if err != nil {
-		if m.staticConfig.RequireOAuth {
-			klog.Errorf("failed to initialize dynamic client: %v", err)
-			return nil, errors.New("failed to initialize dynamic client")
-		}
 		return &Kubernetes{manager: m}, nil
 	}
 	return derived, nil
