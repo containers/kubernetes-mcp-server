@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -334,7 +335,28 @@ func TestWellKnownReverseProxy(t *testing.T) {
 			})
 		}
 	})
-	// With Authorization URL configured
+	// With Authorization URL configured but invalid payload
+	invalidPayloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`NOT A JSON PAYLOAD`))
+	}))
+	t.Cleanup(invalidPayloadServer.Close)
+	invalidPayloadConfig := &config.StaticConfig{AuthorizationURL: invalidPayloadServer.URL, RequireOAuth: true, ValidateToken: true}
+	testCaseWithContext(t, &httpContext{StaticConfig: invalidPayloadConfig}, func(ctx *httpContext) {
+		for _, path := range cases {
+			resp, err := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			t.Run("Protected resource '"+path+"' with invalid Authorization URL payload returns 500 - Internal Server Error", func(t *testing.T) {
+				if err != nil {
+					t.Fatalf("Failed to get %s endpoint: %v", path, err)
+				}
+				if resp.StatusCode != http.StatusInternalServerError {
+					t.Errorf("Expected HTTP 500 Internal Server Error, got %d", resp.StatusCode)
+				}
+			})
+		}
+	})
+	// With Authorization URL configured and valid payload
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.EscapedPath(), "/.well-known/") {
 			http.NotFound(w, r)
@@ -344,7 +366,8 @@ func TestWellKnownReverseProxy(t *testing.T) {
 		_, _ = w.Write([]byte(`{"issuer": "https://example.com","scopes_supported":["mcp-server"]}`))
 	}))
 	t.Cleanup(testServer.Close)
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{AuthorizationURL: testServer.URL, RequireOAuth: true, ValidateToken: true}}, func(ctx *httpContext) {
+	staticConfig := &config.StaticConfig{AuthorizationURL: testServer.URL, RequireOAuth: true, ValidateToken: true}
+	testCaseWithContext(t, &httpContext{StaticConfig: staticConfig}, func(ctx *httpContext) {
 		for _, path := range cases {
 			resp, err := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
 			t.Cleanup(func() { _ = resp.Body.Close() })
@@ -359,6 +382,87 @@ func TestWellKnownReverseProxy(t *testing.T) {
 			t.Run(path+" returns application/json content type", func(t *testing.T) {
 				if resp.Header.Get("Content-Type") != "application/json" {
 					t.Errorf("Expected Content-Type application/json, got %s", resp.Header.Get("Content-Type"))
+				}
+			})
+		}
+	})
+}
+
+func TestWellKnownOverrides(t *testing.T) {
+	cases := []string{
+		".well-known/oauth-authorization-server",
+		".well-known/oauth-protected-resource",
+		".well-known/openid-configuration",
+	}
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.EscapedPath(), "/.well-known/") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`
+			{
+				"issuer": "https://localhost",
+				"registration_endpoint": "https://localhost/clients-registrations/openid-connect",
+				"require_request_uri_registration": true,
+				"scopes_supported":["scope-1", "scope-2"]
+			}`))
+	}))
+	t.Cleanup(testServer.Close)
+	baseConfig := config.StaticConfig{AuthorizationURL: testServer.URL, RequireOAuth: true, ValidateToken: true}
+	// With Dynamic Client Registration disabled
+	disableDynamicRegistrationConfig := baseConfig
+	disableDynamicRegistrationConfig.DisableDynamicClientRegistration = true
+	testCaseWithContext(t, &httpContext{StaticConfig: &disableDynamicRegistrationConfig}, func(ctx *httpContext) {
+		for _, path := range cases {
+			resp, _ := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("Failed to read response body: %v", err)
+			}
+			t.Run("DisableDynamicClientRegistration removes registration_endpoint field", func(t *testing.T) {
+				if strings.Contains(string(body), "registration_endpoint") {
+					t.Error("Expected registration_endpoint to be removed, but it was found in the response")
+				}
+			})
+			t.Run("DisableDynamicClientRegistration sets require_request_uri_registration = false", func(t *testing.T) {
+				if !strings.Contains(string(body), `"require_request_uri_registration":false`) {
+					t.Error("Expected require_request_uri_registration to be false, but it was not found in the response")
+				}
+			})
+			t.Run("DisableDynamicClientRegistration includes/preserves scopes_supported", func(t *testing.T) {
+				if !strings.Contains(string(body), `"scopes_supported":["scope-1","scope-2"]`) {
+					t.Error("Expected scopes_supported to be present, but it was not found in the response")
+				}
+			})
+		}
+	})
+	// With overrides for OAuth scopes (client/frontend)
+	oAuthScopesConfig := baseConfig
+	oAuthScopesConfig.OAuthScopes = []string{"openid", "mcp-server"}
+	testCaseWithContext(t, &httpContext{StaticConfig: &oAuthScopesConfig}, func(ctx *httpContext) {
+		for _, path := range cases {
+			resp, _ := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("Failed to read response body: %v", err)
+			}
+			t.Run("OAuthScopes overrides scopes_supported", func(t *testing.T) {
+				if !strings.Contains(string(body), `"scopes_supported":["openid","mcp-server"]`) {
+					t.Errorf("Expected scopes_supported to be overridden, but original was preserved, response: %s", string(body))
+				}
+			})
+			t.Run("OAuthScopes preserves other fields", func(t *testing.T) {
+				if !strings.Contains(string(body), `"issuer":"https://localhost"`) {
+					t.Errorf("Expected issuer to be preserved, but got: %s", string(body))
+				}
+				if !strings.Contains(string(body), `"registration_endpoint":"https://localhost`) {
+					t.Errorf("Expected registration_endpoint to be preserved, but got: %s", string(body))
+				}
+				if !strings.Contains(string(body), `"require_request_uri_registration":true`) {
+					t.Error("Expected require_request_uri_registration to be true, but it was not found in the response")
 				}
 			})
 		}

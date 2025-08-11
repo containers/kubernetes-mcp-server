@@ -111,6 +111,7 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 			}
 			// Token exchange with OIDC provider
 			sts := NewFromConfig(staticConfig, oidcProvider)
+			// TODO: Maybe the token had already been exchanged, if it has the right audience and scopes, we can skip this step.
 			if err == nil && sts.IsEnabled() {
 				var exchangedToken *oauth2.Token
 				// If the token is valid, we can exchange it for a new token with the specified audience and scopes.

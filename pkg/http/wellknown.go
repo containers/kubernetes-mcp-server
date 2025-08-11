@@ -1,7 +1,8 @@
 package http
 
 import (
-	"io"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -21,7 +22,9 @@ var WellKnownEndpoints = []string{
 }
 
 type WellKnown struct {
-	authorizationUrl string
+	authorizationUrl                 string
+	scopesSupported                  []string
+	disableDynamicClientRegistration bool
 }
 
 var _ http.Handler = &WellKnown{}
@@ -31,7 +34,11 @@ func WellKnownHandler(staticConfig *config.StaticConfig) http.Handler {
 	if authorizationUrl != "" && strings.HasSuffix("authorizationUrl", "/") {
 		authorizationUrl = strings.TrimSuffix(authorizationUrl, "/")
 	}
-	return &WellKnown{authorizationUrl}
+	return &WellKnown{
+		authorizationUrl:                 authorizationUrl,
+		disableDynamicClientRegistration: staticConfig.DisableDynamicClientRegistration,
+		scopesSupported:                  staticConfig.OAuthScopes,
+	}
 }
 
 func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -50,9 +57,22 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
+	var resourceMetadata map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&resourceMetadata)
 	if err != nil {
 		http.Error(writer, "Failed to read response body: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if w.disableDynamicClientRegistration {
+		delete(resourceMetadata, "registration_endpoint")
+		resourceMetadata["require_request_uri_registration"] = false
+	}
+	if len(w.scopesSupported) > 0 {
+		resourceMetadata["scopes_supported"] = w.scopesSupported
+	}
+	body, err := json.Marshal(resourceMetadata)
+	if err != nil {
+		http.Error(writer, "Failed to marshal response body: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	for key, values := range resp.Header {
@@ -60,6 +80,7 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 			writer.Header().Add(key, value)
 		}
 	}
+	writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
 	writer.WriteHeader(resp.StatusCode)
 	_, _ = writer.Write(body)
 }

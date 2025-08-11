@@ -33,6 +33,11 @@ type StaticConfig struct {
 	// AuthorizationURL is the URL of the OIDC authorization server.
 	// It is used for token validation and for STS token exchange.
 	AuthorizationURL string `toml:"authorization_url,omitempty"`
+	// DisableDynamicClientRegistration indicates whether dynamic client registration is disabled.
+	// If true, the .well-known endpoints will not expose the registration endpoint.
+	DisableDynamicClientRegistration bool `toml:"disable_dynamic_client_registration,omitempty"`
+	// OAuthScopes are the supported **client** scopes requested during the **client/frontend** OAuth flow.
+	OAuthScopes []string `toml:"oauth_scopes,omitempty"`
 	// StsClientId is the OAuth client ID used for backend token exchange
 	StsClientId string `toml:"sts_client_id,omitempty"`
 	// StsClientSecret is the OAuth client secret used for backend token exchange
