@@ -3,17 +3,18 @@ package mcp
 import (
 	"context"
 	"encoding/base64"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"path/filepath"
-	"runtime"
 	"sigs.k8s.io/yaml"
-	"strings"
-	"testing"
 )
 
 func TestHelmInstall(t *testing.T) {
@@ -249,6 +250,132 @@ func TestHelmUninstallDenied(t *testing.T) {
 		t.Run("helm_uninstall has error", func(t *testing.T) {
 			if !helmUninstall.IsError {
 				t.Fatalf("call tool should fail")
+			}
+		})
+	})
+}
+
+func TestHelmValues(t *testing.T) {
+	testCase(t, func(c *mcpContext) {
+		c.withEnvTest()
+		_, file, _, _ := runtime.Caller(0)
+		chartPath := filepath.Join(filepath.Dir(file), "testdata", "helm-chart-with-values")
+
+		t.Run("helm_values with local chart returns values", func(t *testing.T) {
+			toolResult, err := c.callTool("helm_values", map[string]interface{}{
+				"chart": chartPath,
+			})
+			if err != nil {
+				t.Fatalf("call tool failed %v", err)
+			}
+			if toolResult.IsError {
+				t.Fatalf("call tool failed: %v", toolResult.Content[0].(mcp.TextContent).Text)
+			}
+
+			// Parse the returned YAML
+			var values map[string]interface{}
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &values)
+			if err != nil {
+				t.Fatalf("invalid tool result content %v", err)
+			}
+
+			// Verify some expected values
+			if values["replicaCount"] != float64(1) {
+				t.Fatalf("expected replicaCount to be 1, got %v", values["replicaCount"])
+			}
+
+			if imageMap, ok := values["image"].(map[string]interface{}); ok {
+				if imageMap["repository"] != "nginx" {
+					t.Fatalf("expected image.repository to be nginx, got %v", imageMap["repository"])
+				}
+				if imageMap["tag"] != "latest" {
+					t.Fatalf("expected image.tag to be latest, got %v", imageMap["tag"])
+				}
+			} else {
+				t.Fatalf("expected image to be a map, got %T", values["image"])
+			}
+
+			if customConfig, ok := values["customConfig"].(map[string]interface{}); ok {
+				if customConfig["debug"] != false {
+					t.Fatalf("expected customConfig.debug to be false, got %v", customConfig["debug"])
+				}
+				if customConfig["logLevel"] != "info" {
+					t.Fatalf("expected customConfig.logLevel to be info, got %v", customConfig["logLevel"])
+				}
+			} else {
+				t.Fatalf("expected customConfig to be a map, got %T", values["customConfig"])
+			}
+		})
+
+		t.Run("helm_values with version parameter", func(t *testing.T) {
+			toolResult, err := c.callTool("helm_values", map[string]interface{}{
+				"chart":   chartPath,
+				"version": "1.0.0",
+			})
+			if err != nil {
+				t.Fatalf("call tool failed %v", err)
+			}
+			if toolResult.IsError {
+				t.Fatalf("call tool failed: %v", toolResult.Content[0].(mcp.TextContent).Text)
+			}
+
+			// Should still return values even with version specified
+			var values map[string]interface{}
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &values)
+			if err != nil {
+				t.Fatalf("invalid tool result content %v", err)
+			}
+
+			if values["replicaCount"] != float64(1) {
+				t.Fatalf("expected replicaCount to be 1, got %v", values["replicaCount"])
+			}
+		})
+
+		t.Run("helm_values with chart without values returns no values message", func(t *testing.T) {
+			chartPathNoValues := filepath.Join(filepath.Dir(file), "testdata", "helm-chart-no-op")
+			toolResult, err := c.callTool("helm_values", map[string]interface{}{
+				"chart": chartPathNoValues,
+			})
+			if err != nil {
+				t.Fatalf("call tool failed %v", err)
+			}
+			if toolResult.IsError {
+				t.Fatalf("call tool failed: %v", toolResult.Content[0].(mcp.TextContent).Text)
+			}
+
+			if toolResult.Content[0].(mcp.TextContent).Text != "No values found for chart" {
+				t.Fatalf("expected 'No values found for chart', got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			}
+		})
+
+		t.Run("helm_values with missing chart argument returns error", func(t *testing.T) {
+			toolResult, err := c.callTool("helm_values", map[string]interface{}{})
+			if err != nil {
+				t.Fatalf("call tool failed %v", err)
+			}
+			if !toolResult.IsError {
+				t.Fatalf("expected tool to fail with missing chart argument")
+			}
+
+			expectedError := "missing required argument: chart"
+			if !strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, expectedError) {
+				t.Fatalf("expected error to contain '%s', got %v", expectedError, toolResult.Content[0].(mcp.TextContent).Text)
+			}
+		})
+
+		t.Run("helm_values with invalid chart path returns error", func(t *testing.T) {
+			toolResult, err := c.callTool("helm_values", map[string]interface{}{
+				"chart": "/non/existent/path",
+			})
+			if err != nil {
+				t.Fatalf("call tool failed %v", err)
+			}
+			if !toolResult.IsError {
+				t.Fatalf("expected tool to fail with invalid chart path")
+			}
+
+			if !strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "failed to retrieve values for Helm chart") {
+				t.Fatalf("expected error to contain failure message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 			}
 		})
 	})
