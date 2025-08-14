@@ -1,0 +1,5 @@
+apiVersion: v2
+name: test-chart-with-values
+version: 1.0.0
+type: application
+description: Test chart with values for testing helm_values tool

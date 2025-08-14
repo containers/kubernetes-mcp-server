@@ -2,16 +2,18 @@ package helm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
+	"time"
+
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"log"
 	"sigs.k8s.io/yaml"
-	"time"
 )
 
 type Kubernetes interface {
@@ -139,4 +141,43 @@ func simplify(release ...*release.Release) []map[string]interface{} {
 		}
 	}
 	return ret
+}
+
+func (h *Helm) GetChartValues(ctx context.Context, chart string, version string) (string, error) {
+	// Create a show action to get chart values
+	cfg, err := h.newAction("", false)
+	if err != nil {
+		return "", err
+	}
+
+	// Create a show action to get chart values with configuration
+	show := action.NewShowWithConfig(action.ShowValues, cfg)
+	show.Version = version
+
+	// Locate the chart
+	chartRequested, err := show.LocateChart(chart, cli.New())
+	if err != nil {
+		return "", err
+	}
+
+	// Load the chart
+	chartLoaded, err := loader.Load(chartRequested)
+	if err != nil {
+		return "", err
+	}
+
+	// Get the values from the chart
+	values := chartLoaded.Values
+	if values == nil {
+		return "No values found for chart", nil
+	}
+
+	// Convert values to YAML
+	ret, err := json.MarshalIndent(values, "", "  ")
+
+	if err != nil {
+		return "", err
+	}
+
+	return string(ret), nil
 }
