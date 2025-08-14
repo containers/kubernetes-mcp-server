@@ -719,6 +719,36 @@ func TestPodsLog(t *testing.T) {
 				return
 			}
 		})
+		podsPreviousLogInNamespace, err := c.callTool("pods_log", map[string]interface{}{
+			"namespace": "ns-1",
+			"name":      "a-pod-in-ns-1",
+			"previous":  true,
+		})
+		t.Run("pods_log with previous=true returns previous pod log", func(t *testing.T) {
+			if err != nil {
+				t.Fatalf("call tool failed %v", err)
+				return
+			}
+			if podsPreviousLogInNamespace.IsError {
+				t.Fatalf("call tool failed")
+				return
+			}
+		})
+		podsPreviousLogFalse, err := c.callTool("pods_log", map[string]interface{}{
+			"namespace": "ns-1",
+			"name":      "a-pod-in-ns-1",
+			"previous":  false,
+		})
+		t.Run("pods_log with previous=false returns current pod log", func(t *testing.T) {
+			if err != nil {
+				t.Fatalf("call tool failed %v", err)
+				return
+			}
+			if podsPreviousLogFalse.IsError {
+				t.Fatalf("call tool failed")
+				return
+			}
+		})
 	})
 }
 

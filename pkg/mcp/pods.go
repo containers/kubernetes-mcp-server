@@ -99,6 +99,7 @@ func (s *Server) initPods() []server.ServerTool {
 			mcp.WithString("namespace", mcp.Description("Namespace to get the Pod logs from")),
 			mcp.WithString("name", mcp.Description("Name of the Pod to get the logs from"), mcp.Required()),
 			mcp.WithString("container", mcp.Description("Name of the Pod container to get the logs from (Optional)")),
+			mcp.WithBoolean("previous", mcp.Description("Return previous terminated container logs (Optional)")),
 			// Tool annotations
 			mcp.WithTitleAnnotation("Pods: Log"),
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -284,11 +285,16 @@ func (s *Server) podsLog(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.Cal
 	if container == nil {
 		container = ""
 	}
+	previous := ctr.GetArguments()["previous"]
+	var previousBool bool
+	if previous != nil {
+		previousBool = previous.(bool)
+	}
 	derived, err := s.k.Derived(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ret, err := derived.PodsLog(ctx, ns.(string), name.(string), container.(string))
+	ret, err := derived.PodsLog(ctx, ns.(string), name.(string), container.(string), previousBool)
 	if err != nil {
 		return NewTextResult("", fmt.Errorf("failed to get pod %s log in namespace %s: %v", name, ns, err)), nil
 	} else if ret == "" {
