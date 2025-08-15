@@ -43,6 +43,7 @@ func (p *FullProfile) GetTools(s *Server) []server.ServerTool {
 		s.initPods(),
 		s.initResources(),
 		s.initHelm(),
+		s.initOlm(),
 	)
 }
 
