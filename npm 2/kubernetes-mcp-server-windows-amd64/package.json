@@ -1,0 +1,11 @@
+{
+  "name": "kubernetes-mcp-server-windows-amd64",
+  "version": "0.0.0",
+  "description": "Model Context Protocol (MCP) server for Kubernetes and OpenShift",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ]
+}
