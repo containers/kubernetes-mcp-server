@@ -213,7 +213,7 @@ func (c *mcpContext) withKubeConfig(rc *rest.Config) *api.Config {
 	fakeConfig.Contexts["fake-context"].AuthInfo = "fake"
 	fakeConfig.Contexts["additional-context"] = api.NewContext()
 	fakeConfig.Contexts["additional-context"].Cluster = "additional-cluster"
-	fakeConfig.Contexts["additional-context"].AuthInfo = "additional-auth"
+	fakeConfig.Contexts["additional-context"].AuthInfo = ""
 	fakeConfig.CurrentContext = "fake-context"
 	kubeConfig := filepath.Join(c.tempDir, "config")
 	_ = clientcmd.WriteToFile(*fakeConfig, kubeConfig)

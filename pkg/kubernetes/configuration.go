@@ -106,10 +106,45 @@ func (m *Manager) ConfigurationView(minify bool) (runtime.Object, error) {
 			return nil, err
 		}
 	}
+
+	// Remove certificate-authority-data from clusters to reduce output size
+	newcfg := cfg.DeepCopy()
+	for _, cluster := range newcfg.Clusters {
+		if cluster != nil {
+			cluster.CertificateAuthorityData = nil
+		}
+	}
+	// Remove AuthInfos
+	newcfg.AuthInfos = nil
+
 	//nolint:staticcheck
-	if err = clientcmdapi.FlattenConfig(&cfg); err != nil {
+	if err = clientcmdapi.FlattenConfig(newcfg); err != nil {
 		// ignore error
 		//return "", err
 	}
-	return latest.Scheme.ConvertToVersion(&cfg, latest.ExternalVersion)
+	return latest.Scheme.ConvertToVersion(newcfg, latest.ExternalVersion)
+}
+
+// SwitchContext switches the current Kubernetes context to the specified context
+func (m *Manager) SwitchContext(contextName string) error {
+	// Get the raw config
+	rawConfig, err := m.clientCmdConfig.RawConfig()
+	if err != nil {
+		return err
+	}
+
+	// Check if the context exists
+	if _, exists := rawConfig.Contexts[contextName]; !exists {
+		return err
+	}
+
+	// Update the current context
+	rawConfig.CurrentContext = contextName
+
+	// Write the updated config back
+	if err := clientcmd.ModifyConfig(m.clientCmdConfig.ConfigAccess(), rawConfig, true); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -55,11 +55,8 @@ func TestConfigurationView(t *testing.T) {
 			}
 		})
 		t.Run("configuration_view returns auth info", func(t *testing.T) {
-			if len(decoded.AuthInfos) != 1 {
-				t.Errorf("invalid auth info count, expected 1, got %v", len(decoded.AuthInfos))
-			}
-			if decoded.AuthInfos[0].Name != "fake" {
-				t.Errorf("fake-auth not found: %v", decoded.AuthInfos)
+			if len(decoded.AuthInfos) != 0 {
+				t.Errorf("invalid auth info count, expected 0, got %v", len(decoded.AuthInfos))
 			}
 		})
 		toolResult, err = c.callTool("configuration_view", map[string]interface{}{
@@ -86,8 +83,8 @@ func TestConfigurationView(t *testing.T) {
 			if decoded.Contexts[0].Context.Cluster != "additional-cluster" {
 				t.Errorf("additional-cluster not found: %v", decoded.Contexts)
 			}
-			if decoded.Contexts[0].Context.AuthInfo != "additional-auth" {
-				t.Errorf("additional-auth not found: %v", decoded.Contexts)
+			if decoded.Contexts[0].Context.AuthInfo != "" {
+				t.Errorf("expected empty auth info for additional-context, got: %v", decoded.Contexts[0].Context.AuthInfo)
 			}
 			if decoded.Contexts[1].Name != "fake-context" {
 				t.Errorf("fake-context not found: %v", decoded.Contexts)
@@ -102,11 +99,8 @@ func TestConfigurationView(t *testing.T) {
 			}
 		})
 		t.Run("configuration_view with minified=false returns auth info", func(t *testing.T) {
-			if len(decoded.AuthInfos) != 2 {
-				t.Errorf("invalid auth info count, expected 2, got %v", len(decoded.AuthInfos))
-			}
-			if decoded.AuthInfos[0].Name != "additional-auth" {
-				t.Errorf("additional-auth not found: %v", decoded.AuthInfos)
+			if len(decoded.AuthInfos) != 0 {
+				t.Errorf("invalid auth info count, expected 0, got %v", len(decoded.AuthInfos))
 			}
 		})
 	})
@@ -167,11 +161,8 @@ func TestConfigurationViewInCluster(t *testing.T) {
 			}
 		})
 		t.Run("configuration_view returns auth info", func(t *testing.T) {
-			if len(decoded.AuthInfos) != 1 {
-				t.Fatalf("invalid auth info count, expected 1, got %v", len(decoded.AuthInfos))
-			}
-			if decoded.AuthInfos[0].Name != "user" {
-				t.Fatalf("user not found: %v", decoded.AuthInfos)
+			if len(decoded.AuthInfos) != 0 {
+				t.Fatalf("invalid auth info count, expected 0, got %v", len(decoded.AuthInfos))
 			}
 		})
 	})

@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
 func (s *Server) initConfiguration() []server.ServerTool {
@@ -24,6 +23,15 @@ func (s *Server) initConfiguration() []server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true),
 		), Handler: s.configurationView},
+		{Tool: mcp.NewTool("configuration_switch_context",
+			mcp.WithDescription("Switch the current Kubernetes context to a different context"),
+			mcp.WithString("context", mcp.Description("The name of the context to switch to. Use configuration_view to see available contexts.")),
+			// Tool annotations
+			mcp.WithTitleAnnotation("Configuration: Switch Context"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
+		), Handler: s.configurationSwitchContext},
 	}
 	return tools
 }
@@ -43,4 +51,18 @@ func (s *Server) configurationView(_ context.Context, ctr mcp.CallToolRequest) (
 		err = fmt.Errorf("failed to get configuration: %v", err)
 	}
 	return NewTextResult(configurationYaml, err), nil
+}
+
+func (s *Server) configurationSwitchContext(_ context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	contextName, ok := ctr.GetArguments()["context"].(string)
+	if !ok || contextName == "" {
+		return NewTextResult("", fmt.Errorf("context parameter is required and must be a string")), nil
+	}
+
+	err := s.k.SwitchContext(contextName)
+	if err != nil {
+		return NewTextResult("", fmt.Errorf("failed to switch context: %v", err)), nil
+	}
+
+	return NewTextResult(fmt.Sprintf("Successfully switched to context: %s", contextName), nil), nil
 }
