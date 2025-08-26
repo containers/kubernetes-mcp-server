@@ -69,7 +69,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	mockKubeConfig := c.mockServer.KubeConfig()
 	kubeConfig := filepath.Join(t.TempDir(), "config")
 	_ = clientcmd.WriteToFile(*mockKubeConfig, kubeConfig)
-	_ = os.Setenv("KUBECONFIG", kubeConfig)
+	c.StaticConfig.KubeConfig = kubeConfig
 	// Capture logging
 	c.klogState = klog.CaptureState()
 	flags := flag.NewFlagSet("test", flag.ContinueOnError)
