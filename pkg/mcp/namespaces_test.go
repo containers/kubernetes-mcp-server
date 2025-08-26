@@ -1,6 +1,10 @@
 package mcp
 
 import (
+	"regexp"
+	"slices"
+	"testing"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -8,10 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"regexp"
 	"sigs.k8s.io/yaml"
-	"slices"
-	"testing"
 )
 
 func TestNamespacesList(t *testing.T) {

@@ -1,12 +1,13 @@
 package mcp
 
 import (
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
-	"k8s.io/utils/ptr"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/client/transport"
+	"github.com/mark3labs/mcp-go/mcp"
+	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )

@@ -94,7 +94,7 @@ func TestPodsListInAllNamespacesUnauthorized(t *testing.T) {
 				return
 			}
 			if toolResult.IsError {
-				t.Fatalf("call tool failed")
+				t.Fatalf("call tool failed %v", toolResult.Content)
 				return
 			}
 		})

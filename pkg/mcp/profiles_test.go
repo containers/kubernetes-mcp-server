@@ -1,10 +1,11 @@
 package mcp
 
 import (
-	"github.com/mark3labs/mcp-go/mcp"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func TestFullProfileTools(t *testing.T) {

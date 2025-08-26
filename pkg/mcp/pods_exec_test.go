@@ -58,7 +58,7 @@ func TestPodsExec(t *testing.T) {
 				t.Fatalf("call tool failed %v", err)
 			}
 			if podsExecNilNamespace.IsError {
-				t.Fatalf("call tool failed")
+				t.Fatalf("call tool failed: %v", podsExecNilNamespace.Content)
 			}
 			if !strings.Contains(podsExecNilNamespace.Content[0].(mcp.TextContent).Text, "command:ls -l\n") {
 				t.Errorf("unexpected result %v", podsExecNilNamespace.Content[0].(mcp.TextContent).Text)
@@ -74,9 +74,9 @@ func TestPodsExec(t *testing.T) {
 				t.Fatalf("call tool failed %v", err)
 			}
 			if podsExecInNamespace.IsError {
-				t.Fatalf("call tool failed")
+				t.Fatalf("call tool failed: %v", podsExecInNamespace.Content)
 			}
-			if !strings.Contains(podsExecNilNamespace.Content[0].(mcp.TextContent).Text, "command:ls -l\n") {
+			if !strings.Contains(podsExecInNamespace.Content[0].(mcp.TextContent).Text, "command:ls -l\n") {
 				t.Errorf("unexpected result %v", podsExecInNamespace.Content[0].(mcp.TextContent).Text)
 			}
 		})

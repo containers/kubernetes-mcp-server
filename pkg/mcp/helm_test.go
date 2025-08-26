@@ -3,17 +3,18 @@ package mcp
 import (
 	"context"
 	"encoding/base64"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"path/filepath"
-	"runtime"
 	"sigs.k8s.io/yaml"
-	"strings"
-	"testing"
 )
 
 func TestHelmInstall(t *testing.T) {
