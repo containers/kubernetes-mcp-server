@@ -57,6 +57,7 @@ type MCPServerOptions struct {
 	HttpPort             int
 	SSEBaseUrl           string
 	Kubeconfig           string
+	KubeContext          string
 	Profile              string
 	ListOutput           string
 	ReadOnly             bool
@@ -115,6 +116,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.Port, "port", o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
 	cmd.Flags().StringVar(&o.SSEBaseUrl, "sse-base-url", o.SSEBaseUrl, "SSE public base URL to use when sending the endpoint message (e.g. https://example.com)")
 	cmd.Flags().StringVar(&o.Kubeconfig, "kubeconfig", o.Kubeconfig, "Path to the kubeconfig file to use for authentication")
+	cmd.Flags().StringVar(&o.KubeContext, "kubecontext", o.Kubeconfig, "Context name from kube config")
 	cmd.Flags().StringVar(&o.Profile, "profile", o.Profile, "MCP profile to use (one of: "+strings.Join(mcp.ProfileNames, ", ")+")")
 	cmd.Flags().StringVar(&o.ListOutput, "list-output", o.ListOutput, "Output format for resource list operations (one of: "+strings.Join(output.Names, ", ")+"). Defaults to table.")
 	cmd.Flags().BoolVar(&o.ReadOnly, "read-only", o.ReadOnly, "If true, only tools annotated with readOnlyHint=true are exposed")
@@ -172,6 +174,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag("kubeconfig").Changed {
 		m.StaticConfig.KubeConfig = m.Kubeconfig
+	}
+	if cmd.Flag("kubecontext").Changed {
+		m.StaticConfig.KubeContext = m.KubeContext
 	}
 	if cmd.Flag("list-output").Changed || m.StaticConfig.ListOutput == "" {
 		m.StaticConfig.ListOutput = m.ListOutput

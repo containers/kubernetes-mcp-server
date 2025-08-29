@@ -27,9 +27,13 @@ func resolveKubernetesConfigurations(kubernetes *Manager) error {
 	if kubernetes.staticConfig.KubeConfig != "" {
 		pathOptions.LoadingRules.ExplicitPath = kubernetes.staticConfig.KubeConfig
 	}
+	overrides := &clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: ""}}
+	if kubernetes.staticConfig.KubeContext != "" {
+		overrides.CurrentContext = kubernetes.staticConfig.KubeContext
+	}
 	kubernetes.clientCmdConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		pathOptions.LoadingRules,
-		&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: ""}})
+		overrides)
 	var err error
 	if kubernetes.IsInCluster() {
 		kubernetes.cfg, err = InClusterConfig()
@@ -102,6 +106,9 @@ func (m *Manager) ConfigurationView(minify bool) (runtime.Object, error) {
 		return nil, err
 	}
 	if minify {
+		if m.staticConfig.KubeContext != "" {
+			cfg.CurrentContext = m.staticConfig.KubeContext
+		}
 		if err = clientcmdapi.MinifyConfig(&cfg); err != nil {
 			return nil, err
 		}
