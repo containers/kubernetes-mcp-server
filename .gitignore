@@ -27,3 +27,4 @@ python/build/
 python/dist/
 python/kubernetes_mcp_server.egg-info/
 !python/kubernetes-mcp-server
+/kubernetes-mcp-server.iml
