@@ -18,7 +18,7 @@ func (s *Server) initPods() []server.ServerTool {
 	return []server.ServerTool{
 		{Tool: mcp.NewTool("pods_list",
 			mcp.WithDescription("List all the Kubernetes pods in the current cluster from all namespaces"),
-			mcp.WithString("labelSelector", mcp.Description("Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label"), mcp.Pattern("([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]")),
+			mcp.WithString("labelSelector", mcp.Description("Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label"), mcp.Pattern("^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$")),
 			// Tool annotations
 			mcp.WithTitleAnnotation("Pods: List"),
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -28,7 +28,7 @@ func (s *Server) initPods() []server.ServerTool {
 		{Tool: mcp.NewTool("pods_list_in_namespace",
 			mcp.WithDescription("List all the Kubernetes pods in the specified namespace in the current cluster"),
 			mcp.WithString("namespace", mcp.Description("Namespace to list pods from"), mcp.Required()),
-			mcp.WithString("labelSelector", mcp.Description("Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label"), mcp.Pattern("([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]")),
+			mcp.WithString("labelSelector", mcp.Description("Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label"), mcp.Pattern("^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$")),
 			// Tool annotations
 			mcp.WithTitleAnnotation("Pods: List in Namespace"),
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -61,7 +61,7 @@ func (s *Server) initPods() []server.ServerTool {
 			mcp.WithBoolean("all_namespaces", mcp.Description("If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace"), mcp.DefaultBool(true)),
 			mcp.WithString("namespace", mcp.Description("Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)")),
 			mcp.WithString("name", mcp.Description("Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)")),
-			mcp.WithString("label_selector", mcp.Description("Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)"), mcp.Pattern("([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]")),
+			mcp.WithString("label_selector", mcp.Description("Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)"), mcp.Pattern("^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$")),
 			// Tool annotations
 			mcp.WithTitleAnnotation("Pods: Top"),
 			mcp.WithReadOnlyHintAnnotation(true),
