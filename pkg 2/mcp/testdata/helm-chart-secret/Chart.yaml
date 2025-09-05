@@ -1,0 +1,5 @@
+apiVersion: v2
+name: secret-chart
+version: 0.1.0
+type: application
+
