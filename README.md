@@ -317,6 +317,8 @@ Get the logs of a Kubernetes Pod in the current or provided namespace with the p
   - Namespace to get the Pod logs from
 - `container` (`string`, optional)
   - Name of the Pod container to get logs from
+- `previous` (`boolean`, optional)
+  - Return previous terminated container logs
 
 ### `pods_run`
 
