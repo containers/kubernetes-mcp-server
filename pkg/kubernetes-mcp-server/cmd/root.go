@@ -70,8 +70,8 @@ type MCPServerOptions struct {
 
 	HealthEndpoint         string
 	StreamableHttpEndpoint string
-	SseEndpoint            string
-	SseMessageEndpoint     string
+	SSEEndpoint            string
+	SSEMessageEndpoint     string
 
 	ConfigPath   string
 	StaticConfig *config.StaticConfig
@@ -125,10 +125,10 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&o.ReadOnly, "read-only", o.ReadOnly, "If true, only tools annotated with readOnlyHint=true are exposed")
 	cmd.Flags().BoolVar(&o.DisableDestructive, "disable-destructive", o.DisableDestructive, "If true, tools annotated with destructiveHint=true are disabled")
 	cmd.Flags().BoolVar(&o.RequireOAuth, "require-oauth", o.RequireOAuth, "If true, requires OAuth authorization as defined in the Model Context Protocol (MCP) specification. This flag is ignored if transport type is stdio")
-	cmd.Flags().StringVar(&o.HealthEndpoint, "health-endpoint", o.HealthEndpoint, "Use for set health endpoint to use for health checks, Default is /healthz")
-	cmd.Flags().StringVar(&o.StreamableHttpEndpoint, "streamable-http-endpoint", o.StreamableHttpEndpoint, "Use for set streamable http requests endpoint, Default is /mcp")
-	cmd.Flags().StringVar(&o.SseEndpoint, "sse-endpoint", o.SseEndpoint, "Use for set sse requests endpoint, Default is /sse")
-	cmd.Flags().StringVar(&o.SseMessageEndpoint, "sse-message-endpoint", o.SseMessageEndpoint, "Use for set sse message requests endpoint, Default is /message")
+	cmd.Flags().StringVar(&o.HealthEndpoint, "health-endpoint", "/healthz", "Use for set health endpoint to use for health checks")
+	cmd.Flags().StringVar(&o.StreamableHttpEndpoint, "streamable-http-endpoint", "/mcp", "Use for set streamable http requests endpoint")
+	cmd.Flags().StringVar(&o.SSEEndpoint, "sse-endpoint", "/sse", "Use for set sse requests endpoint")
+	cmd.Flags().StringVar(&o.SSEMessageEndpoint, "sse-message-endpoint", "/message", "Use for set sse message requests endpoint")
 	_ = cmd.Flags().MarkHidden("require-oauth")
 	cmd.Flags().StringVar(&o.OAuthAudience, "oauth-audience", o.OAuthAudience, "OAuth audience for token claims validation. Optional. If not set, the audience is not validated. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden("oauth-audience")
@@ -216,10 +216,10 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 		m.StaticConfig.StreamableHttpEndpoint = m.StreamableHttpEndpoint
 	}
 	if cmd.Flag("sse-endpoint").Changed {
-		m.StaticConfig.SSEEndpoint = m.SseEndpoint
+		m.StaticConfig.SSEEndpoint = m.SSEEndpoint
 	}
 	if cmd.Flag("sse-message-endpoint").Changed {
-		m.StaticConfig.SSEMessageEndpoint = m.SseMessageEndpoint
+		m.StaticConfig.SSEMessageEndpoint = m.SSEMessageEndpoint
 	}
 }
 
