@@ -104,11 +104,17 @@ func (s *Server) ServeStdio() error {
 	return server.ServeStdio(s.server)
 }
 
-func (s *Server) ServeSse(baseUrl string, httpServer *http.Server) *server.SSEServer {
+func (s *Server) ServeSse(baseUrl, sseEndpoint, sseMessageEndpoint string, httpServer *http.Server) *server.SSEServer {
 	options := make([]server.SSEOption, 0)
 	options = append(options, server.WithSSEContextFunc(contextFunc), server.WithHTTPServer(httpServer))
 	if baseUrl != "" {
 		options = append(options, server.WithBaseURL(baseUrl))
+	}
+	if sseEndpoint != "" {
+		options = append(options, server.WithSSEEndpoint(sseEndpoint))
+	}
+	if sseMessageEndpoint != "" {
+		options = append(options, server.WithMessageEndpoint(sseMessageEndpoint))
 	}
 	return server.NewSSEServer(s.server, options...)
 }
@@ -141,10 +147,6 @@ func (s *Server) GetKubernetesAPIServerHost() string {
 
 func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
-}
-
-func (s *Server) GetMCPServer() *server.MCPServer {
-	return s.server
 }
 
 func (s *Server) Close() {

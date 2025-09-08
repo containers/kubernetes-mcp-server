@@ -65,6 +65,7 @@ type KubernetesApiTokenVerifier interface {
 func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, verifier KubernetesApiTokenVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			healthEndpoint := getEndpointOrDefault(staticConfig.HealthEndpoint, defaultHealthEndpoint)
 			if r.URL.Path == healthEndpoint || slices.Contains(WellKnownEndpoints, r.URL.EscapedPath()) {
 				next.ServeHTTP(w, r)
 				return

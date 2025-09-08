@@ -18,11 +18,19 @@ import (
 )
 
 const (
-	healthEndpoint     = "/healthz"
-	mcpEndpoint        = "/mcp"
-	sseEndpoint        = "/sse"
-	sseMessageEndpoint = "/message"
+	defaultHealthEndpoint     = "/healthz"
+	defaultMcpEndpoint        = "/mcp"
+	defaultSseEndpoint        = "/sse"
+	defaultSseMessageEndpoint = "/message"
 )
+
+// getEndpointOrDefault returns the endpoint value, otherwise returns the default value.
+func getEndpointOrDefault(configValue, defaultValue string) string {
+	if configValue != "" {
+		return configValue
+	}
+	return defaultValue
+}
 
 func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oidcProvider *oidc.Provider) error {
 	mux := http.NewServeMux()
@@ -36,7 +44,12 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 		Handler: wrappedMux,
 	}
 
-	sseServer := mcpServer.ServeSse(staticConfig.SSEBaseURL, httpServer)
+	healthEndpoint := getEndpointOrDefault(staticConfig.HealthEndpoint, defaultHealthEndpoint)
+	mcpEndpoint := getEndpointOrDefault(staticConfig.StreamableHttpEndpoint, defaultMcpEndpoint)
+	sseEndpoint := getEndpointOrDefault(staticConfig.SSEEndpoint, defaultSseEndpoint)
+	sseMessageEndpoint := getEndpointOrDefault(staticConfig.SSEMessageEndpoint, defaultSseMessageEndpoint)
+
+	sseServer := mcpServer.ServeSse(staticConfig.SSEBaseURL, sseEndpoint, sseMessageEndpoint, httpServer)
 	streamableHttpServer := mcpServer.ServeHTTP(httpServer)
 	mux.Handle(sseEndpoint, sseServer)
 	mux.Handle(sseMessageEndpoint, sseServer)
@@ -54,7 +67,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 
 	serverErr := make(chan error, 1)
 	go func() {
-		klog.V(0).Infof("Streaming and SSE HTTP servers starting on port %s and paths /mcp, /sse, /message", staticConfig.Port)
+		klog.V(0).Infof("Streaming and SSE HTTP servers starting on port %s and paths %s, %s, %s", staticConfig.Port, mcpEndpoint, sseEndpoint, sseMessageEndpoint)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}

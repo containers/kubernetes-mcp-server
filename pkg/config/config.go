@@ -48,6 +48,14 @@ type StaticConfig struct {
 	StsScopes            []string `toml:"sts_scopes,omitempty"`
 	CertificateAuthority string   `toml:"certificate_authority,omitempty"`
 	ServerURL            string   `toml:"server_url,omitempty"`
+	// HealthEndpoint is the health check endpoint
+	HealthEndpoint string `toml:"health_endpoint,omitempty"`
+	// SSEEndpoint is the SSE endpoint
+	SSEEndpoint string `toml:"sse_endpoint,omitempty"`
+	// SSEMessageEndpoint is the SSE message endpoint
+	SSEMessageEndpoint string `toml:"sse_message_endpoint,omitempty"`
+	// StreamableHttpEndpoint is the streamable http endpoint
+	StreamableHttpEndpoint string `toml:"streamable_http_endpoint,omitempty"`
 }
 
 type GroupVersionKind struct {

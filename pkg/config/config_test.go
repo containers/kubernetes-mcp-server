@@ -65,6 +65,11 @@ denied_resources = [
 
 enabled_tools = ["configuration_view", "events_list", "namespaces_list", "pods_list", "resources_list", "resources_get", "resources_create_or_update", "resources_delete"]
 disabled_tools = ["pods_delete", "pods_top", "pods_log", "pods_run", "pods_exec"]
+
+health_endpoint = "/k8s/healthz"
+streamable_http_endpoint = "/k8s/mcp"
+sse_endpoint = "/k8s/sse"
+sse_message_endpoint = "/k8s/message"
 `)
 
 	config, err := ReadConfig(validConfigPath)
@@ -140,6 +145,26 @@ disabled_tools = ["pods_delete", "pods_top", "pods_log", "pods_run", "pods_exec"
 			if config.DisabledTools[i] != tool {
 				t.Errorf("Expected disabled tool %d to be %s, got %s", i, tool, config.DisabledTools[i])
 			}
+		}
+	})
+	t.Run("health_endpoint parsed correctly", func(t *testing.T) {
+		if config.HealthEndpoint != "/k8s/healthz" {
+			t.Fatalf("Unexpected health_endpoint value: %v", config.HealthEndpoint)
+		}
+	})
+	t.Run("streamable_http_endpoint parsed correctly", func(t *testing.T) {
+		if config.StreamableHttpEndpoint != "/k8s/mcp" {
+			t.Fatalf("Unexpected streamable_http_endpoint value: %v", config.StreamableHttpEndpoint)
+		}
+	})
+	t.Run("sse_endpoint parsed correctly", func(t *testing.T) {
+		if config.SSEEndpoint != "/k8s/sse" {
+			t.Fatalf("Unexpected sse_endpoint value: %v", config.SSEEndpoint)
+		}
+	})
+	t.Run("sse_message_endpoint parsed correctly", func(t *testing.T) {
+		if config.SSEMessageEndpoint != "/k8s/message" {
+			t.Fatalf("Unexpected sse_message_endpoint value: %v", config.SSEMessageEndpoint)
 		}
 	})
 }
