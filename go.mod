@@ -13,7 +13,7 @@ require (
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/oauth2 v0.30.0
-	golang.org/x/sync v0.16.0
+	golang.org/x/sync v0.17.0
 	helm.sh/helm/v3 v3.18.6
 	k8s.io/api v0.34.0
 	k8s.io/apiextensions-apiserver v0.34.0
