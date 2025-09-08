@@ -143,6 +143,10 @@ func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
 }
 
+func (s *Server) GetMCPServer() *server.MCPServer {
+	return s.server
+}
+
 func (s *Server) Close() {
 	if s.k != nil {
 		s.k.Close()
