@@ -24,7 +24,7 @@ require (
 	k8s.io/kubectl v0.33.4
 	k8s.io/metrics v0.34.0
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
-	sigs.k8s.io/controller-runtime v0.22.0
+	sigs.k8s.io/controller-runtime v0.22.1
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20250211091558-894df3a7e664
 	sigs.k8s.io/yaml v1.6.0
 )
