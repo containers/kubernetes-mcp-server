@@ -8,7 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-func TestFullProfileTools(t *testing.T) {
+func TestFullToolsetTools(t *testing.T) {
 	expectedNames := []string{
 		"configuration_view",
 		"events_list",
@@ -29,7 +29,7 @@ func TestFullProfileTools(t *testing.T) {
 		"resources_create_or_update",
 		"resources_delete",
 	}
-	mcpCtx := &mcpContext{profile: &FullProfile{}}
+	mcpCtx := &mcpContext{toolset: &Full{}}
 	testCaseWithContext(t, mcpCtx, func(c *mcpContext) {
 		tools, err := c.mcpClient.ListTools(c.ctx, mcp.ListToolsRequest{})
 		t.Run("ListTools returns tools", func(t *testing.T) {
@@ -53,9 +53,9 @@ func TestFullProfileTools(t *testing.T) {
 	})
 }
 
-func TestFullProfileToolsInOpenShift(t *testing.T) {
+func TestFullToolsetToolsInOpenShift(t *testing.T) {
 	mcpCtx := &mcpContext{
-		profile: &FullProfile{},
+		toolset: &Full{},
 		before:  inOpenShift,
 		after:   inOpenShiftClear,
 	}

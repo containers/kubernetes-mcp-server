@@ -24,7 +24,7 @@ type ContextKey string
 const TokenScopesContextKey = ContextKey("TokenScopesContextKey")
 
 type Configuration struct {
-	Profile    Profile
+	Toolset    Toolset
 	ListOutput output.Output
 
 	StaticConfig *config.StaticConfig
@@ -89,7 +89,7 @@ func (s *Server) reloadKubernetesClient() error {
 	}
 	s.k = k
 	applicableTools := make([]server.ServerTool, 0)
-	for _, tool := range s.configuration.Profile.GetTools(s) {
+	for _, tool := range s.configuration.Toolset.GetTools(s) {
 		if !s.configuration.isToolApplicable(tool) {
 			continue
 		}

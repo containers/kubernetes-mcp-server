@@ -103,7 +103,7 @@ func TestMain(m *testing.M) {
 }
 
 type mcpContext struct {
-	profile    Profile
+	toolset    Toolset
 	listOutput output.Output
 	logLevel   int
 
@@ -126,8 +126,8 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	c.ctx, c.cancel = context.WithCancel(t.Context())
 	c.tempDir = t.TempDir()
 	c.withKubeConfig(nil)
-	if c.profile == nil {
-		c.profile = &FullProfile{}
+	if c.toolset == nil {
+		c.toolset = &Full{}
 	}
 	if c.listOutput == nil {
 		c.listOutput = output.Yaml
@@ -149,7 +149,7 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	klog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(c.logLevel), textlogger.Output(&c.logBuffer))))
 	// MCP Server
 	if c.mcpServer, err = NewServer(Configuration{
-		Profile:      c.profile,
+		Toolset:      c.toolset,
 		ListOutput:   c.listOutput,
 		StaticConfig: c.staticConfig,
 	}); err != nil {
@@ -188,7 +188,7 @@ func (c *mcpContext) afterEach() {
 }
 
 func testCase(t *testing.T, test func(c *mcpContext)) {
-	testCaseWithContext(t, &mcpContext{profile: &FullProfile{}}, test)
+	testCaseWithContext(t, &mcpContext{toolset: &Full{}}, test)
 }
 
 func testCaseWithContext(t *testing.T, mcpCtx *mcpContext, test func(c *mcpContext)) {
