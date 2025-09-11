@@ -1,11 +1,16 @@
 package mcp
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFullToolsetTools(t *testing.T) {
@@ -50,6 +55,19 @@ func TestFullToolsetTools(t *testing.T) {
 				}
 			})
 		}
+		t.Run("ListTools returns correct Tool metadata for toolset", func(t *testing.T) {
+			_, file, _, _ := runtime.Caller(0)
+			expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-full-tools.json")
+			expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
+			if err != nil {
+				t.Fatalf("failed to read expected tools metadata file: %v", err)
+			}
+			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
+			if err != nil {
+				t.Fatalf("failed to marshal tools metadata: %v", err)
+			}
+			assert.JSONEqf(t, string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
+		})
 	})
 }
 
@@ -84,6 +102,19 @@ func TestFullToolsetToolsInOpenShift(t *testing.T) {
 			if !strings.Contains(tools.Tools[idx].Description, ", route.openshift.io/v1 Route") {
 				t.Fatalf("tool resources_list does not have OpenShift hint, got %s", tools.Tools[9].Description)
 			}
+		})
+		t.Run("ListTools returns correct Tool metadata for toolset", func(t *testing.T) {
+			_, file, _, _ := runtime.Caller(0)
+			expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-full-tools-openshift.json")
+			expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
+			if err != nil {
+				t.Fatalf("failed to read expected tools metadata file: %v", err)
+			}
+			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
+			if err != nil {
+				t.Fatalf("failed to marshal tools metadata: %v", err)
+			}
+			assert.JSONEqf(t, string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
 		})
 	})
 }
