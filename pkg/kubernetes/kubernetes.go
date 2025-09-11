@@ -22,6 +22,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/helm"
+	"github.com/containers/kubernetes-mcp-server/pkg/olm"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
@@ -211,4 +212,9 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 func (k *Kubernetes) NewHelm() *helm.Helm {
 	// This is a derived Kubernetes, so it already has the Helm initialized
 	return helm.NewHelm(k.manager)
+}
+
+func (k *Kubernetes) NewOlm() *olm.Olm {
+	// Provide an OLM wrapper backed by the manager
+	return olm.NewOlm(k.manager)
 }
