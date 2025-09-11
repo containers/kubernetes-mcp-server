@@ -153,3 +153,53 @@ users:
 		}
 	})
 }
+
+func TestKubernetes_ResolveKubernetesConfigurations_KubeContext(t *testing.T) {
+	tempDir := t.TempDir()
+	kubeconfigPath := path.Join(tempDir, "config")
+	kubeconfigContent := `
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://context1.example.com
+  name: cluster1
+- cluster:
+    server: https://context2.example.com
+  name: cluster2
+contexts:
+- context:
+    cluster: cluster1
+    user: user1
+  name: context1
+- context:
+    cluster: cluster2
+    user: user2
+  name: context2
+current-context: context1
+users:
+- name: user1
+  user:
+    token: token1
+- name: user2
+  user:
+    token: token2
+`
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0644); err != nil {
+		t.Fatalf("failed to create kubeconfig file: %v", err)
+	}
+	m := Manager{staticConfig: &config.StaticConfig{
+		KubeConfig:  kubeconfigPath,
+		KubeContext: "context2",
+	}}
+	err := resolveKubernetesConfigurations(&m)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if m.cfg == nil {
+		t.Errorf("expected non-nil config, got nil")
+	}
+	if m.cfg.Host != "https://context2.example.com" {
+		t.Errorf("expected host https://context2.example.com, got %s", m.cfg.Host)
+	}
+}
