@@ -18,7 +18,7 @@ require (
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.0
 	k8s.io/apimachinery v0.34.1
-	k8s.io/cli-runtime v0.34.0
+	k8s.io/cli-runtime v0.34.1
 	k8s.io/client-go v0.34.1
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubectl v0.33.4
