@@ -4,26 +4,38 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func (s *Server) initConfiguration() []server.ServerTool {
-	tools := []server.ServerTool{
-		{Tool: mcp.NewTool("configuration_view",
-			mcp.WithDescription("Get the current Kubernetes configuration content as a kubeconfig YAML"),
-			mcp.WithBoolean("minified", mcp.Description("Return a minified version of the configuration. "+
-				"If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. "+
-				"If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. "+
-				"(Optional, default true)")),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Configuration: View"),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.configurationView},
+func (s *Server) initConfiguration() []ServerTool {
+	tools := []ServerTool{
+		{Tool: Tool{
+			Name:        "configuration_view",
+			Description: "Get the current Kubernetes configuration content as a kubeconfig YAML",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"minified": {
+						Type: "boolean",
+						Description: "Return a minified version of the configuration. " +
+							"If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. " +
+							"If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. " +
+							"(Optional, default true)",
+					},
+				},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Configuration: View",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.configurationView},
 	}
 	return tools
 }

@@ -115,7 +115,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.Port, "port", o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
 	cmd.Flags().StringVar(&o.SSEBaseUrl, "sse-base-url", o.SSEBaseUrl, "SSE public base URL to use when sending the endpoint message (e.g. https://example.com)")
 	cmd.Flags().StringVar(&o.Kubeconfig, "kubeconfig", o.Kubeconfig, "Path to the kubeconfig file to use for authentication")
-	cmd.Flags().StringVar(&o.Toolset, "toolset", o.Toolset, "MCP toolset to use (one of: "+strings.Join(mcp.ToolsetNames, ", ")+")")
+	cmd.Flags().StringVar(&o.Toolset, "toolset", o.Toolset, "MCP toolset to use (one of: "+strings.Join(mcp.ToolsetNames(), ", ")+")")
 	cmd.Flags().StringVar(&o.ListOutput, "list-output", o.ListOutput, "Output format for resource list operations (one of: "+strings.Join(output.Names, ", ")+"). Defaults to table.")
 	cmd.Flags().BoolVar(&o.ReadOnly, "read-only", o.ReadOnly, "If true, only tools annotated with readOnlyHint=true are exposed")
 	cmd.Flags().BoolVar(&o.DisableDestructive, "disable-destructive", o.DisableDestructive, "If true, tools annotated with destructiveHint=true are disabled")
@@ -239,7 +239,7 @@ func (m *MCPServerOptions) Validate() error {
 func (m *MCPServerOptions) Run() error {
 	toolset := mcp.ToolsetFromString(m.Toolset)
 	if toolset == nil {
-		return fmt.Errorf("invalid toolset name: %s, valid names are: %s", m.Toolset, strings.Join(mcp.ToolsetNames, ", "))
+		return fmt.Errorf("invalid toolset name: %s, valid names are: %s", m.Toolset, strings.Join(mcp.ToolsetNames(), ", "))
 	}
 	listOutput := output.FromString(m.StaticConfig.ListOutput)
 	if listOutput == nil {

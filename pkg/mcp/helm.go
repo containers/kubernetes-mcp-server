@@ -4,46 +4,96 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"k8s.io/utils/ptr"
 )
 
-func (s *Server) initHelm() []server.ServerTool {
-	return []server.ServerTool{
-		{Tool: mcp.NewTool("helm_install",
-			mcp.WithDescription("Install a Helm chart in the current or provided namespace"),
-			mcp.WithString("chart", mcp.Description("Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)"), mcp.Required()),
-			mcp.WithObject("values", mcp.Description("Values to pass to the Helm chart (Optional)")),
-			mcp.WithString("name", mcp.Description("Name of the Helm release (Optional, random name if not provided)")),
-			mcp.WithString("namespace", mcp.Description("Namespace to install the Helm chart in (Optional, current namespace if not provided)")),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Helm: Install"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(false), // TODO: consider replacing implementation with equivalent to: helm upgrade --install
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.helmInstall},
-		{Tool: mcp.NewTool("helm_list",
-			mcp.WithDescription("List all the Helm releases in the current or provided namespace (or in all namespaces if specified)"),
-			mcp.WithString("namespace", mcp.Description("Namespace to list Helm releases from (Optional, all namespaces if not provided)")),
-			mcp.WithBoolean("all_namespaces", mcp.Description("If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)")),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Helm: List"),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.helmList},
-		{Tool: mcp.NewTool("helm_uninstall",
-			mcp.WithDescription("Uninstall a Helm release in the current or provided namespace"),
-			mcp.WithString("name", mcp.Description("Name of the Helm release to uninstall"), mcp.Required()),
-			mcp.WithString("namespace", mcp.Description("Namespace to uninstall the Helm release from (Optional, current namespace if not provided)")),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Helm: Uninstall"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.helmUninstall},
+func (s *Server) initHelm() []ServerTool {
+	return []ServerTool{
+		{Tool: Tool{
+			Name:        "helm_install",
+			Description: "Install a Helm chart in the current or provided namespace",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"chart": {
+						Type:        "string",
+						Description: "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
+					},
+					"values": {
+						Type:        "object",
+						Description: "Values to pass to the Helm chart (Optional)",
+						Properties:  make(map[string]*jsonschema.Schema),
+					},
+					"name": {
+						Type:        "string",
+						Description: "Name of the Helm release (Optional, random name if not provided)",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace to install the Helm chart in (Optional, current namespace if not provided)",
+					},
+				},
+				Required: []string{"chart"},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Helm: Install",
+				ReadOnlyHint:    ptr.To(false),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false), // TODO: consider replacing implementation with equivalent to: helm upgrade --install
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.helmInstall},
+		{Tool: Tool{
+			Name:        "helm_list",
+			Description: "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
+					},
+					"all_namespaces": {
+						Type:        "boolean",
+						Description: "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
+					},
+				},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Helm: List",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.helmList},
+		{Tool: Tool{
+			Name:        "helm_uninstall",
+			Description: "Uninstall a Helm release in the current or provided namespace",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"name": {
+						Type:        "string",
+						Description: "Name of the Helm release to uninstall",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace to uninstall the Helm release from (Optional, current namespace if not provided)",
+					},
+				},
+				Required: []string{"name"},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Helm: Uninstall",
+				ReadOnlyHint:    ptr.To(false),
+				DestructiveHint: ptr.To(true),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.helmUninstall},
 	}
 }
 

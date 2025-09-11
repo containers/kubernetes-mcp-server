@@ -4,34 +4,47 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
-func (s *Server) initNamespaces() []server.ServerTool {
-	ret := make([]server.ServerTool, 0)
-	ret = append(ret, server.ServerTool{
-		Tool: mcp.NewTool("namespaces_list",
-			mcp.WithDescription("List all the Kubernetes namespaces in the current cluster"),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Namespaces: List"),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.namespacesList,
+func (s *Server) initNamespaces() []ServerTool {
+	ret := make([]ServerTool, 0)
+	ret = append(ret, ServerTool{
+		Tool: Tool{
+			Name:        "namespaces_list",
+			Description: "List all the Kubernetes namespaces in the current cluster",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Namespaces: List",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.namespacesList,
 	})
 	if s.k.IsOpenShift(context.Background()) {
-		ret = append(ret, server.ServerTool{
-			Tool: mcp.NewTool("projects_list",
-				mcp.WithDescription("List all the OpenShift projects in the current cluster"),
-				// Tool annotations
-				mcp.WithTitleAnnotation("Projects: List"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithOpenWorldHintAnnotation(true),
-			), Handler: s.projectsList,
+		ret = append(ret, ServerTool{
+			Tool: Tool{
+				Name:        "projects_list",
+				Description: "List all the OpenShift projects in the current cluster",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+				},
+				Annotations: ToolAnnotations{
+					Title:           "Projects: List",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(false),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: s.projectsList,
 		})
 	}
 	return ret

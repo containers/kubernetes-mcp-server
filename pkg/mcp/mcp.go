@@ -30,7 +30,7 @@ type Configuration struct {
 	StaticConfig *config.StaticConfig
 }
 
-func (c *Configuration) isToolApplicable(tool server.ServerTool) bool {
+func (c *Configuration) isToolApplicable(tool ServerTool) bool {
 	if c.StaticConfig.ReadOnly && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
 		return false
 	}
@@ -88,7 +88,7 @@ func (s *Server) reloadKubernetesClient() error {
 		return err
 	}
 	s.k = k
-	applicableTools := make([]server.ServerTool, 0)
+	applicableTools := make([]ServerTool, 0)
 	for _, tool := range s.configuration.Toolset.GetTools(s) {
 		if !s.configuration.isToolApplicable(tool) {
 			continue
@@ -96,7 +96,11 @@ func (s *Server) reloadKubernetesClient() error {
 		applicableTools = append(applicableTools, tool)
 		s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 	}
-	s.server.SetTools(applicableTools...)
+	m3labsServerTools, err := ServerToolToM3LabsServerTool(applicableTools)
+	if err != nil {
+		return fmt.Errorf("failed to convert tools: %v", err)
+	}
+	s.server.SetTools(m3labsServerTools...)
 	return nil
 }
 

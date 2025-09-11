@@ -4,24 +4,35 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func (s *Server) initEvents() []server.ServerTool {
-	return []server.ServerTool{
-		{Tool: mcp.NewTool("events_list",
-			mcp.WithDescription("List all the Kubernetes events in the current cluster from all namespaces"),
-			mcp.WithString("namespace",
-				mcp.Description("Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces")),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Events: List"),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.eventsList},
+func (s *Server) initEvents() []ServerTool {
+	return []ServerTool{
+		{Tool: Tool{
+			Name:        "events_list",
+			Description: "List all the Kubernetes events in the current cluster from all namespaces",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"namespace": {
+						Type:        "string",
+						Description: "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
+					},
+				},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Events: List",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.eventsList},
 	}
 }
 

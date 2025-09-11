@@ -5,99 +5,143 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func (s *Server) initResources() []server.ServerTool {
+func (s *Server) initResources() []ServerTool {
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
 	if s.k.IsOpenShift(context.Background()) {
 		commonApiVersion += ", route.openshift.io/v1 Route"
 	}
 	commonApiVersion = fmt.Sprintf("(common apiVersion and kind include: %s)", commonApiVersion)
-	return []server.ServerTool{
-		{Tool: mcp.NewTool("resources_list",
-			mcp.WithDescription("List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n"+
-				commonApiVersion),
-			mcp.WithString("apiVersion",
-				mcp.Description("apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)"),
-				mcp.Required(),
-			),
-			mcp.WithString("kind",
-				mcp.Description("kind of the resources (examples of valid kind are: Pod, Service, Deployment, Ingress)"),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces")),
-			mcp.WithString("labelSelector",
-				mcp.Description("Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label"), mcp.Pattern("([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]")),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Resources: List"),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.resourcesList},
-		{Tool: mcp.NewTool("resources_get",
-			mcp.WithDescription("Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n"+
-				commonApiVersion),
-			mcp.WithString("apiVersion",
-				mcp.Description("apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)"),
-				mcp.Required(),
-			),
-			mcp.WithString("kind",
-				mcp.Description("kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)"),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("Optional Namespace to retrieve the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will get resource from configured namespace"),
-			),
-			mcp.WithString("name", mcp.Description("Name of the resource"), mcp.Required()),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Resources: Get"),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.resourcesGet},
-		{Tool: mcp.NewTool("resources_create_or_update",
-			mcp.WithDescription("Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n"+
-				commonApiVersion),
-			mcp.WithString("resource",
-				mcp.Description("A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec"),
-				mcp.Required(),
-			),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Resources: Create or Update"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.resourcesCreateOrUpdate},
-		{Tool: mcp.NewTool("resources_delete",
-			mcp.WithDescription("Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n"+
-				commonApiVersion),
-			mcp.WithString("apiVersion",
-				mcp.Description("apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)"),
-				mcp.Required(),
-			),
-			mcp.WithString("kind",
-				mcp.Description("kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)"),
-				mcp.Required(),
-			),
-			mcp.WithString("namespace",
-				mcp.Description("Optional Namespace to delete the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will delete resource from configured namespace"),
-			),
-			mcp.WithString("name", mcp.Description("Name of the resource"), mcp.Required()),
-			// Tool annotations
-			mcp.WithTitleAnnotation("Resources: Delete"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(true),
-		), Handler: s.resourcesDelete},
+	return []ServerTool{
+		{Tool: Tool{
+			Name:        "resources_list",
+			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n" + commonApiVersion,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"apiVersion": {
+						Type:        "string",
+						Description: "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+					},
+					"kind": {
+						Type:        "string",
+						Description: "kind of the resources (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces",
+					},
+					"labelSelector": {
+						Type:        "string",
+						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+					},
+				},
+				Required: []string{"apiVersion", "kind"},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Resources: List",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.resourcesList},
+		{Tool: Tool{
+			Name:        "resources_get",
+			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"apiVersion": {
+						Type:        "string",
+						Description: "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+					},
+					"kind": {
+						Type:        "string",
+						Description: "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Optional Namespace to retrieve the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will get resource from configured namespace",
+					},
+					"name": {
+						Type:        "string",
+						Description: "Name of the resource",
+					},
+				},
+				Required: []string{"apiVersion", "kind", "name"},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Resources: Get",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.resourcesGet},
+		{Tool: Tool{
+			Name:        "resources_create_or_update",
+			Description: "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n" + commonApiVersion,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"resource": {
+						Type:        "string",
+						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
+					},
+				},
+				Required: []string{"resource"},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Resources: Create or Update",
+				ReadOnlyHint:    ptr.To(false),
+				DestructiveHint: ptr.To(true),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.resourcesCreateOrUpdate},
+		{Tool: Tool{
+			Name:        "resources_delete",
+			Description: "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"apiVersion": {
+						Type:        "string",
+						Description: "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+					},
+					"kind": {
+						Type:        "string",
+						Description: "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Optional Namespace to delete the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will delete resource from configured namespace",
+					},
+					"name": {
+						Type:        "string",
+						Description: "Name of the resource",
+					},
+				},
+				Required: []string{"apiVersion", "kind", "name"},
+			},
+			Annotations: ToolAnnotations{
+				Title:           "Resources: Delete",
+				ReadOnlyHint:    ptr.To(false),
+				DestructiveHint: ptr.To(true),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: s.resourcesDelete},
 	}
 }
 

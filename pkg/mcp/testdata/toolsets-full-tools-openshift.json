@@ -65,7 +65,6 @@
         },
         "values": {
           "description": "Values to pass to the Helm chart (Optional)",
-          "properties": {},
           "type": "object"
         }
       },
