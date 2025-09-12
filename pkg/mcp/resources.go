@@ -34,7 +34,7 @@ func (s *Server) initResources() []server.ServerTool {
 			mcp.WithString("namespace",
 				mcp.Description("Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces")),
 			mcp.WithString("labelSelector",
-				mcp.Description("Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label"), mcp.Pattern("([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]")),
+				mcp.Description("Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label"), mcp.Pattern("^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$")),
 			// Tool annotations
 			mcp.WithTitleAnnotation("Resources: List"),
 			mcp.WithReadOnlyHintAnnotation(true),
