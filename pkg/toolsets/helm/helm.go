@@ -1,4 +1,4 @@
-package full
+package helm
 
 import (
 	"fmt"

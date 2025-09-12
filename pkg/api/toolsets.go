@@ -20,7 +20,7 @@ type Toolset interface {
 	// Examples: "core", "metrics", "helm"
 	GetName() string
 	GetDescription() string
-	GetTools(k *internalk8s.Manager) []ServerTool
+	GetTools(o internalk8s.Openshift) []ServerTool
 }
 
 type ToolCallRequest interface {

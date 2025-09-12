@@ -7,16 +7,17 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	authenticationapiv1 "k8s.io/api/authentication/v1"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
@@ -25,10 +26,25 @@ type ContextKey string
 const TokenScopesContextKey = ContextKey("TokenScopesContextKey")
 
 type Configuration struct {
-	Toolset    api.Toolset
-	ListOutput output.Output
+	*config.StaticConfig
+	listOutput output.Output
+	toolsets   []api.Toolset
+}
 
-	StaticConfig *config.StaticConfig
+func (c *Configuration) Toolsets() []api.Toolset {
+	if c.toolsets == nil {
+		for _, toolset := range c.StaticConfig.Toolsets {
+			c.toolsets = append(c.toolsets, toolsets.ToolsetFromString(toolset))
+		}
+	}
+	return c.toolsets
+}
+
+func (c *Configuration) ListOutput() output.Output {
+	if c.listOutput == nil {
+		c.listOutput = output.FromString(c.StaticConfig.ListOutput)
+	}
+	return c.listOutput
 }
 
 func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
@@ -90,12 +106,14 @@ func (s *Server) reloadKubernetesClient() error {
 	}
 	s.k = k
 	applicableTools := make([]api.ServerTool, 0)
-	for _, tool := range s.configuration.Toolset.GetTools(s.k) {
-		if !s.configuration.isToolApplicable(tool) {
-			continue
+	for _, toolset := range s.configuration.Toolsets() {
+		for _, tool := range toolset.GetTools(s.k) {
+			if !s.configuration.isToolApplicable(tool) {
+				continue
+			}
+			applicableTools = append(applicableTools, tool)
+			s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 		}
-		applicableTools = append(applicableTools, tool)
-		s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 	}
 	m3labsServerTools, err := ServerToolToM3LabsServerTool(s, applicableTools)
 	if err != nil {

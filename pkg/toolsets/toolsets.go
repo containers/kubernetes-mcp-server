@@ -1,7 +1,9 @@
 package toolsets
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
@@ -32,8 +34,17 @@ func ToolsetNames() []string {
 
 func ToolsetFromString(name string) api.Toolset {
 	for _, toolset := range Toolsets() {
-		if toolset.GetName() == name {
+		if toolset.GetName() == strings.TrimSpace(name) {
 			return toolset
+		}
+	}
+	return nil
+}
+
+func Validate(toolsets []string) error {
+	for _, toolset := range toolsets {
+		if ToolsetFromString(toolset) == nil {
+			return fmt.Errorf("invalid toolset name: %s, valid names are: %s", toolset, strings.Join(ToolsetNames(), ", "))
 		}
 	}
 	return nil

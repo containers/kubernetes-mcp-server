@@ -41,7 +41,7 @@ func ServerToolToM3LabsServerTool(s *Server, tools []api.ServerTool) ([]server.S
 				Context:         ctx,
 				Kubernetes:      k,
 				ToolCallRequest: request,
-				ListOutput:      s.configuration.ListOutput,
+				ListOutput:      s.configuration.ListOutput(),
 			})
 			if err != nil {
 				return nil, err

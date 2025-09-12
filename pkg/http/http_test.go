@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 	"golang.org/x/sync/errgroup"
@@ -63,7 +62,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	t.Helper()
 	http.DefaultClient.Timeout = 10 * time.Second
 	if c.StaticConfig == nil {
-		c.StaticConfig = &config.StaticConfig{}
+		c.StaticConfig = config.Default()
 	}
 	c.mockServer = test.NewMockServer()
 	// Fake Kubernetes configuration
@@ -87,10 +86,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 		t.Fatalf("Failed to close random port listener: %v", randomPortErr)
 	}
 	c.StaticConfig.Port = fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
-	mcpServer, err := mcp.NewServer(mcp.Configuration{
-		Toolset:      toolsets.Toolsets()[0],
-		StaticConfig: c.StaticConfig,
-	})
+	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: c.StaticConfig})
 	if err != nil {
 		t.Fatalf("Failed to create MCP server: %v", err)
 	}

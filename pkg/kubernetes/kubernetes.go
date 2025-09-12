@@ -53,10 +53,11 @@ type Manager struct {
 	CloseWatchKubeConfig CloseWatchKubeConfig
 }
 
+var _ helm.Kubernetes = (*Manager)(nil)
+var _ Openshift = (*Manager)(nil)
+
 var Scheme = scheme.Scheme
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
-
-var _ helm.Kubernetes = &Manager{}
 
 func NewManager(config *config.StaticConfig) (*Manager, error) {
 	k8s := &Manager{

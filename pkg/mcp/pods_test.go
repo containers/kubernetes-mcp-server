@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 
@@ -179,7 +180,9 @@ func TestPodsListInNamespace(t *testing.T) {
 }
 
 func TestPodsListDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Pod"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Pod" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		podsList, _ := c.callTool("pods_list", map[string]interface{}{})
@@ -414,7 +417,9 @@ func TestPodsGet(t *testing.T) {
 }
 
 func TestPodsGetDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Pod"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Pod" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		podsGet, _ := c.callTool("pods_get", map[string]interface{}{"name": "a-pod-in-default"})
@@ -564,7 +569,9 @@ func TestPodsDelete(t *testing.T) {
 }
 
 func TestPodsDeleteDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Pod"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Pod" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		podsDelete, _ := c.callTool("pods_delete", map[string]interface{}{"name": "a-pod-in-default"})
@@ -753,7 +760,9 @@ func TestPodsLog(t *testing.T) {
 }
 
 func TestPodsLogDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Pod"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Pod" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		podsLog, _ := c.callTool("pods_log", map[string]interface{}{"name": "a-pod-in-default"})
@@ -922,7 +931,9 @@ func TestPodsRun(t *testing.T) {
 }
 
 func TestPodsRunDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Pod"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Pod" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		podsRun, _ := c.callTool("pods_run", map[string]interface{}{"image": "nginx"})

@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 func TestPodsExec(t *testing.T) {
@@ -104,7 +105,9 @@ func TestPodsExec(t *testing.T) {
 }
 
 func TestPodsExecDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Pod"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Pod" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		podsRun, _ := c.callTool("pods_exec", map[string]interface{}{

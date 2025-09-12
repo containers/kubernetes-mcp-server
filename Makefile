@@ -111,3 +111,7 @@ golangci-lint: ## Download and install golangci-lint if not already installed
 .PHONY: lint
 lint: golangci-lint ## Lint the code
 	$(GOLANGCI_LINT) run --verbose --print-resources-usage
+
+.PHONY: update-readme-tools
+update-readme-tools: ## Update the README.md file with the latest toolsets
+	go run ./internal/tools/update-readme/main.go README.md
