@@ -44,6 +44,17 @@ func (s *Server) initHelm() []server.ServerTool {
 			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithOpenWorldHintAnnotation(true),
 		), Handler: s.helmUninstall},
+		{Tool: mcp.NewTool("helm_values",
+			mcp.WithDescription("Retrieves the default or overridden values.yaml for a specified Helm chart version. Accepts a chart reference (e.g., stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress) and an optional chart version. If no version is provided, the latest available version is used."),
+			mcp.WithString("chart", mcp.Description("Chart reference to extract values from, such as stable/grafana or oci://ghcr.io/nginxinc/charts/nginx-ingress"), mcp.Required()),
+			mcp.WithString("version", mcp.Description("Version of the Helm chart to retrieve values for. Optional; defaults to the latest version if not provided.")),
+			// Tool annotations
+			mcp.WithTitleAnnotation("Helm: Values"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(false), // TODO: consider replacing implementation with equivalent to: helm upgrade --install
+			mcp.WithOpenWorldHintAnnotation(true),
+		), Handler: s.helmChartValues},
 	}
 }
 
@@ -115,4 +126,32 @@ func (s *Server) helmUninstall(ctx context.Context, ctr mcp.CallToolRequest) (*m
 		return NewTextResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
 	}
 	return NewTextResult(ret, err), nil
+}
+
+func (s *Server) helmChartValues(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	var chart string
+	ok := false
+	if chart, ok = ctr.GetArguments()["chart"].(string); !ok {
+		return NewTextResult("", fmt.Errorf("missing required argument: chart")), nil
+	}
+
+	version := ""
+	if v, ok := ctr.GetArguments()["version"].(string); ok {
+		version = v
+	}
+
+	derived, err := s.k.Derived(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize derived context: %w", err)
+	}
+
+	ret, err := derived.NewHelm().GetChartValues(ctx, chart, version)
+	if err != nil {
+		if version != "" {
+			return NewTextResult("", fmt.Errorf("failed to retrieve values for Helm chart '%s' (version %s): %w", chart, version, err)), nil
+		}
+		return NewTextResult("", fmt.Errorf("failed to retrieve values for Helm chart '%s': %w", chart, err)), nil
+	}
+
+	return NewTextResult(ret, nil), nil
 }
