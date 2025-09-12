@@ -1,4 +1,4 @@
-package full
+package core
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initResources(k *internalk8s.Manager) []api.ServerTool {
+func initResources(o internalk8s.Openshift) []api.ServerTool {
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
-	if k.IsOpenShift(context.Background()) {
+	if o.IsOpenShift(context.Background()) {
 		commonApiVersion += ", route.openshift.io/v1 Route"
 	}
 	commonApiVersion = fmt.Sprintf("(common apiVersion and kind include: %s)", commonApiVersion)

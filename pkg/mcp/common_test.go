@@ -42,10 +42,8 @@ import (
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/workflows"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/full"
 )
 
 // envTest has an expensive setup, so we only want to do it once per entire test run.
@@ -106,7 +104,7 @@ func TestMain(m *testing.M) {
 }
 
 type mcpContext struct {
-	toolset    api.Toolset
+	toolsets   []string
 	listOutput output.Output
 	logLevel   int
 
@@ -129,17 +127,17 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	c.ctx, c.cancel = context.WithCancel(t.Context())
 	c.tempDir = t.TempDir()
 	c.withKubeConfig(nil)
-	if c.toolset == nil {
-		c.toolset = &full.Full{}
-	}
-	if c.listOutput == nil {
-		c.listOutput = output.Yaml
-	}
 	if c.staticConfig == nil {
-		c.staticConfig = &config.StaticConfig{
-			ReadOnly:           false,
-			DisableDestructive: false,
-		}
+		c.staticConfig = config.Default()
+		// Default to use YAML output for lists (previously the default)
+		c.staticConfig.ListOutput = "yaml"
+	}
+	if c.toolsets != nil {
+		c.staticConfig.Toolsets = c.toolsets
+
+	}
+	if c.listOutput != nil {
+		c.staticConfig.ListOutput = c.listOutput.GetName()
 	}
 	if c.before != nil {
 		c.before(c)
@@ -151,11 +149,7 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	_ = flags.Set("v", strconv.Itoa(c.logLevel))
 	klog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(c.logLevel), textlogger.Output(&c.logBuffer))))
 	// MCP Server
-	if c.mcpServer, err = NewServer(Configuration{
-		Toolset:      c.toolset,
-		ListOutput:   c.listOutput,
-		StaticConfig: c.staticConfig,
-	}); err != nil {
+	if c.mcpServer, err = NewServer(Configuration{StaticConfig: c.staticConfig}); err != nil {
 		t.Fatal(err)
 		return
 	}
@@ -191,7 +185,7 @@ func (c *mcpContext) afterEach() {
 }
 
 func testCase(t *testing.T, test func(c *mcpContext)) {
-	testCaseWithContext(t, &mcpContext{toolset: &full.Full{}}, test)
+	testCaseWithContext(t, &mcpContext{}, test)
 }
 
 func testCaseWithContext(t *testing.T, mcpCtx *mcpContext, test func(c *mcpContext)) {

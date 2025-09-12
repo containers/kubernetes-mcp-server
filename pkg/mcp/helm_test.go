@@ -8,13 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/mcp"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 func TestHelmInstall(t *testing.T) {
@@ -60,7 +62,9 @@ func TestHelmInstall(t *testing.T) {
 }
 
 func TestHelmInstallDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Secret"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Secret" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		_, file, _, _ := runtime.Caller(0)
@@ -226,7 +230,9 @@ func TestHelmUninstall(t *testing.T) {
 }
 
 func TestHelmUninstallDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Secret"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Secret" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		kc := c.newKubernetesClient()

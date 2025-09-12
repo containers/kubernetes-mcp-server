@@ -25,7 +25,7 @@ func (t *TestToolset) GetName() string { return t.name }
 
 func (t *TestToolset) GetDescription() string { return t.description }
 
-func (t *TestToolset) GetTools(k *kubernetes.Manager) []api.ServerTool { return nil }
+func (t *TestToolset) GetTools(_ kubernetes.Openshift) []api.ServerTool { return nil }
 
 var _ api.Toolset = (*TestToolset)(nil)
 
@@ -52,6 +52,35 @@ func (s *ToolsetsSuite) TestToolsetFromString() {
 		res := ToolsetFromString("existent")
 		s.NotNil(res, "Expected to find the registered toolset")
 		s.Equal("existent", res.GetName(), "Expected to find the registered toolset by name")
+	})
+	s.Run("Returns the correct toolset if found after trimming spaces", func() {
+		Register(&TestToolset{name: "no-spaces"})
+		res := ToolsetFromString("  no-spaces  ")
+		s.NotNil(res, "Expected to find the registered toolset")
+		s.Equal("no-spaces", res.GetName(), "Expected to find the registered toolset by name")
+	})
+}
+
+func (s *ToolsetsSuite) TestValidate() {
+	s.Run("Returns nil for empty toolset list", func() {
+		s.Nil(Validate([]string{}), "Expected nil for empty toolset list")
+	})
+	s.Run("Returns error for invalid toolset name", func() {
+		err := Validate([]string{"invalid"})
+		s.NotNil(err, "Expected error for invalid toolset name")
+		s.Contains(err.Error(), "invalid toolset name: invalid", "Expected error message to contain invalid toolset name")
+	})
+	s.Run("Returns nil for valid toolset names", func() {
+		Register(&TestToolset{name: "valid-1"})
+		Register(&TestToolset{name: "valid-2"})
+		err := Validate([]string{"valid-1", "valid-2"})
+		s.Nil(err, "Expected nil for valid toolset names")
+	})
+	s.Run("Returns error if any toolset name is invalid", func() {
+		Register(&TestToolset{name: "valid"})
+		err := Validate([]string{"valid", "invalid"})
+		s.NotNil(err, "Expected error if any toolset name is invalid")
+		s.Contains(err.Error(), "invalid toolset name: invalid", "Expected error message to contain invalid toolset name")
 	})
 }
 

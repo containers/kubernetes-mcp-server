@@ -6,7 +6,7 @@
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/containers/kubernetes-mcp-server?sort=semver)](https://github.com/containers/kubernetes-mcp-server/releases/latest)
 [![Build](https://github.com/containers/kubernetes-mcp-server/actions/workflows/build.yaml/badge.svg)](https://github.com/containers/kubernetes-mcp-server/actions/workflows/build.yaml)
 
-[✨ Features](#features) | [🚀 Getting Started](#getting-started) | [🎥 Demos](#demos) | [⚙️ Configuration](#configuration) | [🛠️ Tools](#tools) | [🧑‍💻 Development](#development)
+[✨ Features](#features) | [🚀 Getting Started](#getting-started) | [🎥 Demos](#demos) | [⚙️ Configuration](#configuration) | [🛠️ Tools](#tools-and-functionalities) | [🧑‍💻 Development](#development)
 
 https://github.com/user-attachments/assets/be2b67b3-fc1c-4d11-ae46-93deba8ed98e
 
@@ -183,242 +183,140 @@ uvx kubernetes-mcp-server@latest --help
 | `--list-output`         | Output format for resource list operations (one of: yaml, table) (default "table")                                                                                                                                                                                                            |
 | `--read-only`           | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
 | `--disable-destructive` | If set, the MCP server will disable all destructive operations (delete, update, etc.) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without accidentally making changes. This option has no effect when `--read-only` is used.                            |
+| `--toolsets`            | Comma-separated list of toolsets to enable. Check the [🛠️ Tools and Functionalities](#tools-and-functionalities) section for more information.                                                                                                                                               |
 
-## 🛠️ Tools <a id="tools"></a>
+## 🛠️ Tools and Functionalities <a id="tools-and-functionalities"></a>
 
-### `configuration_view`
+The Kubernetes MCP server supports enabling or disabling specific groups of tools and functionalities (tools, resources, prompts, and so on) via the `--toolsets` command-line flag or `toolsets` configuration option.
+This allows you to control which Kubernetes functionalities are available to your AI tools.
+Enabling only the toolsets you need can help reduce the context size and improve the LLM's tool selection accuracy.
 
-Get the current Kubernetes configuration content as a kubeconfig YAML
+### Available Toolsets
 
-**Parameters:**
-- `minified` (`boolean`, optional, default: `true`)
-  - Return a minified version of the configuration
-  - If `true`, keeps only the current-context and relevant configuration pieces
-  - If `false`, returns all contexts, clusters, auth-infos, and users
+The following sets of tools are available (all on by default):
 
-### `events_list`
+<!-- AVAILABLE-TOOLSETS-START -->
 
-List all the Kubernetes events in the current cluster from all namespaces
+| Toolset | Description                                                                         |
+|---------|-------------------------------------------------------------------------------------|
+| config  | View and manage the current local Kubernetes configuration (kubeconfig)             |
+| core    | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.) |
+| helm    | Tools for managing Helm charts and releases                                         |
 
-**Parameters:**
-- `namespace` (`string`, optional)
-  - Namespace to retrieve the events from. If not provided, will list events from all namespaces
+<!-- AVAILABLE-TOOLSETS-END -->
 
-### `helm_install`
+### Tools
 
-Install a Helm chart in the current or provided namespace with the provided name and chart
+<!-- AVAILABLE-TOOLSETS-TOOLS-START -->
 
-**Parameters:**
-- `chart` (`string`, required)
-  - Name of the Helm chart to install
-  - Can be a local path or a remote URL
-  - Example: `./my-chart.tgz` or `https://example.com/my-chart.tgz`
-- `values` (`object`, optional)
-  - Values to pass to the Helm chart
-  - Example: `{"key": "value"}`
-- `name` (`string`, optional)
-  - Name of the Helm release
-  - Random name if not provided
-- `namespace` (`string`, optional)
-  - Namespace to install the Helm chart in
-  - If not provided, will use the configured namespace
+<details>
 
-### `helm_list`
+<summary>config</summary>
 
-List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
+- **configuration_view** - Get the current Kubernetes configuration content as a kubeconfig YAML
+  - `minified` (`boolean`) - Return a minified version of the configuration. If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. (Optional, default true)
 
-**Parameters:**
-- `namespace` (`string`, optional)
-  - Namespace to list the Helm releases from
-  - If not provided, will use the configured namespace
-- `all_namespaces` (`boolean`, optional)
-  - If `true`, will list Helm releases from all namespaces
-  - If `false`, will list Helm releases from the specified namespace
+</details>
 
-### `helm_uninstall`
+<details>
 
-Uninstall a Helm release in the current or provided namespace with the provided name
+<summary>core</summary>
 
-**Parameters:**
-- `name` (`string`, required)
-  - Name of the Helm release to uninstall
-- `namespace` (`string`, optional)
-  - Namespace to uninstall the Helm release from
-  - If not provided, will use the configured namespace
+- **events_list** - List all the Kubernetes events in the current cluster from all namespaces
+  - `namespace` (`string`) - Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces
 
-### `namespaces_list`
+- **namespaces_list** - List all the Kubernetes namespaces in the current cluster
 
-List all the Kubernetes namespaces in the current cluster
+- **projects_list** - List all the OpenShift projects in the current cluster
 
-**Parameters:** None
+- **pods_list** - List all the Kubernetes pods in the current cluster from all namespaces
+  - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
 
-### `pods_delete`
+- **pods_list_in_namespace** - List all the Kubernetes pods in the specified namespace in the current cluster
+  - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
+  - `namespace` (`string`) **(required)** - Namespace to list pods from
 
-Delete a Kubernetes Pod in the current or provided namespace with the provided name
+- **pods_get** - Get a Kubernetes Pod in the current or provided namespace with the provided name
+  - `name` (`string`) **(required)** - Name of the Pod
+  - `namespace` (`string`) - Namespace to get the Pod from
 
-**Parameters:**
-- `name` (`string`, required)
-  - Name of the Pod to delete
-- `namespace` (`string`, required)
-  - Namespace to delete the Pod from
+- **pods_delete** - Delete a Kubernetes Pod in the current or provided namespace with the provided name
+  - `name` (`string`) **(required)** - Name of the Pod to delete
+  - `namespace` (`string`) - Namespace to delete the Pod from
 
-### `pods_exec`
+- **pods_top** - List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace
+  - `all_namespaces` (`boolean`) - If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace
+  - `label_selector` (`string`) - Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)
+  - `name` (`string`) - Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)
+  - `namespace` (`string`) - Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)
 
-Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command
+- **pods_exec** - Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command
+  - `command` (`array`) **(required)** - Command to execute in the Pod container. The first item is the command to be run, and the rest are the arguments to that command. Example: ["ls", "-l", "/tmp"]
+  - `container` (`string`) - Name of the Pod container where the command will be executed (Optional)
+  - `name` (`string`) **(required)** - Name of the Pod where the command will be executed
+  - `namespace` (`string`) - Namespace of the Pod where the command will be executed
 
-**Parameters:**
-- `command` (`string[]`, required)
-  - Command to execute in the Pod container
-  - First item is the command, rest are arguments
-  - Example: `["ls", "-l", "/tmp"]`
-- `name` (string, required)
-  - Name of the Pod
-- `namespace` (string, required)
-  - Namespace of the Pod
-- `container` (`string`, optional)
-  - Name of the Pod container to get logs from
+- **pods_log** - Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name
+  - `container` (`string`) - Name of the Pod container to get the logs from (Optional)
+  - `name` (`string`) **(required)** - Name of the Pod to get the logs from
+  - `namespace` (`string`) - Namespace to get the Pod logs from
+  - `previous` (`boolean`) - Return previous terminated container logs (Optional)
 
-### `pods_get`
+- **pods_run** - Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name
+  - `image` (`string`) **(required)** - Container Image to run in the Pod
+  - `name` (`string`) - Name of the Pod (Optional, random name if not provided)
+  - `namespace` (`string`) - Namespace to run the Pod in
+  - `port` (`number`) - TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)
 
-Get a Kubernetes Pod in the current or provided namespace with the provided name
+- **resources_list** - List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector
+(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
+  - `apiVersion` (`string`) **(required)** - apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)
+  - `kind` (`string`) **(required)** - kind of the resources (examples of valid kind are: Pod, Service, Deployment, Ingress)
+  - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
+  - `namespace` (`string`) - Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces
 
-**Parameters:**
-- `name` (`string`, required)
-  - Name of the Pod
-- `namespace` (`string`, required)
-  - Namespace to get the Pod from
+- **resources_get** - Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name
+(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
+  - `apiVersion` (`string`) **(required)** - apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)
+  - `kind` (`string`) **(required)** - kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)
+  - `name` (`string`) **(required)** - Name of the resource
+  - `namespace` (`string`) - Optional Namespace to retrieve the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will get resource from configured namespace
 
-### `pods_list`
+- **resources_create_or_update** - Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource
+(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
+  - `resource` (`string`) **(required)** - A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec
 
-List all the Kubernetes pods in the current cluster from all namespaces
+- **resources_delete** - Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name
+(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
+  - `apiVersion` (`string`) **(required)** - apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)
+  - `kind` (`string`) **(required)** - kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)
+  - `name` (`string`) **(required)** - Name of the resource
+  - `namespace` (`string`) - Optional Namespace to delete the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will delete resource from configured namespace
 
-**Parameters:**
-- `labelSelector` (`string`, optional)
-  - Kubernetes label selector (e.g., 'app=myapp,env=prod' or 'app in (myapp,yourapp)'). Use this option to filter the pods by label
+</details>
 
-### `pods_list_in_namespace`
+<details>
 
-List all the Kubernetes pods in the specified namespace in the current cluster
+<summary>helm</summary>
 
-**Parameters:**
-- `namespace` (`string`, required)
-  - Namespace to list pods from
-- `labelSelector` (`string`, optional)
-  - Kubernetes label selector (e.g., 'app=myapp,env=prod' or 'app in (myapp,yourapp)'). Use this option to filter the pods by label
+- **helm_install** - Install a Helm chart in the current or provided namespace
+  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
+  - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
+  - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
+  - `values` (`object`) - Values to pass to the Helm chart (Optional)
 
-### `pods_log`
+- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
+  - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
+  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
 
-Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name
+- **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
+  - `name` (`string`) **(required)** - Name of the Helm release to uninstall
+  - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
 
-**Parameters:**
-- `name` (`string`, required)
-  - Name of the Pod to get logs from
-- `namespace` (`string`, required)
-  - Namespace to get the Pod logs from
-- `container` (`string`, optional)
-  - Name of the Pod container to get logs from
-- `previous` (`boolean`, optional)
-  - Return previous terminated container logs
+</details>
 
-### `pods_run`
 
-Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name
-
-**Parameters:**
-- `image` (`string`, required)
-  - Container Image to run in the Pod
-- `namespace` (`string`, required)
-  - Namespace to run the Pod in
-- `name` (`string`, optional)
-  - Name of the Pod (random name if not provided)
-- `port` (`number`, optional)
-  - TCP/IP port to expose from the Pod container
-  - No port exposed if not provided
-
-### `pods_top`
-
-Lists the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace
-
-**Parameters:**
-- `all_namespaces` (`boolean`, optional, default: `true`)
-  - If `true`, lists resource consumption for Pods in all namespaces
-  - If `false`, lists resource consumption for Pods in the configured or provided namespace
-- `namespace` (`string`, optional)
-  - Namespace to list the Pod resources from
-  - If not provided, will list Pods from the configured namespace (in case all_namespaces is false)
-- `name` (`string`, optional)
-  - Name of the Pod to get resource consumption from
-  - If not provided, will list resource consumption for all Pods in the applicable namespace(s)
-- `label_selector` (`string`, optional)
-  - Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)
-
-### `projects_list`
-
-List all the OpenShift projects in the current cluster
-
-### `resources_create_or_update`
-
-Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource
-
-**Parameters:**
-- `resource` (`string`, required)
-  - A JSON or YAML containing a representation of the Kubernetes resource
-  - Should include top-level fields such as apiVersion, kind, metadata, and spec
-
-**Common apiVersion and kind include:**
-- v1 Pod
-- v1 Service
-- v1 Node
-- apps/v1 Deployment
-- networking.k8s.io/v1 Ingress
-
-### `resources_delete`
-
-Delete a Kubernetes resource in the current cluster
-
-**Parameters:**
-- `apiVersion` (`string`, required)
-  - apiVersion of the resource (e.g., `v1`, `apps/v1`, `networking.k8s.io/v1`)
-- `kind` (`string`, required)
-  - kind of the resource (e.g., `Pod`, `Service`, `Deployment`, `Ingress`)
-- `name` (`string`, required)
-  - Name of the resource
-- `namespace` (`string`, optional)
-  - Namespace to delete the namespaced resource from
-  - Ignored for cluster-scoped resources
-  - Uses configured namespace if not provided
-
-### `resources_get`
-
-Get a Kubernetes resource in the current cluster
-
-**Parameters:**
-- `apiVersion` (`string`, required)
-  - apiVersion of the resource (e.g., `v1`, `apps/v1`, `networking.k8s.io/v1`)
-- `kind` (`string`, required)
-  - kind of the resource (e.g., `Pod`, `Service`, `Deployment`, `Ingress`)
-- `name` (`string`, required)
-  - Name of the resource
-- `namespace` (`string`, optional)
-  - Namespace to retrieve the namespaced resource from
-  - Ignored for cluster-scoped resources
-  - Uses configured namespace if not provided
-
-### `resources_list`
-
-List Kubernetes resources and objects in the current cluster
-
-**Parameters:**
-- `apiVersion` (`string`, required)
-  - apiVersion of the resources (e.g., `v1`, `apps/v1`, `networking.k8s.io/v1`)
-- `kind` (`string`, required)
-  - kind of the resources (e.g., `Pod`, `Service`, `Deployment`, `Ingress`)
-- `namespace` (`string`, optional)
-  - Namespace to retrieve the namespaced resources from
-  - Ignored for cluster-scoped resources
-  - Lists resources from all namespaces if not provided
-- `labelSelector` (`string`, optional)
-  - Kubernetes label selector (e.g., 'app=myapp,env=prod' or 'app in (myapp,yourapp)'). Use this option to filter the pods by label.
+<!-- AVAILABLE-TOOLSETS-TOOLS-END -->
 
 ## 🧑‍💻 Development <a id="development"></a>
 

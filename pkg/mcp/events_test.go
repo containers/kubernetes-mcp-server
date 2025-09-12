@@ -1,11 +1,14 @@
 package mcp
 
 import (
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"testing"
+
 	"github.com/mark3labs/mcp-go/mcp"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 func TestEventsList(t *testing.T) {
@@ -96,7 +99,9 @@ func TestEventsList(t *testing.T) {
 }
 
 func TestEventsListDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Event"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Event" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		eventList, _ := c.callTool("events_list", map[string]interface{}{})

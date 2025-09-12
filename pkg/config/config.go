@@ -20,6 +20,7 @@ type StaticConfig struct {
 	ReadOnly bool `toml:"read_only,omitempty"`
 	// When true, disable tools annotated with destructiveHint=true
 	DisableDestructive bool     `toml:"disable_destructive,omitempty"`
+	Toolsets           []string `toml:"toolsets,omitempty"`
 	EnabledTools       []string `toml:"enabled_tools,omitempty"`
 	DisabledTools      []string `toml:"disabled_tools,omitempty"`
 
@@ -50,22 +51,32 @@ type StaticConfig struct {
 	ServerURL            string   `toml:"server_url,omitempty"`
 }
 
+func Default() *StaticConfig {
+	return &StaticConfig{
+		ListOutput: "table",
+		Toolsets:   []string{"core", "config", "helm"},
+	}
+}
+
 type GroupVersionKind struct {
 	Group   string `toml:"group"`
 	Version string `toml:"version"`
 	Kind    string `toml:"kind,omitempty"`
 }
 
-// ReadConfig reads the toml file and returns the StaticConfig.
-func ReadConfig(configPath string) (*StaticConfig, error) {
+// Read reads the toml file and returns the StaticConfig.
+func Read(configPath string) (*StaticConfig, error) {
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
+	return ReadToml(configData)
+}
 
-	var config *StaticConfig
-	err = toml.Unmarshal(configData, &config)
-	if err != nil {
+// ReadToml reads the toml data and returns the StaticConfig.
+func ReadToml(configData []byte) (*StaticConfig, error) {
+	config := Default()
+	if err := toml.Unmarshal(configData, config); err != nil {
 		return nil, err
 	}
 	return config, nil

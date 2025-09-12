@@ -210,7 +210,9 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 }
 
 func TestPodsTopDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Group: "metrics.k8s.io", Version: "v1beta1"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { group = "metrics.k8s.io", version = "v1beta1" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		mockServer := test.NewMockServer()
 		defer mockServer.Close()

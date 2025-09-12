@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/yaml"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
@@ -152,12 +153,12 @@ func TestResourcesList(t *testing.T) {
 }
 
 func TestResourcesListDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{
-		DeniedResources: []config.GroupVersionKind{
-			{Version: "v1", Kind: "Secret"},
-			{Group: "rbac.authorization.k8s.io", Version: "v1"},
-		},
-	}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [
+			{ version = "v1", kind = "Secret" },
+			{ group = "rbac.authorization.k8s.io", version = "v1" }
+		]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		deniedByKind, _ := c.callTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "Secret"})
@@ -357,12 +358,12 @@ func TestResourcesGet(t *testing.T) {
 }
 
 func TestResourcesGetDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{
-		DeniedResources: []config.GroupVersionKind{
-			{Version: "v1", Kind: "Secret"},
-			{Group: "rbac.authorization.k8s.io", Version: "v1"},
-		},
-	}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [
+			{ version = "v1", kind = "Secret" },
+			{ group = "rbac.authorization.k8s.io", version = "v1" }
+		]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		kc := c.newKubernetesClient()
@@ -583,12 +584,12 @@ func TestResourcesCreateOrUpdate(t *testing.T) {
 }
 
 func TestResourcesCreateOrUpdateDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{
-		DeniedResources: []config.GroupVersionKind{
-			{Version: "v1", Kind: "Secret"},
-			{Group: "rbac.authorization.k8s.io", Version: "v1"},
-		},
-	}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [
+			{ version = "v1", kind = "Secret" },
+			{ group = "rbac.authorization.k8s.io", version = "v1" }
+		]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		secretYaml := "apiVersion: v1\nkind: Secret\nmetadata:\n  name: a-denied-secret\n  namespace: default\n"
@@ -745,12 +746,12 @@ func TestResourcesDelete(t *testing.T) {
 }
 
 func TestResourcesDeleteDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{
-		DeniedResources: []config.GroupVersionKind{
-			{Version: "v1", Kind: "Secret"},
-			{Group: "rbac.authorization.k8s.io", Version: "v1"},
-		},
-	}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [
+			{ version = "v1", kind = "Secret" },
+			{ group = "rbac.authorization.k8s.io", version = "v1" }
+		]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		kc := c.newKubernetesClient()

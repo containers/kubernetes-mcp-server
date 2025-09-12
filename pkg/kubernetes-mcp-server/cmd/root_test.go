@@ -129,13 +129,13 @@ func TestConfig(t *testing.T) {
 	})
 }
 
-func TestToolset(t *testing.T) {
+func TestToolsets(t *testing.T) {
 	t.Run("available", func(t *testing.T) {
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--help"})
 		o, err := captureOutput(rootCmd.Execute) // --help doesn't use logger/klog, cobra prints directly to stdout
-		if !strings.Contains(o, "MCP toolset to use (one of: full) ") {
+		if !strings.Contains(o, "Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm).") {
 			t.Fatalf("Expected all available toolsets, got %s %v", o, err)
 		}
 	})
@@ -143,16 +143,16 @@ func TestToolset(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolset: full") {
-			t.Fatalf("Expected toolset 'full', got %s %v", out, err)
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolsets: core, config, helm") {
+			t.Fatalf("Expected toolsets 'full', got %s %v", out, err)
 		}
 	})
-	t.Run("set with --toolset", func(t *testing.T) {
+	t.Run("set with --toolsets", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--toolset", "full"}) // TODO: change by some non-default toolset
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--toolsets", "helm,config"})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - Toolset\: full\"`
+		expected := `(?m)\" - Toolsets\: helm, config\"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected toolset to be %s, got %s %v", expected, out.String(), err)
 		}

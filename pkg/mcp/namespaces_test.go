@@ -5,14 +5,16 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/mark3labs/mcp-go/mcp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/yaml"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
 func TestNamespacesList(t *testing.T) {
@@ -51,7 +53,9 @@ func TestNamespacesList(t *testing.T) {
 }
 
 func TestNamespacesListDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Version: "v1", Kind: "Namespace"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { version = "v1", kind = "Namespace" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
 		c.withEnvTest()
 		namespacesList, _ := c.callTool("namespaces_list", map[string]interface{}{})
@@ -156,7 +160,9 @@ func TestProjectsListInOpenShift(t *testing.T) {
 }
 
 func TestProjectsListInOpenShiftDenied(t *testing.T) {
-	deniedResourcesServer := &config.StaticConfig{DeniedResources: []config.GroupVersionKind{{Group: "project.openshift.io", Version: "v1"}}}
+	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+		denied_resources = [ { group = "project.openshift.io", version = "v1" } ]
+	`)))
 	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer, before: inOpenShift, after: inOpenShiftClear}, func(c *mcpContext) {
 		c.withEnvTest()
 		projectsList, _ := c.callTool("projects_list", map[string]interface{}{})

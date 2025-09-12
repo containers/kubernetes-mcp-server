@@ -1,4 +1,4 @@
-package full
+package core
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
-func initNamespaces(k *internalk8s.Manager) []api.ServerTool {
+func initNamespaces(o internalk8s.Openshift) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
@@ -30,7 +30,7 @@ func initNamespaces(k *internalk8s.Manager) []api.ServerTool {
 			},
 		}, Handler: namespacesList,
 	})
-	if k.IsOpenShift(context.Background()) {
+	if o.IsOpenShift(context.Background()) {
 		ret = append(ret, api.ServerTool{
 			Tool: api.Tool{
 				Name:        "projects_list",
