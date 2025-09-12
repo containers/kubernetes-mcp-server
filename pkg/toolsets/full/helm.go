@@ -1,17 +1,17 @@
-package mcp
+package full
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/mark3labs/mcp-go/mcp"
 	"k8s.io/utils/ptr"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-func (s *Server) initHelm() []ServerTool {
-	return []ServerTool{
-		{Tool: Tool{
+func initHelm() []api.ServerTool {
+	return []api.ServerTool{
+		{Tool: api.Tool{
 			Name:        "helm_install",
 			Description: "Install a Helm chart in the current or provided namespace",
 			InputSchema: &jsonschema.Schema{
@@ -37,15 +37,15 @@ func (s *Server) initHelm() []ServerTool {
 				},
 				Required: []string{"chart"},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Helm: Install",
 				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(false), // TODO: consider replacing implementation with equivalent to: helm upgrade --install
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.helmInstall},
-		{Tool: Tool{
+		}, Handler: helmInstall},
+		{Tool: api.Tool{
 			Name:        "helm_list",
 			Description: "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
 			InputSchema: &jsonschema.Schema{
@@ -61,15 +61,15 @@ func (s *Server) initHelm() []ServerTool {
 					},
 				},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Helm: List",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.helmList},
-		{Tool: Tool{
+		}, Handler: helmList},
+		{Tool: api.Tool{
 			Name:        "helm_uninstall",
 			Description: "Uninstall a Helm release in the current or provided namespace",
 			InputSchema: &jsonschema.Schema{
@@ -86,83 +86,71 @@ func (s *Server) initHelm() []ServerTool {
 				},
 				Required: []string{"name"},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Helm: Uninstall",
 				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.helmUninstall},
+		}, Handler: helmUninstall},
 	}
 }
 
-func (s *Server) helmInstall(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	var chart string
 	ok := false
-	if chart, ok = ctr.GetArguments()["chart"].(string); !ok {
-		return NewTextResult("", fmt.Errorf("failed to install helm chart, missing argument chart")), nil
+	if chart, ok = params.GetArguments()["chart"].(string); !ok {
+		return api.NewToolCallResult("", fmt.Errorf("failed to install helm chart, missing argument chart")), nil
 	}
 	values := map[string]interface{}{}
-	if v, ok := ctr.GetArguments()["values"].(map[string]interface{}); ok {
+	if v, ok := params.GetArguments()["values"].(map[string]interface{}); ok {
 		values = v
 	}
 	name := ""
-	if v, ok := ctr.GetArguments()["name"].(string); ok {
+	if v, ok := params.GetArguments()["name"].(string); ok {
 		name = v
 	}
 	namespace := ""
-	if v, ok := ctr.GetArguments()["namespace"].(string); ok {
+	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	derived, err := s.k.Derived(ctx)
+	ret, err := params.NewHelm().Install(params, chart, values, name, namespace)
 	if err != nil {
-		return nil, err
+		return api.NewToolCallResult("", fmt.Errorf("failed to install helm chart '%s': %w", chart, err)), nil
 	}
-	ret, err := derived.NewHelm().Install(ctx, chart, values, name, namespace)
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to install helm chart '%s': %w", chart, err)), nil
-	}
-	return NewTextResult(ret, err), nil
+	return api.NewToolCallResult(ret, err), nil
 }
 
-func (s *Server) helmList(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	allNamespaces := false
-	if v, ok := ctr.GetArguments()["all_namespaces"].(bool); ok {
+	if v, ok := params.GetArguments()["all_namespaces"].(bool); ok {
 		allNamespaces = v
 	}
 	namespace := ""
-	if v, ok := ctr.GetArguments()["namespace"].(string); ok {
+	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	derived, err := s.k.Derived(ctx)
+	ret, err := params.NewHelm().List(namespace, allNamespaces)
 	if err != nil {
-		return nil, err
+		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases in namespace '%s': %w", namespace, err)), nil
 	}
-	ret, err := derived.NewHelm().List(namespace, allNamespaces)
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to list helm releases in namespace '%s': %w", namespace, err)), nil
-	}
-	return NewTextResult(ret, err), nil
+	return api.NewToolCallResult(ret, err), nil
 }
 
-func (s *Server) helmUninstall(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func helmUninstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	var name string
 	ok := false
-	if name, ok = ctr.GetArguments()["name"].(string); !ok {
-		return NewTextResult("", fmt.Errorf("failed to uninstall helm chart, missing argument name")), nil
+	if name, ok = params.GetArguments()["name"].(string); !ok {
+		return api.NewToolCallResult("", fmt.Errorf("failed to uninstall helm chart, missing argument name")), nil
 	}
 	namespace := ""
-	if v, ok := ctr.GetArguments()["namespace"].(string); ok {
+	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	derived, err := s.k.Derived(ctx)
+	ret, err := params.NewHelm().Uninstall(name, namespace)
 	if err != nil {
-		return nil, err
+		return api.NewToolCallResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
 	}
-	ret, err := derived.NewHelm().Uninstall(name, namespace)
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
-	}
-	return NewTextResult(ret, err), nil
+	return api.NewToolCallResult(ret, err), nil
 }

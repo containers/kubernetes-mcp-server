@@ -1,19 +1,18 @@
-package mcp
+package full
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/mark3labs/mcp-go/mcp"
 	"k8s.io/utils/ptr"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func (s *Server) initEvents() []ServerTool {
-	return []ServerTool{
-		{Tool: Tool{
+func initEvents() []api.ServerTool {
+	return []api.ServerTool{
+		{Tool: api.Tool{
 			Name:        "events_list",
 			Description: "List all the Kubernetes events in the current cluster from all namespaces",
 			InputSchema: &jsonschema.Schema{
@@ -25,36 +24,32 @@ func (s *Server) initEvents() []ServerTool {
 					},
 				},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Events: List",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.eventsList},
+		}, Handler: eventsList},
 	}
 }
 
-func (s *Server) eventsList(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	namespace := ctr.GetArguments()["namespace"]
+func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
 	}
-	derived, err := s.k.Derived(ctx)
+	eventMap, err := params.EventsList(params, namespace.(string))
 	if err != nil {
-		return nil, err
-	}
-	eventMap, err := derived.EventsList(ctx, namespace.(string))
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to list events in all namespaces: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %v", err)), nil
 	}
 	if len(eventMap) == 0 {
-		return NewTextResult("No events found", nil), nil
+		return api.NewToolCallResult("No events found", nil), nil
 	}
 	yamlEvents, err := output.MarshalYaml(eventMap)
 	if err != nil {
 		err = fmt.Errorf("failed to list events in all namespaces: %v", err)
 	}
-	return NewTextResult(fmt.Sprintf("The following events (YAML format) were found:\n%s", yamlEvents), err), nil
+	return api.NewToolCallResult(fmt.Sprintf("The following events (YAML format) were found:\n%s", yamlEvents), err), nil
 }

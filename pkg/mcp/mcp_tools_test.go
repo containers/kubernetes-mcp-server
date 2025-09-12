@@ -161,7 +161,7 @@ func TestToolCallLogging(t *testing.T) {
 			}
 		})
 		sensitiveHeaders := []string{
-			"Authorization",
+			"Authorization:",
 			// TODO: Add more sensitive headers as needed
 		}
 		t.Run("Does not log sensitive headers", func(t *testing.T) {

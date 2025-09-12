@@ -14,8 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -32,7 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/tools/clientcmd/api"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	toolswatch "k8s.io/client-go/tools/watch"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
@@ -43,6 +41,11 @@ import (
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/store"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/workflows"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/full"
 )
 
 // envTest has an expensive setup, so we only want to do it once per entire test run.
@@ -103,7 +106,7 @@ func TestMain(m *testing.M) {
 }
 
 type mcpContext struct {
-	toolset    Toolset
+	toolset    api.Toolset
 	listOutput output.Output
 	logLevel   int
 
@@ -127,7 +130,7 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	c.tempDir = t.TempDir()
 	c.withKubeConfig(nil)
 	if c.toolset == nil {
-		c.toolset = &Full{}
+		c.toolset = &full.Full{}
 	}
 	if c.listOutput == nil {
 		c.listOutput = output.Yaml
@@ -188,7 +191,7 @@ func (c *mcpContext) afterEach() {
 }
 
 func testCase(t *testing.T, test func(c *mcpContext)) {
-	testCaseWithContext(t, &mcpContext{toolset: &Full{}}, test)
+	testCaseWithContext(t, &mcpContext{toolset: &full.Full{}}, test)
 }
 
 func testCaseWithContext(t *testing.T, mcpCtx *mcpContext, test func(c *mcpContext)) {
@@ -198,23 +201,23 @@ func testCaseWithContext(t *testing.T, mcpCtx *mcpContext, test func(c *mcpConte
 }
 
 // withKubeConfig sets up a fake kubeconfig in the temp directory based on the provided rest.Config
-func (c *mcpContext) withKubeConfig(rc *rest.Config) *api.Config {
-	fakeConfig := api.NewConfig()
-	fakeConfig.Clusters["fake"] = api.NewCluster()
+func (c *mcpContext) withKubeConfig(rc *rest.Config) *clientcmdapi.Config {
+	fakeConfig := clientcmdapi.NewConfig()
+	fakeConfig.Clusters["fake"] = clientcmdapi.NewCluster()
 	fakeConfig.Clusters["fake"].Server = "https://127.0.0.1:6443"
-	fakeConfig.Clusters["additional-cluster"] = api.NewCluster()
-	fakeConfig.AuthInfos["fake"] = api.NewAuthInfo()
-	fakeConfig.AuthInfos["additional-auth"] = api.NewAuthInfo()
+	fakeConfig.Clusters["additional-cluster"] = clientcmdapi.NewCluster()
+	fakeConfig.AuthInfos["fake"] = clientcmdapi.NewAuthInfo()
+	fakeConfig.AuthInfos["additional-auth"] = clientcmdapi.NewAuthInfo()
 	if rc != nil {
 		fakeConfig.Clusters["fake"].Server = rc.Host
 		fakeConfig.Clusters["fake"].CertificateAuthorityData = rc.CAData
 		fakeConfig.AuthInfos["fake"].ClientKeyData = rc.KeyData
 		fakeConfig.AuthInfos["fake"].ClientCertificateData = rc.CertData
 	}
-	fakeConfig.Contexts["fake-context"] = api.NewContext()
+	fakeConfig.Contexts["fake-context"] = clientcmdapi.NewContext()
 	fakeConfig.Contexts["fake-context"].Cluster = "fake"
 	fakeConfig.Contexts["fake-context"].AuthInfo = "fake"
-	fakeConfig.Contexts["additional-context"] = api.NewContext()
+	fakeConfig.Contexts["additional-context"] = clientcmdapi.NewContext()
 	fakeConfig.Contexts["additional-context"].Cluster = "additional-cluster"
 	fakeConfig.Contexts["additional-context"].AuthInfo = "additional-auth"
 	fakeConfig.CurrentContext = "fake-context"

@@ -81,24 +81,24 @@ func (m *Manager) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	return m.clientCmdConfig
 }
 
-func (m *Manager) ConfigurationView(minify bool) (runtime.Object, error) {
+func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
 	var cfg clientcmdapi.Config
 	var err error
-	if m.IsInCluster() {
+	if k.manager.IsInCluster() {
 		cfg = *clientcmdapi.NewConfig()
 		cfg.Clusters["cluster"] = &clientcmdapi.Cluster{
-			Server:                m.cfg.Host,
-			InsecureSkipTLSVerify: m.cfg.Insecure,
+			Server:                k.manager.cfg.Host,
+			InsecureSkipTLSVerify: k.manager.cfg.Insecure,
 		}
 		cfg.AuthInfos["user"] = &clientcmdapi.AuthInfo{
-			Token: m.cfg.BearerToken,
+			Token: k.manager.cfg.BearerToken,
 		}
 		cfg.Contexts["context"] = &clientcmdapi.Context{
 			Cluster:  "cluster",
 			AuthInfo: "user",
 		}
 		cfg.CurrentContext = "context"
-	} else if cfg, err = m.clientCmdConfig.RawConfig(); err != nil {
+	} else if cfg, err = k.manager.clientCmdConfig.RawConfig(); err != nil {
 		return nil, err
 	}
 	if minify {

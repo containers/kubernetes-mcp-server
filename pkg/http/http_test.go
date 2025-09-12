@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 	"golang.org/x/sync/errgroup"
@@ -87,7 +88,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	}
 	c.StaticConfig.Port = fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
 	mcpServer, err := mcp.NewServer(mcp.Configuration{
-		Toolset:      mcp.Toolsets()[0],
+		Toolset:      toolsets.Toolsets()[0],
 		StaticConfig: c.StaticConfig,
 	})
 	if err != nil {

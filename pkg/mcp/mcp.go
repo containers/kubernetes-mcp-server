@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	authenticationapiv1 "k8s.io/api/authentication/v1"
@@ -24,13 +25,13 @@ type ContextKey string
 const TokenScopesContextKey = ContextKey("TokenScopesContextKey")
 
 type Configuration struct {
-	Toolset    Toolset
+	Toolset    api.Toolset
 	ListOutput output.Output
 
 	StaticConfig *config.StaticConfig
 }
 
-func (c *Configuration) isToolApplicable(tool ServerTool) bool {
+func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 	if c.StaticConfig.ReadOnly && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
 		return false
 	}
@@ -88,15 +89,15 @@ func (s *Server) reloadKubernetesClient() error {
 		return err
 	}
 	s.k = k
-	applicableTools := make([]ServerTool, 0)
-	for _, tool := range s.configuration.Toolset.GetTools(s) {
+	applicableTools := make([]api.ServerTool, 0)
+	for _, tool := range s.configuration.Toolset.GetTools(s.k) {
 		if !s.configuration.isToolApplicable(tool) {
 			continue
 		}
 		applicableTools = append(applicableTools, tool)
 		s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 	}
-	m3labsServerTools, err := ServerToolToM3LabsServerTool(applicableTools)
+	m3labsServerTools, err := ServerToolToM3LabsServerTool(s, applicableTools)
 	if err != nil {
 		return fmt.Errorf("failed to convert tools: %v", err)
 	}

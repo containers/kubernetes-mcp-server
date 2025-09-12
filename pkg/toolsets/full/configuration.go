@@ -1,19 +1,18 @@
-package mcp
+package full
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/mark3labs/mcp-go/mcp"
 	"k8s.io/utils/ptr"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func (s *Server) initConfiguration() []ServerTool {
-	tools := []ServerTool{
-		{Tool: Tool{
+func initConfiguration() []api.ServerTool {
+	tools := []api.ServerTool{
+		{Tool: api.Tool{
 			Name:        "configuration_view",
 			Description: "Get the current Kubernetes configuration content as a kubeconfig YAML",
 			InputSchema: &jsonschema.Schema{
@@ -28,31 +27,31 @@ func (s *Server) initConfiguration() []ServerTool {
 					},
 				},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Configuration: View",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.configurationView},
+		}, Handler: configurationView},
 	}
 	return tools
 }
 
-func (s *Server) configurationView(_ context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func configurationView(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	minify := true
-	minified := ctr.GetArguments()["minified"]
+	minified := params.GetArguments()["minified"]
 	if _, ok := minified.(bool); ok {
 		minify = minified.(bool)
 	}
-	ret, err := s.k.ConfigurationView(minify)
+	ret, err := params.ConfigurationView(minify)
 	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to get configuration: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get configuration: %v", err)), nil
 	}
 	configurationYaml, err := output.MarshalYaml(ret)
 	if err != nil {
 		err = fmt.Errorf("failed to get configuration: %v", err)
 	}
-	return NewTextResult(configurationYaml, err), nil
+	return api.NewToolCallResult(configurationYaml, err), nil
 }

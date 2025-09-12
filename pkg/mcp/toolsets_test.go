@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/full"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 )
@@ -34,7 +35,7 @@ func TestFullToolsetTools(t *testing.T) {
 		"resources_create_or_update",
 		"resources_delete",
 	}
-	mcpCtx := &mcpContext{toolset: &Full{}}
+	mcpCtx := &mcpContext{toolset: &full.Full{}}
 	testCaseWithContext(t, mcpCtx, func(c *mcpContext) {
 		tools, err := c.mcpClient.ListTools(c.ctx, mcp.ListToolsRequest{})
 		t.Run("ListTools returns tools", func(t *testing.T) {
@@ -73,7 +74,7 @@ func TestFullToolsetTools(t *testing.T) {
 
 func TestFullToolsetToolsInOpenShift(t *testing.T) {
 	mcpCtx := &mcpContext{
-		toolset: &Full{},
+		toolset: &full.Full{},
 		before:  inOpenShift,
 		after:   inOpenShiftClear,
 	}

@@ -1,4 +1,4 @@
-package mcp
+package full
 
 import (
 	"context"
@@ -6,22 +6,23 @@ import (
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/mark3labs/mcp-go/mcp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func (s *Server) initResources() []ServerTool {
+func initResources(k *internalk8s.Manager) []api.ServerTool {
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
-	if s.k.IsOpenShift(context.Background()) {
+	if k.IsOpenShift(context.Background()) {
 		commonApiVersion += ", route.openshift.io/v1 Route"
 	}
 	commonApiVersion = fmt.Sprintf("(common apiVersion and kind include: %s)", commonApiVersion)
-	return []ServerTool{
-		{Tool: Tool{
+	return []api.ServerTool{
+		{Tool: api.Tool{
 			Name:        "resources_list",
 			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
@@ -47,15 +48,15 @@ func (s *Server) initResources() []ServerTool {
 				},
 				Required: []string{"apiVersion", "kind"},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Resources: List",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.resourcesList},
-		{Tool: Tool{
+		}, Handler: resourcesList},
+		{Tool: api.Tool{
 			Name:        "resources_get",
 			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
@@ -80,15 +81,15 @@ func (s *Server) initResources() []ServerTool {
 				},
 				Required: []string{"apiVersion", "kind", "name"},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Resources: Get",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.resourcesGet},
-		{Tool: Tool{
+		}, Handler: resourcesGet},
+		{Tool: api.Tool{
 			Name:        "resources_create_or_update",
 			Description: "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
@@ -101,15 +102,15 @@ func (s *Server) initResources() []ServerTool {
 				},
 				Required: []string{"resource"},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Resources: Create or Update",
 				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.resourcesCreateOrUpdate},
-		{Tool: Tool{
+		}, Handler: resourcesCreateOrUpdate},
+		{Tool: api.Tool{
 			Name:        "resources_delete",
 			Description: "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
@@ -134,149 +135,133 @@ func (s *Server) initResources() []ServerTool {
 				},
 				Required: []string{"apiVersion", "kind", "name"},
 			},
-			Annotations: ToolAnnotations{
+			Annotations: api.ToolAnnotations{
 				Title:           "Resources: Delete",
 				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: s.resourcesDelete},
+		}, Handler: resourcesDelete},
 	}
 }
 
-func (s *Server) resourcesList(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	namespace := ctr.GetArguments()["namespace"]
+func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
 	}
-	labelSelector := ctr.GetArguments()["labelSelector"]
+	labelSelector := params.GetArguments()["labelSelector"]
 	resourceListOptions := kubernetes.ResourceListOptions{
-		AsTable: s.configuration.ListOutput.AsTable(),
+		AsTable: params.ListOutput.AsTable(),
 	}
 
 	if labelSelector != nil {
 		l, ok := labelSelector.(string)
 		if !ok {
-			return NewTextResult("", fmt.Errorf("labelSelector is not a string")), nil
+			return api.NewToolCallResult("", fmt.Errorf("labelSelector is not a string")), nil
 		}
 		resourceListOptions.LabelSelector = l
 	}
-	gvk, err := parseGroupVersionKind(ctr.GetArguments())
+	gvk, err := parseGroupVersionKind(params.GetArguments())
 	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to list resources, %s", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources, %s", err)), nil
 	}
 
 	ns, ok := namespace.(string)
 	if !ok {
-		return NewTextResult("", fmt.Errorf("namespace is not a string")), nil
+		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	derived, err := s.k.Derived(ctx)
+	ret, err := params.ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
-		return nil, err
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %v", err)), nil
 	}
-	ret, err := derived.ResourcesList(ctx, gvk, ns, resourceListOptions)
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to list resources: %v", err)), nil
-	}
-	return NewTextResult(s.configuration.ListOutput.PrintObj(ret)), nil
+	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
 }
 
-func (s *Server) resourcesGet(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	namespace := ctr.GetArguments()["namespace"]
+func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
 	}
-	gvk, err := parseGroupVersionKind(ctr.GetArguments())
+	gvk, err := parseGroupVersionKind(params.GetArguments())
 	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to get resource, %s", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get resource, %s", err)), nil
 	}
-	name := ctr.GetArguments()["name"]
+	name := params.GetArguments()["name"]
 	if name == nil {
-		return NewTextResult("", errors.New("failed to get resource, missing argument name")), nil
+		return api.NewToolCallResult("", errors.New("failed to get resource, missing argument name")), nil
 	}
 
 	ns, ok := namespace.(string)
 	if !ok {
-		return NewTextResult("", fmt.Errorf("namespace is not a string")), nil
+		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
 	n, ok := name.(string)
 	if !ok {
-		return NewTextResult("", fmt.Errorf("name is not a string")), nil
+		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	derived, err := s.k.Derived(ctx)
+	ret, err := params.ResourcesGet(params, gvk, ns, n)
 	if err != nil {
-		return nil, err
+		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %v", err)), nil
 	}
-	ret, err := derived.ResourcesGet(ctx, gvk, ns, n)
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to get resource: %v", err)), nil
-	}
-	return NewTextResult(output.MarshalYaml(ret)), nil
+	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
 }
 
-func (s *Server) resourcesCreateOrUpdate(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	resource := ctr.GetArguments()["resource"]
+func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	resource := params.GetArguments()["resource"]
 	if resource == nil || resource == "" {
-		return NewTextResult("", errors.New("failed to create or update resources, missing argument resource")), nil
+		return api.NewToolCallResult("", errors.New("failed to create or update resources, missing argument resource")), nil
 	}
 
 	r, ok := resource.(string)
 	if !ok {
-		return NewTextResult("", fmt.Errorf("resource is not a string")), nil
+		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	derived, err := s.k.Derived(ctx)
+	resources, err := params.ResourcesCreateOrUpdate(params, r)
 	if err != nil {
-		return nil, err
-	}
-	resources, err := derived.ResourcesCreateOrUpdate(ctx, r)
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to create or update resources: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %v", err)), nil
 	}
 	marshalledYaml, err := output.MarshalYaml(resources)
 	if err != nil {
 		err = fmt.Errorf("failed to create or update resources:: %v", err)
 	}
-	return NewTextResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
+	return api.NewToolCallResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
 }
 
-func (s *Server) resourcesDelete(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	namespace := ctr.GetArguments()["namespace"]
+func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
 	}
-	gvk, err := parseGroupVersionKind(ctr.GetArguments())
+	gvk, err := parseGroupVersionKind(params.GetArguments())
 	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to delete resource, %s", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource, %s", err)), nil
 	}
-	name := ctr.GetArguments()["name"]
+	name := params.GetArguments()["name"]
 	if name == nil {
-		return NewTextResult("", errors.New("failed to delete resource, missing argument name")), nil
+		return api.NewToolCallResult("", errors.New("failed to delete resource, missing argument name")), nil
 	}
 
 	ns, ok := namespace.(string)
 	if !ok {
-		return NewTextResult("", fmt.Errorf("namespace is not a string")), nil
+		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
 	n, ok := name.(string)
 	if !ok {
-		return NewTextResult("", fmt.Errorf("name is not a string")), nil
+		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	derived, err := s.k.Derived(ctx)
+	err = params.ResourcesDelete(params, gvk, ns, n)
 	if err != nil {
-		return nil, err
+		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %v", err)), nil
 	}
-	err = derived.ResourcesDelete(ctx, gvk, ns, n)
-	if err != nil {
-		return NewTextResult("", fmt.Errorf("failed to delete resource: %v", err)), nil
-	}
-	return NewTextResult("Resource deleted successfully", err), nil
+	return api.NewToolCallResult("Resource deleted successfully", err), nil
 }
 
 func parseGroupVersionKind(arguments map[string]interface{}) (*schema.GroupVersionKind, error) {
