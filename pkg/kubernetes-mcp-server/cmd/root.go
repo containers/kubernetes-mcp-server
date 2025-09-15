@@ -69,6 +69,11 @@ type MCPServerOptions struct {
 	CertificateAuthority string
 	ServerURL            string
 
+	HealthEndpoint         string
+	StreamableHttpEndpoint string
+	SSEEndpoint            string
+	SSEMessageEndpoint     string
+
 	ConfigPath   string
 	StaticConfig *config.StaticConfig
 
@@ -121,6 +126,10 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&o.ReadOnly, "read-only", o.ReadOnly, "If true, only tools annotated with readOnlyHint=true are exposed")
 	cmd.Flags().BoolVar(&o.DisableDestructive, "disable-destructive", o.DisableDestructive, "If true, tools annotated with destructiveHint=true are disabled")
 	cmd.Flags().BoolVar(&o.RequireOAuth, "require-oauth", o.RequireOAuth, "If true, requires OAuth authorization as defined in the Model Context Protocol (MCP) specification. This flag is ignored if transport type is stdio")
+	cmd.Flags().StringVar(&o.HealthEndpoint, "health-endpoint", "/healthz", "Use for set health endpoint to use for health checks")
+	cmd.Flags().StringVar(&o.StreamableHttpEndpoint, "streamable-http-endpoint", "/mcp", "Use for set streamable http requests endpoint")
+	cmd.Flags().StringVar(&o.SSEEndpoint, "sse-endpoint", "/sse", "Use for set sse requests endpoint")
+	cmd.Flags().StringVar(&o.SSEMessageEndpoint, "sse-message-endpoint", "/message", "Use for set sse message requests endpoint")
 	_ = cmd.Flags().MarkHidden("require-oauth")
 	cmd.Flags().StringVar(&o.OAuthAudience, "oauth-audience", o.OAuthAudience, "OAuth audience for token claims validation. Optional. If not set, the audience is not validated. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden("oauth-audience")
@@ -200,6 +209,18 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag("certificate-authority").Changed {
 		m.StaticConfig.CertificateAuthority = m.CertificateAuthority
+	}
+	if cmd.Flag("health-endpoint").Changed {
+		m.StaticConfig.HealthEndpoint = m.HealthEndpoint
+	}
+	if cmd.Flag("streamable-http-endpoint").Changed {
+		m.StaticConfig.StreamableHttpEndpoint = m.StreamableHttpEndpoint
+	}
+	if cmd.Flag("sse-endpoint").Changed {
+		m.StaticConfig.SSEEndpoint = m.SSEEndpoint
+	}
+	if cmd.Flag("sse-message-endpoint").Changed {
+		m.StaticConfig.SSEMessageEndpoint = m.SSEMessageEndpoint
 	}
 }
 
