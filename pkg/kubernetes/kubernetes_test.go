@@ -6,6 +6,10 @@ import (
 	"path"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
@@ -312,5 +316,148 @@ users:
 		if derivedCfg.BearerToken != testBearerToken {
 			t.Errorf("expected BearerToken %s, got %s", testBearerToken, derivedCfg.BearerToken)
 		}
+	})
+}
+
+func TestKubernetes_WithContext(t *testing.T) {
+	// Create a temporary kubeconfig file with multiple contexts for testing
+	tempDir := t.TempDir()
+	kubeconfigPath := path.Join(tempDir, "config")
+	kubeconfigContent := `
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://production-cluster.example.com
+  name: production-cluster
+- cluster:
+    server: https://staging-cluster.example.com
+  name: staging-cluster
+- cluster:
+    server: https://development-cluster.example.com
+  name: development-cluster
+contexts:
+- context:
+    cluster: production-cluster
+    user: prod-user
+  name: production
+- context:
+    cluster: staging-cluster
+    user: staging-user
+  name: staging
+- context:
+    cluster: development-cluster
+    user: dev-user
+  name: development
+current-context: production
+users:
+- name: prod-user
+  user:
+    username: prod-username
+    password: prod-password
+- name: staging-user
+  user:
+    username: staging-username
+    password: staging-password
+- name: dev-user
+  user:
+    username: dev-username
+    password: dev-password
+`
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0644), "failed to create kubeconfig file")
+
+	testStaticConfig := &config.StaticConfig{
+		KubeConfig: kubeconfigPath,
+	}
+
+	testManager, err := NewManager(testStaticConfig)
+	require.NoError(t, err, "failed to create manager")
+	defer testManager.Close()
+
+	originalK8s := &Kubernetes{manager: testManager}
+
+	t.Run("WithContext with valid context creates new Kubernetes instance", func(t *testing.T) {
+		contextK8s, err := originalK8s.WithContext("staging")
+		require.NoError(t, err, "WithContext should not return error")
+
+		// Verify new instance is created
+		assert.NotSame(t, contextK8s, originalK8s, "expected new Kubernetes instance, got original instance")
+
+		// Verify new manager is created
+		assert.NotSame(t, contextK8s.manager, originalK8s.manager, "expected new manager, got original manager")
+
+		// Verify that all necessary clients are properly initialized
+		assert.NotNil(t, contextK8s.manager.accessControlClientSet, "expected accessControlClientSet to be initialized")
+		assert.NotNil(t, contextK8s.manager.discoveryClient, "expected discoveryClient to be initialized")
+		assert.NotNil(t, contextK8s.manager.accessControlRESTMapper, "expected accessControlRESTMapper to be initialized")
+		assert.NotNil(t, contextK8s.manager.dynamicClient, "expected dynamicClient to be initialized")
+
+		// Verify static config is preserved
+		assert.Same(t, contextK8s.manager.staticConfig, testStaticConfig, "staticConfig not properly wired to context manager")
+
+		// Verify the context-specific configuration
+		require.NotNil(t, contextK8s.manager.cfg, "context config should not be nil")
+		assert.Equal(t, "https://staging-cluster.example.com", contextK8s.manager.cfg.Host, "Host should point to staging cluster")
+	})
+
+	t.Run("WithContext with different context creates different instance", func(t *testing.T) {
+		stagingK8s, err := originalK8s.WithContext("staging")
+		require.NoError(t, err, "WithContext should not return error for staging")
+
+		devK8s, err := originalK8s.WithContext("development")
+		require.NoError(t, err, "WithContext should not return error for development")
+
+		// Verify different instances are created
+		assert.NotSame(t, stagingK8s, devK8s, "expected different instances for different contexts")
+		assert.NotSame(t, stagingK8s.manager, devK8s.manager, "expected different managers for different contexts")
+
+		// Verify different configurations
+		require.NotNil(t, stagingK8s.manager.cfg, "staging config should not be nil")
+		require.NotNil(t, devK8s.manager.cfg, "development config should not be nil")
+
+		assert.Equal(t, "https://staging-cluster.example.com", stagingK8s.manager.cfg.Host, "staging Host should point to staging cluster")
+		assert.Equal(t, "https://development-cluster.example.com", devK8s.manager.cfg.Host, "development Host should point to development cluster")
+	})
+
+	t.Run("WithContext with empty context name returns same manager", func(t *testing.T) {
+		contextK8s, err := originalK8s.WithContext("")
+		require.NoError(t, err, "WithContext with empty name should not fail")
+
+		// Should return same manager for empty context
+		assert.Same(t, contextK8s.manager, originalK8s.manager, "expected same manager for empty context name")
+	})
+
+	t.Run("WithContext with nonexistent context returns error", func(t *testing.T) {
+		_, err := originalK8s.WithContext("nonexistent-context")
+		require.Error(t, err, "expected error for nonexistent context")
+		assert.Contains(t, err.Error(), "context", "error should mention context")
+	})
+
+	t.Run("WithContext from in-cluster returns same manager", func(t *testing.T) {
+		// Create in-cluster config
+		inClusterStaticConfig := &config.StaticConfig{}
+
+		// Mock in-cluster configuration (this will fail to create actual clients, but tests the path)
+		originalInClusterConfig := InClusterConfig
+		InClusterConfig = func() (*rest.Config, error) {
+			return &rest.Config{
+				Host: "https://kubernetes.default.svc",
+			}, nil
+		}
+		defer func() {
+			InClusterConfig = originalInClusterConfig
+		}()
+
+		inClusterManager, err := NewManager(inClusterStaticConfig)
+		require.NoError(t, err, "failed to create in-cluster manager")
+		defer inClusterManager.Close()
+
+		inClusterK8s := &Kubernetes{manager: inClusterManager}
+
+		contextK8s, err := inClusterK8s.WithContext("any-context")
+		require.NoError(t, err, "WithContext from in-cluster should not fail")
+
+		// Should return same manager for in-cluster mode
+		assert.Same(t, contextK8s.manager, inClusterK8s.manager, "expected same manager for in-cluster mode")
 	})
 }

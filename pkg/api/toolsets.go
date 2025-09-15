@@ -3,11 +3,35 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
 )
+
+// ContextParameterSchema is the reusable context parameter schema for multi-cluster tools
+var ContextParameterSchema = &jsonschema.Schema{
+	Type:        "string",
+	Description: "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+}
+
+// GetKubernetesWithContext returns a Kubernetes client for the specified context, or the default client if no context is specified
+func GetKubernetesWithContext(params ToolHandlerParams) (*internalk8s.Kubernetes, error) {
+	contextName := params.GetArguments()["context"]
+	if contextName == nil || contextName == "" {
+		// No context specified, use default
+		return params.Kubernetes, nil
+	}
+
+	// Create client for specified context
+	contextClient, err := params.WithContext(contextName.(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client for context '%s': %v", contextName, err)
+	}
+
+	return contextClient, nil
+}
 
 type ServerTool struct {
 	Tool    Tool

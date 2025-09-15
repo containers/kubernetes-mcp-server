@@ -18,10 +18,11 @@ func initPods() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "pods_list",
-			Description: "List all the Kubernetes pods in the current cluster from all namespaces",
+			Description: "List all the Kubernetes pods in the cluster (current or provided context) from all namespaces",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"labelSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
@@ -39,10 +40,11 @@ func initPods() []api.ServerTool {
 		}, Handler: podsListInAllNamespaces},
 		{Tool: api.Tool{
 			Name:        "pods_list_in_namespace",
-			Description: "List all the Kubernetes pods in the specified namespace in the current cluster",
+			Description: "List all the Kubernetes pods in the specified namespace in the cluster (current or provided context)",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace to list pods from",
@@ -69,6 +71,7 @@ func initPods() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace to get the Pod from",
@@ -94,6 +97,7 @@ func initPods() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace to delete the Pod from",
@@ -119,6 +123,7 @@ func initPods() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"all_namespaces": {
 						Type:        "boolean",
 						Description: "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
@@ -153,6 +158,7 @@ func initPods() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace of the Pod where the command will be executed",
@@ -189,6 +195,7 @@ func initPods() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace to get the Pod logs from",
@@ -222,6 +229,7 @@ func initPods() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace to run the Pod in",
@@ -253,6 +261,12 @@ func initPods() []api.ServerTool {
 }
 
 func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	labelSelector := params.GetArguments()["labelSelector"]
 	resourceListOptions := kubernetes.ResourceListOptions{
 		AsTable: params.ListOutput.AsTable(),
@@ -260,7 +274,7 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 	if labelSelector != nil {
 		resourceListOptions.LabelSelector = labelSelector.(string)
 	}
-	ret, err := params.PodsListInAllNamespaces(params, resourceListOptions)
+	ret, err := k8sClient.PodsListInAllNamespaces(params.Context, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %v", err)), nil
 	}
@@ -268,6 +282,12 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 }
 
 func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	ns := params.GetArguments()["namespace"]
 	if ns == nil {
 		return api.NewToolCallResult("", errors.New("failed to list pods in namespace, missing argument namespace")), nil
@@ -279,7 +299,7 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if labelSelector != nil {
 		resourceListOptions.LabelSelector = labelSelector.(string)
 	}
-	ret, err := params.PodsListInNamespace(params, ns.(string), resourceListOptions)
+	ret, err := k8sClient.PodsListInNamespace(params.Context, ns.(string), resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %v", ns, err)), nil
 	}
@@ -287,6 +307,12 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 }
 
 func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	ns := params.GetArguments()["namespace"]
 	if ns == nil {
 		ns = ""
@@ -295,7 +321,7 @@ func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if name == nil {
 		return api.NewToolCallResult("", errors.New("failed to get pod, missing argument name")), nil
 	}
-	ret, err := params.PodsGet(params, ns.(string), name.(string))
+	ret, err := k8sClient.PodsGet(params.Context, ns.(string), name.(string))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s in namespace %s: %v", name, ns, err)), nil
 	}
@@ -303,6 +329,12 @@ func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	ns := params.GetArguments()["namespace"]
 	if ns == nil {
 		ns = ""
@@ -311,7 +343,7 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if name == nil {
 		return api.NewToolCallResult("", errors.New("failed to delete pod, missing argument name")), nil
 	}
-	ret, err := params.PodsDelete(params, ns.(string), name.(string))
+	ret, err := k8sClient.PodsDelete(params.Context, ns.(string), name.(string))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete pod %s in namespace %s: %v", name, ns, err)), nil
 	}
@@ -319,6 +351,12 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	podsTopOptions := kubernetes.PodsTopOptions{AllNamespaces: true}
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		podsTopOptions.Namespace = v
@@ -332,7 +370,7 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["label_selector"].(string); ok {
 		podsTopOptions.LabelSelector = v
 	}
-	ret, err := params.PodsTop(params, podsTopOptions)
+	ret, err := k8sClient.PodsTop(params.Context, podsTopOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %v", err)), nil
 	}
@@ -346,6 +384,12 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	ns := params.GetArguments()["namespace"]
 	if ns == nil {
 		ns = ""
@@ -369,7 +413,7 @@ func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	} else {
 		return api.NewToolCallResult("", errors.New("failed to exec in pod, invalid command argument")), nil
 	}
-	ret, err := params.PodsExec(params, ns.(string), name.(string), container.(string), command)
+	ret, err := k8sClient.PodsExec(params.Context, ns.(string), name.(string), container.(string), command)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to exec in pod %s in namespace %s: %v", name, ns, err)), nil
 	} else if ret == "" {
@@ -379,6 +423,12 @@ func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	ns := params.GetArguments()["namespace"]
 	if ns == nil {
 		ns = ""
@@ -396,7 +446,7 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if previous != nil {
 		previousBool = previous.(bool)
 	}
-	ret, err := params.PodsLog(params, ns.(string), name.(string), container.(string), previousBool)
+	ret, err := k8sClient.PodsLog(params.Context, ns.(string), name.(string), container.(string), previousBool)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s log in namespace %s: %v", name, ns, err)), nil
 	} else if ret == "" {
@@ -406,6 +456,12 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	ns := params.GetArguments()["namespace"]
 	if ns == nil {
 		ns = ""
@@ -422,7 +478,7 @@ func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if port == nil {
 		port = float64(0)
 	}
-	resources, err := params.PodsRun(params, ns.(string), name.(string), image.(string), int32(port.(float64)))
+	resources, err := k8sClient.PodsRun(params.Context, ns.(string), name.(string), image.(string), int32(port.(float64)))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to run pod %s in namespace %s: %v", name, ns, err)), nil
 	}

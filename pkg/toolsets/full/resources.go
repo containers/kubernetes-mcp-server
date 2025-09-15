@@ -10,7 +10,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
@@ -24,10 +23,11 @@ func initResources(k *internalk8s.Manager) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "resources_list",
-			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n" + commonApiVersion,
+			Description: "List Kubernetes resources and objects in the cluster (current or provided context) by providing their apiVersion and kind and optionally the namespace and label selector\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"apiVersion": {
 						Type:        "string",
 						Description: "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -58,10 +58,11 @@ func initResources(k *internalk8s.Manager) []api.ServerTool {
 		}, Handler: resourcesList},
 		{Tool: api.Tool{
 			Name:        "resources_get",
-			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
+			Description: "Get a Kubernetes resource in the cluster (current or provided context) by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"apiVersion": {
 						Type:        "string",
 						Description: "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -91,10 +92,11 @@ func initResources(k *internalk8s.Manager) []api.ServerTool {
 		}, Handler: resourcesGet},
 		{Tool: api.Tool{
 			Name:        "resources_create_or_update",
-			Description: "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n" + commonApiVersion,
+			Description: "Create or update a Kubernetes resource in the cluster (current or provided context) by providing a YAML or JSON representation of the resource\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"resource": {
 						Type:        "string",
 						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
@@ -112,10 +114,11 @@ func initResources(k *internalk8s.Manager) []api.ServerTool {
 		}, Handler: resourcesCreateOrUpdate},
 		{Tool: api.Tool{
 			Name:        "resources_delete",
-			Description: "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
+			Description: "Delete a Kubernetes resource in the cluster (current or provided context) by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"apiVersion": {
 						Type:        "string",
 						Description: "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -147,12 +150,18 @@ func initResources(k *internalk8s.Manager) []api.ServerTool {
 }
 
 func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
 	}
 	labelSelector := params.GetArguments()["labelSelector"]
-	resourceListOptions := kubernetes.ResourceListOptions{
+	resourceListOptions := internalk8s.ResourceListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 
@@ -173,7 +182,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	ret, err := params.ResourcesList(params, gvk, ns, resourceListOptions)
+	ret, err := k8sClient.ResourcesList(params.Context, gvk, ns, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %v", err)), nil
 	}
@@ -181,6 +190,12 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
@@ -204,7 +219,7 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	ret, err := params.ResourcesGet(params, gvk, ns, n)
+	ret, err := k8sClient.ResourcesGet(params.Context, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %v", err)), nil
 	}
@@ -212,6 +227,12 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	resource := params.GetArguments()["resource"]
 	if resource == nil || resource == "" {
 		return api.NewToolCallResult("", errors.New("failed to create or update resources, missing argument resource")), nil
@@ -222,7 +243,7 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := params.ResourcesCreateOrUpdate(params, r)
+	resources, err := k8sClient.ResourcesCreateOrUpdate(params.Context, r)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %v", err)), nil
 	}
@@ -234,6 +255,12 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 }
 
 func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
@@ -257,7 +284,7 @@ func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	err = params.ResourcesDelete(params, gvk, ns, n)
+	err = k8sClient.ResourcesDelete(params.Context, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %v", err)), nil
 	}

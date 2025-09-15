@@ -17,6 +17,8 @@ A powerful and flexible Kubernetes [Model Context Protocol (MCP)](https://blog.m
 - **✅ Configuration**:
   - Automatically detect changes in the Kubernetes configuration and update the MCP server.
   - **View** and manage the current [Kubernetes `.kube/config`](https://blog.marcnuri.com/where-is-my-default-kubeconfig-file) or in-cluster configuration.
+  - **Multi-cluster support**: Switch between different Kubernetes contexts on the fly using the optional `context` parameter on any cluster-specific tool.
+  - **List available contexts**: Discover all available Kubernetes contexts in your kubeconfig with `contexts_list`.
 - **✅ Generic Kubernetes Resources**: Perform operations on **any** Kubernetes or OpenShift resource.
   - Any CRUD operation (Create or Update, Get, List, Delete).
 - **✅ Pods**: Perform Pod-specific operations.
@@ -196,11 +198,21 @@ Get the current Kubernetes configuration content as a kubeconfig YAML
   - If `true`, keeps only the current-context and relevant configuration pieces
   - If `false`, returns all contexts, clusters, auth-infos, and users
 
+### `contexts_list`
+
+List all available Kubernetes contexts from your kubeconfig with their cluster server URLs
+
+**Parameters:** None
+
+**Output format:** `[*] CONTEXT_NAME -> CLUSTER_SERVER_URL` where `*` indicates the current active context.
+
 ### `events_list`
 
 List all the Kubernetes events in the current cluster from all namespaces
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `namespace` (`string`, optional)
   - Namespace to retrieve the events from. If not provided, will list events from all namespaces
 
@@ -209,6 +221,8 @@ List all the Kubernetes events in the current cluster from all namespaces
 Install a Helm chart in the current or provided namespace with the provided name and chart
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `chart` (`string`, required)
   - Name of the Helm chart to install
   - Can be a local path or a remote URL
@@ -228,6 +242,8 @@ Install a Helm chart in the current or provided namespace with the provided name
 List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `namespace` (`string`, optional)
   - Namespace to list the Helm releases from
   - If not provided, will use the configured namespace
@@ -240,6 +256,8 @@ List all the Helm releases in the current or provided namespace (or in all names
 Uninstall a Helm release in the current or provided namespace with the provided name
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `name` (`string`, required)
   - Name of the Helm release to uninstall
 - `namespace` (`string`, optional)
@@ -250,13 +268,17 @@ Uninstall a Helm release in the current or provided namespace with the provided 
 
 List all the Kubernetes namespaces in the current cluster
 
-**Parameters:** None
+**Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 
 ### `pods_delete`
 
 Delete a Kubernetes Pod in the current or provided namespace with the provided name
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `name` (`string`, required)
   - Name of the Pod to delete
 - `namespace` (`string`, required)
@@ -267,6 +289,8 @@ Delete a Kubernetes Pod in the current or provided namespace with the provided n
 Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `command` (`string[]`, required)
   - Command to execute in the Pod container
   - First item is the command, rest are arguments
@@ -283,6 +307,8 @@ Execute a command in a Kubernetes Pod in the current or provided namespace with 
 Get a Kubernetes Pod in the current or provided namespace with the provided name
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `name` (`string`, required)
   - Name of the Pod
 - `namespace` (`string`, required)
@@ -293,6 +319,8 @@ Get a Kubernetes Pod in the current or provided namespace with the provided name
 List all the Kubernetes pods in the current cluster from all namespaces
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `labelSelector` (`string`, optional)
   - Kubernetes label selector (e.g., 'app=myapp,env=prod' or 'app in (myapp,yourapp)'). Use this option to filter the pods by label
 
@@ -301,6 +329,8 @@ List all the Kubernetes pods in the current cluster from all namespaces
 List all the Kubernetes pods in the specified namespace in the current cluster
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `namespace` (`string`, required)
   - Namespace to list pods from
 - `labelSelector` (`string`, optional)
@@ -311,6 +341,8 @@ List all the Kubernetes pods in the specified namespace in the current cluster
 Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `name` (`string`, required)
   - Name of the Pod to get logs from
 - `namespace` (`string`, required)
@@ -325,6 +357,8 @@ Get the logs of a Kubernetes Pod in the current or provided namespace with the p
 Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `image` (`string`, required)
   - Container Image to run in the Pod
 - `namespace` (`string`, required)
@@ -340,6 +374,8 @@ Run a Kubernetes Pod in the current or provided namespace with the provided cont
 Lists the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `all_namespaces` (`boolean`, optional, default: `true`)
   - If `true`, lists resource consumption for Pods in all namespaces
   - If `false`, lists resource consumption for Pods in the configured or provided namespace
@@ -356,11 +392,17 @@ Lists the resource consumption (CPU and memory) as recorded by the Kubernetes Me
 
 List all the OpenShift projects in the current cluster
 
+**Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
+
 ### `resources_create_or_update`
 
 Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `resource` (`string`, required)
   - A JSON or YAML containing a representation of the Kubernetes resource
   - Should include top-level fields such as apiVersion, kind, metadata, and spec
@@ -377,6 +419,8 @@ Create or update a Kubernetes resource in the current cluster by providing a YAM
 Delete a Kubernetes resource in the current cluster
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `apiVersion` (`string`, required)
   - apiVersion of the resource (e.g., `v1`, `apps/v1`, `networking.k8s.io/v1`)
 - `kind` (`string`, required)
@@ -393,6 +437,8 @@ Delete a Kubernetes resource in the current cluster
 Get a Kubernetes resource in the current cluster
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `apiVersion` (`string`, required)
   - apiVersion of the resource (e.g., `v1`, `apps/v1`, `networking.k8s.io/v1`)
 - `kind` (`string`, required)
@@ -409,6 +455,8 @@ Get a Kubernetes resource in the current cluster
 List Kubernetes resources and objects in the current cluster
 
 **Parameters:**
+- `context` (`string`, optional)
+  - Kubernetes context to use for this operation. If not provided, uses the current context
 - `apiVersion` (`string`, required)
   - apiVersion of the resources (e.g., `v1`, `apps/v1`, `networking.k8s.io/v1`)
 - `kind` (`string`, required)

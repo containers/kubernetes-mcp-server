@@ -17,6 +17,7 @@ import (
 func TestFullToolsetTools(t *testing.T) {
 	expectedNames := []string{
 		"configuration_view",
+		"contexts_list",
 		"events_list",
 		"helm_install",
 		"helm_list",

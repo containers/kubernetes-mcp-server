@@ -14,10 +14,11 @@ func initEvents() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "events_list",
-			Description: "List all the Kubernetes events in the current cluster from all namespaces",
+			Description: "List all the Kubernetes events in the cluster (current or provided context) from all namespaces",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
@@ -36,11 +37,17 @@ func initEvents() []api.ServerTool {
 }
 
 func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
 	}
-	eventMap, err := params.EventsList(params, namespace.(string))
+	eventMap, err := k8sClient.EventsList(params.Context, namespace.(string))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %v", err)), nil
 	}

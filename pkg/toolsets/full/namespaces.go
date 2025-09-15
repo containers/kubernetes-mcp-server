@@ -8,7 +8,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
@@ -17,9 +16,12 @@ func initNamespaces(k *internalk8s.Manager) []api.ServerTool {
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "namespaces_list",
-			Description: "List all the Kubernetes namespaces in the current cluster",
+			Description: "List all the Kubernetes namespaces in the cluster (current or provided context)",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
+				},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Namespaces: List",
@@ -34,9 +36,12 @@ func initNamespaces(k *internalk8s.Manager) []api.ServerTool {
 		ret = append(ret, api.ServerTool{
 			Tool: api.Tool{
 				Name:        "projects_list",
-				Description: "List all the OpenShift projects in the current cluster",
+				Description: "List all the OpenShift projects in the cluster (current or provided context)",
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"context": api.ContextParameterSchema,
+					},
 				},
 				Annotations: api.ToolAnnotations{
 					Title:           "Projects: List",
@@ -52,7 +57,13 @@ func initNamespaces(k *internalk8s.Manager) []api.ServerTool {
 }
 
 func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ret, err := params.NamespacesList(params, kubernetes.ResourceListOptions{AsTable: params.ListOutput.AsTable()})
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
+	ret, err := k8sClient.NamespacesList(params.Context, internalk8s.ResourceListOptions{AsTable: params.ListOutput.AsTable()})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %v", err)), nil
 	}
@@ -60,7 +71,13 @@ func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ret, err := params.ProjectsList(params, kubernetes.ResourceListOptions{AsTable: params.ListOutput.AsTable()})
+	// Get Kubernetes client for the specified context (or default)
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
+	ret, err := k8sClient.ProjectsList(params.Context, internalk8s.ResourceListOptions{AsTable: params.ListOutput.AsTable()})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %v", err)), nil
 	}
