@@ -17,6 +17,7 @@ func initHelm() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"chart": {
 						Type:        "string",
 						Description: "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
@@ -51,6 +52,7 @@ func initHelm() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
@@ -75,6 +77,7 @@ func initHelm() []api.ServerTool {
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"context": api.ContextParameterSchema,
 					"name": {
 						Type:        "string",
 						Description: "Name of the Helm release to uninstall",
@@ -98,6 +101,11 @@ func initHelm() []api.ServerTool {
 }
 
 func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	var chart string
 	ok := false
 	if chart, ok = params.GetArguments()["chart"].(string); !ok {
@@ -115,7 +123,7 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := params.NewHelm().Install(params, chart, values, name, namespace)
+	ret, err := k8sClient.NewHelm().Install(params, chart, values, name, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to install helm chart '%s': %w", chart, err)), nil
 	}
@@ -123,6 +131,11 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	allNamespaces := false
 	if v, ok := params.GetArguments()["all_namespaces"].(bool); ok {
 		allNamespaces = v
@@ -131,7 +144,7 @@ func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := params.NewHelm().List(namespace, allNamespaces)
+	ret, err := k8sClient.NewHelm().List(namespace, allNamespaces)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases in namespace '%s': %w", namespace, err)), nil
 	}
@@ -139,6 +152,11 @@ func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func helmUninstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	k8sClient, err := api.GetKubernetesWithContext(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
 	var name string
 	ok := false
 	if name, ok = params.GetArguments()["name"].(string); !ok {
@@ -148,7 +166,7 @@ func helmUninstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := params.NewHelm().Uninstall(name, namespace)
+	ret, err := k8sClient.NewHelm().Uninstall(name, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
 	}

@@ -1,10 +1,13 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/rest"
 	v1 "k8s.io/client-go/tools/clientcmd/api/v1"
 	"sigs.k8s.io/yaml"
@@ -175,5 +178,60 @@ func TestConfigurationViewInCluster(t *testing.T) {
 				t.Fatalf("user not found: %v", decoded.AuthInfos)
 			}
 		})
+	})
+}
+
+func TestContextsList(t *testing.T) {
+	testCase(t, func(c *mcpContext) {
+		toolResult, err := c.callTool("contexts_list", map[string]interface{}{})
+		require.NoError(t, err, "contexts_list tool call should not fail")
+
+		content := toolResult.Content[0].(mcp.TextContent).Text
+
+		// Expected exact output format based on test setup with fake contexts
+		expectedOutput := `Available Kubernetes contexts (2 total, current: fake-context):
+
+Format: [*] CONTEXT_NAME -> CLUSTER_SERVER_URL
+        (* indicates the current active context)
+
+Contexts:
+─────────
+* fake-context -> https://127.0.0.1:6443
+  additional-context -> 
+─────────
+
+Usage:
+To use a specific context with any tool, add the 'context' parameter:
+Example: {"name": "pods_list", "arguments": {"context": "fake-context"}}`
+
+		// Split both expected and actual content into lines for comparison
+		expectedLines := strings.Split(expectedOutput, "\n")
+		actualLines := strings.Split(content, "\n")
+
+		// First, verify line count matches
+		assert.Equal(t, len(expectedLines), len(actualLines), "line count should match")
+
+		// Then verify each expected line is present in the actual content
+		// Note: Context lines might appear in different order due to Go map iteration randomness
+		for i, expectedLine := range expectedLines {
+			// For context lines (lines with -> in them), check if any actual line matches
+			if strings.Contains(expectedLine, " -> ") {
+				found := false
+				for _, actualLine := range actualLines {
+					if actualLine == expectedLine {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "expected context line should be present: %s", expectedLine)
+			} else {
+				// For non-context lines, they should appear in the same position
+				if i < len(actualLines) {
+					assert.Equal(t, expectedLine, actualLines[i], "line %d should match", i+1)
+				} else {
+					t.Errorf("expected line %d not found in actual output: %s", i+1, expectedLine)
+				}
+			}
+		}
 	})
 }

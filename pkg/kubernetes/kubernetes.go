@@ -212,3 +212,12 @@ func (k *Kubernetes) NewHelm() *helm.Helm {
 	// This is a derived Kubernetes, so it already has the Helm initialized
 	return helm.NewHelm(k.manager)
 }
+
+// WithContext creates a new Kubernetes instance configured for the specified context
+func (k *Kubernetes) WithContext(contextName string) (*Kubernetes, error) {
+	contextManager, err := k.manager.newManagerForContext(contextName)
+	if err != nil {
+		return nil, err
+	}
+	return &Kubernetes{manager: contextManager}, nil
+}

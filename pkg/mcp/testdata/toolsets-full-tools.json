@@ -21,16 +21,34 @@
   },
   {
     "annotations": {
+      "title": "Contexts: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List all available contexts from the kubeconfig file. Shows context names mapped to their cluster server URLs, indicates the current active context, and provides usage examples. Output format: [*] CONTEXT_NAME -\u003e CLUSTER_SERVER_URL",
+    "inputSchema": {
+      "type": "object"
+    },
+    "name": "contexts_list"
+  },
+  {
+    "annotations": {
       "title": "Events: List",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": false,
       "openWorldHint": true
     },
-    "description": "List all the Kubernetes events in the current cluster from all namespaces",
+    "description": "List all the Kubernetes events in the cluster (current or provided context) from all namespaces",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "namespace": {
           "description": "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
           "type": "string"
@@ -53,6 +71,10 @@
       "properties": {
         "chart": {
           "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
           "type": "string"
         },
         "name": {
@@ -90,6 +112,10 @@
           "description": "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
           "type": "boolean"
         },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "namespace": {
           "description": "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
           "type": "string"
@@ -110,6 +136,10 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "name": {
           "description": "Name of the Helm release to uninstall",
           "type": "string"
@@ -133,9 +163,15 @@
       "idempotentHint": false,
       "openWorldHint": true
     },
-    "description": "List all the Kubernetes namespaces in the current cluster",
+    "description": "List all the Kubernetes namespaces in the cluster (current or provided context)",
     "inputSchema": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        }
+      }
     },
     "name": "namespaces_list"
   },
@@ -151,6 +187,10 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "name": {
           "description": "Name of the Pod to delete",
           "type": "string"
@@ -189,6 +229,10 @@
           "description": "Name of the Pod container where the command will be executed (Optional)",
           "type": "string"
         },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "name": {
           "description": "Name of the Pod where the command will be executed",
           "type": "string"
@@ -217,6 +261,10 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "name": {
           "description": "Name of the Pod",
           "type": "string"
@@ -240,10 +288,14 @@
       "idempotentHint": false,
       "openWorldHint": true
     },
-    "description": "List all the Kubernetes pods in the current cluster from all namespaces",
+    "description": "List all the Kubernetes pods in the cluster (current or provided context) from all namespaces",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "labelSelector": {
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
           "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
@@ -261,10 +313,14 @@
       "idempotentHint": false,
       "openWorldHint": true
     },
-    "description": "List all the Kubernetes pods in the specified namespace in the current cluster",
+    "description": "List all the Kubernetes pods in the specified namespace in the cluster (current or provided context)",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "labelSelector": {
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
           "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
@@ -295,6 +351,10 @@
       "properties": {
         "container": {
           "description": "Name of the Pod container to get the logs from (Optional)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
           "type": "string"
         },
         "name": {
@@ -328,6 +388,10 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "image": {
           "description": "Container Image to run in the Pod",
           "type": "string"
@@ -368,6 +432,10 @@
           "description": "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
           "type": "boolean"
         },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "label_selector": {
           "description": "Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)",
           "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
@@ -393,10 +461,14 @@
       "idempotentHint": true,
       "openWorldHint": true
     },
-    "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Create or update a Kubernetes resource in the cluster (current or provided context) by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
+          "type": "string"
+        },
         "resource": {
           "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
           "type": "string"
@@ -416,12 +488,16 @@
       "idempotentHint": true,
       "openWorldHint": true
     },
-    "description": "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Delete a Kubernetes resource in the cluster (current or provided context) by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "type": "object",
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
           "type": "string"
         },
         "kind": {
@@ -453,12 +529,16 @@
       "idempotentHint": false,
       "openWorldHint": true
     },
-    "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Get a Kubernetes resource in the cluster (current or provided context) by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "type": "object",
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
           "type": "string"
         },
         "kind": {
@@ -490,12 +570,16 @@
       "idempotentHint": false,
       "openWorldHint": true
     },
-    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "List Kubernetes resources and objects in the cluster (current or provided context) by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "type": "object",
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional Kubernetes context to use for this operation (if not provided, uses the current context)",
           "type": "string"
         },
         "kind": {
