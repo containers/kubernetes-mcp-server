@@ -30,13 +30,13 @@ type ToolsetsSuite struct {
 
 func (s *ToolsetsSuite) SetupTest() {
 	s.originalToolsets = toolsets.Toolsets()
-	toolsets.Clear()
 	s.MockServer = test.NewMockServer()
 	s.Cfg = configuration.Default()
 	s.Cfg.KubeConfig = s.MockServer.KubeconfigFile(s.T())
 }
 
 func (s *ToolsetsSuite) TearDownTest() {
+	toolsets.Clear()
 	for _, toolset := range s.originalToolsets {
 		toolsets.Register(toolset)
 	}
@@ -54,6 +54,7 @@ func (s *ToolsetsSuite) TearDownSubTest() {
 
 func (s *ToolsetsSuite) TestNoToolsets() {
 	s.Run("No toolsets registered", func() {
+		toolsets.Clear()
 		s.Cfg.Toolsets = []string{}
 		s.InitMcpClient()
 		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
@@ -67,10 +68,6 @@ func (s *ToolsetsSuite) TestNoToolsets() {
 
 func (s *ToolsetsSuite) TestDefaultToolsetsTools() {
 	s.Run("Default configuration toolsets", func() {
-		s.Cfg.Toolsets = configuration.Default().Toolsets
-		toolsets.Register(&core.Toolset{})
-		toolsets.Register(&config.Toolset{})
-		toolsets.Register(&helm.Toolset{})
 		s.InitMcpClient()
 		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
 		s.Run("ListTools returns tools", func() {
@@ -92,10 +89,6 @@ func (s *ToolsetsSuite) TestDefaultToolsetsTools() {
 func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 	s.Run("Default configuration toolsets in OpenShift", func() {
 		s.Handle(&test.InOpenShiftHandler{})
-		s.Cfg.Toolsets = configuration.Default().Toolsets
-		toolsets.Register(&core.Toolset{})
-		toolsets.Register(&config.Toolset{})
-		toolsets.Register(&helm.Toolset{})
 		s.InitMcpClient()
 		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
 		s.Run("ListTools returns tools", func() {
@@ -122,6 +115,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	}
 	for _, testCase := range testCases {
 		s.Run("Toolset "+testCase.GetName(), func() {
+			toolsets.Clear()
 			toolsets.Register(testCase)
 			s.Cfg.Toolsets = []string{testCase.GetName()}
 			s.InitMcpClient()
