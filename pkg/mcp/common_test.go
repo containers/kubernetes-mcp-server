@@ -20,6 +20,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -417,4 +418,33 @@ func createTestData(ctx context.Context) {
 	}, metav1.CreateOptions{})
 	_, _ = kubernetesAdmin.CoreV1().ConfigMaps("default").
 		Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "a-configmap-to-delete"}}, metav1.CreateOptions{})
+}
+
+type BaseMcpSuite struct {
+	suite.Suite
+	*test.McpClient
+	mcpServer *Server
+	Cfg       *config.StaticConfig
+}
+
+func (s *BaseMcpSuite) SetupTest() {
+	s.Cfg = config.Default()
+	s.Cfg.KubeConfig = filepath.Join(s.T().TempDir(), "config")
+	s.Require().NoError(os.WriteFile(s.Cfg.KubeConfig, envTest.KubeConfig, 0600), "Expected to write kubeconfig")
+}
+
+func (s *BaseMcpSuite) TearDownTest() {
+	if s.McpClient != nil {
+		s.McpClient.Close()
+	}
+	if s.mcpServer != nil {
+		s.mcpServer.Close()
+	}
+}
+
+func (s *BaseMcpSuite) InitMcpClient() {
+	var err error
+	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
+	s.Require().NoError(err, "Expected no error creating MCP server")
+	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil))
 }

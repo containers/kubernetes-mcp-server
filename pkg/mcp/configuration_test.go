@@ -10,42 +10,22 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 type ConfigurationSuite struct {
-	suite.Suite
-	*test.McpClient
-	mcpServer *Server
-	Cfg       *config.StaticConfig
+	BaseMcpSuite
 }
 
 func (s *ConfigurationSuite) SetupTest() {
-	s.Cfg = config.Default()
-}
-
-func (s *ConfigurationSuite) TearDownTest() {
-	if s.McpClient != nil {
-		s.McpClient.Close()
-	}
-	if s.mcpServer != nil {
-		s.mcpServer.Close()
-	}
-}
-
-func (s *ConfigurationSuite) InitMcpClient() {
-	var err error
-	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
-	s.Require().NoError(err, "Expected no error creating MCP server")
-	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil))
-}
-
-func (s *ConfigurationSuite) TestConfigurationView() {
-	// Out of cluster requires kubeconfig
+	s.BaseMcpSuite.SetupTest()
+	// Use mock server for predictable kubeconfig content
 	mockServer := test.NewMockServer()
 	s.T().Cleanup(mockServer.Close)
 	s.Cfg.KubeConfig = mockServer.KubeconfigFile(s.T())
+}
+
+func (s *ConfigurationSuite) TestConfigurationView() {
 	s.InitMcpClient()
 	s.Run("configuration_view", func() {
 		toolResult, err := s.CallTool("configuration_view", map[string]interface{}{})
@@ -108,6 +88,7 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 }
 
 func (s *ConfigurationSuite) TestConfigurationViewInCluster() {
+	s.Cfg.KubeConfig = "" // Force in-cluster
 	kubernetes.InClusterConfig = func() (*rest.Config, error) {
 		return &rest.Config{
 			Host:        "https://kubernetes.default.svc",
