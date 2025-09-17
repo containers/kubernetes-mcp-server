@@ -107,15 +107,15 @@ func (s *EventsSuite) TestEventsListDenied() {
 	`), s.Cfg), "Expected to parse denied resources  config")
 	s.InitMcpClient()
 	s.Run("events_list (denied)", func() {
-		eventList, err := s.CallTool("events_list", map[string]interface{}{})
-		s.Run("events_list has error", func() {
-			s.Truef(eventList.IsError, "call tool should fail")
+		toolResult, err := s.CallTool("events_list", map[string]interface{}{})
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
 			s.Nilf(err, "call tool should not return error object")
 		})
-		s.Run("events_list describes denial", func() {
+		s.Run("describes denial", func() {
 			expectedMessage := "failed to list events in all namespaces: resource not allowed: /v1, Kind=Event"
-			s.Equalf(expectedMessage, eventList.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, eventList.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
 }
