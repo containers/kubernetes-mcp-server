@@ -1,0 +1,88 @@
+[
+  {
+    "annotations": {
+      "title": "Helm: Install",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Install a Helm chart in the current or provided namespace",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chart": {
+          "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Helm release (Optional, random name if not provided)",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to install the Helm chart in (Optional, current namespace if not provided)",
+          "type": "string"
+        },
+        "values": {
+          "description": "Values to pass to the Helm chart (Optional)",
+          "type": "object"
+        }
+      },
+      "required": [
+        "chart"
+      ]
+    },
+    "name": "helm_install"
+  },
+  {
+    "annotations": {
+      "title": "Helm: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "all_namespaces": {
+          "description": "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
+          "type": "boolean"
+        },
+        "namespace": {
+          "description": "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
+          "type": "string"
+        }
+      }
+    },
+    "name": "helm_list"
+  },
+  {
+    "annotations": {
+      "title": "Helm: Uninstall",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Uninstall a Helm release in the current or provided namespace",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the Helm release to uninstall",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to uninstall the Helm release from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "helm_uninstall"
+  }
+]

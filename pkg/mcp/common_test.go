@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/workflows"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
@@ -82,11 +83,9 @@ func TestMain(m *testing.M) {
 		BinaryAssetsDirectory: filepath.Join(envTestDir, "k8s", versionDir),
 	}
 	adminSystemMasterBaseConfig, _ := envTest.Start()
-	au, err := envTest.AddUser(envTestUser, adminSystemMasterBaseConfig)
-	if err != nil {
-		panic(err)
-	}
+	au := test.Must(envTest.AddUser(envTestUser, adminSystemMasterBaseConfig))
 	envTestRestConfig = au.Config()
+	envTest.KubeConfig = test.Must(au.KubeConfig())
 
 	//Create test data as administrator
 	ctx := context.Background()

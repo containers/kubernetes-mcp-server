@@ -6,7 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"testing"
 
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/httpstream/spdy"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -46,7 +50,9 @@ func NewMockServer() *MockServer {
 }
 
 func (m *MockServer) Close() {
-	m.server.Close()
+	if m.server != nil {
+		m.server.Close()
+	}
 }
 
 func (m *MockServer) Handle(handler http.Handler) {
@@ -57,19 +63,20 @@ func (m *MockServer) Config() *rest.Config {
 	return m.config
 }
 
-func (m *MockServer) KubeConfig() *api.Config {
-	fakeConfig := api.NewConfig()
-	fakeConfig.Clusters["fake"] = api.NewCluster()
+func (m *MockServer) Kubeconfig() *api.Config {
+	fakeConfig := KubeConfigFake()
 	fakeConfig.Clusters["fake"].Server = m.config.Host
 	fakeConfig.Clusters["fake"].CertificateAuthorityData = m.config.CAData
-	fakeConfig.AuthInfos["fake"] = api.NewAuthInfo()
 	fakeConfig.AuthInfos["fake"].ClientKeyData = m.config.KeyData
 	fakeConfig.AuthInfos["fake"].ClientCertificateData = m.config.CertData
-	fakeConfig.Contexts["fake-context"] = api.NewContext()
-	fakeConfig.Contexts["fake-context"].Cluster = "fake"
-	fakeConfig.Contexts["fake-context"].AuthInfo = "fake"
-	fakeConfig.CurrentContext = "fake-context"
 	return fakeConfig
+}
+
+func (m *MockServer) KubeconfigFile(t *testing.T) string {
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	err := clientcmd.WriteToFile(*m.Kubeconfig(), kubeconfig)
+	require.NoError(t, err, "Expected no error writing kubeconfig file")
+	return kubeconfig
 }
 
 func WriteObject(w http.ResponseWriter, obj runtime.Object) {
@@ -169,4 +176,39 @@ WaitForStreams:
 	}
 
 	return ctx, nil
+}
+
+type InOpenShiftHandler struct {
+}
+
+var _ http.Handler = (*InOpenShiftHandler)(nil)
+
+func (h *InOpenShiftHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
+	if req.URL.Path == "/api" {
+		_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":[],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
+		return
+	}
+	// Request Performed by DiscoveryClient to Kube API (Get API Groups)
+	if req.URL.Path == "/apis" {
+		_, _ = w.Write([]byte(`{
+			"kind":"APIGroupList",
+			"groups":[{
+				"name":"project.openshift.io",
+				"versions":[{"groupVersion":"project.openshift.io/v1","version":"v1"}],
+				"preferredVersion":{"groupVersion":"project.openshift.io/v1","version":"v1"}
+			}]}`))
+		return
+	}
+	if req.URL.Path == "/apis/project.openshift.io/v1" {
+		_, _ = w.Write([]byte(`{
+			"kind":"APIResourceList",
+			"apiVersion":"v1",
+			"groupVersion":"project.openshift.io/v1",
+			"resources":[
+				{"name":"projects","singularName":"","namespaced":false,"kind":"Project","verbs":["create","delete","get","list","patch","update","watch"],"shortNames":["pr"]}
+			]}`))
+		return
+	}
 }

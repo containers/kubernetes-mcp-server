@@ -10,10 +10,18 @@ import (
 
 type ToolsetsSuite struct {
 	suite.Suite
+	originalToolsets []api.Toolset
 }
 
 func (s *ToolsetsSuite) SetupTest() {
+	s.originalToolsets = Toolsets()
 	Clear()
+}
+
+func (s *ToolsetsSuite) TearDownTest() {
+	for _, toolset := range s.originalToolsets {
+		Register(toolset)
+	}
 }
 
 type TestToolset struct {

@@ -5,115 +5,151 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	configuration "github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
 )
 
-func TestDefaultToolsetTools(t *testing.T) {
-	expectedNames := []string{
-		"configuration_view",
-		"events_list",
-		"helm_install",
-		"helm_list",
-		"helm_uninstall",
-		"namespaces_list",
-		"pods_list",
-		"pods_list_in_namespace",
-		"pods_get",
-		"pods_delete",
-		"pods_top",
-		"pods_log",
-		"pods_run",
-		"pods_exec",
-		"resources_list",
-		"resources_get",
-		"resources_create_or_update",
-		"resources_delete",
+type ToolsetsSuite struct {
+	suite.Suite
+	originalToolsets []api.Toolset
+	*test.MockServer
+	*test.McpClient
+	Cfg       *configuration.StaticConfig
+	mcpServer *Server
+}
+
+func (s *ToolsetsSuite) SetupTest() {
+	s.originalToolsets = toolsets.Toolsets()
+	toolsets.Clear()
+	s.MockServer = test.NewMockServer()
+	s.Cfg = configuration.Default()
+	s.Cfg.KubeConfig = s.MockServer.KubeconfigFile(s.T())
+}
+
+func (s *ToolsetsSuite) TearDownTest() {
+	for _, toolset := range s.originalToolsets {
+		toolsets.Register(toolset)
 	}
-	mcpCtx := &mcpContext{}
-	testCaseWithContext(t, mcpCtx, func(c *mcpContext) {
-		tools, err := c.mcpClient.ListTools(c.ctx, mcp.ListToolsRequest{})
-		t.Run("ListTools returns tools", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call ListTools failed %v", err)
-				return
-			}
-		})
-		nameSet := make(map[string]bool)
-		for _, tool := range tools.Tools {
-			nameSet[tool.Name] = true
-		}
-		for _, name := range expectedNames {
-			t.Run("ListTools has "+name+" tool", func(t *testing.T) {
-				if nameSet[name] != true {
-					t.Fatalf("tool %s not found", name)
-					return
-				}
-			})
-		}
-		t.Run("ListTools returns correct Tool metadata for toolset", func(t *testing.T) {
-			_, file, _, _ := runtime.Caller(0)
-			expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-full-tools.json")
-			expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
-			if err != nil {
-				t.Fatalf("failed to read expected tools metadata file: %v", err)
-			}
-			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
-			if err != nil {
-				t.Fatalf("failed to marshal tools metadata: %v", err)
-			}
-			assert.JSONEqf(t, string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
+	s.MockServer.Close()
+}
+
+func (s *ToolsetsSuite) TearDownSubTest() {
+	if s.McpClient != nil {
+		s.McpClient.Close()
+	}
+	if s.mcpServer != nil {
+		s.mcpServer.Close()
+	}
+}
+
+func (s *ToolsetsSuite) TestNoToolsets() {
+	s.Run("No toolsets registered", func() {
+		s.Cfg.Toolsets = []string{}
+		s.InitMcpClient()
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Run("ListTools returns no tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+			s.Empty(tools.Tools, "Expected no tools from ListTools")
 		})
 	})
 }
 
-func TestDefaultToolsetToolsInOpenShift(t *testing.T) {
-	mcpCtx := &mcpContext{
-		before: inOpenShift,
-		after:  inOpenShiftClear,
-	}
-	testCaseWithContext(t, mcpCtx, func(c *mcpContext) {
-		tools, err := c.mcpClient.ListTools(c.ctx, mcp.ListToolsRequest{})
-		t.Run("ListTools returns tools", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call ListTools failed %v", err)
-			}
+func (s *ToolsetsSuite) TestDefaultToolsetsTools() {
+	s.Run("Default configuration toolsets", func() {
+		s.Cfg.Toolsets = configuration.Default().Toolsets
+		toolsets.Register(&core.Toolset{})
+		toolsets.Register(&config.Toolset{})
+		toolsets.Register(&helm.Toolset{})
+		s.InitMcpClient()
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
 		})
-		t.Run("ListTools contains projects_list tool", func(t *testing.T) {
-			idx := slices.IndexFunc(tools.Tools, func(tool mcp.Tool) bool {
-				return tool.Name == "projects_list"
-			})
-			if idx == -1 {
-				t.Fatalf("tool projects_list not found")
-			}
+		s.Run("ListTools returns correct Tool metadata", func() {
+			_, file, _, _ := runtime.Caller(0)
+			expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-full-tools.json")
+			expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
+			s.Require().NoErrorf(err, "failed to read expected tools metadata file: %v", err)
+			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
+			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
+			s.JSONEq(string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
 		})
-		t.Run("ListTools has resources_list tool with OpenShift hint", func(t *testing.T) {
-			idx := slices.IndexFunc(tools.Tools, func(tool mcp.Tool) bool {
-				return tool.Name == "resources_list"
-			})
-			if idx == -1 {
-				t.Fatalf("tool resources_list not found")
-			}
-			if !strings.Contains(tools.Tools[idx].Description, ", route.openshift.io/v1 Route") {
-				t.Fatalf("tool resources_list does not have OpenShift hint, got %s", tools.Tools[9].Description)
-			}
+	})
+}
+
+func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
+	s.Run("Default configuration toolsets in OpenShift", func() {
+		s.Handle(&test.InOpenShiftHandler{})
+		s.Cfg.Toolsets = configuration.Default().Toolsets
+		toolsets.Register(&core.Toolset{})
+		toolsets.Register(&config.Toolset{})
+		toolsets.Register(&helm.Toolset{})
+		s.InitMcpClient()
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
 		})
-		t.Run("ListTools returns correct Tool metadata for toolset", func(t *testing.T) {
+		s.Run("ListTools returns correct Tool metadata", func() {
 			_, file, _, _ := runtime.Caller(0)
 			expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-full-tools-openshift.json")
 			expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
-			if err != nil {
-				t.Fatalf("failed to read expected tools metadata file: %v", err)
-			}
+			s.Require().NoErrorf(err, "failed to read expected tools metadata file: %v", err)
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
-			if err != nil {
-				t.Fatalf("failed to marshal tools metadata: %v", err)
-			}
-			assert.JSONEqf(t, string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
+			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
+			s.JSONEq(string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
 		})
 	})
+}
+
+func (s *ToolsetsSuite) TestGranularToolsetsTools() {
+	testCases := []api.Toolset{
+		&core.Toolset{},
+		&config.Toolset{},
+		&helm.Toolset{},
+	}
+	for _, testCase := range testCases {
+		s.Run("Toolset "+testCase.GetName(), func() {
+			toolsets.Register(testCase)
+			s.Cfg.Toolsets = []string{testCase.GetName()}
+			s.InitMcpClient()
+			tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+			s.Run("ListTools returns tools", func() {
+				s.NotNil(tools, "Expected tools from ListTools")
+				s.NoError(err, "Expected no error from ListTools")
+			})
+			s.Run("ListTools returns correct Tool metadata", func() {
+				_, file, _, _ := runtime.Caller(0)
+				expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-"+testCase.GetName()+"-tools.json")
+				expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
+				s.Require().NoErrorf(err, "failed to read expected tools metadata file: %v", err)
+				metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
+				s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
+				s.JSONEq(string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
+			})
+		})
+	}
+}
+
+func (s *ToolsetsSuite) InitMcpClient() {
+	var err error
+	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
+	s.Require().NoError(err, "Expected no error creating MCP server")
+	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil))
+}
+
+func TestToolsets(t *testing.T) {
+	suite.Run(t, new(ToolsetsSuite))
 }
