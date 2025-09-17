@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
@@ -48,7 +50,7 @@ func TestConfig(t *testing.T) {
 	t.Run("defaults to none", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		expectedConfig := `" - Config: "`
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), expectedConfig) {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedConfig, out.String(), err)
@@ -59,7 +61,7 @@ func TestConfig(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		_, file, _, _ := runtime.Caller(0)
 		emptyConfigPath := filepath.Join(filepath.Dir(file), "testdata", "empty-config.toml")
-		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--config", emptyConfigPath})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config", emptyConfigPath})
 		_ = rootCmd.Execute()
 		expected := `(?m)\" - Config\:[^\"]+empty-config\.toml\"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
@@ -69,7 +71,7 @@ func TestConfig(t *testing.T) {
 	t.Run("invalid path throws error", func(t *testing.T) {
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--config", "invalid-path-to-config.toml"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config", "invalid-path-to-config.toml"})
 		err := rootCmd.Execute()
 		if err == nil {
 			t.Fatal("Expected error for invalid config path, got nil")
@@ -142,7 +144,7 @@ func TestToolsets(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolsets: core, config, helm") {
 			t.Fatalf("Expected toolsets 'full', got %s %v", out, err)
 		}
@@ -150,7 +152,7 @@ func TestToolsets(t *testing.T) {
 	t.Run("set with --toolsets", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--toolsets", "helm,config"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--toolsets", "helm,config"})
 		_ = rootCmd.Execute()
 		expected := `(?m)\" - Toolsets\: helm, config\"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
@@ -172,7 +174,7 @@ func TestListOutput(t *testing.T) {
 	t.Run("defaults to table", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- ListOutput: table") {
 			t.Fatalf("Expected list-output 'table', got %s %v", out, err)
 		}
@@ -180,7 +182,7 @@ func TestListOutput(t *testing.T) {
 	t.Run("set with --list-output", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--list-output", "yaml"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--list-output", "yaml"})
 		_ = rootCmd.Execute()
 		expected := `(?m)\" - ListOutput\: yaml\"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
@@ -193,7 +195,7 @@ func TestReadOnly(t *testing.T) {
 	t.Run("defaults to false", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - Read-only mode: false") {
 			t.Fatalf("Expected read-only mode false, got %s %v", out, err)
 		}
@@ -201,7 +203,7 @@ func TestReadOnly(t *testing.T) {
 	t.Run("set with --read-only", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--read-only"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--read-only"})
 		_ = rootCmd.Execute()
 		expected := `(?m)\" - Read-only mode\: true\"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
@@ -214,7 +216,7 @@ func TestDisableDestructive(t *testing.T) {
 	t.Run("defaults to false", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - Disable destructive tools: false") {
 			t.Fatalf("Expected disable destructive false, got %s %v", out, err)
 		}
@@ -222,7 +224,7 @@ func TestDisableDestructive(t *testing.T) {
 	t.Run("set with --disable-destructive", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--disable-destructive"})
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--disable-destructive"})
 		_ = rootCmd.Execute()
 		expected := `(?m)\" - Disable destructive tools\: true\"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
@@ -253,5 +255,24 @@ func TestAuthorizationURL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Expected no error for valid https authorization-url, got %s", err.Error())
 		}
+	})
+}
+
+func TestStdioLogging(t *testing.T) {
+	t.Run("stdio disables klog", func(t *testing.T) {
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
+		err := rootCmd.Execute()
+		require.NoErrorf(t, err, "Expected no error executing command, got %v", err)
+		assert.Equalf(t, "0.0.0\n", out.String(), "Expected only version output, got %s", out.String())
+	})
+	t.Run("http mode enables klog", func(t *testing.T) {
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--port=1337"})
+		err := rootCmd.Execute()
+		require.NoErrorf(t, err, "Expected no error executing command, got %v", err)
+		assert.Containsf(t, out.String(), "Starting kubernetes-mcp-server", "Expected klog output, got %s", out.String())
 	})
 }

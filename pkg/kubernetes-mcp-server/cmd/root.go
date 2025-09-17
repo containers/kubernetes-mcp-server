@@ -207,6 +207,12 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 func (m *MCPServerOptions) initializeLogging() {
 	flagSet := flag.NewFlagSet("klog", flag.ContinueOnError)
 	klog.InitFlags(flagSet)
+	if m.StaticConfig.Port == "" {
+		// disable klog output for stdio mode
+		// this is needed to avoid klog writing to stderr and breaking the protocol
+		_ = flagSet.Parse([]string{"-logtostderr=false", "-alsologtostderr=false", "-stderrthreshold=FATAL"})
+		return
+	}
 	loggerOptions := []textlogger.ConfigOption{textlogger.Output(m.Out)}
 	if m.StaticConfig.LogLevel >= 0 {
 		loggerOptions = append(loggerOptions, textlogger.Verbosity(m.StaticConfig.LogLevel))
