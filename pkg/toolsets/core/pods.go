@@ -337,7 +337,7 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %v", err)), nil
 	}
 	buf := new(bytes.Buffer)
-	printer := metricsutil.NewTopCmdPrinter(buf)
+	printer := metricsutil.NewTopCmdPrinter(buf, true)
 	err = printer.PrintPodMetrics(ret.Items, true, true, false, "", true)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %v", err)), nil

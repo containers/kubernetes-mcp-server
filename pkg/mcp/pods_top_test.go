@@ -71,12 +71,12 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 			if req.URL.Path == "/apis/metrics.k8s.io/v1beta1/pods" {
 				if req.URL.Query().Get("labelSelector") == "app=pod-ns-5-42" {
 					_, _ = w.Write([]byte(`{"kind":"PodMetricsList","apiVersion":"metrics.k8s.io/v1beta1","items":[` +
-						`{"metadata":{"name":"pod-ns-5-42","namespace":"ns-5"},"containers":[{"name":"container-1","usage":{"cpu":"42m","memory":"42Mi"}}]}` +
+						`{"metadata":{"name":"pod-ns-5-42","namespace":"ns-5"},"containers":[{"name":"container-1","usage":{"cpu":"42m","memory":"42Mi","swap":"42Mi"}}]}` +
 						`]}`))
 				} else {
 					_, _ = w.Write([]byte(`{"kind":"PodMetricsList","apiVersion":"metrics.k8s.io/v1beta1","items":[` +
-						`{"metadata":{"name":"pod-1","namespace":"default"},"containers":[{"name":"container-1","usage":{"cpu":"100m","memory":"200Mi"}},{"name":"container-2","usage":{"cpu":"200m","memory":"300Mi"}}]},` +
-						`{"metadata":{"name":"pod-2","namespace":"ns-1"},"containers":[{"name":"container-1-ns-1","usage":{"cpu":"300m","memory":"400Mi"}}]}` +
+						`{"metadata":{"name":"pod-1","namespace":"default"},"containers":[{"name":"container-1","usage":{"cpu":"100m","memory":"200Mi","swap":"13Mi"}},{"name":"container-2","usage":{"cpu":"200m","memory":"300Mi","swap":"37Mi"}}]},` +
+						`{"metadata":{"name":"pod-2","namespace":"ns-1"},"containers":[{"name":"container-1-ns-1","usage":{"cpu":"300m","memory":"400Mi","swap":"42Mi"}}]}` +
 						`]}`))
 
 				}
@@ -85,14 +85,14 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 			// Pod Metrics from configured namespace
 			if req.URL.Path == "/apis/metrics.k8s.io/v1beta1/namespaces/default/pods" {
 				_, _ = w.Write([]byte(`{"kind":"PodMetricsList","apiVersion":"metrics.k8s.io/v1beta1","items":[` +
-					`{"metadata":{"name":"pod-1","namespace":"default"},"containers":[{"name":"container-1","usage":{"cpu":"10m","memory":"20Mi"}},{"name":"container-2","usage":{"cpu":"30m","memory":"40Mi"}}]}` +
+					`{"metadata":{"name":"pod-1","namespace":"default"},"containers":[{"name":"container-1","usage":{"cpu":"10m","memory":"20Mi","swap":"13Mi"}},{"name":"container-2","usage":{"cpu":"30m","memory":"40Mi","swap":"37Mi"}}]}` +
 					`]}`))
 				return
 			}
 			// Pod Metrics from ns-5 namespace
 			if req.URL.Path == "/apis/metrics.k8s.io/v1beta1/namespaces/ns-5/pods" {
 				_, _ = w.Write([]byte(`{"kind":"PodMetricsList","apiVersion":"metrics.k8s.io/v1beta1","items":[` +
-					`{"metadata":{"name":"pod-ns-5-1","namespace":"ns-5"},"containers":[{"name":"container-1","usage":{"cpu":"10m","memory":"20Mi"}}]}` +
+					`{"metadata":{"name":"pod-ns-5-1","namespace":"ns-5"},"containers":[{"name":"container-1","usage":{"cpu":"10m","memory":"20Mi","swap":"42Mi"}}]}` +
 					`]}`))
 				return
 			}
@@ -100,7 +100,7 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 			if req.URL.Path == "/apis/metrics.k8s.io/v1beta1/namespaces/ns-5/pods/pod-ns-5-5" {
 				_, _ = w.Write([]byte(`{"kind":"PodMetrics","apiVersion":"metrics.k8s.io/v1beta1",` +
 					`"metadata":{"name":"pod-ns-5-5","namespace":"ns-5"},` +
-					`"containers":[{"name":"container-1","usage":{"cpu":"13m","memory":"37Mi"}}]` +
+					`"containers":[{"name":"container-1","usage":{"cpu":"13m","memory":"37Mi","swap":"42Mi"}}]` +
 					`}`))
 			}
 		}))
@@ -113,21 +113,21 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 			if podsTopDefaults.IsError {
 				t.Fatalf("call tool failed %s", textContent)
 			}
-			expectedHeaders := regexp.MustCompile(`(?m)^\s*NAMESPACE\s+POD\s+NAME\s+CPU\(cores\)\s+MEMORY\(bytes\)\s*$`)
+			expectedHeaders := regexp.MustCompile(`(?m)^\s*NAMESPACE\s+POD\s+NAME\s+CPU\(cores\)\s+MEMORY\(bytes\)\s+SWAP\(bytes\)\s*$`)
 			if !expectedHeaders.MatchString(textContent) {
 				t.Errorf("Expected headers '%s' not found in output:\n%s", expectedHeaders.String(), textContent)
 			}
 			expectedRows := []string{
-				"default\\s+pod-1\\s+container-1\\s+100m\\s+200Mi",
-				"default\\s+pod-1\\s+container-2\\s+200m\\s+300Mi",
-				"ns-1\\s+pod-2\\s+container-1-ns-1\\s+300m\\s+400Mi",
+				"default\\s+pod-1\\s+container-1\\s+100m\\s+200Mi\\s+13Mi",
+				"default\\s+pod-1\\s+container-2\\s+200m\\s+300Mi\\s+37Mi",
+				"ns-1\\s+pod-2\\s+container-1-ns-1\\s+300m\\s+400Mi\\s+42Mi",
 			}
 			for _, row := range expectedRows {
 				if !regexp.MustCompile(row).MatchString(textContent) {
 					t.Errorf("Expected row '%s' not found in output:\n%s", row, textContent)
 				}
 			}
-			expectedTotal := regexp.MustCompile(`(?m)^\s+600m\s+900Mi\s*$`)
+			expectedTotal := regexp.MustCompile(`(?m)^\s+600m\s+900Mi\s+92Mi\s*$`)
 			if !expectedTotal.MatchString(textContent) {
 				t.Errorf("Expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 			}
@@ -141,15 +141,15 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 			}
 			textContent := podsTopConfiguredNamespace.Content[0].(mcp.TextContent).Text
 			expectedRows := []string{
-				"default\\s+pod-1\\s+container-1\\s+10m\\s+20Mi",
-				"default\\s+pod-1\\s+container-2\\s+30m\\s+40Mi",
+				"default\\s+pod-1\\s+container-1\\s+10m\\s+20Mi\\s+13Mi",
+				"default\\s+pod-1\\s+container-2\\s+30m\\s+40Mi\\s+37Mi",
 			}
 			for _, row := range expectedRows {
 				if !regexp.MustCompile(row).MatchString(textContent) {
 					t.Errorf("Expected row '%s' not found in output:\n%s", row, textContent)
 				}
 			}
-			expectedTotal := regexp.MustCompile(`(?m)^\s+40m\s+60Mi\s*$`)
+			expectedTotal := regexp.MustCompile(`(?m)^\s+40m\s+60Mi\s+50Mi\s*$`)
 			if !expectedTotal.MatchString(textContent) {
 				t.Errorf("Expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 			}
@@ -162,11 +162,11 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 				t.Fatalf("call tool failed %v", err)
 			}
 			textContent := podsTopNamespace.Content[0].(mcp.TextContent).Text
-			expectedRow := regexp.MustCompile(`ns-5\s+pod-ns-5-1\s+container-1\s+10m\s+20Mi`)
+			expectedRow := regexp.MustCompile(`ns-5\s+pod-ns-5-1\s+container-1\s+10m\s+20Mi\s+42Mi`)
 			if !expectedRow.MatchString(textContent) {
 				t.Errorf("Expected row '%s' not found in output:\n%s", expectedRow.String(), textContent)
 			}
-			expectedTotal := regexp.MustCompile(`(?m)^\s+10m\s+20Mi\s*$`)
+			expectedTotal := regexp.MustCompile(`(?m)^\s+10m\s+20Mi\s+42Mi\s*$`)
 			if !expectedTotal.MatchString(textContent) {
 				t.Errorf("Expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 			}
@@ -180,11 +180,11 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 				t.Fatalf("call tool failed %v", err)
 			}
 			textContent := podsTopNamespaceName.Content[0].(mcp.TextContent).Text
-			expectedRow := regexp.MustCompile(`ns-5\s+pod-ns-5-5\s+container-1\s+13m\s+37Mi`)
+			expectedRow := regexp.MustCompile(`ns-5\s+pod-ns-5-5\s+container-1\s+13m\s+37Mi\s+42Mi`)
 			if !expectedRow.MatchString(textContent) {
 				t.Errorf("Expected row '%s' not found in output:\n%s", expectedRow.String(), textContent)
 			}
-			expectedTotal := regexp.MustCompile(`(?m)^\s+13m\s+37Mi\s*$`)
+			expectedTotal := regexp.MustCompile(`(?m)^\s+13m\s+37Mi\s+42Mi\s*$`)
 			if !expectedTotal.MatchString(textContent) {
 				t.Errorf("Expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 			}
@@ -201,7 +201,7 @@ func TestPodsTopMetricsAvailable(t *testing.T) {
 			if !expectedRow.MatchString(textContent) {
 				t.Errorf("Expected row '%s' not found in output:\n%s", expectedRow.String(), textContent)
 			}
-			expectedTotal := regexp.MustCompile(`(?m)^\s+42m\s+42Mi\s*$`)
+			expectedTotal := regexp.MustCompile(`(?m)^\s+42m\s+42Mi\s+42Mi\s*$`)
 			if !expectedTotal.MatchString(textContent) {
 				t.Errorf("Expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 			}
