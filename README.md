@@ -128,6 +128,31 @@ extensions:
 
 ```
 
+### Claude Code
+
+[Claude Code](https://claude.ai/code) provides an integrated command-line interface for Claude with MCP server support.
+
+For reliable connection with Claude Code, use the JSON configuration format:
+
+```bash
+claude mcp add-json kubectl '{"command":"npx","args":["-y","kubernetes-mcp-server@latest"],"env":{"KUBECONFIG":"${HOME}/.kube/config"}}' -s user
+```
+
+This ensures:
+- ✅ Reliable stdio transport connection
+- ✅ User-level scope (works across all projects) 
+- ✅ Proper environment variable handling
+- ✅ Auto-managed server lifecycle
+
+#### Troubleshooting
+
+If you see "Failed to connect" in health checks but the server works when you run kubectl commands, this is expected behavior. The health check timeout may be too aggressive for stdio transport, but the server will function correctly when Claude Code actually uses it.
+
+For connection issues, ensure you're using:
+- **JSON format**: Use `claude mcp add-json` with proper JSON structure instead of command-line arguments
+- **Separate args array**: `"args":["-y","kubernetes-mcp-server@latest"]` instead of combined strings
+- **Environment variables**: Set `KUBECONFIG` in the `env` object for proper kubectl access
+
 ## 🎥 Demos <a id="demos"></a>
 
 ### Diagnosing and automatically fixing an OpenShift Deployment
