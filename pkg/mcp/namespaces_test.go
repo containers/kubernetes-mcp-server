@@ -50,7 +50,7 @@ func (s *NamespacesSuite) TestNamespacesList() {
 func (s *NamespacesSuite) TestNamespacesListDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "Namespace" } ]
-	`), s.Cfg), "Expected to parse denied resources  config")
+	`), s.Cfg), "Expected to parse denied resources config")
 	s.InitMcpClient()
 	s.Run("namespaces_list (denied)", func() {
 		toolResult, err := s.CallTool("namespaces_list", map[string]interface{}{})

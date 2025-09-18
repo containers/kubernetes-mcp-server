@@ -104,7 +104,7 @@ func (s *EventsSuite) TestEventsList() {
 func (s *EventsSuite) TestEventsListDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "Event" } ]
-	`), s.Cfg), "Expected to parse denied resources  config")
+	`), s.Cfg), "Expected to parse denied resources config")
 	s.InitMcpClient()
 	s.Run("events_list (denied)", func() {
 		toolResult, err := s.CallTool("events_list", map[string]interface{}{})

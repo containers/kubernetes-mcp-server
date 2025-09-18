@@ -2,9 +2,6 @@ package mcp
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -75,13 +72,10 @@ func (s *ToolsetsSuite) TestDefaultToolsetsTools() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			_, file, _, _ := runtime.Caller(0)
-			expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-full-tools.json")
-			expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
-			s.Require().NoErrorf(err, "failed to read expected tools metadata file: %v", err)
+			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools.json")
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-			s.JSONEq(string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
+			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
 		})
 	})
 }
@@ -96,13 +90,10 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			_, file, _, _ := runtime.Caller(0)
-			expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-full-tools-openshift.json")
-			expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
-			s.Require().NoErrorf(err, "failed to read expected tools metadata file: %v", err)
+			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-openshift.json")
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-			s.JSONEq(string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
+			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
 		})
 	})
 }
@@ -125,13 +116,10 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 				s.NoError(err, "Expected no error from ListTools")
 			})
 			s.Run("ListTools returns correct Tool metadata", func() {
-				_, file, _, _ := runtime.Caller(0)
-				expectedMetadataPath := filepath.Join(filepath.Dir(file), "testdata", "toolsets-"+testCase.GetName()+"-tools.json")
-				expectedMetadataBytes, err := os.ReadFile(expectedMetadataPath)
-				s.Require().NoErrorf(err, "failed to read expected tools metadata file: %v", err)
+				expectedMetadata := test.ReadFile("testdata", "toolsets-"+testCase.GetName()+"-tools.json")
 				metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 				s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-				s.JSONEq(string(expectedMetadataBytes), string(metadata), "tools metadata does not match expected")
+				s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
 			})
 		})
 	}
