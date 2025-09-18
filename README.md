@@ -94,7 +94,7 @@ code-insiders --add-mcp '{"name":"kubernetes","command":"npx","args":["kubernete
 
 Install the Kubernetes MCP server extension in Cursor by pressing the following link:
 
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=kubernetes-mcp-server&config=JTdCJTIyY29tbWFuZCUyMiUzQSUyMm5weCUyMC15JTIwa3ViZXJuZXRlcy1tY3Atc2VydmVyJTQwbGF0ZXN0JTIyJTdE)
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=kubernetes-mcp-server&config=eyJjb21tYW5kIjoibnB4IC15IGt1YmVybmV0ZXMtbWNwLXNlcnZlckBsYXRlc3QifQ%3D%3D)
 
 Alternatively, you can install the extension manually by editing the `mcp.json` file:
 
