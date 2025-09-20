@@ -92,17 +92,27 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 		k.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
 }
 
-func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool) (string, error) {
-	tailLines := int64(256)
+func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tailLines int64) (string, error) {
 	pods, err := k.manager.accessControlClientSet.Pods(k.NamespaceOrDefault(namespace))
 	if err != nil {
 		return "", err
 	}
-	req := pods.GetLogs(name, &v1.PodLogOptions{
-		TailLines: &tailLines,
+
+	logOptions := &v1.PodLogOptions{
 		Container: container,
 		Previous:  previous,
-	})
+	}
+
+	// Only set tailLines if a value is provided (non-zero)
+	if tailLines > 0 {
+		logOptions.TailLines = &tailLines
+	} else {
+		// Default to 256 lines when not specified
+		defaultLines := int64(256)
+		logOptions.TailLines = &defaultLines
+	}
+
+	req := pods.GetLogs(name, logOptions)
 	res := req.Do(ctx)
 	if res.Error() != nil {
 		return "", res.Error()
