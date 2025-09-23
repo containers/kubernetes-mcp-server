@@ -201,10 +201,10 @@ func initPods() []api.ServerTool {
 						Type:        "string",
 						Description: "Name of the Pod container to get the logs from (Optional)",
 					},
-					"tailLines": {
+					"tail": {
 						Type:        "integer",
-						Description: "Number of lines to retrieve from the end of the logs (Optional, default: 256)",
-						Default:     api.ToRawMessage(int64(256)),
+						Description: "Number of lines to retrieve from the end of the logs (Optional, default: 100)",
+						Default:     api.ToRawMessage(kubernetes.DefaultTailLines),
 						Minimum:     ptr.To(float64(0)),
 					},
 					"previous": {
@@ -403,23 +403,23 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		previousBool = previous.(bool)
 	}
 	// Extract tailLines parameter
-	tailLines := params.GetArguments()["tailLines"]
-	var tailLinesInt int64
-	if tailLines != nil {
+	tail := params.GetArguments()["tail"]
+	var tailInt int64
+	if tail != nil {
 		// Convert to int64 - safely handle both float64 (JSON number) and int types
-		switch v := tailLines.(type) {
+		switch v := tail.(type) {
 		case float64:
-			tailLinesInt = int64(v)
+			tailInt = int64(v)
 		case int:
-			tailLinesInt = int64(v)
+			tailInt = int64(v)
 		case int64:
-			tailLinesInt = v
+			tailInt = v
 		default:
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tailLines parameter: expected integer, got %T", tailLines)), nil
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tail)), nil
 		}
 	}
 
-	ret, err := params.PodsLog(params.Context, ns.(string), name.(string), container.(string), previousBool, tailLinesInt)
+	ret, err := params.PodsLog(params.Context, ns.(string), name.(string), container.(string), previousBool, tailInt)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s log in namespace %s: %v", name, ns, err)), nil
 	} else if ret == "" {

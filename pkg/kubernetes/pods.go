@@ -17,9 +17,13 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/metrics/pkg/apis/metrics"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
+
+// Default number of lines to retrieve from the end of the logs
+const DefaultTailLines = int64(100)
 
 type PodsTopOptions struct {
 	metav1.ListOptions
@@ -92,7 +96,7 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 		k.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
 }
 
-func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tailLines int64) (string, error) {
+func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
 	pods, err := k.manager.accessControlClientSet.Pods(k.NamespaceOrDefault(namespace))
 	if err != nil {
 		return "", err
@@ -104,12 +108,11 @@ func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container str
 	}
 
 	// Only set tailLines if a value is provided (non-zero)
-	if tailLines > 0 {
-		logOptions.TailLines = &tailLines
+	if tail > 0 {
+		logOptions.TailLines = &tail
 	} else {
-		// Default to 256 lines when not specified
-		defaultLines := int64(256)
-		logOptions.TailLines = &defaultLines
+		// Default to DefaultTailLines lines when not specified
+		logOptions.TailLines = ptr.To(DefaultTailLines)
 	}
 
 	req := pods.GetLogs(name, logOptions)
