@@ -20,6 +20,13 @@ func initNamespaces(o internalk8s.Openshift) []api.ServerTool {
 			Description: "List all the Kubernetes namespaces in the current cluster",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"labelSelector": {
+						Type:        "string",
+						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the namespaces by label",
+						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+					},
+				},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Namespaces: List",
@@ -37,6 +44,13 @@ func initNamespaces(o internalk8s.Openshift) []api.ServerTool {
 				Description: "List all the OpenShift projects in the current cluster",
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"labelSelector": {
+							Type:        "string",
+							Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the namespaces by label",
+							Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+						},
+					},
 				},
 				Annotations: api.ToolAnnotations{
 					Title:           "Projects: List",
