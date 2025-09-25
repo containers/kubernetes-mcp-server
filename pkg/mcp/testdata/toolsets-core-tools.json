@@ -202,6 +202,12 @@
         "previous": {
           "description": "Return previous terminated container logs (Optional)",
           "type": "boolean"
+        },
+        "tail": {
+          "default": 100,
+          "description": "Number of lines to retrieve from the end of the logs (Optional, default: 100)",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
