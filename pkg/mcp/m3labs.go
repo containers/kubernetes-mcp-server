@@ -30,6 +30,12 @@ func ServerToolToM3LabsServerTool(s *Server, tools []api.ServerTool) ([]server.S
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal tool input schema for tool %s: %v", tool.Tool.Name, err)
 			}
+			// TODO: temporary fix to append an empty properties object (some client have trouble parsing a schema without properties)
+			// As opposed, Gemini had trouble for a while when properties was present but empty.
+			// https://github.com/containers/kubernetes-mcp-server/issues/340
+			if string(schema) == `{"type":"object"}` {
+				schema = []byte(`{"type":"object","properties":{}}`)
+			}
 			m3labTool.RawInputSchema = schema
 		}
 		m3labHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

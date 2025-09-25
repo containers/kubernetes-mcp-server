@@ -125,6 +125,28 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	}
 }
 
+func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
+	//https://github.com/containers/kubernetes-mcp-server/issues/340
+	s.Run("InputSchema for no-arg tool is object with empty properties", func() {
+		s.InitMcpClient()
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+		})
+		var namespacesList *mcp.Tool
+		for _, tool := range tools.Tools {
+			if tool.Name == "namespaces_list" {
+				namespacesList = &tool
+				break
+			}
+		}
+		s.Require().NotNil(namespacesList, "Expected namespaces_list from ListTools")
+		s.NotNil(namespacesList.InputSchema.Properties, "Expected namespaces_list.InputSchema.Properties not to be nil")
+		s.Empty(namespacesList.InputSchema.Properties, "Expected namespaces_list.InputSchema.Properties to be empty")
+	})
+}
+
 func (s *ToolsetsSuite) InitMcpClient() {
 	var err error
 	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
