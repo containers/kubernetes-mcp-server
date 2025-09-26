@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -9,6 +10,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
 )
 
 type EventsSuite struct {
@@ -24,7 +26,7 @@ func (s *EventsSuite) TestEventsList() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Run("returns no events message", func() {
-			s.Equal("No events found", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equal("# No events found", toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
 	s.Run("events_list (with events)", func() {
@@ -50,8 +52,16 @@ func (s *EventsSuite) TestEventsList() {
 				s.Nilf(err, "call tool failed %v", err)
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
+			s.Run("has yaml comment indicating output format", func() {
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# The following events (YAML format) were found:\n"), "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+			})
+			var decoded []v1.Event
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			s.Run("has yaml content", func() {
+				s.Nilf(err, "unmarshal failed %v", err)
+			})
 			s.Run("returns all events", func() {
-				s.Equalf("The following events (YAML format) were found:\n"+
+				s.YAMLEqf(""+
 					"- InvolvedObject:\n"+
 					"    Kind: Pod\n"+
 					"    Name: a-pod\n"+
@@ -83,8 +93,16 @@ func (s *EventsSuite) TestEventsList() {
 				s.Nilf(err, "call tool failed %v", err)
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
+			s.Run("has yaml comment indicating output format", func() {
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# The following events (YAML format) were found:\n"), "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+			})
+			var decoded []v1.Event
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			s.Run("has yaml content", func() {
+				s.Nilf(err, "unmarshal failed %v", err)
+			})
 			s.Run("returns events from namespace", func() {
-				s.Equalf("The following events (YAML format) were found:\n"+
+				s.YAMLEqf(""+
 					"- InvolvedObject:\n"+
 					"    Kind: Pod\n"+
 					"    Name: a-pod\n"+

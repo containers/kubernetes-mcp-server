@@ -45,11 +45,11 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %v", err)), nil
 	}
 	if len(eventMap) == 0 {
-		return api.NewToolCallResult("No events found", nil), nil
+		return api.NewToolCallResult("# No events found", nil), nil
 	}
 	yamlEvents, err := output.MarshalYaml(eventMap)
 	if err != nil {
 		err = fmt.Errorf("failed to list events in all namespaces: %v", err)
 	}
-	return api.NewToolCallResult(fmt.Sprintf("The following events (YAML format) were found:\n%s", yamlEvents), err), nil
+	return api.NewToolCallResult(fmt.Sprintf("# The following events (YAML format) were found:\n%s", yamlEvents), err), nil
 }
