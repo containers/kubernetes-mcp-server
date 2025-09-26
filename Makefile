@@ -47,12 +47,12 @@ clean: ## Clean up all build artifacts
 	rm -rf $(CLEAN_TARGETS)
 
 .PHONY: build
-build: clean tidy format ## Build the project
+build: clean tidy format lint ## Build the project
 	go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME) ./cmd/kubernetes-mcp-server
 
 
 .PHONY: build-all-platforms
-build-all-platforms: clean tidy format ## Build the project for all platforms
+build-all-platforms: clean tidy format lint ## Build the project for all platforms
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
 		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
