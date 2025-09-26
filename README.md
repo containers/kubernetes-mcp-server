@@ -261,7 +261,7 @@ The following sets of tools are available (all on by default):
   - `name` (`string`) **(required)** - Name of the Pod to get the logs from
   - `namespace` (`string`) - Namespace to get the Pod logs from
   - `previous` (`boolean`) - Return previous terminated container logs (Optional)
-  - `tail` (`number`) - Number of lines to retrieve from the end of the logs (Optional, default: 100)
+  - `tail` (`integer`) - Number of lines to retrieve from the end of the logs (Optional, default: 100)
 
 - **pods_run** - Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name
   - `image` (`string`) **(required)** - Container Image to run in the Pod
