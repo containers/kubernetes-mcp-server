@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -25,7 +26,14 @@ func (o *OpenShift) IsOpenShift(ctx context.Context) bool {
 var _ internalk8s.Openshift = (*OpenShift)(nil)
 
 func main() {
-	readme, err := os.ReadFile(os.Args[1])
+	// Snyk reports false positive unless we flow the args through filepath.Clean and filepath.Localize in this specific order
+	var err error
+	localReadmePath := filepath.Clean(os.Args[1])
+	localReadmePath, err = filepath.Localize(localReadmePath)
+	if err != nil {
+		panic(err)
+	}
+	readme, err := os.ReadFile(localReadmePath)
 	if err != nil {
 		panic(err)
 	}
@@ -81,7 +89,7 @@ func main() {
 		toolsetTools.String(),
 	)
 
-	if err := os.WriteFile(os.Args[1], []byte(updated), 0o644); err != nil {
+	if err := os.WriteFile(localReadmePath, []byte(updated), 0o644); err != nil {
 		panic(err)
 	}
 }
