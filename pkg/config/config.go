@@ -6,6 +6,10 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+const (
+	ClusterProviderKubeConfig = "kubeconfig"
+)
+
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
@@ -49,12 +53,18 @@ type StaticConfig struct {
 	StsScopes            []string `toml:"sts_scopes,omitempty"`
 	CertificateAuthority string   `toml:"certificate_authority,omitempty"`
 	ServerURL            string   `toml:"server_url,omitempty"`
+	// ClusterProviderStrategy is how the server finds clusters.
+	// If set to "kubeconfig", the clusters will be loaded from those in the kubeconfig.
+	ClusterProviderStrategy string `toml:"cluster_provider_strategy,omitempty"`
+	// ClusterContexts is which context should be used for each cluster
+	ClusterContexts map[string]string `toml:"cluster_contexts"`
 }
 
 func Default() *StaticConfig {
 	return &StaticConfig{
-		ListOutput: "table",
-		Toolsets:   []string{"core", "config", "helm"},
+		ListOutput:              "table",
+		Toolsets:                []string{"core", "config", "helm"},
+		ClusterProviderStrategy: ClusterProviderKubeConfig,
 	}
 }
 
