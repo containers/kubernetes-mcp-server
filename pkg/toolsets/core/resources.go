@@ -10,7 +10,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
@@ -152,7 +151,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		namespace = ""
 	}
 	labelSelector := params.GetArguments()["labelSelector"]
-	resourceListOptions := kubernetes.ResourceListOptions{
+	resourceListOptions := internalk8s.ResourceListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 

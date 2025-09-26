@@ -436,7 +436,7 @@ func (s *BaseMcpSuite) SetupTest() {
 
 func (s *BaseMcpSuite) TearDownTest() {
 	if s.McpClient != nil {
-		s.McpClient.Close()
+		s.Close()
 	}
 	if s.mcpServer != nil {
 		s.mcpServer.Close()

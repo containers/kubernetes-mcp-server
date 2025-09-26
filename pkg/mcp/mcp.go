@@ -48,16 +48,16 @@ func (c *Configuration) ListOutput() output.Output {
 }
 
 func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
-	if c.StaticConfig.ReadOnly && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
+	if c.ReadOnly && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
 		return false
 	}
-	if c.StaticConfig.DisableDestructive && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
+	if c.DisableDestructive && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
 		return false
 	}
-	if c.StaticConfig.EnabledTools != nil && !slices.Contains(c.StaticConfig.EnabledTools, tool.Tool.Name) {
+	if c.EnabledTools != nil && !slices.Contains(c.EnabledTools, tool.Tool.Name) {
 		return false
 	}
-	if c.StaticConfig.DisabledTools != nil && slices.Contains(c.StaticConfig.DisabledTools, tool.Tool.Name) {
+	if c.DisabledTools != nil && slices.Contains(c.DisabledTools, tool.Tool.Name) {
 		return false
 	}
 	return true
@@ -79,7 +79,7 @@ func NewServer(configuration Configuration) (*Server, error) {
 		server.WithLogging(),
 		server.WithToolHandlerMiddleware(toolCallLoggingMiddleware),
 	)
-	if configuration.StaticConfig.RequireOAuth && false { // TODO: Disabled scope auth validation for now
+	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now
 		serverOptions = append(serverOptions, server.WithToolHandlerMiddleware(toolScopedAuthorizationMiddleware))
 	}
 
