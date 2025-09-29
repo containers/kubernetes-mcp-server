@@ -26,6 +26,7 @@ func (t *Toolset) GetTools(o internalk8s.Openshift) []api.ServerTool {
 		initNamespaces(o),
 		initPods(),
 		initResources(o),
+		initSearch(o),
 	)
 }
 

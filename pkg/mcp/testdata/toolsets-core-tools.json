@@ -418,5 +418,28 @@
       ]
     },
     "name": "resources_list"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "Search for a string in all resources.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "The string to search for in the resources.",
+          "type": "string"
+        },
+        "as_table": {
+          "description": "Return the results as a table.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "name": "search.Resources"
   }
 ]
