@@ -554,6 +554,18 @@
         "as_table": {
           "description": "Return the results as a table.",
           "type": "boolean"
+        },
+        "api_version": {
+          "description": "Optional API version of the resource to search in.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Optional kind of the resource to search in.",
+          "type": "string"
+        },
+        "namespace_label_selector": {
+          "description": "Optional label selector to filter namespaces.",
+          "type": "string"
         }
       },
       "required": [

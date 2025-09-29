@@ -27,6 +27,18 @@ func initSearch(_ kubernetes.Openshift) []api.ServerTool {
 							Type:        "boolean",
 							Description: "Return the results as a table.",
 						},
+						"api_version": {
+							Type:        "string",
+							Description: "Optional API version of the resource to search in.",
+						},
+						"kind": {
+							Type:        "string",
+							Description: "Optional kind of the resource to search in.",
+						},
+						"namespace_label_selector": {
+							Type:        "string",
+							Description: "Optional label selector to filter namespaces.",
+						},
 					},
 					Required: []string{"query"},
 				},
@@ -50,7 +62,22 @@ func searchResources(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 		asTable = val
 	}
 
-	result, err := params.SearchResources(params, query, asTable)
+	apiVersion := ""
+	if val, ok := params.GetArguments()["api_version"].(string); ok {
+		apiVersion = val
+	}
+
+	kind := ""
+	if val, ok := params.GetArguments()["kind"].(string); ok {
+		kind = val
+	}
+
+	namespaceLabelSelector := ""
+	if val, ok := params.GetArguments()["namespace_label_selector"].(string); ok {
+		namespaceLabelSelector = val
+	}
+
+	result, err := params.SearchResources(params, query, apiVersion, kind, namespaceLabelSelector, asTable)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to search resources: %v", err)), nil
 	}
