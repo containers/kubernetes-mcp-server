@@ -12,71 +12,49 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// SearchResources searches for a query string in all resources across all namespaces.
-func (k *Kubernetes) SearchResources(ctx context.Context, query string, asTable bool) (runtime.Unstructured, error) {
-	// Discovery client is used to discover different supported API groups, versions and resources.
-	serverResources, err := k.manager.discoveryClient.ServerPreferredResources()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get server resources: %w", err)
-	}
-
+// SearchResources searches for a query string in resources, with optional filters for resource type and namespace.
+func (k *Kubernetes) SearchResources(ctx context.Context, query, apiVersion, kind, namespaceLabelSelector string, asTable bool) (runtime.Unstructured, error) {
 	var matchingResources []unstructured.Unstructured
-	for _, apiResourceList := range serverResources {
-		for _, apiResource := range apiResourceList.APIResources {
-			// Skip resources that do not support the "list" verb
-			if !contains(apiResource.Verbs, "list") {
-				continue
-			}
 
-			gvk := schema.GroupVersionKind{
-				Group:   apiResourceList.GroupVersion,
-				Version: apiResource.Version,
-				Kind:    apiResource.Kind,
-			}
-			if gvk.Group == "" {
-				gvk.Group = "core"
-			}
+	if apiVersion != "" && kind != "" {
+		// Search in a specific resource type
+		gv, err := schema.ParseGroupVersion(apiVersion)
+		if err != nil {
+			return nil, fmt.Errorf("invalid apiVersion: %w", err)
+		}
+		gvk := gv.WithKind(kind)
+		apiResource, err := k.getAPIResource(&gvk)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get API resource: %w", err)
+		}
+		resources, err := k.searchInGVK(ctx, query, &gvk, apiResource, namespaceLabelSelector)
+		if err != nil {
+			return nil, err
+		}
+		matchingResources = append(matchingResources, resources...)
+	} else {
+		// Search in all resources
+		serverResources, err := k.manager.discoveryClient.ServerPreferredResources()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get server resources: %w", err)
+		}
 
-			if _, err := k.resourceFor(&gvk); err != nil {
-				// Ignore errors for resources that cannot be mapped
-				continue
-			}
-			var namespaces []string
-			if apiResource.Namespaced {
-				// Get all namespaces
-				nsListObj, err := k.NamespacesList(ctx, ResourceListOptions{})
-				if err != nil {
-					return nil, fmt.Errorf("failed to list namespaces: %w", err)
+		for _, apiResourceList := range serverResources {
+			for _, apiResource := range apiResourceList.APIResources {
+				gvk := schema.GroupVersionKind{
+					Group:   apiResourceList.GroupVersion,
+					Version: apiResource.Version,
+					Kind:    apiResource.Kind,
 				}
-				if unstructuredList, ok := nsListObj.(*unstructured.UnstructuredList); ok {
-					for _, ns := range unstructuredList.Items {
-						namespaces = append(namespaces, ns.GetName())
-					}
+				if gvk.Group == "" {
+					gvk.Group = "core"
 				}
-			} else {
-				// For cluster-scoped resources, use an empty namespace
-				namespaces = append(namespaces, "")
-			}
-
-			for _, ns := range namespaces {
-				list, err := k.ResourcesList(ctx, &gvk, ns, ResourceListOptions{})
+				resources, err := k.searchInGVK(ctx, query, &gvk, &apiResource, namespaceLabelSelector)
 				if err != nil {
-					// Ignore errors for resources that cannot be listed
+					// Ignore errors for resources that cannot be searched
 					continue
 				}
-
-				if unstructuredList, ok := list.(*unstructured.UnstructuredList); ok {
-					for _, item := range unstructuredList.Items {
-						match, err := matchResource(item, query)
-						if err != nil {
-							// Ignore errors during matching
-							continue
-						}
-						if match {
-							matchingResources = append(matchingResources, item)
-						}
-					}
-				}
+				matchingResources = append(matchingResources, resources...)
 			}
 		}
 	}
@@ -92,6 +70,65 @@ func (k *Kubernetes) SearchResources(ctx context.Context, query string, asTable 
 		},
 		Items: matchingResources,
 	}, nil
+}
+
+func (k *Kubernetes) searchInGVK(ctx context.Context, query string, gvk *schema.GroupVersionKind, apiResource *metav1.APIResource, namespaceLabelSelector string) ([]unstructured.Unstructured, error) {
+	if !contains(apiResource.Verbs, "list") {
+		return nil, nil // Skip resources that do not support the "list" verb
+	}
+
+	var matchingResources []unstructured.Unstructured
+	var namespaces []string
+	if apiResource.Namespaced {
+		nsListOptions := ResourceListOptions{}
+		if namespaceLabelSelector != "" {
+			nsListOptions.LabelSelector = namespaceLabelSelector
+		}
+		nsListObj, err := k.NamespacesList(ctx, nsListOptions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list namespaces: %w", err)
+		}
+		if unstructuredList, ok := nsListObj.(*unstructured.UnstructuredList); ok {
+			for _, ns := range unstructuredList.Items {
+				namespaces = append(namespaces, ns.GetName())
+			}
+		}
+	} else {
+		namespaces = append(namespaces, "") // For cluster-scoped resources
+	}
+
+	for _, ns := range namespaces {
+		list, err := k.ResourcesList(ctx, gvk, ns, ResourceListOptions{})
+		if err != nil {
+			continue // Ignore errors for resources that cannot be listed
+		}
+
+		if unstructuredList, ok := list.(*unstructured.UnstructuredList); ok {
+			for _, item := range unstructuredList.Items {
+				match, err := matchResource(item, query)
+				if err != nil {
+					continue // Ignore errors during matching
+				}
+				if match {
+					matchingResources = append(matchingResources, item)
+				}
+			}
+		}
+	}
+	return matchingResources, nil
+}
+
+func (k *Kubernetes) getAPIResource(gvk *schema.GroupVersionKind) (*metav1.APIResource, error) {
+	apiResourceList, err := k.manager.discoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
+	if err != nil {
+		return nil, err
+	}
+	for _, apiResource := range apiResourceList.APIResources {
+		if apiResource.Kind == gvk.Kind {
+			return &apiResource, nil
+		}
+	}
+	return nil, fmt.Errorf("resource not found for GVK: %s", gvk)
 }
 
 func (k *Kubernetes) createTable(resources []unstructured.Unstructured) (runtime.Unstructured, error) {
