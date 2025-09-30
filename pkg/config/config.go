@@ -10,6 +10,7 @@ import (
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
 	Confluence *ConfluenceConfig `toml:"confluence,omitempty"`
+	Prometheus *PrometheusConfig `toml:"prometheus,omitempty"`
 
 	DeniedResources []GroupVersionKind `toml:"denied_resources"`
 
@@ -60,10 +61,15 @@ type ConfluenceConfig struct {
 	Token    string `toml:"token"`
 }
 
+// PrometheusConfig is the configuration for the Prometheus toolset.
+type PrometheusConfig struct {
+	URL string `toml:"url"`
+}
+
 func Default() *StaticConfig {
 	return &StaticConfig{
 		ListOutput: "table",
-		Toolsets:   []string{"core", "config", "helm", "confluence"},
+		Toolsets:   []string{"core", "config", "helm", "confluence", "prometheus"},
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/confluence"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/prometheus"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
@@ -36,11 +37,17 @@ func (c *Configuration) Toolsets() []api.Toolset {
 	if c.toolsets == nil {
 		for _, toolsetName := range c.StaticConfig.Toolsets {
 			var toolset api.Toolset
+			var err error
 			if toolsetName == "confluence" {
-				var err error
 				toolset, err = confluence.NewToolset(c.Confluence)
 				if err != nil {
 					klog.Warningf("failed to initialize confluence toolset: %v", err)
+					continue
+				}
+			} else if toolsetName == "prometheus" {
+				toolset, err = prometheus.NewToolset(c.Prometheus)
+				if err != nil {
+					klog.Warningf("failed to initialize prometheus toolset: %v", err)
 					continue
 				}
 			} else {
