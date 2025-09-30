@@ -42,23 +42,35 @@ func newKubeConfigClusterProvider(config *config.StaticConfig) (*kubeConfigClust
 		return nil, err
 	}
 
+	// Handle in-cluster mode
+	if m.IsInCluster() {
+		return &kubeConfigClusterProvider{
+			defaultCluster: "default",
+			managers:       map[string]*Manager{"default": m},
+		}, nil
+	}
+
 	rawConfig, err := m.clientCmdConfig.RawConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	defaultContext := rawConfig.Contexts[rawConfig.CurrentContext]
+	defaultContext, ok := rawConfig.Contexts[rawConfig.CurrentContext]
+	if !ok || defaultContext == nil {
+		return nil, fmt.Errorf("current context '%s' not found in kubeconfig", rawConfig.CurrentContext)
+	}
 
-	allClusterManagers := make(map[string]*Manager)
+	allClusterManagers := map[string]*Manager{
+		defaultContext.Cluster: m, // we already initialized a manager for the default context, let's use it
+	}
 
 	for _, context := range rawConfig.Contexts {
 		if _, exists := rawConfig.Clusters[context.Cluster]; exists {
-			allClusterManagers[context.Cluster] = nil // these will be lazy initialized as they are accessed later
+			if _, alreadyExists := allClusterManagers[context.Cluster]; !alreadyExists {
+				allClusterManagers[context.Cluster] = nil // these will be lazy initialized as they are accessed later
+			}
 		}
 	}
-
-	// we already initialized a manager for the default context, let's use it
-	allClusterManagers[defaultContext.Cluster] = m
 
 	return &kubeConfigClusterProvider{
 		defaultCluster: defaultContext.Cluster,

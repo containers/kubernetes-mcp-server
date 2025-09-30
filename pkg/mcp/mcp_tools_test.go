@@ -34,7 +34,12 @@ func TestUnrestricted(t *testing.T) {
 }
 
 func TestReadOnly(t *testing.T) {
-	readOnlyServer := func(c *mcpContext) { c.staticConfig = &config.StaticConfig{ReadOnly: true} }
+	readOnlyServer := func(c *mcpContext) {
+		c.staticConfig = &config.StaticConfig{
+			ReadOnly:                true,
+			ClusterProviderStrategy: config.ClusterProviderKubeConfig,
+		}
+	}
 	testCaseWithContext(t, &mcpContext{before: readOnlyServer}, func(c *mcpContext) {
 		tools, err := c.mcpClient.ListTools(c.ctx, mcp.ListToolsRequest{})
 		t.Run("ListTools returns tools", func(t *testing.T) {
@@ -56,7 +61,12 @@ func TestReadOnly(t *testing.T) {
 }
 
 func TestDisableDestructive(t *testing.T) {
-	disableDestructiveServer := func(c *mcpContext) { c.staticConfig = &config.StaticConfig{DisableDestructive: true} }
+	disableDestructiveServer := func(c *mcpContext) {
+		c.staticConfig = &config.StaticConfig{
+			DisableDestructive:      true,
+			ClusterProviderStrategy: config.ClusterProviderKubeConfig,
+		}
+	}
 	testCaseWithContext(t, &mcpContext{before: disableDestructiveServer}, func(c *mcpContext) {
 		tools, err := c.mcpClient.ListTools(c.ctx, mcp.ListToolsRequest{})
 		t.Run("ListTools returns tools", func(t *testing.T) {
@@ -101,7 +111,8 @@ func TestEnabledTools(t *testing.T) {
 func TestDisabledTools(t *testing.T) {
 	testCaseWithContext(t, &mcpContext{
 		staticConfig: &config.StaticConfig{
-			DisabledTools: []string{"namespaces_list", "events_list"},
+			DisabledTools:           []string{"namespaces_list", "events_list"},
+			ClusterProviderStrategy: config.ClusterProviderKubeConfig,
 		},
 	}, func(c *mcpContext) {
 		tools, err := c.mcpClient.ListTools(c.ctx, mcp.ListToolsRequest{})
