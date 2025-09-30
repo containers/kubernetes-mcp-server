@@ -106,7 +106,9 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 	}
 
 	// close the old provider
-	s.p.Close()
+	if s.p != nil {
+		s.p.Close()
+	}
 
 	s.p = p
 
@@ -158,13 +160,24 @@ func (s *Server) ServeHTTP(httpServer *http.Server) *server.StreamableHTTPServer
 }
 
 // KubernetesApiVerifyToken verifies the given token with the audience by
-// sending an TokenReview request to API Server.
-func (s *Server) KubernetesApiVerifyToken(ctx context.Context, token string, audience string) (*authenticationapiv1.UserInfo, []string, error) {
+// sending an TokenReview request to API Server for the specified cluster.
+func (s *Server) KubernetesApiVerifyToken(ctx context.Context, token string, audience string, cluster string) (*authenticationapiv1.UserInfo, []string, error) {
 	if s.p == nil {
 		return nil, nil, fmt.Errorf("kubernetes cluster provider is not initialized")
 	}
 
-	return s.k.VerifyToken(ctx, token, audience)
+	// Use provided cluster or default
+	if cluster == "" {
+		cluster = s.p.GetDefaultCluster()
+	}
+
+	// Get the cluster manager for the specified cluster
+	m, err := s.p.GetClusterManager(ctx, cluster)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return m.VerifyToken(ctx, token, audience)
 }
 
 func (s *Server) GetEnabledTools() []string {
