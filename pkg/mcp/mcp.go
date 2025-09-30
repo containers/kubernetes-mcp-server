@@ -100,6 +100,7 @@ func NewServer(configuration Configuration) (*Server, error) {
 }
 
 func (s *Server) reloadKubernetesClusterProvider() error {
+	ctx := context.Background()
 	p, err := internalk8s.NewClusterProvider(s.configuration.StaticConfig)
 	if err != nil {
 		return err
@@ -112,14 +113,22 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 
 	s.p = p
 
-	k, err := s.p.GetClusterManager(context.Background(), s.p.GetDefaultCluster())
+	k, err := s.p.GetClusterManager(ctx, s.p.GetDefaultCluster())
 	if err != nil {
 		return err
 	}
 
+	clusters, err := p.GetClusters(ctx)
+	if err != nil {
+		return err
+	}
+
+	mutator := WithClusterParameter(p.GetDefaultCluster(), clusters, []string{}) // TODO: see which tools (if any) do not need the cluster parameter
+
 	applicableTools := make([]api.ServerTool, 0)
 	for _, toolset := range s.configuration.Toolsets() {
 		for _, tool := range toolset.GetTools(k) {
+			tool := mutator(tool)
 			if !s.configuration.isToolApplicable(tool) {
 				continue
 			}
