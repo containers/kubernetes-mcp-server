@@ -11,6 +11,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "namespace": {
           "description": "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
           "type": "string"
@@ -29,7 +37,17 @@
     },
     "description": "List all the Kubernetes namespaces in the current cluster",
     "inputSchema": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        }
+      }
     },
     "name": "namespaces_list"
   },
@@ -45,6 +63,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "name": {
           "description": "Name of the Pod to delete",
           "type": "string"
@@ -72,6 +98,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "command": {
           "description": "Command to execute in the Pod container. The first item is the command to be run, and the rest are the arguments to that command. Example: [\"ls\", \"-l\", \"/tmp\"]",
           "items": {
@@ -111,6 +145,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "name": {
           "description": "Name of the Pod",
           "type": "string"
@@ -138,6 +180,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "labelSelector": {
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
           "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
@@ -159,6 +209,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "labelSelector": {
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
           "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
@@ -187,6 +245,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "container": {
           "description": "Name of the Pod container to get the logs from (Optional)",
           "type": "string"
@@ -228,6 +294,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "image": {
           "description": "Container Image to run in the Pod",
           "type": "string"
@@ -263,6 +337,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "all_namespaces": {
           "default": true,
           "description": "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
@@ -297,6 +379,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "resource": {
           "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
           "type": "string"
@@ -320,6 +410,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
           "type": "string"
@@ -357,6 +455,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
           "type": "string"
@@ -394,6 +500,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "apiVersion": {
           "description": "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
           "type": "string"

@@ -11,6 +11,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
+        "cluster": {
+          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+          "enum": [
+            "additional-cluster",
+            "fake"
+          ],
+          "type": "string"
+        },
         "minified": {
           "description": "Return a minified version of the configuration. If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. (Optional, default true)",
           "type": "boolean"
