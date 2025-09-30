@@ -184,6 +184,33 @@ uvx kubernetes-mcp-server@latest --help
 | `--read-only`           | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
 | `--disable-destructive` | If set, the MCP server will disable all destructive operations (delete, update, etc.) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without accidentally making changes. This option has no effect when `--read-only` is used.                            |
 | `--toolsets`            | Comma-separated list of toolsets to enable. Check the [🛠️ Tools and Functionalities](#tools-and-functionalities) section for more information.                                                                                                                                               |
+| `--config`              | Path to a TOML configuration file. If provided, the server will load its configuration from this file.                                                                                                                                                                                       |
+
+### Configuration File
+
+In addition to command-line arguments, the server can be configured using a TOML file specified with the `--config` flag.
+This allows for more advanced configuration options that are not available through command-line arguments.
+
+#### Confluence Toolset
+
+To enable the Confluence toolset, you need to provide the URL, username, and an API token for your Confluence instance in the configuration file.
+
+**Example `config.toml`:**
+```toml
+[confluence]
+url = "https://your-confluence-domain.com"
+username = "your-username"
+token = "your-api-token"
+```
+
+#### Advanced Configuration
+
+The TOML configuration file also supports more advanced options, such as:
+
+- **`denied_resources`**: A list of Kubernetes resources that should not be accessible through the server.
+- **OAuth Integration**: A comprehensive set of options to configure OIDC-based authentication and authorization for the server, including settings for token validation, client registration, and token exchange (STS).
+
+For a complete list of all available configuration options, please refer to the `pkg/config/config.go` source file.
 
 ## 🛠️ Tools and Functionalities <a id="tools-and-functionalities"></a>
 
@@ -197,11 +224,12 @@ The following sets of tools are available (all on by default):
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset | Description                                                                         |
-|---------|-------------------------------------------------------------------------------------|
-| config  | View and manage the current local Kubernetes configuration (kubeconfig)             |
-| core    | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.) |
-| helm    | Tools for managing Helm charts and releases                                         |
+| Toolset    | Description                                                                         |
+|------------|-------------------------------------------------------------------------------------|
+| config     | View and manage the current local Kubernetes configuration (kubeconfig)             |
+| confluence | Tools for interacting with Confluence                                               |
+| core       | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.) |
+| helm       | Tools for managing Helm charts and releases                                         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -215,6 +243,18 @@ The following sets of tools are available (all on by default):
 
 - **configuration_view** - Get the current Kubernetes configuration content as a kubeconfig YAML
   - `minified` (`boolean`) - Return a minified version of the configuration. If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. (Optional, default true)
+
+</details>
+
+<details>
+
+<summary>confluence</summary>
+
+- **confluence.createPage** - Create a new page in Confluence.
+  - `space_key` (`string`) **(required)** - The key of the space to create the page in.
+  - `title` (`string`) **(required)** - The title of the new page.
+  - `content` (`string`) **(required)** - The content of the new page in Confluence Storage Format (XHTML).
+  - `parent_id` (`string`) - Optional ID of a parent page.
 
 </details>
 
