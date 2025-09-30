@@ -1,0 +1,44 @@
+{{- if .Values.config -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname" . }}-config
+  labels:
+    {{- include "kubernetes-mcp-server.labels" . | nindent 4 }}
+data:
+  config.toml: |-
+    log_level = {{ .Values.config.logLevel | default 0 }}
+    read_only = {{ .Values.config.readOnly | default false }}
+    disable_destructive = {{ .Values.config.disableDestructive | default false }}
+    {{- if .Values.config.toolsets }}
+    toolsets = {{ .Values.config.toolsets | toJson }}
+    {{- end }}
+    {{- if .Values.config.denied_resources }}
+    denied_resources = {{ .Values.config.denied_resources | toJson }}
+    {{- end }}
+    {{- if .Values.config.confluence.url }}
+    [confluence]
+      url = "{{ .Values.config.confluence.url }}"
+      username = "{{ .Values.config.confluence.username }}"
+      token = "{{ .Values.config.confluence.token }}"
+    {{- end }}
+    {{- if .Values.config.oauth.require }}
+    [oauth]
+      require = {{ .Values.config.oauth.require }}
+      {{- if .Values.config.oauth.audience }}
+      audience = "{{ .Values.config.oauth.audience }}"
+      {{- end }}
+      {{- if .Values.config.oauth.validateToken }}
+      validateToken = {{ .Values.config.oauth.validateToken }}
+      {{- end }}
+      {{- if .Values.config.oauth.authorizationUrl }}
+      authorizationUrl = "{{ .Values.config.oauth.authorizationUrl }}"
+      {{- end }}
+      {{- if .Values.config.oauth.serverUrl }}
+      serverUrl = "{{ .Values.config.oauth.serverUrl }}"
+      {{- end }}
+      {{- if .Values.config.oauth.certificateAuthority }}
+      certificateAuthority = "{{ .Values.config.oauth.certificateAuthority }}"
+      {{- end }}
+    {{- end }}
+{{- end }}
