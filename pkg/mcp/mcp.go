@@ -67,7 +67,7 @@ type Server struct {
 	configuration *Configuration
 	server        *server.MCPServer
 	enabledTools  []string
-	k             *internalk8s.Manager
+	p             internalk8s.ClusterProvider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
@@ -91,26 +91,37 @@ func NewServer(configuration Configuration) (*Server, error) {
 			serverOptions...,
 		),
 	}
-	if err := s.reloadKubernetesClient(); err != nil {
+	if err := s.reloadKubernetesClusterProvider(); err != nil {
 		return nil, err
 	}
-	s.k.WatchKubeConfig(s.reloadKubernetesClient)
+	s.p.WatchClusters(s.reloadKubernetesClusterProvider)
 
 	return s, nil
 }
 
-func (s *Server) reloadKubernetesClient() error {
-	k, err := internalk8s.NewManager(s.configuration.StaticConfig)
+func (s *Server) reloadKubernetesClusterProvider() error {
+	p, err := internalk8s.NewClusterProvider(s.configuration.StaticConfig)
 	if err != nil {
 		return err
 	}
-	s.k = k
+
+	// close the old provider
+	s.p.Close()
+
+	s.p = p
+
+	k, err := s.p.GetClusterManager(context.Background(), s.p.GetDefaultCluster())
+	if err != nil {
+		return err
+	}
+
 	applicableTools := make([]api.ServerTool, 0)
 	for _, toolset := range s.configuration.Toolsets() {
-		for _, tool := range toolset.GetTools(s.k) {
+		for _, tool := range toolset.GetTools(k) {
 			if !s.configuration.isToolApplicable(tool) {
 				continue
 			}
+
 			applicableTools = append(applicableTools, tool)
 			s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 		}
@@ -119,6 +130,7 @@ func (s *Server) reloadKubernetesClient() error {
 	if err != nil {
 		return fmt.Errorf("failed to convert tools: %v", err)
 	}
+
 	s.server.SetTools(m3labsServerTools...)
 	return nil
 }
@@ -148,18 +160,11 @@ func (s *Server) ServeHTTP(httpServer *http.Server) *server.StreamableHTTPServer
 // KubernetesApiVerifyToken verifies the given token with the audience by
 // sending an TokenReview request to API Server.
 func (s *Server) KubernetesApiVerifyToken(ctx context.Context, token string, audience string) (*authenticationapiv1.UserInfo, []string, error) {
-	if s.k == nil {
-		return nil, nil, fmt.Errorf("kubernetes manager is not initialized")
+	if s.p == nil {
+		return nil, nil, fmt.Errorf("kubernetes cluster provider is not initialized")
 	}
-	return s.k.VerifyToken(ctx, token, audience)
-}
 
-// GetKubernetesAPIServerHost returns the Kubernetes API server host from the configuration.
-func (s *Server) GetKubernetesAPIServerHost() string {
-	if s.k == nil {
-		return ""
-	}
-	return s.k.GetAPIServerHost()
+	return s.k.VerifyToken(ctx, token, audience)
 }
 
 func (s *Server) GetEnabledTools() []string {
@@ -167,8 +172,8 @@ func (s *Server) GetEnabledTools() []string {
 }
 
 func (s *Server) Close() {
-	if s.k != nil {
-		s.k.Close()
+	if s.p != nil {
+		s.p.Close()
 	}
 }
 

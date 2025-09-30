@@ -16,6 +16,8 @@ type ClusterProvider interface {
 	GetClusters(ctx context.Context) ([]string, error)
 	GetClusterManager(ctx context.Context, cluster string) (*Manager, error)
 	GetDefaultCluster() string
+	WatchClusters(func() error)
+	Close()
 }
 
 type kubeConfigClusterProvider struct {
@@ -98,6 +100,18 @@ func (k *kubeConfigClusterProvider) GetClusterManager(ctx context.Context, clust
 
 func (k *kubeConfigClusterProvider) GetDefaultCluster() string {
 	return k.defaultCluster
+}
+
+func (k *kubeConfigClusterProvider) WatchClusters(onKubeConfigChanged func() error) {
+	m := k.managers[k.defaultCluster]
+
+	m.WatchKubeConfig(onKubeConfigChanged)
+}
+
+func (k *kubeConfigClusterProvider) Close() {
+	m := k.managers[k.defaultCluster]
+
+	m.Close()
 }
 
 func (m *Manager) newForCluster(cluster string) (*Manager, error) {
