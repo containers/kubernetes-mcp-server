@@ -89,7 +89,7 @@ func (k *kubeConfigClusterProvider) GetClusters(ctx context.Context) ([]string, 
 
 func (k *kubeConfigClusterProvider) GetClusterManager(ctx context.Context, cluster string) (*Manager, error) {
 	m, ok := k.managers[cluster]
-	if ok {
+	if ok && m != nil {
 		return m, nil
 	}
 
