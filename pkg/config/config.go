@@ -9,6 +9,8 @@ import (
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
+	Confluence *ConfluenceConfig `toml:"confluence,omitempty"`
+
 	DeniedResources []GroupVersionKind `toml:"denied_resources"`
 
 	LogLevel   int    `toml:"log_level,omitempty"`
@@ -51,10 +53,17 @@ type StaticConfig struct {
 	ServerURL            string   `toml:"server_url,omitempty"`
 }
 
+// ConfluenceConfig is the configuration for the Confluence toolset.
+type ConfluenceConfig struct {
+	URL      string `toml:"url"`
+	Username string `toml:"username"`
+	Token    string `toml:"token"`
+}
+
 func Default() *StaticConfig {
 	return &StaticConfig{
 		ListOutput: "table",
-		Toolsets:   []string{"core", "config", "helm"},
+		Toolsets:   []string{"core", "config", "helm", "confluence"},
 	}
 }
 
