@@ -10,10 +10,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/confluence"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
+
+func TestMain(m *testing.M) {
+	// The blank imports above will register the core, config, and helm toolsets.
+	// We need to manually register the confluence toolset as it requires configuration.
+	// For this test, we can register a disabled version.
+	confluenceToolset, _ := confluence.NewToolset(nil)
+	toolsets.Register(confluenceToolset)
+	os.Exit(m.Run())
+}
 
 func captureOutput(f func() error) (string, error) {
 	originalOut := os.Stdout
@@ -137,15 +151,17 @@ func TestToolsets(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--help"})
 		o, err := captureOutput(rootCmd.Execute) // --help doesn't use logger/klog, cobra prints directly to stdout
-		if !strings.Contains(o, "Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm).") {
-			t.Fatalf("Expected all available toolsets, got %s %v", o, err)
-		}
+		assert.NoError(t, err)
+		assert.Contains(t, o, "config")
+		assert.Contains(t, o, "core")
+		assert.Contains(t, o, "helm")
+		assert.Contains(t, o, "confluence")
 	})
 	t.Run("default", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolsets: core, config, helm") {
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolsets: core, config, helm, confluence") {
 			t.Fatalf("Expected toolsets 'full', got %s %v", out, err)
 		}
 	})

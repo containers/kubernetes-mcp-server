@@ -152,8 +152,8 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 		s.Equalf("table", config.ListOutput, "Expected ListOutput to be table, got %s", config.ListOutput)
 	})
 	s.Run("toolsets defaulted correctly", func() {
-		s.Require().Lenf(config.Toolsets, 3, "Expected 3 toolsets, got %d", len(config.Toolsets))
-		for _, toolset := range []string{"core", "config", "helm"} {
+		s.Require().Lenf(config.Toolsets, 4, "Expected 4 toolsets, got %d", len(config.Toolsets))
+		for _, toolset := range []string{"core", "config", "helm", "confluence"} {
 			s.Containsf(config.Toolsets, toolset, "Expected toolsets to contain %s", toolset)
 		}
 	})

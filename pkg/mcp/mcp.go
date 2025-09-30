@@ -18,6 +18,7 @@ import (
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/confluence"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
@@ -33,8 +34,22 @@ type Configuration struct {
 
 func (c *Configuration) Toolsets() []api.Toolset {
 	if c.toolsets == nil {
-		for _, toolset := range c.StaticConfig.Toolsets {
-			c.toolsets = append(c.toolsets, toolsets.ToolsetFromString(toolset))
+		for _, toolsetName := range c.StaticConfig.Toolsets {
+			var toolset api.Toolset
+			if toolsetName == "confluence" {
+				var err error
+				toolset, err = confluence.NewToolset(c.Confluence)
+				if err != nil {
+					klog.Warningf("failed to initialize confluence toolset: %v", err)
+					continue
+				}
+			} else {
+				toolset = toolsets.ToolsetFromString(toolsetName)
+			}
+
+			if toolset != nil {
+				c.toolsets = append(c.toolsets, toolset)
+			}
 		}
 	}
 	return c.toolsets

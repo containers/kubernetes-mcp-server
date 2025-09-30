@@ -46,6 +46,11 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/confluence"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
 )
 
 // envTest has an expensive setup, so we only want to do it once per entire test run.
@@ -54,6 +59,12 @@ var envTestRestConfig *rest.Config
 var envTestUser = envtest.User{Name: "test-user", Groups: []string{"test:users"}}
 
 func TestMain(m *testing.M) {
+	// The blank imports above will register the core, config, and helm toolsets.
+	// We need to manually register the confluence toolset as it requires configuration.
+	// For this test, we can register a disabled version.
+	confluenceToolset, _ := confluence.NewToolset(nil)
+	toolsets.Register(confluenceToolset)
+
 	// Set up
 	_ = os.Setenv("KUBECONFIG", "/dev/null")     // Avoid interference from existing kubeconfig
 	_ = os.Setenv("KUBERNETES_SERVICE_HOST", "") // Avoid interference from in-cluster config
