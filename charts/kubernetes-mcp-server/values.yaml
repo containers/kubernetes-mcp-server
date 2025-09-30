@@ -104,6 +104,8 @@ config:
     # url: https://your-confluence-instance
     # username: user
     # token: "" # It is recommended to set this via --set-string in a CI/CD pipeline
+  prometheus:
+    # url: http://your-prometheus-instance:9090
   oauth:
     # require: false
     # audience: ""

@@ -22,6 +22,10 @@ data:
       username = "{{ .Values.config.confluence.username }}"
       token = "{{ .Values.config.confluence.token }}"
     {{- end }}
+    {{- if .Values.config.prometheus.url }}
+    [prometheus]
+      url = "{{ .Values.config.prometheus.url }}"
+    {{- end }}
     {{- if .Values.config.oauth.require }}
     [oauth]
       require = {{ .Values.config.oauth.require }}
