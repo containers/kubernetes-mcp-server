@@ -19,6 +19,12 @@ type EventsSuite struct {
 
 func (s *EventsSuite) TestEventsList() {
 	s.InitMcpClient()
+	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Delete all events in the test namespaces
+	for _, ns := range []string{"default", "ns-1"} {
+		err := client.CoreV1().Events(ns).DeleteCollection(s.T().Context(), metav1.DeleteOptions{}, metav1.ListOptions{})
+		s.Require().NoError(err)
+	}
 	s.Run("events_list (no events)", func() {
 		toolResult, err := s.CallTool("events_list", map[string]interface{}{})
 		s.Run("no error", func() {
@@ -30,7 +36,6 @@ func (s *EventsSuite) TestEventsList() {
 		})
 	})
 	s.Run("events_list (with events)", func() {
-		client := kubernetes.NewForConfigOrDie(envTestRestConfig)
 		for _, ns := range []string{"default", "ns-1"} {
 			_, _ = client.CoreV1().Events(ns).Create(s.T().Context(), &v1.Event{
 				ObjectMeta: metav1.ObjectMeta{

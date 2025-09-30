@@ -9,6 +9,7 @@ import (
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/prometheus"
 )
 
 func TestMain(m *testing.M) {
@@ -17,6 +18,10 @@ func TestMain(m *testing.M) {
 	// For this test, we can register a disabled version.
 	confluenceToolset, _ := confluence.NewToolset(nil)
 	toolsets.Register(confluenceToolset)
+
+	prometheusToolset, _ := prometheus.NewToolset(nil)
+	toolsets.Register(prometheusToolset)
+
 	os.Exit(m.Run())
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -56,8 +57,11 @@ func TestSseHeaders(t *testing.T) {
 		c.clientOptions = append(c.clientOptions, client.WithHeaders(map[string]string{"kubernetes-authorization": "Bearer a-token-from-mcp-client"}))
 	}
 	pathHeaders := make(map[string]http.Header, 0)
+	var pathHeadersMutex sync.Mutex
 	mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		pathHeadersMutex.Lock()
 		pathHeaders[req.URL.Path] = req.Header.Clone()
+		pathHeadersMutex.Unlock()
 		// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
 		if req.URL.Path == "/api" {
 			w.Header().Set("Content-Type", "application/json")
@@ -93,6 +97,8 @@ func TestSseHeaders(t *testing.T) {
 	testCaseWithContext(t, &mcpContext{before: before}, func(c *mcpContext) {
 		_, _ = c.callTool("pods_list", map[string]interface{}{})
 		t.Run("DiscoveryClient propagates headers to Kube API", func(t *testing.T) {
+			pathHeadersMutex.Lock()
+			defer pathHeadersMutex.Unlock()
 			if len(pathHeaders) == 0 {
 				t.Fatalf("No requests were made to Kube API")
 			}
@@ -107,6 +113,8 @@ func TestSseHeaders(t *testing.T) {
 			}
 		})
 		t.Run("DynamicClient propagates headers to Kube API", func(t *testing.T) {
+			pathHeadersMutex.Lock()
+			defer pathHeadersMutex.Unlock()
 			if len(pathHeaders) == 0 {
 				t.Fatalf("No requests were made to Kube API")
 			}
@@ -116,6 +124,8 @@ func TestSseHeaders(t *testing.T) {
 		})
 		_, _ = c.callTool("pods_delete", map[string]interface{}{"name": "a-pod-to-delete"})
 		t.Run("kubernetes.Interface propagates headers to Kube API", func(t *testing.T) {
+			pathHeadersMutex.Lock()
+			defer pathHeadersMutex.Unlock()
 			if len(pathHeaders) == 0 {
 				t.Fatalf("No requests were made to Kube API")
 			}
