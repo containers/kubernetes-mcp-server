@@ -66,15 +66,16 @@ func createTestToolWithExistingProperties(name string) api.ServerTool {
 
 func TestWithClusterParameter(t *testing.T) {
 	tests := []struct {
-		name           string
-		defaultCluster string
-		clusters       []string
-		skipToolNames  []string
-		toolName       string
-		toolFactory    func(string) api.ServerTool
-		expectCluster  bool
-		expectEnum     bool
-		enumCount      int
+		name                string
+		defaultCluster      string
+		targetParameterName string
+		clusters            []string
+		skipToolNames       []string
+		toolName            string
+		toolFactory         func(string) api.ServerTool
+		expectCluster       bool
+		expectEnum          bool
+		enumCount           int
 	}{
 		{
 			name:           "adds cluster parameter when multiple clusters provided",
@@ -146,7 +147,10 @@ func TestWithClusterParameter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mutator := WithClusterParameter(tt.defaultCluster, tt.clusters, tt.skipToolNames)
+			if tt.targetParameterName == "" {
+				tt.targetParameterName = "cluster"
+			}
+			mutator := WithTargetParameter(tt.defaultCluster, tt.targetParameterName, tt.clusters, tt.skipToolNames)
 			tool := tt.toolFactory(tt.toolName)
 			originalTool := tool // Keep reference to check if tool was unchanged
 
@@ -192,6 +196,7 @@ func TestCreateClusterProperty(t *testing.T) {
 	tests := []struct {
 		name           string
 		defaultCluster string
+		targetName     string
 		clusters       []string
 		expectEnum     bool
 		expectedCount  int
@@ -199,6 +204,7 @@ func TestCreateClusterProperty(t *testing.T) {
 		{
 			name:           "creates property with enum when clusters <= maxClustersInEnum",
 			defaultCluster: "default",
+			targetName:     "cluster",
 			clusters:       []string{"cluster1", "cluster2", "cluster3"},
 			expectEnum:     true,
 			expectedCount:  3,
@@ -206,20 +212,23 @@ func TestCreateClusterProperty(t *testing.T) {
 		{
 			name:           "creates property without enum when clusters > maxClustersInEnum",
 			defaultCluster: "default",
-			clusters:       make([]string, maxClustersInEnum+5), // 20 clusters
+			targetName:     "cluster",
+			clusters:       make([]string, maxTargetsInEnum+5), // 20 clusters
 			expectEnum:     false,
 			expectedCount:  0,
 		},
 		{
 			name:           "creates property with exact maxClustersInEnum clusters",
 			defaultCluster: "default",
-			clusters:       make([]string, maxClustersInEnum),
+			targetName:     "cluster",
+			clusters:       make([]string, maxTargetsInEnum),
 			expectEnum:     true,
-			expectedCount:  maxClustersInEnum,
+			expectedCount:  maxTargetsInEnum,
 		},
 		{
 			name:           "handles single cluster",
 			defaultCluster: "default",
+			targetName:     "cluster",
 			clusters:       []string{"single-cluster"},
 			expectEnum:     true,
 			expectedCount:  1,
@@ -227,6 +236,7 @@ func TestCreateClusterProperty(t *testing.T) {
 		{
 			name:           "handles empty clusters list",
 			defaultCluster: "default",
+			targetName:     "cluster",
 			clusters:       []string{},
 			expectEnum:     true,
 			expectedCount:  0,
@@ -242,7 +252,7 @@ func TestCreateClusterProperty(t *testing.T) {
 				}
 			}
 
-			property := createClusterProperty(tt.defaultCluster, tt.clusters)
+			property := createTargetProperty(tt.defaultCluster, tt.targetName, tt.clusters)
 
 			assert.Equal(t, "string", property.Type)
 			assert.Contains(t, property.Description, tt.defaultCluster)
@@ -279,6 +289,6 @@ func TestToolMutatorType(t *testing.T) {
 
 func TestMaxClustersInEnumConstant(t *testing.T) {
 	t.Run("maxClustersInEnum has expected value", func(t *testing.T) {
-		assert.Equal(t, 15, maxClustersInEnum, "maxClustersInEnum should be 15")
+		assert.Equal(t, 15, maxTargetsInEnum, "maxClustersInEnum should be 15")
 	})
 }

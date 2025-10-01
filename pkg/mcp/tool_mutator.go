@@ -10,9 +10,9 @@ import (
 
 type ToolMutator func(tool api.ServerTool) api.ServerTool
 
-const maxClustersInEnum = 15 // TODO: test and validate that this is a reasonable cutoff
+const maxTargetsInEnum = 15 // TODO: test and validate that this is a reasonable cutoff
 
-func WithClusterParameter(defaultCluster string, clusters, skipToolNames []string) ToolMutator {
+func WithTargetParameter(defaultCluster, targetParameterName string, targets, skipToolNames []string) ToolMutator {
 	skipNames := make(map[string]struct{}, len(skipToolNames))
 	for _, n := range skipToolNames {
 		skipNames[n] = struct{}{}
@@ -31,28 +31,34 @@ func WithClusterParameter(defaultCluster string, clusters, skipToolNames []strin
 			tool.Tool.InputSchema.Properties = make(map[string]*jsonschema.Schema)
 		}
 
-		if len(clusters) > 1 {
-			tool.Tool.InputSchema.Properties["cluster"] = createClusterProperty(defaultCluster, clusters)
+		if len(targets) > 1 {
+			tool.Tool.InputSchema.Properties[targetParameterName] = createTargetProperty(
+				defaultCluster,
+				targetParameterName,
+				targets,
+			)
 		}
 
 		return tool
 	}
 }
 
-func createClusterProperty(defaultCluster string, clusters []string) *jsonschema.Schema {
+func createTargetProperty(defaultCluster, targetName string, targets []string) *jsonschema.Schema {
 	baseSchema := &jsonschema.Schema{
 		Type: "string",
 		Description: fmt.Sprintf(
-			"Optional parameter selecting which cluster to run the tool in. Defaults to %s if not set", defaultCluster,
+			"Optional parameter selecting which %s to run the tool in. Defaults to %s if not set",
+			targetName,
+			defaultCluster,
 		),
 	}
 
-	if len(clusters) <= maxClustersInEnum {
+	if len(targets) <= maxTargetsInEnum {
 		// Sort clusters to ensure consistent enum ordering
-		sort.Strings(clusters)
+		sort.Strings(targets)
 
-		enumValues := make([]any, 0, len(clusters))
-		for _, c := range clusters {
+		enumValues := make([]any, 0, len(targets))
+		for _, c := range targets {
 			enumValues = append(enumValues, c)
 		}
 		baseSchema.Enum = enumValues
