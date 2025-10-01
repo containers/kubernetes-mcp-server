@@ -67,7 +67,7 @@ type Server struct {
 	configuration *Configuration
 	server        *server.MCPServer
 	enabledTools  []string
-	p             internalk8s.ClusterProvider
+	p             internalk8s.ManagerProvider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
@@ -94,14 +94,14 @@ func NewServer(configuration Configuration) (*Server, error) {
 	if err := s.reloadKubernetesClusterProvider(); err != nil {
 		return nil, err
 	}
-	s.p.WatchClusters(s.reloadKubernetesClusterProvider)
+	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
 
 	return s, nil
 }
 
 func (s *Server) reloadKubernetesClusterProvider() error {
 	ctx := context.Background()
-	p, err := internalk8s.NewClusterProvider(s.configuration.StaticConfig)
+	p, err := internalk8s.NewManagerProvider(s.configuration.StaticConfig)
 	if err != nil {
 		return err
 	}
@@ -113,23 +113,33 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 
 	s.p = p
 
-	k, err := s.p.GetClusterManager(ctx, s.p.GetDefaultCluster())
+	k, err := s.p.GetManagerFor(ctx, s.p.GetDefaultTarget())
 	if err != nil {
 		return err
 	}
 
-	clusters, err := p.GetClusters(ctx)
+	targets, err := p.GetTargets(ctx)
 	if err != nil {
 		return err
 	}
 
-	mutator := WithClusterParameter(p.GetDefaultCluster(), clusters, []string{}) // TODO: see which tools (if any) do not need the cluster parameter
+	filter := CompositeFilter(
+		s.configuration.isToolApplicable,
+		ShouldIncludeTargetListTool(p.GetTargetParameterName(), targets),
+	)
+
+	mutator := WithTargetParameter(
+		p.GetDefaultTarget(),
+		p.GetTargetParameterName(),
+		targets,
+		[]string{"configuration_view"}, // TODO: see which tools (if any) do not need the cluster parameter
+	)
 
 	applicableTools := make([]api.ServerTool, 0)
 	for _, toolset := range s.configuration.Toolsets() {
 		for _, tool := range toolset.GetTools(k) {
 			tool := mutator(tool)
-			if !s.configuration.isToolApplicable(tool) {
+			if !filter(tool) {
 				continue
 			}
 
@@ -177,16 +187,24 @@ func (s *Server) KubernetesApiVerifyToken(ctx context.Context, token string, aud
 
 	// Use provided cluster or default
 	if cluster == "" {
-		cluster = s.p.GetDefaultCluster()
+		cluster = s.p.GetDefaultTarget()
 	}
 
 	// Get the cluster manager for the specified cluster
-	m, err := s.p.GetClusterManager(ctx, cluster)
+	m, err := s.p.GetManagerFor(ctx, cluster)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return m.VerifyToken(ctx, token, audience)
+}
+
+// GetTargetParameterName returns the parameter name used for target identification in MCP requests
+func (s *Server) GetTargetParameterName() string {
+	if s.p == nil {
+		return "" // fallback for uninitialized provider
+	}
+	return s.p.GetTargetParameterName()
 }
 
 func (s *Server) GetEnabledTools() []string {
