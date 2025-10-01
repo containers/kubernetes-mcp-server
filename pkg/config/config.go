@@ -8,6 +8,7 @@ import (
 
 const (
 	ClusterProviderKubeConfig = "kubeconfig"
+	ClusterProviderInCluster  = "in-cluster"
 )
 
 // StaticConfig is the configuration for the server.
@@ -55,6 +56,7 @@ type StaticConfig struct {
 	ServerURL            string   `toml:"server_url,omitempty"`
 	// ClusterProviderStrategy is how the server finds clusters.
 	// If set to "kubeconfig", the clusters will be loaded from those in the kubeconfig.
+	// If set to "in-cluster", the server will use the in cluster config
 	ClusterProviderStrategy string `toml:"cluster_provider_strategy,omitempty"`
 	// ClusterContexts is which context should be used for each cluster
 	ClusterContexts map[string]string `toml:"cluster_contexts"`
@@ -62,9 +64,8 @@ type StaticConfig struct {
 
 func Default() *StaticConfig {
 	return &StaticConfig{
-		ListOutput:              "table",
-		Toolsets:                []string{"core", "config", "helm"},
-		ClusterProviderStrategy: ClusterProviderKubeConfig,
+		ListOutput: "table",
+		Toolsets:   []string{"core", "config", "helm"},
 	}
 }
 
