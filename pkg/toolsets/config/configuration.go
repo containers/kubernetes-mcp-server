@@ -13,6 +13,20 @@ import (
 func initConfiguration() []api.ServerTool {
 	tools := []api.ServerTool{
 		{Tool: api.Tool{
+			Name:        "contexts_list",
+			Description: "List all available contexts from the kubeconfig file. Shows context names for all available contexts",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Contexts: List",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(false),
+			},
+		}, Handler: contextsList},
+		{Tool: api.Tool{
 			Name:        "configuration_view",
 			Description: "Get the current Kubernetes configuration content as a kubeconfig YAML",
 			InputSchema: &jsonschema.Schema{
@@ -37,6 +51,37 @@ func initConfiguration() []api.ServerTool {
 		}, Handler: configurationView},
 	}
 	return tools
+}
+
+func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	contexts, err := params.GetTargets(params.Context)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list contexts: %v", err)), nil
+	}
+
+	if len(contexts) == 0 {
+		return api.NewToolCallResult("No contexts found in kubeconfig", nil), nil
+	}
+
+	defaultContext := params.GetDefaultTarget()
+
+	result := fmt.Sprintf("Available Kubernetes contexts (%d total, default: %s):\n\n", len(contexts), defaultContext)
+	result += "Format: [*] CONTEXT_NAME\n"
+	result += " (* indicates the default context used in tools if context is not set)\n\n"
+	result += "Contexts:\n---------\n"
+	for _, context := range contexts {
+		marker := " "
+		if context == defaultContext {
+			marker = "*"
+		}
+
+		result += fmt.Sprintf("%s%s\n", marker, context)
+	}
+	result += "---------\n\n"
+
+	result += "To use a specific context with any tool, set the 'context' parameter in the tool call arguments"
+
+	return api.NewToolCallResult(result, nil), nil
 }
 
 func configurationView(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

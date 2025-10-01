@@ -44,6 +44,7 @@ func NewToolCallResult(content string, err error) *ToolCallResult {
 type ToolHandlerParams struct {
 	context.Context
 	*internalk8s.Kubernetes
+	internalk8s.ManagerProvider
 	ToolCallRequest
 	ListOutput output.Output
 }
