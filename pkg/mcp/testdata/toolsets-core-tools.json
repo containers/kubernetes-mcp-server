@@ -11,11 +11,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -39,11 +39,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         }
@@ -63,11 +63,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -98,11 +98,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -145,11 +145,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -180,11 +180,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -209,11 +209,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -245,11 +245,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -294,11 +294,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -337,11 +337,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -379,11 +379,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -410,11 +410,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -455,11 +455,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
@@ -500,11 +500,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "cluster": {
-          "description": "Optional parameter selecting which cluster to run the tool in. Defaults to fake if not set",
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "enum": [
-            "additional-cluster",
-            "fake"
+            "additional-context",
+            "fake-context"
           ],
           "type": "string"
         },
