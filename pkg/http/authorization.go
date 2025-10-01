@@ -24,10 +24,12 @@ import (
 type KubernetesApiTokenVerifier interface {
 	// KubernetesApiVerifyToken TODO: clarify proper implementation
 	KubernetesApiVerifyToken(ctx context.Context, token, audience, cluster string) (*authenticationapiv1.UserInfo, []string, error)
+	// GetTargetParameterName returns the parameter name used for target identification in MCP requests
+	GetTargetParameterName() string
 }
 
-// extractClusterFromRequest extracts cluster parameter from MCP request body
-func extractClusterFromRequest(r *http.Request) (string, error) {
+// extractTargetFromRequest extracts cluster parameter from MCP request body
+func extractTargetFromRequest(r *http.Request, targetName string) (string, error) {
 	if r.Body == nil {
 		return "", nil
 	}
@@ -53,8 +55,8 @@ func extractClusterFromRequest(r *http.Request) (string, error) {
 		return "", nil
 	}
 
-	// Extract cluster parameter
-	if cluster, ok := mcpRequest.Params.Arguments["cluster"].(string); ok {
+	// Extract target parameter
+	if cluster, ok := mcpRequest.Params.Arguments[targetName].(string); ok {
 		return cluster, nil
 	}
 
@@ -166,7 +168,8 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 			}
 			// Kubernetes API Server TokenReview validation
 			if err == nil && staticConfig.ValidateToken {
-				cluster, clusterErr := extractClusterFromRequest(r)
+				targetParameterName := verifier.GetTargetParameterName()
+				cluster, clusterErr := extractTargetFromRequest(r, targetParameterName)
 				if clusterErr != nil {
 					klog.V(2).Infof("Failed to extract cluster from request, using default: %v", clusterErr)
 				}
