@@ -131,6 +131,7 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "========================================="
 	$(MAKE) tools
 	$(MAKE) kind-create-cluster
+	$(MAKE) keycloak-install
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="
@@ -138,11 +139,10 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "========================================="
 	@echo ""
 	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME)"
+	@echo "  ./$(BINARY_NAME) --port ..."
 	@echo ""
 	@echo "Or run with MCP inspector:"
 	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME)"
-	@echo ""
 
 .PHONY: local-env-teardown
 local-env-teardown: ## Tear down the local Kind cluster
