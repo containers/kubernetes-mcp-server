@@ -113,3 +113,40 @@ lint: golangci-lint ## Lint the code
 .PHONY: update-readme-tools
 update-readme-tools: ## Update the README.md file with the latest toolsets
 	go run ./internal/tools/update-readme/main.go README.md
+
+##@ Tools
+
+.PHONY: tools
+tools: ## Install all required tools (kind) to ./bin/
+	@echo "Checking and installing required tools to ./bin/ ..."
+	@if [ -f bin/kind ]; then echo "[OK] kind already installed"; else echo "Installing kind..."; $(MAKE) -s kind; fi
+	@echo "All tools ready!"
+
+##@ Local Development
+
+.PHONY: local-env-setup
+local-env-setup: ## Setup complete local development environment with Kind cluster
+	@echo "========================================="
+	@echo "Kubernetes MCP Server - Local Setup"
+	@echo "========================================="
+	$(MAKE) tools
+	$(MAKE) kind-create-cluster
+	$(MAKE) build
+	@echo ""
+	@echo "========================================="
+	@echo "Local environment ready!"
+	@echo "========================================="
+	@echo ""
+	@echo "Run the MCP server with:"
+	@echo "  ./$(BINARY_NAME)"
+	@echo ""
+	@echo "Or run with MCP inspector:"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME)"
+	@echo ""
+
+.PHONY: local-env-teardown
+local-env-teardown: ## Tear down the local Kind cluster
+	$(MAKE) kind-delete-cluster
+
+# Include build configuration files
+-include build/*.mk
