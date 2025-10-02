@@ -23,6 +23,12 @@ type KubernetesApiTokenVerifier interface {
 	KubernetesApiVerifyToken(ctx context.Context, token, audience string) (*authenticationapiv1.UserInfo, []string, error)
 }
 
+// write401 sends a 401/Unauthorized response with WWW-Authenticate header.
+func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message string) {
+	w.Header().Set("WWW-Authenticate", wwwAuthenticateHeader+fmt.Sprintf(`, error="%s"`, errorType))
+	http.Error(w, message, http.StatusUnauthorized)
+}
+
 // AuthorizationMiddleware validates the OAuth flow for protected resources.
 //
 // The flow is skipped for unprotected resources, such as health checks and well-known endpoints.
@@ -82,9 +88,7 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 				klog.V(1).Infof("Authentication failed - missing or invalid bearer token: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-
-				w.Header().Set("WWW-Authenticate", wwwAuthenticateHeader+", error=\"missing_token\"")
-				http.Error(w, "Unauthorized: Bearer token required", http.StatusUnauthorized)
+				write401(w, wwwAuthenticateHeader, "missing_token", "Unauthorized: Bearer token required")
 				return
 			}
 
@@ -132,9 +136,7 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 			}
 			if err != nil {
 				klog.V(1).Infof("Authentication failed - JWT validation error: %s %s from %s, error: %v", r.Method, r.URL.Path, r.RemoteAddr, err)
-
-				w.Header().Set("WWW-Authenticate", wwwAuthenticateHeader+", error=\"invalid_token\"")
-				http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
+				write401(w, wwwAuthenticateHeader, "invalid_token", "Unauthorized: Invalid token")
 				return
 			}
 
