@@ -10,7 +10,7 @@ import (
 
 type ToolMutator func(tool api.ServerTool) api.ServerTool
 
-const maxTargetsInEnum = 15 // TODO: test and validate that this is a reasonable cutoff
+const maxTargetsInEnum = 5 // TODO: test and validate that this is a reasonable cutoff
 
 func WithTargetParameter(defaultCluster, targetParameterName string, targets, skipToolNames []string) ToolMutator {
 	skipNames := make(map[string]struct{}, len(skipToolNames))
