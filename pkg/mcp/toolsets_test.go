@@ -2,10 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
-
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/stretchr/testify/suite"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -14,6 +12,9 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/suite"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 type ToolsetsSuite struct {
@@ -91,6 +92,50 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
 			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-openshift.json")
+			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
+			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
+			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
+		})
+	})
+}
+
+func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
+	s.Run("Default configuration toolsets in multi-cluster (with 11 clusters)", func() {
+		kubeconfig := s.Kubeconfig()
+		for i := 0; i < 10; i++ {
+			// Add multiple fake contexts to force multi-cluster behavior
+			kubeconfig.Contexts[strconv.Itoa(i)] = clientcmdapi.NewContext()
+		}
+		s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
+		s.InitMcpClient()
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+		})
+		s.Run("ListTools returns correct Tool metadata", func() {
+			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-multicluster.json")
+			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
+			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
+			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
+		})
+	})
+}
+
+func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiClusterEnum() {
+	s.Run("Default configuration toolsets in multi-cluster (with 2 clusters)", func() {
+		kubeconfig := s.Kubeconfig()
+		// Add additional cluster to force multi-cluster behavior with enum parameter
+		kubeconfig.Contexts["extra-cluster"] = clientcmdapi.NewContext()
+		s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
+		s.InitMcpClient()
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+		})
+		s.Run("ListTools returns correct Tool metadata", func() {
+			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-multicluster-enum.json")
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
 			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")

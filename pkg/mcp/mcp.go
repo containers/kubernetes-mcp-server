@@ -67,7 +67,7 @@ type Server struct {
 	configuration *Configuration
 	server        *server.MCPServer
 	enabledTools  []string
-	k             *internalk8s.Manager
+	p             internalk8s.ManagerProvider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
@@ -91,26 +91,57 @@ func NewServer(configuration Configuration) (*Server, error) {
 			serverOptions...,
 		),
 	}
-	if err := s.reloadKubernetesClient(); err != nil {
+	if err := s.reloadKubernetesClusterProvider(); err != nil {
 		return nil, err
 	}
-	s.k.WatchKubeConfig(s.reloadKubernetesClient)
+	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
 
 	return s, nil
 }
 
-func (s *Server) reloadKubernetesClient() error {
-	k, err := internalk8s.NewManager(s.configuration.StaticConfig)
+func (s *Server) reloadKubernetesClusterProvider() error {
+	ctx := context.Background()
+	p, err := internalk8s.NewManagerProvider(s.configuration.StaticConfig)
 	if err != nil {
 		return err
 	}
-	s.k = k
+
+	// close the old provider
+	if s.p != nil {
+		s.p.Close()
+	}
+
+	s.p = p
+
+	k, err := s.p.GetManagerFor(ctx, s.p.GetDefaultTarget())
+	if err != nil {
+		return err
+	}
+
+	targets, err := p.GetTargets(ctx)
+	if err != nil {
+		return err
+	}
+
+	filter := CompositeFilter(
+		s.configuration.isToolApplicable,
+		ShouldIncludeTargetListTool(p.GetTargetParameterName(), targets),
+	)
+
+	mutator := WithTargetParameter(
+		p.GetDefaultTarget(),
+		p.GetTargetParameterName(),
+		targets,
+	)
+
 	applicableTools := make([]api.ServerTool, 0)
 	for _, toolset := range s.configuration.Toolsets() {
-		for _, tool := range toolset.GetTools(s.k) {
-			if !s.configuration.isToolApplicable(tool) {
+		for _, tool := range toolset.GetTools(k) {
+			tool := mutator(tool)
+			if !filter(tool) {
 				continue
 			}
+
 			applicableTools = append(applicableTools, tool)
 			s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 		}
@@ -119,7 +150,11 @@ func (s *Server) reloadKubernetesClient() error {
 	if err != nil {
 		return fmt.Errorf("failed to convert tools: %v", err)
 	}
+
 	s.server.SetTools(m3labsServerTools...)
+
+	// start new watch
+	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
 	return nil
 }
 
@@ -146,20 +181,32 @@ func (s *Server) ServeHTTP(httpServer *http.Server) *server.StreamableHTTPServer
 }
 
 // KubernetesApiVerifyToken verifies the given token with the audience by
-// sending an TokenReview request to API Server.
-func (s *Server) KubernetesApiVerifyToken(ctx context.Context, token string, audience string) (*authenticationapiv1.UserInfo, []string, error) {
-	if s.k == nil {
-		return nil, nil, fmt.Errorf("kubernetes manager is not initialized")
+// sending an TokenReview request to API Server for the specified cluster.
+func (s *Server) KubernetesApiVerifyToken(ctx context.Context, token string, audience string, cluster string) (*authenticationapiv1.UserInfo, []string, error) {
+	if s.p == nil {
+		return nil, nil, fmt.Errorf("kubernetes cluster provider is not initialized")
 	}
-	return s.k.VerifyToken(ctx, token, audience)
+
+	// Use provided cluster or default
+	if cluster == "" {
+		cluster = s.p.GetDefaultTarget()
+	}
+
+	// Get the cluster manager for the specified cluster
+	m, err := s.p.GetManagerFor(ctx, cluster)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return m.VerifyToken(ctx, token, audience)
 }
 
-// GetKubernetesAPIServerHost returns the Kubernetes API server host from the configuration.
-func (s *Server) GetKubernetesAPIServerHost() string {
-	if s.k == nil {
-		return ""
+// GetTargetParameterName returns the parameter name used for target identification in MCP requests
+func (s *Server) GetTargetParameterName() string {
+	if s.p == nil {
+		return "" // fallback for uninitialized provider
 	}
-	return s.k.GetAPIServerHost()
+	return s.p.GetTargetParameterName()
 }
 
 func (s *Server) GetEnabledTools() []string {
@@ -167,8 +214,8 @@ func (s *Server) GetEnabledTools() []string {
 }
 
 func (s *Server) Close() {
-	if s.k != nil {
-		s.k.Close()
+	if s.p != nil {
+		s.p.Close()
 	}
 }
 

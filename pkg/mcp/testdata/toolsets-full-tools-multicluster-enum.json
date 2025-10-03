@@ -1,0 +1,680 @@
+[
+  {
+    "annotations": {
+      "title": "Configuration: Contexts List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List all available context names and associated server urls from the kubeconfig file",
+    "inputSchema": {
+      "type": "object"
+    },
+    "name": "configuration_contexts_list"
+  },
+  {
+    "annotations": {
+      "title": "Configuration: View",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get the current Kubernetes configuration content as a kubeconfig YAML",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "minified": {
+          "description": "Return a minified version of the configuration. If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. (Optional, default true)",
+          "type": "boolean"
+        }
+      }
+    },
+    "name": "configuration_view"
+  },
+  {
+    "annotations": {
+      "title": "Events: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List all the Kubernetes events in the current cluster from all namespaces",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
+          "type": "string"
+        }
+      }
+    },
+    "name": "events_list"
+  },
+  {
+    "annotations": {
+      "title": "Helm: Install",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Install a Helm chart in the current or provided namespace",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chart": {
+          "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Helm release (Optional, random name if not provided)",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to install the Helm chart in (Optional, current namespace if not provided)",
+          "type": "string"
+        },
+        "values": {
+          "description": "Values to pass to the Helm chart (Optional)",
+          "type": "object"
+        }
+      },
+      "required": [
+        "chart"
+      ]
+    },
+    "name": "helm_install"
+  },
+  {
+    "annotations": {
+      "title": "Helm: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "all_namespaces": {
+          "description": "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
+          "type": "boolean"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
+          "type": "string"
+        }
+      }
+    },
+    "name": "helm_list"
+  },
+  {
+    "annotations": {
+      "title": "Helm: Uninstall",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Uninstall a Helm release in the current or provided namespace",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Helm release to uninstall",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to uninstall the Helm release from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "helm_uninstall"
+  },
+  {
+    "annotations": {
+      "title": "Namespaces: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List all the Kubernetes namespaces in the current cluster",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        }
+      }
+    },
+    "name": "namespaces_list"
+  },
+  {
+    "annotations": {
+      "title": "Pods: Delete",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Delete a Kubernetes Pod in the current or provided namespace with the provided name",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod to delete",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to delete the Pod from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "pods_delete"
+  },
+  {
+    "annotations": {
+      "title": "Pods: Exec",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "Command to execute in the Pod container. The first item is the command to be run, and the rest are the arguments to that command. Example: [\"ls\", \"-l\", \"/tmp\"]",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "container": {
+          "description": "Name of the Pod container where the command will be executed (Optional)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod where the command will be executed",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Pod where the command will be executed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "command"
+      ]
+    },
+    "name": "pods_exec"
+  },
+  {
+    "annotations": {
+      "title": "Pods: Get",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get a Kubernetes Pod in the current or provided namespace with the provided name",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the Pod from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "pods_get"
+  },
+  {
+    "annotations": {
+      "title": "Pods: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List all the Kubernetes pods in the current cluster from all namespaces",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "labelSelector": {
+          "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "type": "string"
+        }
+      }
+    },
+    "name": "pods_list"
+  },
+  {
+    "annotations": {
+      "title": "Pods: List in Namespace",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List all the Kubernetes pods in the specified namespace in the current cluster",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "labelSelector": {
+          "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to list pods from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace"
+      ]
+    },
+    "name": "pods_list_in_namespace"
+  },
+  {
+    "annotations": {
+      "title": "Pods: Log",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "container": {
+          "description": "Name of the Pod container to get the logs from (Optional)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod to get the logs from",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the Pod logs from",
+          "type": "string"
+        },
+        "previous": {
+          "description": "Return previous terminated container logs (Optional)",
+          "type": "boolean"
+        },
+        "tail": {
+          "default": 100,
+          "description": "Number of lines to retrieve from the end of the logs (Optional, default: 100)",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "pods_log"
+  },
+  {
+    "annotations": {
+      "title": "Pods: Run",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "image": {
+          "description": "Container Image to run in the Pod",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod (Optional, random name if not provided)",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to run the Pod in",
+          "type": "string"
+        },
+        "port": {
+          "description": "TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "image"
+      ]
+    },
+    "name": "pods_run"
+  },
+  {
+    "annotations": {
+      "title": "Pods: Top",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "all_namespaces": {
+          "default": true,
+          "description": "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
+          "type": "boolean"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "label_selector": {
+          "description": "Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)",
+          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)",
+          "type": "string"
+        }
+      }
+    },
+    "name": "pods_top"
+  },
+  {
+    "annotations": {
+      "title": "Resources: Create or Update",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "resource": {
+          "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource"
+      ]
+    },
+    "name": "resources_create_or_update"
+  },
+  {
+    "annotations": {
+      "title": "Resources: Delete",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "description": "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the resource",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Optional Namespace to delete the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will delete resource from configured namespace",
+          "type": "string"
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "name"
+      ]
+    },
+    "name": "resources_delete"
+  },
+  {
+    "annotations": {
+      "title": "Resources: Get",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "description": "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the resource",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Optional Namespace to retrieve the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will get resource from configured namespace",
+          "type": "string"
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "name"
+      ]
+    },
+    "name": "resources_get"
+  },
+  {
+    "annotations": {
+      "title": "Resources: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "description": "kind of the resources (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+          "type": "string"
+        },
+        "labelSelector": {
+          "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces",
+          "type": "string"
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind"
+      ]
+    },
+    "name": "resources_list"
+  }
+]

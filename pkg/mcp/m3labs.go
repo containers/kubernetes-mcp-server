@@ -39,10 +39,19 @@ func ServerToolToM3LabsServerTool(s *Server, tools []api.ServerTool) ([]server.S
 			m3labTool.RawInputSchema = schema
 		}
 		m3labHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			k, err := s.k.Derived(ctx)
+			// get the correct internalk8s.Manager for the target specified in the request
+			cluster := request.GetString(s.p.GetTargetParameterName(), s.p.GetDefaultTarget())
+			m, err := s.p.GetManagerFor(ctx, cluster)
 			if err != nil {
 				return nil, err
 			}
+
+			// derive the manager based on auth on top of the settings for the cluster
+			k, err := m.Derived(ctx)
+			if err != nil {
+				return nil, err
+			}
+
 			result, err := tool.Handler(api.ToolHandlerParams{
 				Context:         ctx,
 				Kubernetes:      k,

@@ -73,10 +73,14 @@ func (m *MockServer) Kubeconfig() *api.Config {
 }
 
 func (m *MockServer) KubeconfigFile(t *testing.T) string {
-	kubeconfig := filepath.Join(t.TempDir(), "config")
-	err := clientcmd.WriteToFile(*m.Kubeconfig(), kubeconfig)
+	return KubeconfigFile(t, m.Kubeconfig())
+}
+
+func KubeconfigFile(t *testing.T, kubeconfig *api.Config) string {
+	kubeconfigFile := filepath.Join(t.TempDir(), "config")
+	err := clientcmd.WriteToFile(*kubeconfig, kubeconfigFile)
 	require.NoError(t, err, "Expected no error writing kubeconfig file")
-	return kubeconfig
+	return kubeconfigFile
 }
 
 func WriteObject(w http.ResponseWriter, obj runtime.Object) {

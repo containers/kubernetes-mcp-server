@@ -1,8 +1,11 @@
 package http
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -20,7 +23,44 @@ import (
 
 type KubernetesApiTokenVerifier interface {
 	// KubernetesApiVerifyToken TODO: clarify proper implementation
-	KubernetesApiVerifyToken(ctx context.Context, token, audience string) (*authenticationapiv1.UserInfo, []string, error)
+	KubernetesApiVerifyToken(ctx context.Context, token, audience, cluster string) (*authenticationapiv1.UserInfo, []string, error)
+	// GetTargetParameterName returns the parameter name used for target identification in MCP requests
+	GetTargetParameterName() string
+}
+
+// extractTargetFromRequest extracts cluster parameter from MCP request body
+func extractTargetFromRequest(r *http.Request, targetName string) (string, error) {
+	if r.Body == nil {
+		return "", nil
+	}
+
+	// Read the body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// Restore the body for downstream handlers
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	// Parse the MCP request
+	var mcpRequest struct {
+		Params struct {
+			Arguments map[string]interface{} `json:"arguments"`
+		} `json:"params"`
+	}
+
+	if err := json.Unmarshal(body, &mcpRequest); err != nil {
+		// If we can't parse the request, just return empty cluster (will use default)
+		return "", nil
+	}
+
+	// Extract target parameter
+	if cluster, ok := mcpRequest.Params.Arguments[targetName].(string); ok {
+		return cluster, nil
+	}
+
+	return "", nil
 }
 
 // write401 sends a 401/Unauthorized response with WWW-Authenticate header.
@@ -132,7 +172,12 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 			}
 			// Kubernetes API Server TokenReview validation
 			if err == nil && staticConfig.ValidateToken {
-				err = claims.ValidateWithKubernetesApi(r.Context(), staticConfig.OAuthAudience, verifier)
+				targetParameterName := verifier.GetTargetParameterName()
+				cluster, clusterErr := extractTargetFromRequest(r, targetParameterName)
+				if clusterErr != nil {
+					klog.V(2).Infof("Failed to extract cluster from request, using default: %v", clusterErr)
+				}
+				err = claims.ValidateWithKubernetesApi(r.Context(), staticConfig.OAuthAudience, cluster, verifier)
 			}
 			if err != nil {
 				klog.V(1).Infof("Authentication failed - JWT validation error: %s %s from %s, error: %v", r.Method, r.URL.Path, r.RemoteAddr, err)
@@ -200,9 +245,9 @@ func (c *JWTClaims) ValidateWithProvider(ctx context.Context, audience string, p
 	return nil
 }
 
-func (c *JWTClaims) ValidateWithKubernetesApi(ctx context.Context, audience string, verifier KubernetesApiTokenVerifier) error {
+func (c *JWTClaims) ValidateWithKubernetesApi(ctx context.Context, audience, cluster string, verifier KubernetesApiTokenVerifier) error {
 	if verifier != nil {
-		_, _, err := verifier.KubernetesApiVerifyToken(ctx, c.Token, audience)
+		_, _, err := verifier.KubernetesApiVerifyToken(ctx, c.Token, audience, cluster)
 		if err != nil {
 			return fmt.Errorf("kubernetes API token validation error: %v", err)
 		}

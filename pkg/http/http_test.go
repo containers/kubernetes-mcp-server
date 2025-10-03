@@ -292,7 +292,7 @@ func TestHealthCheck(t *testing.T) {
 		})
 	})
 	// Health exposed even when require Authorization
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
 		if err != nil {
 			t.Fatalf("Failed to get health check endpoint with OAuth: %v", err)
@@ -313,7 +313,7 @@ func TestWellKnownReverseProxy(t *testing.T) {
 		".well-known/openid-configuration",
 	}
 	// With No Authorization URL configured
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		for _, path := range cases {
 			resp, err := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
 			t.Cleanup(func() { _ = resp.Body.Close() })
@@ -333,7 +333,12 @@ func TestWellKnownReverseProxy(t *testing.T) {
 		_, _ = w.Write([]byte(`NOT A JSON PAYLOAD`))
 	}))
 	t.Cleanup(invalidPayloadServer.Close)
-	invalidPayloadConfig := &config.StaticConfig{AuthorizationURL: invalidPayloadServer.URL, RequireOAuth: true, ValidateToken: true}
+	invalidPayloadConfig := &config.StaticConfig{
+		AuthorizationURL:        invalidPayloadServer.URL,
+		RequireOAuth:            true,
+		ValidateToken:           true,
+		ClusterProviderStrategy: config.ClusterProviderKubeConfig,
+	}
 	testCaseWithContext(t, &httpContext{StaticConfig: invalidPayloadConfig}, func(ctx *httpContext) {
 		for _, path := range cases {
 			resp, err := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
@@ -358,7 +363,12 @@ func TestWellKnownReverseProxy(t *testing.T) {
 		_, _ = w.Write([]byte(`{"issuer": "https://example.com","scopes_supported":["mcp-server"]}`))
 	}))
 	t.Cleanup(testServer.Close)
-	staticConfig := &config.StaticConfig{AuthorizationURL: testServer.URL, RequireOAuth: true, ValidateToken: true}
+	staticConfig := &config.StaticConfig{
+		AuthorizationURL:        testServer.URL,
+		RequireOAuth:            true,
+		ValidateToken:           true,
+		ClusterProviderStrategy: config.ClusterProviderKubeConfig,
+	}
 	testCaseWithContext(t, &httpContext{StaticConfig: staticConfig}, func(ctx *httpContext) {
 		for _, path := range cases {
 			resp, err := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
@@ -401,7 +411,12 @@ func TestWellKnownOverrides(t *testing.T) {
 			}`))
 	}))
 	t.Cleanup(testServer.Close)
-	baseConfig := config.StaticConfig{AuthorizationURL: testServer.URL, RequireOAuth: true, ValidateToken: true}
+	baseConfig := config.StaticConfig{
+		AuthorizationURL:        testServer.URL,
+		RequireOAuth:            true,
+		ValidateToken:           true,
+		ClusterProviderStrategy: config.ClusterProviderKubeConfig,
+	}
 	// With Dynamic Client Registration disabled
 	disableDynamicRegistrationConfig := baseConfig
 	disableDynamicRegistrationConfig.DisableDynamicClientRegistration = true
@@ -488,7 +503,7 @@ func TestMiddlewareLogging(t *testing.T) {
 
 func TestAuthorizationUnauthorized(t *testing.T) {
 	// Missing Authorization header
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/mcp", ctx.HttpAddress))
 		if err != nil {
 			t.Fatalf("Failed to get protected endpoint: %v", err)
@@ -513,7 +528,7 @@ func TestAuthorizationUnauthorized(t *testing.T) {
 		})
 	})
 	// Authorization header without Bearer prefix
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/mcp", ctx.HttpAddress), nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
@@ -538,7 +553,7 @@ func TestAuthorizationUnauthorized(t *testing.T) {
 		})
 	})
 	// Invalid Authorization header
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/mcp", ctx.HttpAddress), nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
@@ -569,7 +584,7 @@ func TestAuthorizationUnauthorized(t *testing.T) {
 		})
 	})
 	// Expired Authorization Bearer token
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/mcp", ctx.HttpAddress), nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
@@ -600,7 +615,7 @@ func TestAuthorizationUnauthorized(t *testing.T) {
 		})
 	})
 	// Invalid audience claim Bearer token
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "expected-audience", ValidateToken: true}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "expected-audience", ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/mcp", ctx.HttpAddress), nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
@@ -633,7 +648,7 @@ func TestAuthorizationUnauthorized(t *testing.T) {
 	// Failed OIDC validation
 	oidcTestServer := NewOidcTestServer(t)
 	t.Cleanup(oidcTestServer.Close)
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "mcp-server", ValidateToken: true}, OidcProvider: oidcTestServer.Provider}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "mcp-server", ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}, OidcProvider: oidcTestServer.Provider}, func(ctx *httpContext) {
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/mcp", ctx.HttpAddress), nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
@@ -670,7 +685,7 @@ func TestAuthorizationUnauthorized(t *testing.T) {
 		"aud": "mcp-server"
 	}`
 	validOidcToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256, rawClaims)
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "mcp-server", ValidateToken: true}, OidcProvider: oidcTestServer.Provider}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "mcp-server", ValidateToken: true, ClusterProviderStrategy: config.ClusterProviderKubeConfig}, OidcProvider: oidcTestServer.Provider}, func(ctx *httpContext) {
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/mcp", ctx.HttpAddress), nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %v", err)
@@ -703,7 +718,7 @@ func TestAuthorizationUnauthorized(t *testing.T) {
 }
 
 func TestAuthorizationRequireOAuthFalse(t *testing.T) {
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: false}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: false, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/mcp", ctx.HttpAddress))
 		if err != nil {
 			t.Fatalf("Failed to get protected endpoint: %v", err)
@@ -728,7 +743,7 @@ func TestAuthorizationRawToken(t *testing.T) {
 		{"mcp-server", true},  // Audience set, validation enabled
 	}
 	for _, c := range cases {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: c.audience, ValidateToken: c.validateToken}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: c.audience, ValidateToken: c.validateToken, ClusterProviderStrategy: config.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 			tokenReviewed := false
 			ctx.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if req.URL.EscapedPath() == "/apis/authentication.k8s.io/v1/tokenreviews" {
@@ -777,7 +792,7 @@ func TestAuthorizationOidcToken(t *testing.T) {
 	validOidcToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256, rawClaims)
 	cases := []bool{false, true}
 	for _, validateToken := range cases {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "mcp-server", ValidateToken: validateToken}, OidcProvider: oidcTestServer.Provider}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, OAuthAudience: "mcp-server", ValidateToken: validateToken, ClusterProviderStrategy: config.ClusterProviderKubeConfig}, OidcProvider: oidcTestServer.Provider}, func(ctx *httpContext) {
 			tokenReviewed := false
 			ctx.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if req.URL.EscapedPath() == "/apis/authentication.k8s.io/v1/tokenreviews" {
@@ -833,13 +848,14 @@ func TestAuthorizationOidcTokenExchange(t *testing.T) {
 	cases := []bool{false, true}
 	for _, validateToken := range cases {
 		staticConfig := &config.StaticConfig{
-			RequireOAuth:    true,
-			OAuthAudience:   "mcp-server",
-			ValidateToken:   validateToken,
-			StsClientId:     "test-sts-client-id",
-			StsClientSecret: "test-sts-client-secret",
-			StsAudience:     "backend-audience",
-			StsScopes:       []string{"backend-scope"},
+			RequireOAuth:            true,
+			OAuthAudience:           "mcp-server",
+			ValidateToken:           validateToken,
+			StsClientId:             "test-sts-client-id",
+			StsClientSecret:         "test-sts-client-secret",
+			StsAudience:             "backend-audience",
+			StsScopes:               []string{"backend-scope"},
+			ClusterProviderStrategy: config.ClusterProviderKubeConfig,
 		}
 		testCaseWithContext(t, &httpContext{StaticConfig: staticConfig, OidcProvider: oidcTestServer.Provider}, func(ctx *httpContext) {
 			tokenReviewed := false
