@@ -52,7 +52,7 @@ func (s *ConfigurationSuite) TestContextsList() {
 		})
 		s.Run("contains default context name", func() {
 			s.Regexpf(`^Available Kubernetes contexts \(\d+ total, default: fake-context\)`, toolResult.Content[0].(mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(mcp.TextContent).Text)
-			s.Regexpf(`(?m)^\*fake-context$`, toolResult.Content[0].(mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Regexpf(`(?m)^\*fake-context -> http:\/\/127\.0\.0\.1:\d*$`, toolResult.Content[0].(mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
 }

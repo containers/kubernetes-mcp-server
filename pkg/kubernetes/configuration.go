@@ -98,17 +98,22 @@ func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
 
 // ConfigurationContextsList returns the list of available context names
 // TODO: Should be moved to the Provider level ?
-func (k *Kubernetes) ConfigurationContextsList() ([]string, error) {
+func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
 	if k.manager.IsInCluster() {
-		return []string{inClusterKubeConfigDefaultContext}, nil
+		return map[string]string{inClusterKubeConfigDefaultContext: ""}, nil
 	}
 	cfg, err := k.manager.clientCmdConfig.RawConfig()
 	if err != nil {
 		return nil, err
 	}
-	contexts := make([]string, 0, len(cfg.Contexts))
-	for context := range cfg.Contexts {
-		contexts = append(contexts, context)
+	contexts := make(map[string]string, len(cfg.Contexts))
+	for name, context := range cfg.Contexts {
+		cluster, ok := cfg.Clusters[context.Cluster]
+		if !ok || cluster.Server == "" {
+			contexts[name] = "unknown"
+		} else {
+			contexts[name] = cluster.Server
+		}
 	}
 	return contexts, nil
 }

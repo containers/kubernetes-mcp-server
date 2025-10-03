@@ -15,7 +15,7 @@ func initConfiguration() []api.ServerTool {
 		{
 			Tool: api.Tool{
 				Name:        "configuration_contexts_list",
-				Description: "List all available context names from the kubeconfig file",
+				Description: "List all available context names and associated server urls from the kubeconfig file",
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 				},
@@ -78,16 +78,16 @@ func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	result := fmt.Sprintf("Available Kubernetes contexts (%d total, default: %s):\n\n", len(contexts), defaultContext)
-	result += "Format: [*] CONTEXT_NAME\n"
+	result += "Format: [*] CONTEXT_NAME -> SERVER_URL\n"
 	result += " (* indicates the default context used in tools if context is not set)\n\n"
 	result += "Contexts:\n---------\n"
-	for _, context := range contexts {
+	for context, server := range contexts {
 		marker := " "
 		if context == defaultContext {
 			marker = "*"
 		}
 
-		result += fmt.Sprintf("%s%s\n", marker, context)
+		result += fmt.Sprintf("%s%s -> %s\n", marker, context, server)
 	}
 	result += "---------\n\n"
 
