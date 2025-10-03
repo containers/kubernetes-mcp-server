@@ -7,6 +7,8 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"k8s.io/utils/ptr"
 )
 
 // createTestTool creates a basic ServerTool for testing
@@ -70,7 +72,6 @@ func TestWithClusterParameter(t *testing.T) {
 		defaultCluster      string
 		targetParameterName string
 		clusters            []string
-		skipToolNames       []string
 		toolName            string
 		toolFactory         func(string) api.ServerTool
 		expectCluster       bool
@@ -81,7 +82,6 @@ func TestWithClusterParameter(t *testing.T) {
 			name:           "adds cluster parameter when multiple clusters provided",
 			defaultCluster: "default-cluster",
 			clusters:       []string{"cluster1", "cluster2", "cluster3"},
-			skipToolNames:  []string{},
 			toolName:       "test-tool",
 			toolFactory:    createTestTool,
 			expectCluster:  true,
@@ -92,19 +92,7 @@ func TestWithClusterParameter(t *testing.T) {
 			name:           "does not add cluster parameter when single cluster provided",
 			defaultCluster: "default-cluster",
 			clusters:       []string{"single-cluster"},
-			skipToolNames:  []string{},
 			toolName:       "test-tool",
-			toolFactory:    createTestTool,
-			expectCluster:  false,
-			expectEnum:     false,
-			enumCount:      0,
-		},
-		{
-			name:           "skips tools in skipToolNames list",
-			defaultCluster: "default-cluster",
-			clusters:       []string{"cluster1", "cluster2"},
-			skipToolNames:  []string{"skip-this-tool"},
-			toolName:       "skip-this-tool",
 			toolFactory:    createTestTool,
 			expectCluster:  false,
 			expectEnum:     false,
@@ -114,7 +102,6 @@ func TestWithClusterParameter(t *testing.T) {
 			name:           "creates InputSchema when nil",
 			defaultCluster: "default-cluster",
 			clusters:       []string{"cluster1", "cluster2"},
-			skipToolNames:  []string{},
 			toolName:       "test-tool",
 			toolFactory:    createTestToolWithNilSchema,
 			expectCluster:  true,
@@ -125,7 +112,6 @@ func TestWithClusterParameter(t *testing.T) {
 			name:           "creates Properties map when nil",
 			defaultCluster: "default-cluster",
 			clusters:       []string{"cluster1", "cluster2"},
-			skipToolNames:  []string{},
 			toolName:       "test-tool",
 			toolFactory:    createTestToolWithNilProperties,
 			expectCluster:  true,
@@ -136,7 +122,6 @@ func TestWithClusterParameter(t *testing.T) {
 			name:           "preserves existing properties",
 			defaultCluster: "default-cluster",
 			clusters:       []string{"cluster1", "cluster2"},
-			skipToolNames:  []string{},
 			toolName:       "test-tool",
 			toolFactory:    createTestToolWithExistingProperties,
 			expectCluster:  true,
@@ -150,7 +135,7 @@ func TestWithClusterParameter(t *testing.T) {
 			if tt.targetParameterName == "" {
 				tt.targetParameterName = "cluster"
 			}
-			mutator := WithTargetParameter(tt.defaultCluster, tt.targetParameterName, tt.clusters, tt.skipToolNames)
+			mutator := WithTargetParameter(tt.defaultCluster, tt.targetParameterName, tt.clusters)
 			tool := tt.toolFactory(tt.toolName)
 			originalTool := tool // Keep reference to check if tool was unchanged
 
@@ -285,4 +270,78 @@ func TestToolMutatorType(t *testing.T) {
 		result := mutator(originalTool)
 		assert.Equal(t, "modified-original", result.Tool.Name)
 	})
+}
+
+func TestMaxClustersInEnumConstant(t *testing.T) {
+	t.Run("maxClustersInEnum has expected value", func(t *testing.T) {
+		assert.Equal(t, 5, maxTargetsInEnum, "maxClustersInEnum should be 5")
+	})
+}
+
+type TargetParameterToolMutatorSuite struct {
+	suite.Suite
+}
+
+func (s *TargetParameterToolMutatorSuite) TestClusterAwareTool() {
+	tm := WithTargetParameter("default-cluster", "cluster", []string{"cluster-1", "cluster-2", "cluster-3"})
+	tool := createTestTool("cluster-aware-tool")
+	// Tools are cluster-aware by default
+	tm(tool)
+	s.Require().NotNil(tool.Tool.InputSchema.Properties)
+	s.Run("adds cluster parameter", func() {
+		s.NotNil(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to be added")
+	})
+	s.Run("adds correct description", func() {
+		desc := tool.Tool.InputSchema.Properties["cluster"].Description
+		s.Contains(desc, "Optional parameter selecting which cluster to run the tool in", "Expected description to mention cluster selection")
+		s.Contains(desc, "Defaults to default-cluster if not set", "Expected description to mention default cluster")
+	})
+	s.Run("adds enum with clusters", func() {
+		s.Require().NotNil(tool.Tool.InputSchema.Properties["cluster"])
+		enum := tool.Tool.InputSchema.Properties["cluster"].Enum
+		s.NotNilf(enum, "Expected enum to be set")
+		s.Equal(3, len(enum), "Expected enum to have 3 entries")
+		s.Contains(enum, "cluster-1", "Expected enum to contain cluster-1")
+		s.Contains(enum, "cluster-2", "Expected enum to contain cluster-2")
+		s.Contains(enum, "cluster-3", "Expected enum to contain cluster-3")
+	})
+}
+
+func (s *TargetParameterToolMutatorSuite) TestClusterAwareToolSingleCluster() {
+	tm := WithTargetParameter("default", "cluster", []string{"only-cluster"})
+	tool := createTestTool("cluster-aware-tool-single-cluster")
+	// Tools are cluster-aware by default
+	tm(tool)
+	s.Run("does not add cluster parameter for single cluster", func() {
+		s.Nilf(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to not be added for single cluster")
+	})
+}
+
+func (s *TargetParameterToolMutatorSuite) TestClusterAwareToolMultipleClusters() {
+	tm := WithTargetParameter("default", "cluster", []string{"cluster-1", "cluster-2", "cluster-3", "cluster-4", "cluster-5", "cluster-6"})
+	tool := createTestTool("cluster-aware-tool-multiple-clusters")
+	// Tools are cluster-aware by default
+	tm(tool)
+	s.Run("adds cluster parameter", func() {
+		s.NotNilf(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to be added")
+	})
+	s.Run("does not add enum when list of clusters is > 5", func() {
+		s.Require().NotNil(tool.Tool.InputSchema.Properties["cluster"])
+		enum := tool.Tool.InputSchema.Properties["cluster"].Enum
+		s.Nilf(enum, "Expected enum to not be set for too many clusters")
+	})
+}
+
+func (s *TargetParameterToolMutatorSuite) TestNonClusterAwareTool() {
+	tm := WithTargetParameter("default", "cluster", []string{"cluster-1", "cluster-2"})
+	tool := createTestTool("non-cluster-aware-tool")
+	tool.ClusterAware = ptr.To(false)
+	tm(tool)
+	s.Run("does not add cluster parameter", func() {
+		s.Nilf(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to not be added")
+	})
+}
+
+func TestTargetParameterToolMutator(t *testing.T) {
+	suite.Run(t, new(TargetParameterToolMutatorSuite))
 }

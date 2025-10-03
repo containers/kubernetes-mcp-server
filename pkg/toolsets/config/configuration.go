@@ -12,49 +12,58 @@ import (
 
 func initConfiguration() []api.ServerTool {
 	tools := []api.ServerTool{
-		{Tool: api.Tool{
-			Name:        "contexts_list",
-			Description: "List all available contexts from the kubeconfig file. Shows context names for all available contexts",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Contexts: List",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(true),
-				OpenWorldHint:   ptr.To(false),
-			},
-		}, Handler: contextsList},
-		{Tool: api.Tool{
-			Name:        "configuration_view",
-			Description: "Get the current Kubernetes configuration content as a kubeconfig YAML",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"minified": {
-						Type: "boolean",
-						Description: "Return a minified version of the configuration. " +
-							"If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. " +
-							"If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. " +
-							"(Optional, default true)",
-					},
+		{
+			Tool: api.Tool{
+				Name:        "configuration_contexts_list",
+				Description: "List all available context names from the kubeconfig file",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+				},
+				Annotations: api.ToolAnnotations{
+					Title:           "Configuration: Contexts List",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(false),
 				},
 			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Configuration: View",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
-				OpenWorldHint:   ptr.To(true),
+			ClusterAware:       ptr.To(false),
+			TargetListProvider: ptr.To(true),
+			Handler:            contextsList,
+		},
+		{
+			Tool: api.Tool{
+				Name:        "configuration_view",
+				Description: "Get the current Kubernetes configuration content as a kubeconfig YAML",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"minified": {
+							Type: "boolean",
+							Description: "Return a minified version of the configuration. " +
+								"If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. " +
+								"If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. " +
+								"(Optional, default true)",
+						},
+					},
+				},
+				Annotations: api.ToolAnnotations{
+					Title:           "Configuration: View",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(false),
+					OpenWorldHint:   ptr.To(true),
+				},
 			},
-		}, Handler: configurationView},
+			ClusterAware: ptr.To(false),
+			Handler:      configurationView,
+		},
 	}
 	return tools
 }
 
 func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	contexts, err := params.GetTargets(params.Context)
+	contexts, err := params.ConfigurationContextsList()
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list contexts: %v", err)), nil
 	}
@@ -63,7 +72,10 @@ func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("No contexts found in kubeconfig", nil), nil
 	}
 
-	defaultContext := params.GetDefaultTarget()
+	defaultContext, err := params.ConfigurationContextsDefault()
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get default context: %v", err)), nil
+	}
 
 	result := fmt.Sprintf("Available Kubernetes contexts (%d total, default: %s):\n\n", len(contexts), defaultContext)
 	result += "Format: [*] CONTEXT_NAME\n"
@@ -81,6 +93,7 @@ func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	result += "To use a specific context with any tool, set the 'context' parameter in the tool call arguments"
 
+	// TODO: Review output format, current is not parseable and might not be ideal for LLM consumption
 	return api.NewToolCallResult(result, nil), nil
 }
 

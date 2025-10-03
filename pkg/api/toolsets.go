@@ -10,8 +10,29 @@ import (
 )
 
 type ServerTool struct {
-	Tool    Tool
-	Handler ToolHandlerFunc
+	Tool               Tool
+	Handler            ToolHandlerFunc
+	ClusterAware       *bool
+	TargetListProvider *bool
+}
+
+// IsClusterAware indicates whether the tool can accept a "cluster" or "context" parameter
+// to operate on a specific Kubernetes cluster context.
+// Defaults to true if not explicitly set
+func (s *ServerTool) IsClusterAware() bool {
+	if s.ClusterAware != nil {
+		return *s.ClusterAware
+	}
+	return true
+}
+
+// IsTargetListProvider indicates whether the tool is used to provide a list of targets (clusters/contexts)
+// Defaults to false if not explicitly set
+func (s *ServerTool) IsTargetListProvider() bool {
+	if s.TargetListProvider != nil {
+		return *s.TargetListProvider
+	}
+	return false
 }
 
 type Toolset interface {
@@ -44,7 +65,6 @@ func NewToolCallResult(content string, err error) *ToolCallResult {
 type ToolHandlerParams struct {
 	context.Context
 	*internalk8s.Kubernetes
-	internalk8s.ManagerProvider
 	ToolCallRequest
 	ListOutput output.Output
 }

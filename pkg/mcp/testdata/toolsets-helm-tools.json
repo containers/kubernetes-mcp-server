@@ -11,14 +11,6 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "context": {
-          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "additional-context",
-            "fake-context"
-          ],
-          "type": "string"
-        },
         "chart": {
           "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
           "type": "string"
@@ -54,14 +46,6 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "context": {
-          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "additional-context",
-            "fake-context"
-          ],
-          "type": "string"
-        },
         "all_namespaces": {
           "description": "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
           "type": "boolean"
@@ -86,14 +70,6 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "context": {
-          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "additional-context",
-            "fake-context"
-          ],
-          "type": "string"
-        },
         "name": {
           "description": "Name of the Helm release to uninstall",
           "type": "string"

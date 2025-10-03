@@ -5,6 +5,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
+// ToolFilter is a function that takes a ServerTool and returns a boolean indicating whether to include the tool
 type ToolFilter func(tool api.ServerTool) bool
 
 func CompositeFilter(filters ...ToolFilter) ToolFilter {
@@ -21,16 +22,18 @@ func CompositeFilter(filters ...ToolFilter) ToolFilter {
 
 func ShouldIncludeTargetListTool(targetName string, targets []string) ToolFilter {
 	return func(tool api.ServerTool) bool {
-		if tool.Tool.Name == "contexts_list" {
-			if targetName != kubernetes.KubeConfigTargetParameterName {
-				// let's not include contexts_list if we aren't targetting contexts in our ManagerProvider
-				return false
-			}
+		if !tool.IsTargetListProvider() {
+			return true
+		}
+		if len(targets) <= maxTargetsInEnum {
+			// all targets in enum, no need for target list provider tool
+			return false
+		}
 
-			if len(targets) <= maxTargetsInEnum {
-				// all targets in enum, no need for contexts_list tool
-				return false
-			}
+		// TODO: this check should be removed or make more generic when we have other
+		if tool.Tool.Name == "configuration_contexts_list" && targetName != kubernetes.KubeConfigTargetParameterName {
+			// let's not include configuration_contexts_list if we aren't targeting contexts in our ManagerProvider
+			return false
 		}
 
 		return true

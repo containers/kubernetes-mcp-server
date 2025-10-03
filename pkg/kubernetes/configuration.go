@@ -8,6 +8,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api/latest"
 )
 
+const inClusterKubeConfigDefaultContext = "in-cluster"
+
 // InClusterConfig is a variable that holds the function to get the in-cluster config
 // Exposed for testing
 var InClusterConfig = func() (*rest.Config, error) {
@@ -81,6 +83,40 @@ func (m *Manager) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	return m.clientCmdConfig
 }
 
+// ConfigurationContextsDefault returns the current context name
+// TODO: Should be moved to the Provider level ?
+func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
+	if k.manager.IsInCluster() {
+		return inClusterKubeConfigDefaultContext, nil
+	}
+	cfg, err := k.manager.clientCmdConfig.RawConfig()
+	if err != nil {
+		return "", err
+	}
+	return cfg.CurrentContext, nil
+}
+
+// ConfigurationContextsList returns the list of available context names
+// TODO: Should be moved to the Provider level ?
+func (k *Kubernetes) ConfigurationContextsList() ([]string, error) {
+	if k.manager.IsInCluster() {
+		return []string{inClusterKubeConfigDefaultContext}, nil
+	}
+	cfg, err := k.manager.clientCmdConfig.RawConfig()
+	if err != nil {
+		return nil, err
+	}
+	contexts := make([]string, 0, len(cfg.Contexts))
+	for context := range cfg.Contexts {
+		contexts = append(contexts, context)
+	}
+	return contexts, nil
+}
+
+// ConfigurationView returns the current kubeconfig content as a kubeconfig YAML
+// If minify is true, keeps only the current-context and the relevant pieces of the configuration for that context.
+// If minify is false, all contexts, clusters, auth-infos, and users are returned in the configuration.
+// TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
 	var cfg clientcmdapi.Config
 	var err error
@@ -93,11 +129,11 @@ func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
 		cfg.AuthInfos["user"] = &clientcmdapi.AuthInfo{
 			Token: k.manager.cfg.BearerToken,
 		}
-		cfg.Contexts["context"] = &clientcmdapi.Context{
+		cfg.Contexts[inClusterKubeConfigDefaultContext] = &clientcmdapi.Context{
 			Cluster:  "cluster",
 			AuthInfo: "user",
 		}
-		cfg.CurrentContext = "context"
+		cfg.CurrentContext = inClusterKubeConfigDefaultContext
 	} else if cfg, err = k.manager.clientCmdConfig.RawConfig(); err != nil {
 		return nil, err
 	}

@@ -12,14 +12,10 @@ type ToolMutator func(tool api.ServerTool) api.ServerTool
 
 const maxTargetsInEnum = 5 // TODO: test and validate that this is a reasonable cutoff
 
-func WithTargetParameter(defaultCluster, targetParameterName string, targets, skipToolNames []string) ToolMutator {
-	skipNames := make(map[string]struct{}, len(skipToolNames))
-	for _, n := range skipToolNames {
-		skipNames[n] = struct{}{}
-	}
-
+// WithTargetParameter adds a target selection parameter to the tool's input schema if the tool is cluster-aware
+func WithTargetParameter(defaultCluster, targetParameterName string, targets []string) ToolMutator {
 	return func(tool api.ServerTool) api.ServerTool {
-		if _, ok := skipNames[tool.Tool.Name]; ok {
+		if !tool.IsClusterAware() {
 			return tool
 		}
 

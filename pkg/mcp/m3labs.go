@@ -55,7 +55,6 @@ func ServerToolToM3LabsServerTool(s *Server, tools []api.ServerTool) ([]server.S
 			result, err := tool.Handler(api.ToolHandlerParams{
 				Context:         ctx,
 				Kubernetes:      k,
-				ManagerProvider: s.p,
 				ToolCallRequest: request,
 				ListOutput:      s.configuration.ListOutput(),
 			})
