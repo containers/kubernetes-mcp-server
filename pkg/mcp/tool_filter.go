@@ -25,8 +25,8 @@ func ShouldIncludeTargetListTool(targetName string, targets []string) ToolFilter
 		if !tool.IsTargetListProvider() {
 			return true
 		}
-		if len(targets) <= maxTargetsInEnum {
-			// all targets in enum, no need for target list provider tool
+		if len(targets) <= 1 {
+			// there is no need to provide a tool to list the single available target
 			return false
 		}
 

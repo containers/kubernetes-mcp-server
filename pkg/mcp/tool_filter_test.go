@@ -54,26 +54,26 @@ func (s *ToolFilterSuite) TestShouldIncludeTargetListTool() {
 		s.True(filter(tool))
 	})
 	s.Run("target-list-provider tools", func() {
-		s.Run("with targets <= 5: returns false", func() {
-			filter := ShouldIncludeTargetListTool("any", []string{"1", "2", "3", "4", "5"})
+		s.Run("with targets == 1: returns false", func() {
+			filter := ShouldIncludeTargetListTool("any", []string{"1"})
 			tool := api.ServerTool{Tool: api.Tool{Name: "test"}, TargetListProvider: ptr.To(true)}
 			s.False(filter(tool))
 		})
-		s.Run("with targets <= 5", func() {
+		s.Run("with targets == 1", func() {
 			s.Run("and tool is configuration_contexts_list and targetName is not context: returns false", func() {
-				filter := ShouldIncludeTargetListTool("not_context", []string{"1", "2", "3", "4", "5", "6"})
+				filter := ShouldIncludeTargetListTool("not_context", []string{"1"})
 				tool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}, TargetListProvider: ptr.To(true)}
 				s.False(filter(tool))
 			})
-			s.Run("and tool is configuration_contexts_list and targetName is context: returns true", func() {
-				filter := ShouldIncludeTargetListTool("context", []string{"1", "2", "3", "4", "5", "6"})
+			s.Run("and tool is configuration_contexts_list and targetName is context: returns false", func() {
+				filter := ShouldIncludeTargetListTool("context", []string{"1"})
 				tool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}, TargetListProvider: ptr.To(true)}
-				s.True(filter(tool))
+				s.False(filter(tool))
 			})
-			s.Run("and tool is not configuration_contexts_list: returns true", func() {
-				filter := ShouldIncludeTargetListTool("any", []string{"1", "2", "3", "4", "5", "6"})
+			s.Run("and tool is not configuration_contexts_list: returns false", func() {
+				filter := ShouldIncludeTargetListTool("any", []string{"1"})
 				tool := api.ServerTool{Tool: api.Tool{Name: "other_tool"}, TargetListProvider: ptr.To(true)}
-				s.True(filter(tool))
+				s.False(filter(tool))
 			})
 		})
 	})

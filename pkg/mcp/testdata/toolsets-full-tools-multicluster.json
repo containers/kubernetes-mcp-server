@@ -7,7 +7,7 @@
       "idempotentHint": true,
       "openWorldHint": false
     },
-    "description": "List all available context names from the kubeconfig file",
+    "description": "List all available context names and associated server urls from the kubeconfig file",
     "inputSchema": {
       "type": "object"
     },

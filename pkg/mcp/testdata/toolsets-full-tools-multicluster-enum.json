@@ -1,6 +1,20 @@
 [
   {
     "annotations": {
+      "title": "Configuration: Contexts List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List all available context names and associated server urls from the kubeconfig file",
+    "inputSchema": {
+      "type": "object"
+    },
+    "name": "configuration_contexts_list"
+  },
+  {
+    "annotations": {
       "title": "Configuration: View",
       "readOnlyHint": true,
       "destructiveHint": false,
