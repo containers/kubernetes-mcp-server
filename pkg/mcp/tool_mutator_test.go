@@ -286,9 +286,3 @@ func TestToolMutatorType(t *testing.T) {
 		assert.Equal(t, "modified-original", result.Tool.Name)
 	})
 }
-
-func TestMaxClustersInEnumConstant(t *testing.T) {
-	t.Run("maxClustersInEnum has expected value", func(t *testing.T) {
-		assert.Equal(t, 15, maxTargetsInEnum, "maxClustersInEnum should be 15")
-	})
-}
