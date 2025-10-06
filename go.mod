@@ -4,9 +4,9 @@ go 1.24.1
 
 require (
 	github.com/BurntSushi/toml v1.5.0
-	github.com/coreos/go-oidc/v3 v3.15.0
+	github.com/coreos/go-oidc/v3 v3.16.0
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/go-jose/go-jose/v4 v4.1.2
+	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/google/jsonschema-go v0.3.0
 	github.com/mark3labs/mcp-go v0.41.1
 	github.com/pkg/errors v0.9.1
