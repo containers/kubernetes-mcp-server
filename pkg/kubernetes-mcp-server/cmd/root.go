@@ -47,6 +47,9 @@ kubernetes-mcp-server --port 8080
 
 # start a SSE server on port 8443 with a public HTTPS host of example.com
 kubernetes-mcp-server --port 8443 --sse-base-url https://example.com:8443
+
+# start a SSE server on port 8080 with multi-cluster tools disabled
+kubernetes-mcp-server --port 8080 --disable-multi-cluster
 `))
 )
 
@@ -68,6 +71,7 @@ type MCPServerOptions struct {
 	AuthorizationURL     string
 	CertificateAuthority string
 	ServerURL            string
+	DisableMultiCluster  bool
 
 	ConfigPath   string
 	StaticConfig *config.StaticConfig
@@ -130,6 +134,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("server-url")
 	cmd.Flags().StringVar(&o.CertificateAuthority, "certificate-authority", o.CertificateAuthority, "Certificate authority path to verify certificates. Optional. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden("certificate-authority")
+	cmd.Flags().BoolVar(&o.DisableMultiCluster, "disable-multi-cluster", o.DisableMultiCluster, "Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.")
 
 	return cmd
 }
@@ -202,6 +207,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	if cmd.Flag("certificate-authority").Changed {
 		m.StaticConfig.CertificateAuthority = m.CertificateAuthority
 	}
+	if cmd.Flag("disable-multi-cluster").Changed && m.DisableMultiCluster {
+		m.StaticConfig.ClusterProviderStrategy = config.ClusterProviderDisabled
+	}
 }
 
 func (m *MCPServerOptions) initializeLogging() {
@@ -257,6 +265,13 @@ func (m *MCPServerOptions) Run() error {
 	klog.V(1).Infof(" - ListOutput: %s", m.StaticConfig.ListOutput)
 	klog.V(1).Infof(" - Read-only mode: %t", m.StaticConfig.ReadOnly)
 	klog.V(1).Infof(" - Disable destructive tools: %t", m.StaticConfig.DisableDestructive)
+
+	strategy := m.StaticConfig.ClusterProviderStrategy
+	if strategy == "" {
+		strategy = "auto-detect (it is advisable to set this explicitly in your Config)"
+	}
+
+	klog.V(1).Infof(" - ClusterProviderStrategy: %s", strategy)
 
 	if m.Version {
 		_, _ = fmt.Fprintf(m.Out, "%s\n", version.Version)
