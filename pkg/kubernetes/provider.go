@@ -32,11 +32,12 @@ type kubeConfigClusterProvider struct {
 
 var _ ManagerProvider = &kubeConfigClusterProvider{}
 
-type inClusterProvider struct {
-	manager *Manager
+type singleClusterProvider struct {
+	strategy string
+	manager  *Manager
 }
 
-var _ ManagerProvider = &inClusterProvider{}
+var _ ManagerProvider = &singleClusterProvider{}
 
 func NewManagerProvider(cfg *config.StaticConfig) (ManagerProvider, error) {
 	m, err := NewManager(cfg)
@@ -44,13 +45,17 @@ func NewManagerProvider(cfg *config.StaticConfig) (ManagerProvider, error) {
 		return nil, err
 	}
 
-	switch resolveStrategy(cfg, m) {
+	strategy := resolveStrategy(cfg, m)
+	switch strategy {
 	case config.ClusterProviderKubeConfig:
 		return newKubeConfigClusterProvider(m)
-	case config.ClusterProviderInCluster:
-		return newInClusterProvider(m)
+	case config.ClusterProviderInCluster, config.ClusterProviderDisabled:
+		return newSingleClusterProvider(m, strategy)
 	default:
-		return nil, fmt.Errorf("invalid ClusterProviderStrategy '%s', must be 'kubeconfig' or 'in-cluster'", cfg.ClusterProviderStrategy)
+		return nil, fmt.Errorf(
+			"invalid ClusterProviderStrategy '%s', must be 'kubeconfig', 'in-cluster', or 'disabled'",
+			strategy,
+		)
 	}
 }
 
@@ -83,9 +88,14 @@ func newKubeConfigClusterProvider(m *Manager) (*kubeConfigClusterProvider, error
 	}, nil
 }
 
-func newInClusterProvider(m *Manager) (*inClusterProvider, error) {
-	return &inClusterProvider{
-		manager: m,
+func newSingleClusterProvider(m *Manager, strategy string) (*singleClusterProvider, error) {
+	if strategy == config.ClusterProviderInCluster && !m.IsInCluster() {
+		return nil, fmt.Errorf("server must be deployed in cluster for the in-cluster ClusterProviderStrategy")
+	}
+
+	return &singleClusterProvider{
+		manager:  m,
+		strategy: strategy,
 	}, nil
 }
 
@@ -141,32 +151,32 @@ func (k *kubeConfigClusterProvider) Close() {
 	m.Close()
 }
 
-func (i *inClusterProvider) GetTargets(ctx context.Context) ([]string, error) {
+func (s *singleClusterProvider) GetTargets(ctx context.Context) ([]string, error) {
 	return []string{""}, nil
 }
 
-func (i *inClusterProvider) GetManagerFor(ctx context.Context, target string) (*Manager, error) {
+func (s *singleClusterProvider) GetManagerFor(ctx context.Context, target string) (*Manager, error) {
 	if target != "" {
-		return nil, fmt.Errorf("unable to get manager for other context/cluster with in-cluster strategy")
+		return nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy", s.strategy)
 	}
 
-	return i.manager, nil
+	return s.manager, nil
 }
 
-func (i *inClusterProvider) GetDefaultTarget() string {
+func (s *singleClusterProvider) GetDefaultTarget() string {
 	return ""
 }
 
-func (i *inClusterProvider) GetTargetParameterName() string {
+func (s *singleClusterProvider) GetTargetParameterName() string {
 	return ""
 }
 
-func (i *inClusterProvider) WatchTargets(watch func() error) {
-	i.manager.WatchKubeConfig(watch)
+func (s *singleClusterProvider) WatchTargets(watch func() error) {
+	s.manager.WatchKubeConfig(watch)
 }
 
-func (i *inClusterProvider) Close() {
-	i.manager.Close()
+func (s *singleClusterProvider) Close() {
+	s.manager.Close()
 }
 
 func (m *Manager) newForContext(context string) (*Manager, error) {
