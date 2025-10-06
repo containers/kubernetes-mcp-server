@@ -286,7 +286,7 @@ func TestDisableMultiCluster(t *testing.T) {
 			t.Fatalf("Expected ClusterProviderStrategy kubeconfig, got %s %v", out, err)
 		}
 	})
-	t.Run("set with --disable-destructive", func(t *testing.T) {
+	t.Run("set with --disable-multi-cluster", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--disable-multi-cluster"})
