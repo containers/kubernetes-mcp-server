@@ -276,3 +276,24 @@ func TestStdioLogging(t *testing.T) {
 		assert.Containsf(t, out.String(), "Starting kubernetes-mcp-server", "Expected klog output, got %s", out.String())
 	})
 }
+
+func TestDisableMultiCluster(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - ClusterProviderStrategy: auto-detect (it is advisable to set this explicitly in your Config)") {
+			t.Fatalf("Expected ClusterProviderStrategy kubeconfig, got %s %v", out, err)
+		}
+	})
+	t.Run("set with --disable-destructive", func(t *testing.T) {
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--disable-multi-cluster"})
+		_ = rootCmd.Execute()
+		expected := `(?m)\" - ClusterProviderStrategy\: disabled\"`
+		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
+			t.Fatalf("Expected ClusterProviderStrategy %s, got %s %v", expected, out.String(), err)
+		}
+	})
+}
