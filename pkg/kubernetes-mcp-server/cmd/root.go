@@ -290,7 +290,7 @@ func (m *MCPServerOptions) Run() error {
 
 	strategy := m.StaticConfig.ClusterProviderStrategy
 	if strategy == "" {
-		strategy = "auto-detect (it is advisable to set this explicitly in your Config)"
+		strategy = "auto-detect (it is recommended to set this explicitly in your Config)"
 	}
 
 	klog.V(1).Infof(" - ClusterProviderStrategy: %s", strategy)

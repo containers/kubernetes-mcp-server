@@ -282,7 +282,7 @@ func TestDisableMultiCluster(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - ClusterProviderStrategy: auto-detect (it is advisable to set this explicitly in your Config)") {
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - ClusterProviderStrategy: auto-detect (it is recommended to set this explicitly in your Config)") {
 			t.Fatalf("Expected ClusterProviderStrategy kubeconfig, got %s %v", out, err)
 		}
 	})
