@@ -1,0 +1,29 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: keycloak
+  labels:
+    app: keycloak
+  annotations:
+    cert-manager.io/cluster-issuer: "selfsigned-ca-issuer"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - keycloak.127-0-0-1.sslip.io
+    secretName: keycloak-tls-cert
+  rules:
+  - host: keycloak.127-0-0-1.sslip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: keycloak
+            port:
+              number: 80

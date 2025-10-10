@@ -1,0 +1,20 @@
+# RBAC ClusterRoleBinding for mcp user with OIDC authentication
+#
+# IMPORTANT: This requires Kubernetes API server to be configured with OIDC:
+#   --oidc-issuer-url=https://keycloak.127-0-0-1.sslip.io/realms/openshift
+#   --oidc-username-claim=preferred_username
+#
+# Without OIDC configuration, this binding will not work.
+#
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-mcp-cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: https://keycloak.127-0-0-1.sslip.io/realms/openshift#mcp
