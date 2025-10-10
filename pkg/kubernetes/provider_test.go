@@ -43,7 +43,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderInCluster() {
 	}
 	s.Run("With no cluster_provider_strategy, returns single-cluster provider", func() {
 		cfg := test.Must(config.ReadToml([]byte{}))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().NoError(err, "Expected no error for in-cluster provider")
 		s.NotNil(provider, "Expected provider instance")
 		s.IsType(&singleClusterProvider{}, provider, "Expected singleClusterProvider type")
@@ -52,7 +52,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderInCluster() {
 		cfg := test.Must(config.ReadToml([]byte(`
 			cluster_provider_strategy = "in-cluster"
 		`)))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().NoError(err, "Expected no error for single-cluster strategy")
 		s.NotNil(provider, "Expected provider instance")
 		s.IsType(&singleClusterProvider{}, provider, "Expected singleClusterProvider type")
@@ -61,7 +61,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderInCluster() {
 		cfg := test.Must(config.ReadToml([]byte(`
 			cluster_provider_strategy = "kubeconfig"
 		`)))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().Error(err, "Expected error for kubeconfig strategy")
 		s.ErrorContains(err, "kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments")
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
@@ -70,7 +70,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderInCluster() {
 		cfg := test.Must(config.ReadToml([]byte(`
 			cluster_provider_strategy = "i-do-not-exist"
 		`)))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().Error(err, "Expected error for non-existent strategy")
 		s.ErrorContains(err, "no provider registered for strategy 'i-do-not-exist'")
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
@@ -85,7 +85,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderLocal() {
 		cfg := test.Must(config.ReadToml([]byte(`
 			kubeconfig = "` + kubeconfigPath + `"
 		`)))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().NoError(err, "Expected no error for kubeconfig provider")
 		s.NotNil(provider, "Expected provider instance")
 		s.IsType(&kubeConfigClusterProvider{}, provider, "Expected kubeConfigClusterProvider type")
@@ -95,7 +95,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderLocal() {
 			kubeconfig = "` + kubeconfigPath + `"
 			cluster_provider_strategy = "kubeconfig"
 		`)))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().NoError(err, "Expected no error for kubeconfig provider")
 		s.NotNil(provider, "Expected provider instance")
 		s.IsType(&kubeConfigClusterProvider{}, provider, "Expected kubeConfigClusterProvider type")
@@ -105,7 +105,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderLocal() {
 			kubeconfig = "` + kubeconfigPath + `"
 			cluster_provider_strategy = "in-cluster"
 		`)))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().Error(err, "Expected error for in-cluster strategy")
 		s.ErrorContains(err, "server must be deployed in cluster for the in-cluster ClusterProviderStrategy")
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
@@ -115,7 +115,7 @@ func (s *ProviderTestSuite) TestNewManagerProviderLocal() {
 			kubeconfig = "` + kubeconfigPath + `"
 			cluster_provider_strategy = "i-do-not-exist"
 		`)))
-		provider, err := NewManagerProvider(cfg)
+		provider, err := NewProvider(cfg)
 		s.Require().Error(err, "Expected error for non-existent strategy")
 		s.ErrorContains(err, "no provider registered for strategy 'i-do-not-exist'")
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
