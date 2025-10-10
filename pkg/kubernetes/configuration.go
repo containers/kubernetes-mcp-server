@@ -47,40 +47,8 @@ func resolveKubernetesConfigurations(kubernetes *Manager) error {
 	return err
 }
 
-func (m *Manager) IsInCluster() bool {
-	if m.staticConfig.KubeConfig != "" {
-		return false
-	}
-	cfg, err := InClusterConfig()
-	return err == nil && cfg != nil
-}
-
-func (m *Manager) configuredNamespace() string {
-	if ns, _, nsErr := m.clientCmdConfig.Namespace(); nsErr == nil {
-		return ns
-	}
-	return ""
-}
-
-func (m *Manager) NamespaceOrDefault(namespace string) string {
-	if namespace == "" {
-		return m.configuredNamespace()
-	}
-	return namespace
-}
-
 func (k *Kubernetes) NamespaceOrDefault(namespace string) string {
 	return k.manager.NamespaceOrDefault(namespace)
-}
-
-// ToRESTConfig returns the rest.Config object (genericclioptions.RESTClientGetter)
-func (m *Manager) ToRESTConfig() (*rest.Config, error) {
-	return m.cfg, nil
-}
-
-// ToRawKubeConfigLoader returns the clientcmd.ClientConfig object (genericclioptions.RESTClientGetter)
-func (m *Manager) ToRawKubeConfigLoader() clientcmd.ClientConfig {
-	return m.clientCmdConfig
 }
 
 // ConfigurationContextsDefault returns the current context name

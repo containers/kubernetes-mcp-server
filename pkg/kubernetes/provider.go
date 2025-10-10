@@ -11,16 +11,18 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type ManagerProvider interface {
+type Provider interface {
+	Openshift
+	TokenVerifier
 	GetTargets(ctx context.Context) ([]string, error)
-	GetManagerFor(ctx context.Context, target string) (*Manager, error)
+	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	GetDefaultTarget() string
 	GetTargetParameterName() string
 	WatchTargets(func() error)
 	Close()
 }
 
-func NewManagerProvider(cfg *config.StaticConfig) (ManagerProvider, error) {
+func NewProvider(cfg *config.StaticConfig) (Provider, error) {
 	m, err := NewManager(cfg)
 	if err != nil {
 		return nil, err
