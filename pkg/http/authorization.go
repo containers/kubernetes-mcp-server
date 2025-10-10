@@ -23,7 +23,7 @@ import (
 
 type KubernetesApiTokenVerifier interface {
 	// KubernetesApiVerifyToken TODO: clarify proper implementation
-	KubernetesApiVerifyToken(ctx context.Context, token, audience, cluster string) (*authenticationapiv1.UserInfo, []string, error)
+	KubernetesApiVerifyToken(ctx context.Context, cluster, token, audience string) (*authenticationapiv1.UserInfo, []string, error)
 	// GetTargetParameterName returns the parameter name used for target identification in MCP requests
 	GetTargetParameterName() string
 }
@@ -247,7 +247,7 @@ func (c *JWTClaims) ValidateWithProvider(ctx context.Context, audience string, p
 
 func (c *JWTClaims) ValidateWithKubernetesApi(ctx context.Context, audience, cluster string, verifier KubernetesApiTokenVerifier) error {
 	if verifier != nil {
-		_, _, err := verifier.KubernetesApiVerifyToken(ctx, c.Token, audience, cluster)
+		_, _, err := verifier.KubernetesApiVerifyToken(ctx, cluster, c.Token, audience)
 		if err != nil {
 			return fmt.Errorf("kubernetes API token validation error: %v", err)
 		}

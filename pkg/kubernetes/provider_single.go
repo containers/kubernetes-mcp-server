@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	authenticationv1api "k8s.io/api/authentication/v1"
 )
 
-// singleClusterProvider implements ManagerProvider for managing a single
+// singleClusterProvider implements Provider for managing a single
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
@@ -15,7 +16,7 @@ type singleClusterProvider struct {
 	manager  *Manager
 }
 
-var _ ManagerProvider = &singleClusterProvider{}
+var _ Provider = &singleClusterProvider{}
 
 func init() {
 	RegisterProvider(config.ClusterProviderInCluster, newSingleClusterProvider(config.ClusterProviderInCluster))
@@ -25,7 +26,7 @@ func init() {
 // newSingleClusterProvider creates a provider that manages a single cluster.
 // Validates that the manager is in-cluster when the in-cluster strategy is used.
 func newSingleClusterProvider(strategy string) ProviderFactory {
-	return func(m *Manager, cfg *config.StaticConfig) (ManagerProvider, error) {
+	return func(m *Manager, cfg *config.StaticConfig) (Provider, error) {
 		if strategy == config.ClusterProviderInCluster && !m.IsInCluster() {
 			return nil, fmt.Errorf("server must be deployed in cluster for the in-cluster ClusterProviderStrategy")
 		}
@@ -37,30 +38,41 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 	}
 }
 
-func (s *singleClusterProvider) GetTargets(ctx context.Context) ([]string, error) {
+func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
+	return p.manager.IsOpenShift(ctx)
+}
+
+func (p *singleClusterProvider) VerifyToken(ctx context.Context, target, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
+	if target != "" {
+		return nil, nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy", p.strategy)
+	}
+	return p.manager.VerifyToken(ctx, token, audience)
+}
+
+func (p *singleClusterProvider) GetTargets(ctx context.Context) ([]string, error) {
 	return []string{""}, nil
 }
 
-func (s *singleClusterProvider) GetManagerFor(ctx context.Context, target string) (*Manager, error) {
+func (p *singleClusterProvider) GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error) {
 	if target != "" {
-		return nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy", s.strategy)
+		return nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy", p.strategy)
 	}
 
-	return s.manager, nil
+	return p.manager.Derived(ctx)
 }
 
-func (s *singleClusterProvider) GetDefaultTarget() string {
+func (p *singleClusterProvider) GetDefaultTarget() string {
 	return ""
 }
 
-func (s *singleClusterProvider) GetTargetParameterName() string {
+func (p *singleClusterProvider) GetTargetParameterName() string {
 	return ""
 }
 
-func (s *singleClusterProvider) WatchTargets(watch func() error) {
-	s.manager.WatchKubeConfig(watch)
+func (p *singleClusterProvider) WatchTargets(watch func() error) {
+	p.manager.WatchKubeConfig(watch)
 }
 
-func (s *singleClusterProvider) Close() {
-	s.manager.Close()
+func (p *singleClusterProvider) Close() {
+	p.manager.Close()
 }

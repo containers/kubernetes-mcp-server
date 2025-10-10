@@ -67,7 +67,7 @@ type Server struct {
 	configuration *Configuration
 	server        *server.MCPServer
 	enabledTools  []string
-	p             internalk8s.ManagerProvider
+	p             internalk8s.Provider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
@@ -101,7 +101,7 @@ func NewServer(configuration Configuration) (*Server, error) {
 
 func (s *Server) reloadKubernetesClusterProvider() error {
 	ctx := context.Background()
-	p, err := internalk8s.NewManagerProvider(s.configuration.StaticConfig)
+	p, err := internalk8s.NewProvider(s.configuration.StaticConfig)
 	if err != nil {
 		return err
 	}
@@ -112,11 +112,6 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 	}
 
 	s.p = p
-
-	k, err := s.p.GetManagerFor(ctx, s.p.GetDefaultTarget())
-	if err != nil {
-		return err
-	}
 
 	targets, err := p.GetTargets(ctx)
 	if err != nil {
@@ -136,7 +131,7 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 
 	applicableTools := make([]api.ServerTool, 0)
 	for _, toolset := range s.configuration.Toolsets() {
-		for _, tool := range toolset.GetTools(k) {
+		for _, tool := range toolset.GetTools(p) {
 			tool := mutator(tool)
 			if !filter(tool) {
 				continue
@@ -182,23 +177,11 @@ func (s *Server) ServeHTTP(httpServer *http.Server) *server.StreamableHTTPServer
 
 // KubernetesApiVerifyToken verifies the given token with the audience by
 // sending an TokenReview request to API Server for the specified cluster.
-func (s *Server) KubernetesApiVerifyToken(ctx context.Context, token string, audience string, cluster string) (*authenticationapiv1.UserInfo, []string, error) {
+func (s *Server) KubernetesApiVerifyToken(ctx context.Context, cluster, token, audience string) (*authenticationapiv1.UserInfo, []string, error) {
 	if s.p == nil {
 		return nil, nil, fmt.Errorf("kubernetes cluster provider is not initialized")
 	}
-
-	// Use provided cluster or default
-	if cluster == "" {
-		cluster = s.p.GetDefaultTarget()
-	}
-
-	// Get the cluster manager for the specified cluster
-	m, err := s.p.GetManagerFor(ctx, cluster)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return m.VerifyToken(ctx, token, audience)
+	return s.p.VerifyToken(ctx, cluster, token, audience)
 }
 
 // GetTargetParameterName returns the parameter name used for target identification in MCP requests
