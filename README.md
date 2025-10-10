@@ -209,6 +209,8 @@ The following sets of tools are available (all on by default):
 
 ### Tools
 
+In case multi-cluster support is enabled (default) and you have access to multiple clusters, all applicable tools will include an additional `context` argument to specify the Kubernetes context (cluster) to use for that operation.
+
 <!-- AVAILABLE-TOOLSETS-TOOLS-START -->
 
 <details>
