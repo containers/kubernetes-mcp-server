@@ -25,19 +25,24 @@ type WellKnown struct {
 	authorizationUrl                 string
 	scopesSupported                  []string
 	disableDynamicClientRegistration bool
+	httpClient                       *http.Client
 }
 
 var _ http.Handler = &WellKnown{}
 
-func WellKnownHandler(staticConfig *config.StaticConfig) http.Handler {
+func WellKnownHandler(staticConfig *config.StaticConfig, httpClient *http.Client) http.Handler {
 	authorizationUrl := staticConfig.AuthorizationURL
 	if authorizationUrl != "" && strings.HasSuffix("authorizationUrl", "/") {
 		authorizationUrl = strings.TrimSuffix(authorizationUrl, "/")
+	}
+	if httpClient == nil {
+		httpClient = http.DefaultClient
 	}
 	return &WellKnown{
 		authorizationUrl:                 authorizationUrl,
 		disableDynamicClientRegistration: staticConfig.DisableDynamicClientRegistration,
 		scopesSupported:                  staticConfig.OAuthScopes,
+		httpClient:                       httpClient,
 	}
 }
 
@@ -51,7 +56,7 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		http.Error(writer, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	resp, err := http.DefaultClient.Do(req.WithContext(request.Context()))
+	resp, err := w.httpClient.Do(req.WithContext(request.Context()))
 	if err != nil {
 		http.Error(writer, "Failed to perform request: "+err.Error(), http.StatusInternalServerError)
 		return
