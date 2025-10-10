@@ -36,6 +36,8 @@ spec:
           value: "true"
         - name: KC_HEALTH_ENABLED
           value: "true"
+        - name: KC_PROXY_HEADERS
+          value: "xforwarded"
         ports:
         - name: http
           containerPort: 8080
