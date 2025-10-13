@@ -94,8 +94,8 @@ func (p *kubeConfigClusterProvider) VerifyToken(ctx context.Context, context, to
 
 func (p *kubeConfigClusterProvider) GetTargets(ctx context.Context) ([]string, error) {
 	contextNames := make([]string, 0, len(p.managers))
-	for cluster := range p.managers {
-		contextNames = append(contextNames, cluster)
+	for contextName := range p.managers {
+		contextNames = append(contextNames, contextName)
 	}
 
 	return contextNames, nil
