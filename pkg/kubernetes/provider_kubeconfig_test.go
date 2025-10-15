@@ -18,6 +18,8 @@ type ProviderKubeconfigTestSuite struct {
 }
 
 func (s *ProviderKubeconfigTestSuite) SetupTest() {
+	// Kubeconfig provider is used when the multi-cluster feature is enabled with the kubeconfig strategy.
+	// For this test suite we simulate a kubeconfig with multiple contexts.
 	s.mockServer = test.NewMockServer()
 	kubeconfig := s.mockServer.Kubeconfig()
 	for i := 0; i < 10; i++ {
@@ -84,7 +86,7 @@ func (s *ProviderKubeconfigTestSuite) TestVerifyToken() {
 		s.Len(audiences, 1, "Expected audiences from VerifyToken with empty target")
 		s.Containsf(audiences, "the-audience", "Expected audience the-audience in %v", audiences)
 	})
-	s.Run("VerifyToken returns UserInfo for empty context (default context", func() {
+	s.Run("VerifyToken returns UserInfo for empty context (default context)", func() {
 		userInfo, audiences, err := s.provider.VerifyToken(s.T().Context(), "", "the-token", "the-audience")
 		s.Require().NoError(err, "Expected no error from VerifyToken with empty target")
 		s.Require().NotNil(userInfo, "Expected UserInfo from VerifyToken with empty target")
