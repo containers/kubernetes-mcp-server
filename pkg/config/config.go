@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -59,8 +61,13 @@ type StaticConfig struct {
 	// If set to "kubeconfig", the clusters will be loaded from those in the kubeconfig.
 	// If set to "in-cluster", the server will use the in cluster config
 	ClusterProviderStrategy string `toml:"cluster_provider_strategy,omitempty"`
-	// ClusterContexts is which context should be used for each cluster
-	ClusterContexts map[string]string `toml:"cluster_contexts"`
+
+	// ClusterProvider-specific configurations
+	// This map holds raw TOML primitives that will be parsed by registered provider parsers
+	ClusterProviderConfigs map[string]toml.Primitive `toml:"cluster_provider_configs,omitempty"`
+
+	// Internal: parsed provider configs (not exposed to TOML package)
+	parsedClusterProviderConfigs map[string]ProviderConfig
 }
 
 func Default() *StaticConfig {
@@ -88,8 +95,46 @@ func Read(configPath string) (*StaticConfig, error) {
 // ReadToml reads the toml data and returns the StaticConfig.
 func ReadToml(configData []byte) (*StaticConfig, error) {
 	config := Default()
-	if err := toml.Unmarshal(configData, config); err != nil {
+	md, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(config)
+	if err != nil {
 		return nil, err
 	}
+
+	if err := config.parseClusterProviderConfigs(md); err != nil {
+		return nil, err
+	}
+
 	return config, nil
+}
+
+func (c *StaticConfig) GetProviderConfig(strategy string) (ProviderConfig, bool) {
+	config, ok := c.parsedClusterProviderConfigs[strategy]
+
+	return config, ok
+}
+
+func (c *StaticConfig) parseClusterProviderConfigs(md toml.MetaData) error {
+	if c.parsedClusterProviderConfigs == nil {
+		c.parsedClusterProviderConfigs = make(map[string]ProviderConfig, len(c.ClusterProviderConfigs))
+	}
+
+	for strategy, primitive := range c.ClusterProviderConfigs {
+		parser, ok := getProviderConfigParser(strategy)
+		if !ok {
+			continue
+		}
+
+		providerConfig, err := parser(primitive, md)
+		if err != nil {
+			return fmt.Errorf("failed to parse config for ClusterProvider '%s': %w", strategy, err)
+		}
+
+		if err := providerConfig.Validate(); err != nil {
+			return fmt.Errorf("invalid config file for ClusterProvider '%s': %w", strategy, err)
+		}
+
+		c.parsedClusterProviderConfigs[strategy] = providerConfig
+	}
+
+	return nil
 }
