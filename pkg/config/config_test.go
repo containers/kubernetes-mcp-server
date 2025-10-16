@@ -11,8 +11,23 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ConfigSuite struct {
+type BaseConfigSuite struct {
 	suite.Suite
+}
+
+func (s *BaseConfigSuite) writeConfig(content string) string {
+	s.T().Helper()
+	tempDir := s.T().TempDir()
+	path := filepath.Join(tempDir, "config.toml")
+	err := os.WriteFile(path, []byte(content), 0644)
+	if err != nil {
+		s.T().Fatalf("Failed to write config file %s: %v", path, err)
+	}
+	return path
+}
+
+type ConfigSuite struct {
+	BaseConfigSuite
 }
 
 func (s *ConfigSuite) TestReadConfigMissingFile() {
@@ -157,17 +172,6 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 			s.Containsf(config.Toolsets, toolset, "Expected toolsets to contain %s", toolset)
 		}
 	})
-}
-
-func (s *ConfigSuite) writeConfig(content string) string {
-	s.T().Helper()
-	tempDir := s.T().TempDir()
-	path := filepath.Join(tempDir, "config.toml")
-	err := os.WriteFile(path, []byte(content), 0644)
-	if err != nil {
-		s.T().Fatalf("Failed to write config file %s: %v", path, err)
-	}
-	return path
 }
 
 func TestConfig(t *testing.T) {
