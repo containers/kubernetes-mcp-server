@@ -30,7 +30,7 @@ func init() {
 // via kubeconfig contexts. Returns an error if the manager is in-cluster mode.
 func newKubeConfigClusterProvider(m *Manager, cfg *config.StaticConfig) (Provider, error) {
 	// Handle in-cluster mode
-	if m.IsInCluster() {
+	if IsInCluster(cfg) {
 		return nil, fmt.Errorf("kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments")
 	}
 
@@ -65,11 +65,6 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 
 	baseManager := p.managers[p.defaultContext]
 
-	if baseManager.IsInCluster() {
-		// In cluster mode, so context switching is not applicable
-		return baseManager, nil
-	}
-
 	m, err := baseManager.newForContext(context)
 	if err != nil {
 		return nil, err
@@ -92,7 +87,7 @@ func (p *kubeConfigClusterProvider) VerifyToken(ctx context.Context, context, to
 	return m.VerifyToken(ctx, token, audience)
 }
 
-func (p *kubeConfigClusterProvider) GetTargets(ctx context.Context) ([]string, error) {
+func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	contextNames := make([]string, 0, len(p.managers))
 	for contextName := range p.managers {
 		contextNames = append(contextNames, contextName)

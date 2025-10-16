@@ -27,7 +27,10 @@ func init() {
 // Validates that the manager is in-cluster when the in-cluster strategy is used.
 func newSingleClusterProvider(strategy string) ProviderFactory {
 	return func(m *Manager, cfg *config.StaticConfig) (Provider, error) {
-		if strategy == config.ClusterProviderInCluster && !m.IsInCluster() {
+		if cfg != nil && cfg.KubeConfig != "" && strategy == config.ClusterProviderInCluster {
+			return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy", cfg.KubeConfig)
+		}
+		if strategy == config.ClusterProviderInCluster && !IsInCluster(cfg) {
 			return nil, fmt.Errorf("server must be deployed in cluster for the in-cluster ClusterProviderStrategy")
 		}
 
@@ -49,7 +52,7 @@ func (p *singleClusterProvider) VerifyToken(ctx context.Context, target, token, 
 	return p.manager.VerifyToken(ctx, token, audience)
 }
 
-func (p *singleClusterProvider) GetTargets(ctx context.Context) ([]string, error) {
+func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	return []string{""}, nil
 }
 

@@ -28,14 +28,14 @@ type Provider interface {
 }
 
 func NewProvider(cfg *config.StaticConfig) (Provider, error) {
-	m, err := NewManager(cfg)
+	strategy := resolveStrategy(cfg)
+
+	factory, err := getProviderFactory(strategy)
 	if err != nil {
 		return nil, err
 	}
 
-	strategy := resolveStrategy(cfg, m)
-
-	factory, err := getProviderFactory(strategy)
+	m, err := NewManager(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +92,16 @@ func (m *Manager) newForContext(context string) (*Manager, error) {
 	return manager, nil
 }
 
-func resolveStrategy(cfg *config.StaticConfig, m *Manager) string {
+func resolveStrategy(cfg *config.StaticConfig) string {
 	if cfg.ClusterProviderStrategy != "" {
 		return cfg.ClusterProviderStrategy
 	}
 
-	if m.IsInCluster() {
+	if cfg.KubeConfig != "" {
+		return config.ClusterProviderKubeConfig
+	}
+
+	if _, inClusterConfigErr := InClusterConfig(); inClusterConfigErr == nil {
 		return config.ClusterProviderInCluster
 	}
 

@@ -25,6 +25,7 @@ import (
 type Manager struct {
 	cfg                     *rest.Config
 	clientCmdConfig         clientcmd.ClientConfig
+	inCluster               bool
 	discoveryClient         discovery.CachedDiscoveryInterface
 	accessControlClientSet  *AccessControlClientset
 	accessControlRESTMapper *AccessControlRESTMapper
@@ -41,14 +42,30 @@ func NewManager(config *config.StaticConfig) (*Manager, error) {
 	k8s := &Manager{
 		staticConfig: config,
 	}
-	if err := resolveKubernetesConfigurations(k8s); err != nil {
-		return nil, err
+	pathOptions := clientcmd.NewDefaultPathOptions()
+	if k8s.staticConfig.KubeConfig != "" {
+		pathOptions.LoadingRules.ExplicitPath = k8s.staticConfig.KubeConfig
+	}
+	k8s.clientCmdConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		pathOptions.LoadingRules,
+		&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: ""}})
+	var err error
+	if IsInCluster(k8s.staticConfig) {
+		k8s.cfg, err = InClusterConfig()
+		k8s.inCluster = true
+	} else {
+		k8s.cfg, err = k8s.clientCmdConfig.ClientConfig()
+	}
+	if err != nil || k8s.cfg == nil {
+		return nil, fmt.Errorf("failed to create kubernetes rest config: %v", err)
+	}
+	if k8s.cfg.UserAgent == "" {
+		k8s.cfg.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
 	//k8s.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
-	var err error
 	k8s.accessControlClientSet, err = NewAccessControlClientset(k8s.cfg, k8s.staticConfig)
 	if err != nil {
 		return nil, err
@@ -105,21 +122,6 @@ func (m *Manager) Close() {
 	if m.CloseWatchKubeConfig != nil {
 		_ = m.CloseWatchKubeConfig()
 	}
-}
-
-func (m *Manager) GetAPIServerHost() string {
-	if m.cfg == nil {
-		return ""
-	}
-	return m.cfg.Host
-}
-
-func (m *Manager) IsInCluster() bool {
-	if m.staticConfig.KubeConfig != "" {
-		return false
-	}
-	cfg, err := InClusterConfig()
-	return err == nil && cfg != nil
 }
 
 func (m *Manager) configuredNamespace() string {
@@ -221,11 +223,14 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return &Kubernetes{manager: m}, nil
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
-	derived := &Kubernetes{manager: &Manager{
-		clientCmdConfig: clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil),
-		cfg:             derivedCfg,
-		staticConfig:    m.staticConfig,
-	}}
+	derived := &Kubernetes{
+		manager: &Manager{
+			clientCmdConfig: clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil),
+			inCluster:       m.inCluster,
+			cfg:             derivedCfg,
+			staticConfig:    m.staticConfig,
+		},
+	}
 	derived.manager.accessControlClientSet, err = NewAccessControlClientset(derived.manager.cfg, derived.manager.staticConfig)
 	if err != nil {
 		if m.staticConfig.RequireOAuth {

@@ -1,9 +1,9 @@
 package kubernetes
 
 import (
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/clientcmd/api/latest"
 )
@@ -22,29 +22,13 @@ var InClusterConfig = func() (*rest.Config, error) {
 	return inClusterConfig, err
 }
 
-// resolveKubernetesConfigurations resolves the required kubernetes configurations and sets them in the Kubernetes struct
-func resolveKubernetesConfigurations(kubernetes *Manager) error {
-	// Always set clientCmdConfig
-	pathOptions := clientcmd.NewDefaultPathOptions()
-	if kubernetes.staticConfig.KubeConfig != "" {
-		pathOptions.LoadingRules.ExplicitPath = kubernetes.staticConfig.KubeConfig
+func IsInCluster(cfg *config.StaticConfig) bool {
+	// Even if running in-cluster, if a kubeconfig is provided, we consider it as out-of-cluster
+	if cfg != nil && cfg.KubeConfig != "" {
+		return false
 	}
-	kubernetes.clientCmdConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		pathOptions.LoadingRules,
-		&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: ""}})
-	var err error
-	if kubernetes.IsInCluster() {
-		kubernetes.cfg, err = InClusterConfig()
-		if err == nil && kubernetes.cfg != nil {
-			return nil
-		}
-	}
-	// Out of cluster
-	kubernetes.cfg, err = kubernetes.clientCmdConfig.ClientConfig()
-	if kubernetes.cfg != nil && kubernetes.cfg.UserAgent == "" {
-		kubernetes.cfg.UserAgent = rest.DefaultKubernetesUserAgent()
-	}
-	return err
+	restConfig, err := InClusterConfig()
+	return err == nil && restConfig != nil
 }
 
 func (k *Kubernetes) NamespaceOrDefault(namespace string) string {
@@ -54,7 +38,7 @@ func (k *Kubernetes) NamespaceOrDefault(namespace string) string {
 // ConfigurationContextsDefault returns the current context name
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
-	if k.manager.IsInCluster() {
+	if k.manager.inCluster {
 		return inClusterKubeConfigDefaultContext, nil
 	}
 	cfg, err := k.manager.clientCmdConfig.RawConfig()
@@ -67,7 +51,7 @@ func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
 // ConfigurationContextsList returns the list of available context names
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
-	if k.manager.IsInCluster() {
+	if k.manager.inCluster {
 		return map[string]string{inClusterKubeConfigDefaultContext: ""}, nil
 	}
 	cfg, err := k.manager.clientCmdConfig.RawConfig()
@@ -93,7 +77,7 @@ func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
 func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
 	var cfg clientcmdapi.Config
 	var err error
-	if k.manager.IsInCluster() {
+	if k.manager.inCluster {
 		cfg = *clientcmdapi.NewConfig()
 		cfg.Clusters["cluster"] = &clientcmdapi.Cluster{
 			Server:                k.manager.cfg.Host,
