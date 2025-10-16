@@ -47,7 +47,7 @@ users:
 			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
 		`)))
 		s.Run("without authorization header returns original manager", func() {
-			testManager, err := NewManager(testStaticConfig)
+			testManager, err := NewManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 			s.T().Cleanup(testManager.Close)
 
@@ -58,7 +58,7 @@ users:
 		})
 
 		s.Run("with invalid authorization header returns original manager", func() {
-			testManager, err := NewManager(testStaticConfig)
+			testManager, err := NewManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 			s.T().Cleanup(testManager.Close)
 
@@ -70,7 +70,7 @@ users:
 		})
 
 		s.Run("with valid bearer token creates derived manager with correct configuration", func() {
-			testManager, err := NewManager(testStaticConfig)
+			testManager, err := NewManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 			s.T().Cleanup(testManager.Close)
 
@@ -138,7 +138,7 @@ users:
 		`)))
 
 		s.Run("with no authorization header returns oauth token required error", func() {
-			testManager, err := NewManager(testStaticConfig)
+			testManager, err := NewManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 			s.T().Cleanup(testManager.Close)
 
@@ -149,7 +149,7 @@ users:
 		})
 
 		s.Run("with invalid authorization header returns oauth token required error", func() {
-			testManager, err := NewManager(testStaticConfig)
+			testManager, err := NewManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 			s.T().Cleanup(testManager.Close)
 
@@ -161,7 +161,7 @@ users:
 		})
 
 		s.Run("with valid bearer token creates derived manager", func() {
-			testManager, err := NewManager(testStaticConfig)
+			testManager, err := NewManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 			s.T().Cleanup(testManager.Close)
 

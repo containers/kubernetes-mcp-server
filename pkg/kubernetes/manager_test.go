@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/rest"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 type ManagerTestSuite struct {
@@ -38,7 +39,7 @@ func (s *ManagerTestSuite) TestNewManagerInCluster() {
 		return &rest.Config{}, nil
 	}
 	s.Run("with default StaticConfig (empty kubeconfig)", func() {
-		manager, err := NewManager(&config.StaticConfig{})
+		manager, err := NewManager(&config.StaticConfig{}, "")
 		s.Require().NoError(err)
 		s.Require().NotNil(manager)
 		s.Run("behaves as in cluster", func() {
@@ -51,7 +52,7 @@ func (s *ManagerTestSuite) TestNewManagerInCluster() {
 	s.Run("with explicit kubeconfig", func() {
 		manager, err := NewManager(&config.StaticConfig{
 			KubeConfig: s.mockServer.KubeconfigFile(s.T()),
-		})
+		}, "")
 		s.Require().NoError(err)
 		s.Require().NotNil(manager)
 		s.Run("behaves as NOT in cluster", func() {
@@ -67,7 +68,7 @@ func (s *ManagerTestSuite) TestNewManagerLocal() {
 	s.Run("with valid kubeconfig in env", func() {
 		kubeconfig := s.mockServer.KubeconfigFile(s.T())
 		s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfig))
-		manager, err := NewManager(&config.StaticConfig{})
+		manager, err := NewManager(&config.StaticConfig{}, "")
 		s.Require().NoError(err)
 		s.Require().NotNil(manager)
 		s.Run("behaves as NOT in cluster", func() {
@@ -89,7 +90,7 @@ func (s *ManagerTestSuite) TestNewManagerLocal() {
 		kubeconfigExplicit := s.mockServer.KubeconfigFile(s.T())
 		manager, err := NewManager(&config.StaticConfig{
 			KubeConfig: kubeconfigExplicit,
-		})
+		}, "")
 		s.Require().NoError(err)
 		s.Require().NotNil(manager)
 		s.Run("behaves as NOT in cluster", func() {
@@ -103,9 +104,41 @@ func (s *ManagerTestSuite) TestNewManagerLocal() {
 			s.Equal(s.mockServer.Config().Host, manager.cfg.Host, "expected rest config host to match mock server")
 		})
 	})
+	s.Run("with valid kubeconfig in env and explicit kubeconfig context (valid)", func() {
+		kubeconfig := s.mockServer.Kubeconfig()
+		kubeconfig.Contexts["not-the-mock-server"] = clientcmdapi.NewContext()
+		kubeconfig.Contexts["not-the-mock-server"].Cluster = "not-the-mock-server"
+		kubeconfig.Clusters["not-the-mock-server"] = clientcmdapi.NewCluster()
+		kubeconfig.Clusters["not-the-mock-server"].Server = "https://not-the-mock-server:6443" // REST configuration should point to mock server, not this
+		kubeconfig.CurrentContext = "not-the-mock-server"
+		kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
+		s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
+		manager, err := NewManager(&config.StaticConfig{}, "fake-context") // fake-context is the one mock-server serves
+		s.Require().NoError(err)
+		s.Require().NotNil(manager)
+		s.Run("behaves as NOT in cluster", func() {
+			s.False(manager.inCluster, "expected not in cluster, got in cluster")
+		})
+		s.Run("loads correct config", func() {
+			s.Contains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfigFile, "expected kubeconfig path to match")
+		})
+		s.Run("rest config host points to mock server", func() {
+			s.Equal(s.mockServer.Config().Host, manager.cfg.Host, "expected rest config host to match mock server")
+		})
+	})
+	s.Run("with valid kubeconfig in env and explicit kubeconfig context (invalid)", func() {
+		kubeconfigInEnv := s.mockServer.KubeconfigFile(s.T())
+		s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigInEnv))
+		manager, err := NewManager(&config.StaticConfig{}, "i-do-not-exist")
+		s.Run("returns error", func() {
+			s.Error(err)
+			s.Nil(manager)
+			s.ErrorContains(err, `failed to create kubernetes rest config: context "i-do-not-exist" does not exist`)
+		})
+	})
 	s.Run("with invalid path kubeconfig in env", func() {
 		s.Require().NoError(os.Setenv("KUBECONFIG", "i-dont-exist"))
-		manager, err := NewManager(&config.StaticConfig{})
+		manager, err := NewManager(&config.StaticConfig{}, "")
 		s.Run("returns error", func() {
 			s.Error(err)
 			s.Nil(manager)
@@ -116,7 +149,7 @@ func (s *ManagerTestSuite) TestNewManagerLocal() {
 		kubeconfigPath := filepath.Join(s.T().TempDir(), "config")
 		s.Require().NoError(os.WriteFile(kubeconfigPath, []byte(""), 0644))
 		s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigPath))
-		manager, err := NewManager(&config.StaticConfig{})
+		manager, err := NewManager(&config.StaticConfig{}, "")
 		s.Run("returns error", func() {
 			s.Error(err)
 			s.Nil(manager)

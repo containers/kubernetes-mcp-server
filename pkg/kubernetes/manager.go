@@ -38,7 +38,7 @@ type Manager struct {
 var _ helm.Kubernetes = (*Manager)(nil)
 var _ Openshift = (*Manager)(nil)
 
-func NewManager(config *config.StaticConfig) (*Manager, error) {
+func NewManager(config *config.StaticConfig, kubeconfigContext string) (*Manager, error) {
 	k8s := &Manager{
 		staticConfig: config,
 	}
@@ -48,7 +48,10 @@ func NewManager(config *config.StaticConfig) (*Manager, error) {
 	}
 	k8s.clientCmdConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		pathOptions.LoadingRules,
-		&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: ""}})
+		&clientcmd.ConfigOverrides{
+			ClusterInfo:    clientcmdapi.Cluster{Server: ""},
+			CurrentContext: kubeconfigContext,
+		})
 	var err error
 	if IsInCluster(k8s.staticConfig) {
 		k8s.cfg, err = InClusterConfig()

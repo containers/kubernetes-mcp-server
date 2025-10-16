@@ -65,7 +65,7 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 
 	baseManager := p.managers[p.defaultContext]
 
-	m, err := baseManager.newForContext(context)
+	m, err := NewManager(baseManager.staticConfig, context)
 	if err != nil {
 		return nil, err
 	}
