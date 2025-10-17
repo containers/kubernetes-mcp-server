@@ -30,12 +30,7 @@ func NewProvider(cfg *config.StaticConfig) (Provider, error) {
 		return nil, err
 	}
 
-	m, err := NewManager(cfg, "")
-	if err != nil {
-		return nil, err
-	}
-
-	return factory(m, cfg)
+	return factory(cfg)
 }
 
 func resolveStrategy(cfg *config.StaticConfig) string {

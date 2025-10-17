@@ -38,9 +38,6 @@ func (k *Kubernetes) NamespaceOrDefault(namespace string) string {
 // ConfigurationContextsDefault returns the current context name
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
-	if k.manager.inCluster {
-		return inClusterKubeConfigDefaultContext, nil
-	}
 	cfg, err := k.manager.clientCmdConfig.RawConfig()
 	if err != nil {
 		return "", err
@@ -51,9 +48,6 @@ func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
 // ConfigurationContextsList returns the list of available context names
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
-	if k.manager.inCluster {
-		return map[string]string{inClusterKubeConfigDefaultContext: ""}, nil
-	}
 	cfg, err := k.manager.clientCmdConfig.RawConfig()
 	if err != nil {
 		return nil, err
@@ -77,21 +71,7 @@ func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
 func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
 	var cfg clientcmdapi.Config
 	var err error
-	if k.manager.inCluster {
-		cfg = *clientcmdapi.NewConfig()
-		cfg.Clusters["cluster"] = &clientcmdapi.Cluster{
-			Server:                k.manager.cfg.Host,
-			InsecureSkipTLSVerify: k.manager.cfg.Insecure,
-		}
-		cfg.AuthInfos["user"] = &clientcmdapi.AuthInfo{
-			Token: k.manager.cfg.BearerToken,
-		}
-		cfg.Contexts[inClusterKubeConfigDefaultContext] = &clientcmdapi.Context{
-			Cluster:  "cluster",
-			AuthInfo: "user",
-		}
-		cfg.CurrentContext = inClusterKubeConfigDefaultContext
-	} else if cfg, err = k.manager.clientCmdConfig.RawConfig(); err != nil {
+	if cfg, err = k.manager.clientCmdConfig.RawConfig(); err != nil {
 		return nil, err
 	}
 	if minify {

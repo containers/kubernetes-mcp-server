@@ -25,7 +25,6 @@ import (
 type Manager struct {
 	cfg                     *rest.Config
 	clientCmdConfig         clientcmd.ClientConfig
-	inCluster               bool
 	discoveryClient         discovery.CachedDiscoveryInterface
 	accessControlClientSet  *AccessControlClientset
 	accessControlRESTMapper *AccessControlRESTMapper
@@ -38,33 +37,77 @@ type Manager struct {
 var _ helm.Kubernetes = (*Manager)(nil)
 var _ Openshift = (*Manager)(nil)
 
-func NewManager(config *config.StaticConfig, kubeconfigContext string) (*Manager, error) {
-	k8s := &Manager{
-		staticConfig: config,
+var (
+	ErrorKubeconfigInClusterNotAllowed = errors.New("kubeconfig manager cannot be used in in-cluster deployments")
+	ErrorInClusterNotInCluster         = errors.New("in-cluster manager cannot be used outside of a cluster")
+)
+
+func NewKubeconfigManager(config *config.StaticConfig, kubeconfigContext string) (*Manager, error) {
+	if IsInCluster(config) {
+		return nil, ErrorKubeconfigInClusterNotAllowed
 	}
+
 	pathOptions := clientcmd.NewDefaultPathOptions()
-	if k8s.staticConfig.KubeConfig != "" {
-		pathOptions.LoadingRules.ExplicitPath = k8s.staticConfig.KubeConfig
+	if config.KubeConfig != "" {
+		pathOptions.LoadingRules.ExplicitPath = config.KubeConfig
 	}
-	k8s.clientCmdConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+	clientCmdConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		pathOptions.LoadingRules,
 		&clientcmd.ConfigOverrides{
 			ClusterInfo:    clientcmdapi.Cluster{Server: ""},
 			CurrentContext: kubeconfigContext,
 		})
-	var err error
-	if IsInCluster(k8s.staticConfig) {
-		k8s.cfg, err = InClusterConfig()
-		k8s.inCluster = true
-	} else {
-		k8s.cfg, err = k8s.clientCmdConfig.ClientConfig()
+
+	restConfig, err := clientCmdConfig.ClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %v", err)
 	}
-	if err != nil || k8s.cfg == nil {
-		return nil, fmt.Errorf("failed to create kubernetes rest config: %v", err)
+
+	return newManager(config, restConfig, clientCmdConfig)
+}
+
+func NewInClusterManager(config *config.StaticConfig) (*Manager, error) {
+	if config.KubeConfig != "" {
+		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %v", config.KubeConfig, ErrorKubeconfigInClusterNotAllowed)
+	}
+
+	if !IsInCluster(config) {
+		return nil, ErrorInClusterNotInCluster
+	}
+
+	restConfig, err := InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create in-cluster kubernetes rest config: %v", err)
+	}
+
+	// Create a dummy kubeconfig clientcmdapi.Config for in-cluster config to be used in places where clientcmd.ClientConfig is required
+	clientCmdConfig := clientcmdapi.NewConfig()
+	clientCmdConfig.Clusters["cluster"] = &clientcmdapi.Cluster{
+		Server:                restConfig.Host,
+		InsecureSkipTLSVerify: restConfig.Insecure,
+	}
+	clientCmdConfig.AuthInfos["user"] = &clientcmdapi.AuthInfo{
+		Token: restConfig.BearerToken,
+	}
+	clientCmdConfig.Contexts[inClusterKubeConfigDefaultContext] = &clientcmdapi.Context{
+		Cluster:  "cluster",
+		AuthInfo: "user",
+	}
+	clientCmdConfig.CurrentContext = inClusterKubeConfigDefaultContext
+
+	return newManager(config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
+}
+
+func newManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
+	k8s := &Manager{
+		staticConfig:    config,
+		cfg:             restConfig,
+		clientCmdConfig: clientCmdConfig,
 	}
 	if k8s.cfg.UserAgent == "" {
 		k8s.cfg.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
+	var err error
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
 	//k8s.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
@@ -229,7 +272,6 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	derived := &Kubernetes{
 		manager: &Manager{
 			clientCmdConfig: clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil),
-			inCluster:       m.inCluster,
 			cfg:             derivedCfg,
 			staticConfig:    m.staticConfig,
 		},
