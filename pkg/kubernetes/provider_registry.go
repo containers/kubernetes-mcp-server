@@ -10,7 +10,7 @@ import (
 // ProviderFactory creates a new Provider instance for a given strategy.
 // Implementations should validate that the Manager is compatible with their strategy
 // (e.g., kubeconfig provider should reject in-cluster managers).
-type ProviderFactory func(m *Manager, cfg *config.StaticConfig) (Provider, error)
+type ProviderFactory func(cfg *config.StaticConfig) (Provider, error)
 
 var providerFactories = make(map[string]ProviderFactory)
 

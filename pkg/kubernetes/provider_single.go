@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -26,12 +27,23 @@ func init() {
 // newSingleClusterProvider creates a provider that manages a single cluster.
 // Validates that the manager is in-cluster when the in-cluster strategy is used.
 func newSingleClusterProvider(strategy string) ProviderFactory {
-	return func(m *Manager, cfg *config.StaticConfig) (Provider, error) {
+	return func(cfg *config.StaticConfig) (Provider, error) {
 		if cfg != nil && cfg.KubeConfig != "" && strategy == config.ClusterProviderInCluster {
 			return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy", cfg.KubeConfig)
 		}
-		if strategy == config.ClusterProviderInCluster && !IsInCluster(cfg) {
-			return nil, fmt.Errorf("server must be deployed in cluster for the in-cluster ClusterProviderStrategy")
+
+		var m *Manager
+		var err error
+		if strategy == config.ClusterProviderInCluster || IsInCluster(cfg) {
+			m, err = NewInClusterManager(cfg)
+		} else {
+			m, err = NewKubeconfigManager(cfg, "")
+		}
+		if err != nil {
+			if errors.Is(err, ErrorInClusterNotInCluster) {
+				return nil, fmt.Errorf("server must be deployed in cluster for the %s ClusterProviderStrategy: %v", strategy, err)
+			}
+			return nil, err
 		}
 
 		return &singleClusterProvider{
