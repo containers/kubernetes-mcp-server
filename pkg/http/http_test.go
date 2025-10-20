@@ -89,7 +89,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	timeoutCtx, c.timeoutCancel = context.WithTimeout(t.Context(), 10*time.Second)
 	group, gc := errgroup.WithContext(timeoutCtx)
 	cancelCtx, c.StopServer = context.WithCancel(gc)
-	group.Go(func() error { return Serve(cancelCtx, mcpServer, c.StaticConfig, c.OidcProvider) })
+	group.Go(func() error { return Serve(cancelCtx, mcpServer, c.StaticConfig, c.OidcProvider, nil) })
 	c.WaitForShutdown = group.Wait
 	// Wait for HTTP server to start (using net)
 	for i := 0; i < 10; i++ {

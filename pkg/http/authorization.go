@@ -108,7 +108,7 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - If ValidateToken is set, the exchanged token is then used against the Kubernetes API Server for TokenReview.
 //
 //	         see TestAuthorizationOidcTokenExchange
-func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, verifier KubernetesApiTokenVerifier) func(http.Handler) http.Handler {
+func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, verifier KubernetesApiTokenVerifier, httpClient *http.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == healthEndpoint || slices.Contains(WellKnownEndpoints, r.URL.EscapedPath()) {
@@ -159,7 +159,11 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 			if err == nil && sts.IsEnabled() {
 				var exchangedToken *oauth2.Token
 				// If the token is valid, we can exchange it for a new token with the specified audience and scopes.
-				exchangedToken, err = sts.ExternalAccountTokenExchange(r.Context(), &oauth2.Token{
+				ctx := r.Context()
+				if httpClient != nil {
+					ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+				}
+				exchangedToken, err = sts.ExternalAccountTokenExchange(ctx, &oauth2.Token{
 					AccessToken: claims.Token,
 					TokenType:   "Bearer",
 				})

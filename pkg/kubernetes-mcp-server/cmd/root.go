@@ -301,10 +301,11 @@ func (m *MCPServerOptions) Run() error {
 	}
 
 	var oidcProvider *oidc.Provider
+	var httpClient *http.Client
 	if m.StaticConfig.AuthorizationURL != "" {
 		ctx := context.Background()
 		if m.StaticConfig.CertificateAuthority != "" {
-			httpClient := &http.Client{}
+			httpClient = &http.Client{}
 			caCert, err := os.ReadFile(m.StaticConfig.CertificateAuthority)
 			if err != nil {
 				return fmt.Errorf("failed to read CA certificate from %s: %w", m.StaticConfig.CertificateAuthority, err)
@@ -341,7 +342,7 @@ func (m *MCPServerOptions) Run() error {
 
 	if m.StaticConfig.Port != "" {
 		ctx := context.Background()
-		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oidcProvider)
+		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oidcProvider, httpClient)
 	}
 
 	if err := mcpServer.ServeStdio(); err != nil && !errors.Is(err, context.Canceled) {

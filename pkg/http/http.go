@@ -24,11 +24,11 @@ const (
 	sseMessageEndpoint = "/message"
 )
 
-func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oidcProvider *oidc.Provider) error {
+func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, httpClient *http.Client) error {
 	mux := http.NewServeMux()
 
 	wrappedMux := RequestMiddleware(
-		AuthorizationMiddleware(staticConfig, oidcProvider, mcpServer)(mux),
+		AuthorizationMiddleware(staticConfig, oidcProvider, mcpServer, httpClient)(mux),
 	)
 
 	httpServer := &http.Server{
@@ -44,7 +44,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	mux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.Handle("/.well-known/", WellKnownHandler(staticConfig))
+	mux.Handle("/.well-known/", WellKnownHandler(staticConfig, httpClient))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
