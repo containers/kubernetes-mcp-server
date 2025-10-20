@@ -16,7 +16,7 @@ LD_FLAGS = -s -w \
 COMMON_BUILD_ARGS = -ldflags "$(LD_FLAGS)"
 
 GOLANGCI_LINT = $(shell pwd)/_output/tools/bin/golangci-lint
-GOLANGCI_LINT_VERSION ?= v2.2.2
+GOLANGCI_LINT_VERSION ?= v2.5.0
 
 # NPM version should not append the -dirty flag
 NPM_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
