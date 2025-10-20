@@ -25,7 +25,8 @@ func init() {
 }
 
 // newSingleClusterProvider creates a provider that manages a single cluster.
-// Validates that the manager is in-cluster when the in-cluster strategy is used.
+// When used within a cluster or with an 'in-cluster' strategy, it uses an InClusterManager.
+// Otherwise, it uses a KubeconfigManager.
 func newSingleClusterProvider(strategy string) ProviderFactory {
 	return func(cfg *config.StaticConfig) (Provider, error) {
 		if cfg != nil && cfg.KubeConfig != "" && strategy == config.ClusterProviderInCluster {

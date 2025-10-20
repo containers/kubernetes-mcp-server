@@ -28,7 +28,9 @@ func init() {
 }
 
 // newKubeConfigClusterProvider creates a provider that manages multiple clusters
-// via kubeconfig contexts. Returns an error if the manager is in-cluster mode.
+// via kubeconfig contexts.
+// Internally, it leverages a KubeconfigManager for each context, initializing them
+// lazily when requested.
 func newKubeConfigClusterProvider(cfg *config.StaticConfig) (Provider, error) {
 	m, err := NewKubeconfigManager(cfg, "")
 	if err != nil {
