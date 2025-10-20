@@ -24,6 +24,7 @@ func (t *Toolset) GetTools(o internalk8s.Openshift) []api.ServerTool {
 	return slices.Concat(
 		initEvents(),
 		initNamespaces(o),
+		initNodes(),
 		initPods(),
 		initResources(o),
 	)

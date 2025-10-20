@@ -197,6 +197,48 @@
   },
   {
     "annotations": {
+      "title": "Node: Log",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "log_path": {
+          "default": "kubelet.log",
+          "description": "Path to the log file on the node (e.g. 'kubelet.log', 'kube-proxy.log'). Default is 'kubelet.log'",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the node to get logs from",
+          "type": "string"
+        },
+        "tail": {
+          "default": 100,
+          "description": "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "node_log"
+  },
+  {
+    "annotations": {
       "title": "Pods: Delete",
       "readOnlyHint": false,
       "destructiveHint": true,
