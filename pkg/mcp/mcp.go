@@ -1,16 +1,14 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	authenticationapiv1 "k8s.io/api/authentication/v1"
-	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -65,32 +63,30 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 
 type Server struct {
 	configuration *Configuration
-	server        *server.MCPServer
+	server        *mcp.Server
 	enabledTools  []string
 	p             internalk8s.Provider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
-	var serverOptions []server.ServerOption
-	serverOptions = append(serverOptions,
-		server.WithResourceCapabilities(true, true),
-		server.WithPromptCapabilities(true),
-		server.WithToolCapabilities(true),
-		server.WithLogging(),
-		server.WithToolHandlerMiddleware(toolCallLoggingMiddleware),
-	)
-	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now
-		serverOptions = append(serverOptions, server.WithToolHandlerMiddleware(toolScopedAuthorizationMiddleware))
-	}
-
 	s := &Server{
 		configuration: &configuration,
-		server: server.NewMCPServer(
-			version.BinaryName,
-			version.Version,
-			serverOptions...,
-		),
+		server: mcp.NewServer(
+			&mcp.Implementation{
+				Name: version.BinaryName, Title: version.BinaryName, Version: version.Version,
+			},
+			&mcp.ServerOptions{
+				HasResources: true,
+				HasPrompts:   true,
+				HasTools:     true,
+			}),
 	}
+
+	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
+	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now
+		s.server.AddReceivingMiddleware(toolScopedAuthorizationMiddleware)
+	}
+
 	if err := s.reloadKubernetesClusterProvider(); err != nil {
 		return nil, err
 	}
@@ -141,38 +137,39 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 			s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 		}
 	}
-	m3labsServerTools, err := ServerToolToM3LabsServerTool(s, applicableTools)
-	if err != nil {
-		return fmt.Errorf("failed to convert tools: %v", err)
-	}
 
-	s.server.SetTools(m3labsServerTools...)
+	// TODO: remove old tools that are no longer applicable
+	for _, tool := range applicableTools {
+		goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
+		if err != nil {
+			return fmt.Errorf("failed to convert tool %s: %v", tool.Tool.Name, err)
+		}
+		s.server.AddTool(goSdkTool, goSdkToolHandler)
+	}
+	// TODO: No option to perform a full replacement of tools.
+	// s.server.SetTools(m3labsServerTools...)
 
 	// start new watch
 	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
 	return nil
 }
 
-func (s *Server) ServeStdio() error {
-	return server.ServeStdio(s.server)
+func (s *Server) ServeStdio(ctx context.Context) error {
+	return s.server.Run(ctx, &mcp.LoggingTransport{Transport: &mcp.StdioTransport{}, Writer: os.Stderr})
 }
 
-func (s *Server) ServeSse(baseUrl string, httpServer *http.Server) *server.SSEServer {
-	options := make([]server.SSEOption, 0)
-	options = append(options, server.WithSSEContextFunc(contextFunc), server.WithHTTPServer(httpServer))
-	if baseUrl != "" {
-		options = append(options, server.WithBaseURL(baseUrl))
-	}
-	return server.NewSSEServer(s.server, options...)
+func (s *Server) ServeSse() *mcp.SSEHandler {
+	return mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
+		contextFunc(request.Context(), request)
+		return s.server
+	}, &mcp.SSEOptions{})
 }
 
-func (s *Server) ServeHTTP(httpServer *http.Server) *server.StreamableHTTPServer {
-	options := []server.StreamableHTTPOption{
-		server.WithHTTPContextFunc(contextFunc),
-		server.WithStreamableHTTPServer(httpServer),
-		server.WithStateLess(true),
-	}
-	return server.NewStreamableHTTPServer(s.server, options...)
+func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
+	return mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
+		contextFunc(request.Context(), request)
+		return s.server
+	}, &mcp.StreamableHTTPOptions{Stateless: true})
 }
 
 // KubernetesApiVerifyToken verifies the given token with the audience by
@@ -207,8 +204,7 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 		return &mcp.CallToolResult{
 			IsError: true,
 			Content: []mcp.Content{
-				mcp.TextContent{
-					Type: "text",
+				&mcp.TextContent{
 					Text: err.Error(),
 				},
 			},
@@ -216,8 +212,7 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 	}
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: content,
 			},
 		},
@@ -238,30 +233,4 @@ func contextFunc(ctx context.Context, r *http.Request) context.Context {
 	}
 
 	return ctx
-}
-
-func toolCallLoggingMiddleware(next server.ToolHandlerFunc) server.ToolHandlerFunc {
-	return func(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		klog.V(5).Infof("mcp tool call: %s(%v)", ctr.Params.Name, ctr.Params.Arguments)
-		if ctr.Header != nil {
-			buffer := bytes.NewBuffer(make([]byte, 0))
-			if err := ctr.Header.WriteSubset(buffer, map[string]bool{"Authorization": true, "authorization": true}); err == nil {
-				klog.V(7).Infof("mcp tool call headers: %s", buffer)
-			}
-		}
-		return next(ctx, ctr)
-	}
-}
-
-func toolScopedAuthorizationMiddleware(next server.ToolHandlerFunc) server.ToolHandlerFunc {
-	return func(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		scopes, ok := ctx.Value(TokenScopesContextKey).([]string)
-		if !ok {
-			return NewTextResult("", fmt.Errorf("authorization failed: Access denied: Tool '%s' requires scope 'mcp:%s' but no scope is available", ctr.Params.Name, ctr.Params.Name)), nil
-		}
-		if !slices.Contains(scopes, "mcp:"+ctr.Params.Name) && !slices.Contains(scopes, ctr.Params.Name) {
-			return NewTextResult("", fmt.Errorf("authorization failed: Access denied: Tool '%s' requires scope 'mcp:%s' but only scopes %s are available", ctr.Params.Name, ctr.Params.Name, scopes)), nil
-		}
-		return next(ctx, ctr)
-	}
 }
