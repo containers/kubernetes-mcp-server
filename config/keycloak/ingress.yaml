@@ -10,6 +10,11 @@ metadata:
     cert-manager.io/cluster-issuer: "selfsigned-ca-issuer"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Required for Keycloak 26.2.0+ to include port in issuer URLs
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-Forwarded-Port 8443;
+      proxy_set_header X-Forwarded-Host $host:8443;
 spec:
   ingressClassName: nginx
   tls:

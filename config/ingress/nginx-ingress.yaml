@@ -350,6 +350,10 @@ spec:
               containerPort: 443
               protocol: TCP
               hostPort: 443
+            - name: https-alt
+              containerPort: 443
+              protocol: TCP
+              hostPort: 8443
             - name: webhook
               containerPort: 8443
               protocol: TCP

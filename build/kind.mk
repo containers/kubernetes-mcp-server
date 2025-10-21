@@ -35,13 +35,21 @@ kind-create-cluster: kind kind-create-certs ## Create the kind cluster for devel
 		echo "Installing cert-manager..."; \
 		kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml; \
 		echo "Waiting for cert-manager to be ready..."; \
-		kubectl wait --namespace cert-manager --for=condition=ready pod --selector=app.kubernetes.io/instance=cert-manager --timeout=120s; \
-		kubectl wait --namespace cert-manager --for=condition=ready pod --selector=app.kubernetes.io/name=webhook --timeout=120s; \
+		kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager --timeout=120s; \
+		kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-cainjector --timeout=120s; \
+		kubectl wait --namespace cert-manager --for=condition=available deployment/cert-manager-webhook --timeout=120s; \
 		echo "✅ cert-manager ready"; \
 		echo "Creating cert-manager ClusterIssuer..."; \
 		sleep 5; \
 		kubectl apply -f config/cert-manager/selfsigned-issuer.yaml; \
 		echo "✅ ClusterIssuer created"; \
+		echo "Adding /etc/hosts entry for Keycloak in control plane..."; \
+		if command -v docker >/dev/null 2>&1 && docker ps --filter "name=$(KIND_CLUSTER_NAME)-control-plane" --format "{{.Names}}" | grep -q "$(KIND_CLUSTER_NAME)-control-plane"; then \
+			docker exec $(KIND_CLUSTER_NAME)-control-plane bash -c 'grep -q "keycloak.127-0-0-1.sslip.io" /etc/hosts || echo "127.0.0.1 keycloak.127-0-0-1.sslip.io" >> /etc/hosts'; \
+		elif command -v podman >/dev/null 2>&1 && podman ps --filter "name=$(KIND_CLUSTER_NAME)-control-plane" --format "{{.Names}}" | grep -q "$(KIND_CLUSTER_NAME)-control-plane"; then \
+			podman exec $(KIND_CLUSTER_NAME)-control-plane bash -c 'grep -q "keycloak.127-0-0-1.sslip.io" /etc/hosts || echo "127.0.0.1 keycloak.127-0-0-1.sslip.io" >> /etc/hosts'; \
+		fi; \
+		echo "✅ /etc/hosts entry added"; \
 	fi
 
 .PHONY: kind-delete-cluster

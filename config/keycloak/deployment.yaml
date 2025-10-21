@@ -26,12 +26,12 @@ spec:
         image: quay.io/keycloak/keycloak:26.4
         args: ["start-dev"]
         env:
-        - name: KEYCLOAK_ADMIN
+        - name: KC_BOOTSTRAP_ADMIN_USERNAME
           value: "admin"
-        - name: KEYCLOAK_ADMIN_PASSWORD
+        - name: KC_BOOTSTRAP_ADMIN_PASSWORD
           value: "admin"
-        - name: KC_HOSTNAME_STRICT
-          value: "false"
+        - name: KC_HOSTNAME
+          value: "https://keycloak.127-0-0-1.sslip.io:8443"
         - name: KC_HTTP_ENABLED
           value: "true"
         - name: KC_HEALTH_ENABLED

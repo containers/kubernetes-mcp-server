@@ -16,15 +16,15 @@ nodes:
     kind: ClusterConfiguration
     apiServer:
       extraArgs:
-        oidc-issuer-url: https://keycloak.127-0-0-1.sslip.io/realms/openshift
+        oidc-issuer-url: https://keycloak.127-0-0-1.sslip.io:8443/realms/openshift
         oidc-client-id: openshift
         oidc-username-claim: preferred_username
         oidc-groups-claim: groups
         oidc-ca-file: /etc/kubernetes/pki/keycloak-ca.crt
   extraPortMappings:
   - containerPort: 80
-    hostPort: 80
+    hostPort: 8080
     protocol: TCP
   - containerPort: 443
-    hostPort: 443
+    hostPort: 8443
     protocol: TCP
