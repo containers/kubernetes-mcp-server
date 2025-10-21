@@ -9,9 +9,7 @@ CONTAINER_ENGINE ?= $(shell command -v docker 2>/dev/null || command -v podman 2
 kind-create-certs: ## Generate placeholder CA certificate for KIND bind mount
 	@if [ ! -f hack/cert-manager-ca/ca.crt ]; then \
 		echo "Creating placeholder CA certificate for bind mount..."; \
-		mkdir -p hack/cert-manager-ca; \
-		echo "placeholder" > hack/cert-manager-ca/ca.crt; \
-		echo "⚠️  Placeholder CA created - will be replaced with cert-manager CA after cluster creation"; \
+		./hack/generate-placeholder-ca.sh; \
 	else \
 		echo "✅ Placeholder CA already exists"; \
 	fi
