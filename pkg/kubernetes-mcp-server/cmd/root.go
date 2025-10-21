@@ -330,7 +330,8 @@ func (m *MCPServerOptions) Run() error {
 		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oidcProvider, httpClient)
 	}
 
-	if err := mcpServer.ServeStdio(); err != nil && !errors.Is(err, context.Canceled) {
+	ctx := context.Background()
+	if err := mcpServer.ServeStdio(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 

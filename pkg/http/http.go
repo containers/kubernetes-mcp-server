@@ -36,8 +36,8 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 		Handler: wrappedMux,
 	}
 
-	sseServer := mcpServer.ServeSse(staticConfig.SSEBaseURL, httpServer)
-	streamableHttpServer := mcpServer.ServeHTTP(httpServer)
+	sseServer := mcpServer.ServeSse()
+	streamableHttpServer := mcpServer.ServeHTTP()
 	mux.Handle(sseEndpoint, sseServer)
 	mux.Handle(sseMessageEndpoint, sseServer)
 	mux.Handle(mcpEndpoint, streamableHttpServer)
