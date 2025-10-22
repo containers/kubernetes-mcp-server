@@ -142,7 +142,7 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "  _output/config.toml"
 	@echo ""
 	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME) --port 8080 --config _output/config.toml"
+	@echo "  ./$(BINARY_NAME) --port 8008 --config _output/config.toml"
 	@echo ""
 	@echo "Or run with MCP inspector:"
 	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --config _output/config.toml"
