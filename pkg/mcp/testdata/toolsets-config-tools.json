@@ -1,6 +1,25 @@
 [
   {
     "annotations": {
+      "title": "Configuration: Contexts List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List all available context names and associated server urls from the kubeconfig file",
+    "inputSchema": {
+      "type": "object"
+    },
+    "name": "configuration_contexts_list",
+    "test_metadata": {
+      "requires_multicluster": true,
+      "target_list_provider": true,
+      "cluster_aware": false
+    }
+  },
+  {
+    "annotations": {
       "title": "Configuration: View",
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -17,6 +36,9 @@
         }
       }
     },
-    "name": "configuration_view"
+    "name": "configuration_view",
+    "test_metadata": {
+      "cluster_aware": false
+    }
   }
 ]

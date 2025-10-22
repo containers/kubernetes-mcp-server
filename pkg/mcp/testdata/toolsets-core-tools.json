@@ -287,6 +287,23 @@
   },
   {
     "annotations": {
+      "title": "Projects: List",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "List all the OpenShift projects in the current cluster",
+    "inputSchema": {
+      "type": "object"
+    },
+    "name": "projects_list",
+    "test_metadata": {
+      "requires_openshift": true
+    }
+  },
+  {
+    "annotations": {
       "title": "Resources: Create or Update",
       "readOnlyHint": false,
       "destructiveHint": true,

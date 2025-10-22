@@ -73,7 +73,9 @@ func (s *ToolsetsSuite) TestDefaultToolsetsTools() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools.json")
+			expectedMetadata := test.BuildExpectedToolsJSON(test.ToolsetBuilderOptions{
+				Toolsets: []string{"core", "config", "helm"},
+			})
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
 			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
@@ -91,7 +93,10 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-openshift.json")
+			expectedMetadata := test.BuildExpectedToolsJSON(test.ToolsetBuilderOptions{
+				Toolsets:    []string{"core", "config", "helm"},
+				IsOpenShift: true,
+			})
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
 			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
@@ -114,7 +119,17 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-multicluster.json")
+			// Extract context names from kubeconfig
+			contexts := make([]string, 0, len(kubeconfig.Contexts))
+			for name := range kubeconfig.Contexts {
+				contexts = append(contexts, name)
+			}
+			expectedMetadata := test.BuildExpectedToolsJSON(test.ToolsetBuilderOptions{
+				Toolsets:       []string{"core", "config", "helm"},
+				IsMultiCluster: true,
+				Contexts:       contexts,
+				DefaultContext: kubeconfig.CurrentContext,
+			})
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
 			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
@@ -135,7 +150,17 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiClusterEnum() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-multicluster-enum.json")
+			// Extract context names from kubeconfig
+			contexts := make([]string, 0, len(kubeconfig.Contexts))
+			for name := range kubeconfig.Contexts {
+				contexts = append(contexts, name)
+			}
+			expectedMetadata := test.BuildExpectedToolsJSON(test.ToolsetBuilderOptions{
+				Toolsets:       []string{"core", "config", "helm"},
+				IsMultiCluster: true,
+				Contexts:       contexts,
+				DefaultContext: kubeconfig.CurrentContext,
+			})
 			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
 			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
@@ -161,7 +186,9 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 				s.NoError(err, "Expected no error from ListTools")
 			})
 			s.Run("ListTools returns correct Tool metadata", func() {
-				expectedMetadata := test.ReadFile("testdata", "toolsets-"+testCase.GetName()+"-tools.json")
+				expectedMetadata := test.BuildExpectedToolsJSON(test.ToolsetBuilderOptions{
+					Toolsets: []string{testCase.GetName()},
+				})
 				metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
 				s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
 				s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
