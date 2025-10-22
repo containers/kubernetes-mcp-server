@@ -63,10 +63,8 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		switch v := tail.(type) {
 		case float64:
 			tailInt = int64(v)
-		case int:
+		case int: case int64:
 			tailInt = int64(v)
-		case int64:
-			tailInt = v
 		default:
 			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tail)), nil
 		}
