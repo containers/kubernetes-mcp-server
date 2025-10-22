@@ -1,5 +1,7 @@
 package testing
 
+import (
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -102,7 +104,7 @@ func NewFakeKubernetesClient(
 
 	// Create a minimal fake discovery client
 	// For basic tests, we don't need a fully functional discovery client
-	fakeDiscovery := &fakeDiscoveryClient{}
+	fakeDiscovery := &fakeDiscoveryClient{gvrToListKind: gvrToListKind}
 	cachedDiscovery := memory.NewMemCacheClient(fakeDiscovery)
 
 	// Create a basic REST mapper that implements ResettableRESTMapper
@@ -110,7 +112,7 @@ func NewFakeKubernetesClient(
 	defaultMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 	restMapper := &FakeRESTMapper{DefaultRESTMapper: defaultMapper}
 
-	// Optionally populate the REST mapper with known GVRs from the gvrToListKind map
+	// Populate the REST mapper with known GVRs from the gvrToListKind map
 	for gvr := range gvrToListKind {
 		gvk := schema.GroupVersionKind{
 			Group:   gvr.Group,
@@ -119,6 +121,18 @@ func NewFakeKubernetesClient(
 		}
 		restMapper.Add(gvk, meta.RESTScopeNamespace)
 	}
+
+	// Add common KubeVirt resources to REST mapper for tests
+	// VirtualMachine is a common resource that tests will try to create
+	kubevirtGV := schema.GroupVersion{Group: "kubevirt.io", Version: "v1"}
+	restMapper.Add(
+		schema.GroupVersionKind{Group: kubevirtGV.Group, Version: kubevirtGV.Version, Kind: "VirtualMachine"},
+		meta.RESTScopeNamespace,
+	)
+	restMapper.Add(
+		schema.GroupVersionKind{Group: kubevirtGV.Group, Version: kubevirtGV.Version, Kind: "VirtualMachineInstance"},
+		meta.RESTScopeNamespace,
+	)
 
 	// Create AccessControlClientset with fake clients
 	accessControlClientset := internalk8s.NewAccessControlClientsetForTesting(
@@ -135,6 +149,7 @@ func NewFakeKubernetesClient(
 // that satisfies the interface requirements for testing
 type fakeDiscoveryClient struct {
 	discovery.DiscoveryInterface
+	gvrToListKind map[schema.GroupVersionResource]string
 }
 
 // Invalidate is required by the CachedDiscoveryInterface
@@ -145,4 +160,79 @@ func (f *fakeDiscoveryClient) Invalidate() {
 // Fresh returns whether the discovery client is fresh
 func (f *fakeDiscoveryClient) Fresh() bool {
 	return true
+}
+
+// ServerGroups returns the list of supported API groups
+func (f *fakeDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) {
+	return &metav1.APIGroupList{
+		Groups: []metav1.APIGroup{
+			{
+				Name: "kubevirt.io",
+				Versions: []metav1.GroupVersionForDiscovery{
+					{GroupVersion: "kubevirt.io/v1", Version: "v1"},
+				},
+				PreferredVersion: metav1.GroupVersionForDiscovery{GroupVersion: "kubevirt.io/v1", Version: "v1"},
+			},
+			{
+				Name: "cdi.kubevirt.io",
+				Versions: []metav1.GroupVersionForDiscovery{
+					{GroupVersion: "cdi.kubevirt.io/v1beta1", Version: "v1beta1"},
+				},
+				PreferredVersion: metav1.GroupVersionForDiscovery{GroupVersion: "cdi.kubevirt.io/v1beta1", Version: "v1beta1"},
+			},
+			{
+				Name: "instancetype.kubevirt.io",
+				Versions: []metav1.GroupVersionForDiscovery{
+					{GroupVersion: "instancetype.kubevirt.io/v1beta1", Version: "v1beta1"},
+				},
+				PreferredVersion: metav1.GroupVersionForDiscovery{GroupVersion: "instancetype.kubevirt.io/v1beta1", Version: "v1beta1"},
+			},
+		},
+	}, nil
+}
+
+// ServerResourcesForGroupVersion returns the APIResourceList for a specific group/version
+func (f *fakeDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	gv, err := schema.ParseGroupVersion(groupVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	resources := &metav1.APIResourceList{
+		GroupVersion: groupVersion,
+		APIResources: []metav1.APIResource{},
+	}
+
+	// Add VirtualMachine resources for kubevirt.io/v1
+	if gv.Group == "kubevirt.io" && gv.Version == "v1" {
+		resources.APIResources = append(resources.APIResources,
+			metav1.APIResource{
+				Name:       "virtualmachines",
+				Namespaced: true,
+				Kind:       "VirtualMachine",
+				Verbs:      metav1.Verbs{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			metav1.APIResource{
+				Name:       "virtualmachineinstances",
+				Namespaced: true,
+				Kind:       "VirtualMachineInstance",
+				Verbs:      metav1.Verbs{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+		)
+	}
+
+	// Add resources from gvrToListKind map
+	for gvr, listKind := range f.gvrToListKind {
+		if gvr.Group == gv.Group && gvr.Version == gv.Version {
+			kind := listKind[:len(listKind)-4] // Remove "List" suffix
+			resources.APIResources = append(resources.APIResources, metav1.APIResource{
+				Name:       gvr.Resource,
+				Namespaced: true,
+				Kind:       kind,
+				Verbs:      metav1.Verbs{"get", "list", "watch", "create", "update", "patch", "delete"},
+			})
+		}
+	}
+
+	return resources, nil
 }
