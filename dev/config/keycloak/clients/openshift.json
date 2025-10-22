@@ -7,6 +7,7 @@
   "serviceAccountsEnabled": true,
   "authorizationServicesEnabled": false,
   "redirectUris": ["*"],
+  "webOrigins": ["*"],
   "defaultClientScopes": ["profile", "email", "groups"],
   "optionalClientScopes": []
 }

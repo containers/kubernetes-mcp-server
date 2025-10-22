@@ -7,6 +7,7 @@
   "serviceAccountsEnabled": false,
   "authorizationServicesEnabled": false,
   "redirectUris": ["*"],
+  "webOrigins": ["*"],
   "defaultClientScopes": ["profile", "email"],
   "optionalClientScopes": ["mcp-server"]
 }
