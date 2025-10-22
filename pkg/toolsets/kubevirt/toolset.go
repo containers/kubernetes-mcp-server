@@ -7,6 +7,7 @@ import (
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	vm_create "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/create"
+	vm_troubleshoot "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/troubleshoot"
 )
 
 type Toolset struct{}
@@ -24,6 +25,7 @@ func (t *Toolset) GetDescription() string {
 func (t *Toolset) GetTools(o internalk8s.Openshift) []api.ServerTool {
 	return slices.Concat(
 		vm_create.Tools(),
+		vm_troubleshoot.Tools(),
 	)
 }
 
