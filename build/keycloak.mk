@@ -423,6 +423,8 @@ keycloak-setup-realm:
 	echo "  sts_audience = \"openshift\""; \
 	echo "  sts_scopes = [\"mcp:openshift\"]"; \
 	echo "  certificate_authority = \"_output/cert-manager-ca/ca.crt\""; \
+	echo "  [cors]"; \
+	echo "  origins = [\"http://localhost:6274\"]"; \
 	echo "========================================"; \
 	echo ""; \
 	echo "Note: The Kubernetes API server is configured with:"; \
@@ -444,5 +446,7 @@ keycloak-setup-realm:
 		'sts_audience = "openshift"' \
 		'sts_scopes = ["mcp:openshift"]' \
 		'certificate_authority = "_output/cert-manager-ca/ca.crt"' \
+		'[cors]' \
+		'origins = ["http://localhost:6274"]' \
 		> _output/config.toml; \
 	echo "✅ Configuration written to _output/config.toml"
