@@ -1,0 +1,188 @@
+# VirtualMachine Troubleshooting Guide
+
+## VM: {{.Name}} (namespace: {{.Namespace}})
+
+Follow these steps to diagnose issues with the VirtualMachine:
+
+---
+
+## Step 1: Check VirtualMachine Status
+
+Use the `resources_get` tool to inspect the VirtualMachine:
+- **apiVersion**: `kubevirt.io/v1`
+- **kind**: `VirtualMachine`
+- **namespace**: `{{.Namespace}}`
+- **name**: `{{.Name}}`
+
+**What to look for:**
+- `status.printableStatus` - Should be "Running" for a healthy VM
+- `status.ready` - Should be `true`
+- `status.conditions` - Look for conditions with `status: "False"` or error messages
+- `spec.runStrategy` - Check if it's "Always", "Manual", "Halted", or "RerunOnFailure"
+
+---
+
+## Step 2: Check VirtualMachineInstance Status
+
+If the VM exists but isn't running, check if a VirtualMachineInstance was created:
+
+Use the `resources_get` tool:
+- **apiVersion**: `kubevirt.io/v1`
+- **kind**: `VirtualMachineInstance`
+- **namespace**: `{{.Namespace}}`
+- **name**: `{{.Name}}`
+
+**What to look for:**
+- `status.phase` - Should be "Running" for a healthy VMI
+- `status.conditions` - Check for "Ready" condition with `status: "True"`
+- `status.guestOSInfo` - Confirms guest agent is running
+- If VMI doesn't exist and VM runStrategy is "Always", this indicates a problem
+
+---
+
+## Step 3: Check DataVolume Status (if applicable)
+
+If the VM uses DataVolumeTemplates, check their status:
+
+Use the `resources_list` tool:
+- **apiVersion**: `cdi.kubevirt.io/v1beta1`
+- **kind**: `DataVolume`
+- **namespace**: `{{.Namespace}}`
+
+Look for DataVolumes with names starting with `{{.Name}}-`
+
+**What to look for:**
+- `status.phase` - Should be "Succeeded" when ready
+- `status.progress` - Shows import/clone progress (e.g., "100.0%")
+- Common issues:
+  - Phase "Pending" - Waiting for resources
+  - Phase "ImportScheduled" or "ImportInProgress" - Still importing
+  - Phase "Failed" - Check `status.conditions` for error details
+
+### Check Underlying PersistentVolumeClaims
+
+DataVolumes create PVCs to provision storage. Check the PVC status:
+
+Use the `resources_list` tool:
+- **apiVersion**: `v1`
+- **kind**: `PersistentVolumeClaim`
+- **namespace**: `{{.Namespace}}`
+
+Look for PVCs with names matching the DataVolume names (typically `{{.Name}}-*`)
+
+Or inspect a specific PVC with `resources_get`:
+- **apiVersion**: `v1`
+- **kind**: `PersistentVolumeClaim`
+- **namespace**: `{{.Namespace}}`
+- **name**: (name from DataVolume or VM volumes)
+
+**What to look for:**
+- `status.phase` - Should be "Bound" when ready
+- `spec.storageClassName` - Verify the storage class exists and is available
+- `status.capacity.storage` - Confirms allocated storage size
+- Common PVC issues:
+  - Phase "Pending" - Storage class not available, insufficient storage, or provisioner issues
+  - Missing PVC - DataVolume creation may have failed
+  - Incorrect size - Check if requested size matches available storage
+
+**Check Storage Class:**
+
+If PVC is stuck in "Pending", verify the storage class exists:
+
+Use the `resources_get` tool:
+- **apiVersion**: `storage.k8s.io/v1`
+- **kind**: `StorageClass`
+- **name**: (from PVC `spec.storageClassName`)
+
+Ensure the storage class provisioner is healthy and has capacity.
+
+---
+
+## Step 4: Check virt-launcher Pod
+
+The virt-launcher pod runs the actual VM. Find and inspect it:
+
+Use the `pods_list_in_namespace` tool:
+- **namespace**: `{{.Namespace}}`
+- **labelSelector**: `kubevirt.io=virt-launcher,vm.kubevirt.io/name={{.Name}}`
+
+**What to look for:**
+- Pod should be in "Running" phase
+- All containers should be ready (e.g., "2/2")
+- Check pod events and conditions for errors
+
+If pod exists, get detailed status with `pods_get`:
+- **namespace**: `{{.Namespace}}`
+- **name**: `virt-launcher-{{.Name}}-xxxxx` (use actual pod name from list)
+
+Get pod logs with `pods_log`:
+- **namespace**: `{{.Namespace}}`
+- **name**: `virt-launcher-{{.Name}}-xxxxx`
+- **container**: `compute` (main VM container)
+
+---
+
+## Step 5: Check Events
+
+Events provide crucial diagnostic information:
+
+Use the `events_list` tool:
+- **namespace**: `{{.Namespace}}`
+
+Filter output for events related to `{{.Name}}` - look for warnings or errors.
+
+---
+
+## Step 6: Check Instance Type and Preference (if used)
+
+If the VM uses instance types or preferences, verify they exist:
+
+For instance types, use `resources_get`:
+- **apiVersion**: `instancetype.kubevirt.io/v1beta1`
+- **kind**: `VirtualMachineClusterInstancetype`
+- **name**: (check VM spec for instancetype name)
+
+For preferences, use `resources_get`:
+- **apiVersion**: `instancetype.kubevirt.io/v1beta1`
+- **kind**: `VirtualMachineClusterPreference`
+- **name**: (check VM spec for preference name)
+
+---
+
+## Common Issues and Solutions
+
+### VM stuck in "Stopped" or "Halted"
+- Check `spec.runStrategy` - if "Halted", the VM is intentionally stopped
+- Change runStrategy to "Always" to start the VM
+
+### VMI doesn't exist
+- Check VM conditions for admission errors
+- Verify instance type and preference exist
+- Check resource quotas in the namespace
+
+### DataVolume stuck in "ImportInProgress"
+- Check CDI controller pods in `cdi` namespace
+- Verify source image is accessible
+- Check PVC storage class exists and has available capacity
+
+### virt-launcher pod in CrashLoopBackOff
+- Check pod logs for container `compute`
+- Common causes:
+  - Insufficient resources (CPU/memory)
+  - Invalid VM configuration
+  - Storage issues (PVC not available)
+
+### VM starts but guest doesn't boot
+- Check virt-launcher logs for QEMU errors
+- Verify boot disk is properly configured
+- Check if guest agent is installed (for cloud images)
+- Ensure correct architecture (amd64 vs arm64)
+
+---
+
+## Additional Resources
+
+For more detailed diagnostics:
+- Check KubeVirt components: `pods_list` in `kubevirt` namespace
+- Check CDI components: `pods_list` in `cdi` namespace (if using DataVolumes)
+- Review resource consumption: `pods_top` for the virt-launcher pod
