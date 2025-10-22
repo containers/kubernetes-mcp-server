@@ -28,7 +28,9 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	mux := http.NewServeMux()
 
 	wrappedMux := RequestMiddleware(
-		AuthorizationMiddleware(staticConfig, oidcProvider, mcpServer, httpClient)(mux),
+		CORSMiddleware(staticConfig.CORSConfig)(
+			AuthorizationMiddleware(staticConfig, oidcProvider, mcpServer, httpClient)(mux),
+		),
 	)
 
 	httpServer := &http.Server{

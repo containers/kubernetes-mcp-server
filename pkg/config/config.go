@@ -68,6 +68,19 @@ type StaticConfig struct {
 
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]ProviderConfig
+
+	// cors config for the http server
+	CORSConfig *CORSConfig `toml:"cors,omitempty"`
+}
+
+// CORSConfig holds the configuration for Cross-Origin Resource Sharing
+// The presence of the [cors] section in the config file enables CORS handling.
+type CORSConfig struct {
+	// Origins is a list of allowed origins. Use ["*"] for allow all
+	Origins []string `toml:"origins"`
+
+	// MaxAge specifies how long (in seconds) the preflight response can be cached
+	MaxAge int `toml:"max_age,omitempty"`
 }
 
 func Default() *StaticConfig {
