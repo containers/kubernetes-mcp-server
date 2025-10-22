@@ -1,0 +1,8 @@
+{
+  "name": "groups",
+  "protocol": "openid-connect",
+  "attributes": {
+    "display.on.consent.screen": "false",
+    "include.in.token.scope": "true"
+  }
+}

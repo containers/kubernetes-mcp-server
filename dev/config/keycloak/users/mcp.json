@@ -1,0 +1,15 @@
+{
+  "username": "mcp",
+  "email": "mcp@example.com",
+  "firstName": "MCP",
+  "lastName": "User",
+  "enabled": true,
+  "emailVerified": true,
+  "credentials": [
+    {
+      "type": "password",
+      "value": "mcp",
+      "temporary": false
+    }
+  ]
+}

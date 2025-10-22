@@ -1,0 +1,12 @@
+{
+  "clientId": "openshift",
+  "enabled": true,
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": true,
+  "serviceAccountsEnabled": true,
+  "authorizationServicesEnabled": false,
+  "redirectUris": ["*"],
+  "defaultClientScopes": ["profile", "email", "groups"],
+  "optionalClientScopes": []
+}

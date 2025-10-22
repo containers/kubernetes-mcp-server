@@ -111,7 +111,7 @@ keycloak-setup-realm:
 	REALM_RESPONSE=$$(curl -sk -w "%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"realm":"openshift","enabled":true}'); \
+		-d @dev/config/keycloak/realm/realm-create.json); \
 	REALM_CODE=$$(echo "$$REALM_RESPONSE" | tail -c 4); \
 	if [ "$$REALM_CODE" = "201" ] || [ "$$REALM_CODE" = "409" ]; then \
 		if [ "$$REALM_CODE" = "201" ]; then echo "✅ OpenShift realm created"; \
@@ -125,7 +125,7 @@ keycloak-setup-realm:
 	EVENT_CONFIG_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X PUT "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"realm":"openshift","enabled":true,"eventsEnabled":true,"eventsListeners":["jboss-logging"],"adminEventsEnabled":true,"adminEventsDetailsEnabled":true}'); \
+		-d @dev/config/keycloak/realm/realm-events-config.json); \
 	EVENT_CONFIG_CODE=$$(echo "$$EVENT_CONFIG_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$EVENT_CONFIG_CODE" = "204" ]; then \
 		echo "✅ User and admin event logging enabled"; \
@@ -137,7 +137,7 @@ keycloak-setup-realm:
 	SCOPE_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"mcp:openshift","protocol":"openid-connect","attributes":{"display.on.consent.screen":"false","include.in.token.scope":"true"}}'); \
+		-d @dev/config/keycloak/client-scopes/mcp-openshift.json); \
 	SCOPE_CODE=$$(echo "$$SCOPE_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$SCOPE_CODE" = "201" ] || [ "$$SCOPE_CODE" = "409" ]; then \
 		if [ "$$SCOPE_CODE" = "201" ]; then echo "✅ mcp:openshift client scope created"; \
@@ -159,7 +159,7 @@ keycloak-setup-realm:
 	MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$SCOPE_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"openshift-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","config":{"included.client.audience":"openshift","id.token.claim":"true","access.token.claim":"true"}}'); \
+		-d @dev/config/keycloak/mappers/openshift-audience.json); \
 	MAPPER_CODE=$$(echo "$$MAPPER_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$MAPPER_CODE" = "201" ] || [ "$$MAPPER_CODE" = "409" ]; then \
 		if [ "$$MAPPER_CODE" = "201" ]; then echo "✅ Audience mapper added"; \
@@ -173,7 +173,7 @@ keycloak-setup-realm:
 	GROUPS_SCOPE_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"groups","protocol":"openid-connect","attributes":{"display.on.consent.screen":"false","include.in.token.scope":"true"}}'); \
+		-d @dev/config/keycloak/client-scopes/groups.json); \
 	GROUPS_SCOPE_CODE=$$(echo "$$GROUPS_SCOPE_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$GROUPS_SCOPE_CODE" = "201" ] || [ "$$GROUPS_SCOPE_CODE" = "409" ]; then \
 		if [ "$$GROUPS_SCOPE_CODE" = "201" ]; then echo "✅ groups client scope created"; \
@@ -195,7 +195,7 @@ keycloak-setup-realm:
 	GROUPS_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$GROUPS_SCOPE_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"groups","protocol":"openid-connect","protocolMapper":"oidc-group-membership-mapper","config":{"claim.name":"groups","full.path":"false","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'); \
+		-d @dev/config/keycloak/mappers/groups-membership.json); \
 	GROUPS_MAPPER_CODE=$$(echo "$$GROUPS_MAPPER_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$GROUPS_MAPPER_CODE" = "201" ] || [ "$$GROUPS_MAPPER_CODE" = "409" ]; then \
 		if [ "$$GROUPS_MAPPER_CODE" = "201" ]; then echo "✅ Group membership mapper added"; \
@@ -209,7 +209,7 @@ keycloak-setup-realm:
 	MCP_SERVER_SCOPE_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"mcp-server","protocol":"openid-connect","attributes":{"display.on.consent.screen":"false","include.in.token.scope":"true"}}'); \
+		-d @dev/config/keycloak/client-scopes/mcp-server.json); \
 	MCP_SERVER_SCOPE_CODE=$$(echo "$$MCP_SERVER_SCOPE_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$MCP_SERVER_SCOPE_CODE" = "201" ] || [ "$$MCP_SERVER_SCOPE_CODE" = "409" ]; then \
 		if [ "$$MCP_SERVER_SCOPE_CODE" = "201" ]; then echo "✅ mcp-server client scope created"; \
@@ -231,7 +231,7 @@ keycloak-setup-realm:
 	MCP_SERVER_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$MCP_SERVER_SCOPE_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"mcp-server-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","config":{"included.client.audience":"mcp-server","id.token.claim":"true","access.token.claim":"true"}}'); \
+		-d @dev/config/keycloak/mappers/mcp-server-audience.json); \
 	MCP_SERVER_MAPPER_CODE=$$(echo "$$MCP_SERVER_MAPPER_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$MCP_SERVER_MAPPER_CODE" = "201" ] || [ "$$MCP_SERVER_MAPPER_CODE" = "409" ]; then \
 		if [ "$$MCP_SERVER_MAPPER_CODE" = "201" ]; then echo "✅ mcp-server audience mapper added"; \
@@ -245,7 +245,7 @@ keycloak-setup-realm:
 	OPENSHIFT_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"clientId":"openshift","enabled":true,"publicClient":false,"standardFlowEnabled":true,"directAccessGrantsEnabled":true,"serviceAccountsEnabled":true,"authorizationServicesEnabled":false,"redirectUris":["*"],"defaultClientScopes":["profile","email","groups"],"optionalClientScopes":[]}'); \
+		-d @dev/config/keycloak/clients/openshift.json); \
 	OPENSHIFT_CLIENT_CODE=$$(echo "$$OPENSHIFT_CLIENT_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$OPENSHIFT_CLIENT_CODE" = "201" ] || [ "$$OPENSHIFT_CLIENT_CODE" = "409" ]; then \
 		if [ "$$OPENSHIFT_CLIENT_CODE" = "201" ]; then echo "✅ openshift client created"; \
@@ -263,7 +263,7 @@ keycloak-setup-realm:
 	OPENSHIFT_USERNAME_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$OPENSHIFT_CLIENT_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{	"name":"username","protocol":"openid-connect","protocolMapper":"oidc-usermodel-property-mapper","config":{"userinfo.token.claim":"true","user.attribute":"username","id.token.claim":"true","access.token.claim":"true","claim.name":"preferred_username","jsonType.label":"String"}}'); \
+		-d @dev/config/keycloak/mappers/username.json); \
 	OPENSHIFT_USERNAME_MAPPER_CODE=$$(echo "$$OPENSHIFT_USERNAME_MAPPER_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$OPENSHIFT_USERNAME_MAPPER_CODE" = "201" ] || [ "$$OPENSHIFT_USERNAME_MAPPER_CODE" = "409" ]; then \
 		if [ "$$OPENSHIFT_USERNAME_MAPPER_CODE" = "201" ]; then echo "✅ Username mapper added to openshift client"; \
@@ -277,7 +277,7 @@ keycloak-setup-realm:
 	MCP_PUBLIC_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"clientId":"mcp-client","enabled":true,"publicClient":true,"standardFlowEnabled":true,"directAccessGrantsEnabled":true,"serviceAccountsEnabled":false,"authorizationServicesEnabled":false,"redirectUris":["*"],"defaultClientScopes":["profile","email"],"optionalClientScopes":["mcp-server"]}'); \
+		-d @dev/config/keycloak/clients/mcp-client.json); \
 	MCP_PUBLIC_CLIENT_CODE=$$(echo "$$MCP_PUBLIC_CLIENT_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$MCP_PUBLIC_CLIENT_CODE" = "201" ] || [ "$$MCP_PUBLIC_CLIENT_CODE" = "409" ]; then \
 		if [ "$$MCP_PUBLIC_CLIENT_CODE" = "201" ]; then echo "✅ mcp-client public client created"; \
@@ -295,7 +295,7 @@ keycloak-setup-realm:
 	MCP_PUBLIC_USERNAME_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_PUBLIC_CLIENT_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"username","protocol":"openid-connect","protocolMapper":"oidc-usermodel-property-mapper","config":{"userinfo.token.claim":"true","user.attribute":"username","id.token.claim":"true","access.token.claim":"true","claim.name":"preferred_username","jsonType.label":"String"}}'); \
+		-d @dev/config/keycloak/mappers/username.json); \
 	MCP_PUBLIC_USERNAME_MAPPER_CODE=$$(echo "$$MCP_PUBLIC_USERNAME_MAPPER_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$MCP_PUBLIC_USERNAME_MAPPER_CODE" = "201" ] || [ "$$MCP_PUBLIC_USERNAME_MAPPER_CODE" = "409" ]; then \
 		if [ "$$MCP_PUBLIC_USERNAME_MAPPER_CODE" = "201" ]; then echo "✅ Username mapper added to mcp-client"; \
@@ -309,7 +309,7 @@ keycloak-setup-realm:
 	MCP_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"clientId":"mcp-server","enabled":true,"publicClient":false,"standardFlowEnabled":true,"directAccessGrantsEnabled":true,"serviceAccountsEnabled":true,"authorizationServicesEnabled":false,"redirectUris":["*"],"defaultClientScopes":["profile","email","groups","mcp-server"],"optionalClientScopes":["mcp:openshift"],"attributes":{"oauth2.device.authorization.grant.enabled":"false","oidc.ciba.grant.enabled":"false","backchannel.logout.session.required":"true","backchannel.logout.revoke.offline.tokens":"false"}}'); \
+		-d @dev/config/keycloak/clients/mcp-server.json); \
 	MCP_CLIENT_CODE=$$(echo "$$MCP_CLIENT_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$MCP_CLIENT_CODE" = "201" ] || [ "$$MCP_CLIENT_CODE" = "409" ]; then \
 		if [ "$$MCP_CLIENT_CODE" = "201" ]; then echo "✅ mcp-server client created"; \
@@ -331,7 +331,7 @@ keycloak-setup-realm:
 	UPDATE_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X PUT "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"clientId":"mcp-server","enabled":true,"publicClient":false,"standardFlowEnabled":true,"directAccessGrantsEnabled":true,"serviceAccountsEnabled":true,"authorizationServicesEnabled":false,"redirectUris":["*"],"defaultClientScopes":["profile","email","groups","mcp-server"],"optionalClientScopes":["mcp:openshift"],"attributes":{"oauth2.device.authorization.grant.enabled":"false","oidc.ciba.grant.enabled":"false","backchannel.logout.session.required":"true","backchannel.logout.revoke.offline.tokens":"false","standard.token.exchange.enabled":"true"}}'); \
+		-d @dev/config/keycloak/clients/mcp-server-update.json); \
 	UPDATE_CLIENT_CODE=$$(echo "$$UPDATE_CLIENT_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$UPDATE_CLIENT_CODE" = "204" ]; then \
 		echo "✅ Standard token exchange enabled for mcp-server client"; \
@@ -354,7 +354,7 @@ keycloak-setup-realm:
 	MCP_USERNAME_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"name":"username","protocol":"openid-connect","protocolMapper":"oidc-usermodel-property-mapper","config":{"userinfo.token.claim":"true","user.attribute":"username","id.token.claim":"true","access.token.claim":"true","claim.name":"preferred_username","jsonType.label":"String"}}'); \
+		-d @dev/config/keycloak/mappers/username.json); \
 	MCP_USERNAME_MAPPER_CODE=$$(echo "$$MCP_USERNAME_MAPPER_RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2); \
 	if [ "$$MCP_USERNAME_MAPPER_CODE" = "201" ] || [ "$$MCP_USERNAME_MAPPER_CODE" = "409" ]; then \
 		if [ "$$MCP_USERNAME_MAPPER_CODE" = "201" ]; then echo "✅ Username mapper added to mcp-server client"; \
@@ -368,7 +368,7 @@ keycloak-setup-realm:
 	USER_RESPONSE=$$(curl -sk -w "%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/users" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
-		-d '{"username":"mcp","email":"mcp@example.com","firstName":"MCP","lastName":"User","enabled":true,"emailVerified":true,"credentials":[{"type":"password","value":"mcp","temporary":false}]}'); \
+		-d @dev/config/keycloak/users/mcp.json); \
 	USER_CODE=$$(echo "$$USER_RESPONSE" | tail -c 4); \
 	if [ "$$USER_CODE" = "201" ] || [ "$$USER_CODE" = "409" ]; then \
 		if [ "$$USER_CODE" = "201" ]; then echo "✅ mcp user created"; \

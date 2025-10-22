@@ -1,0 +1,10 @@
+{
+  "name": "openshift-audience",
+  "protocol": "openid-connect",
+  "protocolMapper": "oidc-audience-mapper",
+  "config": {
+    "included.client.audience": "openshift",
+    "id.token.claim": "true",
+    "access.token.claim": "true"
+  }
+}

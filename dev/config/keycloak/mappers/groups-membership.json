@@ -1,0 +1,12 @@
+{
+  "name": "groups",
+  "protocol": "openid-connect",
+  "protocolMapper": "oidc-group-membership-mapper",
+  "config": {
+    "claim.name": "groups",
+    "full.path": "false",
+    "id.token.claim": "true",
+    "access.token.claim": "true",
+    "userinfo.token.claim": "true"
+  }
+}

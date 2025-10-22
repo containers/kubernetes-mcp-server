@@ -1,0 +1,10 @@
+{
+  "name": "mcp-server-audience",
+  "protocol": "openid-connect",
+  "protocolMapper": "oidc-audience-mapper",
+  "config": {
+    "included.client.audience": "mcp-server",
+    "id.token.claim": "true",
+    "access.token.claim": "true"
+  }
+}

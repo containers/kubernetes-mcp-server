@@ -1,0 +1,12 @@
+{
+  "clientId": "mcp-client",
+  "enabled": true,
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": true,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "redirectUris": ["*"],
+  "defaultClientScopes": ["profile", "email"],
+  "optionalClientScopes": ["mcp-server"]
+}
