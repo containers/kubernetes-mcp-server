@@ -27,7 +27,3 @@ python/build/
 python/dist/
 python/kubernetes_mcp_server.egg-info/
 !python/kubernetes-mcp-server
-
-/bin/
-hack/cert-manager-ca/
-hack/keycloak-certs/ca.crt

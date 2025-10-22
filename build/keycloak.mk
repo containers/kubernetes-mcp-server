@@ -5,15 +5,15 @@ KEYCLOAK_ADMIN_USER = admin
 KEYCLOAK_ADMIN_PASSWORD = admin
 
 .PHONY: keycloak-install
-keycloak-install: ## Install Keycloak for local development
+keycloak-install:
 	@echo "Installing Keycloak (dev mode using official image)..."
-	@kubectl apply -f config/keycloak/deployment.yaml
+	@kubectl apply -f dev/config/keycloak/deployment.yaml
 	@echo "Applying Keycloak ingress (cert-manager will create TLS certificate)..."
-	@kubectl apply -f config/keycloak/ingress.yaml
+	@kubectl apply -f dev/config/keycloak/ingress.yaml
 	@echo "Extracting cert-manager CA certificate..."
-	@mkdir -p hack/cert-manager-ca
-	@kubectl get secret selfsigned-ca-secret -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d > hack/cert-manager-ca/ca.crt
-	@echo "✅ cert-manager CA certificate extracted to hack/cert-manager-ca/ca.crt (bind-mounted to API server)"
+	@mkdir -p _output/cert-manager-ca
+	@kubectl get secret selfsigned-ca-secret -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d > _output/cert-manager-ca/ca.crt
+	@echo "✅ cert-manager CA certificate extracted to _output/cert-manager-ca/ca.crt (bind-mounted to API server)"
 	@echo "Restarting Kubernetes API server to pick up new CA..."
 	@docker exec kubernetes-mcp-server-control-plane pkill -f kube-apiserver || \
 		podman exec kubernetes-mcp-server-control-plane pkill -f kube-apiserver
@@ -29,23 +29,26 @@ keycloak-install: ## Install Keycloak for local development
 	done
 	@echo "Waiting for Keycloak to be ready..."
 	@kubectl wait --for=condition=ready pod -l app=keycloak -n $(KEYCLOAK_NAMESPACE) --timeout=120s || true
+	@echo "Waiting for Keycloak HTTP endpoint to be available..."
+	@for i in $$(seq 1 30); do \
+		STATUS=$$(curl -sk -o /dev/null -w "%{http_code}" https://keycloak.127-0-0-1.sslip.io:8443/realms/master 2>/dev/null || echo "000"); \
+		if [ "$$STATUS" = "200" ]; then \
+			echo "✅ Keycloak HTTP endpoint ready"; \
+			break; \
+		fi; \
+		echo "  Attempt $$i/30: Waiting for Keycloak (status: $$STATUS)..."; \
+		sleep 3; \
+	done
 	@echo ""
-	@echo "Keycloak installed!"
-	@echo "Admin credentials: $(KEYCLOAK_ADMIN_USER) / $(KEYCLOAK_ADMIN_PASSWORD)"
+	@echo "Setting up OpenShift realm..."
+	@$(MAKE) -s keycloak-setup-realm
+	@echo ""
+	@echo "✅ Keycloak installed and configured!"
 	@echo "Access at: https://keycloak.127-0-0-1.sslip.io:8443"
 
 .PHONY: keycloak-uninstall
-keycloak-uninstall: ## Uninstall Keycloak
-	@kubectl delete -f config/keycloak/deployment.yaml 2>/dev/null || true
-
-.PHONY: keycloak-forward
-keycloak-forward: ## Port forward Keycloak (optional - ingress provides direct access)
-	@echo "⚠️  Port forwarding not needed - Keycloak accessible via ingress"
-	@echo "Access at: https://keycloak.127-0-0-1.sslip.io:8443"
-	@echo "Login: $(KEYCLOAK_ADMIN_USER) / $(KEYCLOAK_ADMIN_PASSWORD)"
-	@echo ""
-	@echo "If you still want port forwarding, use:"
-	@echo "  kubectl port-forward -n $(KEYCLOAK_NAMESPACE) svc/keycloak 8090:80"
+keycloak-uninstall:
+	@kubectl delete -f dev/config/keycloak/deployment.yaml 2>/dev/null || true
 
 .PHONY: keycloak-status
 keycloak-status: ## Show Keycloak status and connection info
@@ -78,22 +81,25 @@ keycloak-logs: ## Tail Keycloak logs
 	@kubectl logs -n $(KEYCLOAK_NAMESPACE) -l app=keycloak -f --tail=100
 
 .PHONY: keycloak-setup-realm
-keycloak-setup-realm: ## Setup OpenShift realm with token exchange support
+keycloak-setup-realm:
 	@echo "========================================="
 	@echo "Setting up OpenShift Realm for Token Exchange"
 	@echo "========================================="
 	@echo "Using Keycloak at https://keycloak.127-0-0-1.sslip.io:8443"
 	@echo ""
 	@echo "Getting admin access token..."
-	@TOKEN=$$(curl -sk -X POST "https://keycloak.127-0-0-1.sslip.io:8443/realms/master/protocol/openid-connect/token" \
+	@RESPONSE=$$(curl -sk -X POST "https://keycloak.127-0-0-1.sslip.io:8443/realms/master/protocol/openid-connect/token" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		-d "username=$(KEYCLOAK_ADMIN_USER)" \
 		-d "password=$(KEYCLOAK_ADMIN_PASSWORD)" \
 		-d "grant_type=password" \
-		-d "client_id=admin-cli" \
-		2>/dev/null | jq -r '.access_token // empty'); \
+		-d "client_id=admin-cli"); \
+	TOKEN=$$(echo "$$RESPONSE" | jq -r '.access_token // empty' 2>/dev/null); \
 	if [ -z "$$TOKEN" ] || [ "$$TOKEN" = "null" ]; then \
-		echo "❌ Failed to get access token. Check if:"; \
+		echo "❌ Failed to get access token"; \
+		echo "Response was: $$RESPONSE" | head -c 200; \
+		echo ""; \
+		echo "Check if:"; \
 		echo "  - Keycloak is running (make keycloak-install)"; \
 		echo "  - Keycloak is accessible at https://keycloak.127-0-0-1.sslip.io:8443"; \
 		echo "  - Admin credentials are correct: $(KEYCLOAK_ADMIN_USER)/$(KEYCLOAK_ADMIN_PASSWORD)"; \
@@ -373,7 +379,7 @@ keycloak-setup-realm: ## Setup OpenShift realm with token exchange support
 	fi; \
 	echo ""; \
 	echo "Setting up RBAC for mcp user..."; \
-	kubectl apply -f config/keycloak/rbac.yaml; \
+	kubectl apply -f dev/config/keycloak/rbac.yaml; \
 	echo "✅ RBAC binding created for mcp user"; \
 	echo ""; \
 	echo "🎉 OpenShift realm setup complete!"; \
@@ -416,11 +422,27 @@ keycloak-setup-realm: ## Setup OpenShift realm with token exchange support
 	echo "  sts_client_secret = \"$$CLIENT_SECRET\""; \
 	echo "  sts_audience = \"openshift\""; \
 	echo "  sts_scopes = [\"mcp:openshift\"]"; \
-	echo "  certificate_authority = \"hack/cert-manager-ca/ca.crt\""; \
+	echo "  certificate_authority = \"_output/cert-manager-ca/ca.crt\""; \
 	echo "========================================"; \
 	echo ""; \
 	echo "Note: The Kubernetes API server is configured with:"; \
 	echo "  --oidc-issuer-url=https://keycloak.127-0-0-1.sslip.io:8443/realms/openshift"; \
 	echo ""; \
 	echo "Important: The cert-manager CA certificate was extracted to:"; \
-	echo "  hack/cert-manager-ca/ca.crt"
+	echo "  _output/cert-manager-ca/ca.crt"; \
+	echo ""; \
+	echo "Writing configuration to _output/config.toml..."; \
+	mkdir -p _output; \
+	printf '%s\n' \
+		'require_oauth = true' \
+		'oauth_audience = "mcp-server"' \
+		'oauth_scopes = ["openid", "mcp-server"]' \
+		'validate_token = false' \
+		'authorization_url = "https://keycloak.127-0-0-1.sslip.io:8443/realms/openshift"' \
+		'sts_client_id = "mcp-server"' \
+		"sts_client_secret = \"$$CLIENT_SECRET\"" \
+		'sts_audience = "openshift"' \
+		'sts_scopes = ["mcp:openshift"]' \
+		'certificate_authority = "_output/cert-manager-ca/ca.crt"' \
+		> _output/config.toml; \
+	echo "✅ Configuration written to _output/config.toml"

@@ -4,7 +4,7 @@ set -e
 # Generate a placeholder self-signed CA certificate for KIND cluster startup
 # This will be replaced with the real cert-manager CA after the cluster is created
 
-CERT_DIR="hack/cert-manager-ca"
+CERT_DIR="_output/cert-manager-ca"
 CA_CERT="$CERT_DIR/ca.crt"
 CA_KEY="$CERT_DIR/ca.key"
 

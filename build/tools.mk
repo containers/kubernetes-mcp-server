@@ -10,10 +10,11 @@ ifeq ($(ARCH),aarch64)
     ARCH = arm64
 endif
 
-KIND = bin/kind
+KIND = _output/bin/kind
 KIND_VERSION = v0.30.0
 $(KIND):
-	GOBIN=$(PWD)/bin go install sigs.k8s.io/kind@$(KIND_VERSION)
+	@mkdir -p _output/bin
+	GOBIN=$(PWD)/_output/bin go install sigs.k8s.io/kind@$(KIND_VERSION)
 
 .PHONY: kind
 kind: $(KIND) ## Download kind locally if necessary

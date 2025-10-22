@@ -117,9 +117,9 @@ update-readme-tools: ## Update the README.md file with the latest toolsets
 ##@ Tools
 
 .PHONY: tools
-tools: ## Install all required tools (kind) to ./bin/
-	@echo "Checking and installing required tools to ./bin/ ..."
-	@if [ -f bin/kind ]; then echo "[OK] kind already installed"; else echo "Installing kind..."; $(MAKE) -s kind; fi
+tools: ## Install all required tools (kind) to ./_output/bin/
+	@echo "Checking and installing required tools to ./_output/bin/ ..."
+	@if [ -f _output/bin/kind ]; then echo "[OK] kind already installed"; else echo "Installing kind..."; $(MAKE) -s kind; fi
 	@echo "All tools ready!"
 
 ##@ Local Development
@@ -138,11 +138,14 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "Local environment ready!"
 	@echo "========================================="
 	@echo ""
+	@echo "Configuration file generated:"
+	@echo "  _output/config.toml"
+	@echo ""
 	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME) --port ..."
+	@echo "  ./$(BINARY_NAME) --port 8080 --config _output/config.toml"
 	@echo ""
 	@echo "Or run with MCP inspector:"
-	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME)"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --config _output/config.toml"
 
 .PHONY: local-env-teardown
 local-env-teardown: ## Tear down the local Kind cluster
