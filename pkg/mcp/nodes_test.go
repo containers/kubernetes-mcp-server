@@ -158,6 +158,23 @@ func (s *NodesSuite) TestNodesLog() {
 					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 			})
 		})
+		s.Run("nodes_log(name=existing-node, log_path=kubelet.log, tail=-1)", func() {
+			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+				"name":     "existing-node",
+				"log_path": "kubelet.log",
+				"tail":     -1,
+			})
+			s.Require().NotNil(toolResult, "toolResult should not be nil")
+			s.Run("no error", func() {
+				s.Falsef(toolResult.IsError, "call tool should succeed")
+				s.Nilf(err, "call tool should not return error object")
+			})
+			s.Run("returns full log", func() {
+				expectedMessage := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
+				s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			})
+		})
 	}
 }
 
