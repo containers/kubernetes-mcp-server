@@ -7,125 +7,132 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/suite"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
-func TestPodsExec(t *testing.T) {
-	testCase(t, func(c *mcpContext) {
-		mockServer := test.NewMockServer()
-		defer mockServer.Close()
-		c.withKubeConfig(mockServer.Config())
-		mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if req.URL.Path != "/api/v1/namespaces/default/pods/pod-to-exec/exec" {
-				return
-			}
-			var stdin, stdout bytes.Buffer
-			ctx, err := test.CreateHTTPStreams(w, req, &test.StreamOptions{
-				Stdin:  &stdin,
-				Stdout: &stdout,
-			})
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				_, _ = w.Write([]byte(err.Error()))
-				return
-			}
-			defer func(conn io.Closer) { _ = conn.Close() }(ctx.Closer)
-			_, _ = io.WriteString(ctx.StdoutStream, "command:"+strings.Join(req.URL.Query()["command"], " ")+"\n")
-			_, _ = io.WriteString(ctx.StdoutStream, "container:"+strings.Join(req.URL.Query()["container"], " ")+"\n")
-		}))
-		mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if req.URL.Path != "/api/v1/namespaces/default/pods/pod-to-exec" {
-				return
-			}
-			test.WriteObject(w, &v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
-					Name:      "pod-to-exec",
-				},
-				Spec: v1.PodSpec{Containers: []v1.Container{{Name: "container-to-exec"}}},
-			})
-		}))
-		podsExecNilNamespace, err := c.callTool("pods_exec", map[string]interface{}{
+type PodsExecSuite struct {
+	BaseMcpSuite
+	mockServer *test.MockServer
+}
+
+func (s *PodsExecSuite) SetupTest() {
+	s.BaseMcpSuite.SetupTest()
+	s.mockServer = test.NewMockServer()
+	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+}
+
+func (s *PodsExecSuite) TearDownTest() {
+	s.BaseMcpSuite.TearDownTest()
+	if s.mockServer != nil {
+		s.mockServer.Close()
+	}
+}
+
+func (s *PodsExecSuite) TestPodsExec() {
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/api/v1/namespaces/default/pods/pod-to-exec/exec" {
+			return
+		}
+		var stdin, stdout bytes.Buffer
+		ctx, err := test.CreateHTTPStreams(w, req, &test.StreamOptions{
+			Stdin:  &stdin,
+			Stdout: &stdout,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(err.Error()))
+			return
+		}
+		defer func(conn io.Closer) { _ = conn.Close() }(ctx.Closer)
+		_, _ = io.WriteString(ctx.StdoutStream, "command:"+strings.Join(req.URL.Query()["command"], " ")+"\n")
+		_, _ = io.WriteString(ctx.StdoutStream, "container:"+strings.Join(req.URL.Query()["container"], " ")+"\n")
+	}))
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/api/v1/namespaces/default/pods/pod-to-exec" {
+			return
+		}
+		test.WriteObject(w, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Name:      "pod-to-exec",
+			},
+			Spec: v1.PodSpec{Containers: []v1.Container{{Name: "container-to-exec"}}},
+		})
+	}))
+	s.InitMcpClient()
+
+	s.Run("pods_exec(name=pod-to-exec, command=[ls -l])", func() {
+		result, err := s.CallTool("pods_exec", map[string]interface{}{
 			"name":    "pod-to-exec",
 			"command": []interface{}{"ls", "-l"},
 		})
-		t.Run("pods_exec with name and nil namespace returns command output", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call tool failed %v", err)
-			}
-			if podsExecNilNamespace.IsError {
-				t.Fatalf("call tool failed: %v", podsExecNilNamespace.Content)
-			}
-			if !strings.Contains(podsExecNilNamespace.Content[0].(mcp.TextContent).Text, "command:ls -l\n") {
-				t.Errorf("unexpected result %v", podsExecNilNamespace.Content[0].(mcp.TextContent).Text)
-			}
+		s.Require().NotNil(result)
+		s.Run("returns command output", func() {
+			s.NoError(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+			s.Contains(result.Content[0].(mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(mcp.TextContent).Text)
 		})
-		podsExecInNamespace, err := c.callTool("pods_exec", map[string]interface{}{
+	})
+	s.Run("pods_exec(name=pod-to-exec, namespace=default, command=[ls -l])", func() {
+		result, err := s.CallTool("pods_exec", map[string]interface{}{
 			"namespace": "default",
 			"name":      "pod-to-exec",
 			"command":   []interface{}{"ls", "-l"},
 		})
-		t.Run("pods_exec with name and namespace returns command output", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call tool failed %v", err)
-			}
-			if podsExecInNamespace.IsError {
-				t.Fatalf("call tool failed: %v", podsExecInNamespace.Content)
-			}
-			if !strings.Contains(podsExecInNamespace.Content[0].(mcp.TextContent).Text, "command:ls -l\n") {
-				t.Errorf("unexpected result %v", podsExecInNamespace.Content[0].(mcp.TextContent).Text)
-			}
+		s.Require().NotNil(result)
+		s.Run("returns command output", func() {
+			s.NoError(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+			s.Contains(result.Content[0].(mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(mcp.TextContent).Text)
 		})
-		podsExecInNamespaceAndContainer, err := c.callTool("pods_exec", map[string]interface{}{
+	})
+	s.Run("pods_exec(name=pod-to-exec, namespace=default, command=[ls -l], container=a-specific-container)", func() {
+		result, err := s.CallTool("pods_exec", map[string]interface{}{
 			"namespace": "default",
 			"name":      "pod-to-exec",
 			"command":   []interface{}{"ls", "-l"},
 			"container": "a-specific-container",
 		})
-		t.Run("pods_exec with name, namespace, and container returns command output", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call tool failed %v", err)
-			}
-			if podsExecInNamespaceAndContainer.IsError {
-				t.Fatalf("call tool failed")
-			}
-			if !strings.Contains(podsExecInNamespaceAndContainer.Content[0].(mcp.TextContent).Text, "command:ls -l\n") {
-				t.Errorf("unexpected result %v", podsExecInNamespaceAndContainer.Content[0].(mcp.TextContent).Text)
-			}
-			if !strings.Contains(podsExecInNamespaceAndContainer.Content[0].(mcp.TextContent).Text, "container:a-specific-container\n") {
-				t.Errorf("expected container name not found %v", podsExecInNamespaceAndContainer.Content[0].(mcp.TextContent).Text)
-			}
+		s.Require().NotNil(result)
+		s.Run("returns command output", func() {
+			s.NoError(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+			s.Contains(result.Content[0].(mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(mcp.TextContent).Text)
 		})
 	})
 }
 
-func TestPodsExecDenied(t *testing.T) {
-	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+func (s *PodsExecSuite) TestPodsExecDenied() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "Pod" } ]
-	`)))
-	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer}, func(c *mcpContext) {
-		c.withEnvTest()
-		podsRun, _ := c.callTool("pods_exec", map[string]interface{}{
+	`), s.Cfg), "Expected to parse denied resources config")
+	s.InitMcpClient()
+	s.Run("pods_exec (denied)", func() {
+		toolResult, err := s.CallTool("pods_exec", map[string]interface{}{
 			"namespace": "default",
 			"name":      "pod-to-exec",
 			"command":   []interface{}{"ls", "-l"},
 			"container": "a-specific-container",
 		})
-		t.Run("pods_exec has error", func(t *testing.T) {
-			if !podsRun.IsError {
-				t.Fatalf("call tool should fail")
-			}
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
 		})
-		t.Run("pods_exec describes denial", func(t *testing.T) {
+		s.Run("describes denial", func() {
 			expectedMessage := "failed to exec in pod pod-to-exec in namespace default: resource not allowed: /v1, Kind=Pod"
-			if podsRun.Content[0].(mcp.TextContent).Text != expectedMessage {
-				t.Fatalf("expected descriptive error '%s', got %v", expectedMessage, podsRun.Content[0].(mcp.TextContent).Text)
-			}
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
+}
+
+func TestPodsExec(t *testing.T) {
+	suite.Run(t, new(PodsExecSuite))
 }

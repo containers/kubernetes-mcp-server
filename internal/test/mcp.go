@@ -1,12 +1,12 @@
 package test
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
@@ -17,7 +17,7 @@ type McpClient struct {
 	*client.Client
 }
 
-func NewMcpClient(t *testing.T, mcpHttpServer *server.StreamableHTTPServer) *McpClient {
+func NewMcpClient(t *testing.T, mcpHttpServer http.Handler) *McpClient {
 	require.NotNil(t, mcpHttpServer, "McpHttpServer must be provided")
 	var err error
 	ret := &McpClient{ctx: t.Context()}
