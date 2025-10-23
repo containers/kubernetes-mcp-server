@@ -67,7 +67,7 @@ func (s *PodsExecSuite) TestPodsExec() {
 	}))
 	s.InitMcpClient()
 
-	s.Run("pods_exec(name=pod-to-exec, command=[ls -l])", func() {
+	s.Run("pods_exec(name=pod-to-exec, namespace=nil, command=[ls -l]), uses configured namespace", func() {
 		result, err := s.CallTool("pods_exec", map[string]interface{}{
 			"name":    "pod-to-exec",
 			"command": []interface{}{"ls", "-l"},
