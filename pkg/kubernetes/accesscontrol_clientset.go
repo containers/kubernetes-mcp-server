@@ -39,6 +39,22 @@ func (a *AccessControlClientset) DiscoveryClient() discovery.DiscoveryInterface 
 	return a.discoveryClient
 }
 
+func (a *AccessControlClientset) NodesLogs(ctx context.Context, name, logPath string) (*rest.Request, error) {
+	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
+	if !isAllowed(a.staticConfig, gvk) {
+		return nil, isNotAllowedError(gvk)
+	}
+
+	if _, err := a.delegate.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
+		return nil, fmt.Errorf("failed to get node %s: %w", name, err)
+	}
+
+	url := []string{"api", "v1", "nodes", name, "proxy", "logs", logPath}
+	return a.delegate.CoreV1().RESTClient().
+		Get().
+		AbsPath(url...), nil
+}
+
 func (a *AccessControlClientset) Pods(namespace string) (corev1.PodInterface, error) {
 	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	if !isAllowed(a.staticConfig, gvk) {

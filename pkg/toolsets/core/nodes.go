@@ -13,7 +13,7 @@ import (
 func initNodes() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
-			Name:        "node_log",
+			Name:        "nodes_log",
 			Description: "Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -48,12 +48,12 @@ func initNodes() []api.ServerTool {
 }
 
 func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	name := params.GetArguments()["name"]
-	if name == nil {
+	name, ok := params.GetArguments()["name"].(string)
+	if !ok || name == "" {
 		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument name")), nil
 	}
-	logPath := params.GetArguments()["log_path"]
-	if logPath == nil {
+	logPath, ok := params.GetArguments()["log_path"].(string)
+	if !ok || logPath == "" {
 		logPath = "kubelet.log"
 	}
 	tail := params.GetArguments()["tail"]
@@ -63,13 +63,14 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		switch v := tail.(type) {
 		case float64:
 			tailInt = int64(v)
-		case int: case int64:
-			tailInt = int64(v)
+		case int:
+		case int64:
+			tailInt = v
 		default:
 			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tail)), nil
 		}
 	}
-	ret, err := params.NodeLog(params, name.(string), logPath.(string), tailInt)
+	ret, err := params.NodesLog(params, name, logPath, tailInt)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
 	} else if ret == "" {

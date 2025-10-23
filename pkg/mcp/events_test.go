@@ -126,6 +126,7 @@ func (s *EventsSuite) TestEventsListDenied() {
 	s.InitMcpClient()
 	s.Run("events_list (denied)", func() {
 		toolResult, err := s.CallTool("events_list", map[string]interface{}{})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Run("has error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
 			s.Nilf(err, "call tool should not return error object")
