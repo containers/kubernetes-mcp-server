@@ -16,6 +16,18 @@ func Default() *StaticConfig {
 	return &mergedConfig
 }
 
+// HasDefaultOverrides indicates whether the internal defaultOverrides function
+// provides any overrides or an empty StaticConfig.
+func HasDefaultOverrides() bool {
+	overrides := defaultOverrides()
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(overrides); err != nil {
+		// If marshaling fails, assume no overrides
+		return false
+	}
+	return len(bytes.TrimSpace(buf.Bytes())) > 0
+}
+
 // mergeConfig applies non-zero values from override to base using TOML serialization
 // and returns the merged StaticConfig.
 // In case of any error during marshalling or unmarshalling, it returns the base config unchanged.

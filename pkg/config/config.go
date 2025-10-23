@@ -19,7 +19,7 @@ const (
 type StaticConfig struct {
 	DeniedResources []GroupVersionKind `toml:"denied_resources"`
 
-	LogLevel   int    `toml:"log_level,omitempty"`
+	LogLevel   int    `toml:"log_level,omitzero"`
 	Port       string `toml:"port,omitempty"`
 	SSEBaseURL string `toml:"sse_base_url,omitempty"`
 	KubeConfig string `toml:"kubeconfig,omitempty"`
