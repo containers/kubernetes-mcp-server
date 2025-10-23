@@ -174,6 +174,49 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 	})
 }
 
+func (s *ConfigSuite) TestMergeConfig() {
+	base := StaticConfig{
+		ListOutput: "table",
+		Toolsets:   []string{"core", "config", "helm"},
+		Port:       "8080",
+	}
+	s.Run("merges override values on top of base", func() {
+		override := StaticConfig{
+			ListOutput: "json",
+			Port:       "9090",
+		}
+
+		result := mergeConfig(base, override)
+
+		s.Equal("json", result.ListOutput, "ListOutput should be overridden")
+		s.Equal("9090", result.Port, "Port should be overridden")
+	})
+
+	s.Run("preserves base values when override is empty", func() {
+		override := StaticConfig{}
+
+		result := mergeConfig(base, override)
+
+		s.Equal("table", result.ListOutput, "ListOutput should be preserved from base")
+		s.Equal([]string{"core", "config", "helm"}, result.Toolsets, "Toolsets should be preserved from base")
+		s.Equal("8080", result.Port, "Port should be preserved from base")
+	})
+
+	s.Run("handles partial overrides", func() {
+		override := StaticConfig{
+			Toolsets: []string{"custom"},
+			ReadOnly: true,
+		}
+
+		result := mergeConfig(base, override)
+
+		s.Equal("table", result.ListOutput, "ListOutput should be preserved from base")
+		s.Equal([]string{"custom"}, result.Toolsets, "Toolsets should be overridden")
+		s.Equal("8080", result.Port, "Port should be preserved from base since override doesn't specify it")
+		s.True(result.ReadOnly, "ReadOnly should be overridden to true")
+	})
+}
+
 func TestConfig(t *testing.T) {
 	suite.Run(t, new(ConfigSuite))
 }

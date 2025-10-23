@@ -70,13 +70,6 @@ type StaticConfig struct {
 	parsedClusterProviderConfigs map[string]ProviderConfig
 }
 
-func Default() *StaticConfig {
-	return &StaticConfig{
-		ListOutput: "table",
-		Toolsets:   []string{"core", "config", "helm"},
-	}
-}
-
 type GroupVersionKind struct {
 	Group   string `toml:"group"`
 	Version string `toml:"version"`
