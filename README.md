@@ -54,11 +54,11 @@ If you're using the native binaries you don't need to have Node or Python instal
 
 - Access to a Kubernetes cluster.
 
-### Claude Desktop
+### Claude
 
-#### Using npx
+If you have npm installed, this is the fastest way to get started with `kubernetes-mcp-server` on Claude.
 
-If you have npm installed, this is the fastest way to get started with `kubernetes-mcp-server` on Claude Desktop.
+#### Claude Desktop - Using npx
 
 Open your `claude_desktop_config.json` and add the mcp server to the list of `mcpServers`:
 ``` json
@@ -73,6 +73,13 @@ Open your `claude_desktop_config.json` and add the mcp server to the list of `mc
     }
   }
 }
+```
+
+#### Claude Code - Using npx
+
+Add and enable `kubernetes-mcp-server` by runing the following command:
+```
+claude mcp add --transport stdio kubernetes -- npx -y kubernetes-mcp-server@latest
 ```
 
 ### VS Code / VS Code Insiders
