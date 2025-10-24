@@ -32,7 +32,7 @@ var _ http.Handler = &WellKnown{}
 
 func WellKnownHandler(staticConfig *config.StaticConfig, httpClient *http.Client) http.Handler {
 	authorizationUrl := staticConfig.AuthorizationURL
-	if authorizationUrl != "" && strings.HasSuffix("authorizationUrl", "/") {
+	if authorizationUrl != "" && strings.HasSuffix(authorizationUrl, "/") {
 		authorizationUrl = strings.TrimSuffix(authorizationUrl, "/")
 	}
 	if httpClient == nil {
@@ -55,6 +55,11 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	if err != nil {
 		http.Error(writer, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+	for key, values := range request.Header {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
 	}
 	resp, err := w.httpClient.Do(req.WithContext(request.Context()))
 	if err != nil {
