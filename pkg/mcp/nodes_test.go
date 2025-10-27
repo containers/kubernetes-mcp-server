@@ -200,6 +200,115 @@ func (s *NodesSuite) TestNodesLogDenied() {
 	})
 }
 
+func (s *NodesSuite) TestNodesStatsSummary() {
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Get Node response
+		if req.URL.Path == "/api/v1/nodes/existing-node" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"apiVersion": "v1",
+				"kind": "Node",
+				"metadata": {
+					"name": "existing-node"
+				}
+			}`))
+			return
+		}
+		// Get Stats Summary response
+		if req.URL.Path == "/api/v1/nodes/existing-node/proxy/stats/summary" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"node": {
+					"nodeName": "existing-node",
+					"cpu": {
+						"time": "2025-10-27T00:00:00Z",
+						"usageNanoCores": 1000000000,
+						"usageCoreNanoSeconds": 5000000000
+					},
+					"memory": {
+						"time": "2025-10-27T00:00:00Z",
+						"availableBytes": 8000000000,
+						"usageBytes": 4000000000,
+						"workingSetBytes": 3500000000
+					}
+				},
+				"pods": []
+			}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	s.InitMcpClient()
+	s.Run("nodes_stats_summary(name=nil)", func() {
+		toolResult, err := s.CallTool("nodes_stats_summary", map[string]interface{}{})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes missing name", func() {
+			expectedMessage := "failed to get node stats summary, missing argument name"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+	s.Run("nodes_stats_summary(name=inexistent-node)", func() {
+		toolResult, err := s.CallTool("nodes_stats_summary", map[string]interface{}{
+			"name": "inexistent-node",
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes missing node", func() {
+			expectedMessage := "failed to get node stats summary for inexistent-node: failed to get node inexistent-node: the server could not find the requested resource (get nodes inexistent-node)"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+	s.Run("nodes_stats_summary(name=existing-node)", func() {
+		toolResult, err := s.CallTool("nodes_stats_summary", map[string]interface{}{
+			"name": "existing-node",
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("no error", func() {
+			s.Falsef(toolResult.IsError, "call tool should succeed")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("returns stats summary", func() {
+			content := toolResult.Content[0].(mcp.TextContent).Text
+			s.Containsf(content, "existing-node", "expected stats to contain node name, got %v", content)
+			s.Containsf(content, "usageNanoCores", "expected stats to contain CPU metrics, got %v", content)
+			s.Containsf(content, "usageBytes", "expected stats to contain memory metrics, got %v", content)
+		})
+	})
+}
+
+func (s *NodesSuite) TestNodesStatsSummaryDenied() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		denied_resources = [ { version = "v1", kind = "Node" } ]
+	`), s.Cfg), "Expected to parse denied resources config")
+	s.InitMcpClient()
+	s.Run("nodes_stats_summary (denied)", func() {
+		toolResult, err := s.CallTool("nodes_stats_summary", map[string]interface{}{
+			"name": "does-not-matter",
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes denial", func() {
+			expectedMessage := "failed to get node stats summary for does-not-matter: resource not allowed: /v1, Kind=Node"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+}
+
 func TestNodes(t *testing.T) {
 	suite.Run(t, new(NodesSuite))
 }

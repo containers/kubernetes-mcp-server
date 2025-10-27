@@ -44,6 +44,27 @@ func initNodes() []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: nodesLog},
+		{Tool: api.Tool{
+			Name:        "nodes_stats_summary",
+			Description: "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"name": {
+						Type:        "string",
+						Description: "Name of the node to get stats from",
+					},
+				},
+				Required: []string{"name"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Node: Stats Summary",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: nodesStatsSummary},
 	}
 }
 
@@ -75,6 +96,18 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
 	} else if ret == "" {
 		ret = fmt.Sprintf("The node %s has not logged any message yet or the log file is empty", name)
+	}
+	return api.NewToolCallResult(ret, nil), nil
+}
+
+func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	name, ok := params.GetArguments()["name"].(string)
+	if !ok || name == "" {
+		return api.NewToolCallResult("", errors.New("failed to get node stats summary, missing argument name")), nil
+	}
+	ret, err := params.NodesStatsSummary(params, name)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get node stats summary for %s: %v", name, err)), nil
 	}
 	return api.NewToolCallResult(ret, nil), nil
 }

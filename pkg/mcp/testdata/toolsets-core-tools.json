@@ -69,6 +69,29 @@
   },
   {
     "annotations": {
+      "title": "Node: Stats Summary",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the node to get stats from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "nodes_stats_summary"
+  },
+  {
+    "annotations": {
       "title": "Pods: Delete",
       "readOnlyHint": false,
       "destructiveHint": true,
