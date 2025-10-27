@@ -18,4 +18,5 @@ Choose the guide that matches your needs:
 
 ## Additional Documentation
 
+- **[Keycloak OIDC Setup](KEYCLOAK_OIDC_SETUP.md)** - Developer guide for local Keycloak environment and testing with MCP Inspector
 - **[Main README](../README.md)** - Project overview and general information
