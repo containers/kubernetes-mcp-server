@@ -49,10 +49,11 @@ func (a *AccessControlClientset) NodesLogs(ctx context.Context, name, logPath st
 		return nil, fmt.Errorf("failed to get node %s: %w", name, err)
 	}
 
-	url := []string{"api", "v1", "nodes", name, "proxy", "logs", logPath}
+	url := []string{"api", "v1", "nodes", name, "proxy", "logs"}
 	return a.delegate.CoreV1().RESTClient().
 		Get().
-		AbsPath(url...), nil
+		AbsPath(url...).
+		Param("query", logPath), nil
 }
 
 func (a *AccessControlClientset) Pods(namespace string) (corev1.PodInterface, error) {
