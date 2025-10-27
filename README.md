@@ -54,6 +54,15 @@ If you're using the native binaries you don't need to have Node or Python instal
 
 - Access to a Kubernetes cluster.
 
+<details>
+<summary><b>Claude Code</b></summary>
+
+Follow the [dedicated Claude Code getting started guide](docs/GETTING_STARTED_CLAUDE_CODE.md) in our [user documentation](docs/).
+
+For a secure production setup with dedicated ServiceAccount and read-only access, also review the [Kubernetes setup guide](docs/GETTING_STARTED_KUBERNETES.md).
+
+</details>
+
 ### Claude Desktop
 
 #### Using npx

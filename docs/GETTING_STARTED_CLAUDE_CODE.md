@@ -88,20 +88,10 @@ to fetch and display the relevant information from your cluster:
 
 Common command-line flags you can add to the `args` array:
 
-| Flag | Description | Example |
-|------|-------------|---------|
-| `--read-only` | Enable read-only mode (recommended) | Already included above |
-| `--kubeconfig <path>` | Path to kubeconfig file | Use `KUBECONFIG` env var instead |
-| `--context <name>` | Use specific context from kubeconfig | `"--context", "my-cluster"` |
-| `--namespace <ns>` | Default namespace for operations | `"--namespace", "production"` |
-
-**Example with custom namespace:**
-
-```bash
-claude mcp add-json kubernetes-mcp-server \
-  '{"command":"npx","args":["-y","kubernetes-mcp-server@latest","--read-only","--namespace","production"],"env":{"KUBECONFIG":"'${HOME}'/.kube/mcp-viewer.kubeconfig"}}' \
-  -s user
-```
+| Flag | Description |
+|------|-------------|
+| `--read-only` | Enable read-only mode (recommended) |
+| `--kubeconfig <path>` | Path to kubeconfig file (or use `KUBECONFIG` env var) |
 
 ## Next Steps
 
