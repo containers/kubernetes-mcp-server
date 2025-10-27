@@ -43,23 +43,29 @@ func (s *NodesSuite) TestNodesLog() {
 			}`))
 			return
 		}
-		// Get Empty Log response
-		if req.URL.Path == "/api/v1/nodes/existing-node/proxy/logs/empty.log" {
-			w.Header().Set("Content-Type", "text/plain")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(``))
-			return
-		}
-		// Get Kubelet Log response
-		if req.URL.Path == "/api/v1/nodes/existing-node/proxy/logs/kubelet.log" {
-			w.Header().Set("Content-Type", "text/plain")
-			w.WriteHeader(http.StatusOK)
-			logContent := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
-			if req.URL.Query().Get("tailLines") != "" {
-				logContent = "Line 4\nLine 5\n"
+		// Check for log proxy requests based on path and query parameters
+		if req.URL.Path == "/api/v1/nodes/existing-node/proxy/logs" {
+			logPath := req.URL.Query().Get("query")
+
+			// Get Empty Log response
+			if logPath == "empty.log" {
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(``))
+				return
 			}
-			_, _ = w.Write([]byte(logContent))
-			return
+
+			// Get Kubelet Log response
+			if logPath == "kubelet.log" {
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusOK)
+				logContent := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
+				if req.URL.Query().Get("tailLines") != "" {
+					logContent = "Line 4\nLine 5\n"
+				}
+				_, _ = w.Write([]byte(logContent))
+				return
+			}
 		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
