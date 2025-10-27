@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/BurntSushi/toml"
@@ -12,7 +13,27 @@ type ProviderConfig interface {
 	Validate() error
 }
 
-type ProviderConfigParser func(primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error)
+type ProviderConfigParser func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error)
+
+type configDirPathKey struct{}
+
+func withConfigDirPath(ctx context.Context, dirPath string) context.Context {
+	return context.WithValue(ctx, configDirPathKey{}, dirPath)
+}
+
+func ConfigDirPathFromContext(ctx context.Context) string {
+	val := ctx.Value(configDirPathKey{})
+
+	if val == nil {
+		return ""
+	}
+
+	if strVal, ok := val.(string); ok {
+		return strVal
+	}
+
+	return ""
+}
 
 var (
 	providerConfigParsers = make(map[string]ProviderConfigParser)

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -42,7 +44,7 @@ func (p *ProviderConfigForTest) Validate() error {
 	return nil
 }
 
-func providerConfigForTestParser(primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
+func providerConfigForTestParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
 	var providerConfigForTest ProviderConfigForTest
 	if err := md.PrimitiveDecode(primitive, &providerConfigForTest); err != nil {
 		return nil, err
@@ -131,7 +133,7 @@ func (s *ProviderConfigSuite) TestReadConfigUnregisteredProviderConfig() {
 }
 
 func (s *ProviderConfigSuite) TestReadConfigParserError() {
-	RegisterProviderConfig("test", func(primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
+	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
 		return nil, errors.New("parser error forced by test")
 	})
 	invalidConfigPath := s.writeConfig(`
@@ -149,6 +151,35 @@ func (s *ProviderConfigSuite) TestReadConfigParserError() {
 	})
 	s.Run("returns nil config for provider config parser error", func() {
 		s.Nil(config, "Expected nil config for provider config parser error")
+	})
+}
+
+func (s *ProviderConfigSuite) TestConfigDirPathInContext() {
+	var capturedDirPath string
+	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
+		capturedDirPath = ConfigDirPathFromContext(ctx)
+		var providerConfigForTest ProviderConfigForTest
+		if err := md.PrimitiveDecode(primitive, &providerConfigForTest); err != nil {
+			return nil, err
+		}
+		return &providerConfigForTest, nil
+	})
+	configPath := s.writeConfig(`
+		cluster_provider_strategy = "test"
+		[cluster_provider_configs.test]
+		bool_prop = true
+		str_prop = "a string"
+		int_prop = 42
+	`)
+
+	absConfigPath, err := filepath.Abs(configPath)
+	s.Require().NoError(err, "test error: getting the absConfigPath should not fail")
+
+	_, err = Read(configPath)
+	s.Run("provides config directory path in context to parser", func() {
+		s.Require().NoError(err, "Expected no error reading config")
+		s.NotEmpty(capturedDirPath, "Expected non-empty directory path in context")
+		s.Equal(filepath.Dir(absConfigPath), capturedDirPath, "Expected directory path to match config file directory")
 	})
 }
 

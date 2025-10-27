@@ -2,8 +2,10 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 )
@@ -68,6 +70,9 @@ type StaticConfig struct {
 
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]ProviderConfig
+
+	// Internal: the config.toml directory, to help resolve relative file paths
+	configDirPath string
 }
 
 type GroupVersionKind struct {
@@ -76,21 +81,46 @@ type GroupVersionKind struct {
 	Kind    string `toml:"kind,omitempty"`
 }
 
-// Read reads the toml file and returns the StaticConfig.
-func Read(configPath string) (*StaticConfig, error) {
+type ReadConfigOpt func(cfg *StaticConfig)
+
+func withDirPath(path string) ReadConfigOpt {
+	return func(cfg *StaticConfig) {
+		cfg.configDirPath = path
+	}
+}
+
+// Read reads the toml file and returns the StaticConfig, with any opts applied.
+func Read(configPath string, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
-	return ReadToml(configData)
+
+	// get and save the absolute dir path to the config file, so that other config parsers can use it
+	absPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve absolute path to config file: %w", err)
+	}
+	dirPath := filepath.Dir(absPath)
+
+	cfg, err := ReadToml(configData, append(opts, withDirPath(dirPath))...)
+	if err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
 }
 
-// ReadToml reads the toml data and returns the StaticConfig.
-func ReadToml(configData []byte) (*StaticConfig, error) {
+// ReadToml reads the toml data and returns the StaticConfig, with any opts applied
+func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	config := Default()
 	md, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(config)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, opt := range opts {
+		opt(config)
 	}
 
 	if err := config.parseClusterProviderConfigs(md); err != nil {
@@ -111,13 +141,15 @@ func (c *StaticConfig) parseClusterProviderConfigs(md toml.MetaData) error {
 		c.parsedClusterProviderConfigs = make(map[string]ProviderConfig, len(c.ClusterProviderConfigs))
 	}
 
+	ctx := withConfigDirPath(context.Background(), c.configDirPath)
+
 	for strategy, primitive := range c.ClusterProviderConfigs {
 		parser, ok := getProviderConfigParser(strategy)
 		if !ok {
 			continue
 		}
 
-		providerConfig, err := parser(primitive, md)
+		providerConfig, err := parser(ctx, primitive, md)
 		if err != nil {
 			return fmt.Errorf("failed to parse config for ClusterProvider '%s': %w", strategy, err)
 		}
