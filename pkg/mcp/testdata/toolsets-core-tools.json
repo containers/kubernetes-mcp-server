@@ -45,16 +45,15 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "log_path": {
-          "default": "kubelet.log",
-          "description": "Path to the log file on the node (e.g. 'kubelet.log', 'kube-proxy.log'). Default is 'kubelet.log'",
-          "type": "string"
-        },
         "name": {
           "description": "Name of the node to get logs from",
           "type": "string"
         },
-        "tail": {
+        "query": {
+          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
+          "type": "string"
+        },
+        "tailLines": {
           "default": 100,
           "description": "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
           "minimum": 0,
@@ -62,7 +61,8 @@
         }
       },
       "required": [
-        "name"
+        "name",
+        "query"
       ]
     },
     "name": "nodes_log"

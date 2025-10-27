@@ -39,7 +39,7 @@ func (a *AccessControlClientset) DiscoveryClient() discovery.DiscoveryInterface 
 	return a.discoveryClient
 }
 
-func (a *AccessControlClientset) NodesLogs(ctx context.Context, name, logPath string) (*rest.Request, error) {
+func (a *AccessControlClientset) NodesLogs(ctx context.Context, name string) (*rest.Request, error) {
 	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
 	if !isAllowed(a.staticConfig, gvk) {
 		return nil, isNotAllowedError(gvk)
@@ -52,8 +52,7 @@ func (a *AccessControlClientset) NodesLogs(ctx context.Context, name, logPath st
 	url := []string{"api", "v1", "nodes", name, "proxy", "logs"}
 	return a.delegate.CoreV1().RESTClient().
 		Get().
-		AbsPath(url...).
-		Param("query", logPath), nil
+		AbsPath(url...), nil
 }
 
 func (a *AccessControlClientset) Pods(namespace string) (corev1.PodInterface, error) {

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -43,29 +44,27 @@ func (s *NodesSuite) TestNodesLog() {
 			}`))
 			return
 		}
-		// Check for log proxy requests based on path and query parameters
+		// Get Proxy Logs
 		if req.URL.Path == "/api/v1/nodes/existing-node/proxy/logs" {
-			logPath := req.URL.Query().Get("query")
-
-			// Get Empty Log response
-			if logPath == "empty.log" {
-				w.Header().Set("Content-Type", "text/plain")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(``))
+			w.Header().Set("Content-Type", "text/plain")
+			query := req.URL.Query().Get("query")
+			var logContent string
+			switch query {
+			case "/empty.log":
+				logContent = ""
+			case "/kubelet.log":
+				logContent = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
+			default:
+				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-
-			// Get Kubelet Log response
-			if logPath == "kubelet.log" {
-				w.Header().Set("Content-Type", "text/plain")
-				w.WriteHeader(http.StatusOK)
-				logContent := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
-				if req.URL.Query().Get("tailLines") != "" {
-					logContent = "Line 4\nLine 5\n"
-				}
-				_, _ = w.Write([]byte(logContent))
-				return
+			_, err := strconv.Atoi(req.URL.Query().Get("tailLines"))
+			if err == nil {
+				logContent = "Line 4\nLine 5\n"
 			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(logContent))
+			return
 		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -83,9 +82,25 @@ func (s *NodesSuite) TestNodesLog() {
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
-	s.Run("nodes_log(name=inexistent-node)", func() {
+	s.Run("nodes_log(name=existing-node, query=nil)", func() {
 		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-			"name": "inexistent-node",
+			"name": "existing-node",
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes missing name", func() {
+			expectedMessage := "failed to get node log, missing argument query"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+	s.Run("nodes_log(name=inexistent-node, query=/kubelet.log)", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "inexistent-node",
+			"query": "/kubelet.log",
 		})
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Run("has error", func() {
@@ -98,10 +113,10 @@ func (s *NodesSuite) TestNodesLog() {
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
-	s.Run("nodes_log(name=existing-node, log_path=missing.log)", func() {
+	s.Run("nodes_log(name=existing-node, query=/missing.log)", func() {
 		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-			"name":     "existing-node",
-			"log_path": "missing.log",
+			"name":  "existing-node",
+			"query": "/missing.log",
 		})
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Run("has error", func() {
@@ -114,10 +129,10 @@ func (s *NodesSuite) TestNodesLog() {
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
-	s.Run("nodes_log(name=existing-node, log_path=empty.log)", func() {
+	s.Run("nodes_log(name=existing-node, query=/empty.log)", func() {
 		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-			"name":     "existing-node",
-			"log_path": "empty.log",
+			"name":  "existing-node",
+			"query": "/empty.log",
 		})
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Run("no error", func() {
@@ -130,10 +145,10 @@ func (s *NodesSuite) TestNodesLog() {
 				"expected descriptive message '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
-	s.Run("nodes_log(name=existing-node, log_path=kubelet.log)", func() {
+	s.Run("nodes_log(name=existing-node, query=/kubelet.log)", func() {
 		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-			"name":     "existing-node",
-			"log_path": "kubelet.log",
+			"name":  "existing-node",
+			"query": "/kubelet.log",
 		})
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Run("no error", func() {
@@ -147,11 +162,11 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 	})
 	for _, tailCase := range []interface{}{2, int64(2), float64(2)} {
-		s.Run("nodes_log(name=existing-node, log_path=kubelet.log, tail=2)", func() {
+		s.Run("nodes_log(name=existing-node, query=/kubelet.log, tailLines=2)", func() {
 			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-				"name":     "existing-node",
-				"log_path": "kubelet.log",
-				"tail":     tailCase,
+				"name":      "existing-node",
+				"query":     "/kubelet.log",
+				"tailLines": tailCase,
 			})
 			s.Require().NotNil(toolResult, "toolResult should not be nil")
 			s.Run("no error", func() {
@@ -164,11 +179,11 @@ func (s *NodesSuite) TestNodesLog() {
 					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 			})
 		})
-		s.Run("nodes_log(name=existing-node, log_path=kubelet.log, tail=-1)", func() {
+		s.Run("nodes_log(name=existing-node, query=/kubelet.log, tailLines=-1)", func() {
 			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-				"name":     "existing-node",
-				"log_path": "kubelet.log",
-				"tail":     -1,
+				"name":  "existing-node",
+				"query": "/kubelet.log",
+				"tail":  -1,
 			})
 			s.Require().NotNil(toolResult, "toolResult should not be nil")
 			s.Run("no error", func() {
@@ -191,7 +206,8 @@ func (s *NodesSuite) TestNodesLogDenied() {
 	s.InitMcpClient()
 	s.Run("nodes_log (denied)", func() {
 		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-			"name": "does-not-matter",
+			"name":  "does-not-matter",
+			"query": "/does-not-matter-either.log",
 		})
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Run("has error", func() {

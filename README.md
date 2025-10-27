@@ -235,6 +235,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **projects_list** - List all the OpenShift projects in the current cluster
 
+- **nodes_log** - Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet
+  - `name` (`string`) **(required)** - Name of the node to get logs from
+  - `query` (`string`) **(required)** - query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "/var/log/kubelet.log" or "/var/log/kube-proxy.log")
+  - `tailLines` (`integer`) - Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)
+
 - **pods_list** - List all the Kubernetes pods in the current cluster from all namespaces
   - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
 

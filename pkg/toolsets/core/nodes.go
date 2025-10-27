@@ -22,19 +22,18 @@ func initNodes() []api.ServerTool {
 						Type:        "string",
 						Description: "Name of the node to get logs from",
 					},
-					"log_path": {
+					"query": {
 						Type:        "string",
-						Description: "Path to the log file on the node (e.g. 'kubelet.log', 'kube-proxy.log'). Default is 'kubelet.log'",
-						Default:     api.ToRawMessage("kubelet.log"),
+						Description: `query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "/var/log/kubelet.log" or "/var/log/kube-proxy.log")`,
 					},
-					"tail": {
+					"tailLines": {
 						Type:        "integer",
 						Description: "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
 						Default:     api.ToRawMessage(100),
 						Minimum:     ptr.To(float64(0)),
 					},
 				},
-				Required: []string{"name"},
+				Required: []string{"name", "query"},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Node: Log",
@@ -52,25 +51,25 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if !ok || name == "" {
 		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument name")), nil
 	}
-	logPath, ok := params.GetArguments()["log_path"].(string)
-	if !ok || logPath == "" {
-		logPath = "kubelet.log"
+	query, ok := params.GetArguments()["query"].(string)
+	if !ok || query == "" {
+		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument query")), nil
 	}
-	tail := params.GetArguments()["tail"]
+	tailLines := params.GetArguments()["tailLines"]
 	var tailInt int64
-	if tail != nil {
+	if tailLines != nil {
 		// Convert to int64 - safely handle both float64 (JSON number) and int types
-		switch v := tail.(type) {
+		switch v := tailLines.(type) {
 		case float64:
 			tailInt = int64(v)
 		case int:
 		case int64:
 			tailInt = v
 		default:
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tail)), nil
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tailLines)), nil
 		}
 	}
-	ret, err := params.NodesLog(params, name, logPath, tailInt)
+	ret, err := params.NodesLog(params, name, query, tailInt)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
 	} else if ret == "" {

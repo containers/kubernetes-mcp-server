@@ -5,21 +5,23 @@ import (
 	"fmt"
 )
 
-func (k *Kubernetes) NodesLog(ctx context.Context, name string, logPath string, tail int64) (string, error) {
+func (k *Kubernetes) NodesLog(ctx context.Context, name string, query string, tailLines int64) (string, error) {
 	// Use the node proxy API to access logs from the kubelet
+	// https://kubernetes.io/docs/concepts/cluster-administration/system-logs/#log-query
 	// Common log paths:
 	// - /var/log/kubelet.log - kubelet logs
 	// - /var/log/kube-proxy.log - kube-proxy logs
 	// - /var/log/containers/ - container logs
 
-	req, err := k.AccessControlClientset().NodesLogs(ctx, name, logPath)
+	req, err := k.AccessControlClientset().NodesLogs(ctx, name)
 	if err != nil {
 		return "", err
 	}
 
+	req.Param("query", query)
 	// Query parameters for tail
-	if tail > 0 {
-		req.Param("tailLines", fmt.Sprintf("%d", tail))
+	if tailLines > 0 {
+		req.Param("tailLines", fmt.Sprintf("%d", tailLines))
 	}
 
 	result := req.Do(ctx)
