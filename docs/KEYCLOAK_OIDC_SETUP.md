@@ -1,5 +1,9 @@
 # Keycloak OIDC Setup for Kubernetes MCP Server
 
+> **⚠️ Preview Feature**
+>
+> OIDC/OAuth authentication setup is currently in **preview**. Configuration flags or fields may change. Use for **development and testing only**.
+
 This guide shows you how to set up a local development environment with Keycloak for OIDC authentication testing.
 
 ## Overview
