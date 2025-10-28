@@ -443,9 +443,9 @@ func (s *BaseMcpSuite) TearDownTest() {
 	}
 }
 
-func (s *BaseMcpSuite) InitMcpClient() {
+func (s *BaseMcpSuite) InitMcpClient(options ...transport.StreamableHTTPCOption) {
 	var err error
 	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
 	s.Require().NoError(err, "Expected no error creating MCP server")
-	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil))
+	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil), options...)
 }

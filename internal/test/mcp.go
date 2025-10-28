@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
@@ -17,12 +18,12 @@ type McpClient struct {
 	*client.Client
 }
 
-func NewMcpClient(t *testing.T, mcpHttpServer http.Handler) *McpClient {
+func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...transport.StreamableHTTPCOption) *McpClient {
 	require.NotNil(t, mcpHttpServer, "McpHttpServer must be provided")
 	var err error
 	ret := &McpClient{ctx: t.Context()}
 	ret.testServer = httptest.NewServer(mcpHttpServer)
-	ret.Client, err = client.NewStreamableHttpClient(ret.testServer.URL + "/mcp")
+	ret.Client, err = client.NewStreamableHttpClient(ret.testServer.URL+"/mcp", options...)
 	require.NoError(t, err, "Expected no error creating MCP client")
 	err = ret.Start(t.Context())
 	require.NoError(t, err, "Expected no error starting MCP client")
