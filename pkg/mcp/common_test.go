@@ -449,3 +449,21 @@ func (s *BaseMcpSuite) InitMcpClient() {
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil))
 }
+
+// CrdWaitUntilReady waits for a CRD to be established
+func (s *BaseMcpSuite) CrdWaitUntilReady(name string) {
+	apiExtensionClient := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
+	watcher, err := apiExtensionClient.CustomResourceDefinitions().Watch(s.T().Context(), metav1.ListOptions{
+		FieldSelector: "metadata.name=" + name,
+	})
+	s.Require().NoError(err, "failed to watch CRD")
+	_, err = toolswatch.UntilWithoutRetry(s.T().Context(), watcher, func(event watch.Event) (bool, error) {
+		for _, c := range event.Object.(*apiextensionsv1spec.CustomResourceDefinition).Status.Conditions {
+			if c.Type == apiextensionsv1spec.Established && c.Status == apiextensionsv1spec.ConditionTrue {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+	s.Require().NoError(err, "failed to wait for CRD")
+}
