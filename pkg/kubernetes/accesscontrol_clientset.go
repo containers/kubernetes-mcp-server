@@ -39,6 +39,14 @@ func (a *AccessControlClientset) DiscoveryClient() discovery.DiscoveryInterface 
 	return a.discoveryClient
 }
 
+func (a *AccessControlClientset) Nodes() (corev1.NodeInterface, error) {
+	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
+	if !isAllowed(a.staticConfig, gvk) {
+		return nil, isNotAllowedError(gvk)
+	}
+	return a.delegate.CoreV1().Nodes(), nil
+}
+
 func (a *AccessControlClientset) NodesLogs(ctx context.Context, name string) (*rest.Request, error) {
 	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
 	if !isAllowed(a.staticConfig, gvk) {
@@ -127,6 +135,29 @@ func (a *AccessControlClientset) PodsMetricses(ctx context.Context, namespace, n
 	}
 	convertedMetrics := &metrics.PodMetricsList{}
 	return convertedMetrics, metricsv1beta1api.Convert_v1beta1_PodMetricsList_To_metrics_PodMetricsList(versionedMetrics, convertedMetrics, nil)
+}
+
+func (a *AccessControlClientset) NodesMetricses(ctx context.Context, name string, listOptions metav1.ListOptions) (*metrics.NodeMetricsList, error) {
+	gvk := &schema.GroupVersionKind{Group: metrics.GroupName, Version: metricsv1beta1api.SchemeGroupVersion.Version, Kind: "NodeMetrics"}
+	if !isAllowed(a.staticConfig, gvk) {
+		return nil, isNotAllowedError(gvk)
+	}
+	versionedMetrics := &metricsv1beta1api.NodeMetricsList{}
+	var err error
+	if name != "" {
+		m, err := a.metricsV1beta1.NodeMetricses().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get metrics for node %s: %w", name, err)
+		}
+		versionedMetrics.Items = []metricsv1beta1api.NodeMetrics{*m}
+	} else {
+		versionedMetrics, err = a.metricsV1beta1.NodeMetricses().List(ctx, listOptions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list node metrics: %w", err)
+		}
+	}
+	convertedMetrics := &metrics.NodeMetricsList{}
+	return convertedMetrics, metricsv1beta1api.Convert_v1beta1_NodeMetricsList_To_metrics_NodeMetricsList(versionedMetrics, convertedMetrics, nil)
 }
 
 func (a *AccessControlClientset) Services(namespace string) (corev1.ServiceInterface, error) {

@@ -92,6 +92,31 @@
   },
   {
     "annotations": {
+      "title": "Nodes: Top",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
+          "type": "string"
+        },
+        "label_selector": {
+          "description": "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
+          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "type": "string"
+        }
+      }
+    },
+    "name": "nodes_top"
+  },
+  {
+    "annotations": {
       "title": "Pods: Delete",
       "readOnlyHint": false,
       "destructiveHint": true,
