@@ -57,6 +57,41 @@
   },
   {
     "annotations": {
+      "title": "Helm: History",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Retrieve the revision history for a given Helm release",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "type": "string"
+        },
+        "max": {
+          "description": "Maximum number of revisions to retrieve (Optional, all revisions if not provided)",
+          "type": "integer"
+        },
+        "name": {
+          "description": "Name of the Helm release to retrieve history for",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Helm release (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "name": "helm_history"
+  },
+  {
+    "annotations": {
       "title": "Helm: Install",
       "destructiveHint": false,
       "openWorldHint": true
