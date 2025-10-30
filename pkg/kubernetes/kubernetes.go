@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/helm"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -28,6 +29,14 @@ type Kubernetes struct {
 // This ensures that any denied resources configured in the system are properly enforced
 func (k *Kubernetes) AccessControlClientset() *AccessControlClientset {
 	return k.manager.accessControlClientSet
+}
+
+// RESTConfig returns the Kubernetes REST configuration
+func (k *Kubernetes) RESTConfig() *rest.Config {
+	if k.manager == nil {
+		return nil
+	}
+	return k.manager.cfg
 }
 
 var Scheme = scheme.Scheme
