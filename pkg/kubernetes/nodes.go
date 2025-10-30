@@ -39,6 +39,7 @@ func (k *Kubernetes) NodesLog(ctx context.Context, name string, query string, ta
 
 func (k *Kubernetes) NodesStatsSummary(ctx context.Context, name string) (string, error) {
 	// Use the node proxy API to access stats summary from the kubelet
+	// https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/
 	// This endpoint provides CPU, memory, filesystem, and network statistics
 
 	req, err := k.AccessControlClientset().NodesStatsSummary(ctx, name)
