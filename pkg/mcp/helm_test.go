@@ -266,6 +266,106 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 	})
 }
 
+func (s *HelmSuite) TestHelmHistoryNoReleases() {
+	s.InitMcpClient()
+	s.Run("helm_history(name=non-existent-release) with no releases", func() {
+		toolResult, err := s.CallTool("helm_history", map[string]interface{}{
+			"name": "non-existent-release",
+		})
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail for non-existent release")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes error", func() {
+			s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "failed to retrieve helm history"), "expected descriptive error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+}
+
+func (s *HelmSuite) TestHelmHistory() {
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Create multiple revisions of a release
+	for i := 1; i <= 3; i++ {
+		_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "sh.helm.release.v1.release-with-history.v" + string(rune('0'+i)),
+				Labels: map[string]string{"owner": "helm", "name": "release-with-history", "version": string(rune('0' + i))},
+			},
+			Data: map[string][]byte{
+				"release": []byte(base64.StdEncoding.EncodeToString([]byte("{" +
+					"\"name\":\"release-with-history\"," +
+					"\"version\":" + string(rune('0'+i)) + "," +
+					"\"info\":{\"status\":\"superseded\",\"last_deployed\":\"2024-01-01T00:00:00Z\",\"description\":\"Upgrade complete\"}," +
+					"\"chart\":{\"metadata\":{\"name\":\"test-chart\",\"version\":\"1.0.0\",\"appVersion\":\"1.0.0\"}}" +
+					"}"))),
+			},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(err)
+	}
+	s.InitMcpClient()
+	s.Run("helm_history(name=release-with-history) with multiple revisions", func() {
+		toolResult, err := s.CallTool("helm_history", map[string]interface{}{
+			"name": "release-with-history",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("returns history", func() {
+			var decoded []map[string]interface{}
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			s.Run("has yaml content", func() {
+				s.Nilf(err, "invalid tool result content %v", err)
+			})
+			s.Run("has 3 items", func() {
+				s.Lenf(decoded, 3, "invalid helm history count, expected 3, got %v", len(decoded))
+			})
+			s.Run("has valid revision numbers", func() {
+				for i, item := range decoded {
+					expectedRevision := float64(i + 1)
+					s.Equalf(expectedRevision, item["revision"], "invalid revision for item %d, expected %v, got %v", i, expectedRevision, item["revision"])
+				}
+			})
+			s.Run("has valid status", func() {
+				s.Equalf("superseded", decoded[0]["status"], "invalid status, expected superseded, got %v", decoded[0]["status"])
+			})
+			s.Run("has valid chart", func() {
+				s.Equalf("test-chart-1.0.0", decoded[0]["chart"], "invalid chart, expected test-chart-1.0.0, got %v", decoded[0]["chart"])
+			})
+			s.Run("has valid appVersion", func() {
+				s.Equalf("1.0.0", decoded[0]["appVersion"], "invalid appVersion, expected 1.0.0, got %v", decoded[0]["appVersion"])
+			})
+			s.Run("has valid description", func() {
+				s.Equalf("Upgrade complete", decoded[0]["description"], "invalid description, expected 'Upgrade complete', got %v", decoded[0]["description"])
+			})
+		})
+	})
+	s.Run("helm_history(name=release-with-history, max=2) with max limit", func() {
+		toolResult, err := s.CallTool("helm_history", map[string]interface{}{
+			"name": "release-with-history",
+			"max":  2,
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("returns limited history", func() {
+			var decoded []map[string]interface{}
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			s.Run("has yaml content", func() {
+				s.Nilf(err, "invalid tool result content %v", err)
+			})
+			s.Run("has 2 items", func() {
+				s.Lenf(decoded, 2, "invalid helm history count with max=2, expected 2, got %v", len(decoded))
+			})
+			s.Run("returns most recent revisions", func() {
+				s.Equalf(float64(2), decoded[0]["revision"], "expected revision 2, got %v", decoded[0]["revision"])
+				s.Equalf(float64(3), decoded[1]["revision"], "expected revision 3, got %v", decoded[1]["revision"])
+			})
+		})
+	})
+}
+
 func clearHelmReleases(ctx context.Context, kc *kubernetes.Clientset) {
 	secrets, _ := kc.CoreV1().Secrets("default").List(ctx, metav1.ListOptions{})
 	for _, secret := range secrets.Items {

@@ -34,6 +34,7 @@ A powerful and flexible Kubernetes [Model Context Protocol (MCP)](https://blog.m
   - **Install** a Helm chart in the current or provided namespace.
   - **List** Helm releases in all namespaces or in a specific namespace.
   - **Uninstall** a Helm release in the current or provided namespace.
+  - **History** - View revision history for a Helm release.
 
 Unlike other Kubernetes MCP server implementations, this **IS NOT** just a wrapper around `kubectl` or `helm` command-line tools.
 It is a **Go-based native implementation** that interacts directly with the Kubernetes API server.
@@ -249,6 +250,9 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `query` (`string`) **(required)** - query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "/var/log/kubelet.log" or "/var/log/kube-proxy.log")
   - `tailLines` (`integer`) - Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)
 
+- **nodes_stats_summary** - Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics
+  - `name` (`string`) **(required)** - Name of the node to get stats from
+
 - **pods_list** - List all the Kubernetes pods in the current cluster from all namespaces
   - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
 
@@ -333,6 +337,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
   - `name` (`string`) **(required)** - Name of the Helm release to uninstall
   - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
+
+- **helm_history** - Retrieve the revision history for a given Helm release
+  - `max` (`integer`) - Maximum number of revisions to retrieve (Optional, all revisions if not provided)
+  - `name` (`string`) **(required)** - Name of the Helm release to retrieve history for
+  - `namespace` (`string`) - Namespace of the Helm release (Optional, current namespace if not provided)
 
 </details>
 
