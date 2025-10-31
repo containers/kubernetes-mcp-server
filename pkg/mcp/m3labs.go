@@ -9,6 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kiali"
 )
 
 func ServerToolToM3LabsServerTool(s *Server, tools []api.ServerTool) ([]server.ServerTool, error) {
@@ -45,10 +46,16 @@ func ServerToolToM3LabsServerTool(s *Server, tools []api.ServerTool) ([]server.S
 			if err != nil {
 				return nil, err
 			}
-
+			kialiManager := kiali.NewManager(s.configuration.StaticConfig)
+			kialiManager.BearerToken = k.CurrentBearerToken()
+			derivedKiali, err := kialiManager.Derived(ctx)
+			if err != nil {
+				return nil, err
+			}
 			result, err := tool.Handler(api.ToolHandlerParams{
 				Context:         ctx,
 				Kubernetes:      k,
+				Kiali:           derivedKiali,
 				ToolCallRequest: request,
 				ListOutput:      s.configuration.ListOutput(),
 			})

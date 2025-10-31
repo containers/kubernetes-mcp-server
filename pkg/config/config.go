@@ -68,6 +68,11 @@ type StaticConfig struct {
 	// This map holds raw TOML primitives that will be parsed by registered provider parsers
 	ClusterProviderConfigs map[string]toml.Primitive `toml:"cluster_provider_configs,omitempty"`
 
+	// KialiServerURL is the URL of the Kiali server.
+	KialiURL string `toml:"kiali_url,omitempty"`
+	// KialiInsecure indicates whether the server should use insecure TLS for the Kiali server.
+	KialiInsecure bool `toml:"kiali_insecure,omitempty"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]ProviderConfig
 
