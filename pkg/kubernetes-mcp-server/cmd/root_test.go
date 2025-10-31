@@ -137,7 +137,7 @@ func TestToolsets(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--help"})
 		o, err := captureOutput(rootCmd.Execute) // --help doesn't use logger/klog, cobra prints directly to stdout
-		if !strings.Contains(o, "Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm).") {
+        if !strings.Contains(o, "Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm, kiali).") {
 			t.Fatalf("Expected all available toolsets, got %s %v", o, err)
 		}
 	})
@@ -159,6 +159,47 @@ func TestToolsets(t *testing.T) {
 			t.Fatalf("Expected toolset to be %s, got %s %v", expected, out.String(), err)
 		}
 	})
+}
+
+func TestKialiURLRequired(t *testing.T) {
+    t.Run("flag toolsets includes kiali and missing kiali-url returns error", func(t *testing.T) {
+        ioStreams, _ := testStream()
+        rootCmd := NewMCPServer(ioStreams)
+        rootCmd.SetArgs([]string{"--version", "--port=1337", "--toolsets", "core,kiali"})
+        err := rootCmd.Execute()
+        if err == nil || !strings.Contains(err.Error(), "kiali-url is required when kiali tools are enabled") {
+            t.Fatalf("expected error about missing kiali-url, got %v", err)
+        }
+    })
+    t.Run("flag toolsets includes kiali and kiali-url provided passes", func(t *testing.T) {
+        ioStreams, _ := testStream()
+        rootCmd := NewMCPServer(ioStreams)
+        rootCmd.SetArgs([]string{"--version", "--port=1337", "--toolsets", "core,kiali", "--kiali-url", "http://kiali"})
+        if err := rootCmd.Execute(); err != nil {
+            t.Fatalf("unexpected error: %v", err)
+        }
+    })
+    t.Run("config toolsets includes kiali and missing kiali_url returns error", func(t *testing.T) {
+        ioStreams, _ := testStream()
+        rootCmd := NewMCPServer(ioStreams)
+        _, file, _, _ := runtime.Caller(0)
+        cfgPath := filepath.Join(filepath.Dir(file), "testdata", "kiali-toolset-missing-url.toml")
+        rootCmd.SetArgs([]string{"--version", "--port=1337", "--config", cfgPath})
+        err := rootCmd.Execute()
+        if err == nil || !strings.Contains(err.Error(), "kiali-url is required when kiali tools are enabled") {
+            t.Fatalf("expected error about missing kiali-url, got %v", err)
+        }
+    })
+    t.Run("config toolsets includes kiali and kiali_url present passes", func(t *testing.T) {
+        ioStreams, _ := testStream()
+        rootCmd := NewMCPServer(ioStreams)
+        _, file, _, _ := runtime.Caller(0)
+        cfgPath := filepath.Join(filepath.Dir(file), "testdata", "kiali-toolset-with-url.toml")
+        rootCmd.SetArgs([]string{"--version", "--port=1337", "--config", cfgPath})
+        if err := rootCmd.Execute(); err != nil {
+            t.Fatalf("unexpected error: %v", err)
+        }
+    })
 }
 
 func TestListOutput(t *testing.T) {

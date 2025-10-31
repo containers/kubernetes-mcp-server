@@ -1,0 +1,3 @@
+toolsets = ["core", "kiali"]
+kiali_url = "http://kiali"
+
