@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/helm"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -36,4 +37,13 @@ var ParameterCodec = runtime.NewParameterCodec(Scheme)
 func (k *Kubernetes) NewHelm() *helm.Helm {
 	// This is a derived Kubernetes, so it already has the Helm initialized
 	return helm.NewHelm(k.manager)
+}
+
+// CurrentBearerToken returns the bearer token that the Kubernetes client is currently
+// configured to use, or empty if none is set in the underlying rest.Config.
+func (k *Kubernetes) CurrentBearerToken() string {
+	if k == nil || k.manager == nil || k.manager.cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(k.manager.cfg.BearerToken)
 }
