@@ -17,4 +17,4 @@ $(KIND):
 	GOBIN=$(PWD)/_output/bin go install sigs.k8s.io/kind@$(KIND_VERSION)
 
 .PHONY: kind
-kind: $(KIND) ## Download kind locally if necessary
+kind: $(KIND)
