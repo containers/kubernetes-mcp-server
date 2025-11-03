@@ -23,6 +23,7 @@ func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...transport
 	var err error
 	ret := &McpClient{ctx: t.Context()}
 	ret.testServer = httptest.NewServer(mcpHttpServer)
+	options = append(options, transport.WithContinuousListening())
 	ret.Client, err = client.NewStreamableHttpClient(ret.testServer.URL+"/mcp", options...)
 	require.NoError(t, err, "Expected no error creating MCP client")
 	err = ret.Start(t.Context())
