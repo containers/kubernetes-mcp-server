@@ -50,6 +50,8 @@ keycloak-install:
 keycloak-uninstall:
 	@kubectl delete -f dev/config/keycloak/deployment.yaml 2>/dev/null || true
 
+##@ Keycloak
+
 .PHONY: keycloak-status
 keycloak-status: ## Show Keycloak status and connection info
 	@if kubectl get svc -n $(KEYCLOAK_NAMESPACE) keycloak >/dev/null 2>&1; then \
