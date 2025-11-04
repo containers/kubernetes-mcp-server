@@ -1,23 +1,16 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
@@ -30,11 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	toolswatch "k8s.io/client-go/tools/watch"
-	"k8s.io/klog/v2"
-	"k8s.io/klog/v2/textlogger"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/env"
@@ -45,7 +34,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
 // envTest has an expensive setup, so we only want to do it once per entire test run.
@@ -101,133 +89,6 @@ func TestMain(m *testing.M) {
 		_ = envTest.Stop()
 	}
 	os.Exit(code)
-}
-
-type mcpContext struct {
-	toolsets   []string
-	listOutput output.Output
-	logLevel   int
-
-	staticConfig  *config.StaticConfig
-	clientOptions []transport.ClientOption
-	before        func(*mcpContext)
-	after         func(*mcpContext)
-	ctx           context.Context
-	tempDir       string
-	cancel        context.CancelFunc
-	mcpServer     *Server
-	mcpHttpServer *httptest.Server
-	mcpClient     *client.Client
-	klogState     klog.State
-	logBuffer     bytes.Buffer
-}
-
-func (c *mcpContext) beforeEach(t *testing.T) {
-	var err error
-	c.ctx, c.cancel = context.WithCancel(t.Context())
-	c.tempDir = t.TempDir()
-	c.withKubeConfig(nil)
-	if c.staticConfig == nil {
-		c.staticConfig = config.Default()
-		// Default to use YAML output for lists (previously the default)
-		c.staticConfig.ListOutput = "yaml"
-	}
-	if c.toolsets != nil {
-		c.staticConfig.Toolsets = c.toolsets
-
-	}
-	if c.listOutput != nil {
-		c.staticConfig.ListOutput = c.listOutput.GetName()
-	}
-	if c.before != nil {
-		c.before(c)
-	}
-	// Set up logging
-	c.klogState = klog.CaptureState()
-	flags := flag.NewFlagSet("test", flag.ContinueOnError)
-	klog.InitFlags(flags)
-	_ = flags.Set("v", strconv.Itoa(c.logLevel))
-	klog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(c.logLevel), textlogger.Output(&c.logBuffer))))
-	// MCP Server
-	if c.mcpServer, err = NewServer(Configuration{StaticConfig: c.staticConfig}); err != nil {
-		t.Fatal(err)
-		return
-	}
-	c.mcpHttpServer = server.NewTestServer(c.mcpServer.server, server.WithSSEContextFunc(contextFunc))
-	if c.mcpClient, err = client.NewSSEMCPClient(c.mcpHttpServer.URL+"/sse", c.clientOptions...); err != nil {
-		t.Fatal(err)
-		return
-	}
-	// MCP Client
-	if err = c.mcpClient.Start(c.ctx); err != nil {
-		t.Fatal(err)
-		return
-	}
-	initRequest := mcp.InitializeRequest{}
-	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initRequest.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "1.33.7"}
-	_, err = c.mcpClient.Initialize(c.ctx, initRequest)
-	if err != nil {
-		t.Fatal(err)
-		return
-	}
-}
-
-func (c *mcpContext) afterEach() {
-	if c.after != nil {
-		c.after(c)
-	}
-	c.cancel()
-	c.mcpServer.Close()
-	_ = c.mcpClient.Close()
-	c.mcpHttpServer.Close()
-	c.klogState.Restore()
-}
-
-func testCaseWithContext(t *testing.T, mcpCtx *mcpContext, test func(c *mcpContext)) {
-	mcpCtx.beforeEach(t)
-	defer mcpCtx.afterEach()
-	test(mcpCtx)
-}
-
-// withKubeConfig sets up a fake kubeconfig in the temp directory based on the provided rest.Config
-func (c *mcpContext) withKubeConfig(rc *rest.Config) *clientcmdapi.Config {
-	fakeConfig := clientcmdapi.NewConfig()
-	fakeConfig.Clusters["fake"] = clientcmdapi.NewCluster()
-	fakeConfig.Clusters["fake"].Server = "https://127.0.0.1:6443"
-	fakeConfig.Clusters["additional-cluster"] = clientcmdapi.NewCluster()
-	fakeConfig.AuthInfos["fake"] = clientcmdapi.NewAuthInfo()
-	fakeConfig.AuthInfos["additional-auth"] = clientcmdapi.NewAuthInfo()
-	if rc != nil {
-		fakeConfig.Clusters["fake"].Server = rc.Host
-		fakeConfig.Clusters["fake"].CertificateAuthorityData = rc.CAData
-		fakeConfig.AuthInfos["fake"].ClientKeyData = rc.KeyData
-		fakeConfig.AuthInfos["fake"].ClientCertificateData = rc.CertData
-	}
-	fakeConfig.Contexts["fake-context"] = clientcmdapi.NewContext()
-	fakeConfig.Contexts["fake-context"].Cluster = "fake"
-	fakeConfig.Contexts["fake-context"].AuthInfo = "fake"
-	fakeConfig.Contexts["additional-context"] = clientcmdapi.NewContext()
-	fakeConfig.Contexts["additional-context"].Cluster = "additional-cluster"
-	fakeConfig.Contexts["additional-context"].AuthInfo = "additional-auth"
-	fakeConfig.CurrentContext = "fake-context"
-	kubeConfig := filepath.Join(c.tempDir, "config")
-	_ = clientcmd.WriteToFile(*fakeConfig, kubeConfig)
-	_ = os.Setenv("KUBECONFIG", kubeConfig)
-	if c.mcpServer != nil {
-		if err := c.mcpServer.reloadKubernetesClusterProvider(); err != nil {
-			panic(err)
-		}
-	}
-	return fakeConfig
-}
-
-// callTool helper function to call a tool by name with arguments
-func (c *mcpContext) callTool(name string, args map[string]interface{}) (*mcp.CallToolResult, error) {
-	callToolRequest := mcp.CallToolRequest{}
-	callToolRequest.Params.Name = name
-	callToolRequest.Params.Arguments = args
-	return c.mcpClient.CallTool(c.ctx, callToolRequest)
 }
 
 func restoreAuth(ctx context.Context) {

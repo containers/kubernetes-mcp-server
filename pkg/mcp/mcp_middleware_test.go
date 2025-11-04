@@ -1,68 +1,87 @@
 package mcp
 
 import (
+	"bytes"
+	"flag"
 	"regexp"
-	"strings"
+	"strconv"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client/transport"
+	"github.com/stretchr/testify/suite"
+	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/textlogger"
 )
 
-func TestToolCallLogging(t *testing.T) {
-	testCaseWithContext(t, &mcpContext{logLevel: 5}, func(c *mcpContext) {
-		_, _ = c.callTool("configuration_view", map[string]interface{}{
-			"minified": false,
-		})
-		t.Run("Logs tool name", func(t *testing.T) {
-			expectedLog := "mcp tool call: configuration_view("
-			if !strings.Contains(c.logBuffer.String(), expectedLog) {
-				t.Errorf("Expected log to contain '%s', got: %s", expectedLog, c.logBuffer.String())
-			}
-		})
-		t.Run("Logs tool call arguments", func(t *testing.T) {
-			expected := `"mcp tool call: configuration_view\((.+)\)"`
-			m := regexp.MustCompile(expected).FindStringSubmatch(c.logBuffer.String())
-			if len(m) != 2 {
-				t.Fatalf("Expected log entry to contain arguments, got %s", c.logBuffer.String())
-			}
-			if m[1] != "map[minified:false]" {
-				t.Errorf("Expected log arguments to be 'map[minified:false]', got %s", m[1])
-			}
-		})
+type McpLoggingSuite struct {
+	BaseMcpSuite
+	klogState klog.State
+	logBuffer bytes.Buffer
+}
+
+func (s *McpLoggingSuite) SetupTest() {
+	s.BaseMcpSuite.SetupTest()
+	s.klogState = klog.CaptureState()
+}
+
+func (s *McpLoggingSuite) TearDownTest() {
+	s.BaseMcpSuite.TearDownTest()
+	s.klogState.Restore()
+}
+
+func (s *McpLoggingSuite) SetLogLevel(level int) {
+	flags := flag.NewFlagSet("test", flag.ContinueOnError)
+	klog.InitFlags(flags)
+	_ = flags.Set("v", strconv.Itoa(level))
+	klog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(level), textlogger.Output(&s.logBuffer))))
+}
+
+func (s *McpLoggingSuite) TestLogsToolCall() {
+	s.SetLogLevel(5)
+	s.InitMcpClient()
+	_, err := s.CallTool("configuration_view", map[string]interface{}{"minified": false})
+	s.Require().NoError(err, "call to tool configuration_view failed")
+
+	s.Run("Logs tool name", func() {
+		s.Contains(s.logBuffer.String(), "mcp tool call: configuration_view(")
 	})
-	before := func(c *mcpContext) {
-		c.clientOptions = append(c.clientOptions, transport.WithHeaders(map[string]string{
-			"Accept-Encoding":   "gzip",
-			"Authorization":     "Bearer should-not-be-logged",
-			"authorization":     "Bearer should-not-be-logged",
-			"a-loggable-header": "should-be-logged",
-		}))
+	s.Run("Logs tool call arguments", func() {
+		expected := `"mcp tool call: configuration_view\((.+)\)"`
+		m := regexp.MustCompile(expected).FindStringSubmatch(s.logBuffer.String())
+		s.Len(m, 2, "Expected log entry to contain arguments")
+		s.Equal("map[minified:false]", m[1], "Expected log arguments to be 'map[minified:false]'")
+	})
+}
+
+func (s *McpLoggingSuite) TestLogsToolCallHeaders() {
+	s.SetLogLevel(7)
+	s.InitMcpClient(transport.WithHTTPHeaders(map[string]string{
+		"Accept-Encoding":   "gzip",
+		"Authorization":     "Bearer should-not-be-logged",
+		"authorization":     "Bearer should-not-be-logged",
+		"a-loggable-header": "should-be-logged",
+	}))
+	_, err := s.CallTool("configuration_view", map[string]interface{}{"minified": false})
+	s.Require().NoError(err, "call to tool configuration_view failed")
+
+	s.Run("Logs tool call headers", func() {
+		expectedLog := "mcp tool call headers: A-Loggable-Header: should-be-logged"
+		s.Contains(s.logBuffer.String(), expectedLog, "Expected log to contain loggable header")
+	})
+	sensitiveHeaders := []string{
+		"Authorization:",
+		// TODO: Add more sensitive headers as needed
 	}
-	testCaseWithContext(t, &mcpContext{logLevel: 7, before: before}, func(c *mcpContext) {
-		_, _ = c.callTool("configuration_view", map[string]interface{}{
-			"minified": false,
-		})
-		t.Run("Logs tool call headers", func(t *testing.T) {
-			expectedLog := "mcp tool call headers: A-Loggable-Header: should-be-logged"
-			if !strings.Contains(c.logBuffer.String(), expectedLog) {
-				t.Errorf("Expected log to contain '%s', got: %s", expectedLog, c.logBuffer.String())
-			}
-		})
-		sensitiveHeaders := []string{
-			"Authorization:",
-			// TODO: Add more sensitive headers as needed
+	s.Run("Does not log sensitive headers", func() {
+		for _, header := range sensitiveHeaders {
+			s.NotContains(s.logBuffer.String(), header, "Log should not contain sensitive header")
 		}
-		t.Run("Does not log sensitive headers", func(t *testing.T) {
-			for _, header := range sensitiveHeaders {
-				if strings.Contains(c.logBuffer.String(), header) {
-					t.Errorf("Log should not contain sensitive header '%s', got: %s", header, c.logBuffer.String())
-				}
-			}
-		})
-		t.Run("Does not log sensitive header values", func(t *testing.T) {
-			if strings.Contains(c.logBuffer.String(), "should-not-be-logged") {
-				t.Errorf("Log should not contain sensitive header value 'should-not-be-logged', got: %s", c.logBuffer.String())
-			}
-		})
 	})
+	s.Run("Does not log sensitive header values", func() {
+		s.NotContains(s.logBuffer.String(), "should-not-be-logged", "Log should not contain sensitive header value")
+	})
+}
+
+func TestMcpLogging(t *testing.T) {
+	suite.Run(t, new(McpLoggingSuite))
 }
