@@ -243,6 +243,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **events_list** - List all the Kubernetes events in the current cluster from all namespaces
   - `namespace` (`string`) - Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces
 
+- **cluster_health_check** - Perform comprehensive health check on Kubernetes/OpenShift cluster and report issues. Examines cluster operators (OpenShift), nodes, deployments, pods, persistent volumes, and events to identify problems affecting cluster stability or workload availability.
+  - `check_events` (`boolean`) - Include recent warning events in the health check (may increase execution time)
+  - `output_format` (`string`) - Output format for results: 'text' (human-readable) or 'json' (machine-readable)
+  - `verbose` (`boolean`) - Enable detailed output with additional context and resource-level details
+
 - **namespaces_list** - List all the Kubernetes namespaces in the current cluster
 
 - **projects_list** - List all the OpenShift projects in the current cluster
