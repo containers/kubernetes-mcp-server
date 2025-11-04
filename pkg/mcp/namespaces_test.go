@@ -13,9 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/yaml"
-
-	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 type NamespacesSuite struct {
@@ -108,68 +105,67 @@ func (s *NamespacesSuite) TestNamespacesListAsTable() {
 	})
 }
 
-func TestNamespaces(t *testing.T) {
-	suite.Run(t, new(NamespacesSuite))
-}
+func (s *NamespacesSuite) TestProjectsListInOpenShift() {
+	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
+	s.T().Cleanup(func() {
+		s.Require().NoError(EnvTestInOpenShiftClear(s.T().Context()), "Expected to clear OpenShift test configuration")
+	})
+	s.InitMcpClient()
 
-func TestProjectsListInOpenShift(t *testing.T) {
-	testCaseWithContext(t, &mcpContext{before: inOpenShift, after: inOpenShiftClear}, func(c *mcpContext) {
+	s.Run("projects_list returns project list in OpenShift", func() {
 		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
 		_, _ = dynamicClient.Resource(schema.GroupVersionResource{Group: "project.openshift.io", Version: "v1", Resource: "projects"}).
-			Create(c.ctx, &unstructured.Unstructured{Object: map[string]interface{}{
+			Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "project.openshift.io/v1",
 				"kind":       "Project",
 				"metadata": map[string]interface{}{
 					"name": "an-openshift-project",
 				},
 			}}, metav1.CreateOptions{})
-		toolResult, err := c.callTool("projects_list", map[string]interface{}{})
-		t.Run("projects_list returns project list", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call tool failed %v", err)
-			}
-			if toolResult.IsError {
-				t.Fatalf("call tool failed")
-			}
+		toolResult, err := s.CallTool("projects_list", map[string]interface{}{})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
 		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
-		t.Run("projects_list has yaml content", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("invalid tool result content %v", err)
-			}
+		s.Run("has yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
 		})
-		t.Run("projects_list returns at least 1 items", func(t *testing.T) {
-			if len(decoded) < 1 {
-				t.Errorf("invalid project count, expected at least 1, got %v", len(decoded))
-			}
+		s.Run("returns at least 1 item", func() {
+			s.GreaterOrEqualf(len(decoded), 1, "invalid project count, expected at least 1, got %v", len(decoded))
 			idx := slices.IndexFunc(decoded, func(ns unstructured.Unstructured) bool {
 				return ns.GetName() == "an-openshift-project"
 			})
-			if idx == -1 {
-				t.Errorf("namespace %s not found in the list", "an-openshift-project")
-			}
+			s.NotEqualf(-1, idx, "namespace %s not found in the list", "an-openshift-project")
 		})
 	})
 }
 
-func TestProjectsListInOpenShiftDenied(t *testing.T) {
-	deniedResourcesServer := test.Must(config.ReadToml([]byte(`
+func (s *NamespacesSuite) TestProjectsListInOpenShiftDenied() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { group = "project.openshift.io", version = "v1" } ]
-	`)))
-	testCaseWithContext(t, &mcpContext{staticConfig: deniedResourcesServer, before: inOpenShift, after: inOpenShiftClear}, func(c *mcpContext) {
-		c.withEnvTest()
-		projectsList, _ := c.callTool("projects_list", map[string]interface{}{})
-		t.Run("projects_list has error", func(t *testing.T) {
-			if !projectsList.IsError {
-				t.Fatalf("call tool should fail")
-			}
+	`), s.Cfg), "Expected to parse denied resources config")
+	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
+	s.T().Cleanup(func() {
+		s.Require().NoError(EnvTestInOpenShiftClear(s.T().Context()), "Expected to clear OpenShift test configuration")
+	})
+	s.InitMcpClient()
+
+	s.Run("projects_list (denied)", func() {
+		projectsList, err := s.CallTool("projects_list", map[string]interface{}{})
+		s.Run("has error", func() {
+			s.Truef(projectsList.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
 		})
-		t.Run("projects_list describes denial", func(t *testing.T) {
+		s.Run("describes denial", func() {
 			expectedMessage := "failed to list projects: resource not allowed: project.openshift.io/v1, Kind=Project"
-			if projectsList.Content[0].(mcp.TextContent).Text != expectedMessage {
-				t.Fatalf("expected descriptive error '%s', got %v", expectedMessage, projectsList.Content[0].(mcp.TextContent).Text)
-			}
+			s.Equalf(expectedMessage, projectsList.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, projectsList.Content[0].(mcp.TextContent).Text)
 		})
 	})
+}
+
+func TestNamespaces(t *testing.T) {
+	suite.Run(t, new(NamespacesSuite))
 }

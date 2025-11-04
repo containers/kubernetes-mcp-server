@@ -454,20 +454,26 @@ func (s *PodsSuite) TestPodsDeleteDenied() {
 	})
 }
 
-func TestPodsDeleteInOpenShift(t *testing.T) {
-	testCaseWithContext(t, &mcpContext{before: inOpenShift, after: inOpenShiftClear}, func(c *mcpContext) {
+func (s *PodsSuite) TestPodsDeleteInOpenShift() {
+	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
+	s.T().Cleanup(func() {
+		s.Require().NoError(EnvTestInOpenShiftClear(s.T().Context()), "Expected to clear OpenShift test configuration")
+	})
+	s.InitMcpClient()
+
+	s.Run("pods_delete with managed pod in OpenShift", func() {
 		managedLabels := map[string]string{
 			"app.kubernetes.io/managed-by": "kubernetes-mcp-server",
 			"app.kubernetes.io/name":       "a-manged-pod-to-delete",
 		}
-		kc := c.newKubernetesClient()
-		_, _ = kc.CoreV1().Pods("default").Create(c.ctx, &corev1.Pod{
+		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "a-managed-pod-to-delete-in-openshift", Labels: managedLabels},
 			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
 		}, metav1.CreateOptions{})
 		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
 		_, _ = dynamicClient.Resource(schema.GroupVersionResource{Group: "route.openshift.io", Version: "v1", Resource: "routes"}).
-			Namespace("default").Create(c.ctx, &unstructured.Unstructured{Object: map[string]interface{}{
+			Namespace("default").Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
 			"apiVersion": "route.openshift.io/v1",
 			"kind":       "Route",
 			"metadata": map[string]interface{}{
@@ -475,36 +481,22 @@ func TestPodsDeleteInOpenShift(t *testing.T) {
 				"labels": managedLabels,
 			},
 		}}, metav1.CreateOptions{})
-		podsDeleteManagedOpenShift, err := c.callTool("pods_delete", map[string]interface{}{
+		podsDeleteManagedOpenShift, err := s.CallTool("pods_delete", map[string]interface{}{
 			"name": "a-managed-pod-to-delete-in-openshift",
 		})
-		t.Run("pods_delete with managed pod in OpenShift returns success", func(t *testing.T) {
-			if err != nil {
-				t.Errorf("call tool failed %v", err)
-				return
-			}
-			if podsDeleteManagedOpenShift.IsError {
-				t.Errorf("call tool failed")
-				return
-			}
-			if podsDeleteManagedOpenShift.Content[0].(mcp.TextContent).Text != "Pod deleted successfully" {
-				t.Errorf("invalid tool result content, got %v", podsDeleteManagedOpenShift.Content[0].(mcp.TextContent).Text)
-				return
-			}
+		s.Run("returns success", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(podsDeleteManagedOpenShift.IsError, "call tool failed")
+			s.Equalf("Pod deleted successfully", podsDeleteManagedOpenShift.Content[0].(mcp.TextContent).Text,
+				"invalid tool result content, got %v", podsDeleteManagedOpenShift.Content[0].(mcp.TextContent).Text)
 		})
-		t.Run("pods_delete with managed pod in OpenShift deletes Pod and Route", func(t *testing.T) {
-			p, pErr := kc.CoreV1().Pods("default").Get(c.ctx, "a-managed-pod-to-delete-in-openshift", metav1.GetOptions{})
-			if pErr == nil && p != nil && p.DeletionTimestamp == nil {
-				t.Errorf("Pod not deleted")
-				return
-			}
+		s.Run("deletes Pod and Route", func() {
+			p, pErr := kc.CoreV1().Pods("default").Get(s.T().Context(), "a-managed-pod-to-delete-in-openshift", metav1.GetOptions{})
+			s.False(pErr == nil && p != nil && p.DeletionTimestamp == nil, "Pod not deleted")
 			r, rErr := dynamicClient.
 				Resource(schema.GroupVersionResource{Group: "route.openshift.io", Version: "v1", Resource: "routes"}).
-				Namespace("default").Get(c.ctx, "a-managed-route-to-delete", metav1.GetOptions{})
-			if rErr == nil && r != nil && r.GetDeletionTimestamp() == nil {
-				t.Errorf("Route not deleted")
-				return
-			}
+				Namespace("default").Get(s.T().Context(), "a-managed-route-to-delete", metav1.GetOptions{})
+			s.False(rErr == nil && r != nil && r.GetDeletionTimestamp() == nil, "Route not deleted")
 		})
 	})
 }

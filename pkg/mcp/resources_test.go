@@ -17,8 +17,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
 type ResourcesSuite struct {
@@ -141,31 +139,34 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 	})
 }
 
-func TestResourcesListAsTable(t *testing.T) {
-	testCaseWithContext(t, &mcpContext{listOutput: output.Table, before: inOpenShift, after: inOpenShiftClear}, func(c *mcpContext) {
-		c.withEnvTest()
-		kc := c.newKubernetesClient()
-		_, _ = kc.CoreV1().ConfigMaps("default").Create(t.Context(), &corev1.ConfigMap{
+func (s *ResourcesSuite) TestResourcesListAsTable() {
+	s.Cfg.ListOutput = "table"
+	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
+	s.T().Cleanup(func() {
+		s.Require().NoError(EnvTestInOpenShiftClear(s.T().Context()), "Expected to clear OpenShift test configuration")
+	})
+	s.InitMcpClient()
+
+	s.Run("resources_list(apiVersion=v1, kind=ConfigMap) (list_output=table)", func() {
+		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		_, _ = kc.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "a-configmap-to-list-as-table", Labels: map[string]string{"resource": "config-map"}},
 			Data:       map[string]string{"key": "value"},
 		}, metav1.CreateOptions{})
-		configMapList, err := c.callTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap"})
-		t.Run("resources_list returns ConfigMap list", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call tool failed %v", err)
-			}
-			if configMapList.IsError {
-				t.Fatalf("call tool failed")
-			}
+		configMapList, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap"})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(configMapList.IsError, "call tool failed")
 		})
+		s.Require().NotNil(configMapList, "Expected tool result from call")
 		outConfigMapList := configMapList.Content[0].(mcp.TextContent).Text
-		t.Run("resources_list returns column headers for ConfigMap list", func(t *testing.T) {
+		s.Run("returns column headers for ConfigMap list", func() {
 			expectedHeaders := "NAMESPACE\\s+APIVERSION\\s+KIND\\s+NAME\\s+DATA\\s+AGE\\s+LABELS"
-			if m, e := regexp.MatchString(expectedHeaders, outConfigMapList); !m || e != nil {
-				t.Fatalf("Expected headers '%s' not found in output:\n%s", expectedHeaders, outConfigMapList)
-			}
+			m, e := regexp.MatchString(expectedHeaders, outConfigMapList)
+			s.Truef(m, "Expected headers '%s' not found in output:\n%s", expectedHeaders, outConfigMapList)
+			s.NoErrorf(e, "Error matching headers regex: %v", e)
 		})
-		t.Run("resources_list returns formatted row for a-configmap-to-list-as-table", func(t *testing.T) {
+		s.Run("returns formatted row for a-configmap-to-list-as-table", func() {
 			expectedRow := "(?<namespace>default)\\s+" +
 				"(?<apiVersion>v1)\\s+" +
 				"(?<kind>ConfigMap)\\s+" +
@@ -173,47 +174,46 @@ func TestResourcesListAsTable(t *testing.T) {
 				"(?<data>1)\\s+" +
 				"(?<age>(\\d+m)?(\\d+s)?)\\s+" +
 				"(?<labels>resource=config-map)"
-			if m, e := regexp.MatchString(expectedRow, outConfigMapList); !m || e != nil {
-				t.Fatalf("Expected row '%s' not found in output:\n%s", expectedRow, outConfigMapList)
-			}
+			m, e := regexp.MatchString(expectedRow, outConfigMapList)
+			s.Truef(m, "Expected row '%s' not found in output:\n%s", expectedRow, outConfigMapList)
+			s.NoErrorf(e, "Error matching row regex: %v", e)
 		})
-		// Custom Resource List
+	})
+
+	s.Run("resources_list(apiVersion=route.openshift.io/v1, kind=Route) (list_output=table)", func() {
 		_, _ = dynamic.NewForConfigOrDie(envTestRestConfig).
 			Resource(schema.GroupVersionResource{Group: "route.openshift.io", Version: "v1", Resource: "routes"}).
 			Namespace("default").
-			Create(c.ctx, &unstructured.Unstructured{Object: map[string]interface{}{
+			Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "route.openshift.io/v1",
 				"kind":       "Route",
 				"metadata": map[string]interface{}{
 					"name": "an-openshift-route-to-list-as-table",
 				},
 			}}, metav1.CreateOptions{})
-		routeList, err := c.callTool("resources_list", map[string]interface{}{"apiVersion": "route.openshift.io/v1", "kind": "Route"})
-		t.Run("resources_list returns Route list", func(t *testing.T) {
-			if err != nil {
-				t.Fatalf("call tool failed %v", err)
-			}
-			if routeList.IsError {
-				t.Fatalf("call tool failed")
-			}
+		routeList, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "route.openshift.io/v1", "kind": "Route"})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(routeList.IsError, "call tool failed")
 		})
+		s.Require().NotNil(routeList, "Expected tool result from call")
 		outRouteList := routeList.Content[0].(mcp.TextContent).Text
-		t.Run("resources_list returns column headers for Route list", func(t *testing.T) {
+		s.Run("returns column headers for Route list", func() {
 			expectedHeaders := "NAMESPACE\\s+APIVERSION\\s+KIND\\s+NAME\\s+AGE\\s+LABELS"
-			if m, e := regexp.MatchString(expectedHeaders, outRouteList); !m || e != nil {
-				t.Fatalf("Expected headers '%s' not found in output:\n%s", expectedHeaders, outRouteList)
-			}
+			m, e := regexp.MatchString(expectedHeaders, outRouteList)
+			s.Truef(m, "Expected headers '%s' not found in output:\n%s", expectedHeaders, outRouteList)
+			s.NoErrorf(e, "Error matching headers regex: %v", e)
 		})
-		t.Run("resources_list returns formatted row for an-openshift-route-to-list-as-table", func(t *testing.T) {
+		s.Run("returns formatted row for an-openshift-route-to-list-as-table", func() {
 			expectedRow := "(?<namespace>default)\\s+" +
 				"(?<apiVersion>route.openshift.io/v1)\\s+" +
 				"(?<kind>Route)\\s+" +
 				"(?<name>an-openshift-route-to-list-as-table)\\s+" +
 				"(?<age>(\\d+m)?(\\d+s)?)\\s+" +
 				"(?<labels><none>)"
-			if m, e := regexp.MatchString(expectedRow, outRouteList); !m || e != nil {
-				t.Fatalf("Expected row '%s' not found in output:\n%s", expectedRow, outRouteList)
-			}
+			m, e := regexp.MatchString(expectedRow, outRouteList)
+			s.Truef(m, "Expected row '%s' not found in output:\n%s", expectedRow, outRouteList)
+			s.NoErrorf(e, "Error matching row regex: %v", e)
 		})
 	})
 }
@@ -393,7 +393,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 			_, err = apiExtensionsV1Client.CustomResourceDefinitions().Get(s.T().Context(), "customs.example.com", metav1.GetOptions{})
 			s.Nilf(err, "custom resource definition not found")
 		})
-		s.CrdWaitUntilReady("customs.example.com")
+		s.Require().NoError(EnvTestCrdWaitUntilReady(s.T().Context(), "customs.example.com"))
 	})
 
 	s.Run("resources_create_or_update creates custom resource", func() {

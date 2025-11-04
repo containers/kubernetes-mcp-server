@@ -222,120 +222,6 @@ func (c *mcpContext) withKubeConfig(rc *rest.Config) *clientcmdapi.Config {
 	return fakeConfig
 }
 
-// withEnvTest sets up the environment for kubeconfig to be used with envTest
-func (c *mcpContext) withEnvTest() {
-	c.withKubeConfig(envTestRestConfig)
-}
-
-// inOpenShift sets up the kubernetes environment to seem to be running OpenShift
-func inOpenShift(c *mcpContext) {
-	c.withEnvTest()
-	crdTemplate := `
-          {
-            "apiVersion": "apiextensions.k8s.io/v1",
-            "kind": "CustomResourceDefinition",
-            "metadata": {"name": "%s"},
-            "spec": {
-              "group": "%s",
-              "versions": [{
-                "name": "v1","served": true,"storage": true,
-                "schema": {"openAPIV3Schema": {"type": "object","x-kubernetes-preserve-unknown-fields": true}}
-              }],
-              "scope": "%s",
-              "names": {"plural": "%s","singular": "%s","kind": "%s"}
-            }
-          }`
-	tasks, _ := errgroup.WithContext(c.ctx)
-	tasks.Go(func() error {
-		return c.crdApply(fmt.Sprintf(crdTemplate, "projects.project.openshift.io", "project.openshift.io",
-			"Cluster", "projects", "project", "Project"))
-	})
-	tasks.Go(func() error {
-		return c.crdApply(fmt.Sprintf(crdTemplate, "routes.route.openshift.io", "route.openshift.io",
-			"Namespaced", "routes", "route", "Route"))
-	})
-	if err := tasks.Wait(); err != nil {
-		panic(err)
-	}
-}
-
-// inOpenShiftClear clears the kubernetes environment so it no longer seems to be running OpenShift
-func inOpenShiftClear(c *mcpContext) {
-	tasks, _ := errgroup.WithContext(c.ctx)
-	tasks.Go(func() error { return c.crdDelete("projects.project.openshift.io") })
-	tasks.Go(func() error { return c.crdDelete("routes.route.openshift.io") })
-	if err := tasks.Wait(); err != nil {
-		panic(err)
-	}
-}
-
-// newKubernetesClient creates a new Kubernetes client with the envTest kubeconfig
-func (c *mcpContext) newKubernetesClient() *kubernetes.Clientset {
-	return kubernetes.NewForConfigOrDie(envTestRestConfig)
-}
-
-// newApiExtensionsClient creates a new ApiExtensions client with the envTest kubeconfig
-func (c *mcpContext) newApiExtensionsClient() *apiextensionsv1.ApiextensionsV1Client {
-	return apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
-}
-
-// crdApply creates a CRD from the provided resource string and waits for it to be established
-func (c *mcpContext) crdApply(resource string) error {
-	apiExtensionsV1Client := c.newApiExtensionsClient()
-	var crd = &apiextensionsv1spec.CustomResourceDefinition{}
-	err := json.Unmarshal([]byte(resource), crd)
-	if err != nil {
-		return fmt.Errorf("failed to create CRD %v", err)
-	}
-	_, err = apiExtensionsV1Client.CustomResourceDefinitions().Create(c.ctx, crd, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create CRD %v", err)
-	}
-	c.crdWaitUntilReady(crd.Name)
-	return nil
-}
-
-// crdDelete deletes a CRD by name and waits for it to be removed
-func (c *mcpContext) crdDelete(name string) error {
-	apiExtensionsV1Client := c.newApiExtensionsClient()
-	err := apiExtensionsV1Client.CustomResourceDefinitions().Delete(c.ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: ptr.To(int64(0)),
-	})
-	iteration := 0
-	for iteration < 100 {
-		if _, derr := apiExtensionsV1Client.CustomResourceDefinitions().Get(c.ctx, name, metav1.GetOptions{}); derr != nil {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-		iteration++
-	}
-	if err != nil {
-		return errors.Wrap(err, "failed to delete CRD")
-	}
-	return nil
-}
-
-// crdWaitUntilReady waits for a CRD to be established
-func (c *mcpContext) crdWaitUntilReady(name string) {
-	watcher, err := c.newApiExtensionsClient().CustomResourceDefinitions().Watch(c.ctx, metav1.ListOptions{
-		FieldSelector: "metadata.name=" + name,
-	})
-	if err != nil {
-		panic(fmt.Errorf("failed to watch CRD %v", err))
-	}
-	_, err = toolswatch.UntilWithoutRetry(c.ctx, watcher, func(event watch.Event) (bool, error) {
-		for _, c := range event.Object.(*apiextensionsv1spec.CustomResourceDefinition).Status.Conditions {
-			if c.Type == apiextensionsv1spec.Established && c.Status == apiextensionsv1spec.ConditionTrue {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-	if err != nil {
-		panic(fmt.Errorf("failed to wait for CRD %v", err))
-	}
-}
-
 // callTool helper function to call a tool by name with arguments
 func (c *mcpContext) callTool(name string, args map[string]interface{}) (*mcp.CallToolResult, error) {
 	callToolRequest := mcp.CallToolRequest{}
@@ -446,14 +332,53 @@ func (s *BaseMcpSuite) InitMcpClient(options ...transport.StreamableHTTPCOption)
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil), options...)
 }
 
-// CrdWaitUntilReady waits for a CRD to be established
-func (s *BaseMcpSuite) CrdWaitUntilReady(name string) {
+// EnvTestInOpenShift sets up the kubernetes environment to seem to be running OpenShift
+func EnvTestInOpenShift(ctx context.Context) error {
+	crdTemplate := `
+          {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "metadata": {"name": "%s"},
+            "spec": {
+              "group": "%s",
+              "versions": [{
+                "name": "v1","served": true,"storage": true,
+                "schema": {"openAPIV3Schema": {"type": "object","x-kubernetes-preserve-unknown-fields": true}}
+              }],
+              "scope": "%s",
+              "names": {"plural": "%s","singular": "%s","kind": "%s"}
+            }
+          }`
+	tasks, _ := errgroup.WithContext(ctx)
+	tasks.Go(func() error {
+		return EnvTestCrdApply(ctx, fmt.Sprintf(crdTemplate, "projects.project.openshift.io", "project.openshift.io",
+			"Cluster", "projects", "project", "Project"))
+	})
+	tasks.Go(func() error {
+		return EnvTestCrdApply(ctx, fmt.Sprintf(crdTemplate, "routes.route.openshift.io", "route.openshift.io",
+			"Namespaced", "routes", "route", "Route"))
+	})
+	return tasks.Wait()
+}
+
+// EnvTestInOpenShiftClear clears the kubernetes environment so it no longer seems to be running OpenShift
+func EnvTestInOpenShiftClear(ctx context.Context) error {
+	tasks, _ := errgroup.WithContext(ctx)
+	tasks.Go(func() error { return EnvTestCrdDelete(ctx, "projects.project.openshift.io") })
+	tasks.Go(func() error { return EnvTestCrdDelete(ctx, "routes.route.openshift.io") })
+	return tasks.Wait()
+}
+
+// EnvTestCrdWaitUntilReady waits for a CRD to be established
+func EnvTestCrdWaitUntilReady(ctx context.Context, name string) error {
 	apiExtensionClient := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
-	watcher, err := apiExtensionClient.CustomResourceDefinitions().Watch(s.T().Context(), metav1.ListOptions{
+	watcher, err := apiExtensionClient.CustomResourceDefinitions().Watch(ctx, metav1.ListOptions{
 		FieldSelector: "metadata.name=" + name,
 	})
-	s.Require().NoError(err, "failed to watch CRD")
-	_, err = toolswatch.UntilWithoutRetry(s.T().Context(), watcher, func(event watch.Event) (bool, error) {
+	if err != nil {
+		return fmt.Errorf("unable to watch CRDs: %w", err)
+	}
+	_, err = toolswatch.UntilWithoutRetry(ctx, watcher, func(event watch.Event) (bool, error) {
 		for _, c := range event.Object.(*apiextensionsv1spec.CustomResourceDefinition).Status.Conditions {
 			if c.Type == apiextensionsv1spec.Established && c.Status == apiextensionsv1spec.ConditionTrue {
 				return true, nil
@@ -461,5 +386,43 @@ func (s *BaseMcpSuite) CrdWaitUntilReady(name string) {
 		}
 		return false, nil
 	})
-	s.Require().NoError(err, "failed to wait for CRD")
+	if err != nil {
+		return fmt.Errorf("failed to wait for CRD: %w", err)
+	}
+	return nil
+}
+
+// EnvTestCrdApply creates a CRD from the provided resource string and waits for it to be established
+func EnvTestCrdApply(ctx context.Context, resource string) error {
+	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
+	var crd = &apiextensionsv1spec.CustomResourceDefinition{}
+	err := json.Unmarshal([]byte(resource), crd)
+	if err != nil {
+		return fmt.Errorf("failed to create CRD %v", err)
+	}
+	_, err = apiExtensionsV1Client.CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create CRD %v", err)
+	}
+	return EnvTestCrdWaitUntilReady(ctx, crd.Name)
+}
+
+// crdDelete deletes a CRD by name and waits for it to be removed
+func EnvTestCrdDelete(ctx context.Context, name string) error {
+	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
+	err := apiExtensionsV1Client.CustomResourceDefinitions().Delete(ctx, name, metav1.DeleteOptions{
+		GracePeriodSeconds: ptr.To(int64(0)),
+	})
+	iteration := 0
+	for iteration < 100 {
+		if _, derr := apiExtensionsV1Client.CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{}); derr != nil {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+		iteration++
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to delete CRD")
+	}
+	return nil
 }

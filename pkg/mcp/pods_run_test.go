@@ -109,37 +109,33 @@ func (s *PodsRunSuite) TestPodsRunDenied() {
 	})
 }
 
-func TestPodsRunInOpenShift(t *testing.T) {
-	testCaseWithContext(t, &mcpContext{before: inOpenShift, after: inOpenShiftClear}, func(c *mcpContext) {
-		t.Run("pods_run with image, namespace, and port returns route with port", func(t *testing.T) {
-			podsRunInOpenShift, err := c.callTool("pods_run", map[string]interface{}{"image": "nginx", "port": 80})
-			if err != nil {
-				t.Errorf("call tool failed %v", err)
-				return
-			}
-			if podsRunInOpenShift.IsError {
-				t.Errorf("call tool failed")
-				return
-			}
-			var decodedPodServiceRoute []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(podsRunInOpenShift.Content[0].(mcp.TextContent).Text), &decodedPodServiceRoute)
-			if err != nil {
-				t.Errorf("invalid tool result content %v", err)
-				return
-			}
-			if len(decodedPodServiceRoute) != 3 {
-				t.Errorf("invalid pods count, expected 3, got %v", len(decodedPodServiceRoute))
-				return
-			}
-			if decodedPodServiceRoute[2].GetKind() != "Route" {
-				t.Errorf("invalid route kind, expected Route, got %v", decodedPodServiceRoute[2].GetKind())
-				return
-			}
+func (s *PodsRunSuite) TestPodsRunInOpenShift() {
+	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
+	s.T().Cleanup(func() {
+		s.Require().NoError(EnvTestInOpenShiftClear(s.T().Context()), "Expected to clear OpenShift test configuration")
+	})
+	s.InitMcpClient()
+
+	s.Run("pods_run(image=nginx, namespace=nil, port=80) returns route with port", func() {
+		podsRunInOpenShift, err := s.CallTool("pods_run", map[string]interface{}{"image": "nginx", "port": 80})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(podsRunInOpenShift.IsError, "call tool failed")
+		})
+		var decodedPodServiceRoute []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(podsRunInOpenShift.Content[0].(mcp.TextContent).Text), &decodedPodServiceRoute)
+		s.Run("has yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+		})
+		s.Run("returns 3 items (Pod + Service + Route)", func() {
+			s.Lenf(decodedPodServiceRoute, 3, "invalid pods count, expected 3, got %v", len(decodedPodServiceRoute))
+			s.Equalf("Pod", decodedPodServiceRoute[0].GetKind(), "invalid pod kind, expected Pod, got %v", decodedPodServiceRoute[0].GetKind())
+			s.Equalf("Service", decodedPodServiceRoute[1].GetKind(), "invalid service kind, expected Service, got %v", decodedPodServiceRoute[1].GetKind())
+			s.Equalf("Route", decodedPodServiceRoute[2].GetKind(), "invalid route kind, expected Route, got %v", decodedPodServiceRoute[2].GetKind())
+		})
+		s.Run("returns route with port", func() {
 			targetPort := decodedPodServiceRoute[2].Object["spec"].(map[string]interface{})["port"].(map[string]interface{})["targetPort"].(int64)
-			if targetPort != 80 {
-				t.Errorf("invalid route target port, expected 80, got %v", targetPort)
-				return
-			}
+			s.Equalf(int64(80), targetPort, "invalid route target port, expected 80, got %v", targetPort)
 		})
 	})
 }
