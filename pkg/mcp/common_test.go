@@ -184,10 +184,6 @@ func (c *mcpContext) afterEach() {
 	c.klogState.Restore()
 }
 
-func testCase(t *testing.T, test func(c *mcpContext)) {
-	testCaseWithContext(t, &mcpContext{}, test)
-}
-
 func testCaseWithContext(t *testing.T, mcpCtx *mcpContext, test func(c *mcpContext)) {
 	mcpCtx.beforeEach(t)
 	defer mcpCtx.afterEach()
