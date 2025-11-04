@@ -78,6 +78,11 @@ const (
 	flagKialiInsecure        = "kiali-insecure"
 )
 
+type KialiOptions struct {
+	Url      string
+	Insecure bool
+}
+
 type MCPServerOptions struct {
 	Version              bool
 	LogLevel             int
@@ -97,8 +102,7 @@ type MCPServerOptions struct {
 	CertificateAuthority string
 	ServerURL            string
 	DisableMultiCluster  bool
-	KialiUrl             string
-	KialiInsecure        bool
+	KialiOptions         KialiOptions
 
 	ConfigPath   string
 	StaticConfig *config.StaticConfig
@@ -162,8 +166,8 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.CertificateAuthority, flagCertificateAuthority, o.CertificateAuthority, "Certificate authority path to verify certificates. Optional. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden(flagCertificateAuthority)
 	cmd.Flags().BoolVar(&o.DisableMultiCluster, flagDisableMultiCluster, o.DisableMultiCluster, "Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.")
-	cmd.Flags().StringVar(&o.KialiUrl, flagKialiUrl, o.KialiUrl, "Kiali endpoint to use for kiali tools. Optional. If not set, the kiali tools will not be available.")
-	cmd.Flags().BoolVar(&o.KialiInsecure, flagKialiInsecure, o.KialiInsecure, "If true, allows insecure TLS connections to Kiali. Optional. If true, the kiali tools will not be available.")
+	cmd.Flags().StringVar(&o.KialiOptions.Url, flagKialiUrl, o.KialiOptions.Url, "Kiali endpoint to use for kiali tools. Optional. If not set, the kiali tools will not be available.")
+	cmd.Flags().BoolVar(&o.KialiOptions.Insecure, flagKialiInsecure, o.KialiOptions.Insecure, "If true, allows insecure TLS connections to Kiali. Optional. If true, the kiali tools will not be available.")
 
 	return cmd
 }
@@ -240,10 +244,10 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 		m.StaticConfig.ClusterProviderStrategy = config.ClusterProviderDisabled
 	}
 	if cmd.Flag(flagKialiUrl).Changed {
-		m.StaticConfig.KialiURL = m.KialiUrl
+		m.StaticConfig.KialiOptions.Url = m.KialiOptions.Url
 	}
 	if cmd.Flag(flagKialiInsecure).Changed {
-		m.StaticConfig.KialiInsecure = m.KialiInsecure
+		m.StaticConfig.KialiOptions.Insecure = m.KialiOptions.Insecure
 	}
 }
 
@@ -290,10 +294,10 @@ func (m *MCPServerOptions) Validate() error {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
 		}
 	}
-    /* If Kiali tools are enabled, validate the Kiali URL */
-    if slices.Contains(m.StaticConfig.Toolsets, "kiali") && strings.TrimSpace(m.StaticConfig.KialiURL) == "" {
-        return fmt.Errorf("kiali-url is required when kiali tools are enabled")
-    }
+	/* If Kiali tools are enabled, validate the Kiali URL */
+	if slices.Contains(m.StaticConfig.Toolsets, "kiali") && strings.TrimSpace(m.StaticConfig.KialiOptions.Url) == "" {
+		return fmt.Errorf("kiali-url is required when kiali tools are enabled")
+	}
 	return nil
 }
 

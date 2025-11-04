@@ -33,7 +33,8 @@ func initMeshStatus() []api.ServerTool {
 }
 
 func meshStatusHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	content, err := params.MeshStatus(params.Context)
+	k := params.NewKiali()
+	content, err := k.MeshStatus(params.Context)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh status: %v", err)), nil
 	}

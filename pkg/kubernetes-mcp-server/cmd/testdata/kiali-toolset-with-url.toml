@@ -1,3 +1,5 @@
 toolsets = ["core", "kiali"]
-kiali_url = "http://kiali"
+
+[kiali]
+url = "http://kiali"
 

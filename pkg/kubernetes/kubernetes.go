@@ -2,9 +2,9 @@ package kubernetes
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
-	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/helm"
+	"github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"k8s.io/client-go/kubernetes/scheme"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
@@ -39,11 +39,15 @@ func (k *Kubernetes) NewHelm() *helm.Helm {
 	return helm.NewHelm(k.manager)
 }
 
-// CurrentBearerToken returns the bearer token that the Kubernetes client is currently
-// configured to use, or empty if none is set in the underlying rest.Config.
-func (k *Kubernetes) CurrentBearerToken() string {
-	if k == nil || k.manager == nil || k.manager.cfg == nil {
-		return ""
+// NewKiali returns a Kiali client initialized with the same StaticConfig and bearer token
+// as the underlying Kubernetes manager. The token is taken from the manager rest.Config.
+func (k *Kubernetes) NewKiali() *kiali.Kiali {
+	if k == nil || k.manager == nil || k.manager.staticConfig == nil {
+		return nil
 	}
-	return strings.TrimSpace(k.manager.cfg.BearerToken)
+	km := kiali.NewManager(k.manager.staticConfig)
+	if k.manager.cfg != nil {
+		km.BearerToken = k.manager.cfg.BearerToken
+	}
+	return km.GetKiali()
 }

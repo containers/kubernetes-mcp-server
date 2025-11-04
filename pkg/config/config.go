@@ -16,6 +16,12 @@ const (
 	ClusterProviderDisabled   = "disabled"
 )
 
+// KialiOptions is the configuration for the kiali toolset.
+type KialiOptions struct {
+	Url      string `toml:"url,omitempty"`
+	Insecure bool   `toml:"insecure,omitempty"`
+}
+
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
@@ -68,10 +74,8 @@ type StaticConfig struct {
 	// This map holds raw TOML primitives that will be parsed by registered provider parsers
 	ClusterProviderConfigs map[string]toml.Primitive `toml:"cluster_provider_configs,omitempty"`
 
-	// KialiServerURL is the URL of the Kiali server.
-	KialiURL string `toml:"kiali_url,omitempty"`
-	// KialiInsecure indicates whether the server should use insecure TLS for the Kiali server.
-	KialiInsecure bool `toml:"kiali_insecure,omitempty"`
+	// KialiOptions is the configuration for the kiali toolset.
+	KialiOptions KialiOptions `toml:"kiali,omitempty"`
 
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]ProviderConfig

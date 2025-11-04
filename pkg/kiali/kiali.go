@@ -5,12 +5,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"strings"
-
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-	"k8s.io/klog/v2"
 )
 
 type Kiali struct {
@@ -63,21 +61,14 @@ func (k *Kiali) createHTTPClient() *http.Client {
 // CurrentAuthorizationHeader returns the Authorization header value that the
 // Kiali client is currently configured to use (Bearer <token>), or empty
 // if no bearer token is configured.
-func (k *Kiali) CurrentAuthorizationHeader(ctx context.Context) string {
-	token, _ := ctx.Value(internalk8s.OAuthAuthorizationHeader).(string)
-	token = strings.TrimSpace(token)
-
-	if token == "" {
-		// Fall back to using the same token that the Kubernetes client is using
-		if k == nil || k.manager == nil || k.manager.BearerToken == "" {
-			return ""
-		}
-		token = strings.TrimSpace(k.manager.BearerToken)
-		if token == "" {
-			return ""
-		}
+func (k *Kiali) authorizationHeader() string {
+	if k == nil || k.manager == nil {
+		return ""
 	}
-	// Normalize to exactly "Bearer <token>" without double prefix
+	token := strings.TrimSpace(k.manager.BearerToken)
+	if token == "" {
+		return ""
+	}
 	lower := strings.ToLower(token)
 	if strings.HasPrefix(lower, "bearer ") {
 		return "Bearer " + strings.TrimSpace(token[7:])
@@ -97,7 +88,7 @@ func (k *Kiali) executeRequest(ctx context.Context, endpoint string) (string, er
 	if err != nil {
 		return "", err
 	}
-	authHeader := k.CurrentAuthorizationHeader(ctx)
+	authHeader := k.authorizationHeader()
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}
