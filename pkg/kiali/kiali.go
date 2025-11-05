@@ -69,9 +69,8 @@ func (k *Kiali) authorizationHeader() string {
 	if token == "" {
 		return ""
 	}
-	lower := strings.ToLower(token)
-	if strings.HasPrefix(lower, "bearer ") {
-		return "Bearer " + strings.TrimSpace(token[7:])
+	if strings.HasPrefix(token, "Bearer ") {
+		return token
 	}
 	return "Bearer " + token
 }
