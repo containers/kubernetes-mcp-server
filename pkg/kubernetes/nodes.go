@@ -12,6 +12,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/metrics/pkg/apis/metrics"
@@ -169,7 +170,7 @@ func (k *Kubernetes) NodesFiles(ctx context.Context, opts NodeFilesOptions) (str
 	}
 
 	// Create the pod
-	pods, err := k.manager.accessControlClientSet.Pods(opts.Namespace)
+	pods, err := k.AccessControlClientset().Pods(opts.Namespace)
 	if err != nil {
 		return "", fmt.Errorf("failed to get pods client: %w", err)
 	}
@@ -288,7 +289,26 @@ func (k *Kubernetes) execInPod(ctx context.Context, namespace, podName string, c
 		Stderr:    true,
 	}
 
-	executor, err := k.manager.accessControlClientSet.PodsExec(namespace, podName, podExecOptions)
+	// Compute URL
+	execRequest := k.AccessControlClientset().CoreV1().RESTClient().
+		Post().
+		Resource("pods").
+		Namespace(namespace).
+		Name(podName).
+		SubResource("exec")
+	execRequest.VersionedParams(podExecOptions, ParameterCodec)
+
+	spdyExec, err := remotecommand.NewSPDYExecutor(k.AccessControlClientset().cfg, "POST", execRequest.URL())
+	if err != nil {
+		return "", err
+	}
+	webSocketExec, err := remotecommand.NewWebSocketExecutor(k.AccessControlClientset().cfg, "GET", execRequest.URL().String())
+	if err != nil {
+		return "", err
+	}
+	executor, err := remotecommand.NewFallbackExecutor(webSocketExec, spdyExec, func(err error) bool {
+		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -316,7 +336,7 @@ func (k *Kubernetes) execInPod(ctx context.Context, namespace, podName string, c
 
 // waitForPodReady waits for a pod to be ready
 func (k *Kubernetes) waitForPodReady(ctx context.Context, namespace, podName string, timeout time.Duration) error {
-	pods, err := k.manager.accessControlClientSet.Pods(namespace)
+	pods, err := k.AccessControlClientset().Pods(namespace)
 	if err != nil {
 		return err
 	}

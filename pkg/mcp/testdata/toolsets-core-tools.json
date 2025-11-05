@@ -34,9 +34,7 @@
   {
     "annotations": {
       "title": "Node: Files",
-      "readOnlyHint": false,
       "destructiveHint": true,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Perform file operations (put, get, list) on a Kubernetes node filesystem by creating a privileged pod. WARNING: Requires privileged access to the node. This tool creates a temporary privileged pod that mounts the node's root filesystem to perform file operations. The pod is automatically deleted after the operation completes.",

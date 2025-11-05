@@ -171,9 +171,7 @@
   {
     "annotations": {
       "title": "Node: Files",
-      "readOnlyHint": false,
       "destructiveHint": true,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Perform file operations (put, get, list) on a Kubernetes node filesystem by creating a privileged pod. WARNING: Requires privileged access to the node. This tool creates a temporary privileged pod that mounts the node's root filesystem to perform file operations. The pod is automatically deleted after the operation completes.",
@@ -249,7 +247,7 @@
           "type": "string"
         },
         "query": {
-          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/<log-file-name>\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
+          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
           "type": "string"
         },
         "tailLines": {
