@@ -1,5 +1,5 @@
 toolsets = ["core", "kiali"]
 
-[kiali]
+[toolset_configs.kiali]
 url = "http://kiali"
 
