@@ -204,7 +204,7 @@ Enabling only the toolsets you need can help reduce the context size and improve
 
 ### Available Toolsets
 
-The following sets of tools are available (all on by default):
+The following sets of tools are available (all on by default).
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
@@ -213,8 +213,11 @@ The following sets of tools are available (all on by default):
 | config  | View and manage the current local Kubernetes configuration (kubeconfig)             |
 | core    | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.) |
 | helm    | Tools for managing Helm charts and releases                                         |
+| kiali   | Most common tools for managing Kiali                                                |
 
 <!-- AVAILABLE-TOOLSETS-END -->
+
+See more info about Kiali integration in [docs/KIALI_INTEGRATION.md](docs/KIALI_INTEGRATION.md).
 
 ### Tools
 
@@ -340,6 +343,14 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
   - `name` (`string`) **(required)** - Name of the Helm release to uninstall
   - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
+
+</details>
+
+<details>
+
+<summary>kiali</summary>
+
+- **mesh_status** - Get the status of mesh components including Istio, Kiali, Grafana, Prometheus and their interactions, versions, and health status
 
 </details>
 
