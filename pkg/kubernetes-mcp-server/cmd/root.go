@@ -25,6 +25,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
+	"github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
@@ -243,11 +244,8 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	if cmd.Flag(flagDisableMultiCluster).Changed && m.DisableMultiCluster {
 		m.StaticConfig.ClusterProviderStrategy = config.ClusterProviderDisabled
 	}
-	if cmd.Flag(flagKialiUrl).Changed {
-		m.StaticConfig.KialiOptions.Url = m.KialiOptions.Url
-	}
-	if cmd.Flag(flagKialiInsecure).Changed {
-		m.StaticConfig.KialiOptions.Insecure = m.KialiOptions.Insecure
+	if cmd.Flag(flagKialiUrl).Changed || cmd.Flag(flagKialiInsecure).Changed {
+		m.StaticConfig.SetToolsetConfig("kiali", &kiali.Config{Url: m.KialiOptions.Url, Insecure: m.KialiOptions.Insecure})
 	}
 }
 
@@ -294,9 +292,15 @@ func (m *MCPServerOptions) Validate() error {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
 		}
 	}
-	/* If Kiali tools are enabled, validate the Kiali URL */
-	if slices.Contains(m.StaticConfig.Toolsets, "kiali") && strings.TrimSpace(m.StaticConfig.KialiOptions.Url) == "" {
-		return fmt.Errorf("kiali-url is required when kiali tools are enabled")
+	/* If Kiali tools are enabled, validate Kiali toolset configuration */
+	if slices.Contains(m.StaticConfig.Toolsets, "kiali") {
+		cfg, ok := m.StaticConfig.GetToolsetConfig("kiali")
+		if !ok {
+			return fmt.Errorf("kiali configuration is required when kiali tools are enabled")
+		}
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("invalid kiali configuration: %w", err)
+		}
 	}
 	return nil
 }

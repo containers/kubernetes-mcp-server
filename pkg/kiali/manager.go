@@ -13,11 +13,18 @@ type Manager struct {
 }
 
 func NewManager(config *config.StaticConfig) *Manager {
-	return &Manager{
+	m := &Manager{
 		BearerToken:   "",
-		KialiURL:      config.KialiOptions.Url,
-		KialiInsecure: config.KialiOptions.Insecure,
+		KialiURL:      "",
+		KialiInsecure: false,
 	}
+	if cfg, ok := config.GetToolsetConfig("kiali"); ok {
+		if kc, ok := cfg.(*Config); ok && kc != nil {
+			m.KialiURL = kc.Url
+			m.KialiInsecure = kc.Insecure
+		}
+	}
+	return m
 }
 
 func (m *Manager) Derived(_ context.Context) (*Kiali, error) {

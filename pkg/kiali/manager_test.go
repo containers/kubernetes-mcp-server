@@ -8,21 +8,23 @@ import (
 )
 
 func TestNewManagerUsesConfigFields(t *testing.T) {
-	cfg := &config.StaticConfig{KialiOptions: config.KialiOptions{Url: "https://kiali.example", Insecure: true}}
+	cfg := config.Default()
+	cfg.SetToolsetConfig("kiali", &Config{Url: "https://kiali.example", Insecure: true})
 	m := NewManager(cfg)
 	if m == nil {
 		t.Fatalf("expected manager, got nil")
 	}
-	if m.KialiURL != cfg.KialiOptions.Url {
-		t.Fatalf("expected KialiURL %s, got %s", cfg.KialiOptions.Url, m.KialiURL)
+	if m.KialiURL != "https://kiali.example" {
+		t.Fatalf("expected KialiURL %s, got %s", "https://kiali.example", m.KialiURL)
 	}
-	if m.KialiInsecure != cfg.KialiOptions.Insecure {
-		t.Fatalf("expected KialiInsecure %v, got %v", cfg.KialiOptions.Insecure, m.KialiInsecure)
+	if m.KialiInsecure != true {
+		t.Fatalf("expected KialiInsecure %v, got %v", true, m.KialiInsecure)
 	}
 }
 
 func TestDerivedWithoutAuthorizationReturnsOriginalManager(t *testing.T) {
-	cfg := &config.StaticConfig{KialiOptions: config.KialiOptions{Url: "https://kiali.example"}}
+	cfg := config.Default()
+	cfg.SetToolsetConfig("kiali", &Config{Url: "https://kiali.example"})
 	m := NewManager(cfg)
 	k, err := m.Derived(context.Background())
 	if err != nil {
@@ -34,7 +36,8 @@ func TestDerivedWithoutAuthorizationReturnsOriginalManager(t *testing.T) {
 }
 
 func TestDerivedPreservesURLAndToken(t *testing.T) {
-	cfg := &config.StaticConfig{KialiOptions: config.KialiOptions{Url: "https://kiali.example", Insecure: true}}
+	cfg := config.Default()
+	cfg.SetToolsetConfig("kiali", &Config{Url: "https://kiali.example", Insecure: true})
 	m := NewManager(cfg)
 	m.BearerToken = "token-abc"
 	k, err := m.Derived(context.Background())

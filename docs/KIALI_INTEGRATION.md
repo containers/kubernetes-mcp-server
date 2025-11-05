@@ -11,7 +11,7 @@ Config (TOML):
 ```toml
 toolsets = ["core", "kiali"]
 
-[kiali]
+[toolset_configs.kiali]
 url = "https://kiali.example"
 # insecure = true  # optional: allow insecure TLS
 ```
@@ -25,7 +25,7 @@ kubernetes-mcp-server \
   [--kiali-insecure]
 ```
 
-When the `kiali` toolset is enabled, a Kiali URL is required. Without it, the server will refuse to start.
+When the `kiali` toolset is enabled, a Kiali toolset configuration is required. Provide it via `[toolset_configs.kiali]` in the config file or by passing flags (which populate the toolset config). If missing or invalid, the server will refuse to start.
 
 ### How authentication works
 
@@ -38,7 +38,8 @@ When the `kiali` toolset is enabled, a Kiali URL is required. Without it, the se
 
 ### Troubleshooting
 
-- Error: "kiali-url is required when kiali tools are enabled" → provide `--kiali-url` or set `[kiali].url` in the config TOML.
-- TLS issues against Kiali → try `--kiali-insecure` or `[kiali].insecure = true` for non-production environments.
+- Missing Kiali configuration when `kiali` toolset is enabled → provide `--kiali-url` or set `[toolset_configs.kiali].url` in the config TOML.
+- Invalid URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL.
+- TLS issues against Kiali → try `--kiali-insecure` or `[toolset_configs.kiali].insecure = true` for non-production environments.
 
 

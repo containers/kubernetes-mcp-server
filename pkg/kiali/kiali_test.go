@@ -11,7 +11,9 @@ import (
 )
 
 func TestValidateAndGetURL_JoinsProperly(t *testing.T) {
-	m := NewManager(&config.StaticConfig{KialiOptions: config.KialiOptions{Url: "https://kiali.example/"}})
+	cfg := config.Default()
+	cfg.SetToolsetConfig("kiali", &Config{Url: "https://kiali.example/"})
+	m := NewManager(cfg)
 	k := m.GetKiali()
 
 	full, err := k.validateAndGetURL("/api/path")
@@ -56,7 +58,9 @@ func TestExecuteRequest_SetsAuthAndCallsServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := NewManager(&config.StaticConfig{KialiOptions: config.KialiOptions{Url: srv.URL}})
+	cfg := config.Default()
+	cfg.SetToolsetConfig("kiali", &Config{Url: srv.URL})
+	m := NewManager(cfg)
 	m.BearerToken = "token-xyz"
 	k := m.GetKiali()
 	out, err := k.executeRequest(context.Background(), "/api/ping?q=1")

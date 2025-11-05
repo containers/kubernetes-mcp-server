@@ -16,12 +16,6 @@ const (
 	ClusterProviderDisabled   = "disabled"
 )
 
-// KialiOptions is the configuration for the kiali toolset.
-type KialiOptions struct {
-	Url      string `toml:"url,omitempty"`
-	Insecure bool   `toml:"insecure,omitempty"`
-}
-
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
@@ -74,11 +68,14 @@ type StaticConfig struct {
 	// This map holds raw TOML primitives that will be parsed by registered provider parsers
 	ClusterProviderConfigs map[string]toml.Primitive `toml:"cluster_provider_configs,omitempty"`
 
-	// KialiOptions is the configuration for the kiali toolset.
-	KialiOptions KialiOptions `toml:"kiali,omitempty"`
+	// Toolset-specific configurations
+	// This map holds raw TOML primitives that will be parsed by registered toolset parsers
+	ToolsetConfigs map[string]toml.Primitive `toml:"toolset_configs,omitempty"`
 
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]ProviderConfig
+	// Internal: parsed toolset configs (not exposed to TOML package)
+	parsedToolsetConfigs map[string]ToolsetConfig
 
 	// Internal: the config.toml directory, to help resolve relative file paths
 	configDirPath string
@@ -136,6 +133,10 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		return nil, err
 	}
 
+	if err := config.parseToolsetConfigs(md); err != nil {
+		return nil, err
+	}
+
 	return config, nil
 }
 
@@ -171,4 +172,44 @@ func (c *StaticConfig) parseClusterProviderConfigs(md toml.MetaData) error {
 	}
 
 	return nil
+}
+
+func (c *StaticConfig) parseToolsetConfigs(md toml.MetaData) error {
+	if c.parsedToolsetConfigs == nil {
+		c.parsedToolsetConfigs = make(map[string]ToolsetConfig, len(c.ToolsetConfigs))
+	}
+
+	ctx := withConfigDirPath(context.Background(), c.configDirPath)
+
+	for name, primitive := range c.ToolsetConfigs {
+		parser, ok := getToolsetConfigParser(name)
+		if !ok {
+			continue
+		}
+
+		toolsetConfig, err := parser(ctx, primitive, md)
+		if err != nil {
+			return fmt.Errorf("failed to parse config for Toolset '%s': %w", name, err)
+		}
+
+		if err := toolsetConfig.Validate(); err != nil {
+			return fmt.Errorf("invalid config file for Toolset '%s': %w", name, err)
+		}
+
+		c.parsedToolsetConfigs[name] = toolsetConfig
+	}
+
+	return nil
+}
+
+func (c *StaticConfig) GetToolsetConfig(name string) (ToolsetConfig, bool) {
+	cfg, ok := c.parsedToolsetConfigs[name]
+	return cfg, ok
+}
+
+func (c *StaticConfig) SetToolsetConfig(name string, cfg ToolsetConfig) {
+	if c.parsedToolsetConfigs == nil {
+		c.parsedToolsetConfigs = make(map[string]ToolsetConfig)
+	}
+	c.parsedToolsetConfigs[name] = cfg
 }

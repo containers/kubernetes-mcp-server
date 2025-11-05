@@ -19,7 +19,9 @@ func TestMeshStatus_CallsGraphWithExpectedQuery(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := NewManager(&config.StaticConfig{KialiOptions: config.KialiOptions{Url: srv.URL}})
+	cfg := config.Default()
+	cfg.SetToolsetConfig("kiali", &Config{Url: srv.URL})
+	m := NewManager(cfg)
 	m.BearerToken = "tkn"
 	k := m.GetKiali()
 	out, err := k.MeshStatus(context.Background())
