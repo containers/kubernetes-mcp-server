@@ -73,8 +73,6 @@ type Server struct {
 func NewServer(configuration Configuration) (*Server, error) {
 	var serverOptions []server.ServerOption
 	serverOptions = append(serverOptions,
-		server.WithResourceCapabilities(true, true),
-		server.WithPromptCapabilities(true),
 		server.WithToolCapabilities(true),
 		server.WithLogging(),
 		server.WithToolHandlerMiddleware(toolCallLoggingMiddleware),
