@@ -18,7 +18,6 @@
       "title": "Configuration: View",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Get the current Kubernetes configuration content as a kubeconfig YAML",
@@ -38,7 +37,6 @@
       "title": "Events: List",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "List all the Kubernetes events in the current cluster from all namespaces",
@@ -64,9 +62,7 @@
   {
     "annotations": {
       "title": "Helm: Install",
-      "readOnlyHint": false,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Install a Helm chart in the current or provided namespace",
@@ -109,7 +105,6 @@
       "title": "Helm: List",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
@@ -139,7 +134,6 @@
   {
     "annotations": {
       "title": "Helm: Uninstall",
-      "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true
@@ -176,7 +170,6 @@
       "title": "Namespaces: List",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "List all the Kubernetes namespaces in the current cluster",
@@ -200,7 +193,6 @@
       "title": "Node: Log",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet",
@@ -242,7 +234,6 @@
       "title": "Node: Stats Summary",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
@@ -304,7 +295,6 @@
   {
     "annotations": {
       "title": "Pods: Delete",
-      "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true
@@ -339,9 +329,7 @@
   {
     "annotations": {
       "title": "Pods: Exec",
-      "readOnlyHint": false,
       "destructiveHint": true,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command",
@@ -388,7 +376,6 @@
       "title": "Pods: Get",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Get a Kubernetes Pod in the current or provided namespace with the provided name",
@@ -423,7 +410,6 @@
       "title": "Pods: List",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "List all the Kubernetes pods in the current cluster from all namespaces",
@@ -452,7 +438,6 @@
       "title": "Pods: List in Namespace",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "List all the Kubernetes pods in the specified namespace in the current cluster",
@@ -488,7 +473,6 @@
       "title": "Pods: Log",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name",
@@ -535,9 +519,7 @@
   {
     "annotations": {
       "title": "Pods: Run",
-      "readOnlyHint": false,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name",
@@ -620,7 +602,6 @@
   {
     "annotations": {
       "title": "Resources: Create or Update",
-      "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true
@@ -651,7 +632,6 @@
   {
     "annotations": {
       "title": "Resources: Delete",
-      "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true
@@ -698,7 +678,6 @@
       "title": "Resources: Get",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
@@ -743,7 +722,6 @@
       "title": "Resources: List",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",

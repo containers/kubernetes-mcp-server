@@ -51,7 +51,6 @@ func initResources(o internalk8s.Openshift) []api.ServerTool {
 				Title:           "Resources: List",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: resourcesList},
@@ -84,7 +83,6 @@ func initResources(o internalk8s.Openshift) []api.ServerTool {
 				Title:           "Resources: Get",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: resourcesGet},
@@ -103,7 +101,6 @@ func initResources(o internalk8s.Openshift) []api.ServerTool {
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Resources: Create or Update",
-				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
@@ -136,7 +133,6 @@ func initResources(o internalk8s.Openshift) []api.ServerTool {
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Resources: Delete",
-				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),

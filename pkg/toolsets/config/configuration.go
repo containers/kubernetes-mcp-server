@@ -51,7 +51,6 @@ func initConfiguration() []api.ServerTool {
 					Title:           "Configuration: View",
 					ReadOnlyHint:    ptr.To(true),
 					DestructiveHint: ptr.To(false),
-					IdempotentHint:  ptr.To(false),
 					OpenWorldHint:   ptr.To(true),
 				},
 			},

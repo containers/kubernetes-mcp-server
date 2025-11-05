@@ -39,9 +39,8 @@ func initHelm() []api.ServerTool {
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Helm: Install",
-				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false), // TODO: consider replacing implementation with equivalent to: helm upgrade --install
+				IdempotentHint:  nil, // TODO: consider replacing implementation with equivalent to: helm upgrade --install
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: helmInstall},
@@ -65,7 +64,6 @@ func initHelm() []api.ServerTool {
 				Title:           "Helm: List",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: helmList},
@@ -88,7 +86,6 @@ func initHelm() []api.ServerTool {
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Helm: Uninstall",
-				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),

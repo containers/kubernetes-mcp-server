@@ -28,7 +28,6 @@ func initEvents() []api.ServerTool {
 				Title:           "Events: List",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: eventsList},

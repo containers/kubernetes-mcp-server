@@ -2,9 +2,7 @@
   {
     "annotations": {
       "title": "Helm: Install",
-      "readOnlyHint": false,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "Install a Helm chart in the current or provided namespace",
@@ -39,7 +37,6 @@
       "title": "Helm: List",
       "readOnlyHint": true,
       "destructiveHint": false,
-      "idempotentHint": false,
       "openWorldHint": true
     },
     "description": "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
@@ -61,7 +58,6 @@
   {
     "annotations": {
       "title": "Helm: Uninstall",
-      "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true
