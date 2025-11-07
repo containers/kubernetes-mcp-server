@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,15 +21,15 @@ const (
 	defaultPreferenceLabel   = "instancetype.kubevirt.io/default-preference"
 )
 
-//go:embed plan.tmpl
-var planTemplate string
+//go:embed vm.yaml.tmpl
+var vmYamlTemplate string
 
 func Tools() []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
 				Name:        "vm_create",
-				Description: "Generate a comprehensive creation plan for a VirtualMachine, including pre-creation checks for instance types, preferences, and container disk images",
+				Description: "Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
@@ -63,13 +64,17 @@ func Tools() []api.ServerTool {
 							Description: "Optional performance family hint for the VM instance type (e.g., 'u1' for general-purpose, 'o1' for overcommitted, 'c1' for compute-optimized, 'm1' for memory-optimized). Defaults to 'u1' (general-purpose) if not specified.",
 							Examples:    []interface{}{"general-purpose", "overcommitted", "compute-optimized", "memory-optimized"},
 						},
+						"autostart": {
+							Type:        "boolean",
+							Description: "Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.",
+						},
 					},
 					Required: []string{"namespace", "name"},
 				},
 				Annotations: api.ToolAnnotations{
 					Title:           "Virtual Machine: Create",
-					ReadOnlyHint:    ptr.To(true),
-					DestructiveHint: ptr.To(false),
+					ReadOnlyHint:    ptr.To(false),
+					DestructiveHint: ptr.To(true),
 					IdempotentHint:  ptr.To(true),
 					OpenWorldHint:   ptr.To(false),
 				},
@@ -88,6 +93,7 @@ type vmParams struct {
 	UseDataSource       bool
 	DataSourceName      string
 	DataSourceNamespace string
+	RunStrategy         string
 }
 
 type DataSourceInfo struct {
@@ -129,13 +135,25 @@ func create(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	// Build template parameters from resolved resources
 	templateParams := buildTemplateParams(createParams, matchedDataSource, instancetype, preference)
 
-	// Render the VM creation plan template
-	result, err := renderTemplate(templateParams)
+	// Render the VM YAML
+	vmYaml, err := renderVMYaml(templateParams)
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	return api.NewToolCallResult(result, nil), nil
+	// Create the VM in the cluster
+	resources, err := params.ResourcesCreateOrUpdate(params, vmYaml)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to create VirtualMachine: %w", err)), nil
+	}
+
+	// Format the output
+	marshalledYaml, err := output.MarshalYaml(resources)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to marshal created VirtualMachine: %w", err)), nil
+	}
+
+	return api.NewToolCallResult("# VirtualMachine created successfully\n"+marshalledYaml, nil), nil
 }
 
 // createParameters holds parsed input parameters for VM creation
@@ -147,6 +165,7 @@ type createParameters struct {
 	Preference   string
 	Size         string
 	Performance  string
+	Autostart    bool
 }
 
 // parseCreateParameters parses and validates input parameters
@@ -167,6 +186,7 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 	}
 
 	performance := normalizePerformance(getOptionalString(params, "performance"))
+	autostart := getOptionalBool(params, "autostart")
 
 	return &createParameters{
 		Namespace:    namespace,
@@ -176,6 +196,7 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 		Preference:   getOptionalString(params, "preference"),
 		Size:         getOptionalString(params, "size"),
 		Performance:  performance,
+		Autostart:    autostart,
 	}, nil
 }
 
@@ -301,11 +322,18 @@ func filterInstancetypesBySize(instancetypes []InstancetypeInfo, normalizedSize 
 
 // buildTemplateParams constructs the template parameters for VM creation
 func buildTemplateParams(createParams *createParameters, matchedDataSource *DataSourceInfo, instancetype, preference string) vmParams {
+	// Determine runStrategy based on autostart parameter
+	runStrategy := "Halted"
+	if createParams.Autostart {
+		runStrategy = "Always"
+	}
+
 	params := vmParams{
 		Namespace:    createParams.Namespace,
 		Name:         createParams.Name,
 		Instancetype: instancetype,
 		Preference:   preference,
+		RunStrategy:  runStrategy,
 	}
 
 	if matchedDataSource != nil && matchedDataSource.Namespace != "" {
@@ -324,9 +352,9 @@ func buildTemplateParams(createParams *createParameters, matchedDataSource *Data
 	return params
 }
 
-// renderTemplate renders the VM creation plan template
-func renderTemplate(templateParams vmParams) (string, error) {
-	tmpl, err := template.New("vm").Parse(planTemplate)
+// renderVMYaml renders the VM YAML from template
+func renderVMYaml(templateParams vmParams) (string, error) {
+	tmpl, err := template.New("vm").Parse(vmYamlTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -396,6 +424,19 @@ func getOptionalString(params api.ToolHandlerParams, key string) string {
 		return ""
 	}
 	return str
+}
+
+func getOptionalBool(params api.ToolHandlerParams, key string) bool {
+	args := params.GetArguments()
+	val, ok := args[key]
+	if !ok {
+		return false
+	}
+	b, ok := val.(bool)
+	if !ok {
+		return false
+	}
+	return b
 }
 
 // resolveContainerDisk resolves OS names to container disk images from quay.io/containerdisks

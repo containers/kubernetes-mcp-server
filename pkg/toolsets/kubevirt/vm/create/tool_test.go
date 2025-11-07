@@ -1,40 +1,33 @@
 package create
 
 import (
-	"context"
 	"strings"
 	"testing"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
-type mockToolCallRequest struct {
-	arguments map[string]interface{}
-}
-
-func (m *mockToolCallRequest) GetArguments() map[string]any {
-	return m.arguments
-}
-
-func TestCreate(t *testing.T) {
+// Test the YAML rendering directly without creating resources
+func TestRenderVMYaml(t *testing.T) {
 	tests := []struct {
 		name      string
-		args      map[string]interface{}
+		params    vmParams
 		wantErr   bool
 		checkFunc func(t *testing.T, result string)
 	}{
 		{
-			name: "creates VM with basic settings",
-			args: map[string]interface{}{
-				"namespace": "test-ns",
-				"name":      "test-vm",
-				"workload":  "fedora",
+			name: "renders VM with basic settings",
+			params: vmParams{
+				Namespace:     "test-ns",
+				Name:          "test-vm",
+				ContainerDisk: "quay.io/containerdisks/fedora:latest",
+				RunStrategy:   "Halted",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, result string) {
-				if !strings.Contains(result, "VirtualMachine Creation Plan") {
-					t.Errorf("Expected 'VirtualMachine Creation Plan' header in result")
+				if !strings.Contains(result, "apiVersion: kubevirt.io/v1") {
+					t.Errorf("Expected apiVersion in YAML")
+				}
+				if !strings.Contains(result, "kind: VirtualMachine") {
+					t.Errorf("Expected kind VirtualMachine in YAML")
 				}
 				if !strings.Contains(result, "name: test-vm") {
 					t.Errorf("Expected VM name test-vm in YAML")
@@ -51,12 +44,13 @@ func TestCreate(t *testing.T) {
 			},
 		},
 		{
-			name: "creates VM with instancetype",
-			args: map[string]interface{}{
-				"namespace":    "test-ns",
-				"name":         "test-vm",
-				"workload":     "ubuntu",
-				"instancetype": "u1.medium",
+			name: "renders VM with instancetype",
+			params: vmParams{
+				Namespace:     "test-ns",
+				Name:          "test-vm",
+				ContainerDisk: "quay.io/containerdisks/ubuntu:24.04",
+				Instancetype:  "u1.medium",
+				RunStrategy:   "Halted",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, result string) {
@@ -66,19 +60,20 @@ func TestCreate(t *testing.T) {
 				if !strings.Contains(result, "kind: VirtualMachineClusterInstancetype") {
 					t.Errorf("Expected VirtualMachineClusterInstancetype in YAML manifest")
 				}
-				// When instancetype is set, memory should not be in the YAML resources section
-				if strings.Contains(result, "resources:\n          requests:\n            memory:") {
-					t.Errorf("Should not have memory resources when instancetype is specified")
+				// When instancetype is set, memory should not be in the YAML
+				if strings.Contains(result, "guest: 2Gi") {
+					t.Errorf("Should not have guest memory when instancetype is specified")
 				}
 			},
 		},
 		{
-			name: "creates VM with preference",
-			args: map[string]interface{}{
-				"namespace":  "test-ns",
-				"name":       "test-vm",
-				"workload":   "rhel",
-				"preference": "rhel.9",
+			name: "renders VM with preference",
+			params: vmParams{
+				Namespace:     "test-ns",
+				Name:          "test-vm",
+				ContainerDisk: "registry.redhat.io/rhel9/rhel-guest-image:latest",
+				Preference:    "rhel.9",
+				RunStrategy:   "Halted",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, result string) {
@@ -91,11 +86,12 @@ func TestCreate(t *testing.T) {
 			},
 		},
 		{
-			name: "creates VM with custom container disk",
-			args: map[string]interface{}{
-				"namespace": "test-ns",
-				"name":      "test-vm",
-				"workload":  "quay.io/myrepo/myimage:v1.0",
+			name: "renders VM with custom container disk",
+			params: vmParams{
+				Namespace:     "test-ns",
+				Name:          "test-vm",
+				ContainerDisk: "quay.io/myrepo/myimage:v1.0",
+				RunStrategy:   "Halted",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, result string) {
@@ -105,31 +101,43 @@ func TestCreate(t *testing.T) {
 			},
 		},
 		{
-			name: "missing namespace",
-			args: map[string]interface{}{
-				"name":     "test-vm",
-				"workload": "fedora",
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing name",
-			args: map[string]interface{}{
-				"namespace": "test-ns",
-				"workload":  "fedora",
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing workload defaults to fedora",
-			args: map[string]interface{}{
-				"namespace": "test-ns",
-				"name":      "test-vm",
+			name: "renders VM with DataSource",
+			params: vmParams{
+				Namespace:           "test-ns",
+				Name:                "test-vm",
+				UseDataSource:       true,
+				DataSourceName:      "fedora",
+				DataSourceNamespace: "openshift-virtualization-os-images",
+				RunStrategy:         "Halted",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, result string) {
-				if !strings.Contains(result, "quay.io/containerdisks/fedora:latest") {
-					t.Errorf("Expected default fedora container disk in result")
+				if !strings.Contains(result, "dataVolumeTemplates") {
+					t.Errorf("Expected dataVolumeTemplates in YAML")
+				}
+				if !strings.Contains(result, "kind: DataSource") {
+					t.Errorf("Expected DataSource kind in YAML")
+				}
+				if !strings.Contains(result, "name: fedora") {
+					t.Errorf("Expected DataSource name in YAML")
+				}
+				if !strings.Contains(result, "openshift-virtualization-os-images") {
+					t.Errorf("Expected DataSource namespace in YAML")
+				}
+			},
+		},
+		{
+			name: "renders VM with autostart (runStrategy Always)",
+			params: vmParams{
+				Namespace:     "test-ns",
+				Name:          "test-vm",
+				ContainerDisk: "quay.io/containerdisks/fedora:latest",
+				RunStrategy:   "Always",
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result string) {
+				if !strings.Contains(result, "runStrategy: Always") {
+					t.Errorf("Expected runStrategy: Always in YAML")
 				}
 			},
 		},
@@ -137,36 +145,21 @@ func TestCreate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			params := api.ToolHandlerParams{
-				Context:         context.Background(),
-				Kubernetes:      &internalk8s.Kubernetes{},
-				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
-			}
-
-			result, err := create(params)
-			if err != nil {
-				t.Errorf("create() unexpected Go error: %v", err)
-				return
-			}
-
-			if result == nil {
-				t.Error("Expected non-nil result")
-				return
-			}
+			result, err := renderVMYaml(tt.params)
 
 			if tt.wantErr {
-				if result.Error == nil {
-					t.Error("Expected error in result.Error, got nil")
+				if err == nil {
+					t.Error("Expected error, got nil")
 				}
 			} else {
-				if result.Error != nil {
-					t.Errorf("Expected no error in result, got: %v", result.Error)
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
 				}
-				if result.Content == "" {
-					t.Error("Expected non-empty result content")
+				if result == "" {
+					t.Error("Expected non-empty result")
 				}
 				if tt.checkFunc != nil {
-					tt.checkFunc(t, result.Content)
+					tt.checkFunc(t, result)
 				}
 			}
 		})
