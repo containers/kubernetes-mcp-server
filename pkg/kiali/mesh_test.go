@@ -1,43 +1,40 @@
 package kiali
 
 import (
-	"context"
+	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
-func TestMeshStatus_CallsGraphWithExpectedQuery(t *testing.T) {
+func (s *KialiSuite) TestMeshStatus() {
 	var capturedURL *url.URL
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	s.MockServer.Config().BearerToken = "token-xyz"
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u := *r.URL
 		capturedURL = &u
 		_, _ = w.Write([]byte("graph"))
 	}))
-	defer srv.Close()
 
-	cfg := config.Default()
-	cfg.SetToolsetConfig("kiali", &Config{Url: srv.URL})
-	m := NewManager(cfg)
-	m.BearerToken = "tkn"
-	k := m.GetKiali()
-	out, err := k.MeshStatus(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if out != "graph" {
-		t.Fatalf("unexpected response: %s", out)
-	}
-	if capturedURL == nil {
-		t.Fatalf("expected request to be captured")
-	}
-	if capturedURL.Path != "/api/mesh/graph" {
-		t.Fatalf("unexpected path: %s", capturedURL.Path)
-	}
-	if capturedURL.Query().Get("includeGateways") != "false" || capturedURL.Query().Get("includeWaypoints") != "false" {
-		t.Fatalf("unexpected query: %s", capturedURL.RawQuery)
-	}
+	s.Config = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
+		[toolset_configs.kiali]
+		url = "%s"
+	`, s.MockServer.Config().Host))))
+	k := NewKiali(s.Config, s.MockServer.Config())
+
+	out, err := k.MeshStatus(s.T().Context())
+	s.Require().NoError(err, "Expected no error executing request")
+	s.Run("response body is correct", func() {
+		s.Equal("graph", out, "Unexpected response body")
+	})
+	s.Run("path is correct", func() {
+		s.Equal("/api/mesh/graph", capturedURL.Path, "Unexpected path")
+	})
+	s.Run("query parameters are correct", func() {
+		s.Equal("false", capturedURL.Query().Get("includeGateways"), "Unexpected includeGateways query parameter")
+		s.Equal("false", capturedURL.Query().Get("includeWaypoints"), "Unexpected includeWaypoints query parameter")
+	})
+
 }

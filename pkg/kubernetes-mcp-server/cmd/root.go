@@ -292,20 +292,20 @@ func (m *MCPServerOptions) Validate() error {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
 		}
 	}
-    /* If Kiali tools are enabled, validate Kiali toolset configuration */
-    if slices.Contains(m.StaticConfig.Toolsets, "kiali") {
-        cfg, ok := m.StaticConfig.GetToolsetConfig("kiali")
-        if !ok {
-            return fmt.Errorf("kiali-url is required when kiali tools are enabled")
-        }
-        if err := cfg.Validate(); err != nil {
-            // Normalize error message for missing URL to match expected UX/tests
-            if strings.Contains(err.Error(), "kiali-url is required") {
-                return fmt.Errorf("kiali-url is required when kiali tools are enabled")
-            }
-            return fmt.Errorf("invalid kiali configuration: %w", err)
-        }
-    }
+	/* If Kiali tools are enabled, validate Kiali toolset configuration */
+	if slices.Contains(m.StaticConfig.Toolsets, "kiali") {
+		cfg, ok := m.StaticConfig.GetToolsetConfig("kiali")
+		if !ok {
+			return fmt.Errorf("kiali-url is required when kiali tools are enabled")
+		}
+		if err := cfg.Validate(); err != nil {
+			// Normalize error message for missing URL to match expected UX/tests
+			if strings.Contains(err.Error(), "kiali-url is required") {
+				return fmt.Errorf("kiali-url is required when kiali tools are enabled")
+			}
+			return fmt.Errorf("invalid kiali configuration: %w", err)
+		}
+	}
 	return nil
 }
 

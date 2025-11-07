@@ -5,32 +5,41 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 )
 
 type Kiali struct {
-	manager *Manager
+	bearerToken   string
+	kialiURL      string
+	kialiInsecure bool
 }
 
-func (m *Manager) GetKiali() *Kiali {
-	return &Kiali{manager: m}
-}
-
-func (k *Kiali) GetKiali() *Kiali {
-	return k
+// NewKiali creates a new Kiali instance
+func NewKiali(config *config.StaticConfig, kubernetes *rest.Config) *Kiali {
+	kiali := &Kiali{bearerToken: kubernetes.BearerToken}
+	if cfg, ok := config.GetToolsetConfig("kiali"); ok {
+		if kc, ok := cfg.(*Config); ok && kc != nil {
+			kiali.kialiURL = kc.Url
+			kiali.kialiInsecure = kc.Insecure
+		}
+	}
+	return kiali
 }
 
 // validateAndGetURL validates the Kiali client configuration and returns the full URL
 // by safely concatenating the base URL with the provided endpoint, avoiding duplicate
 // or missing slashes regardless of trailing/leading slashes.
 func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
-	if k == nil || k.manager == nil || k.manager.KialiURL == "" {
+	if k == nil || k.kialiURL == "" {
 		return "", fmt.Errorf("kiali client not initialized")
 	}
-	baseStr := strings.TrimSpace(k.manager.KialiURL)
+	baseStr := strings.TrimSpace(k.kialiURL)
 	if baseStr == "" {
 		return "", fmt.Errorf("kiali server URL not configured")
 	}
@@ -52,7 +61,7 @@ func (k *Kiali) createHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: k.manager.KialiInsecure,
+				InsecureSkipVerify: k.kialiInsecure,
 			},
 		},
 	}
@@ -62,10 +71,10 @@ func (k *Kiali) createHTTPClient() *http.Client {
 // Kiali client is currently configured to use (Bearer <token>), or empty
 // if no bearer token is configured.
 func (k *Kiali) authorizationHeader() string {
-	if k == nil || k.manager == nil {
+	if k == nil {
 		return ""
 	}
-	token := strings.TrimSpace(k.manager.BearerToken)
+	token := strings.TrimSpace(k.bearerToken)
 	if token == "" {
 		return ""
 	}
