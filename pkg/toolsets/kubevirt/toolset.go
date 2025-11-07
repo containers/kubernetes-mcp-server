@@ -7,6 +7,8 @@ import (
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	vm_create "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/create"
+	vm_start "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/start"
+	vm_stop "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/stop"
 	vm_troubleshoot "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/troubleshoot"
 )
 
@@ -25,6 +27,8 @@ func (t *Toolset) GetDescription() string {
 func (t *Toolset) GetTools(o internalk8s.Openshift) []api.ServerTool {
 	return slices.Concat(
 		vm_create.Tools(),
+		vm_start.Tools(),
+		vm_stop.Tools(),
 		vm_troubleshoot.Tools(),
 	)
 }
