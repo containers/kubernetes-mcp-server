@@ -12,6 +12,13 @@ import (
 	"golang.org/x/net/context"
 )
 
+func McpInitRequest() mcp.InitializeRequest {
+	initRequest := mcp.InitializeRequest{}
+	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initRequest.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "1.33.7"}
+	return initRequest
+}
+
 type McpClient struct {
 	ctx        context.Context
 	testServer *httptest.Server
@@ -28,10 +35,7 @@ func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...transport
 	require.NoError(t, err, "Expected no error creating MCP client")
 	err = ret.Start(t.Context())
 	require.NoError(t, err, "Expected no error starting MCP client")
-	initRequest := mcp.InitializeRequest{}
-	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initRequest.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "1.33.7"}
-	_, err = ret.Initialize(t.Context(), initRequest)
+	_, err = ret.Initialize(t.Context(), McpInitRequest())
 	require.NoError(t, err, "Expected no error initializing MCP client")
 	return ret
 }

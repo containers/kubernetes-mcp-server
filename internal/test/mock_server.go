@@ -216,3 +216,33 @@ func (h *InOpenShiftHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		return
 	}
 }
+
+const tokenReviewSuccessful = `
+	{
+		"kind": "TokenReview",
+		"apiVersion": "authentication.k8s.io/v1",
+		"spec": {"token": "valid-token"},
+		"status": {
+			"authenticated": true,
+			"user": {
+				"username": "test-user",
+				"groups": ["system:authenticated"]
+			},
+			"audiences": ["the-audience"]
+		}
+	}`
+
+type TokenReviewHandler struct {
+	TokenReviewed bool
+}
+
+var _ http.Handler = (*TokenReviewHandler)(nil)
+
+func (h *TokenReviewHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.URL.EscapedPath() == "/apis/authentication.k8s.io/v1/tokenreviews" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(tokenReviewSuccessful))
+		h.TokenReviewed = true
+		return
+	}
+}

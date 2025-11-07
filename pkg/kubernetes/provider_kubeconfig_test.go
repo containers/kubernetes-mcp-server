@@ -2,7 +2,6 @@ package kubernetes
 
 import (
 	"fmt"
-	"net/http"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -57,25 +56,8 @@ func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 }
 
 func (s *ProviderKubeconfigTestSuite) TestVerifyToken() {
-	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.EscapedPath() == "/apis/authentication.k8s.io/v1/tokenreviews" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`
-				{
-					"kind": "TokenReview",
-					"apiVersion": "authentication.k8s.io/v1",
-					"spec": {"token": "the-token"},
-					"status": {
-						"authenticated": true,
-						"user": {
-							"username": "test-user",
-							"groups": ["system:authenticated"]
-						},
-						"audiences": ["the-audience"]
-					}
-				}`))
-		}
-	}))
+	s.mockServer.Handle(&test.TokenReviewHandler{})
+
 	s.Run("VerifyToken returns UserInfo for non-empty context", func() {
 		userInfo, audiences, err := s.provider.VerifyToken(s.T().Context(), "fake-context", "some-token", "the-audience")
 		s.Require().NoError(err, "Expected no error from VerifyToken with empty target")
