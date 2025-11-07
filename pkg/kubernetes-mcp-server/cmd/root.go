@@ -57,8 +57,6 @@ const (
 	flagVersion              = "version"
 	flagLogLevel             = "log-level"
 	flagConfig               = "config"
-	flagSSEPort              = "sse-port"
-	flagHttpPort             = "http-port"
 	flagPort                 = "port"
 	flagSSEBaseUrl           = "sse-base-url"
 	flagKubeconfig           = "kubeconfig"
@@ -79,8 +77,6 @@ type MCPServerOptions struct {
 	Version              bool
 	LogLevel             int
 	Port                 string
-	SSEPort              int
-	HttpPort             int
 	SSEBaseUrl           string
 	Kubeconfig           string
 	Toolsets             []string
@@ -133,10 +129,6 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Version, flagVersion, o.Version, "Print version information and quit")
 	cmd.Flags().IntVar(&o.LogLevel, flagLogLevel, o.LogLevel, "Set the log level (from 0 to 9)")
 	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
-	cmd.Flags().IntVar(&o.SSEPort, flagSSEPort, o.SSEPort, "Start a SSE server on the specified port")
-	cmd.Flag(flagSSEPort).Deprecated = "Use --port instead"
-	cmd.Flags().IntVar(&o.HttpPort, flagHttpPort, o.HttpPort, "Start a streamable HTTP server on the specified port")
-	cmd.Flag(flagHttpPort).Deprecated = "Use --port instead"
 	cmd.Flags().StringVar(&o.Port, flagPort, o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
 	cmd.Flags().StringVar(&o.SSEBaseUrl, flagSSEBaseUrl, o.SSEBaseUrl, "SSE public base URL to use when sending the endpoint message (e.g. https://example.com)")
 	cmd.Flags().StringVar(&o.Kubeconfig, flagKubeconfig, o.Kubeconfig, "Path to the kubeconfig file to use for authentication")
@@ -188,10 +180,6 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagPort).Changed {
 		m.StaticConfig.Port = m.Port
-	} else if cmd.Flag(flagSSEPort).Changed {
-		m.StaticConfig.Port = strconv.Itoa(m.SSEPort)
-	} else if cmd.Flag(flagHttpPort).Changed {
-		m.StaticConfig.Port = strconv.Itoa(m.HttpPort)
 	}
 	if cmd.Flag(flagSSEBaseUrl).Changed {
 		m.StaticConfig.SSEBaseURL = m.SSEBaseUrl
@@ -253,9 +241,6 @@ func (m *MCPServerOptions) initializeLogging() {
 }
 
 func (m *MCPServerOptions) Validate() error {
-	if m.Port != "" && (m.SSEPort > 0 || m.HttpPort > 0) {
-		return fmt.Errorf("--port is mutually exclusive with deprecated --http-port and --sse-port flags")
-	}
 	if output.FromString(m.StaticConfig.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", m.StaticConfig.ListOutput, strings.Join(output.Names, ", "))
 	}
