@@ -22,10 +22,10 @@ func (c *Config) Validate() error {
 		return errors.New("kiali config is nil")
 	}
 	if c.Url == "" {
-		return errors.New("kiali-url is required")
+		return errors.New("url is required")
 	}
 	if u, err := url.Parse(c.Url); err != nil || u.Scheme == "" || u.Host == "" {
-		return errors.New("kiali-url must be a valid URL")
+		return errors.New("url must be a valid URL")
 	}
 	return nil
 }
