@@ -1,4 +1,4 @@
-package start
+package start_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/start"
 )
 
 type mockToolCallRequest struct {
@@ -67,6 +68,13 @@ func TestStartParameterValidation(t *testing.T) {
 		},
 	}
 
+	// Get the tool through the public API
+	tools := start.Tools()
+	if len(tools) != 1 {
+		t.Fatalf("Expected 1 tool, got %d", len(tools))
+	}
+	vmStartTool := tools[0]
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			params := api.ToolHandlerParams{
@@ -75,9 +83,10 @@ func TestStartParameterValidation(t *testing.T) {
 				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
 			}
 
-			result, err := start(params)
+			// Call through the public Handler interface
+			result, err := vmStartTool.Handler(params)
 			if err != nil {
-				t.Errorf("start() unexpected Go error: %v", err)
+				t.Errorf("Handler() unexpected Go error: %v", err)
 				return
 			}
 

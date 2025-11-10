@@ -1,4 +1,4 @@
-package stop
+package stop_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/stop"
 )
 
 type mockToolCallRequest struct {
@@ -67,6 +68,13 @@ func TestStopParameterValidation(t *testing.T) {
 		},
 	}
 
+	// Get the tool through the public API
+	tools := stop.Tools()
+	if len(tools) != 1 {
+		t.Fatalf("Expected 1 tool, got %d", len(tools))
+	}
+	vmStopTool := tools[0]
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			params := api.ToolHandlerParams{
@@ -75,9 +83,10 @@ func TestStopParameterValidation(t *testing.T) {
 				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
 			}
 
-			result, err := stop(params)
+			// Call through the public Handler interface
+			result, err := vmStopTool.Handler(params)
 			if err != nil {
-				t.Errorf("stop() unexpected Go error: %v", err)
+				t.Errorf("Handler() unexpected Go error: %v", err)
 				return
 			}
 
