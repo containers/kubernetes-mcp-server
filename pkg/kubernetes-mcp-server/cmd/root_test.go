@@ -137,7 +137,7 @@ func TestToolsets(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--help"})
 		o, err := captureOutput(rootCmd.Execute) // --help doesn't use logger/klog, cobra prints directly to stdout
-		if !strings.Contains(o, "Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm).") {
+		if !strings.Contains(o, "Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm, kiali).") {
 			t.Fatalf("Expected all available toolsets, got %s %v", o, err)
 		}
 	})

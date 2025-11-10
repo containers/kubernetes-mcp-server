@@ -53,7 +53,7 @@ func (s *KialiSuite) TestNewKiali_InvalidConfig() {
 		url = "://invalid-url"
 	`))
 	s.Error(err, "Expected error reading invalid config")
-	s.ErrorContains(err, "kiali-url must be a valid URL", "Unexpected error message")
+	s.ErrorContains(err, "url must be a valid URL", "Unexpected error message")
 	s.Nil(cfg, "Unexpected Kiali config")
 }
 
@@ -108,7 +108,7 @@ func (s *KialiSuite) TestExecuteRequest() {
 	`, s.MockServer.Config().Host))))
 	k := NewKiali(s.Config, s.MockServer.Config())
 
-	out, err := k.executeRequest(s.T().Context(), "/api/ping?q=1")
+	out, err := k.executeRequest(s.T().Context(), http.MethodGet, "/api/ping?q=1", "", nil)
 	s.Require().NoError(err, "Expected no error executing request")
 	s.Run("auth header set", func() {
 		s.Equal("Bearer token-xyz", seenAuth, "Unexpected Authorization header")

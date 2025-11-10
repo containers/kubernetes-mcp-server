@@ -84,15 +84,17 @@ func (k *Kiali) authorizationHeader() string {
 	return "Bearer " + token
 }
 
-// executeRequest executes an HTTP request and handles common error scenarios.
-func (k *Kiali) executeRequest(ctx context.Context, endpoint string) (string, error) {
+// executeRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
+func (k *Kiali) executeRequest(ctx context.Context, method, endpoint, contentType string, body io.Reader) (string, error) {
+	if method == "" {
+		method = http.MethodGet
+	}
 	ApiCallURL, err := k.validateAndGetURL(endpoint)
 	if err != nil {
 		return "", err
 	}
-
-	klog.V(0).Infof("Kiali Call URL: %s", ApiCallURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ApiCallURL, nil)
+	klog.V(0).Infof("kiali API call: %s %s", method, ApiCallURL)
+	req, err := http.NewRequestWithContext(ctx, method, ApiCallURL, body)
 	if err != nil {
 		return "", err
 	}
@@ -100,18 +102,21 @@ func (k *Kiali) executeRequest(ctx context.Context, endpoint string) (string, er
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	client := k.createHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if len(body) > 0 {
-			return "", fmt.Errorf("kiali API error: %s", strings.TrimSpace(string(body)))
+		if len(respBody) > 0 {
+			return "", fmt.Errorf("kiali API error: %s", strings.TrimSpace(string(respBody)))
 		}
 		return "", fmt.Errorf("kiali API error: status %d", resp.StatusCode)
 	}
-	return string(body), nil
+	return string(respBody), nil
 }
