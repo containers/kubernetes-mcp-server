@@ -48,12 +48,12 @@ func Tools() []api.ServerTool {
 
 func start(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	// Parse required parameters
-	namespace, err := getRequiredString(params, "namespace")
+	namespace, err := params.GetRequiredString("namespace")
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	name, err := getRequiredString(params, "name")
+	name, err := params.GetRequiredString("name")
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
@@ -107,17 +107,4 @@ func start(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	return api.NewToolCallResult("# VirtualMachine started successfully\n"+marshalledYaml, nil), nil
-}
-
-func getRequiredString(params api.ToolHandlerParams, key string) (string, error) {
-	args := params.GetArguments()
-	val, ok := args[key]
-	if !ok {
-		return "", fmt.Errorf("%s parameter required", key)
-	}
-	str, ok := val.(string)
-	if !ok {
-		return "", fmt.Errorf("%s parameter must be a string", key)
-	}
-	return str, nil
 }
