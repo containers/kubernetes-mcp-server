@@ -11,8 +11,9 @@ import (
 
 // Config holds Kiali toolset configuration
 type Config struct {
-	Url      string `toml:"url,omitempty"`
-	Insecure bool   `toml:"insecure,omitempty"`
+	Url                  string `toml:"url"`
+	Insecure             bool   `toml:"insecure,omitempty"`
+	CertificateAuthority string `toml:"certificate_authority,omitempty"`
 }
 
 var _ config.ToolsetConfig = (*Config)(nil)

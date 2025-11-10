@@ -3,10 +3,12 @@ package kiali
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -15,9 +17,10 @@ import (
 )
 
 type Kiali struct {
-	bearerToken   string
-	kialiURL      string
-	kialiInsecure bool
+	bearerToken          string
+	kialiURL             string
+	kialiInsecure        bool
+	certificateAuthority string
 }
 
 // NewKiali creates a new Kiali instance
@@ -27,6 +30,7 @@ func NewKiali(config *config.StaticConfig, kubernetes *rest.Config) *Kiali {
 		if kc, ok := cfg.(*Config); ok && kc != nil {
 			kiali.kialiURL = kc.Url
 			kiali.kialiInsecure = kc.Insecure
+			kiali.certificateAuthority = kc.CertificateAuthority
 		}
 	}
 	return kiali
@@ -58,11 +62,34 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 }
 
 func (k *Kiali) createHTTPClient() *http.Client {
+	// Base TLS configuration, optionally extended with a custom CA
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: k.kialiInsecure,
+	}
+
+	// If a custom Certificate Authority path is configured, load and add it
+	if caPath := strings.TrimSpace(k.certificateAuthority); caPath != "" {
+		// Start with the host system pool when possible so we don't drop system roots
+		var certPool *x509.CertPool
+		if systemPool, err := x509.SystemCertPool(); err == nil && systemPool != nil {
+			certPool = systemPool
+		} else {
+			certPool = x509.NewCertPool()
+		}
+		if pemData, err := os.ReadFile(caPath); err == nil {
+			if ok := certPool.AppendCertsFromPEM(pemData); ok {
+				tlsConfig.RootCAs = certPool
+			} else {
+				klog.V(0).Infof("failed to append certificates from %q; proceeding without custom CA", caPath)
+			}
+		} else {
+			klog.V(0).Infof("failed to read certificate authority file %q: %v; proceeding without custom CA", caPath, err)
+		}
+	}
+
 	return &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: k.kialiInsecure,
-			},
+			TLSClientConfig: tlsConfig,
 		},
 	}
 }
