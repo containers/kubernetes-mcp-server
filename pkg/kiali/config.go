@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -27,6 +28,10 @@ func (c *Config) Validate() error {
 	}
 	if u, err := url.Parse(c.Url); err != nil || u.Scheme == "" || u.Host == "" {
 		return errors.New("url must be a valid URL")
+	}
+	u, _ := url.Parse(c.Url)
+	if strings.EqualFold(u.Scheme, "https") && !c.Insecure && strings.TrimSpace(c.CertificateAuthority) == "" {
+		return errors.New("certificate_authority is required for https when insecure is false")
 	}
 	return nil
 }

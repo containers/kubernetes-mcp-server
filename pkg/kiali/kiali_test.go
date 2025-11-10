@@ -57,10 +57,21 @@ func (s *KialiSuite) TestNewKiali_InvalidConfig() {
 	s.Nil(cfg, "Unexpected Kiali config")
 }
 
+func (s *KialiSuite) TestCertificateRequiredForHTTPSWhenNotInsecure() {
+	cfg, err := config.ReadToml([]byte(`
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+	`))
+	s.Error(err, "Expected error when https and insecure=false without certificate_authority")
+	s.ErrorContains(err, "certificate_authority is required for https when insecure is false", "Unexpected error message")
+	s.Nil(cfg, "Unexpected Kiali config")
+}
+
 func (s *KialiSuite) TestValidateAndGetURL() {
 	s.Config = test.Must(config.ReadToml([]byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
+		insecure = true
 	`)))
 	k := NewKiali(s.Config, s.MockServer.Config())
 
