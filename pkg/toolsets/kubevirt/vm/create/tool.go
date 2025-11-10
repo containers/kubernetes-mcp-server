@@ -19,6 +19,7 @@ import (
 const (
 	defaultInstancetypeLabel = "instancetype.kubevirt.io/default-instancetype"
 	defaultPreferenceLabel   = "instancetype.kubevirt.io/default-preference"
+	defaultWorkload          = "fedora"
 )
 
 //go:embed vm.yaml.tmpl
@@ -180,15 +181,10 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 		return nil, err
 	}
 
-	workload := params.GetOptionalString("workload")
-	if workload == "" {
-		workload = "fedora" // Default to fedora if not specified
-	}
-
 	return &createParameters{
 		Namespace:    namespace,
 		Name:         name,
-		Workload:     workload,
+		Workload:     params.GetOptionalString("workload", defaultWorkload),
 		Instancetype: params.GetOptionalString("instancetype"),
 		Preference:   params.GetOptionalString("preference"),
 		Size:         params.GetOptionalString("size"),

@@ -88,15 +88,22 @@ func (p ToolHandlerParams) GetRequiredString(key string) (string, error) {
 }
 
 // GetOptionalString extracts an optional string parameter from the tool call arguments.
-// Returns an empty string if the parameter is missing or not a string.
-func (p ToolHandlerParams) GetOptionalString(key string) string {
+// Returns the provided default value if the parameter is missing or not a string.
+// If no default value is provided, returns an empty string.
+func (p ToolHandlerParams) GetOptionalString(key string, defaultValue ...string) string {
 	args := p.GetArguments()
 	val, ok := args[key]
 	if !ok {
+		if len(defaultValue) > 0 {
+			return defaultValue[0]
+		}
 		return ""
 	}
 	str, ok := val.(string)
 	if !ok {
+		if len(defaultValue) > 0 {
+			return defaultValue[0]
+		}
 		return ""
 	}
 	return str
