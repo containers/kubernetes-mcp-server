@@ -36,7 +36,7 @@ jobs:
           - ubuntu-latest #x64
           - ubuntu-24.04-arm #arm64
           - windows-latest #x64
-          - macos-13 #x64
+          - macos-15-intel #x64
           - macos-latest #arm64
     runs-on: ${{ matrix.os }}
     steps:
