@@ -59,6 +59,10 @@ func (m *MockServer) Handle(handler http.Handler) {
 	m.restHandlers = append(m.restHandlers, handler.ServeHTTP)
 }
 
+func (m *MockServer) ResetHandlers() {
+	m.restHandlers = make([]http.HandlerFunc, 0)
+}
+
 func (m *MockServer) Config() *rest.Config {
 	return m.config
 }

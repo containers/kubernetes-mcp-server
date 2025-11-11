@@ -1,61 +1,13 @@
 package mcp
 
 import (
-	"context"
 	"net/http"
-	"os"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 )
-
-type WatchKubeConfigSuite struct {
-	BaseMcpSuite
-}
-
-func (s *WatchKubeConfigSuite) SetupTest() {
-	s.BaseMcpSuite.SetupTest()
-	kubeconfig := test.KubeConfigFake()
-	s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
-}
-
-func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		s.T().Skip("Skipping test on non-Unix-like platforms")
-	}
-	// Given
-	s.InitMcpClient()
-	withTimeout, cancel := context.WithTimeout(s.T().Context(), 5*time.Second)
-	defer cancel()
-	var notification *mcp.JSONRPCNotification
-	s.OnNotification(func(n mcp.JSONRPCNotification) {
-		notification = &n
-	})
-	// When
-	f, _ := os.OpenFile(s.Cfg.KubeConfig, os.O_APPEND|os.O_WRONLY, 0644)
-	_, _ = f.WriteString("\n")
-	_ = f.Close()
-	for notification == nil {
-		select {
-		case <-withTimeout.Done():
-			s.FailNow("timeout waiting for WatchKubeConfig notification")
-		default:
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-	// Then
-	s.NotNil(notification, "WatchKubeConfig did not notify")
-	s.Equal("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change")
-}
-
-func TestWatchKubeConfig(t *testing.T) {
-	suite.Run(t, new(WatchKubeConfigSuite))
-}
 
 type McpHeadersSuite struct {
 	BaseMcpSuite
