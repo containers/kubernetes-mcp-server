@@ -14,6 +14,7 @@ env:
 jobs:
   publish-platform-images:
     name: 'Publish: linux-${{ matrix.platform.tag }}'
+    if: github.repository == 'containers/kubernetes-mcp-server'
     strategy:
       fail-fast: true
       matrix:
@@ -47,6 +48,7 @@ jobs:
 
   publish-manifest:
     name: Publish Manifest
+    if: github.repository == 'containers/kubernetes-mcp-server'
     runs-on: ubuntu-latest
     needs: publish-platform-images
     steps:
