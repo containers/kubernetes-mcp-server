@@ -204,7 +204,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 		}
 		toCreate = append(toCreate, u)
 	}
-	return k.resourcesCreateOrUpdate(ctx, toCreate)
+	return k.resourcesCreateOrUpdate(ctx, toCreate, ResourcesCreateOrUpdateOptions{})
 }
 
 func (k *Kubernetes) PodsTop(ctx context.Context, options PodsTopOptions) (*metrics.PodMetricsList, error) {

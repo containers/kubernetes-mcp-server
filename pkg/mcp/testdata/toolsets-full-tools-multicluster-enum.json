@@ -618,6 +618,18 @@
           ],
           "type": "string"
         },
+        "dryRun": {
+          "description": "Perform a dry-run validation without persisting changes to the cluster. Useful for testing changes before applying them. Defaults to false",
+          "type": "boolean"
+        },
+        "fieldManager": {
+          "description": "Custom field manager name for tracking ownership of applied fields. Defaults to 'kubernetes-mcp-server'",
+          "type": "string"
+        },
+        "force": {
+          "description": "Force apply to re-acquire conflicting fields owned by other field managers (e.g., kubectl, helm). Use with caution as this overrides field ownership. Defaults to false",
+          "type": "boolean"
+        },
         "resource": {
           "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
           "type": "string"

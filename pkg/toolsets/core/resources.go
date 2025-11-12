@@ -96,6 +96,18 @@ func initResources(o internalk8s.Openshift) []api.ServerTool {
 						Type:        "string",
 						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
 					},
+					"force": {
+						Type:        "boolean",
+						Description: "Force apply to re-acquire conflicting fields owned by other field managers (e.g., kubectl, helm). Use with caution as this overrides field ownership. Defaults to false",
+					},
+					"dryRun": {
+						Type:        "boolean",
+						Description: "Perform a dry-run validation without persisting changes to the cluster. Useful for testing changes before applying them. Defaults to false",
+					},
+					"fieldManager": {
+						Type:        "string",
+						Description: "Custom field manager name for tracking ownership of applied fields. Defaults to 'kubernetes-mcp-server'",
+					},
 				},
 				Required: []string{"resource"},
 			},
@@ -217,7 +229,28 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := params.ResourcesCreateOrUpdate(params, r)
+	// Parse optional parameters
+	options := internalk8s.ResourcesCreateOrUpdateOptions{}
+
+	if force := params.GetArguments()["force"]; force != nil {
+		if f, ok := force.(bool); ok {
+			options.Force = f
+		}
+	}
+
+	if dryRun := params.GetArguments()["dryRun"]; dryRun != nil {
+		if d, ok := dryRun.(bool); ok {
+			options.DryRun = d
+		}
+	}
+
+	if fieldManager := params.GetArguments()["fieldManager"]; fieldManager != nil {
+		if fm, ok := fieldManager.(string); ok {
+			options.FieldManager = fm
+		}
+	}
+
+	resources, err := params.ResourcesCreateOrUpdate(params, r, options)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %v", err)), nil
 	}
@@ -225,7 +258,13 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 	if err != nil {
 		err = fmt.Errorf("failed to create or update resources:: %v", err)
 	}
-	return api.NewToolCallResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
+
+	resultMessage := "# The following resources (YAML) have been created or updated successfully\n"
+	if options.DryRun {
+		resultMessage = "# Dry-run successful - the following resources (YAML) would be created or updated\n"
+	}
+
+	return api.NewToolCallResult(resultMessage+marshalledYaml, err), nil
 }
 
 func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

@@ -58,7 +58,13 @@ func (k *Kubernetes) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionK
 	return k.manager.dynamicClient.Resource(*gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (k *Kubernetes) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]*unstructured.Unstructured, error) {
+type ResourcesCreateOrUpdateOptions struct {
+	Force        bool
+	DryRun       bool
+	FieldManager string
+}
+
+func (k *Kubernetes) ResourcesCreateOrUpdate(ctx context.Context, resource string, options ResourcesCreateOrUpdateOptions) ([]*unstructured.Unstructured, error) {
 	separator := regexp.MustCompile(`\r?\n---\r?\n`)
 	resources := separator.Split(resource, -1)
 	var parsedResources []*unstructured.Unstructured
@@ -69,7 +75,7 @@ func (k *Kubernetes) ResourcesCreateOrUpdate(ctx context.Context, resource strin
 		}
 		parsedResources = append(parsedResources, &obj)
 	}
-	return k.resourcesCreateOrUpdate(ctx, parsedResources)
+	return k.resourcesCreateOrUpdate(ctx, parsedResources, options)
 }
 
 func (k *Kubernetes) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string) error {
@@ -132,7 +138,7 @@ func (k *Kubernetes) resourcesListAsTable(ctx context.Context, gvk *schema.Group
 	return &unstructured.Unstructured{Object: unstructuredObject}, err
 }
 
-func (k *Kubernetes) resourcesCreateOrUpdate(ctx context.Context, resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+func (k *Kubernetes) resourcesCreateOrUpdate(ctx context.Context, resources []*unstructured.Unstructured, options ResourcesCreateOrUpdateOptions) ([]*unstructured.Unstructured, error) {
 	for i, obj := range resources {
 		gvk := obj.GroupVersionKind()
 		gvr, rErr := k.resourceFor(&gvk)
@@ -145,9 +151,25 @@ func (k *Kubernetes) resourcesCreateOrUpdate(ctx context.Context, resources []*u
 		if namespaced, nsErr := k.isNamespaced(&gvk); nsErr == nil && namespaced {
 			namespace = k.NamespaceOrDefault(namespace)
 		}
-		resources[i], rErr = k.manager.dynamicClient.Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{
-			FieldManager: version.BinaryName,
-		})
+
+		// Set field manager, defaulting to binary name if not provided
+		fieldManager := options.FieldManager
+		if fieldManager == "" {
+			fieldManager = version.BinaryName
+		}
+
+		// Build apply options
+		applyOptions := metav1.ApplyOptions{
+			FieldManager: fieldManager,
+			Force:        options.Force,
+		}
+
+		// Add dry-run if requested
+		if options.DryRun {
+			applyOptions.DryRun = []string{"All"}
+		}
+
+		resources[i], rErr = k.manager.dynamicClient.Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, applyOptions)
 		if rErr != nil {
 			return nil, rErr
 		}
