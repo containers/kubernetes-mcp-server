@@ -91,6 +91,119 @@ func initHelm() []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: helmUninstall},
+		{Tool: api.Tool{
+			Name:        "helm_upgrade",
+			Description: "Upgrade an existing Helm release with a new chart version or values",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"name": {
+						Type:        "string",
+						Description: "Name of the Helm release to upgrade",
+					},
+					"chart": {
+						Type:        "string",
+						Description: "Chart reference to upgrade to (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
+					},
+					"values": {
+						Type:        "object",
+						Description: "Values to pass to the Helm chart (Optional)",
+						Properties:  make(map[string]*jsonschema.Schema),
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace where the Helm release is installed (Optional, current namespace if not provided)",
+					},
+				},
+				Required: []string{"name", "chart"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Helm: Upgrade",
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: helmUpgrade},
+		{Tool: api.Tool{
+			Name:        "helm_get_values",
+			Description: "Get the values of a Helm release to see the current configuration",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"name": {
+						Type:        "string",
+						Description: "Name of the Helm release",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace where the Helm release is installed (Optional, current namespace if not provided)",
+					},
+					"all_values": {
+						Type:        "boolean",
+						Description: "If true, returns all values including defaults from the chart (Optional, defaults to false which returns only user-supplied values)",
+					},
+				},
+				Required: []string{"name"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Helm: Get Values",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: helmGetValues},
+		{Tool: api.Tool{
+			Name:        "helm_status",
+			Description: "Get the status of a Helm release including deployment state, notes, and resource information",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"name": {
+						Type:        "string",
+						Description: "Name of the Helm release",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace where the Helm release is installed (Optional, current namespace if not provided)",
+					},
+				},
+				Required: []string{"name"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Helm: Status",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: helmStatus},
+		{Tool: api.Tool{
+			Name:        "helm_history",
+			Description: "Get the revision history of a Helm release to see past deployments and their status",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"name": {
+						Type:        "string",
+						Description: "Name of the Helm release",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace where the Helm release is installed (Optional, current namespace if not provided)",
+					},
+					"max": {
+						Type:        "integer",
+						Description: "Maximum number of revisions to return (Optional, returns all if not specified)",
+					},
+				},
+				Required: []string{"name"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Helm: History",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: helmHistory},
 	}
 }
 
@@ -148,6 +261,90 @@ func helmUninstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	ret, err := params.NewHelm().Uninstall(name, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
+	}
+	return api.NewToolCallResult(ret, err), nil
+}
+
+func helmUpgrade(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	var name string
+	ok := false
+	if name, ok = params.GetArguments()["name"].(string); !ok {
+		return api.NewToolCallResult("", fmt.Errorf("failed to upgrade helm release, missing argument name")), nil
+	}
+	var chart string
+	if chart, ok = params.GetArguments()["chart"].(string); !ok {
+		return api.NewToolCallResult("", fmt.Errorf("failed to upgrade helm release, missing argument chart")), nil
+	}
+	values := map[string]interface{}{}
+	if v, ok := params.GetArguments()["values"].(map[string]interface{}); ok {
+		values = v
+	}
+	namespace := ""
+	if v, ok := params.GetArguments()["namespace"].(string); ok {
+		namespace = v
+	}
+	ret, err := params.NewHelm().Upgrade(params, name, chart, values, namespace)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to upgrade helm release '%s': %w", name, err)), nil
+	}
+	return api.NewToolCallResult(ret, err), nil
+}
+
+func helmGetValues(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	var name string
+	ok := false
+	if name, ok = params.GetArguments()["name"].(string); !ok {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get helm values, missing argument name")), nil
+	}
+	namespace := ""
+	if v, ok := params.GetArguments()["namespace"].(string); ok {
+		namespace = v
+	}
+	allValues := false
+	if v, ok := params.GetArguments()["all_values"].(bool); ok {
+		allValues = v
+	}
+	ret, err := params.NewHelm().GetValues(name, namespace, allValues)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get values for helm release '%s': %w", name, err)), nil
+	}
+	return api.NewToolCallResult(ret, err), nil
+}
+
+func helmStatus(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	var name string
+	ok := false
+	if name, ok = params.GetArguments()["name"].(string); !ok {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get helm status, missing argument name")), nil
+	}
+	namespace := ""
+	if v, ok := params.GetArguments()["namespace"].(string); ok {
+		namespace = v
+	}
+	ret, err := params.NewHelm().Status(name, namespace)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get status for helm release '%s': %w", name, err)), nil
+	}
+	return api.NewToolCallResult(ret, err), nil
+}
+
+func helmHistory(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	var name string
+	ok := false
+	if name, ok = params.GetArguments()["name"].(string); !ok {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get helm history, missing argument name")), nil
+	}
+	namespace := ""
+	if v, ok := params.GetArguments()["namespace"].(string); ok {
+		namespace = v
+	}
+	max := 0
+	if v, ok := params.GetArguments()["max"].(float64); ok {
+		max = int(v)
+	}
+	ret, err := params.NewHelm().History(name, namespace, max)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get history for helm release '%s': %w", name, err)), nil
 	}
 	return api.NewToolCallResult(ret, err), nil
 }

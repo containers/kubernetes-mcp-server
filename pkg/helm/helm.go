@@ -104,6 +104,141 @@ func (h *Helm) Uninstall(name string, namespace string) (string, error) {
 	return fmt.Sprintf("Uninstalled release %s %s", uninstalledRelease.Release.Name, uninstalledRelease.Info), nil
 }
 
+func (h *Helm) Upgrade(ctx context.Context, name string, chart string, values map[string]interface{}, namespace string) (string, error) {
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
+	if err != nil {
+		return "", err
+	}
+	upgrade := action.NewUpgrade(cfg)
+	upgrade.Namespace = h.kubernetes.NamespaceOrDefault(namespace)
+	upgrade.Wait = true
+	upgrade.Timeout = 5 * time.Minute
+	upgrade.Install = false // Set to true for upgrade --install behavior
+
+	chartRequested, err := upgrade.LocateChart(chart, cli.New())
+	if err != nil {
+		return "", err
+	}
+	chartLoaded, err := loader.Load(chartRequested)
+	if err != nil {
+		return "", err
+	}
+
+	upgradedRelease, err := upgrade.RunWithContext(ctx, name, chartLoaded, values)
+	if err != nil {
+		return "", err
+	}
+	ret, err := yaml.Marshal(simplify(upgradedRelease))
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
+func (h *Helm) GetValues(name string, namespace string, allValues bool) (string, error) {
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
+	if err != nil {
+		return "", err
+	}
+	getValues := action.NewGetValues(cfg)
+	getValues.AllValues = allValues
+	values, err := getValues.Run(name)
+	if err != nil {
+		return "", err
+	}
+	ret, err := yaml.Marshal(values)
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
+func (h *Helm) Status(name string, namespace string) (string, error) {
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
+	if err != nil {
+		return "", err
+	}
+	status := action.NewStatus(cfg)
+	statusRelease, err := status.Run(name)
+	if err != nil {
+		return "", err
+	}
+
+	result := map[string]interface{}{
+		"name":      statusRelease.Name,
+		"namespace": statusRelease.Namespace,
+		"revision":  statusRelease.Version,
+	}
+	if statusRelease.Chart != nil {
+		result["chart"] = statusRelease.Chart.Metadata.Name
+		result["chartVersion"] = statusRelease.Chart.Metadata.Version
+		result["appVersion"] = statusRelease.Chart.Metadata.AppVersion
+	}
+	if statusRelease.Info != nil {
+		result["status"] = statusRelease.Info.Status.String()
+		if !statusRelease.Info.LastDeployed.IsZero() {
+			result["lastDeployed"] = statusRelease.Info.LastDeployed.Format(time.RFC1123Z)
+		}
+		if statusRelease.Info.Description != "" {
+			result["description"] = statusRelease.Info.Description
+		}
+		if statusRelease.Info.Notes != "" {
+			result["notes"] = statusRelease.Info.Notes
+		}
+	}
+
+	ret, err := yaml.Marshal(result)
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
+func (h *Helm) History(name string, namespace string, max int) (string, error) {
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
+	if err != nil {
+		return "", err
+	}
+	history := action.NewHistory(cfg)
+	if max > 0 {
+		history.Max = max
+	}
+	releases, err := history.Run(name)
+	if err != nil {
+		return "", err
+	}
+	if len(releases) == 0 {
+		return fmt.Sprintf("No history found for release %s", name), nil
+	}
+
+	result := make([]map[string]interface{}, len(releases))
+	for i, r := range releases {
+		result[i] = map[string]interface{}{
+			"revision": r.Version,
+		}
+		if r.Chart != nil {
+			result[i]["chart"] = r.Chart.Metadata.Name
+			result[i]["chartVersion"] = r.Chart.Metadata.Version
+			result[i]["appVersion"] = r.Chart.Metadata.AppVersion
+		}
+		if r.Info != nil {
+			result[i]["status"] = r.Info.Status.String()
+			if !r.Info.LastDeployed.IsZero() {
+				result[i]["updated"] = r.Info.LastDeployed.Format(time.RFC1123Z)
+			}
+			if r.Info.Description != "" {
+				result[i]["description"] = r.Info.Description
+			}
+		}
+	}
+
+	ret, err := yaml.Marshal(result)
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
 func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configuration, error) {
 	cfg := new(action.Configuration)
 	applicableNamespace := ""
