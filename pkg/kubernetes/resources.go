@@ -3,9 +3,10 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/runtime"
 	"regexp"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 	authv1 "k8s.io/api/authorization/v1"
@@ -46,6 +47,10 @@ func (k *Kubernetes) ResourcesList(ctx context.Context, gvk *schema.GroupVersion
 }
 
 func (k *Kubernetes) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string) (*unstructured.Unstructured, error) {
+	if k.manager == nil {
+		return nil, fmt.Errorf("kubernetes manager not initialized")
+	}
+
 	gvr, err := k.resourceFor(gvk)
 	if err != nil {
 		return nil, err
@@ -73,6 +78,10 @@ func (k *Kubernetes) ResourcesCreateOrUpdate(ctx context.Context, resource strin
 }
 
 func (k *Kubernetes) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string) error {
+	if k.manager == nil {
+		return fmt.Errorf("kubernetes manager not initialized")
+	}
+
 	gvr, err := k.resourceFor(gvk)
 	if err != nil {
 		return err

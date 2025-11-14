@@ -6,10 +6,8 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
@@ -58,29 +56,15 @@ func start(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	// Get dynamic client
-	restConfig := params.RESTConfig()
-	if restConfig == nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get REST config")), nil
+	// Define the VirtualMachine GVK
+	gvk := schema.GroupVersionKind{
+		Group:   "kubevirt.io",
+		Version: "v1",
+		Kind:    "VirtualMachine",
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to create dynamic client: %w", err)), nil
-	}
-
-	// Get the current VM
-	gvr := schema.GroupVersionResource{
-		Group:    "kubevirt.io",
-		Version:  "v1",
-		Resource: "virtualmachines",
-	}
-
-	vm, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(
-		params.Context,
-		name,
-		metav1.GetOptions{},
-	)
+	// Get the current VM using access-controlled method
+	vm, err := params.ResourcesGet(params.Context, &gvk, namespace, name)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get VirtualMachine: %w", err)), nil
 	}
@@ -90,15 +74,15 @@ func start(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to set runStrategy: %w", err)), nil
 	}
 
-	// Update the VM
-	updatedVM, err := dynamicClient.Resource(gvr).Namespace(namespace).Update(
-		params.Context,
-		vm,
-		metav1.UpdateOptions{},
-	)
+	// Update the VM using access-controlled method
+	updatedVMs, err := params.ResourcesCreateOrUpdate(params.Context, mustMarshalYAML(vm))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to update VirtualMachine: %w", err)), nil
 	}
+	if len(updatedVMs) == 0 {
+		return api.NewToolCallResult("", fmt.Errorf("no VirtualMachine returned after update")), nil
+	}
+	updatedVM := updatedVMs[0]
 
 	// Format the output
 	marshalledYaml, err := output.MarshalYaml(updatedVM)
@@ -107,4 +91,13 @@ func start(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	return api.NewToolCallResult("# VirtualMachine started successfully\n"+marshalledYaml, nil), nil
+}
+
+// mustMarshalYAML marshals an unstructured object to YAML string
+func mustMarshalYAML(obj *unstructured.Unstructured) string {
+	yaml, err := output.MarshalYaml(obj)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal object to YAML: %v", err))
+	}
+	return yaml
 }

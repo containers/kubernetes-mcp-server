@@ -5,9 +5,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
@@ -56,30 +54,15 @@ func deleteVM(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	// Get dynamic client
-	restConfig := params.RESTConfig()
-	if restConfig == nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get REST config")), nil
+	// Define the VirtualMachine GVK
+	gvk := schema.GroupVersionKind{
+		Group:   "kubevirt.io",
+		Version: "v1",
+		Kind:    "VirtualMachine",
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to create dynamic client: %w", err)), nil
-	}
-
-	// Define the VirtualMachine GVR
-	gvr := schema.GroupVersionResource{
-		Group:    "kubevirt.io",
-		Version:  "v1",
-		Resource: "virtualmachines",
-	}
-
-	// Delete the VM
-	err = dynamicClient.Resource(gvr).Namespace(namespace).Delete(
-		params.Context,
-		name,
-		metav1.DeleteOptions{},
-	)
+	// Delete the VM using the access-controlled method
+	err = params.ResourcesDelete(params.Context, &gvk, namespace, name)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete VirtualMachine: %w", err)), nil
 	}

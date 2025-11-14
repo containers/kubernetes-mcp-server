@@ -7,12 +7,11 @@ import (
 	"text/template"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
@@ -464,27 +463,15 @@ func getDefaultContainerDisks() []DataSourceInfo {
 
 // searchDataSources searches for DataSource resources in the cluster
 func searchDataSources(params api.ToolHandlerParams, query string) ([]DataSourceInfo, error) {
-	// Get dynamic client for querying DataSources
-	restConfig := params.RESTConfig()
-	if restConfig == nil {
-		return nil, fmt.Errorf("REST config is nil")
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		// Return just the built-in containerdisk images
-		return getDefaultContainerDisks(), nil
-	}
-
-	// DataSource GVR for CDI
-	dataSourceGVR := schema.GroupVersionResource{
-		Group:    "cdi.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "datasources",
+	// DataSource GVK for CDI
+	dataSourceGVK := schema.GroupVersionKind{
+		Group:   "cdi.kubevirt.io",
+		Version: "v1beta1",
+		Kind:    "DataSource",
 	}
 
 	// Collect DataSources from well-known namespaces and all namespaces
-	results := collectDataSources(params, dynamicClient, dataSourceGVR)
+	results := collectDataSources(params, dataSourceGVK)
 
 	// Add common containerdisk images
 	results = append(results, getDefaultContainerDisks()...)
@@ -504,7 +491,7 @@ func searchDataSources(params api.ToolHandlerParams, query string) ([]DataSource
 }
 
 // collectDataSources collects DataSources from well-known namespaces and all namespaces
-func collectDataSources(params api.ToolHandlerParams, dynamicClient dynamic.Interface, gvr schema.GroupVersionResource) []DataSourceInfo {
+func collectDataSources(params api.ToolHandlerParams, gvk schema.GroupVersionKind) []DataSourceInfo {
 	var results []DataSourceInfo
 
 	// Try to list DataSources from well-known namespaces first
@@ -514,20 +501,36 @@ func collectDataSources(params api.ToolHandlerParams, dynamicClient dynamic.Inte
 	}
 
 	for _, ns := range wellKnownNamespaces {
-		dsInfos, err := listDataSourcesFromNamespace(params, dynamicClient, gvr, ns)
+		dsInfos, err := listDataSourcesFromNamespace(params, gvk, ns)
 		if err == nil {
 			results = append(results, dsInfos...)
 		}
 	}
 
 	// List DataSources from all namespaces
-	list, err := dynamicClient.Resource(gvr).List(params.Context, metav1.ListOptions{})
+	listResult, err := params.ResourcesList(params.Context, &gvk, "", internalk8s.ResourceListOptions{})
 	if err != nil {
 		// If we found DataSources from well-known namespaces but couldn't list all, return what we have
 		if len(results) > 0 {
 			return results
 		}
 		// DataSources might not be available, return helpful message
+		return []DataSourceInfo{
+			{
+				Name:      "No DataSources found",
+				Namespace: "",
+				Source:    "CDI may not be installed or DataSources are not available in this cluster",
+			},
+		}
+	}
+
+	// Convert to UnstructuredList
+	list, ok := listResult.(*unstructured.UnstructuredList)
+	if !ok {
+		// If we found DataSources from well-known namespaces but couldn't convert the result, return what we have
+		if len(results) > 0 {
+			return results
+		}
 		return []DataSourceInfo{
 			{
 				Name:      "No DataSources found",
@@ -587,11 +590,17 @@ func deduplicateAndMergeDataSources(existing []DataSourceInfo, items []unstructu
 }
 
 // listDataSourcesFromNamespace lists DataSources from a specific namespace
-func listDataSourcesFromNamespace(params api.ToolHandlerParams, dynamicClient dynamic.Interface, gvr schema.GroupVersionResource, namespace string) ([]DataSourceInfo, error) {
+func listDataSourcesFromNamespace(params api.ToolHandlerParams, gvk schema.GroupVersionKind, namespace string) ([]DataSourceInfo, error) {
 	var results []DataSourceInfo
-	list, err := dynamicClient.Resource(gvr).Namespace(namespace).List(params.Context, metav1.ListOptions{})
+	listResult, err := params.ResourcesList(params.Context, &gvk, namespace, internalk8s.ResourceListOptions{})
 	if err != nil {
 		return nil, err
+	}
+
+	// Convert to UnstructuredList
+	list, ok := listResult.(*unstructured.UnstructuredList)
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type: %T", listResult)
 	}
 
 	for _, item := range list.Items {
@@ -629,47 +638,41 @@ func searchPreferences(params api.ToolHandlerParams, namespace string) []Prefere
 		return []PreferenceInfo{}
 	}
 
-	restConfig := params.RESTConfig()
-	if restConfig == nil {
-		return []PreferenceInfo{}
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return []PreferenceInfo{}
-	}
-
 	var results []PreferenceInfo
 
 	// Search for cluster-wide VirtualMachineClusterPreferences
-	clusterPreferenceGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachineclusterpreferences",
+	clusterPreferenceGVK := schema.GroupVersionKind{
+		Group:   "instancetype.kubevirt.io",
+		Version: "v1beta1",
+		Kind:    "VirtualMachineClusterPreference",
 	}
 
-	clusterList, err := dynamicClient.Resource(clusterPreferenceGVR).List(params.Context, metav1.ListOptions{})
+	clusterListResult, err := params.ResourcesList(params.Context, &clusterPreferenceGVK, "", internalk8s.ResourceListOptions{})
 	if err == nil {
-		for _, item := range clusterList.Items {
-			results = append(results, PreferenceInfo{
-				Name: item.GetName(),
-			})
+		if clusterList, ok := clusterListResult.(*unstructured.UnstructuredList); ok {
+			for _, item := range clusterList.Items {
+				results = append(results, PreferenceInfo{
+					Name: item.GetName(),
+				})
+			}
 		}
 	}
 
 	// Search for namespaced VirtualMachinePreferences
-	namespacedPreferenceGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachinepreferences",
+	namespacedPreferenceGVK := schema.GroupVersionKind{
+		Group:   "instancetype.kubevirt.io",
+		Version: "v1beta1",
+		Kind:    "VirtualMachinePreference",
 	}
 
-	namespacedList, err := dynamicClient.Resource(namespacedPreferenceGVR).Namespace(namespace).List(params.Context, metav1.ListOptions{})
+	namespacedListResult, err := params.ResourcesList(params.Context, &namespacedPreferenceGVK, namespace, internalk8s.ResourceListOptions{})
 	if err == nil {
-		for _, item := range namespacedList.Items {
-			results = append(results, PreferenceInfo{
-				Name: item.GetName(),
-			})
+		if namespacedList, ok := namespacedListResult.(*unstructured.UnstructuredList); ok {
+			for _, item := range namespacedList.Items {
+				results = append(results, PreferenceInfo{
+					Name: item.GetName(),
+				})
+			}
 		}
 	}
 
@@ -683,49 +686,43 @@ func searchInstancetypes(params api.ToolHandlerParams, namespace string) []Insta
 		return []InstancetypeInfo{}
 	}
 
-	restConfig := params.RESTConfig()
-	if restConfig == nil {
-		return []InstancetypeInfo{}
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return []InstancetypeInfo{}
-	}
-
 	var results []InstancetypeInfo
 
 	// Search for cluster-wide VirtualMachineClusterInstancetypes
-	clusterInstancetypeGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachineclusterinstancetypes",
+	clusterInstancetypeGVK := schema.GroupVersionKind{
+		Group:   "instancetype.kubevirt.io",
+		Version: "v1beta1",
+		Kind:    "VirtualMachineClusterInstancetype",
 	}
 
-	clusterList, err := dynamicClient.Resource(clusterInstancetypeGVR).List(params.Context, metav1.ListOptions{})
+	clusterListResult, err := params.ResourcesList(params.Context, &clusterInstancetypeGVK, "", internalk8s.ResourceListOptions{})
 	if err == nil {
-		for _, item := range clusterList.Items {
-			results = append(results, InstancetypeInfo{
-				Name:   item.GetName(),
-				Labels: item.GetLabels(),
-			})
+		if clusterList, ok := clusterListResult.(*unstructured.UnstructuredList); ok {
+			for _, item := range clusterList.Items {
+				results = append(results, InstancetypeInfo{
+					Name:   item.GetName(),
+					Labels: item.GetLabels(),
+				})
+			}
 		}
 	}
 
 	// Search for namespaced VirtualMachineInstancetypes
-	namespacedInstancetypeGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachineinstancetypes",
+	namespacedInstancetypeGVK := schema.GroupVersionKind{
+		Group:   "instancetype.kubevirt.io",
+		Version: "v1beta1",
+		Kind:    "VirtualMachineInstancetype",
 	}
 
-	namespacedList, err := dynamicClient.Resource(namespacedInstancetypeGVR).Namespace(namespace).List(params.Context, metav1.ListOptions{})
+	namespacedListResult, err := params.ResourcesList(params.Context, &namespacedInstancetypeGVK, namespace, internalk8s.ResourceListOptions{})
 	if err == nil {
-		for _, item := range namespacedList.Items {
-			results = append(results, InstancetypeInfo{
-				Name:   item.GetName(),
-				Labels: item.GetLabels(),
-			})
+		if namespacedList, ok := namespacedListResult.(*unstructured.UnstructuredList); ok {
+			for _, item := range namespacedList.Items {
+				results = append(results, InstancetypeInfo{
+					Name:   item.GetName(),
+					Labels: item.GetLabels(),
+				})
+			}
 		}
 	}
 
