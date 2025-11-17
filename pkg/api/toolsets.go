@@ -40,6 +40,8 @@ type Toolset interface {
 	// Used to identify the toolset in configuration, logs, and command-line arguments.
 	// Examples: "core", "metrics", "helm"
 	GetName() string
+	// GetDescription returns a human-readable description of the toolset.
+	// Will be used to generate documentation and help text.
 	GetDescription() string
 	GetTools(o internalk8s.Openshift) []ServerTool
 }

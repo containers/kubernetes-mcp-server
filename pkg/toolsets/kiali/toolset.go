@@ -17,7 +17,7 @@ func (t *Toolset) GetName() string {
 }
 
 func (t *Toolset) GetDescription() string {
-	return "Most common tools for managing Kiali"
+	return "Most common tools for managing Kiali, check the [Kiali integration documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI_INTEGRATION.md) for more details."
 }
 
 func (t *Toolset) GetTools(_ internalk8s.Openshift) []api.ServerTool {
