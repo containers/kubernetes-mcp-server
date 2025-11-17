@@ -15,7 +15,7 @@ func initServices() []api.ServerTool {
 	// Services list tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "services_list",
+			Name:        "kiali_services_list",
 			Description: "Get all services in the mesh across specified namespaces with health and Istio resource information",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -39,7 +39,7 @@ func initServices() []api.ServerTool {
 	// Service details tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "service_details",
+			Name:        "kiali_service_details",
 			Description: "Get detailed information for a specific service in a namespace, including validation, health status, and configuration",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -68,7 +68,7 @@ func initServices() []api.ServerTool {
 	// Service metrics tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "service_metrics",
+			Name:        "kiali_service_metrics",
 			Description: "Get metrics for a specific service in a namespace. Supports filtering by time range, direction (inbound/outbound), reporter, and other query parameters",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

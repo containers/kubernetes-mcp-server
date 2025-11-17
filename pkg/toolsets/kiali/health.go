@@ -15,7 +15,7 @@ func initHealth() []api.ServerTool {
 	// Cluster health tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "health",
+			Name:        "kiali_health",
 			Description: "Get health status for apps, workloads, and services across specified namespaces in the mesh. Returns health information including error rates and status for the requested resource type",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

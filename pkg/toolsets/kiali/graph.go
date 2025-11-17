@@ -14,7 +14,7 @@ func initGraph() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "graph",
+			Name:        "kiali_graph",
 			Description: "Check the status of my mesh by querying Kiali graph",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

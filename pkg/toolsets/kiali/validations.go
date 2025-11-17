@@ -14,7 +14,7 @@ func initValidations() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "validations_list",
+			Name:        "kiali_validations_list",
 			Description: "List all the validations in the current cluster from all namespaces",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

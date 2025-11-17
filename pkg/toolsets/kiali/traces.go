@@ -15,7 +15,7 @@ func initTraces() []api.ServerTool {
 	// App traces tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "app_traces",
+			Name:        "kiali_app_traces",
 			Description: "Get distributed tracing data for a specific app in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -71,7 +71,7 @@ func initTraces() []api.ServerTool {
 	// Service traces tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "service_traces",
+			Name:        "kiali_service_traces",
 			Description: "Get distributed tracing data for a specific service in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -127,7 +127,7 @@ func initTraces() []api.ServerTool {
 	// Workload traces tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "workload_traces",
+			Name:        "kiali_workload_traces",
 			Description: "Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

@@ -13,7 +13,7 @@ func initIstioConfig() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "istio_config",
+			Name:        "kiali_istio_config",
 			Description: "Get all Istio configuration objects in the mesh including their full YAML resources and details",
 			InputSchema: &jsonschema.Schema{
 				Type:       "object",
@@ -45,7 +45,7 @@ func initIstioObjectDetails() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "istio_object_details",
+			Name:        "kiali_istio_object_details",
 			Description: "Get detailed information about a specific Istio object including validation and help information",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -105,7 +105,7 @@ func initIstioObjectPatch() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "istio_object_patch",
+			Name:        "kiali_istio_object_patch",
 			Description: "Modify an existing Istio object using PATCH method. The JSON patch data will be applied to the existing object.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -170,7 +170,7 @@ func initIstioObjectCreate() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "istio_object_create",
+			Name:        "kiali_istio_object_create",
 			Description: "Create a new Istio object using POST method. The JSON data will be used to create the new object.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -230,7 +230,7 @@ func initIstioObjectDelete() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "istio_object_delete",
+			Name:        "kiali_istio_object_delete",
 			Description: "Delete an existing Istio object using DELETE method.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
