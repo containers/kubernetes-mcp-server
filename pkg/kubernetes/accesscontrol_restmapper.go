@@ -40,11 +40,41 @@ func (a AccessControlRESTMapper) KindsFor(resource schema.GroupVersionResource) 
 }
 
 func (a AccessControlRESTMapper) ResourceFor(input schema.GroupVersionResource) (schema.GroupVersionResource, error) {
-	return a.delegate.ResourceFor(input)
+	gvr, err := a.delegate.ResourceFor(input)
+	if err != nil {
+		return schema.GroupVersionResource{}, err
+	}
+
+	gvk, err := a.delegate.KindFor(gvr)
+	if err != nil {
+		return schema.GroupVersionResource{}, err
+	}
+
+	if !isAllowed(a.staticConfig, &gvk) {
+		return schema.GroupVersionResource{}, isNotAllowedError(&gvk)
+	}
+
+	return gvr, nil
 }
 
 func (a AccessControlRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
-	return a.delegate.ResourcesFor(input)
+	gvrs, err := a.delegate.ResourcesFor(input)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, gvr := range gvrs {
+		gvk, err := a.delegate.KindFor(gvr)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isAllowed(a.staticConfig, &gvk) {
+			return nil, isNotAllowedError(&gvk)
+		}
+	}
+
+	return gvrs, nil
 }
 
 func (a AccessControlRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
