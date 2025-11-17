@@ -187,6 +187,7 @@ func (k *Kubernetes) supportsGroupVersion(groupVersion string) bool {
 	return true
 }
 
+// TODO: figure out if we want to also check subresource access here
 func (k *Kubernetes) canIUse(ctx context.Context, gvr *schema.GroupVersionResource, namespace, verb string) bool {
 	accessReviews, err := k.manager.accessControlClientSet.SelfSubjectAccessReviews()
 	if err != nil {
