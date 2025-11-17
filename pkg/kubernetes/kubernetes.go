@@ -1,13 +1,16 @@
 package kubernetes
 
 import (
+	"net/http"
+
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/helm"
 	"github.com/containers/kubernetes-mcp-server/pkg/kiali"
-	"k8s.io/client-go/kubernetes/scheme"
-
-	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
 
 type HeaderKey string
@@ -23,6 +26,28 @@ type CloseWatchKubeConfig func() error
 
 type Kubernetes struct {
 	manager *Manager
+}
+
+// AccessControlRestClient returns the access-controlled rest.Interface
+// This ensures that any denied resources configured in the system are properly enforced
+func (k *Kubernetes) AccessControlRestClient() (rest.Interface, error) {
+	config, err := k.manager.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	config.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
+		return &AccessControlRoundTripper{
+			delegate:                rt,
+			accessControlRESTMapper: k.manager.accessControlRESTMapper,
+		}
+	}
+
+	client, err := rest.RESTClientFor(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 // AccessControlClientset returns the access-controlled clientset
