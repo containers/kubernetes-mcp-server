@@ -5,6 +5,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/helm"
 	"github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
@@ -29,6 +30,12 @@ type Kubernetes struct {
 // This ensures that any denied resources configured in the system are properly enforced
 func (k *Kubernetes) AccessControlClientset() *AccessControlClientset {
 	return k.manager.accessControlClientSet
+}
+
+// AccessControlDynamicClient returns an access-controlled dynamic client
+// This ensures that any denied resources configured in the system are properly enforced
+func (k *Kubernetes) AccessControlDynamicClient() dynamic.Interface {
+	return NewAccessControlDynamicClient(k)
 }
 
 var Scheme = scheme.Scheme
