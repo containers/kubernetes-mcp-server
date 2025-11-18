@@ -24,6 +24,9 @@ KubeVirt-focused MCP tasks live here. Each folder under this directory represent
 - **[easy] create-vm-with-size** - Create a VM with specific size requirements
   - **Prompt:** *Create a virtual machine with custom CPU and memory specifications.*
 
+- **[hard] create-vm-with-vlan** - Create a VM with a Multus secondary network interface
+  - **Prompt:** *Please create a Fedora virtual machine named test-vm in the vm-test namespace with a secondary network interface connected to the vlan-network multus network.*
+
 ### VM Lifecycle Management
 
 - **[medium] pause-vm** - Pause a running virtual machine

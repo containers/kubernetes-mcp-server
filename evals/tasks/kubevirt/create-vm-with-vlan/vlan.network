@@ -1,0 +1,6 @@
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan-network
+spec:
+  config: '{"bridge":"br10","cniVersion":"0.3.1","ipam":null,"macspoofchk":false,"mtu":1400,"name":"linux-bridge-net-vlan100","type":"bridge","vlan":100}'

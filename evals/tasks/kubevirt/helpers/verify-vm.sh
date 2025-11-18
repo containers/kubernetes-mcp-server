@@ -252,3 +252,72 @@ verify_memory_increased() {
         return 1
     fi
 }
+
+# verify_multus_secondary_network: Verifies that a VM has a secondary network interface with Multus
+# Usage: verify_multus_secondary_network <vm-name> <namespace> <network-name>
+# Example: verify_multus_secondary_network test-vm vm-test vlan-network
+verify_multus_secondary_network() {
+    local vm_name="$1"
+    local namespace="$2"
+    local network_name="$3"
+
+    # Check if the network is defined in spec.template.spec.networks
+    local networks
+    networks=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.networks[*].name}')
+
+    if [[ ! "$networks" =~ (^|[[:space:]])"$network_name"($|[[:space:]]) ]]; then
+        echo "✗ VirtualMachine does not have network '$network_name' defined"
+        echo "  Found networks: $networks"
+        kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.networks}' | jq .
+        return 1
+    fi
+
+    echo "✓ VirtualMachine has network '$network_name' defined"
+
+    # Verify it's a Multus network by checking for multus.networkName field
+    local multus_network_name
+    local network_index
+
+    # Find the index of the network with the matching name
+    network_index=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o json | \
+        jq -r ".spec.template.spec.networks | to_entries | .[] | select(.value.name == \"$network_name\") | .key")
+
+    if [[ -z "$network_index" ]]; then
+        echo "✗ Could not find network '$network_name' in VM spec"
+        return 1
+    fi
+
+    multus_network_name=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath="{.spec.template.spec.networks[$network_index].multus.networkName}")
+
+    if [[ -z "$multus_network_name" ]]; then
+        echo "✗ Network '$network_name' is not configured as a Multus network"
+        kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath="{.spec.template.spec.networks[$network_index]}" | jq .
+        return 1
+    fi
+
+    echo "✓ Network '$network_name' is configured as Multus network referencing: $multus_network_name"
+
+    # Verify matching interface exists
+    local interfaces
+    interfaces=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.domain.devices.interfaces[*].name}')
+
+    if [[ ! "$interfaces" =~ (^|[[:space:]])"$network_name"($|[[:space:]]) ]]; then
+        echo "✗ VirtualMachine does not have interface for network '$network_name'"
+        echo "  Found interfaces: $interfaces"
+        kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.domain.devices.interfaces}' | jq .
+        return 1
+    fi
+
+    echo "✓ VirtualMachine has interface for network '$network_name'"
+
+    # Verify the NetworkAttachmentDefinition exists
+    if ! kubectl get network-attachment-definitions "$multus_network_name" -n "$namespace" &>/dev/null; then
+        echo "✗ NetworkAttachmentDefinition '$multus_network_name' not found in namespace '$namespace'"
+        kubectl get network-attachment-definitions -n "$namespace"
+        return 1
+    fi
+
+    echo "✓ NetworkAttachmentDefinition '$multus_network_name' exists in namespace '$namespace'"
+
+    return 0
+}
