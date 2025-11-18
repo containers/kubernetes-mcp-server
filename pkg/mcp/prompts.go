@@ -48,7 +48,7 @@ func createPromptHandler(s *Server, prompt api.ServerPrompt) mcp.PromptHandler {
 		arguments := make(map[string]string)
 		if params != nil {
 			// Cast to concrete type to access Arguments field
-			if getPromptParams, ok := params.(*mcp.GetPromptParams); ok && getPromptParams.Arguments != nil {
+			if getPromptParams, ok := params.(*mcp.GetPromptParams); ok && getPromptParams != nil && getPromptParams.Arguments != nil {
 				arguments = getPromptParams.Arguments
 			}
 		}

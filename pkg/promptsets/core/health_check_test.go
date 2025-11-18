@@ -46,20 +46,26 @@ func TestInitHealthCheckPrompts(t *testing.T) {
 	require.Len(t, prompts, 1)
 	assert.Equal(t, "cluster_health_check", prompts[0].Name)
 	assert.Contains(t, prompts[0].Description, "comprehensive health check")
-	assert.Len(t, prompts[0].Arguments, 2)
+	assert.Len(t, prompts[0].Arguments, 4)
 
 	// Check arguments
-	assert.Equal(t, "verbose", prompts[0].Arguments[0].Name)
+	assert.Equal(t, "check_events", prompts[0].Arguments[0].Name)
 	assert.False(t, prompts[0].Arguments[0].Required)
 
-	assert.Equal(t, "namespace", prompts[0].Arguments[1].Name)
+	assert.Equal(t, "output_format", prompts[0].Arguments[1].Name)
 	assert.False(t, prompts[0].Arguments[1].Required)
+
+	assert.Equal(t, "verbose", prompts[0].Arguments[2].Name)
+	assert.False(t, prompts[0].Arguments[2].Required)
+
+	assert.Equal(t, "namespace", prompts[0].Arguments[3].Name)
+	assert.False(t, prompts[0].Arguments[3].Required)
 }
 
 func TestBuildHealthCheckPromptMessages(t *testing.T) {
 	t.Run("Default messages with no arguments", func(t *testing.T) {
-		// When
-		messages := buildHealthCheckPromptMessages(false, "")
+		// When - checkEvents=true (default), outputFormat="text" (default)
+		messages := buildHealthCheckPromptMessages(false, "", true, "text")
 
 		// Then
 		require.Len(t, messages, 2)
@@ -71,7 +77,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 		assert.Contains(t, userContent, "across all namespaces")
 		assert.Contains(t, userContent, "Use pods_list to get all pods")
 		assert.Contains(t, userContent, "resources_list")
-		assert.Contains(t, userContent, "events_list")
+		assert.Contains(t, userContent, "Check Recent Events")
 		assert.NotContains(t, userContent, "pods_list_in_namespace")
 
 		// Check assistant message
@@ -80,7 +86,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("Messages with namespace filter", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(false, "test-namespace")
+		messages := buildHealthCheckPromptMessages(false, "test-namespace", true, "text")
 
 		// Then
 		require.Len(t, messages, 2)
@@ -94,7 +100,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("Messages with verbose mode", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(true, "")
+		messages := buildHealthCheckPromptMessages(true, "", true, "text")
 
 		// Then
 		require.Len(t, messages, 2)
@@ -108,7 +114,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("Messages with both verbose and namespace", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(true, "prod")
+		messages := buildHealthCheckPromptMessages(true, "prod", true, "text")
 
 		// Then
 		require.Len(t, messages, 2)
@@ -118,9 +124,37 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 		assert.Contains(t, userContent, "For verbose mode")
 	})
 
-	t.Run("User message contains all required sections", func(t *testing.T) {
+	t.Run("Messages with checkEvents disabled", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(false, "")
+		messages := buildHealthCheckPromptMessages(false, "", false, "text")
+
+		// Then
+		require.Len(t, messages, 2)
+
+		userContent := messages[0].Content
+		assert.NotContains(t, userContent, "Check Recent Events")
+		assert.NotContains(t, userContent, "events_list")
+	})
+
+	t.Run("Messages with JSON output format", func(t *testing.T) {
+		// When
+		messages := buildHealthCheckPromptMessages(false, "", true, "json")
+
+		// Then
+		require.Len(t, messages, 2)
+
+		userContent := messages[0].Content
+		assert.Contains(t, userContent, "JSON object")
+		assert.Contains(t, userContent, "cluster_type")
+		assert.Contains(t, userContent, "node_health")
+		assert.Contains(t, userContent, "pod_health")
+		assert.NotContains(t, userContent, "✅")
+		assert.NotContains(t, userContent, "⚠️")
+	})
+
+	t.Run("User message contains all required sections", func(t *testing.T) {
+		// When - with checkEvents enabled
+		messages := buildHealthCheckPromptMessages(false, "", true, "text")
 
 		// Then
 		userContent := messages[0].Content
@@ -145,7 +179,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("User message contains critical tool references", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(false, "")
+		messages := buildHealthCheckPromptMessages(false, "", true, "text")
 
 		// Then
 		userContent := messages[0].Content
@@ -154,7 +188,6 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 		tools := []string{
 			"resources_list",
 			"pods_list",
-			"events_list",
 		}
 
 		for _, tool := range tools {
@@ -164,7 +197,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("User message contains health check criteria", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(false, "")
+		messages := buildHealthCheckPromptMessages(false, "", true, "text")
 
 		// Then
 		userContent := messages[0].Content
@@ -188,7 +221,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("User message contains workload types with apiVersions", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(false, "")
+		messages := buildHealthCheckPromptMessages(false, "", true, "text")
 
 		// Then
 		userContent := messages[0].Content
@@ -210,7 +243,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("User message contains output format template", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(false, "")
+		messages := buildHealthCheckPromptMessages(false, "", true, "text")
 
 		// Then
 		userContent := messages[0].Content
@@ -237,7 +270,7 @@ func TestBuildHealthCheckPromptMessages(t *testing.T) {
 
 	t.Run("User message does not reference non-existent tools", func(t *testing.T) {
 		// When
-		messages := buildHealthCheckPromptMessages(false, "")
+		messages := buildHealthCheckPromptMessages(false, "", true, "text")
 
 		// Then
 		userContent := messages[0].Content
@@ -263,6 +296,8 @@ func TestGetMessagesWithArguments(t *testing.T) {
 		userContent := messages[0].Content
 		assert.Contains(t, userContent, "across all namespaces")
 		assert.NotContains(t, userContent, "For verbose mode")
+		// Default is checkEvents=true
+		assert.Contains(t, userContent, "Check Recent Events")
 	})
 
 	t.Run("With verbose=true", func(t *testing.T) {
@@ -295,11 +330,13 @@ func TestGetMessagesWithArguments(t *testing.T) {
 		assert.Contains(t, userContent, "in namespace 'kube-system'")
 	})
 
-	t.Run("With both arguments", func(t *testing.T) {
+	t.Run("With all arguments", func(t *testing.T) {
 		// When
 		messages := getMessages(map[string]string{
-			"verbose":   "true",
-			"namespace": "default",
+			"verbose":       "true",
+			"namespace":     "default",
+			"check_events":  "false",
+			"output_format": "json",
 		})
 
 		// Then
@@ -307,13 +344,36 @@ func TestGetMessagesWithArguments(t *testing.T) {
 		userContent := messages[0].Content
 		assert.Contains(t, userContent, "For verbose mode")
 		assert.Contains(t, userContent, "in namespace 'default'")
+		assert.NotContains(t, userContent, "Check Recent Events")
+		assert.Contains(t, userContent, "JSON object")
+	})
+
+	t.Run("With check_events=false", func(t *testing.T) {
+		// When
+		messages := getMessages(map[string]string{"check_events": "false"})
+
+		// Then
+		require.Len(t, messages, 2)
+		userContent := messages[0].Content
+		assert.NotContains(t, userContent, "Check Recent Events")
+	})
+
+	t.Run("With output_format=json", func(t *testing.T) {
+		// When
+		messages := getMessages(map[string]string{"output_format": "json"})
+
+		// Then
+		require.Len(t, messages, 2)
+		userContent := messages[0].Content
+		assert.Contains(t, userContent, "JSON object")
+		assert.Contains(t, userContent, "cluster_type")
 	})
 }
 
 func TestHealthCheckPromptCompleteness(t *testing.T) {
 	// This test ensures the prompt covers all essential aspects
 
-	messages := buildHealthCheckPromptMessages(false, "")
+	messages := buildHealthCheckPromptMessages(false, "", true, "text")
 	userContent := messages[0].Content
 
 	t.Run("Covers all Kubernetes resource types", func(t *testing.T) {
@@ -367,5 +427,53 @@ func TestHealthCheckPromptCompleteness(t *testing.T) {
 		assert.Contains(t, userContent, "apiVersion=apps/v1")
 		assert.Contains(t, userContent, "apiVersion=v1")
 		assert.Contains(t, userContent, "ClusterOperator, ClusterVersion")
+	})
+}
+
+func TestIsBooleanEnabled(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		defaultValue bool
+		expected     bool
+	}{
+		{"empty with default true", "", true, true},
+		{"empty with default false", "", false, false},
+		{"true lowercase", "true", false, true},
+		{"true uppercase", "TRUE", false, true},
+		{"false lowercase", "false", true, false},
+		{"false uppercase", "FALSE", true, false},
+		{"yes", "yes", false, true},
+		{"no", "no", true, false},
+		{"1", "1", false, true},
+		{"0", "0", true, false},
+		{"invalid with default true", "invalid", true, true},
+		{"invalid with default false", "invalid", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isBooleanEnabled(tt.input, tt.defaultValue)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetEmojiInstructions(t *testing.T) {
+	t.Run("Returns emoji instructions for text format", func(t *testing.T) {
+		result := getEmojiInstructions("text")
+		assert.Contains(t, result, "✅")
+		assert.Contains(t, result, "⚠️")
+		assert.Contains(t, result, "❌")
+	})
+
+	t.Run("Returns empty for json format", func(t *testing.T) {
+		result := getEmojiInstructions("json")
+		assert.Empty(t, result)
+	})
+
+	t.Run("Returns emoji instructions for other formats", func(t *testing.T) {
+		result := getEmojiInstructions("yaml")
+		assert.Contains(t, result, "✅")
 	})
 }
