@@ -445,30 +445,30 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **app_traces** - Get distributed tracing data for a specific app in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.
   - `app` (`string`) **(required)** - Name of the app to get traces for
   - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional)
+  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)
   - `limit` (`integer`) - Maximum number of traces to return (default: 100)
   - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
   - `namespace` (`string`) **(required)** - Namespace containing the app
-  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
+  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided)
   - `tags` (`string`) - JSON string of tags to filter traces (optional)
 
 - **service_traces** - Get distributed tracing data for a specific service in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.
   - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional)
+  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)
   - `limit` (`integer`) - Maximum number of traces to return (default: 100)
   - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
   - `namespace` (`string`) **(required)** - Namespace containing the service
   - `service` (`string`) **(required)** - Name of the service to get traces for
-  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
+  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided)
   - `tags` (`string`) - JSON string of tags to filter traces (optional)
 
-- **workload_traces** - Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis. Note: startMicros and endMicros are typically required by the Kiali API.
+- **workload_traces** - Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.
   - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (required by Kiali API)
+  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)
   - `limit` (`integer`) - Maximum number of traces to return (default: 100)
   - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
   - `namespace` (`string`) **(required)** - Namespace containing the workload
-  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (required by Kiali API)
+  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided)
   - `tags` (`string`) - JSON string of tags to filter traces (optional)
   - `workload` (`string`) **(required)** - Name of the workload to get traces for
 
