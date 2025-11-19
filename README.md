@@ -390,7 +390,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **kiali_get_traces** - Gets traces for a specific resource (app, service, workload) in a namespace
   - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional)
+  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)
   - `limit` (`integer`) - Maximum number of traces to return (default: 100)
   - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
   - `namespace` (`string`) **(required)** - Namespace to get resources from

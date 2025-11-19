@@ -2,6 +2,8 @@ package kiali
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
@@ -30,11 +32,11 @@ func initTraces() []api.ServerTool {
 					},
 					"startMicros": {
 						Type:        "string",
-						Description: "Start time for traces in microseconds since epoch (optional)",
+						Description: "Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided)",
 					},
 					"endMicros": {
 						Type:        "string",
-						Description: "End time for traces in microseconds since epoch (optional)",
+						Description: "End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)",
 					},
 					"limit": {
 						Type:        "integer",
@@ -86,11 +88,11 @@ func initTraces() []api.ServerTool {
 					},
 					"startMicros": {
 						Type:        "string",
-						Description: "Start time for traces in microseconds since epoch (optional)",
+						Description: "Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided)",
 					},
 					"endMicros": {
 						Type:        "string",
-						Description: "End time for traces in microseconds since epoch (optional)",
+						Description: "End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)",
 					},
 					"limit": {
 						Type:        "integer",
@@ -128,7 +130,7 @@ func initTraces() []api.ServerTool {
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "workload_traces",
-			Description: "Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis. Note: startMicros and endMicros are typically required by the Kiali API.",
+			Description: "Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -142,11 +144,11 @@ func initTraces() []api.ServerTool {
 					},
 					"startMicros": {
 						Type:        "string",
-						Description: "Start time for traces in microseconds since epoch (required by Kiali API)",
+						Description: "Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided)",
 					},
 					"endMicros": {
 						Type:        "string",
-						Description: "End time for traces in microseconds since epoch (required by Kiali API)",
+						Description: "End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)",
 					},
 					"limit": {
 						Type:        "integer",
@@ -216,17 +218,57 @@ func appTracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 
 	// Build query parameters from optional arguments
 	queryParams := make(map[string]string)
-	if startMicros, ok := params.GetArguments()["startMicros"].(string); ok && startMicros != "" {
-		queryParams["startMicros"] = startMicros
+
+	// Handle startMicros: if not provided, default to 10 minutes ago
+	var startMicros string
+	if startMicrosVal, ok := params.GetArguments()["startMicros"].(string); ok && startMicrosVal != "" {
+		startMicros = startMicrosVal
+	} else {
+		// Default to 10 minutes before current time
+		now := time.Now()
+		tenMinutesAgo := now.Add(-10 * time.Minute)
+		startMicros = strconv.FormatInt(tenMinutesAgo.UnixMicro(), 10)
 	}
-	if endMicros, ok := params.GetArguments()["endMicros"].(string); ok && endMicros != "" {
-		queryParams["endMicros"] = endMicros
+	queryParams["startMicros"] = startMicros
+
+	// Handle endMicros: if not provided, default to 10 minutes after startMicros
+	var endMicros string
+	if endMicrosVal, ok := params.GetArguments()["endMicros"].(string); ok && endMicrosVal != "" {
+		endMicros = endMicrosVal
+	} else {
+		// Parse startMicros to calculate endMicros
+		startMicrosInt, err := strconv.ParseInt(startMicros, 10, 64)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("invalid startMicros value: %v", err)), nil
+		}
+		startTime := time.UnixMicro(startMicrosInt)
+		endTime := startTime.Add(10 * time.Minute)
+		endMicros = strconv.FormatInt(endTime.UnixMicro(), 10)
 	}
-	if limit, ok := params.GetArguments()["limit"].(string); ok && limit != "" {
-		queryParams["limit"] = limit
+	queryParams["endMicros"] = endMicros
+
+	// Handle limit: convert integer to string if provided
+	if limit := params.GetArguments()["limit"]; limit != nil {
+		switch v := limit.(type) {
+		case float64:
+			queryParams["limit"] = fmt.Sprintf("%.0f", v)
+		case int:
+			queryParams["limit"] = fmt.Sprintf("%d", v)
+		case int64:
+			queryParams["limit"] = fmt.Sprintf("%d", v)
+		}
 	}
-	if minDuration, ok := params.GetArguments()["minDuration"].(string); ok && minDuration != "" {
-		queryParams["minDuration"] = minDuration
+
+	// Handle minDuration: convert integer to string if provided
+	if minDuration := params.GetArguments()["minDuration"]; minDuration != nil {
+		switch v := minDuration.(type) {
+		case float64:
+			queryParams["minDuration"] = fmt.Sprintf("%.0f", v)
+		case int:
+			queryParams["minDuration"] = fmt.Sprintf("%d", v)
+		case int64:
+			queryParams["minDuration"] = fmt.Sprintf("%d", v)
+		}
 	}
 	if tags, ok := params.GetArguments()["tags"].(string); ok && tags != "" {
 		queryParams["tags"] = tags
@@ -249,17 +291,57 @@ func serviceTracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, er
 
 	// Build query parameters from optional arguments
 	queryParams := make(map[string]string)
-	if startMicros, ok := params.GetArguments()["startMicros"].(string); ok && startMicros != "" {
-		queryParams["startMicros"] = startMicros
+
+	// Handle startMicros: if not provided, default to 10 minutes ago
+	var startMicros string
+	if startMicrosVal, ok := params.GetArguments()["startMicros"].(string); ok && startMicrosVal != "" {
+		startMicros = startMicrosVal
+	} else {
+		// Default to 10 minutes before current time
+		now := time.Now()
+		tenMinutesAgo := now.Add(-10 * time.Minute)
+		startMicros = strconv.FormatInt(tenMinutesAgo.UnixMicro(), 10)
 	}
-	if endMicros, ok := params.GetArguments()["endMicros"].(string); ok && endMicros != "" {
-		queryParams["endMicros"] = endMicros
+	queryParams["startMicros"] = startMicros
+
+	// Handle endMicros: if not provided, default to 10 minutes after startMicros
+	var endMicros string
+	if endMicrosVal, ok := params.GetArguments()["endMicros"].(string); ok && endMicrosVal != "" {
+		endMicros = endMicrosVal
+	} else {
+		// Parse startMicros to calculate endMicros
+		startMicrosInt, err := strconv.ParseInt(startMicros, 10, 64)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("invalid startMicros value: %v", err)), nil
+		}
+		startTime := time.UnixMicro(startMicrosInt)
+		endTime := startTime.Add(10 * time.Minute)
+		endMicros = strconv.FormatInt(endTime.UnixMicro(), 10)
 	}
-	if limit, ok := params.GetArguments()["limit"].(string); ok && limit != "" {
-		queryParams["limit"] = limit
+	queryParams["endMicros"] = endMicros
+
+	// Handle limit: convert integer to string if provided
+	if limit := params.GetArguments()["limit"]; limit != nil {
+		switch v := limit.(type) {
+		case float64:
+			queryParams["limit"] = fmt.Sprintf("%.0f", v)
+		case int:
+			queryParams["limit"] = fmt.Sprintf("%d", v)
+		case int64:
+			queryParams["limit"] = fmt.Sprintf("%d", v)
+		}
 	}
-	if minDuration, ok := params.GetArguments()["minDuration"].(string); ok && minDuration != "" {
-		queryParams["minDuration"] = minDuration
+
+	// Handle minDuration: convert integer to string if provided
+	if minDuration := params.GetArguments()["minDuration"]; minDuration != nil {
+		switch v := minDuration.(type) {
+		case float64:
+			queryParams["minDuration"] = fmt.Sprintf("%.0f", v)
+		case int:
+			queryParams["minDuration"] = fmt.Sprintf("%d", v)
+		case int64:
+			queryParams["minDuration"] = fmt.Sprintf("%d", v)
+		}
 	}
 	if tags, ok := params.GetArguments()["tags"].(string); ok && tags != "" {
 		queryParams["tags"] = tags
@@ -283,17 +365,57 @@ func workloadTracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 
 	// Build query parameters from optional arguments
 	queryParams := make(map[string]string)
-	if startMicros, ok := params.GetArguments()["startMicros"].(string); ok && startMicros != "" {
-		queryParams["startMicros"] = startMicros
+
+	// Handle startMicros: if not provided, default to 10 minutes ago
+	var startMicros string
+	if startMicrosVal, ok := params.GetArguments()["startMicros"].(string); ok && startMicrosVal != "" {
+		startMicros = startMicrosVal
+	} else {
+		// Default to 10 minutes before current time
+		now := time.Now()
+		tenMinutesAgo := now.Add(-10 * time.Minute)
+		startMicros = strconv.FormatInt(tenMinutesAgo.UnixMicro(), 10)
 	}
-	if endMicros, ok := params.GetArguments()["endMicros"].(string); ok && endMicros != "" {
-		queryParams["endMicros"] = endMicros
+	queryParams["startMicros"] = startMicros
+
+	// Handle endMicros: if not provided, default to 10 minutes after startMicros
+	var endMicros string
+	if endMicrosVal, ok := params.GetArguments()["endMicros"].(string); ok && endMicrosVal != "" {
+		endMicros = endMicrosVal
+	} else {
+		// Parse startMicros to calculate endMicros
+		startMicrosInt, err := strconv.ParseInt(startMicros, 10, 64)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("invalid startMicros value: %v", err)), nil
+		}
+		startTime := time.UnixMicro(startMicrosInt)
+		endTime := startTime.Add(10 * time.Minute)
+		endMicros = strconv.FormatInt(endTime.UnixMicro(), 10)
 	}
-	if limit, ok := params.GetArguments()["limit"].(string); ok && limit != "" {
-		queryParams["limit"] = limit
+	queryParams["endMicros"] = endMicros
+
+	// Handle limit: convert integer to string if provided
+	if limit := params.GetArguments()["limit"]; limit != nil {
+		switch v := limit.(type) {
+		case float64:
+			queryParams["limit"] = fmt.Sprintf("%.0f", v)
+		case int:
+			queryParams["limit"] = fmt.Sprintf("%d", v)
+		case int64:
+			queryParams["limit"] = fmt.Sprintf("%d", v)
+		}
 	}
-	if minDuration, ok := params.GetArguments()["minDuration"].(string); ok && minDuration != "" {
-		queryParams["minDuration"] = minDuration
+
+	// Handle minDuration: convert integer to string if provided
+	if minDuration := params.GetArguments()["minDuration"]; minDuration != nil {
+		switch v := minDuration.(type) {
+		case float64:
+			queryParams["minDuration"] = fmt.Sprintf("%.0f", v)
+		case int:
+			queryParams["minDuration"] = fmt.Sprintf("%d", v)
+		case int64:
+			queryParams["minDuration"] = fmt.Sprintf("%d", v)
+		}
 	}
 	if tags, ok := params.GetArguments()["tags"].(string); ok && tags != "" {
 		queryParams["tags"] = tags
