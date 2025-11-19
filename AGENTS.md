@@ -177,7 +177,7 @@ When introducing new modules run `make tidy` so that `go.mod` and `go.sum` remai
 The server is distributed as a binary executable, a Docker image, an npm package, and a Python package.
 
 - **Native binaries** for Linux, macOS, and Windows are available in the GitHub releases.
-- A **container image** (Docker) is built and pushed to the `quay.io/manusa/kubernetes_mcp_server` repository.
+- A **container image** (Docker) is built and pushed to the `quay.io/containers/kubernetes_mcp_server` repository.
 - An **npm** package is available at [npmjs.com](https://www.npmjs.com/package/kubernetes-mcp-server).
   It wraps the platform-specific binary and provides a convenient way to run the server using `npx`.
 - A **Python** package is available at [pypi.org](https://pypi.org/project/kubernetes-mcp-server/).
