@@ -202,6 +202,41 @@ func (s *HelmSuite) TestHelmList() {
 	})
 }
 
+func (s *HelmSuite) TestHelmListDenied() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		denied_resources = [ { version = "v1", kind = "Secret" } ]
+	`), s.Cfg), "Expected to parse denied resources config")
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "sh.helm.release.v1.release-to-list-denied",
+			Labels: map[string]string{"owner": "helm", "name": "release-to-list-denied"},
+		},
+		Data: map[string][]byte{
+			"release": []byte(base64.StdEncoding.EncodeToString([]byte("{" +
+				"\"name\":\"release-to-list-denied\"," +
+				"\"info\":{\"status\":\"deployed\"}" +
+				"}"))),
+		},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	s.InitMcpClient()
+	s.Run("helm_list() with deployed release (denied)", func() {
+		toolResult, err := s.CallTool("helm_list", map[string]interface{}{})
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes denial", func() {
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			s.Truef(strings.HasPrefix(msg, "failed to list helm releases"), "expected descriptive error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
+			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+}
+
 func (s *HelmSuite) TestHelmUninstallNoReleases() {
 	s.InitMcpClient()
 	s.Run("helm_uninstall(name=release-to-uninstall) with no releases", func() {

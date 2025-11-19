@@ -154,14 +154,14 @@ func (k *Kubernetes) resourcesCreateOrUpdate(ctx context.Context, resources []*u
 		}
 		// Clear the cache to ensure the next operation is performed on the latest exposed APIs (will change after the CRD creation)
 		if gvk.Kind == "CustomResourceDefinition" {
-			k.manager.accessControlRESTMapper.Reset()
+			k.manager.restMapper.Reset()
 		}
 	}
 	return resources, nil
 }
 
 func (k *Kubernetes) resourceFor(gvk *schema.GroupVersionKind) (*schema.GroupVersionResource, error) {
-	m, err := k.manager.accessControlRESTMapper.RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
+	m, err := k.manager.restMapper.RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
 	if err != nil {
 		return nil, err
 	}
