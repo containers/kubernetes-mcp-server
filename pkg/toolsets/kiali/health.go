@@ -57,7 +57,7 @@ func initHealthSummary() []api.ServerTool {
 	// Mesh health summary tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "mesh_health_summary",
+			Name:        "kiali_mesh_health_summary",
 			Description: "Get aggregated health summary for the entire mesh or specific namespaces. Returns overall availability, error rates, and counts of healthy/unhealthy entities across apps, services, and workloads. Provides global and per-namespace breakdowns with identification of top unhealthy entities.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
