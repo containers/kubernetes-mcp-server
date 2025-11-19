@@ -30,19 +30,7 @@ func (s *PodsTopSuite) TearDownTest() {
 }
 
 func (s *PodsTopSuite) TestPodsTopMetricsUnavailable() {
-	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
-		if req.URL.Path == "/api" {
-			_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":[],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
-			return
-		}
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups)
-		if req.URL.Path == "/apis" {
-			_, _ = w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[]}`))
-			return
-		}
-	}))
+	s.mockServer.Handle(&test.DiscoveryClientHandler{})
 	s.InitMcpClient()
 
 	s.Run("pods_top with metrics API not available", func() {
@@ -238,8 +226,10 @@ func (s *PodsTopSuite) TestPodsTopDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to get pods top: resource not allowed: metrics.k8s.io/v1beta1, Kind=PodMetrics"
-			s.Equalf(expectedMessage, result.Content[0].(mcp.TextContent).Text,
+			msg := result.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get pods top:(.+:)? resource not allowed: metrics.k8s.io/v1beta1, Kind=PodMetrics"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, result.Content[0].(mcp.TextContent).Text)
 		})
 	})

@@ -186,6 +186,33 @@ WaitForStreams:
 	return ctx, nil
 }
 
+type DiscoveryClientHandler struct{}
+
+var _ http.Handler = (*DiscoveryClientHandler)(nil)
+
+func (h *DiscoveryClientHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
+	if req.URL.Path == "/api" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":["v1"],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
+		return
+	}
+	// Request Performed by DiscoveryClient to Kube API (Get API Groups)
+	if req.URL.Path == "/apis" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[]}`))
+		return
+	}
+	// Request Performed by DiscoveryClient to Kube API (Get API Resources)
+	if req.URL.Path == "/api/v1" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","resources":[
+			{"name":"pods","singularName":"","namespaced":true,"kind":"Pod","verbs":["get","list","watch","create","update","patch","delete"]}
+		]}`))
+		return
+	}
+}
+
 type InOpenShiftHandler struct {
 }
 

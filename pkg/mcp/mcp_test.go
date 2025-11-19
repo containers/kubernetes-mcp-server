@@ -22,25 +22,9 @@ func (s *McpHeadersSuite) SetupTest() {
 	s.pathHeaders = make(map[string]http.Header)
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		s.pathHeaders[req.URL.Path] = req.Header.Clone()
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
-		if req.URL.Path == "/api" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":["v1"],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
-			return
-		}
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups)
-		if req.URL.Path == "/apis" {
-			w.Header().Set("Content-Type", "application/json")
-			//w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[{"name":"apps","versions":[{"groupVersion":"apps/v1","version":"v1"}],"preferredVersion":{"groupVersion":"apps/v1","version":"v1"}}]}`))
-			_, _ = w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[]}`))
-			return
-		}
-		// Request Performed by DiscoveryClient to Kube API (Get API Resources)
-		if req.URL.Path == "/api/v1" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","resources":[{"name":"pods","singularName":"","namespaced":true,"kind":"Pod","verbs":["get","list","watch","create","update","patch","delete"]}]}`))
-			return
-		}
+	}))
+	s.mockServer.Handle(&test.DiscoveryClientHandler{})
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Request Performed by DynamicClient
 		if req.URL.Path == "/api/v1/namespaces/default/pods" {
 			w.Header().Set("Content-Type", "application/json")

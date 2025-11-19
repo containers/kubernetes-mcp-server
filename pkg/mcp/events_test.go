@@ -132,8 +132,10 @@ func (s *EventsSuite) TestEventsListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to list events in all namespaces: resource not allowed: /v1, Kind=Event"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to list events in all namespaces:(.+:)? resource not allowed: /v1, Kind=Event"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})

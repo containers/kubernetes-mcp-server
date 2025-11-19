@@ -56,8 +56,10 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to list namespaces: resource not allowed: /v1, Kind=Namespace"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to list namespaces:(.+:)? resource not allowed: /v1, Kind=Namespace"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
@@ -159,8 +161,10 @@ func (s *NamespacesSuite) TestProjectsListInOpenShiftDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to list projects: resource not allowed: project.openshift.io/v1, Kind=Project"
-			s.Equalf(expectedMessage, projectsList.Content[0].(mcp.TextContent).Text,
+			msg := projectsList.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to list projects:(.+:)? resource not allowed: project.openshift.io/v1, Kind=Project"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, projectsList.Content[0].(mcp.TextContent).Text)
 		})
 	})

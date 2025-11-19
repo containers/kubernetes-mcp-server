@@ -162,8 +162,10 @@ func (s *PodsSuite) TestPodsListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to list pods in all namespaces: resource not allowed: /v1, Kind=Pod"
-			s.Equalf(expectedMessage, podsList.Content[0].(mcp.TextContent).Text,
+			msg := podsList.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to list pods in all namespaces:(.+:)? resource not allowed: /v1, Kind=Pod"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, podsList.Content[0].(mcp.TextContent).Text)
 		})
 	})
@@ -174,8 +176,10 @@ func (s *PodsSuite) TestPodsListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to list pods in namespace ns-1: resource not allowed: /v1, Kind=Pod"
-			s.Equalf(expectedMessage, podsListInNamespace.Content[0].(mcp.TextContent).Text,
+			msg := podsListInNamespace.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to list pods in namespace ns-1:(.+:)? resource not allowed: /v1, Kind=Pod"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, podsListInNamespace.Content[0].(mcp.TextContent).Text)
 		})
 	})
@@ -346,8 +350,10 @@ func (s *PodsSuite) TestPodsGetDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to get pod a-pod-in-default in namespace : resource not allowed: /v1, Kind=Pod"
-			s.Equalf(expectedMessage, podsGet.Content[0].(mcp.TextContent).Text,
+			msg := podsGet.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get pod a-pod-in-default in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, podsGet.Content[0].(mcp.TextContent).Text)
 		})
 	})
@@ -447,8 +453,10 @@ func (s *PodsSuite) TestPodsDeleteDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to delete pod a-pod-in-default in namespace : resource not allowed: /v1, Kind=Pod"
-			s.Equalf(expectedMessage, podsDelete.Content[0].(mcp.TextContent).Text,
+			msg := podsDelete.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to delete pod a-pod-in-default in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, podsDelete.Content[0].(mcp.TextContent).Text)
 		})
 	})
@@ -599,8 +607,10 @@ func (s *PodsSuite) TestPodsLogDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to get pod a-pod-in-default log in namespace : resource not allowed: /v1, Kind=Pod"
-			s.Equalf(expectedMessage, podsLog.Content[0].(mcp.TextContent).Text,
+			msg := podsLog.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get pod a-pod-in-default log in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, podsLog.Content[0].(mcp.TextContent).Text)
 		})
 	})

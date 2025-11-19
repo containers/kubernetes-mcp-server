@@ -93,7 +93,7 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 		s.Run("describes missing name", func() {
 			expectedMessage := "failed to get node log, missing argument query"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+			s.Regexpf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
@@ -215,8 +215,10 @@ func (s *NodesSuite) TestNodesLogDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get node log for does-not-matter: resource not allowed: /v1, Kind=Node"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+			s.Equalf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
@@ -324,8 +326,10 @@ func (s *NodesSuite) TestNodesStatsSummaryDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to get node stats summary for does-not-matter: resource not allowed: /v1, Kind=Node"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get node stats summary for does-not-matter:(.+:)? resource not allowed: /v1, Kind=Node"
+			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})

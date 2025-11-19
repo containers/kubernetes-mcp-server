@@ -86,9 +86,11 @@ func (s *HelmSuite) TestHelmInstallDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "failed to install helm chart"), "expected descriptive error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			s.Truef(strings.HasPrefix(msg, "failed to install helm chart"), "expected descriptive error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
-			s.Truef(strings.HasSuffix(toolResult.Content[0].(mcp.TextContent).Text, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
 }
@@ -260,8 +262,8 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 		})
 		s.Run("describes denial", func() {
 			s.T().Skipf("Helm won't report what underlying resource caused the failure, so we can't assert on it")
-			expectedMessage := "failed to uninstall release: resource not allowed: /v1, Kind=Secret"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text, "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			expectedMessage := "failed to uninstall release:(.+:)? resource not allowed: /v1, Kind=Secret"
+			s.Regexpf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text, "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
 		})
 	})
 }
