@@ -53,11 +53,32 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 	if endpoint == "" {
 		return baseURL.String(), nil
 	}
-	ref, err := url.Parse(endpoint)
+	// Parse the endpoint to extract path, query, and fragment
+	endpoint = strings.TrimSpace(endpoint)
+	endpointURL, err := url.Parse(endpoint)
+
 	if err != nil {
 		return "", fmt.Errorf("invalid endpoint path: %w", err)
 	}
-	return baseURL.ResolveReference(ref).String(), nil
+	// Get the base path and endpoint path
+	basePath := strings.TrimSuffix(baseURL.Path, "/")
+	endpointPath := strings.TrimPrefix(endpointURL.Path, "/")
+
+	// Concatenate paths, avoiding duplicate slashes
+	var fullPath string
+	if basePath == "" || basePath == "/" {
+		fullPath = "/" + endpointPath
+	} else {
+		fullPath = basePath + "/" + endpointPath
+	}
+
+	// Reconstruct the URL with the concatenated path, preserving query and fragment
+	resultURL := *baseURL
+	resultURL.Path = fullPath
+	resultURL.RawQuery = endpointURL.RawQuery
+	resultURL.Fragment = endpointURL.Fragment
+
+	return resultURL.String(), nil
 }
 
 func (k *Kiali) createHTTPClient() *http.Client {

@@ -98,6 +98,36 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 			s.Equal("2", u.Query().Get("y"), "Unexpected query parameter y")
 		})
 	})
+
+	s.Run("With base URL containing path", func() {
+		s.Config = test.Must(config.ReadToml([]byte(`
+			[toolset_configs.kiali]
+			url = "http://kiali-istio-system.apps-crc.testing/kiali"
+			insecure = true
+		`)))
+		k := NewKiali(s.Config, s.MockServer.Config())
+
+		s.Run("concatenates base path with endpoint", func() {
+			full, err := k.validateAndGetURL("/api/namespaces")
+			s.Require().NoError(err, "Expected no error validating URL")
+			s.Equal("http://kiali-istio-system.apps-crc.testing/kiali/api/namespaces", full, "Unexpected full URL")
+		})
+
+		s.Run("handles endpoint without leading slash", func() {
+			full, err := k.validateAndGetURL("api/namespaces")
+			s.Require().NoError(err, "Expected no error validating URL")
+			s.Equal("http://kiali-istio-system.apps-crc.testing/kiali/api/namespaces", full, "Unexpected full URL")
+		})
+
+		s.Run("preserves query parameters with base path", func() {
+			full, err := k.validateAndGetURL("/api/namespaces?health=true")
+			s.Require().NoError(err, "Expected no error validating URL")
+			u, err := url.Parse(full)
+			s.Require().NoError(err, "Expected to parse full URL")
+			s.Equal("/kiali/api/namespaces", u.Path, "Unexpected path in parsed URL")
+			s.Equal("true", u.Query().Get("health"), "Unexpected query parameter health")
+		})
+	})
 }
 
 // CurrentAuthorizationHeader behavior is now implicit via executeRequest using Manager.BearerToken
