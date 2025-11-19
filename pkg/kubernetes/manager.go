@@ -53,7 +53,7 @@ func NewKubeconfigManager(config *config.StaticConfig, kubeconfigContext string)
 		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %v", err)
 	}
 
-	return newManager(config, restConfig, clientCmdConfig)
+	return NewManager(config, restConfig, clientCmdConfig)
 }
 
 func NewInClusterManager(config *config.StaticConfig) (*Manager, error) {
@@ -85,10 +85,10 @@ func NewInClusterManager(config *config.StaticConfig) (*Manager, error) {
 	}
 	clientCmdConfig.CurrentContext = inClusterKubeConfigDefaultContext
 
-	return newManager(config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
+	return NewManager(config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
 }
 
-func newManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
+func NewManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
 	if config == nil {
 		return nil, errors.New("config cannot be nil")
 	}
