@@ -12,12 +12,12 @@ import (
 
 type ProviderConfigSuite struct {
 	BaseConfigSuite
-	originalProviderConfigRegistry *ExtendedConfigRegistry
+	originalProviderConfigRegistry *extendedConfigRegistry
 }
 
 func (s *ProviderConfigSuite) SetupTest() {
 	s.originalProviderConfigRegistry = providerConfigRegistry
-	providerConfigRegistry = NewExtendedConfigRegistry()
+	providerConfigRegistry = newExtendedConfigRegistry()
 }
 
 func (s *ProviderConfigSuite) TearDownTest() {

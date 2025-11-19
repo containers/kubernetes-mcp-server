@@ -15,17 +15,17 @@ type Extended interface {
 
 type ExtendedConfigParser func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (Extended, error)
 
-type ExtendedConfigRegistry struct {
+type extendedConfigRegistry struct {
 	parsers map[string]ExtendedConfigParser
 }
 
-func NewExtendedConfigRegistry() *ExtendedConfigRegistry {
-	return &ExtendedConfigRegistry{
+func newExtendedConfigRegistry() *extendedConfigRegistry {
+	return &extendedConfigRegistry{
 		parsers: make(map[string]ExtendedConfigParser),
 	}
 }
 
-func (r *ExtendedConfigRegistry) Register(name string, parser ExtendedConfigParser) {
+func (r *extendedConfigRegistry) register(name string, parser ExtendedConfigParser) {
 	if _, exists := r.parsers[name]; exists {
 		panic("extended config parser already registered for name: " + name)
 	}
@@ -33,7 +33,7 @@ func (r *ExtendedConfigRegistry) Register(name string, parser ExtendedConfigPars
 	r.parsers[name] = parser
 }
 
-func (r *ExtendedConfigRegistry) Parse(ctx context.Context, metaData toml.MetaData, configs map[string]toml.Primitive) (map[string]Extended, error) {
+func (r *extendedConfigRegistry) parse(ctx context.Context, metaData toml.MetaData, configs map[string]toml.Primitive) (map[string]Extended, error) {
 	if len(configs) == 0 {
 		return make(map[string]Extended), nil
 	}

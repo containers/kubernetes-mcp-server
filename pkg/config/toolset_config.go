@@ -1,7 +1,7 @@
 package config
 
-var toolsetConfigRegistry = NewExtendedConfigRegistry()
+var toolsetConfigRegistry = newExtendedConfigRegistry()
 
 func RegisterToolsetConfig(name string, parser ExtendedConfigParser) {
-	toolsetConfigRegistry.Register(name, parser)
+	toolsetConfigRegistry.register(name, parser)
 }

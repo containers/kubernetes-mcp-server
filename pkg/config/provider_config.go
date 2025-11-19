@@ -1,7 +1,7 @@
 package config
 
-var providerConfigRegistry = NewExtendedConfigRegistry()
+var providerConfigRegistry = newExtendedConfigRegistry()
 
 func RegisterProviderConfig(name string, parser ExtendedConfigParser) {
-	providerConfigRegistry.Register(name, parser)
+	providerConfigRegistry.register(name, parser)
 }

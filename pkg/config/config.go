@@ -131,12 +131,12 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 
 	ctx := withConfigDirPath(context.Background(), config.configDirPath)
 
-	config.parsedClusterProviderConfigs, err = providerConfigRegistry.Parse(ctx, md, config.ClusterProviderConfigs)
+	config.parsedClusterProviderConfigs, err = providerConfigRegistry.parse(ctx, md, config.ClusterProviderConfigs)
 	if err != nil {
 		return nil, err
 	}
 
-	config.parsedToolsetConfigs, err = toolsetConfigRegistry.Parse(ctx, md, config.ToolsetConfigs)
+	config.parsedToolsetConfigs, err = toolsetConfigRegistry.parse(ctx, md, config.ToolsetConfigs)
 	if err != nil {
 		return nil, err
 	}

@@ -11,12 +11,12 @@ import (
 
 type ToolsetConfigSuite struct {
 	BaseConfigSuite
-	originalToolsetConfigRegistry *ExtendedConfigRegistry
+	originalToolsetConfigRegistry *extendedConfigRegistry
 }
 
 func (s *ToolsetConfigSuite) SetupTest() {
 	s.originalToolsetConfigRegistry = toolsetConfigRegistry
-	toolsetConfigRegistry = NewExtendedConfigRegistry()
+	toolsetConfigRegistry = newExtendedConfigRegistry()
 }
 
 func (s *ToolsetConfigSuite) TearDownTest() {
