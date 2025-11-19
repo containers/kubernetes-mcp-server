@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -23,12 +24,12 @@ import (
 )
 
 type Manager struct {
-	cfg                     *rest.Config
-	clientCmdConfig         clientcmd.ClientConfig
-	discoveryClient         discovery.CachedDiscoveryInterface
-	accessControlClientSet  *AccessControlClientset
-	accessControlRESTMapper *AccessControlRESTMapper
-	dynamicClient           *dynamic.DynamicClient
+	cfg                    *rest.Config
+	clientCmdConfig        clientcmd.ClientConfig
+	discoveryClient        discovery.CachedDiscoveryInterface
+	restMapper             *restmapper.DeferredDiscoveryRESTMapper
+	accessControlClientSet *AccessControlClientset
+	dynamicClient          *dynamic.DynamicClient
 
 	staticConfig         *config.StaticConfig
 	CloseWatchKubeConfig CloseWatchKubeConfig
@@ -117,10 +118,14 @@ func newManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdC
 		return nil, err
 	}
 	k8s.discoveryClient = memory.NewMemCacheClient(k8s.accessControlClientSet.DiscoveryClient())
-	k8s.accessControlRESTMapper = NewAccessControlRESTMapper(
-		restmapper.NewDeferredDiscoveryRESTMapper(k8s.discoveryClient),
-		k8s.staticConfig,
-	)
+	k8s.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(k8s.discoveryClient)
+	k8s.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
+		return &AccessControlRoundTripper{
+			delegate:     original,
+			staticConfig: k8s.staticConfig,
+			restMapper:   k8s.restMapper,
+		}
+	})
 	k8s.dynamicClient, err = dynamic.NewForConfig(k8s.cfg)
 	if err != nil {
 		return nil, err
@@ -189,7 +194,7 @@ func (m *Manager) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error
 }
 
 func (m *Manager) ToRESTMapper() (meta.RESTMapper, error) {
-	return m.accessControlRESTMapper, nil
+	return m.restMapper, nil
 }
 
 // ToRESTConfig returns the rest.Config object (genericclioptions.RESTClientGetter)
@@ -243,8 +248,9 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	}
 	klog.V(5).Infof("%s header found (Bearer), using provided bearer token", OAuthAuthorizationHeader)
 	derivedCfg := &rest.Config{
-		Host:    m.cfg.Host,
-		APIPath: m.cfg.APIPath,
+		Host:          m.cfg.Host,
+		APIPath:       m.cfg.APIPath,
+		WrapTransport: m.cfg.WrapTransport,
 		// Copy only server verification TLS settings (CA bundle and server name)
 		TLSClientConfig: rest.TLSClientConfig{
 			Insecure:   m.cfg.Insecure,
@@ -285,10 +291,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return &Kubernetes{manager: m}, nil
 	}
 	derived.manager.discoveryClient = memory.NewMemCacheClient(derived.manager.accessControlClientSet.DiscoveryClient())
-	derived.manager.accessControlRESTMapper = NewAccessControlRESTMapper(
-		restmapper.NewDeferredDiscoveryRESTMapper(derived.manager.discoveryClient),
-		derived.manager.staticConfig,
-	)
+	derived.manager.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(derived.manager.discoveryClient)
 	derived.manager.dynamicClient, err = dynamic.NewForConfig(derived.manager.cfg)
 	if err != nil {
 		if m.staticConfig.RequireOAuth {
