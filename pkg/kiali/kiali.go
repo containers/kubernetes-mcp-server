@@ -60,25 +60,16 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid endpoint path: %w", err)
 	}
-	// Get the base path and endpoint path
-	basePath := strings.TrimSuffix(baseURL.Path, "/")
-	endpointPath := strings.TrimPrefix(endpointURL.Path, "/")
-
-	// Concatenate paths, avoiding duplicate slashes
-	var fullPath string
-	if basePath == "" || basePath == "/" {
-		fullPath = "/" + endpointPath
-	} else {
-		fullPath = basePath + "/" + endpointPath
+	resultURL, err := url.JoinPath(baseURL.String(), endpointURL.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to join kiali base URL with endpoint path: %w", err)
 	}
 
-	// Reconstruct the URL with the concatenated path, preserving query and fragment
-	resultURL := *baseURL
-	resultURL.Path = fullPath
-	resultURL.RawQuery = endpointURL.RawQuery
-	resultURL.Fragment = endpointURL.Fragment
+	u, _ := url.Parse(resultURL)
+	u.RawQuery = endpointURL.RawQuery
+	u.Fragment = endpointURL.Fragment
 
-	return resultURL.String(), nil
+	return u.String(), nil
 }
 
 func (k *Kiali) createHTTPClient() *http.Client {
