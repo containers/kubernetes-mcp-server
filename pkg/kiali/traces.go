@@ -105,3 +105,16 @@ func (k *Kiali) WorkloadTraces(ctx context.Context, namespace string, workload s
 
 	return k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
 }
+
+// TraceDetails returns detailed information for a specific trace by its ID.
+// Parameters:
+//   - traceId: the unique identifier of the trace
+func (k *Kiali) TraceDetails(ctx context.Context, traceId string) (string, error) {
+	if traceId == "" {
+		return "", fmt.Errorf("trace ID is required")
+	}
+
+	endpoint := fmt.Sprintf("/api/traces/%s", url.PathEscape(traceId))
+
+	return k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
+}
