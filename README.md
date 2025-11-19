@@ -462,15 +462,18 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
   - `tags` (`string`) - JSON string of tags to filter traces (optional)
 
-- **workload_traces** - Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.
+- **workload_traces** - Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis. Note: startMicros and endMicros are typically required by the Kiali API.
   - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional)
+  - `endMicros` (`string`) - End time for traces in microseconds since epoch (required by Kiali API)
   - `limit` (`integer`) - Maximum number of traces to return (default: 100)
   - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
   - `namespace` (`string`) **(required)** - Namespace containing the workload
-  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
+  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (required by Kiali API)
   - `tags` (`string`) - JSON string of tags to filter traces (optional)
   - `workload` (`string`) **(required)** - Name of the workload to get traces for
+
+- **trace_details** - Get detailed information for a specific trace by its ID. Returns complete trace information including all spans, timing details, and metadata for in-depth analysis.
+  - `traceId` (`string`) **(required)** - Unique identifier of the trace to retrieve
 
 </details>
 

@@ -128,7 +128,7 @@ func initTraces() []api.ServerTool {
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "workload_traces",
-			Description: "Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.",
+			Description: "Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis. Note: startMicros and endMicros are typically required by the Kiali API.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -142,11 +142,11 @@ func initTraces() []api.ServerTool {
 					},
 					"startMicros": {
 						Type:        "string",
-						Description: "Start time for traces in microseconds since epoch (optional)",
+						Description: "Start time for traces in microseconds since epoch (required by Kiali API)",
 					},
 					"endMicros": {
 						Type:        "string",
-						Description: "End time for traces in microseconds since epoch (optional)",
+						Description: "End time for traces in microseconds since epoch (required by Kiali API)",
 					},
 					"limit": {
 						Type:        "integer",
@@ -178,6 +178,32 @@ func initTraces() []api.ServerTool {
 			},
 		},
 		Handler: workloadTracesHandler,
+	})
+
+	// Trace details tool
+	ret = append(ret, api.ServerTool{
+		Tool: api.Tool{
+			Name:        "trace_details",
+			Description: "Get detailed information for a specific trace by its ID. Returns complete trace information including all spans, timing details, and metadata for in-depth analysis.",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"traceId": {
+						Type:        "string",
+						Description: "Unique identifier of the trace to retrieve",
+					},
+				},
+				Required: []string{"traceId"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Trace: Details",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		},
+		Handler: traceDetailsHandler,
 	})
 
 	return ret
@@ -280,6 +306,21 @@ func workloadTracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 	content, err := k.WorkloadTraces(params.Context, namespace, workload, queryParams)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get workload traces: %v", err)), nil
+	}
+	return api.NewToolCallResult(content, nil), nil
+}
+
+func traceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Extract required parameter
+	traceId, ok := params.GetArguments()["traceId"].(string)
+	if !ok || traceId == "" {
+		return api.NewToolCallResult("", fmt.Errorf("traceId parameter is required")), nil
+	}
+
+	k := params.NewKiali()
+	content, err := k.TraceDetails(params.Context, traceId)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get trace details: %v", err)), nil
 	}
 	return api.NewToolCallResult(content, nil), nil
 }
