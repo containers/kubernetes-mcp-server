@@ -325,6 +325,7 @@ func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 }
 
 func (s *AuthorizationSuite) TestAuthorizationRawToken() {
+	s.MockServer.ResetHandlers()
 	tokenReviewHandler := test.NewTokenReviewHandler()
 	s.MockServer.Handle(tokenReviewHandler)
 
@@ -371,6 +372,7 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 }
 
 func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
+	s.MockServer.ResetHandlers()
 	tokenReviewHandler := test.NewTokenReviewHandler()
 	s.MockServer.Handle(tokenReviewHandler)
 
@@ -418,6 +420,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 }
 
 func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
+	s.MockServer.ResetHandlers()
 	tokenReviewHandler := test.NewTokenReviewHandler()
 	s.MockServer.Handle(tokenReviewHandler)
 

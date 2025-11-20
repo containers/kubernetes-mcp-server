@@ -49,7 +49,7 @@ func (s *ManagerTestSuite) TestNewInClusterManager() {
 				s.Equal("in-cluster", rawConfig.CurrentContext, "expected current context to be 'in-cluster'")
 			})
 			s.Run("sets default user-agent", func() {
-				s.Contains(manager.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
+				s.Contains(manager.accessControlClientSet.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
 			})
 		})
 		s.Run("with explicit kubeconfig", func() {
@@ -98,10 +98,10 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 				s.Contains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfig, "expected kubeconfig path to match")
 			})
 			s.Run("sets default user-agent", func() {
-				s.Contains(manager.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
+				s.Contains(manager.accessControlClientSet.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.cfg.Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.accessControlClientSet.cfg.Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig in config", func() {
@@ -124,7 +124,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 				s.Contains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfigExplicit, "expected kubeconfig path to match explicit")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.cfg.Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.accessControlClientSet.cfg.Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig context (valid)", func() {
@@ -149,7 +149,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 				s.Contains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfigFile, "expected kubeconfig path to match")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.cfg.Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.accessControlClientSet.cfg.Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig context (invalid)", func() {

@@ -82,10 +82,10 @@ users:
 			s.Equal(derived.manager.staticConfig, testStaticConfig, "staticConfig not properly wired to derived manager")
 
 			s.Run("RestConfig is correctly copied and sensitive fields are omitted", func() {
-				derivedCfg := derived.manager.cfg
+				derivedCfg := derived.manager.accessControlClientSet.cfg
 				s.Require().NotNil(derivedCfg, "derived config is nil")
 
-				originalCfg := testManager.cfg
+				originalCfg := testManager.accessControlClientSet.cfg
 				s.Equalf(originalCfg.Host, derivedCfg.Host, "expected Host %s, got %s", originalCfg.Host, derivedCfg.Host)
 				s.Equalf(originalCfg.APIPath, derivedCfg.APIPath, "expected APIPath %s, got %s", originalCfg.APIPath, derivedCfg.APIPath)
 				s.Equalf(originalCfg.QPS, derivedCfg.QPS, "expected QPS %f, got %f", originalCfg.QPS, derivedCfg.QPS)
@@ -121,12 +121,11 @@ users:
 			})
 			s.Run("derived manager has initialized clients", func() {
 				// Verify that the derived manager has proper clients initialized
-				s.NotNilf(derived.manager.accessControlClientSet, "expected accessControlClientSet to be initialized")
-				s.Equalf(testStaticConfig, derived.manager.accessControlClientSet.staticConfig, "staticConfig not properly wired to derived manager")
-				s.NotNilf(derived.manager.discoveryClient, "expected discoveryClient to be initialized")
-				s.NotNilf(derived.manager.restMapper, "expected accessControlRESTMapper to be initialized")
-				//s.Equalf(testStaticConfig, derived.manager.re.staticConfig, "staticConfig not properly wired to derived manager")
-				s.NotNilf(derived.manager.dynamicClient, "expected dynamicClient to be initialized")
+				s.NotNilf(derived.AccessControlClientset(), "expected accessControlClientSet to be initialized")
+				s.Equalf(testStaticConfig, derived.manager.staticConfig, "staticConfig not properly wired to derived manager")
+				s.NotNilf(derived.AccessControlClientset().DiscoveryClient(), "expected discoveryClient to be initialized")
+				s.NotNilf(derived.AccessControlClientset().RESTMapper(), "expected accessControlRESTMapper to be initialized")
+				s.NotNilf(derived.AccessControlClientset().DynamicClient(), "expected dynamicClient to be initialized")
 			})
 		})
 	})
@@ -172,7 +171,7 @@ users:
 			s.NotEqual(derived.manager, testManager, "expected new derived manager, got original manager")
 			s.Equal(derived.manager.staticConfig, testStaticConfig, "staticConfig not properly wired to derived manager")
 
-			derivedCfg := derived.manager.cfg
+			derivedCfg := derived.manager.accessControlClientSet.cfg
 			s.Require().NotNil(derivedCfg, "derived config is nil")
 
 			s.Equalf("aiTana-julIA", derivedCfg.BearerToken, "expected BearerToken %s, got %s", "aiTana-julIA", derivedCfg.BearerToken)
