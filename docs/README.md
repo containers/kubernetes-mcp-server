@@ -18,7 +18,7 @@ Choose the guide that matches your needs:
 
 ## Other toolsets
 
-- **[Kiali](KIALI_INTEGRATION.md)** - Tools for Kiali ServiceMesh with Istio
+- **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
 
 ## Additional Documentation
 
