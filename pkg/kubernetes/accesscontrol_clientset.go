@@ -1,204 +1,113 @@
 package kubernetes
 
 import (
-	"context"
 	"fmt"
+	"net/http"
 
-	authenticationv1api "k8s.io/api/authentication/v1"
-	authorizationv1api "k8s.io/api/authorization/v1"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/httpstream"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	authenticationv1 "k8s.io/client-go/kubernetes/typed/authentication/v1"
 	authorizationv1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/remotecommand"
-	"k8s.io/metrics/pkg/apis/metrics"
-	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	"k8s.io/client-go/restmapper"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 // AccessControlClientset is a limited clientset delegating interface to the standard kubernetes.Clientset
 // Only a limited set of functions are implemented with a single point of access to the kubernetes API where
 // apiVersion and kinds are checked for allowed access
 type AccessControlClientset struct {
-	cfg             *rest.Config
-	delegate        kubernetes.Interface
-	discoveryClient discovery.DiscoveryInterface
+	cfg *rest.Config
+	kubernetes.Interface
+	restMapper      meta.ResettableRESTMapper
+	discoveryClient discovery.CachedDiscoveryInterface
+	dynamicClient   dynamic.Interface
 	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
-	staticConfig    *config.StaticConfig // TODO: maybe just store the denied resource slice
 }
 
-func (a *AccessControlClientset) DiscoveryClient() discovery.DiscoveryInterface {
+func NewAccessControlClientset(staticConfig *config.StaticConfig, restConfig *rest.Config) (*AccessControlClientset, error) {
+	rest.CopyConfig(restConfig)
+	acc := &AccessControlClientset{
+		cfg: rest.CopyConfig(restConfig),
+	}
+	if acc.cfg.UserAgent == "" {
+		acc.cfg.UserAgent = rest.DefaultKubernetesUserAgent()
+	}
+	acc.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
+		return &AccessControlRoundTripper{
+			delegate:     original,
+			staticConfig: staticConfig,
+			restMapper:   acc.restMapper,
+		}
+	})
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(acc.cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create discovery client: %v", err)
+	}
+	acc.discoveryClient = memory.NewMemCacheClient(discoveryClient)
+	acc.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(acc.discoveryClient)
+	acc.Interface, err = kubernetes.NewForConfig(acc.cfg)
+	if err != nil {
+		return nil, err
+	}
+	acc.dynamicClient, err = dynamic.NewForConfig(acc.cfg)
+	if err != nil {
+		return nil, err
+	}
+	acc.metricsV1beta1, err = metricsv1beta1.NewForConfig(acc.cfg)
+	if err != nil {
+		return nil, err
+	}
+	return acc, nil
+}
+
+func (a *AccessControlClientset) RESTMapper() meta.ResettableRESTMapper {
+	return a.restMapper
+}
+
+func (a *AccessControlClientset) DiscoveryClient() discovery.CachedDiscoveryInterface {
 	return a.discoveryClient
 }
 
+func (a *AccessControlClientset) DynamicClient() dynamic.Interface {
+	return a.dynamicClient
+}
+
+func (a *AccessControlClientset) MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client {
+	return a.metricsV1beta1
+}
+
+// Nodes returns NodeInterface
+// Deprecated: use CoreV1().Nodes() directly
 func (a *AccessControlClientset) Nodes() (corev1.NodeInterface, error) {
-	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	return a.delegate.CoreV1().Nodes(), nil
+	return a.CoreV1().Nodes(), nil
 }
 
-func (a *AccessControlClientset) NodesLogs(ctx context.Context, name string) (*rest.Request, error) {
-	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-
-	if _, err := a.delegate.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
-		return nil, fmt.Errorf("failed to get node %s: %w", name, err)
-	}
-
-	url := []string{"api", "v1", "nodes", name, "proxy", "logs"}
-	return a.delegate.CoreV1().RESTClient().
-		Get().
-		AbsPath(url...), nil
-}
-
-func (a *AccessControlClientset) NodesMetricses(ctx context.Context, name string, listOptions metav1.ListOptions) (*metrics.NodeMetricsList, error) {
-	gvk := &schema.GroupVersionKind{Group: metrics.GroupName, Version: metricsv1beta1api.SchemeGroupVersion.Version, Kind: "NodeMetrics"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	versionedMetrics := &metricsv1beta1api.NodeMetricsList{}
-	var err error
-	if name != "" {
-		m, err := a.metricsV1beta1.NodeMetricses().Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get metrics for node %s: %w", name, err)
-		}
-		versionedMetrics.Items = []metricsv1beta1api.NodeMetrics{*m}
-	} else {
-		versionedMetrics, err = a.metricsV1beta1.NodeMetricses().List(ctx, listOptions)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list node metrics: %w", err)
-		}
-	}
-	convertedMetrics := &metrics.NodeMetricsList{}
-	return convertedMetrics, metricsv1beta1api.Convert_v1beta1_NodeMetricsList_To_metrics_NodeMetricsList(versionedMetrics, convertedMetrics, nil)
-}
-
-func (a *AccessControlClientset) NodesStatsSummary(ctx context.Context, name string) (*rest.Request, error) {
-	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-
-	if _, err := a.delegate.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
-		return nil, fmt.Errorf("failed to get node %s: %w", name, err)
-	}
-
-	url := []string{"api", "v1", "nodes", name, "proxy", "stats", "summary"}
-	return a.delegate.CoreV1().RESTClient().
-		Get().
-		AbsPath(url...), nil
-}
-
+// Pods returns PodInterface
+// Deprecated: use CoreV1().Pods(namespace) directly
 func (a *AccessControlClientset) Pods(namespace string) (corev1.PodInterface, error) {
-	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	return a.delegate.CoreV1().Pods(namespace), nil
+	return a.CoreV1().Pods(namespace), nil
 }
 
-func (a *AccessControlClientset) PodsExec(namespace, name string, podExecOptions *v1.PodExecOptions) (remotecommand.Executor, error) {
-	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	// Compute URL
-	// https://github.com/kubernetes/kubectl/blob/5366de04e168bcbc11f5e340d131a9ca8b7d0df4/pkg/cmd/exec/exec.go#L382-L397
-	execRequest := a.delegate.CoreV1().RESTClient().
-		Post().
-		Resource("pods").
-		Namespace(namespace).
-		Name(name).
-		SubResource("exec")
-	execRequest.VersionedParams(podExecOptions, ParameterCodec)
-	spdyExec, err := remotecommand.NewSPDYExecutor(a.cfg, "POST", execRequest.URL())
-	if err != nil {
-		return nil, err
-	}
-	webSocketExec, err := remotecommand.NewWebSocketExecutor(a.cfg, "GET", execRequest.URL().String())
-	if err != nil {
-		return nil, err
-	}
-	return remotecommand.NewFallbackExecutor(webSocketExec, spdyExec, func(err error) bool {
-		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
-	})
-}
-
-func (a *AccessControlClientset) PodsMetricses(ctx context.Context, namespace, name string, listOptions metav1.ListOptions) (*metrics.PodMetricsList, error) {
-	gvk := &schema.GroupVersionKind{Group: metrics.GroupName, Version: metricsv1beta1api.SchemeGroupVersion.Version, Kind: "PodMetrics"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	versionedMetrics := &metricsv1beta1api.PodMetricsList{}
-	var err error
-	if name != "" {
-		m, err := a.metricsV1beta1.PodMetricses(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get metrics for pod %s/%s: %w", namespace, name, err)
-		}
-		versionedMetrics.Items = []metricsv1beta1api.PodMetrics{*m}
-	} else {
-		versionedMetrics, err = a.metricsV1beta1.PodMetricses(namespace).List(ctx, listOptions)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list pod metrics in namespace %s: %w", namespace, err)
-		}
-	}
-	convertedMetrics := &metrics.PodMetricsList{}
-	return convertedMetrics, metricsv1beta1api.Convert_v1beta1_PodMetricsList_To_metrics_PodMetricsList(versionedMetrics, convertedMetrics, nil)
-}
-
+// Services returns ServiceInterface
+// Deprecated: use CoreV1().Services(namespace) directly
 func (a *AccessControlClientset) Services(namespace string) (corev1.ServiceInterface, error) {
-	gvk := &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Service"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	return a.delegate.CoreV1().Services(namespace), nil
+	return a.CoreV1().Services(namespace), nil
 }
 
+// SelfSubjectAccessReviews returns SelfSubjectAccessReviewInterface
+// Deprecated: use AuthorizationV1().SelfSubjectAccessReviews() directly
 func (a *AccessControlClientset) SelfSubjectAccessReviews() (authorizationv1.SelfSubjectAccessReviewInterface, error) {
-	gvk := &schema.GroupVersionKind{Group: authorizationv1api.GroupName, Version: authorizationv1api.SchemeGroupVersion.Version, Kind: "SelfSubjectAccessReview"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	return a.delegate.AuthorizationV1().SelfSubjectAccessReviews(), nil
+	return a.AuthorizationV1().SelfSubjectAccessReviews(), nil
 }
 
 // TokenReview returns TokenReviewInterface
+// Deprecated: use AuthenticationV1().TokenReviews() directly
 func (a *AccessControlClientset) TokenReview() (authenticationv1.TokenReviewInterface, error) {
-	gvk := &schema.GroupVersionKind{Group: authenticationv1api.GroupName, Version: authorizationv1api.SchemeGroupVersion.Version, Kind: "TokenReview"}
-	if !isAllowed(a.staticConfig, gvk) {
-		return nil, isNotAllowedError(gvk)
-	}
-	return a.delegate.AuthenticationV1().TokenReviews(), nil
-}
-
-func NewAccessControlClientset(cfg *rest.Config, staticConfig *config.StaticConfig) (*AccessControlClientset, error) {
-	clientSet, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	metricsClient, err := metricsv1beta1.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &AccessControlClientset{
-		cfg:             cfg,
-		delegate:        clientSet,
-		discoveryClient: clientSet.DiscoveryClient,
-		metricsV1beta1:  metricsClient,
-		staticConfig:    staticConfig,
-	}, nil
+	return a.AuthenticationV1().TokenReviews(), nil
 }

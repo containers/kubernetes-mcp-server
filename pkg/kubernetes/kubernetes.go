@@ -41,5 +41,5 @@ func (k *Kubernetes) NewHelm() *helm.Helm {
 // NewKiali returns a Kiali client initialized with the same StaticConfig and bearer token
 // as the underlying derived Kubernetes manager.
 func (k *Kubernetes) NewKiali() *kiali.Kiali {
-	return kiali.NewKiali(k.manager.staticConfig, k.manager.cfg)
+	return kiali.NewKiali(k.manager.staticConfig, k.AccessControlClientset().cfg)
 }
