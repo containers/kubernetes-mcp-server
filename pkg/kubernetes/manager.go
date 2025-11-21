@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/fsnotify/fsnotify"
@@ -23,9 +26,37 @@ type Manager struct {
 
 	staticConfig         *config.StaticConfig
 	CloseWatchKubeConfig CloseWatchKubeConfig
+
+	clusterWatcher *clusterStateWatcher
+}
+
+// clusterState represents the cached state of the cluster
+type clusterState struct {
+	apiGroups   []string
+	isOpenShift bool
+}
+
+// clusterStateWatcher monitors cluster state changes and triggers debounced reloads
+type clusterStateWatcher struct {
+	manager        *Manager
+	pollInterval   time.Duration
+	debounceWindow time.Duration
+	lastKnownState clusterState
+	reloadCallback func() error
+	debounceTimer  *time.Timer
+	mu             sync.Mutex
+	stopCh         chan struct{}
+	stoppedCh      chan struct{}
 }
 
 var _ Openshift = (*Manager)(nil)
+
+const (
+	// DefaultClusterStatePollInterval is the default interval for polling cluster state changes
+	DefaultClusterStatePollInterval = 30 * time.Second
+	// DefaultClusterStateDebounceWindow is the default debounce window for cluster state changes
+	DefaultClusterStateDebounceWindow = 5 * time.Second
+)
 
 var (
 	ErrorKubeconfigInClusterNotAllowed = errors.New("kubeconfig manager cannot be used in in-cluster deployments")
@@ -154,6 +185,9 @@ func (m *Manager) Close() {
 	if m.CloseWatchKubeConfig != nil {
 		_ = m.CloseWatchKubeConfig()
 	}
+	if m.clusterWatcher != nil {
+		m.clusterWatcher.stop()
+	}
 }
 
 func (m *Manager) VerifyToken(ctx context.Context, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
@@ -247,5 +281,119 @@ func applyRateLimitFromEnv(cfg *rest.Config) {
 		if burst, err := strconv.Atoi(burstStr); err == nil {
 			cfg.Burst = burst
 		}
+	}
+}
+
+// WatchClusterState starts a background watcher that periodically polls for cluster state changes
+// and triggers a debounced reload when changes are detected.
+func (m *Manager) WatchClusterState(pollInterval, debounceWindow time.Duration, onClusterStateChange func() error) {
+	if m.clusterWatcher != nil {
+		m.clusterWatcher.stop()
+	}
+
+	watcher := &clusterStateWatcher{
+		manager:        m,
+		pollInterval:   pollInterval,
+		debounceWindow: debounceWindow,
+		reloadCallback: onClusterStateChange,
+		stopCh:         make(chan struct{}),
+		stoppedCh:      make(chan struct{}),
+	}
+
+	captureState := func() clusterState {
+		state := clusterState{apiGroups: []string{}}
+		if groups, err := m.accessControlClientset.DiscoveryClient().ServerGroups(); err == nil {
+			for _, group := range groups.Groups {
+				state.apiGroups = append(state.apiGroups, group.Name)
+			}
+			sort.Strings(state.apiGroups)
+		}
+		state.isOpenShift = m.IsOpenShift(context.Background())
+		return state
+	}
+	watcher.lastKnownState = captureState()
+
+	m.clusterWatcher = watcher
+
+	// Start background monitoring
+	go func() {
+		defer close(watcher.stoppedCh)
+		ticker := time.NewTicker(pollInterval)
+		defer ticker.Stop()
+
+		klog.V(2).Infof("Started cluster state watcher (poll interval: %v, debounce: %v)", pollInterval, debounceWindow)
+
+		for {
+			select {
+			case <-watcher.stopCh:
+				klog.V(2).Info("Stopping cluster state watcher")
+				return
+			case <-ticker.C:
+				// Invalidate discovery cache to get fresh API groups
+				m.accessControlClientset.DiscoveryClient().Invalidate()
+
+				watcher.mu.Lock()
+				current := captureState()
+				klog.V(3).Infof("Polled cluster state: %d API groups, OpenShift=%v", len(current.apiGroups), current.isOpenShift)
+
+				changed := current.isOpenShift != watcher.lastKnownState.isOpenShift ||
+					len(current.apiGroups) != len(watcher.lastKnownState.apiGroups)
+
+				if !changed {
+					for i := range current.apiGroups {
+						if current.apiGroups[i] != watcher.lastKnownState.apiGroups[i] {
+							changed = true
+							break
+						}
+					}
+				}
+
+				if changed {
+					klog.V(2).Info("Cluster state changed, scheduling debounced reload")
+					if watcher.debounceTimer != nil {
+						watcher.debounceTimer.Stop()
+					}
+					watcher.debounceTimer = time.AfterFunc(debounceWindow, func() {
+						klog.V(2).Info("Debounce window expired, triggering reload")
+						if err := onClusterStateChange(); err != nil {
+							klog.Errorf("Failed to reload: %v", err)
+						} else {
+							watcher.mu.Lock()
+							watcher.lastKnownState = captureState()
+							watcher.mu.Unlock()
+							klog.V(2).Info("Reload completed")
+						}
+					})
+				}
+				watcher.mu.Unlock()
+			}
+		}
+	}()
+}
+
+// stop stops the cluster state watcher
+func (w *clusterStateWatcher) stop() {
+	if w == nil {
+		return
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.debounceTimer != nil {
+		w.debounceTimer.Stop()
+	}
+
+	if w.stopCh == nil || w.stoppedCh == nil {
+		return
+	}
+
+	select {
+	case <-w.stopCh:
+		// Already closed or stopped
+		return
+	default:
+		close(w.stopCh)
+		<-w.stoppedCh
 	}
 }

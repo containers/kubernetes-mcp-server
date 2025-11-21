@@ -120,8 +120,8 @@ func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
 
 func (p *kubeConfigClusterProvider) WatchTargets(onKubeConfigChanged func() error) {
 	m := p.managers[p.defaultContext]
-
 	m.WatchKubeConfig(onKubeConfigChanged)
+	m.WatchClusterState(DefaultClusterStatePollInterval, DefaultClusterStateDebounceWindow, onKubeConfigChanged)
 }
 
 func (p *kubeConfigClusterProvider) Close() {

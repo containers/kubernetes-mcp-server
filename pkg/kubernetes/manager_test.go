@@ -228,6 +228,49 @@ func (s *ManagerTestSuite) TestNewManager() {
 	})
 }
 
+func (s *ManagerTestSuite) TestClusterStateWatcherStop() {
+	s.Run("stop() on nil watcher", func() {
+		var watcher *clusterStateWatcher
+		// Should not panic
+		watcher.stop()
+	})
+
+	s.Run("stop() on uninitialized watcher (nil channels)", func() {
+		watcher := &clusterStateWatcher{}
+		// Should not panic even with nil channels
+		watcher.stop()
+	})
+
+	s.Run("stop() on initialized watcher", func() {
+		watcher := &clusterStateWatcher{
+			stopCh:    make(chan struct{}),
+			stoppedCh: make(chan struct{}),
+		}
+		// Close the stoppedCh to simulate a running goroutine
+		go func() {
+			<-watcher.stopCh
+			close(watcher.stoppedCh)
+		}()
+		// Should not panic and should stop cleanly
+		watcher.stop()
+	})
+
+	s.Run("stop() called multiple times", func() {
+		watcher := &clusterStateWatcher{
+			stopCh:    make(chan struct{}),
+			stoppedCh: make(chan struct{}),
+		}
+		go func() {
+			<-watcher.stopCh
+			close(watcher.stoppedCh)
+		}()
+		// First stop
+		watcher.stop()
+		// Second stop should not panic
+		watcher.stop()
+	})
+}
+
 func TestManager(t *testing.T) {
 	suite.Run(t, new(ManagerTestSuite))
 }
