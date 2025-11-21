@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // Health returns health status for apps, workloads, and services across namespaces.
@@ -11,7 +12,7 @@ import (
 //   - namespaces: comma-separated list of namespaces (optional, if empty returns health for all accessible namespaces)
 //   - queryParams: optional query parameters map for filtering health data (e.g., "type", "rateInterval", "queryTime")
 //   - type: health type - "app", "service", or "workload" (default: "app")
-//   - rateInterval: rate interval for fetching error rate (default: "10m")
+//   - rateInterval: rate interval for fetching error rate (default: "1m")
 //   - queryTime: Unix timestamp for the prometheus query (optional)
 func (k *Kiali) Health(ctx context.Context, namespaces string, queryParams map[string]string) (string, error) {
 	// Build query parameters
@@ -32,6 +33,18 @@ func (k *Kiali) Health(ctx context.Context, namespaces string, queryParams map[s
 			q.Set(key, value)
 		}
 	}
+
+	// Ensure health "type" aligns with graphType (versionedApp -> app)
+	healthType := "app"
+	if gt, ok := queryParams["graphType"]; ok && strings.TrimSpace(gt) != "" {
+		v := strings.TrimSpace(gt)
+		if strings.EqualFold(v, "versionedApp") {
+			healthType = "app"
+		} else {
+			healthType = v
+		}
+	}
+	q.Set("type", healthType)
 
 	u.RawQuery = q.Encode()
 	endpoint := u.String()

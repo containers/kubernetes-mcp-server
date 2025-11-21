@@ -348,92 +348,38 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kiali</summary>
 
-- **kiali_graph** - Check the status of my mesh by querying Kiali graph
+- **kiali_get_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Use this for high-level overviews
+  - `graphType` (`string`) - Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'
   - `namespace` (`string`) - Optional single namespace to include in the graph (alternative to namespaces)
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
+  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '60s'
 
-- **kiali_mesh_status** - Get the status of mesh components including Istio, Kiali, Grafana, Prometheus and their interactions, versions, and health status
+- **kiali_manage_istio_config** - Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects
+  - `action` (`string`) **(required)** - Action to perform: list, get, create, patch, or delete
+  - `group` (`string`) - API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')
+  - `json_data` (`string`) - JSON data to apply or create the object
+  - `kind` (`string`) - Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')
+  - `name` (`string`) - Name of the Istio object
+  - `namespace` (`string`) - Namespace containing the Istio object
+  - `version` (`string`) - API version of the Istio object (e.g., 'v1', 'v1beta1')
 
-- **kiali_istio_config** - Get all Istio configuration objects in the mesh including their full YAML resources and details
-
-- **kiali_istio_object_details** - Get detailed information about a specific Istio object including validation and help information
-  - `group` (`string`) **(required)** - API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')
-  - `kind` (`string`) **(required)** - Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')
-  - `name` (`string`) **(required)** - Name of the Istio object
-  - `namespace` (`string`) **(required)** - Namespace containing the Istio object
-  - `version` (`string`) **(required)** - API version of the Istio object (e.g., 'v1', 'v1beta1')
-
-- **kiali_istio_object_patch** - Modify an existing Istio object using PATCH method. The JSON patch data will be applied to the existing object.
-  - `group` (`string`) **(required)** - API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')
-  - `json_patch` (`string`) **(required)** - JSON patch data to apply to the object
-  - `kind` (`string`) **(required)** - Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')
-  - `name` (`string`) **(required)** - Name of the Istio object
-  - `namespace` (`string`) **(required)** - Namespace containing the Istio object
-  - `version` (`string`) **(required)** - API version of the Istio object (e.g., 'v1', 'v1beta1')
-
-- **kiali_istio_object_create** - Create a new Istio object using POST method. The JSON data will be used to create the new object.
-  - `group` (`string`) **(required)** - API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')
-  - `json_data` (`string`) **(required)** - JSON data for the new object
-  - `kind` (`string`) **(required)** - Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')
-  - `namespace` (`string`) **(required)** - Namespace where the Istio object will be created
-  - `version` (`string`) **(required)** - API version of the Istio object (e.g., 'v1', 'v1beta1')
-
-- **kiali_istio_object_delete** - Delete an existing Istio object using DELETE method.
-  - `group` (`string`) **(required)** - API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')
-  - `kind` (`string`) **(required)** - Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')
-  - `name` (`string`) **(required)** - Name of the Istio object
-  - `namespace` (`string`) **(required)** - Namespace containing the Istio object
-  - `version` (`string`) **(required)** - API version of the Istio object (e.g., 'v1', 'v1beta1')
-
-- **kiali_validations_list** - List all the validations in the current cluster from all namespaces
-  - `namespace` (`string`) - Optional single namespace to retrieve validations from (alternative to namespaces)
-  - `namespaces` (`string`) - Optional comma-separated list of namespaces to retrieve validations from
-
-- **kiali_namespaces** - Get all namespaces in the mesh that the user has access to
-
-- **kiali_services_list** - Get all services in the mesh across specified namespaces with health and Istio resource information
+- **kiali_get_resource_details** - Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh
   - `namespaces` (`string`) - Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces
+  - `resource_name` (`string`) - Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).
+  - `resource_type` (`string`) - Type of resource to get details for (service, workload)
 
-- **kiali_service_details** - Get detailed information for a specific service in a namespace, including validation, health status, and configuration
-  - `namespace` (`string`) **(required)** - Namespace containing the service
-  - `service` (`string`) **(required)** - Name of the service to get details for
-
-- **kiali_service_metrics** - Get metrics for a specific service in a namespace. Supports filtering by time range, direction (inbound/outbound), reporter, and other query parameters
+- **kiali_get_metrics** - Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh
   - `byLabels` (`string`) - Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional
   - `direction` (`string`) - Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'
-  - `duration` (`string`) - Duration of the query period in seconds (e.g., '1800' for 30 minutes). Optional, defaults to 1800 seconds
-  - `namespace` (`string`) **(required)** - Namespace containing the service
+  - `duration` (`string`) - Time range to get metrics for (optional string - if provided, gets metrics; if empty, get default 1800s).
+  - `namespace` (`string`) **(required)** - Namespace to get resources from
   - `quantiles` (`string`) - Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional
   - `rateInterval` (`string`) - Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '1m'
   - `reporter` (`string`) - Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'
   - `requestProtocol` (`string`) - Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional
-  - `service` (`string`) **(required)** - Name of the service to get metrics for
+  - `resource_name` (`string`) **(required)** - Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).
+  - `resource_type` (`string`) **(required)** - Type of resource to get details for (service, workload)
   - `step` (`string`) - Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds
-
-- **kiali_workloads_list** - Get all workloads in the mesh across specified namespaces with health and Istio resource information
-  - `namespaces` (`string`) - Comma-separated list of namespaces to get workloads from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list workloads from all accessible namespaces
-
-- **kiali_workload_details** - Get detailed information for a specific workload in a namespace, including validation, health status, and configuration
-  - `namespace` (`string`) **(required)** - Namespace containing the workload
-  - `workload` (`string`) **(required)** - Name of the workload to get details for
-
-- **kiali_workload_metrics** - Get metrics for a specific workload in a namespace. Supports filtering by time range, direction (inbound/outbound), reporter, and other query parameters
-  - `byLabels` (`string`) - Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional
-  - `direction` (`string`) - Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'
-  - `duration` (`string`) - Duration of the query period in seconds (e.g., '1800' for 30 minutes). Optional, defaults to 1800 seconds
-  - `namespace` (`string`) **(required)** - Namespace containing the workload
-  - `quantiles` (`string`) - Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional
-  - `rateInterval` (`string`) - Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '1m'
-  - `reporter` (`string`) - Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'
-  - `requestProtocol` (`string`) - Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional
-  - `step` (`string`) - Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds
-  - `workload` (`string`) **(required)** - Name of the workload to get metrics for
-
-- **kiali_health** - Get health status for apps, workloads, and services across specified namespaces in the mesh. Returns health information including error rates and status for the requested resource type
-  - `namespaces` (`string`) - Comma-separated list of namespaces to get health from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, returns health for all accessible namespaces
-  - `queryTime` (`string`) - Unix timestamp (in seconds) for the prometheus query. If not provided, uses current time. Optional
-  - `rateInterval` (`string`) - Rate interval for fetching error rate (e.g., '10m', '5m', '1h'). Default: '10m'
-  - `type` (`string`) - Type of health to retrieve: 'app', 'service', or 'workload'. Default: 'app'
 
 - **workload_logs** - Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.
   - `container` (`string`) - Optional container name to filter logs. If not provided, automatically detects and uses the main application container (excludes istio-proxy and istio-init)
@@ -442,35 +388,16 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `tail` (`integer`) - Number of lines to retrieve from the end of logs (default: 100)
   - `workload` (`string`) **(required)** - Name of the workload to get logs for
 
-- **kiali_app_traces** - Get distributed tracing data for a specific app in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.
-  - `app` (`string`) **(required)** - Name of the app to get traces for
+- **kiali_get_traces** - Gets traces for a specific resource (app, service, workload) in a namespace
   - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
   - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional)
   - `limit` (`integer`) - Maximum number of traces to return (default: 100)
   - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
-  - `namespace` (`string`) **(required)** - Namespace containing the app
+  - `namespace` (`string`) **(required)** - Namespace to get resources from
+  - `resource_name` (`string`) **(required)** - Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).
+  - `resource_type` (`string`) **(required)** - Type of resource to get metrics for (app, service, workload)
   - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
   - `tags` (`string`) - JSON string of tags to filter traces (optional)
-
-- **kiali_service_traces** - Get distributed tracing data for a specific service in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.
-  - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional)
-  - `limit` (`integer`) - Maximum number of traces to return (default: 100)
-  - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
-  - `namespace` (`string`) **(required)** - Namespace containing the service
-  - `service` (`string`) **(required)** - Name of the service to get traces for
-  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
-  - `tags` (`string`) - JSON string of tags to filter traces (optional)
-
-- **kiali_workload_traces** - Get distributed tracing data for a specific workload in a namespace. Returns trace information including spans, duration, and error details for troubleshooting and performance analysis.
-  - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional)
-  - `limit` (`integer`) - Maximum number of traces to return (default: 100)
-  - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
-  - `namespace` (`string`) **(required)** - Namespace containing the workload
-  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
-  - `tags` (`string`) - JSON string of tags to filter traces (optional)
-  - `workload` (`string`) **(required)** - Name of the workload to get traces for
 
 </details>
 

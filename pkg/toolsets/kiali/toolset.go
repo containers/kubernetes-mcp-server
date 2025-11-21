@@ -22,20 +22,12 @@ func (t *Toolset) GetDescription() string {
 
 func (t *Toolset) GetTools(_ internalk8s.Openshift) []api.ServerTool {
 	return slices.Concat(
-		initGraph(),
-		initMeshStatus(),
-		initIstioConfig(),
-		initIstioObjectDetails(),
-		initIstioObjectPatch(),
-		initIstioObjectCreate(),
-		initIstioObjectDelete(),
-		initValidations(),
-		initNamespaces(),
-		initServices(),
-		initWorkloads(),
-		initHealth(),
+		initGetMeshGraph(),
+		initManageIstioConfig(),
+		initGetResourceDetails(),
+		initGetMetrics(),
 		initLogs(),
-		initTraces(),
+		initGetTraces(),
 	)
 }
 
