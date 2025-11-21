@@ -57,6 +57,7 @@ const (
 	flagVersion              = "version"
 	flagLogLevel             = "log-level"
 	flagConfig               = "config"
+	flagConfigDir            = "config-dir"
 	flagPort                 = "port"
 	flagSSEBaseUrl           = "sse-base-url"
 	flagKubeconfig           = "kubeconfig"
@@ -92,6 +93,7 @@ type MCPServerOptions struct {
 	DisableMultiCluster  bool
 
 	ConfigPath   string
+	ConfigDir    string
 	StaticConfig *config.StaticConfig
 
 	genericiooptions.IOStreams
@@ -129,6 +131,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Version, flagVersion, o.Version, "Print version information and quit")
 	cmd.Flags().IntVar(&o.LogLevel, flagLogLevel, o.LogLevel, "Set the log level (from 0 to 9)")
 	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
+	cmd.Flags().StringVar(&o.ConfigDir, flagConfigDir, o.ConfigDir, "Path to drop-in configuration directory (files loaded in lexical order).")
 	cmd.Flags().StringVar(&o.Port, flagPort, o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
 	cmd.Flags().StringVar(&o.SSEBaseUrl, flagSSEBaseUrl, o.SSEBaseUrl, "SSE public base URL to use when sending the endpoint message (e.g. https://example.com)")
 	cmd.Flags().StringVar(&o.Kubeconfig, flagKubeconfig, o.Kubeconfig, "Path to the kubeconfig file to use for authentication")
@@ -155,7 +158,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 
 func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
 	if m.ConfigPath != "" {
-		cnf, err := config.Read(m.ConfigPath)
+		cnf, err := config.Read(m.ConfigPath, m.ConfigDir)
 		if err != nil {
 			return err
 		}
@@ -319,7 +322,11 @@ func (m *MCPServerOptions) Run() error {
 		oidcProvider = provider
 	}
 
-	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: m.StaticConfig})
+	mcpServer, err := mcp.NewServer(mcp.Configuration{
+		StaticConfig: m.StaticConfig,
+		ConfigPath:   m.ConfigPath,
+		ConfigDir:    m.ConfigDir,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}

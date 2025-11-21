@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"slices"
+	"syscall"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	authenticationapiv1 "k8s.io/api/authentication/v1"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -25,6 +28,8 @@ const TokenScopesContextKey = ContextKey("TokenScopesContextKey")
 
 type Configuration struct {
 	*config.StaticConfig
+	ConfigPath string // Path to main config file (for watching)
+	ConfigDir  string // Path to drop-in config directory (for watching)
 	listOutput output.Output
 	toolsets   []api.Toolset
 }
@@ -66,6 +71,7 @@ type Server struct {
 	server        *mcp.Server
 	enabledTools  []string
 	p             internalk8s.Provider
+	sigHupCh      chan os.Signal
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
@@ -92,6 +98,9 @@ func NewServer(configuration Configuration) (*Server, error) {
 		return nil, err
 	}
 	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
+
+	// Set up SIGHUP handler for configuration reload
+	s.setupSIGHUPHandler()
 
 	return s, nil
 }
@@ -223,7 +232,61 @@ func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
 }
 
+// setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP
+func (s *Server) setupSIGHUPHandler() {
+	s.sigHupCh = make(chan os.Signal, 1)
+	signal.Notify(s.sigHupCh, syscall.SIGHUP)
+
+	go func() {
+		for range s.sigHupCh {
+			klog.V(1).Info("Received SIGHUP signal")
+			if err := s.reloadConfiguration(); err != nil {
+				klog.Errorf("Failed to reload configuration: %v", err)
+			} else {
+				klog.V(1).Info("Configuration reloaded successfully via SIGHUP")
+			}
+		}
+	}()
+
+	klog.V(2).Info("SIGHUP handler registered for configuration reload")
+}
+
+// reloadConfiguration reloads the configuration from disk and reinitializes the server
+func (s *Server) reloadConfiguration() error {
+	klog.V(1).Info("Reloading configuration...")
+
+	// Reload config from files
+	newConfig, err := config.Read(s.configuration.ConfigPath, s.configuration.ConfigDir)
+	if err != nil {
+		return fmt.Errorf("failed to reload configuration: %w", err)
+	}
+
+	// Update the configuration
+	s.configuration.StaticConfig = newConfig
+	// Clear cached values so they get recomputed
+	s.configuration.listOutput = nil
+	s.configuration.toolsets = nil
+
+	// Reload the Kubernetes provider (this will also rebuild tools)
+	if err := s.reloadKubernetesClusterProvider(); err != nil {
+		return fmt.Errorf("failed to reload Kubernetes provider: %w", err)
+	}
+
+	klog.V(1).Info("Configuration reloaded successfully")
+	return nil
+}
+
 func (s *Server) Close() {
+	if s.sigHupCh != nil {
+		signal.Stop(s.sigHupCh)
+		// Check if channel is already closed
+		select {
+		case <-s.sigHupCh:
+			// Already closed
+		default:
+			close(s.sigHupCh)
+		}
+	}
 	if s.p != nil {
 		s.p.Close()
 	}

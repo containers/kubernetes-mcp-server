@@ -66,7 +66,7 @@ func (s *ProviderConfigSuite) TestReadConfigValid() {
 		int_prop = 42
 	`)
 
-	config, err := Read(validConfigPath)
+	config, err := Read(validConfigPath, "")
 	s.Run("returns no error for valid file with registered provider config", func() {
 		s.Require().NoError(err, "Expected no error for valid file, got %v", err)
 	})
@@ -95,7 +95,7 @@ func (s *ProviderConfigSuite) TestReadConfigInvalidProviderConfig() {
 		int_prop = 42
 	`)
 
-	config, err := Read(invalidConfigPath)
+	config, err := Read(invalidConfigPath, "")
 	s.Run("returns error for invalid provider config", func() {
 		s.Require().NotNil(err, "Expected error for invalid provider config, got nil")
 		s.ErrorContains(err, "validation error forced by test", "Expected validation error from provider config")
@@ -114,7 +114,7 @@ func (s *ProviderConfigSuite) TestReadConfigUnregisteredProviderConfig() {
 		int_prop = 42
 	`)
 
-	config, err := Read(invalidConfigPath)
+	config, err := Read(invalidConfigPath, "")
 	s.Run("returns no error for unregistered provider config", func() {
 		s.Require().NoError(err, "Expected no error for unregistered provider config, got %v", err)
 	})
@@ -139,7 +139,7 @@ func (s *ProviderConfigSuite) TestReadConfigParserError() {
 		int_prop = 42
 	`)
 
-	config, err := Read(invalidConfigPath)
+	config, err := Read(invalidConfigPath, "")
 	s.Run("returns error for provider config parser error", func() {
 		s.Require().NotNil(err, "Expected error for provider config parser error, got nil")
 		s.ErrorContains(err, "parser error forced by test", "Expected parser error from provider config")
@@ -170,7 +170,7 @@ func (s *ProviderConfigSuite) TestConfigDirPathInContext() {
 	absConfigPath, err := filepath.Abs(configPath)
 	s.Require().NoError(err, "test error: getting the absConfigPath should not fail")
 
-	_, err = Read(configPath)
+	_, err = Read(configPath, "")
 	s.Run("provides config directory path in context to parser", func() {
 		s.Require().NoError(err, "Expected no error reading config")
 		s.NotEmpty(capturedDirPath, "Expected non-empty directory path in context")
