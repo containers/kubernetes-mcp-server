@@ -190,6 +190,71 @@
   },
   {
     "annotations": {
+      "title": "Node: Files",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Perform file operations (put, get, list) on a Kubernetes node filesystem by creating a privileged pod. WARNING: Requires privileged access to the node. This tool creates a temporary privileged pod that mounts the node's root filesystem to perform file operations. The pod is automatically deleted after the operation completes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "enum": [
+            "extra-cluster",
+            "fake-context"
+          ],
+          "type": "string"
+        },
+        "dest_path": {
+          "description": "Destination path for the operation. For 'put': node file path. For 'get': local file path (optional, defaults to current directory). Not used for 'list'.",
+          "type": "string"
+        },
+        "image": {
+          "default": "busybox",
+          "description": "Container image to use for the privileged pod (optional, defaults to 'busybox')",
+          "type": "string"
+        },
+        "namespace": {
+          "default": "default",
+          "description": "Namespace to create the temporary pod in (optional, defaults to 'default')",
+          "type": "string"
+        },
+        "node_name": {
+          "description": "Name of the node to access",
+          "type": "string"
+        },
+        "operation": {
+          "description": "Operation to perform: 'put' (copy from local to node), 'get' (copy from node to local), or 'list' (list files in a directory)",
+          "enum": [
+            "put",
+            "get",
+            "list"
+          ],
+          "type": "string"
+        },
+        "privileged": {
+          "default": true,
+          "description": "Whether to run the container as privileged. Required for accessing node files. Set to false only if your use case doesn't require privileged access (default: true)",
+          "type": "boolean"
+        },
+        "source_path": {
+          "description": "Source path for the operation. For 'put': local file path. For 'get': node file path. For 'list': node directory path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_name",
+        "operation",
+        "source_path"
+      ]
+    },
+    "name": "node_files"
+  },
+  {
+    "annotations": {
       "title": "Node: Log",
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -212,7 +277,7 @@
           "type": "string"
         },
         "query": {
-          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
+          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/<log-file-name>\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
           "type": "string"
         },
         "tailLines": {
