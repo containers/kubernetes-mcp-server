@@ -12,21 +12,17 @@ import (
 
 type NodesTopSuite struct {
 	BaseMcpSuite
-	mockServer *test.MockServer
+	mockServer       *test.MockServer
+	discoveryHandler *test.DiscoveryClientHandler
 }
 
 func (s *NodesTopSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
-	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
-		if req.URL.Path == "/api" {
-			_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":[],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
-			return
-		}
-	}))
+
+	s.discoveryHandler = &test.DiscoveryClientHandler{}
+	s.mockServer.Handle(s.discoveryHandler)
 }
 
 func (s *NodesTopSuite) TearDownTest() {
@@ -37,12 +33,9 @@ func (s *NodesTopSuite) TearDownTest() {
 }
 
 func (s *NodesTopSuite) WithMetricsServer() {
+	s.discoveryHandler.Groups = []string{`{"name":"metrics.k8s.io","versions":[{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}],"preferredVersion":{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}}`}
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups)
-		if req.URL.Path == "/apis" {
-			_, _ = w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[{"name":"metrics.k8s.io","versions":[{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}],"preferredVersion":{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}}]}`))
-			return
-		}
+		w.Header().Set("Content-Type", "application/json")
 		// Request Performed by DiscoveryClient to Kube API (Get API Resources)
 		if req.URL.Path == "/apis/metrics.k8s.io/v1beta1" {
 			_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"metrics.k8s.io/v1beta1","resources":[{"name":"nodes","singularName":"","namespaced":false,"kind":"NodeMetrics","verbs":["get","list"]}]}`))

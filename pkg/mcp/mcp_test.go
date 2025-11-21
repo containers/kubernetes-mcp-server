@@ -36,7 +36,6 @@ func (s *McpHeadersSuite) SetupTest() {
 			w.WriteHeader(200)
 			return
 		}
-		w.WriteHeader(404)
 	}))
 }
 
