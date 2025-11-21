@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -11,8 +12,9 @@ import (
 
 type McpHeadersSuite struct {
 	BaseMcpSuite
-	mockServer  *test.MockServer
-	pathHeaders map[string]http.Header
+	mockServer     *test.MockServer
+	pathHeaders    map[string]http.Header
+	pathHeadersMux sync.Mutex
 }
 
 func (s *McpHeadersSuite) SetupTest() {
@@ -21,7 +23,9 @@ func (s *McpHeadersSuite) SetupTest() {
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 	s.pathHeaders = make(map[string]http.Header)
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		s.pathHeadersMux.Lock()
 		s.pathHeaders[req.URL.Path] = req.Header.Clone()
+		s.pathHeadersMux.Unlock()
 	}))
 	s.mockServer.Handle(&test.DiscoveryClientHandler{})
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -51,23 +55,40 @@ func (s *McpHeadersSuite) TestAuthorizationHeaderPropagation() {
 	for _, header := range cases {
 		s.InitMcpClient(transport.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"}))
 		_, _ = s.CallTool("pods_list", map[string]interface{}{})
-		s.Require().Greater(len(s.pathHeaders), 0, "No requests were made to Kube API")
+		s.pathHeadersMux.Lock()
+		pathHeadersLen := len(s.pathHeaders)
+		s.pathHeadersMux.Unlock()
+		s.Require().Greater(pathHeadersLen, 0, "No requests were made to Kube API")
 		s.Run("DiscoveryClient propagates "+header+" header to Kube API", func() {
-			s.Require().NotNil(s.pathHeaders["/api"], "No requests were made to /api")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api"].Get("Authorization"), "Overridden header Authorization not found in request to /api")
-			s.Require().NotNil(s.pathHeaders["/apis"], "No requests were made to /apis")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/apis"].Get("Authorization"), "Overridden header Authorization not found in request to /apis")
-			s.Require().NotNil(s.pathHeaders["/api/v1"], "No requests were made to /api/v1")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api/v1"].Get("Authorization"), "Overridden header Authorization not found in request to /api/v1")
+			s.pathHeadersMux.Lock()
+			apiHeaders := s.pathHeaders["/api"]
+			apisHeaders := s.pathHeaders["/apis"]
+			apiV1Headers := s.pathHeaders["/api/v1"]
+			s.pathHeadersMux.Unlock()
+
+			s.Require().NotNil(apiHeaders, "No requests were made to /api")
+			s.Equal("Bearer a-token-from-mcp-client", apiHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /api")
+			s.Require().NotNil(apisHeaders, "No requests were made to /apis")
+			s.Equal("Bearer a-token-from-mcp-client", apisHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /apis")
+			s.Require().NotNil(apiV1Headers, "No requests were made to /api/v1")
+			s.Equal("Bearer a-token-from-mcp-client", apiV1Headers.Get("Authorization"), "Overridden header Authorization not found in request to /api/v1")
 		})
 		s.Run("DynamicClient propagates "+header+" header to Kube API", func() {
-			s.Require().NotNil(s.pathHeaders["/api/v1/namespaces/default/pods"], "No requests were made to /api/v1/namespaces/default/pods")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api/v1/namespaces/default/pods"].Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods")
+			s.pathHeadersMux.Lock()
+			podsHeaders := s.pathHeaders["/api/v1/namespaces/default/pods"]
+			s.pathHeadersMux.Unlock()
+
+			s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
+			s.Equal("Bearer a-token-from-mcp-client", podsHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods")
 		})
 		_, _ = s.CallTool("pods_delete", map[string]interface{}{"name": "a-pod-to-delete"})
 		s.Run("kubernetes.Interface propagates "+header+" header to Kube API", func() {
-			s.Require().NotNil(s.pathHeaders["/api/v1/namespaces/default/pods/a-pod-to-delete"], "No requests were made to /api/v1/namespaces/default/pods/a-pod-to-delete")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api/v1/namespaces/default/pods/a-pod-to-delete"].Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods/a-pod-to-delete")
+			s.pathHeadersMux.Lock()
+			podDeleteHeaders := s.pathHeaders["/api/v1/namespaces/default/pods/a-pod-to-delete"]
+			s.pathHeadersMux.Unlock()
+
+			s.Require().NotNil(podDeleteHeaders, "No requests were made to /api/v1/namespaces/default/pods/a-pod-to-delete")
+			s.Equal("Bearer a-token-from-mcp-client", podDeleteHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods/a-pod-to-delete")
 		})
 
 	}
