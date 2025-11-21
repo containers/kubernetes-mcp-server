@@ -56,7 +56,7 @@ func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 }
 
 func (s *ProviderKubeconfigTestSuite) TestVerifyToken() {
-	s.mockServer.Handle(&test.TokenReviewHandler{})
+	s.mockServer.Handle(test.NewTokenReviewHandler())
 
 	s.Run("VerifyToken returns UserInfo for non-empty context", func() {
 		userInfo, audiences, err := s.provider.VerifyToken(s.T().Context(), "fake-context", "some-token", "the-audience")

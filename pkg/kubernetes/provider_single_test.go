@@ -57,7 +57,7 @@ func (s *ProviderSingleTestSuite) TestWithOpenShiftCluster() {
 }
 
 func (s *ProviderSingleTestSuite) TestVerifyToken() {
-	s.mockServer.Handle(&test.TokenReviewHandler{})
+	s.mockServer.Handle(test.NewTokenReviewHandler())
 
 	s.Run("VerifyToken returns UserInfo for empty target (default target)", func() {
 		userInfo, audiences, err := s.provider.VerifyToken(s.T().Context(), "", "the-token", "the-audience")

@@ -3,10 +3,12 @@ package test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -186,7 +188,10 @@ WaitForStreams:
 	return ctx, nil
 }
 
-type DiscoveryClientHandler struct{}
+type DiscoveryClientHandler struct {
+	V1Resources []string
+	Groups      []string
+}
 
 var _ http.Handler = (*DiscoveryClientHandler)(nil)
 
@@ -200,14 +205,24 @@ func (h *DiscoveryClientHandler) ServeHTTP(w http.ResponseWriter, req *http.Requ
 	// Request Performed by DiscoveryClient to Kube API (Get API Groups)
 	if req.URL.Path == "/apis" {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[]}`))
+		_, _ = fmt.Fprintf(w, `{"kind":"APIGroupList","apiVersion":"v1","groups":[%s]}`, strings.Join(append(h.Groups,
+			`{"name":"apps","versions":[{"groupVersion":"apps/v1","version":"v1"}],"preferredVersion":{"groupVersion":"apps/v1","version":"v1"}}`,
+		), ","))
 		return
 	}
 	// Request Performed by DiscoveryClient to Kube API (Get API Resources)
 	if req.URL.Path == "/api/v1" {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","resources":[
-			{"name":"pods","singularName":"","namespaced":true,"kind":"Pod","verbs":["get","list","watch","create","update","patch","delete"]}
+		_, _ = fmt.Fprintf(w, `{"kind":"APIResourceList","apiVersion":"v1","resources":[%s]}`, strings.Join(append(h.V1Resources,
+			`{"name":"nodes","singularName":"","namespaced":false,"kind":"Node","verbs":["get","list","watch"]}`,
+			`{"name":"pods","singularName":"","namespaced":true,"kind":"Pod","verbs":["get","list","watch","create","update","patch","delete"]}`,
+		), ","))
+		return
+	}
+	if req.URL.Path == "/apis/apps/v1" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"apps/v1","resources":[
+			{"name":"deployments","singularName":"","namespaced":true,"kind":"Deployment","verbs":["get","list","watch","create","update","patch","delete"]}
 		]}`))
 		return
 	}
@@ -264,12 +279,27 @@ const tokenReviewSuccessful = `
 	}`
 
 type TokenReviewHandler struct {
+	DiscoveryClientHandler
 	TokenReviewed bool
 }
 
 var _ http.Handler = (*TokenReviewHandler)(nil)
 
+func NewTokenReviewHandler() *TokenReviewHandler {
+	trh := &TokenReviewHandler{}
+	trh.Groups = []string{
+		`{"name":"authentication.k8s.io","versions":[{"groupVersion":"authentication.k8s.io/v1","version":"v1"}],"preferredVersion":{"groupVersion":"authentication.k8s.io/v1","version":"v1"}}`,
+	}
+	return trh
+}
+
 func (h *TokenReviewHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	h.DiscoveryClientHandler.ServeHTTP(w, req)
+	if req.URL.EscapedPath() == "/apis/authentication.k8s.io/v1" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"authentication.k8s.io/v1","resources":[{"name":"tokenreviews","singularName":"","namespaced":false,"kind":"TokenReview","verbs":["create"]}]}`))
+		return
+	}
 	if req.URL.EscapedPath() == "/apis/authentication.k8s.io/v1/tokenreviews" {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(tokenReviewSuccessful))
