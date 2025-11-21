@@ -6,6 +6,7 @@ node_modules/
 
 .npmrc
 kubernetes-mcp-server
+!charts/kubernetes-mcp-server
 !cmd/kubernetes-mcp-server
 !pkg/kubernetes-mcp-server
 npm/kubernetes-mcp-server/README.md

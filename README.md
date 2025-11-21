@@ -477,6 +477,10 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-END -->
 
+## Helm Chart
+
+A [Helm Chart](https://helm.sh) is available to simplify the deployment of the Kubernetes MCP server. Additional details can be found in he [chart README](./charts/kubernetes-mcp-server/README.md).
+
 ## 🧑‍💻 Development <a id="development"></a>
 
 ### Running with mcp-inspector
