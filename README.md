@@ -348,11 +348,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kiali</summary>
 
-- **kiali_graph** - Check the status of my mesh by querying Kiali graph
+- **kiali_get_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Use this for high-level overviews
+  - `graphType` (`string`) - Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'
   - `namespace` (`string`) - Optional single namespace to include in the graph (alternative to namespaces)
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
-
-- **kiali_mesh_status** - Get the status of mesh components including Istio, Kiali, Grafana, Prometheus and their interactions, versions, and health status
+  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '60s'
 
 - **kiali_istio_config** - Get all Istio configuration objects in the mesh including their full YAML resources and details
 
@@ -388,8 +388,6 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **kiali_validations_list** - List all the validations in the current cluster from all namespaces
   - `namespace` (`string`) - Optional single namespace to retrieve validations from (alternative to namespaces)
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to retrieve validations from
-
-- **kiali_namespaces** - Get all namespaces in the mesh that the user has access to
 
 - **kiali_services_list** - Get all services in the mesh across specified namespaces with health and Istio resource information
   - `namespaces` (`string`) - Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces
@@ -428,12 +426,6 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `requestProtocol` (`string`) - Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional
   - `step` (`string`) - Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds
   - `workload` (`string`) **(required)** - Name of the workload to get metrics for
-
-- **kiali_health** - Get health status for apps, workloads, and services across specified namespaces in the mesh. Returns health information including error rates and status for the requested resource type
-  - `namespaces` (`string`) - Comma-separated list of namespaces to get health from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, returns health for all accessible namespaces
-  - `queryTime` (`string`) - Unix timestamp (in seconds) for the prometheus query. If not provided, uses current time. Optional
-  - `rateInterval` (`string`) - Rate interval for fetching error rate (e.g., '10m', '5m', '1h'). Default: '10m'
-  - `type` (`string`) - Type of health to retrieve: 'app', 'service', or 'workload'. Default: 'app'
 
 - **workload_logs** - Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.
   - `container` (`string`) - Optional container name to filter logs. If not provided, automatically detects and uses the main application container (excludes istio-proxy and istio-init)
