@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: scale-down-deployment
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Scale down the replicas of deployment 'web-service' in namespace 'scale-down-test' by 50%"

@@ -1,0 +1,155 @@
+name: Gevals MCP Evaluation
+
+on:
+  # Weekly schedule - runs every Monday at 9 AM UTC
+  schedule:
+    - cron: '0 9 * * 1'
+
+  # Manual trigger via PR comments
+  issue_comment:
+    types: [created]
+
+  # Allow manual workflow dispatch for testing
+  workflow_dispatch:
+    inputs:
+      task-filter:
+        description: 'Regular expression to filter tasks (optional)'
+        required: false
+        default: ''
+      verbose:
+        description: 'Enable verbose output'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  # Only run once for latest commit per ref and cancel other (previous) runs.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: 1.25
+  KIND_CLUSTER_NAME: mcp-eval-cluster
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Check if workflow should run based on trigger
+  check-trigger:
+    name: Check if evaluation should run
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/run-gevals'))
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+      pr-number: ${{ steps.check.outputs.pr-number }}
+      pr-ref: ${{ steps.check.outputs.pr-ref }}
+    steps:
+      - name: Check trigger conditions
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            # Check if commenter is a maintainer (has write access)
+            PERMISSION=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" \
+              | jq -r '.permission')
+
+            if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" ]]; then
+              echo "should-run=true" >> $GITHUB_OUTPUT
+              echo "pr-number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+              echo "pr-ref=refs/pull/${{ github.event.issue.number }}/head" >> $GITHUB_OUTPUT
+            else
+              echo "should-run=false" >> $GITHUB_OUTPUT
+              echo "User ${{ github.event.comment.user.login }} does not have permission to trigger evaluations"
+            fi
+          else
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "pr-ref=${{ github.ref }}" >> $GITHUB_OUTPUT
+          fi
+
+  # Run gevals evaluation with Kind cluster
+  run-evaluation:
+    name: Run MCP Evaluation
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-trigger.outputs.pr-ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup Kind cluster
+        run: make kind-create-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }}
+
+      - name: Start MCP server
+        run: make run-server
+
+      - name: Run gevals evaluation
+        id: gevals
+        uses: genmcp/gevals/.github/actions/gevals-action@main
+        with:
+          eval-config: 'evals/openai-agent/eval.yaml'
+          gevals-version: 'latest'
+          task-filter: ${{ github.event.inputs.task-filter || '' }}
+          output-format: 'json'
+          verbose: ${{ github.event.inputs.verbose || 'false' }}
+          upload-artifacts: 'true'
+          artifact-name: 'gevals-results'
+          fail-on-error: 'false'
+          task-pass-threshold: '0.8'
+          assertion-pass-threshold: '0.8'
+          working-directory: '.'
+        env:
+          # OpenAI Agent configuration
+          MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
+          MODEL_KEY: ${{ secrets.MODEL_KEY }}
+          MODEL_NAME: ${{ secrets.MODEL_NAME }}
+          # LLM Judge configuration
+          JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
+          JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
+          JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          make stop-server || true
+          make kind-delete-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }} || true
+
+      - name: Post results comment on PR
+        if: github.event_name == 'issue_comment' && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PASS_RATE=$(awk "BEGIN {printf \"%.1f\", ${{ steps.gevals.outputs.task-pass-rate }} * 100}")
+
+          gh pr comment ${{ needs.check-trigger.outputs.pr-number }} --body "$(cat <<EOF
+          ## Gevals MCP Evaluation Results
+
+          **Summary:** ${{ steps.gevals.outputs.tasks-passed }}/${{ steps.gevals.outputs.tasks-total }} tasks passed (${PASS_RATE}%)
+
+          | Metric | Result |
+          |--------|--------|
+          | Tasks Passed | ${{ steps.gevals.outputs.tasks-passed }}/${{ steps.gevals.outputs.tasks-total }} |
+          | Assertions Passed | ${{ steps.gevals.outputs.assertions-passed }}/${{ steps.gevals.outputs.assertions-total }} |
+          | Overall | ${{ steps.gevals.outputs.passed == 'true' && 'Passed' || 'Failed' }} |
+
+          [View full results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          EOF
+          )"

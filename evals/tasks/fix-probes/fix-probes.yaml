@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: fix-probes
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: My webapp in the orders namespace is not working? Can you please fix it?

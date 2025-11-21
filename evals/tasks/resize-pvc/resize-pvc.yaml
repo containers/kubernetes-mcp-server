@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: resize-pvc
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "resize the storage volume to 15Gi for the storage-pod in `resize-pv` namespace"

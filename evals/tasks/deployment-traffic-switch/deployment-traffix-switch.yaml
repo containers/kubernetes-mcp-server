@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: deployment-traffic-switch
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Our new checkout-service-green deployment in the e-commerce namespace has passed all tests. The current live version is checkout-service-blue. Can you switch all live traffic over to the green version now?"

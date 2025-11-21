@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: list-images-for-pods
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    contains: "mysql:8.0.36"
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "What images are all pods running in the cluster?"

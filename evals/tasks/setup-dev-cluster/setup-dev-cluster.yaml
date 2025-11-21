@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: setup-dev-cluster
+  difficulty: hard
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    file: setup-dev-cluster.md

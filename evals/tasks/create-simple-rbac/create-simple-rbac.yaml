@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: create-simple-rbac
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Create a read-only role for pods bound to my reader-sa service account in the create-simple-rbac namespace."

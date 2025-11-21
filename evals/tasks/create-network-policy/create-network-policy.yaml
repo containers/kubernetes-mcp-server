@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: create-network-policy
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Create a NetworkPolicy named 'np' in namespace 'ns1' that: 1. Allows egress traffic only to pods in namespace 'ns2' (incoming traffic not affected) 2. Allows DNS traffic (port 53 TCP and UDP) 3. Blocks all other outgoing traffic"

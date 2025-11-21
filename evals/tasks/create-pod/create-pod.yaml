@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: "create-nginx-pod"
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: Please create a nginx pod named web-server in the create-pod-test namespace
