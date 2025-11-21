@@ -12,7 +12,7 @@ Config (TOML):
 toolsets = ["core", "kiali"]
 
 [toolset_configs.kiali]
-url = "https://kiali.example"
+url = "https://kiali.example" # Endpoint/route to reach Kiali console
 # insecure = true  # optional: allow insecure TLS (not recommended in production)
 # certificate_authority = """-----BEGIN CERTIFICATE-----
 # MIID...
