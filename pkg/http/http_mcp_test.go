@@ -25,7 +25,7 @@ func (s *McpTransportSuite) TearDownTest() {
 }
 
 func (s *McpTransportSuite) TestSseTransport() {
-	sseClient, sseClientErr := client.NewSSEMCPClient(fmt.Sprintf("http://127.0.0.1:%d/sse", s.TcpAddr.Port))
+	sseClient, sseClientErr := client.NewSSEMCPClient(fmt.Sprintf("http://127.0.0.1:%s/sse", s.StaticConfig.Port))
 	s.Require().NoError(sseClientErr, "Expected no error creating SSE MCP client")
 	startErr := sseClient.Start(s.T().Context())
 	s.Require().NoError(startErr, "Expected no error starting SSE MCP client")
@@ -44,7 +44,7 @@ func (s *McpTransportSuite) TestSseTransport() {
 }
 
 func (s *McpTransportSuite) TestStreamableHttpTransport() {
-	httpClient, httpClientErr := client.NewStreamableHttpClient(fmt.Sprintf("http://127.0.0.1:%d/mcp", s.TcpAddr.Port), transport.WithContinuousListening())
+	httpClient, httpClientErr := client.NewStreamableHttpClient(fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port), transport.WithContinuousListening())
 	s.Require().NoError(httpClientErr, "Expected no error creating Streamable HTTP MCP client")
 	startErr := httpClient.Start(s.T().Context())
 	s.Require().NoError(startErr, "Expected no error starting Streamable HTTP MCP client")

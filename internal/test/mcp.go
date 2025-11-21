@@ -13,7 +13,9 @@ import (
 )
 
 func McpInitRequest() mcp.InitializeRequest {
-	initRequest := mcp.InitializeRequest{}
+	initRequest := mcp.InitializeRequest{
+		Request: mcp.Request{Method: "initialize"},
+	}
 	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 	initRequest.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "1.33.7"}
 	return initRequest

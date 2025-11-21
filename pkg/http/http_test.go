@@ -33,7 +33,6 @@ import (
 type BaseHttpSuite struct {
 	suite.Suite
 	MockServer      *test.MockServer
-	TcpAddr         *net.TCPAddr
 	StaticConfig    *config.StaticConfig
 	mcpServer       *mcp.Server
 	OidcProvider    *oidc.Provider
@@ -43,18 +42,19 @@ type BaseHttpSuite struct {
 }
 
 func (s *BaseHttpSuite) SetupTest() {
-	var err error
 	http.DefaultClient.Timeout = 10 * time.Second
 	s.MockServer = test.NewMockServer()
-	s.TcpAddr, err = test.RandomPortAddress()
-	s.Require().NoError(err, "Expected no error getting random port address")
+	s.MockServer.Handle(&test.DiscoveryClientHandler{})
 	s.StaticConfig = config.Default()
 	s.StaticConfig.KubeConfig = s.MockServer.KubeconfigFile(s.T())
-	s.StaticConfig.Port = strconv.Itoa(s.TcpAddr.Port)
 }
 
 func (s *BaseHttpSuite) StartServer() {
-	var err error
+
+	tcpAddr, err := test.RandomPortAddress()
+	s.Require().NoError(err, "Expected no error getting random port address")
+	s.StaticConfig.Port = strconv.Itoa(tcpAddr.Port)
+
 	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig})
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.Require().NotNil(s.mcpServer, "MCP server should not be nil")
@@ -64,7 +64,8 @@ func (s *BaseHttpSuite) StartServer() {
 	cancelCtx, s.StopServer = context.WithCancel(gc)
 	group.Go(func() error { return Serve(cancelCtx, s.mcpServer, s.StaticConfig, s.OidcProvider, nil) })
 	s.WaitForShutdown = group.Wait
-	s.Require().NoError(test.WaitForServer(s.TcpAddr), "HTTP server did not start in time")
+	s.Require().NoError(test.WaitForServer(tcpAddr), "HTTP server did not start in time")
+	s.Require().NoError(test.WaitForHealthz(tcpAddr), "HTTP server /healthz endpoint did not respond with non-404 in time")
 }
 
 func (s *BaseHttpSuite) TearDownTest() {

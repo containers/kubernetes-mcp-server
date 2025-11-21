@@ -3,6 +3,7 @@ package test
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,4 +49,25 @@ func WaitForServer(tcpAddr *net.TCPAddr) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return err
+}
+
+// WaitForHealthz waits for the /healthz endpoint to return a non-404 response
+func WaitForHealthz(tcpAddr *net.TCPAddr) error {
+	url := fmt.Sprintf("http://%s/healthz", tcpAddr.String())
+	var resp *http.Response
+	var err error
+	for i := 0; i < 100; i++ {
+		resp, err = http.Get(url)
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode != http.StatusNotFound {
+				return nil
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("healthz endpoint returned 404 after retries")
 }
