@@ -1,10 +1,13 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"flag"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -15,16 +18,32 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/textlogger"
 	"sigs.k8s.io/yaml"
 )
 
 type HelmSuite struct {
 	BaseMcpSuite
+	klogState klog.State
+	logBuffer bytes.Buffer
 }
 
 func (s *HelmSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(envTestRestConfig))
+
+	// Capture log output to verify denied resource messages
+	s.klogState = klog.CaptureState()
+	flags := flag.NewFlagSet("test", flag.ContinueOnError)
+	klog.InitFlags(flags)
+	_ = flags.Set("v", strconv.Itoa(5))
+	klog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(5), textlogger.Output(&s.logBuffer))))
+}
+
+func (s *HelmSuite) TearDownTest() {
+	s.BaseMcpSuite.TearDownTest()
+	s.klogState.Restore()
 }
 
 func (s *HelmSuite) TestHelmInstall() {
@@ -234,7 +253,7 @@ func (s *HelmSuite) TestHelmUninstall() {
 
 func (s *HelmSuite) TestHelmUninstallDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
-		denied_resources = [ { version = "v1", kind = "Secret" } ]
+		denied_resources = [ { version = "v1", kind = "ConfigMap" } ]
 	`), s.Cfg), "Expected to parse denied resources config")
 	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
@@ -246,7 +265,7 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 			"release": []byte(base64.StdEncoding.EncodeToString([]byte("{" +
 				"\"name\":\"existent-release-to-uninstall\"," +
 				"\"info\":{\"status\":\"deployed\"}," +
-				"\"manifest\":\"apiVersion: v1\\nkind: Secret\\nmetadata:\\n  name: secret-to-deny\\n  namespace: default\\n\"" +
+				"\"manifest\":\"apiVersion: v1\\nkind: ConfigMap\\nmetadata:\\n  name: config-map-to-deny\\n  namespace: default\\n\"" +
 				"}"))),
 		},
 	}, metav1.CreateOptions{})
@@ -260,10 +279,16 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 			s.Truef(toolResult.IsError, "call tool should fail")
 			s.Nilf(err, "call tool should not return error object")
 		})
-		s.Run("describes denial", func() {
-			s.T().Skipf("Helm won't report what underlying resource caused the failure, so we can't assert on it")
-			expectedMessage := "failed to uninstall release:(.+:)? resource not allowed: /v1, Kind=Secret"
-			s.Regexpf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text, "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		s.Run("describes failure to uninstall", func() {
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text,
+				"failed to uninstall helm chart 'existent-release-to-uninstall': failed to delete release: existent-release-to-uninstall")
+		})
+		s.Run("describes denial (in log)", func() {
+			msg := s.logBuffer.String()
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "uninstall: Failed to delete release:(.+:)? resource not allowed: /v1, Kind=ConfigMap"
+			s.Regexpf(expectedMessage, msg,
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

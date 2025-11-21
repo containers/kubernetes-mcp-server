@@ -3,15 +3,16 @@ package helm
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"log"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/yaml"
-	"time"
 )
 
 type Kubernetes interface {
@@ -115,7 +116,7 @@ func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configur
 		return nil, err
 	}
 	cfg.RegistryClient = registryClient
-	return cfg, cfg.Init(h.kubernetes, applicableNamespace, "", log.Printf)
+	return cfg, cfg.Init(h.kubernetes, applicableNamespace, "", klog.V(5).Infof)
 }
 
 func simplify(release ...*release.Release) []map[string]interface{} {
