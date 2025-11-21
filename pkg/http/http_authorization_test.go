@@ -31,6 +31,7 @@ func (s *AuthorizationSuite) SetupTest() {
 	s.BaseHttpSuite.SetupTest()
 
 	// Capture logs
+	s.logBuffer.Reset()
 	s.klogState = klog.CaptureState()
 	flags := flag.NewFlagSet("test", flag.ContinueOnError)
 	klog.InitFlags(flags)
@@ -59,14 +60,14 @@ func (s *AuthorizationSuite) TearDownTest() {
 
 func (s *AuthorizationSuite) StartClient(options ...transport.StreamableHTTPCOption) {
 	var err error
-	s.mcpClient, err = client.NewStreamableHttpClient(fmt.Sprintf("http://127.0.0.1:%d/mcp", s.TcpAddr.Port), options...)
+	s.mcpClient, err = client.NewStreamableHttpClient(fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port), options...)
 	s.Require().NoError(err, "Expected no error creating Streamable HTTP MCP client")
 	err = s.mcpClient.Start(s.T().Context())
 	s.Require().NoError(err, "Expected no error starting Streamable HTTP MCP client")
 }
 
 func (s *AuthorizationSuite) HttpGet(authHeader string) *http.Response {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/mcp", s.TcpAddr.Port), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port), nil)
 	s.Require().NoError(err, "Failed to create request")
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
@@ -339,6 +340,7 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 	for _, c := range cases {
 		s.StaticConfig.OAuthAudience = c.audience
 		s.StaticConfig.ValidateToken = c.validateToken
+		s.logBuffer.Reset()
 		s.StartServer()
 		s.StartClient(transport.WithHTTPHeaders(map[string]string{
 			"Authorization": "Bearer " + tokenBasicNotExpired,
@@ -362,7 +364,9 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 			})
 		})
 		_ = s.mcpClient.Close()
+		s.mcpClient = nil
 		s.StopServer()
+		s.Require().NoError(s.WaitForShutdown())
 	}
 }
 
@@ -407,7 +411,9 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 			})
 		})
 		_ = s.mcpClient.Close()
+		s.mcpClient = nil
 		s.StopServer()
+		s.Require().NoError(s.WaitForShutdown())
 	}
 }
 
@@ -440,6 +446,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 		s.StaticConfig.StsClientSecret = "test-sts-client-secret"
 		s.StaticConfig.StsAudience = "backend-audience"
 		s.StaticConfig.StsScopes = []string{"backend-scope"}
+		s.logBuffer.Reset()
 		s.StartServer()
 		s.StartClient(transport.WithHTTPHeaders(map[string]string{
 			"Authorization": "Bearer " + validOidcClientToken,
@@ -463,7 +470,9 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 			})
 		})
 		_ = s.mcpClient.Close()
+		s.mcpClient = nil
 		s.StopServer()
+		s.Require().NoError(s.WaitForShutdown())
 	}
 }
 
