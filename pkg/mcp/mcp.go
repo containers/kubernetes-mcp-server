@@ -9,12 +9,14 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	authenticationapiv1 "k8s.io/api/authentication/v1"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/promptsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
@@ -27,6 +29,7 @@ type Configuration struct {
 	*config.StaticConfig
 	listOutput output.Output
 	toolsets   []api.Toolset
+	promptsets []api.PromptSet
 }
 
 func (c *Configuration) Toolsets() []api.Toolset {
@@ -36,6 +39,23 @@ func (c *Configuration) Toolsets() []api.Toolset {
 		}
 	}
 	return c.toolsets
+}
+
+func (c *Configuration) Promptsets() []api.PromptSet {
+	if c.promptsets == nil {
+		// Default to core if no promptsets configured
+		promptsetNames := c.StaticConfig.Promptsets
+		if len(promptsetNames) == 0 {
+			promptsetNames = []string{"core"}
+		}
+		for _, promptset := range promptsetNames {
+			ps := promptsets.PromptSetFromString(promptset)
+			if ps != nil {
+				c.promptsets = append(c.promptsets, ps)
+			}
+		}
+	}
+	return c.promptsets
 }
 
 func (c *Configuration) ListOutput() output.Output {
@@ -77,7 +97,7 @@ func NewServer(configuration Configuration) (*Server, error) {
 			},
 			&mcp.ServerOptions{
 				HasResources: false,
-				HasPrompts:   false,
+				HasPrompts:   true,
 				HasTools:     true,
 			}),
 	}
@@ -165,8 +185,39 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 		s.server.AddTool(goSdkTool, goSdkToolHandler)
 	}
 
+	// Register prompts
+	if err := s.registerPrompts(p); err != nil {
+		klog.Warningf("Failed to register prompts: %v", err)
+		// Don't fail the whole reload if prompts fail
+	}
+
 	// start new watch
 	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
+	return nil
+}
+
+// registerPrompts loads and registers all prompts with the MCP server
+func (s *Server) registerPrompts(p internalk8s.Provider) error {
+	allPrompts := make([]api.ServerPrompt, 0)
+	for _, ps := range s.configuration.Promptsets() {
+		prompts := ps.GetPrompts(p)
+		allPrompts = append(allPrompts, prompts...)
+		klog.V(5).Infof("Loaded %d prompts from promptset '%s'", len(prompts), ps.GetName())
+	}
+
+	goSdkPrompts, goSdkHandlers, err := ServerPromptToGoSdkPrompt(s, allPrompts)
+	if err != nil {
+		return fmt.Errorf("failed to convert prompts: %v", err)
+	}
+
+	// Register each prompt with its handler
+	for name, prompt := range goSdkPrompts {
+		handler := goSdkHandlers[name]
+		s.server.AddPrompt(prompt, handler)
+	}
+
+	klog.V(3).Infof("Registered %d prompts", len(goSdkPrompts))
+
 	return nil
 }
 

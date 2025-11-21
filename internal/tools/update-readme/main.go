@@ -11,8 +11,10 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/promptsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
+	_ "github.com/containers/kubernetes-mcp-server/pkg/promptsets/core"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
@@ -102,6 +104,35 @@ func main() {
 		"<!-- AVAILABLE-TOOLSETS-TOOLS-START -->",
 		"<!-- AVAILABLE-TOOLSETS-TOOLS-END -->",
 		toolsetTools.String(),
+	)
+
+	// Available Promptset Prompts
+	promptsetsList := promptsets.PromptSets()
+	promptsetPrompts := strings.Builder{}
+	for _, promptset := range promptsetsList {
+		prompts := promptset.GetPrompts(&OpenShift{})
+		if len(prompts) == 0 {
+			continue
+		}
+		promptsetPrompts.WriteString("<details>\n\n<summary>" + promptset.GetName() + "</summary>\n\n")
+		for _, prompt := range prompts {
+			promptsetPrompts.WriteString(fmt.Sprintf("- **%s** - %s\n", prompt.Name, prompt.Description))
+			for _, arg := range prompt.Arguments {
+				promptsetPrompts.WriteString(fmt.Sprintf("  - `%s` (`%s`)", arg.Name, "string"))
+				if arg.Required {
+					promptsetPrompts.WriteString(" **(required)**")
+				}
+				promptsetPrompts.WriteString(fmt.Sprintf(" - %s\n", arg.Description))
+			}
+			promptsetPrompts.WriteString("\n")
+		}
+		promptsetPrompts.WriteString("</details>\n\n")
+	}
+	updated = replaceBetweenMarkers(
+		updated,
+		"<!-- AVAILABLE-PROMPTSETS-PROMPTS-START -->",
+		"<!-- AVAILABLE-PROMPTSETS-PROMPTS-END -->",
+		promptsetPrompts.String(),
 	)
 
 	if err := os.WriteFile(localReadmePath, []byte(updated), 0o644); err != nil {
