@@ -10,15 +10,24 @@ import (
 // Graph calls the Kiali graph API using the provided Authorization header value.
 // `namespaces` may contain zero, one or many namespaces. If empty, the API may return an empty graph
 // or the server default, depending on Kiali configuration.
-func (k *Kiali) Graph(ctx context.Context, namespaces []string) (string, error) {
+func (k *Kiali) Graph(ctx context.Context, namespaces []string, queryParams map[string]string) (string, error) {
 	u, err := url.Parse(GraphEndpoint)
 	if err != nil {
 		return "", err
 	}
 	q := u.Query()
 	// Static graph parameters per requirements
-	q.Set("duration", "60s")
-	q.Set("graphType", "versionedApp")
+	// Defaults with optional overrides via queryParams
+	duration := "60s"
+	graphType := "versionedApp"
+	if v, ok := queryParams["rateInterval"]; ok && strings.TrimSpace(v) != "" {
+		duration = strings.TrimSpace(v)
+	}
+	if v, ok := queryParams["graphType"]; ok && strings.TrimSpace(v) != "" {
+		graphType = strings.TrimSpace(v)
+	}
+	q.Set("duration", duration)
+	q.Set("graphType", graphType)
 	q.Set("includeIdleEdges", "false")
 	q.Set("injectServiceNodes", "true")
 	q.Set("boxBy", "cluster,namespace,app")
