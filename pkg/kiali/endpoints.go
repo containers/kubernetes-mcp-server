@@ -23,5 +23,4 @@ const (
 	WorkloadDetailsEndpoint   = "/api/namespaces/%s/workloads/%s"
 	WorkloadMetricsEndpoint   = "/api/namespaces/%s/workloads/%s/metrics"
 	ValidationsEndpoint       = "/api/istio/validations"
-	ValidationsListEndpoint   = "/api/istio/validations"
 )
