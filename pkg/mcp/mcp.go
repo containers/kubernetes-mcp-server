@@ -120,12 +120,6 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 		ShouldIncludeTargetListTool(p.GetTargetParameterName(), targets),
 	)
 
-	mutator := WithTargetParameter(
-		p.GetDefaultTarget(),
-		p.GetTargetParameterName(),
-		targets,
-	)
-
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(m3labsServerTools...)
 
@@ -136,6 +130,31 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 	applicableTools := make([]api.ServerTool, 0)
 	s.enabledTools = make([]string, 0)
 	for _, toolset := range s.configuration.Toolsets() {
+		// make sure that the toolset is valid for at least one target, otherwise don't add tools from it
+		toolTargets := []string{}
+		for _, target := range targets {
+			k, err := p.GetDerivedKubernetes(ctx, target)
+			if err != nil {
+				// don't error out - just continue, this is just to determine if a tool is valid or not
+				continue
+			}
+
+			if toolset.IsValid(k) {
+				toolTargets = append(toolTargets, target)
+			}
+		}
+
+		if len(toolTargets) == 0 {
+			// no targets for this toolset, don't add tools from it
+			continue
+		}
+
+		mutator := WithTargetParameter(
+			p.GetDefaultTarget(),
+			p.GetTargetParameterName(),
+			targets,
+		)
+
 		for _, tool := range toolset.GetTools(p) {
 			tool := mutator(tool)
 			if !filter(tool) {

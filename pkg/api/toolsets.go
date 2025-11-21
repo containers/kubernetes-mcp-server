@@ -44,6 +44,9 @@ type Toolset interface {
 	// Will be used to generate documentation and help text.
 	GetDescription() string
 	GetTools(o internalk8s.Openshift) []ServerTool
+	// IsValid returns whether or not the toolset is valid on the current cluster
+	// Used to identify if toolsets should be disabled despite the config based on what is installed in the cluster
+	IsValid(k *internalk8s.Kubernetes) bool
 }
 
 type ToolCallRequest interface {
