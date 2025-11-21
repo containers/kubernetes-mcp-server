@@ -12,21 +12,16 @@ import (
 
 type ProviderConfigSuite struct {
 	BaseConfigSuite
-	originalProviderConfigParsers map[string]ProviderConfigParser
+	originalProviderConfigRegistry *extendedConfigRegistry
 }
 
 func (s *ProviderConfigSuite) SetupTest() {
-	s.originalProviderConfigParsers = make(map[string]ProviderConfigParser)
-	for k, v := range providerConfigParsers {
-		s.originalProviderConfigParsers[k] = v
-	}
+	s.originalProviderConfigRegistry = providerConfigRegistry
+	providerConfigRegistry = newExtendedConfigRegistry()
 }
 
 func (s *ProviderConfigSuite) TearDownTest() {
-	providerConfigParsers = make(map[string]ProviderConfigParser)
-	for k, v := range s.originalProviderConfigParsers {
-		providerConfigParsers[k] = v
-	}
+	providerConfigRegistry = s.originalProviderConfigRegistry
 }
 
 type ProviderConfigForTest struct {
@@ -35,7 +30,7 @@ type ProviderConfigForTest struct {
 	IntProp  int    `toml:"int_prop"`
 }
 
-var _ ProviderConfig = (*ProviderConfigForTest)(nil)
+var _ Extended = (*ProviderConfigForTest)(nil)
 
 func (p *ProviderConfigForTest) Validate() error {
 	if p.StrProp == "force-error" {
@@ -44,7 +39,7 @@ func (p *ProviderConfigForTest) Validate() error {
 	return nil
 }
 
-func providerConfigForTestParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
+func providerConfigForTestParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (Extended, error) {
 	var providerConfigForTest ProviderConfigForTest
 	if err := md.PrimitiveDecode(primitive, &providerConfigForTest); err != nil {
 		return nil, err
@@ -133,7 +128,7 @@ func (s *ProviderConfigSuite) TestReadConfigUnregisteredProviderConfig() {
 }
 
 func (s *ProviderConfigSuite) TestReadConfigParserError() {
-	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
+	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (Extended, error) {
 		return nil, errors.New("parser error forced by test")
 	})
 	invalidConfigPath := s.writeConfig(`
@@ -156,7 +151,7 @@ func (s *ProviderConfigSuite) TestReadConfigParserError() {
 
 func (s *ProviderConfigSuite) TestConfigDirPathInContext() {
 	var capturedDirPath string
-	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ProviderConfig, error) {
+	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (Extended, error) {
 		capturedDirPath = ConfigDirPathFromContext(ctx)
 		var providerConfigForTest ProviderConfigForTest
 		if err := md.PrimitiveDecode(primitive, &providerConfigForTest); err != nil {

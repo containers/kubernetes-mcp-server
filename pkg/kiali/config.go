@@ -17,7 +17,7 @@ type Config struct {
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
 }
 
-var _ config.ToolsetConfig = (*Config)(nil)
+var _ config.Extended = (*Config)(nil)
 
 func (c *Config) Validate() error {
 	if c == nil {
@@ -36,7 +36,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func kialiToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (config.ToolsetConfig, error) {
+func kialiToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (config.Extended, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err

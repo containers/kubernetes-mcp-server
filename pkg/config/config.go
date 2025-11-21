@@ -73,9 +73,9 @@ type StaticConfig struct {
 	ToolsetConfigs map[string]toml.Primitive `toml:"toolset_configs,omitempty"`
 
 	// Internal: parsed provider configs (not exposed to TOML package)
-	parsedClusterProviderConfigs map[string]ProviderConfig
+	parsedClusterProviderConfigs map[string]Extended
 	// Internal: parsed toolset configs (not exposed to TOML package)
-	parsedToolsetConfigs map[string]ToolsetConfig
+	parsedToolsetConfigs map[string]Extended
 
 	// Internal: the config.toml directory, to help resolve relative file paths
 	configDirPath string
@@ -129,87 +129,28 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		opt(config)
 	}
 
-	if err := config.parseClusterProviderConfigs(md); err != nil {
+	ctx := withConfigDirPath(context.Background(), config.configDirPath)
+
+	config.parsedClusterProviderConfigs, err = providerConfigRegistry.parse(ctx, md, config.ClusterProviderConfigs)
+	if err != nil {
 		return nil, err
 	}
 
-	if err := config.parseToolsetConfigs(md); err != nil {
+	config.parsedToolsetConfigs, err = toolsetConfigRegistry.parse(ctx, md, config.ToolsetConfigs)
+	if err != nil {
 		return nil, err
 	}
 
 	return config, nil
 }
 
-func (c *StaticConfig) GetProviderConfig(strategy string) (ProviderConfig, bool) {
+func (c *StaticConfig) GetProviderConfig(strategy string) (Extended, bool) {
 	config, ok := c.parsedClusterProviderConfigs[strategy]
 
 	return config, ok
 }
 
-func (c *StaticConfig) parseClusterProviderConfigs(md toml.MetaData) error {
-	if c.parsedClusterProviderConfigs == nil {
-		c.parsedClusterProviderConfigs = make(map[string]ProviderConfig, len(c.ClusterProviderConfigs))
-	}
-
-	ctx := withConfigDirPath(context.Background(), c.configDirPath)
-
-	for strategy, primitive := range c.ClusterProviderConfigs {
-		parser, ok := getProviderConfigParser(strategy)
-		if !ok {
-			continue
-		}
-
-		providerConfig, err := parser(ctx, primitive, md)
-		if err != nil {
-			return fmt.Errorf("failed to parse config for ClusterProvider '%s': %w", strategy, err)
-		}
-
-		if err := providerConfig.Validate(); err != nil {
-			return fmt.Errorf("invalid config file for ClusterProvider '%s': %w", strategy, err)
-		}
-
-		c.parsedClusterProviderConfigs[strategy] = providerConfig
-	}
-
-	return nil
-}
-
-func (c *StaticConfig) parseToolsetConfigs(md toml.MetaData) error {
-	if c.parsedToolsetConfigs == nil {
-		c.parsedToolsetConfigs = make(map[string]ToolsetConfig, len(c.ToolsetConfigs))
-	}
-
-	ctx := withConfigDirPath(context.Background(), c.configDirPath)
-
-	for name, primitive := range c.ToolsetConfigs {
-		parser, ok := getToolsetConfigParser(name)
-		if !ok {
-			continue
-		}
-
-		toolsetConfig, err := parser(ctx, primitive, md)
-		if err != nil {
-			return fmt.Errorf("failed to parse config for Toolset '%s': %w", name, err)
-		}
-
-		if err := toolsetConfig.Validate(); err != nil {
-			return fmt.Errorf("invalid config file for Toolset '%s': %w", name, err)
-		}
-
-		c.parsedToolsetConfigs[name] = toolsetConfig
-	}
-
-	return nil
-}
-
-func (c *StaticConfig) GetToolsetConfig(name string) (ToolsetConfig, bool) {
+func (c *StaticConfig) GetToolsetConfig(name string) (Extended, bool) {
 	cfg, ok := c.parsedToolsetConfigs[name]
 	return cfg, ok
-}
-
-func (c *StaticConfig) SetToolsetConfig(name string, cfg ToolsetConfig) {
-	if c.parsedToolsetConfigs == nil {
-		c.parsedToolsetConfigs = make(map[string]ToolsetConfig)
-	}
-	c.parsedToolsetConfigs[name] = cfg
 }
