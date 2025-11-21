@@ -38,3 +38,29 @@ func (s *KialiSuite) TestMeshStatus() {
 	})
 
 }
+
+func (s *KialiSuite) TestTraceDetails() {
+	var capturedURL *url.URL
+	s.MockServer.Config().BearerToken = "token-xyz"
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		_, _ = w.Write([]byte(`{"traceId":"test-trace-123","spans":[]}`))
+	}))
+
+	s.Config = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
+		[toolset_configs.kiali]
+		url = "%s"
+	`, s.MockServer.Config().Host))))
+	k := NewKiali(s.Config, s.MockServer.Config())
+
+	traceId := "test-trace-123"
+	out, err := k.TraceDetails(s.T().Context(), traceId)
+	s.Require().NoError(err, "Expected no error executing request")
+	s.Run("response body is correct", func() {
+		s.Contains(out, traceId, "Response should contain trace ID")
+	})
+	s.Run("path is correct", func() {
+		s.Equal("/api/traces/test-trace-123", capturedURL.Path, "Unexpected path")
+	})
+}
