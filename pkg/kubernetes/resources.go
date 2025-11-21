@@ -47,6 +47,10 @@ func (k *Kubernetes) ResourcesList(ctx context.Context, gvk *schema.GroupVersion
 }
 
 func (k *Kubernetes) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string) (*unstructured.Unstructured, error) {
+	if k.manager == nil {
+		return nil, fmt.Errorf("kubernetes manager not initialized")
+	}
+
 	gvr, err := k.resourceFor(gvk)
 	if err != nil {
 		return nil, err
@@ -74,6 +78,10 @@ func (k *Kubernetes) ResourcesCreateOrUpdate(ctx context.Context, resource strin
 }
 
 func (k *Kubernetes) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string) error {
+	if k.manager == nil {
+		return fmt.Errorf("kubernetes manager not initialized")
+	}
+
 	gvr, err := k.resourceFor(gvk)
 	if err != nil {
 		return err

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -69,6 +70,58 @@ type ToolHandlerParams struct {
 	*internalk8s.Kubernetes
 	ToolCallRequest
 	ListOutput output.Output
+}
+
+// GetRequiredString extracts a required string parameter from the tool call arguments.
+// Returns an error if the parameter is missing or not a string.
+func (p ToolHandlerParams) GetRequiredString(key string) (string, error) {
+	args := p.GetArguments()
+	val, ok := args[key]
+	if !ok {
+		return "", fmt.Errorf("%s parameter required", key)
+	}
+	str, ok := val.(string)
+	if !ok {
+		return "", fmt.Errorf("%s parameter must be a string", key)
+	}
+	return str, nil
+}
+
+// GetOptionalString extracts an optional string parameter from the tool call arguments.
+// Returns the provided default value if the parameter is missing or not a string.
+// If no default value is provided, returns an empty string.
+func (p ToolHandlerParams) GetOptionalString(key string, defaultValue ...string) string {
+	args := p.GetArguments()
+	val, ok := args[key]
+	if !ok {
+		if len(defaultValue) > 0 {
+			return defaultValue[0]
+		}
+		return ""
+	}
+	str, ok := val.(string)
+	if !ok {
+		if len(defaultValue) > 0 {
+			return defaultValue[0]
+		}
+		return ""
+	}
+	return str
+}
+
+// GetOptionalBool extracts an optional boolean parameter from the tool call arguments.
+// Returns false if the parameter is missing or not a boolean.
+func (p ToolHandlerParams) GetOptionalBool(key string) bool {
+	args := p.GetArguments()
+	val, ok := args[key]
+	if !ok {
+		return false
+	}
+	b, ok := val.(bool)
+	if !ok {
+		return false
+	}
+	return b
 }
 
 type ToolHandlerFunc func(params ToolHandlerParams) (*ToolCallResult, error)

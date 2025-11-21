@@ -1,0 +1,99 @@
+# VirtualMachine Creation Plan
+
+**IMPORTANT**: Always use `runStrategy` instead of the deprecated `running` field when creating VirtualMachines.
+
+Use the `resources_create_or_update` tool with the following YAML:
+
+```yaml
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: {{.Name}}
+  namespace: {{.Namespace}}
+spec:
+  runStrategy: Halted
+{{- if .Instancetype}}
+  instancetype:
+    name: {{.Instancetype}}
+    kind: VirtualMachineClusterInstancetype
+{{- end}}
+{{- if .Preference}}
+  preference:
+    name: {{.Preference}}
+    kind: VirtualMachineClusterPreference
+{{- end}}
+{{- if .UseDataSource}}
+  dataVolumeTemplates:
+  - metadata:
+      name: {{.Name}}-rootdisk
+    spec:
+      sourceRef:
+        kind: DataSource
+        name: {{.DataSourceName}}
+        namespace: {{.DataSourceNamespace}}
+      storage:
+        resources:
+          requests:
+            storage: 30Gi
+{{- end}}
+  template:
+    spec:
+      domain:
+        devices:
+          disks:
+          - name: {{.Name}}-rootdisk
+{{- if not .Instancetype}}
+        memory:
+          guest: 2Gi
+{{- end}}
+      volumes:
+      - name: {{.Name}}-rootdisk
+{{- if .UseDataSource}}
+        dataVolume:
+          name: {{.Name}}-rootdisk
+{{- else}}
+        containerDisk:
+          image: {{.ContainerDisk}}
+{{- end}}
+```
+
+## Run Strategy Options
+
+The VM is created with `runStrategy: Halted` (stopped state). You can modify the `runStrategy` field to control the VM's execution:
+
+- **`Halted`** - VM is stopped and will not run
+- **`Always`** - VM should always be running (restarts automatically)
+- **`RerunOnFailure`** - Restart the VM only if it fails
+- **`Manual`** - Manual start/stop control via `virtctl start/stop`
+- **`Once`** - Run the VM once, then stop when it terminates
+
+To start the VM after creation, change `runStrategy: Halted` to `runStrategy: Always` or use the Manual strategy and start it with virtctl.
+
+## Verification
+
+After creating the VirtualMachine, verify it was created successfully:
+
+Use the `resources_get` tool:
+- **apiVersion**: `kubevirt.io/v1`
+- **kind**: `VirtualMachine`
+- **namespace**: `{{.Namespace}}`
+- **name**: `{{.Name}}`
+
+Check the resource details for any warnings or errors in the status conditions.
+
+## Troubleshooting
+
+If the VirtualMachine fails to create or start:
+
+1. **Check the VM resource details and events**:
+   - Use `resources_get` tool with apiVersion `kubevirt.io/v1`, kind `VirtualMachine`, namespace `{{.Namespace}}`, name `{{.Name}}`
+   - Look for error messages in the status conditions
+
+2. **Verify instance type exists** (if specified):
+   - Use `resources_get` tool with apiVersion `instancetype.kubevirt.io/v1beta1`, kind `VirtualMachineClusterInstancetype`, name `{{.Instancetype}}`
+
+3. **Verify preference exists** (if specified):
+   - Use `resources_get` tool with apiVersion `instancetype.kubevirt.io/v1beta1`, kind `VirtualMachineClusterPreference`, name `{{.Preference}}`
+
+4. **Check KubeVirt installation**:
+   - Use `pods_list` tool with namespace `kubevirt`
