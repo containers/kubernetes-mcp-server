@@ -87,6 +87,7 @@ func (p *singleClusterProvider) GetTargetParameterName() string {
 
 func (p *singleClusterProvider) WatchTargets(watch func() error) {
 	p.manager.WatchKubeConfig(watch)
+	p.manager.WatchClusterState(DefaultClusterStatePollInterval, DefaultClusterStateDebounceWindow, watch)
 }
 
 func (p *singleClusterProvider) Close() {

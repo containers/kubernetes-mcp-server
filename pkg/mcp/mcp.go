@@ -98,31 +98,44 @@ func NewServer(configuration Configuration) (*Server, error) {
 
 func (s *Server) reloadKubernetesClusterProvider() error {
 	ctx := context.Background()
-	p, err := internalk8s.NewProvider(s.configuration.StaticConfig)
+
+	newProvider, err := internalk8s.NewProvider(s.configuration.StaticConfig)
 	if err != nil {
 		return err
 	}
 
-	// close the old provider
+	targets, err := newProvider.GetTargets(ctx)
+	if err != nil {
+		newProvider.Close()
+		return err
+	}
+
 	if s.p != nil {
 		s.p.Close()
 	}
 
-	s.p = p
+	s.p = newProvider
 
-	targets, err := p.GetTargets(ctx)
-	if err != nil {
+	if err := s.rebuildTools(targets); err != nil {
 		return err
 	}
 
+	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
+
+	return nil
+}
+
+// rebuildTools rebuilds the MCP tool registry based on the current provider and targets.
+// This is called after the provider has been successfully validated and set.
+func (s *Server) rebuildTools(targets []string) error {
 	filter := CompositeFilter(
 		s.configuration.isToolApplicable,
-		ShouldIncludeTargetListTool(p.GetTargetParameterName(), targets),
+		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), targets),
 	)
 
 	mutator := WithTargetParameter(
-		p.GetDefaultTarget(),
-		p.GetTargetParameterName(),
+		s.p.GetDefaultTarget(),
+		s.p.GetTargetParameterName(),
 		targets,
 	)
 
@@ -136,7 +149,7 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 	applicableTools := make([]api.ServerTool, 0)
 	s.enabledTools = make([]string, 0)
 	for _, toolset := range s.configuration.Toolsets() {
-		for _, tool := range toolset.GetTools(p) {
+		for _, tool := range toolset.GetTools(s.p) {
 			tool := mutator(tool)
 			if !filter(tool) {
 				continue
@@ -157,6 +170,7 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 	}
 	s.server.RemoveTools(toolsToRemove...)
 
+	// Add new tools
 	for _, tool := range applicableTools {
 		goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
 		if err != nil {
@@ -165,8 +179,6 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 		s.server.AddTool(goSdkTool, goSdkToolHandler)
 	}
 
-	// start new watch
-	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
 	return nil
 }
 
