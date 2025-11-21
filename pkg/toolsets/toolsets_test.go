@@ -35,6 +35,8 @@ func (t *TestToolset) GetDescription() string { return t.description }
 
 func (t *TestToolset) GetTools(_ kubernetes.Openshift) []api.ServerTool { return nil }
 
+func (t *TestToolset) IsValid(_ *kubernetes.Kubernetes) bool { return true }
+
 var _ api.Toolset = (*TestToolset)(nil)
 
 func (s *ToolsetsSuite) TestToolsetNames() {
