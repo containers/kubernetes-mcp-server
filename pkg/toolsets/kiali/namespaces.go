@@ -13,7 +13,7 @@ func initNamespaces() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "namespaces",
+			Name:        "kiali_namespaces",
 			Description: "Get all namespaces in the mesh that the user has access to",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

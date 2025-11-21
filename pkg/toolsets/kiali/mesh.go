@@ -13,7 +13,7 @@ func initMeshStatus() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "mesh_status",
+			Name:        "kiali_mesh_status",
 			Description: "Get the status of mesh components including Istio, Kiali, Grafana, Prometheus and their interactions, versions, and health status",
 			InputSchema: &jsonschema.Schema{
 				Type:       "object",

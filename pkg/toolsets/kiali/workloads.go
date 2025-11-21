@@ -15,7 +15,7 @@ func initWorkloads() []api.ServerTool {
 	// Workloads list tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "workloads_list",
+			Name:        "kiali_workloads_list",
 			Description: "Get all workloads in the mesh across specified namespaces with health and Istio resource information",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -39,7 +39,7 @@ func initWorkloads() []api.ServerTool {
 	// Workload details tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "workload_details",
+			Name:        "kiali_workload_details",
 			Description: "Get detailed information for a specific workload in a namespace, including validation, health status, and configuration",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -68,7 +68,7 @@ func initWorkloads() []api.ServerTool {
 	// Workload metrics tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "workload_metrics",
+			Name:        "kiali_workload_metrics",
 			Description: "Get metrics for a specific workload in a namespace. Supports filtering by time range, direction (inbound/outbound), reporter, and other query parameters",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
