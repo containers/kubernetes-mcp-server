@@ -3,6 +3,7 @@ package kubevirt
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,14 +71,18 @@ func collectDataSources(ctx context.Context, dynamicClient dynamic.Interface) ma
 	var items []unstructured.Unstructured
 	for _, ns := range wellKnownNamespaces {
 		list, err := dynamicClient.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
-		if err == nil {
+		if err != nil {
+			slog.Debug("failed to list DataSources in well-known namespace", "namespace", ns, "error", err)
+		} else {
 			items = append(items, list.Items...)
 		}
 	}
 
 	// List DataSources from all namespaces
 	list, err := dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{})
-	if err == nil {
+	if err != nil {
+		slog.Debug("failed to list DataSources cluster-wide", "error", err)
+	} else {
 		items = append(items, list.Items...)
 	}
 
@@ -121,7 +126,9 @@ func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, nam
 
 	var results []PreferenceInfo
 	clusterList, err := dynamicClient.Resource(clusterPreferenceGVR).List(ctx, metav1.ListOptions{})
-	if err == nil {
+	if err != nil {
+		slog.Debug("failed to list cluster-scoped VirtualMachineClusterPreferences", "error", err)
+	} else {
 		for _, item := range clusterList.Items {
 			results = append(results, PreferenceInfo{
 				Name:      item.GetName(),
@@ -138,7 +145,9 @@ func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, nam
 	}
 
 	namespacedList, err := dynamicClient.Resource(namespacedPreferenceGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
-	if err == nil {
+	if err != nil {
+		slog.Debug("failed to list namespaced VirtualMachinePreferences", "namespace", namespace, "error", err)
+	} else {
 		for _, item := range namespacedList.Items {
 			results = append(results, PreferenceInfo{
 				Name:      item.GetName(),
@@ -161,7 +170,9 @@ func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, n
 
 	var results []InstancetypeInfo
 	clusterList, err := dynamicClient.Resource(clusterInstancetypeGVR).List(ctx, metav1.ListOptions{})
-	if err == nil {
+	if err != nil {
+		slog.Debug("failed to list cluster-scoped VirtualMachineClusterInstancetypes", "error", err)
+	} else {
 		for _, item := range clusterList.Items {
 			results = append(results, InstancetypeInfo{
 				Name:      item.GetName(),
@@ -179,7 +190,9 @@ func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, n
 	}
 
 	namespacedList, err := dynamicClient.Resource(namespacedInstancetypeGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
-	if err == nil {
+	if err != nil {
+		slog.Debug("failed to list namespaced VirtualMachineInstancetypes", "namespace", namespace, "error", err)
+	} else {
 		for _, item := range namespacedList.Items {
 			results = append(results, InstancetypeInfo{
 				Name:      item.GetName(),
