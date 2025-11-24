@@ -39,7 +39,14 @@ type InstancetypeInfo struct {
 	Labels    map[string]string
 }
 
-// SearchDataSources searches for DataSource resources in the cluster
+// SearchDataSources searches for DataSource resources in the cluster.
+//
+// It searches in well-known namespaces first (openshift-virtualization-os-images,
+// kubevirt-os-images), then performs a cluster-wide search. Duplicate DataSources
+// are filtered by namespace/name key.
+//
+// Returns a map of DataSourceInfo indexed by "namespace/name". If no DataSources
+// are found, returns a placeholder entry indicating no sources are available.
 func SearchDataSources(ctx context.Context, dynamicClient dynamic.Interface) map[string]DataSourceInfo {
 	results := collectDataSources(ctx, dynamicClient)
 	if len(results) == 0 {
@@ -115,7 +122,19 @@ func collectDataSources(ctx context.Context, dynamicClient dynamic.Interface) ma
 	return results
 }
 
-// SearchPreferences searches for both cluster-wide and namespaced VirtualMachinePreference resources
+// SearchPreferences searches for both cluster-wide and namespaced VirtualMachinePreference resources.
+//
+// It queries both VirtualMachineClusterPreferences (cluster-scoped) and
+// VirtualMachinePreferences (namespaced) resources. Each PreferenceInfo includes
+// a Namespace field that is empty for cluster-scoped resources.
+//
+// Parameters:
+//   - ctx: Context for the API calls
+//   - dynamicClient: Kubernetes dynamic client
+//   - namespace: Namespace to search for namespaced preferences
+//
+// Returns a list of PreferenceInfo objects. Returns empty list if no preferences found
+// or if API calls fail.
 func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, namespace string) []PreferenceInfo {
 	// Search for cluster-wide VirtualMachineClusterPreferences
 	clusterPreferenceGVR := schema.GroupVersionResource{
@@ -159,7 +178,20 @@ func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, nam
 	return results
 }
 
-// SearchInstancetypes searches for both cluster-wide and namespaced VirtualMachineInstancetype resources
+// SearchInstancetypes searches for both cluster-wide and namespaced VirtualMachineInstancetype resources.
+//
+// It queries both VirtualMachineClusterInstancetypes (cluster-scoped) and
+// VirtualMachineInstancetypes (namespaced) resources. Each InstancetypeInfo includes
+// a Namespace field that is empty for cluster-scoped resources, plus Labels for
+// filtering by performance class.
+//
+// Parameters:
+//   - ctx: Context for the API calls
+//   - dynamicClient: Kubernetes dynamic client
+//   - namespace: Namespace to search for namespaced instancetypes
+//
+// Returns a list of InstancetypeInfo objects. Returns empty list if no instancetypes found
+// or if API calls fail.
 func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, namespace string) []InstancetypeInfo {
 	// Search for cluster-wide VirtualMachineClusterInstancetypes
 	clusterInstancetypeGVR := schema.GroupVersionResource{
@@ -205,7 +237,21 @@ func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, n
 	return results
 }
 
-// MatchDataSource finds a DataSource that matches the workload input
+// MatchDataSource finds a DataSource that matches the workload input.
+//
+// Matching strategy:
+//  1. Exact name match (case-insensitive)
+//  2. Partial match for DataSources with namespaces (real cluster resources)
+//     e.g., "rhel" matches "rhel9"
+//
+// Built-in containerdisks (without namespaces) are excluded from partial matching
+// to avoid ambiguous matches.
+//
+// Parameters:
+//   - dataSources: Map of available DataSources keyed by "namespace/name"
+//   - workload: User input (OS name, DataSource name, or container image)
+//
+// Returns a pointer to matched DataSourceInfo, or nil if no match found.
 func MatchDataSource(dataSources map[string]DataSourceInfo, workload string) *DataSourceInfo {
 	normalizedInput := strings.ToLower(strings.TrimSpace(workload))
 
@@ -228,7 +274,20 @@ func MatchDataSource(dataSources map[string]DataSourceInfo, workload string) *Da
 	return nil
 }
 
-// MatchInstancetypeBySize finds an instancetype that matches the size and performance hints
+// MatchInstancetypeBySize finds an instancetype that matches the size and performance hints.
+//
+// Matching strategy:
+//  1. Filter instancetypes by size (e.g., "medium" matches "*.medium")
+//  2. Try to match by performance family prefix (e.g., "c1" matches "c1.medium")
+//  3. Try to match by performance family label (instancetype.kubevirt.io/class)
+//  4. Fall back to first instancetype that matches size
+//
+// Parameters:
+//   - instancetypes: List of available instancetypes
+//   - size: Size hint (e.g., "small", "medium", "large")
+//   - performance: Performance class hint (e.g., "u1", "c1", "m1")
+//
+// Returns the matched instancetype name, or empty string if no match found.
 func MatchInstancetypeBySize(instancetypes []InstancetypeInfo, size, performance string) string {
 	normalizedSize := strings.ToLower(strings.TrimSpace(size))
 	normalizedPerformance := strings.ToLower(strings.TrimSpace(performance))
@@ -263,7 +322,14 @@ func MatchInstancetypeBySize(instancetypes []InstancetypeInfo, size, performance
 	return candidatesBySize[0].Name
 }
 
-// FilterInstancetypesBySize filters instancetypes that contain the size hint in their name
+// FilterInstancetypesBySize filters instancetypes that contain the size hint in their name.
+//
+// Parameters:
+//   - instancetypes: List of available instancetypes
+//   - normalizedSize: Lowercase size hint (e.g., "small", "medium", "large")
+//
+// Returns a filtered list of instancetypes whose names contain the size string.
+// For example, "medium" matches "u1.medium", "c1.medium", etc.
 func FilterInstancetypesBySize(instancetypes []InstancetypeInfo, normalizedSize string) []InstancetypeInfo {
 	var candidates []InstancetypeInfo
 	for i := range instancetypes {
@@ -275,7 +341,23 @@ func FilterInstancetypesBySize(instancetypes []InstancetypeInfo, normalizedSize 
 	return candidates
 }
 
-// ResolvePreference determines the preference to use from DataSource defaults or cluster resources
+// ResolvePreference determines the preference to use from DataSource defaults or cluster resources.
+//
+// Resolution priority:
+//  1. Explicit preference parameter (if provided)
+//  2. DataSource default preference (if DataSource matched and has default)
+//  3. Auto-match preference name against workload input
+//     e.g., "rhel" matches "rhel.9"
+//
+// Parameters:
+//   - preferences: List of available preferences from the cluster
+//   - explicitPreference: User-specified preference name (may be empty)
+//   - workload: Workload/OS name used for auto-matching
+//   - matchedDataSource: Matched DataSource (may be nil)
+//
+// Returns a pointer to PreferenceInfo with name and scope, or nil if no match found.
+// If a preference name is provided but not found in available preferences, assumes
+// it's cluster-scoped.
 func ResolvePreference(preferences []PreferenceInfo, explicitPreference, workload string, matchedDataSource *DataSourceInfo) *PreferenceInfo {
 	// If explicit preference is specified, try to find it in available preferences
 	if explicitPreference != "" {
@@ -312,7 +394,24 @@ func ResolvePreference(preferences []PreferenceInfo, explicitPreference, workloa
 	return nil
 }
 
-// ResolveInstancetype determines the instancetype to use from DataSource defaults or size/performance hints
+// ResolveInstancetype determines the instancetype to use from DataSource defaults or size/performance hints.
+//
+// Resolution priority:
+//  1. Explicit instancetype parameter (if provided)
+//  2. DataSource default instancetype (if DataSource matched, has default, and no size specified)
+//  3. Auto-match by size and performance hints
+//     e.g., size="large" + performance="c1" matches "c1.large"
+//
+// Parameters:
+//   - instancetypes: List of available instancetypes from the cluster
+//   - explicitInstancetype: User-specified instancetype name (may be empty)
+//   - size: Size hint (e.g., "small", "medium", "large") - may be empty
+//   - performance: Performance class hint (e.g., "u1", "c1", "m1") - may be empty
+//   - matchedDataSource: Matched DataSource (may be nil)
+//
+// Returns a pointer to InstancetypeInfo with name and scope, or nil if no match found.
+// If an instancetype name is provided but not found in available instancetypes, assumes
+// it's cluster-scoped.
 func ResolveInstancetype(instancetypes []InstancetypeInfo, explicitInstancetype, size, performance string, matchedDataSource *DataSourceInfo) *InstancetypeInfo {
 	// If explicit instancetype is specified, try to find it in available instancetypes
 	if explicitInstancetype != "" {
@@ -353,7 +452,18 @@ func ResolveInstancetype(instancetypes []InstancetypeInfo, explicitInstancetype,
 	return nil
 }
 
-// ExtractDataSourceInfo extracts source information from a DataSource object
+// ExtractDataSourceInfo extracts source information from a DataSource object.
+//
+// Supports multiple source types:
+//   - PVC: Returns "PVC: namespace/name" or "PVC: name"
+//   - Registry: Returns "Registry: url"
+//   - HTTP: Returns "HTTP: url"
+//
+// Parameters:
+//   - obj: Unstructured DataSource object
+//
+// Returns a human-readable string describing the source, or "unknown source"/"DataSource (type unknown)"
+// if the source cannot be determined.
 func ExtractDataSourceInfo(obj *unstructured.Unstructured) string {
 	// Try to get the source from spec.source
 	spec, found, err := unstructured.NestedMap(obj.Object, "spec", "source")
