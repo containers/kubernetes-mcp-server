@@ -51,8 +51,8 @@ func initManageIstioConfig() []api.ServerTool {
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Manage Istio Config: List, Get, Create, Patch, Delete",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
+				ReadOnlyHint:    ptr.To(false),
+				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
@@ -83,35 +83,52 @@ func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 // validateIstioConfigInput centralizes validation rules for manage istio config tool.
 // Rules:
 // - If action is not "list": namespace, group, version, kind are required
-// - If action is "create": name and json_data are required
-// - If action is "patch": json_data is required
+// - If action is "create": json_data are required
+// - If action is "patch": name and json_data is required
+// - If action is "get": name is required
+// - If action is "patch": name is required
 func validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData string) error {
-	if action != "list" {
-		if namespace == "" {
-			return fmt.Errorf("namespace is required for action %q", action)
+	switch action {
+	case "list", "create", "patch", "get", "delete":
+		if action != "list" {
+			if namespace == "" {
+				return fmt.Errorf("namespace is required for action %q", action)
+			}
+			if group == "" {
+				return fmt.Errorf("group is required for action %q", action)
+			}
+			if version == "" {
+				return fmt.Errorf("version is required for action %q", action)
+			}
+			if kind == "" {
+				return fmt.Errorf("kind is required for action %q", action)
+			}
 		}
-		if group == "" {
-			return fmt.Errorf("group is required for action %q", action)
+		if action == "create" {
+			if jsonData == "" {
+				return fmt.Errorf("json_data is required for action %q", action)
+			}
 		}
-		if version == "" {
-			return fmt.Errorf("version is required for action %q", action)
+		if action == "patch" {
+			if name == "" {
+				return fmt.Errorf("name is required for action %q", action)
+			}
+			if jsonData == "" {
+				return fmt.Errorf("json_data is required for action %q", action)
+			}
 		}
-		if kind == "" {
-			return fmt.Errorf("kind is required for action %q", action)
+		if action == "get" {
+			if name == "" {
+				return fmt.Errorf("name is required for action %q", action)
+			}
 		}
-	}
-	if action == "create" {
-		if name == "" {
-			return fmt.Errorf("name is required for action %q", action)
+		if action == "delete" {
+			if name == "" {
+				return fmt.Errorf("name is required for action %q", action)
+			}
 		}
-		if jsonData == "" {
-			return fmt.Errorf("json_data is required for action %q", action)
-		}
-	}
-	if action == "patch" {
-		if jsonData == "" {
-			return fmt.Errorf("json_data is required for action %q", action)
-		}
+	default:
+		return fmt.Errorf("invalid action %q: must be one of list, create, patch, get, delete", action)
 	}
 	return nil
 }

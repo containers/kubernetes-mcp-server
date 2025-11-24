@@ -91,7 +91,7 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if rateInterval, ok := params.GetArguments()["rateInterval"].(string); ok && rateInterval != "" {
 		queryParams["rateInterval"] = rateInterval
 	}
-	if graphType, ok := params.GetArguments()["graph_type"].(string); ok && graphType != "" {
+	if graphType, ok := params.GetArguments()["graphType"].(string); ok && graphType != "" {
 		queryParams["graphType"] = graphType
 	}
 	k := params.NewKiali()

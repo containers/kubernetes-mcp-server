@@ -34,6 +34,7 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 		Errors: make(map[string]string),
 	}
 
+	var errorsMu sync.Mutex
 	var wg sync.WaitGroup
 	wg.Add(4)
 
@@ -42,7 +43,9 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 		defer wg.Done()
 		data, err := k.getGraph(ctx, cleaned, queryParams)
 		if err != nil {
+			errorsMu.Lock()
 			resp.Errors["graph"] = err.Error()
+			errorsMu.Unlock()
 			return
 		}
 		resp.Graph = data
@@ -53,7 +56,9 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 		defer wg.Done()
 		data, err := k.getHealth(ctx, cleaned, queryParams)
 		if err != nil {
+			errorsMu.Lock()
 			resp.Errors["health"] = err.Error()
+			errorsMu.Unlock()
 			return
 		}
 		resp.Health = data
@@ -64,7 +69,9 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 		defer wg.Done()
 		data, err := k.getMeshStatus(ctx)
 		if err != nil {
+			errorsMu.Lock()
 			resp.Errors["mesh_status"] = err.Error()
+			errorsMu.Unlock()
 			return
 		}
 		resp.MeshStatus = data
@@ -75,7 +82,9 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 		defer wg.Done()
 		data, err := k.getNamespaces(ctx)
 		if err != nil {
+			errorsMu.Lock()
 			resp.Errors["namespaces"] = err.Error()
+			errorsMu.Unlock()
 			return
 		}
 		resp.Namespaces = data
