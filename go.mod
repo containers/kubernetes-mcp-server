@@ -8,7 +8,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/google/jsonschema-go v0.3.0
-	github.com/mark3labs/mcp-go v0.43.0
+	github.com/mark3labs/mcp-go v0.43.1
 	github.com/modelcontextprotocol/go-sdk v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/afero v1.15.0
