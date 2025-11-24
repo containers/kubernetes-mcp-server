@@ -60,12 +60,19 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid endpoint path: %w", err)
 	}
+	// Reject absolute URLs - endpoint should be a relative path
+	if endpointURL.Scheme != "" || endpointURL.Host != "" {
+		return "", fmt.Errorf("endpoint must be a relative path, not an absolute URL")
+	}
 	resultURL, err := url.JoinPath(baseURL.String(), endpointURL.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to join kiali base URL with endpoint path: %w", err)
 	}
 
-	u, _ := url.Parse(resultURL)
+	u, err := url.Parse(resultURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse joined URL: %w", err)
+	}
 	u.RawQuery = endpointURL.RawQuery
 	u.Fragment = endpointURL.Fragment
 
@@ -145,7 +152,10 @@ func (k *Kiali) executeRequest(ctx context.Context, method, endpoint, contentTyp
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {
 			return "", fmt.Errorf("kiali API error: %s", strings.TrimSpace(string(respBody)))

@@ -208,11 +208,11 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset | Description                                                                                                                                                                                  | Default |
-|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config  | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                      | ✓       |
-| core    | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                          | ✓       |
-| helm    | Tools for managing Helm charts and releases                                                                                                                                                  | ✓       |
+| Toolset | Description                                                                                                                                                          | Default |
+|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config  | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
+| core    | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
+| helm    | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
 | kiali   | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
