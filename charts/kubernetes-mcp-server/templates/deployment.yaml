@@ -59,9 +59,6 @@ spec:
             - name: config
               mountPath: {{ .Values.configFilePath | dir }}
           {{- with .Values.extraVolumeMounts }}
-          {{- tpl (toYaml .) . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.extraVolumeMounts }}
             {{- tpl (toYaml .) . | nindent 12 }}
           {{- end }}
       volumes:
