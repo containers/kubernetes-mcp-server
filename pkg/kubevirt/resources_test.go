@@ -366,8 +366,16 @@ func TestResolvePreference(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ResolvePreference(tt.preferences, tt.explicitPreference, tt.workload, tt.matchedDataSource)
-			if result != tt.expected {
-				t.Errorf("ResolvePreference() = %q, want %q", result, tt.expected)
+			if tt.expected == "" {
+				if result != nil {
+					t.Errorf("ResolvePreference() = %v, want nil", result)
+				}
+			} else {
+				if result == nil {
+					t.Errorf("ResolvePreference() = nil, want %q", tt.expected)
+				} else if result.Name != tt.expected {
+					t.Errorf("ResolvePreference() = %q, want %q", result.Name, tt.expected)
+				}
 			}
 		})
 	}
@@ -422,8 +430,16 @@ func TestResolveInstancetype(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ResolveInstancetype(tt.instancetypes, tt.explicitInstancetype, tt.size, tt.performance, tt.matchedDataSource)
-			if result != tt.expected {
-				t.Errorf("ResolveInstancetype() = %q, want %q", result, tt.expected)
+			if tt.expected == "" {
+				if result != nil {
+					t.Errorf("ResolveInstancetype() = %v, want nil", result)
+				}
+			} else {
+				if result == nil {
+					t.Errorf("ResolveInstancetype() = nil, want %q", tt.expected)
+				} else if result.Name != tt.expected {
+					t.Errorf("ResolveInstancetype() = %q, want %q", result.Name, tt.expected)
+				}
 			}
 		})
 	}

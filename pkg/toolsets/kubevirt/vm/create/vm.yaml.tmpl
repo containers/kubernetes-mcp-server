@@ -8,12 +8,12 @@ spec:
 {{- if .Instancetype}}
   instancetype:
     name: {{.Instancetype}}
-    kind: VirtualMachineClusterInstancetype
+    kind: {{.InstancetypeKind}}
 {{- end}}
 {{- if .Preference}}
   preference:
     name: {{.Preference}}
-    kind: VirtualMachineClusterPreference
+    kind: {{.PreferenceKind}}
 {{- end}}
 {{- if .UseDataSource}}
   dataVolumeTemplates:

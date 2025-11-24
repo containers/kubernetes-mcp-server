@@ -647,8 +647,8 @@ func TestBuildTemplateParams(t *testing.T) {
 		name                  string
 		createParams          *createParameters
 		matchedDataSource     *kubevirt.DataSourceInfo
-		instancetype          string
-		preference            string
+		instancetype          *kubevirt.InstancetypeInfo
+		preference            *kubevirt.PreferenceInfo
 		expectedRunStrategy   string
 		expectedUseDataSource bool
 		expectedContainerDisk string
@@ -662,8 +662,8 @@ func TestBuildTemplateParams(t *testing.T) {
 				Autostart: false,
 			},
 			matchedDataSource:     nil,
-			instancetype:          "",
-			preference:            "",
+			instancetype:          nil,
+			preference:            nil,
 			expectedRunStrategy:   "Halted",
 			expectedUseDataSource: false,
 			expectedContainerDisk: "quay.io/containerdisks/fedora:latest",
@@ -677,8 +677,8 @@ func TestBuildTemplateParams(t *testing.T) {
 				Autostart: true,
 			},
 			matchedDataSource:     nil,
-			instancetype:          "",
-			preference:            "",
+			instancetype:          nil,
+			preference:            nil,
 			expectedRunStrategy:   "Always",
 			expectedUseDataSource: false,
 			expectedContainerDisk: "quay.io/containerdisks/fedora:latest",
@@ -696,8 +696,8 @@ func TestBuildTemplateParams(t *testing.T) {
 				Namespace: "os-images",
 				Source:    "registry.example.com/fedora:latest",
 			},
-			instancetype:          "",
-			preference:            "",
+			instancetype:          nil,
+			preference:            nil,
 			expectedRunStrategy:   "Halted",
 			expectedUseDataSource: true,
 			expectedContainerDisk: "",
@@ -715,8 +715,8 @@ func TestBuildTemplateParams(t *testing.T) {
 				Namespace: "",
 				Source:    "quay.io/containerdisks/fedora:latest",
 			},
-			instancetype:          "",
-			preference:            "",
+			instancetype:          nil,
+			preference:            nil,
 			expectedRunStrategy:   "Halted",
 			expectedUseDataSource: false,
 			expectedContainerDisk: "quay.io/containerdisks/fedora:latest",
@@ -796,11 +796,12 @@ func TestRenderVMYaml(t *testing.T) {
 		{
 			name: "renders VM with instancetype",
 			params: vmParams{
-				Namespace:     "test-ns",
-				Name:          "test-vm",
-				ContainerDisk: "quay.io/containerdisks/fedora:latest",
-				Instancetype:  "u1.medium",
-				RunStrategy:   "Halted",
+				Namespace:        "test-ns",
+				Name:             "test-vm",
+				ContainerDisk:    "quay.io/containerdisks/fedora:latest",
+				Instancetype:     "u1.medium",
+				InstancetypeKind: "VirtualMachineClusterInstancetype",
+				RunStrategy:      "Halted",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, yaml string) {
@@ -809,6 +810,9 @@ func TestRenderVMYaml(t *testing.T) {
 				}
 				if !strings.Contains(yaml, "name: u1.medium") {
 					t.Error("Expected name: u1.medium in instancetype section")
+				}
+				if !strings.Contains(yaml, "kind: VirtualMachineClusterInstancetype") {
+					t.Error("Expected kind: VirtualMachineClusterInstancetype in instancetype section")
 				}
 			},
 		},

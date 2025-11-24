@@ -27,13 +27,15 @@ type DataSourceInfo struct {
 
 // PreferenceInfo contains information about a VirtualMachinePreference
 type PreferenceInfo struct {
-	Name string
+	Name      string
+	Namespace string // Empty for cluster-scoped preferences
 }
 
 // InstancetypeInfo contains information about a VirtualMachineInstancetype
 type InstancetypeInfo struct {
-	Name   string
-	Labels map[string]string
+	Name      string
+	Namespace string // Empty for cluster-scoped instancetypes
+	Labels    map[string]string
 }
 
 // SearchDataSources searches for DataSource resources in the cluster
@@ -122,7 +124,8 @@ func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, nam
 	if err == nil {
 		for _, item := range clusterList.Items {
 			results = append(results, PreferenceInfo{
-				Name: item.GetName(),
+				Name:      item.GetName(),
+				Namespace: "", // Cluster-scoped
 			})
 		}
 	}
@@ -138,7 +141,8 @@ func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, nam
 	if err == nil {
 		for _, item := range namespacedList.Items {
 			results = append(results, PreferenceInfo{
-				Name: item.GetName(),
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
 			})
 		}
 	}
@@ -160,8 +164,9 @@ func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, n
 	if err == nil {
 		for _, item := range clusterList.Items {
 			results = append(results, InstancetypeInfo{
-				Name:   item.GetName(),
-				Labels: item.GetLabels(),
+				Name:      item.GetName(),
+				Namespace: "", // Cluster-scoped
+				Labels:    item.GetLabels(),
 			})
 		}
 	}
@@ -177,8 +182,9 @@ func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, n
 	if err == nil {
 		for _, item := range namespacedList.Items {
 			results = append(results, InstancetypeInfo{
-				Name:   item.GetName(),
-				Labels: item.GetLabels(),
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+				Labels:    item.GetLabels(),
 			})
 		}
 	}
@@ -257,13 +263,28 @@ func FilterInstancetypesBySize(instancetypes []InstancetypeInfo, normalizedSize 
 }
 
 // ResolvePreference determines the preference to use from DataSource defaults or cluster resources
-func ResolvePreference(preferences []PreferenceInfo, explicitPreference, workload string, matchedDataSource *DataSourceInfo) string {
+func ResolvePreference(preferences []PreferenceInfo, explicitPreference, workload string, matchedDataSource *DataSourceInfo) *PreferenceInfo {
+	// If explicit preference is specified, try to find it in available preferences
 	if explicitPreference != "" {
-		return explicitPreference
+		for i := range preferences {
+			if preferences[i].Name == explicitPreference {
+				return &preferences[i]
+			}
+		}
+		// If not found in available preferences, assume it's cluster-scoped
+		return &PreferenceInfo{Name: explicitPreference, Namespace: ""}
 	}
 
+	// Use DataSource default preference if available
 	if matchedDataSource != nil && matchedDataSource.DefaultPreference != "" {
-		return matchedDataSource.DefaultPreference
+		// Try to find the default preference in available preferences
+		for i := range preferences {
+			if preferences[i].Name == matchedDataSource.DefaultPreference {
+				return &preferences[i]
+			}
+		}
+		// If not found, assume it's cluster-scoped
+		return &PreferenceInfo{Name: matchedDataSource.DefaultPreference, Namespace: ""}
 	}
 
 	// Try to match preference name against the workload input
@@ -272,30 +293,51 @@ func ResolvePreference(preferences []PreferenceInfo, explicitPreference, workloa
 		pref := &preferences[i]
 		// Common patterns: "fedora", "rhel.9", "ubuntu", etc.
 		if strings.Contains(strings.ToLower(pref.Name), normalizedInput) {
-			return pref.Name
+			return pref
 		}
 	}
-	return ""
+	return nil
 }
 
 // ResolveInstancetype determines the instancetype to use from DataSource defaults or size/performance hints
-func ResolveInstancetype(instancetypes []InstancetypeInfo, explicitInstancetype, size, performance string, matchedDataSource *DataSourceInfo) string {
-	// Use explicitly specified instancetype if provided
+func ResolveInstancetype(instancetypes []InstancetypeInfo, explicitInstancetype, size, performance string, matchedDataSource *DataSourceInfo) *InstancetypeInfo {
+	// If explicit instancetype is specified, try to find it in available instancetypes
 	if explicitInstancetype != "" {
-		return explicitInstancetype
+		for i := range instancetypes {
+			if instancetypes[i].Name == explicitInstancetype {
+				return &instancetypes[i]
+			}
+		}
+		// If not found in available instancetypes, assume it's cluster-scoped
+		return &InstancetypeInfo{Name: explicitInstancetype, Namespace: ""}
 	}
 
 	// Use DataSource default instancetype if available (when size not specified)
 	if size == "" && matchedDataSource != nil && matchedDataSource.DefaultInstancetype != "" {
-		return matchedDataSource.DefaultInstancetype
+		// Try to find the default instancetype in available instancetypes
+		for i := range instancetypes {
+			if instancetypes[i].Name == matchedDataSource.DefaultInstancetype {
+				return &instancetypes[i]
+			}
+		}
+		// If not found, assume it's cluster-scoped
+		return &InstancetypeInfo{Name: matchedDataSource.DefaultInstancetype, Namespace: ""}
 	}
 
 	// Match instancetype based on size and performance hints
 	if size != "" {
-		return MatchInstancetypeBySize(instancetypes, size, performance)
+		name := MatchInstancetypeBySize(instancetypes, size, performance)
+		if name != "" {
+			// Find the matched instancetype to get its namespace
+			for i := range instancetypes {
+				if instancetypes[i].Name == name {
+					return &instancetypes[i]
+				}
+			}
+		}
 	}
 
-	return ""
+	return nil
 }
 
 // ExtractDataSourceInfo extracts source information from a DataSource object

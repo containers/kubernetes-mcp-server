@@ -81,7 +81,9 @@ type vmParams struct {
 	Name                string
 	ContainerDisk       string
 	Instancetype        string
+	InstancetypeKind    string
 	Preference          string
+	PreferenceKind      string
 	UseDataSource       bool
 	DataSourceName      string
 	DataSourceNamespace string
@@ -108,13 +110,13 @@ func create(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	instancetypes := kubevirt.SearchInstancetypes(params.Context, dynamicClient, createParams.Namespace)
 
 	// Resolve preference from DataSource defaults or cluster resources
-	preference := kubevirt.ResolvePreference(preferences, createParams.Preference, createParams.Workload, matchedDataSource)
+	preferenceInfo := kubevirt.ResolvePreference(preferences, createParams.Preference, createParams.Workload, matchedDataSource)
 
 	// Resolve instancetype from DataSource defaults or size/performance hints
-	instancetype := kubevirt.ResolveInstancetype(instancetypes, createParams.Instancetype, createParams.Size, createParams.Performance, matchedDataSource)
+	instancetypeInfo := kubevirt.ResolveInstancetype(instancetypes, createParams.Instancetype, createParams.Size, createParams.Performance, matchedDataSource)
 
 	// Build template parameters from resolved resources
-	templateParams := buildTemplateParams(createParams, matchedDataSource, instancetype, preference)
+	templateParams := buildTemplateParams(createParams, matchedDataSource, instancetypeInfo, preferenceInfo)
 
 	// Render the VM YAML
 	vmYaml, err := renderVMYaml(templateParams)
@@ -182,7 +184,7 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 }
 
 // buildTemplateParams constructs the template parameters for VM creation
-func buildTemplateParams(createParams *createParameters, matchedDataSource *kubevirt.DataSourceInfo, instancetype, preference string) vmParams {
+func buildTemplateParams(createParams *createParameters, matchedDataSource *kubevirt.DataSourceInfo, instancetypeInfo *kubevirt.InstancetypeInfo, preferenceInfo *kubevirt.PreferenceInfo) vmParams {
 	// Determine runStrategy based on autostart parameter
 	runStrategy := "Halted"
 	if createParams.Autostart {
@@ -190,11 +192,29 @@ func buildTemplateParams(createParams *createParameters, matchedDataSource *kube
 	}
 
 	params := vmParams{
-		Namespace:    createParams.Namespace,
-		Name:         createParams.Name,
-		Instancetype: instancetype,
-		Preference:   preference,
-		RunStrategy:  runStrategy,
+		Namespace:   createParams.Namespace,
+		Name:        createParams.Name,
+		RunStrategy: runStrategy,
+	}
+
+	// Set instancetype and kind if available
+	if instancetypeInfo != nil {
+		params.Instancetype = instancetypeInfo.Name
+		if instancetypeInfo.Namespace == "" {
+			params.InstancetypeKind = "VirtualMachineClusterInstancetype"
+		} else {
+			params.InstancetypeKind = "VirtualMachineInstancetype"
+		}
+	}
+
+	// Set preference and kind if available
+	if preferenceInfo != nil {
+		params.Preference = preferenceInfo.Name
+		if preferenceInfo.Namespace == "" {
+			params.PreferenceKind = "VirtualMachineClusterPreference"
+		} else {
+			params.PreferenceKind = "VirtualMachinePreference"
+		}
 	}
 
 	if matchedDataSource != nil && matchedDataSource.Namespace != "" {
