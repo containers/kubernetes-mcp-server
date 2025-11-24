@@ -11,3 +11,4 @@ maintainers:
   - name: Marc Nuri
     email: marc.nuri@redhat.com
 version: 0.1.0
+appVersion: "latest"

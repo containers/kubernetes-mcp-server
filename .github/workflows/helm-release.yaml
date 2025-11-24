@@ -1,0 +1,125 @@
+name: Helm Chart Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      chart_version:
+        description: 'Chart version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+      app_version:
+        description: 'App version (defaults to latest if not specified)'
+        required: false
+        type: string
+        default: 'latest'
+
+env:
+  REGISTRY: ghcr.io
+  CHART_NAME: kubernetes-mcp-server
+
+concurrency:
+  group: helm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: '3.19.2'
+
+    - name: Validate chart version format
+      run: |
+        if [[ ! "${{ inputs.chart_version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Error: Chart version must be in format X.Y.Z (e.g., 0.1.0)"
+          exit 1
+        fi
+
+    - name: Update Chart.yaml versions
+      run: |
+        sed -i "s/version: .*/version: ${{ inputs.chart_version }}/" charts/kubernetes-mcp-server/Chart.yaml
+        sed -i "s/appVersion: .*/appVersion: \"${{ inputs.app_version }}\"/" charts/kubernetes-mcp-server/Chart.yaml
+        
+        echo "Updated Chart.yaml:"
+        cat charts/kubernetes-mcp-server/Chart.yaml
+    - name: Lint Helm chart
+      run: |
+        helm lint charts/kubernetes-mcp-server
+
+    - name: Template Helm chart (dry run)
+      run: |
+        helm template test-release charts/kubernetes-mcp-server --set ingress.host=localhost --debug
+    - name: Run Helm unit tests (if kubeconform is available)
+      run: |
+        # Install kubeconform for validation
+        curl -L https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+        sudo mv kubeconform /usr/local/bin
+        
+        # Validate generated manifests
+        helm template test-release charts/kubernetes-mcp-server --set ingress.host=localhost | kubeconform -strict -summary -ignore-missing-schemas
+
+    - name: Package Helm chart
+      run: |
+        helm package charts/kubernetes-mcp-server --destination ./chart-packages
+        echo "Generated packages:"
+        ls -la ./chart-packages/
+
+    - name: Login to Container Registry
+      run: |
+        echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+    - name: Push chart to OCI registry
+      run: |
+        chart_package=$(ls ./chart-packages/kubernetes-mcp-server-*.tgz)
+        echo "Pushing chart package: $chart_package"
+        helm push "$chart_package" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+
+    - name: Verify chart installation
+      run: |
+        # Verify the chart we just pushed works (client-only, no cluster needed)
+        echo "Testing chart template rendering from OCI registry..."
+        helm template test-install oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/kubernetes-mcp-server --set ingress.host=localhost --version ${{ inputs.chart_version }} --debug
+
+    - name: Generate release summary
+      run: |
+        echo "## Helm Chart Release Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Chart Name:** ${{ env.CHART_NAME }}" >> $GITHUB_STEP_SUMMARY  
+        echo "- **Chart Version:** ${{ inputs.chart_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **App Version:** ${{ inputs.app_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry:** ${{ env.REGISTRY }}/${{ github.repository_owner }}/charts" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Installation Command" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "helm install kubernetes-mcp-server oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/kubernetes-mcp-server --set ingress.host=<hostname> --version ${{ inputs.chart_version }} --create-namespace --namespace mcp-system" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  create-git-tag:
+    needs: validate-and-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Create and push git tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        tag_name="chart-v${{ inputs.chart_version }}"
+        git tag -a "$tag_name" -m "Helm chart release v${{ inputs.chart_version }}"
+        git push origin "$tag_name"
+        
+        echo "Created git tag: $tag_name"

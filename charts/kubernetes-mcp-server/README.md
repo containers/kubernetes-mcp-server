@@ -1,6 +1,6 @@
 # kubernetes-mcp-server
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square)
+![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
 
 Helm Chart for the Kubernetes MCP Server
 
@@ -20,12 +20,12 @@ The Chart can be installed quickly and easily to a Kubernetes cluster. Since an 
 Install the Chart using the following command from the root of this directory:
 
 ```shell
-helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server . --set openshift=true --set ingress.host=<hostname>
+helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
 ```
 
 ### Optimized OpenShift Deployment
 
-Functionality has bee added to the Chart to simplify the deployment to OpenShift Cluster.
+Functionality has been added to the Chart to simplify the deployment to OpenShift Cluster.
 
 ## Values
 
@@ -72,5 +72,5 @@ The contents of the README.md file is generated using [helm-docs](https://github
 Execute the following command to regenerate the documentation from within the Helm Chart directory.
 
 ```shell
-helm-docs -t README.md.gotpl
+helm-docs -t README.md.gotmpl
 ```
