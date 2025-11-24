@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,6 +26,43 @@ func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			if customAuthHeader != "" {
 				return next(context.WithValue(ctx, internalk8s.OAuthAuthorizationHeader, customAuthHeader), method, req)
 			}
+		}
+		return next(ctx, method, req)
+	}
+}
+
+func customAuthHeadersPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+
+		var authHeaders *internalk8s.K8sAuthHeaders = nil
+		var err error = nil
+		if req.GetParams() != nil {
+			if toolParams, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+				toolParamsMeta := toolParams.GetMeta()
+				authHeaders, err = internalk8s.NewK8sAuthHeadersFromHeaders(toolParamsMeta)
+				if err != nil {
+					klog.V(4).ErrorS(err, "failed to parse custom auth headers from tool params meta", "tool", req.GetParams().(*mcp.CallToolParamsRaw).Name)
+				}
+			}
+		}
+
+		if authHeaders == nil && req.GetExtra() != nil && req.GetExtra().Header != nil {
+			// Convert http.Header to map[string]any
+			headerMap := make(map[string]any)
+			for key, values := range req.GetExtra().Header {
+				if len(values) > 0 {
+					headerMap[strings.ToLower(key)] = values[0]
+				}
+			}
+			authHeaders, err = internalk8s.NewK8sAuthHeadersFromHeaders(headerMap)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// add auth headers to context
+		if authHeaders != nil {
+			ctx = context.WithValue(ctx, internalk8s.AuthHeadersContextKey, authHeaders)
 		}
 		return next(ctx, method, req)
 	}

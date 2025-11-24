@@ -3,9 +3,10 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/runtime"
 	"regexp"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 	authv1 "k8s.io/api/authorization/v1"

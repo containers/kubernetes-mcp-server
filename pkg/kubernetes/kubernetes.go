@@ -13,8 +13,16 @@ import (
 type HeaderKey string
 
 const (
+	CustomClusterURLHeader    = HeaderKey("kubernetes-cluster-url")
 	CustomAuthorizationHeader = HeaderKey("kubernetes-authorization")
-	OAuthAuthorizationHeader  = HeaderKey("Authorization")
+	// CustomCertificateAuthorityData is the base64-encoded CA certificate.
+	CustomCertificateAuthorityDataHeader = HeaderKey("kubernetes-certificate-authority-data")
+	// CustomClientCertificateData is the base64-encoded client certificate.
+	CustomClientCertificateDataHeader = HeaderKey("kubernetes-client-certificate-data")
+	// CustomClientKeyData is the base64-encoded client key.
+	CustomClientKeyDataHeader = HeaderKey("kubernetes-client-key-data")
+
+	OAuthAuthorizationHeader = HeaderKey("Authorization")
 
 	CustomUserAgent = "kubernetes-mcp-server/bearer-token-auth"
 )
