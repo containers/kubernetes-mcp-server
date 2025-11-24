@@ -27,7 +27,7 @@ spec:
       storage:
         resources:
           requests:
-            storage: 30Gi
+            storage: {{.Storage}}
 {{- end}}
   template:
     spec:

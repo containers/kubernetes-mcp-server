@@ -60,6 +60,11 @@ func Tools() []api.ServerTool {
 							Type:        "boolean",
 							Description: "Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.",
 						},
+						"storage": {
+							Type:        "string",
+							Description: "Optional storage size for the VM's root disk when using DataSources (e.g., '30Gi', '50Gi', '100Gi'). Defaults to 30Gi. Ignored when using container disks.",
+							Examples:    []any{"30Gi", "50Gi", "100Gi"},
+						},
 					},
 					Required: []string{"namespace", "name"},
 				},
@@ -87,6 +92,7 @@ type vmParams struct {
 	UseDataSource       bool
 	DataSourceName      string
 	DataSourceNamespace string
+	Storage             string
 	RunStrategy         string
 }
 
@@ -148,6 +154,7 @@ type createParameters struct {
 	Preference   string
 	Size         string
 	Performance  string
+	Storage      string
 	Autostart    bool
 }
 
@@ -171,6 +178,11 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 	performance := normalizePerformance(getOptionalString(params, "performance"))
 	autostart := getOptionalBool(params, "autostart")
 
+	storage := getOptionalString(params, "storage")
+	if storage == "" {
+		storage = "30Gi" // Default storage size
+	}
+
 	return &createParameters{
 		Namespace:    namespace,
 		Name:         name,
@@ -179,6 +191,7 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 		Preference:   getOptionalString(params, "preference"),
 		Size:         getOptionalString(params, "size"),
 		Performance:  performance,
+		Storage:      storage,
 		Autostart:    autostart,
 	}, nil
 }
@@ -194,6 +207,7 @@ func buildTemplateParams(createParams *createParameters, matchedDataSource *kube
 	params := vmParams{
 		Namespace:   createParams.Namespace,
 		Name:        createParams.Name,
+		Storage:     createParams.Storage,
 		RunStrategy: runStrategy,
 	}
 

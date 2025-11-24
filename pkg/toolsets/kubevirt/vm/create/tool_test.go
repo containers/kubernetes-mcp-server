@@ -574,6 +574,23 @@ func TestParseCreateParameters(t *testing.T) {
 				if params.Autostart != false {
 					t.Errorf("Autostart = %v, want false (default)", params.Autostart)
 				}
+				if params.Storage != "30Gi" {
+					t.Errorf("Storage = %q, want '30Gi' (default)", params.Storage)
+				}
+			},
+		},
+		{
+			name: "parses custom storage parameter",
+			args: map[string]any{
+				"namespace": "test-ns",
+				"name":      "test-vm",
+				"storage":   "100Gi",
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, params *createParameters) {
+				if params.Storage != "100Gi" {
+					t.Errorf("Storage = %q, want '100Gi'", params.Storage)
+				}
 			},
 		},
 		{
