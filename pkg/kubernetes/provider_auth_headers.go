@@ -13,7 +13,9 @@ import (
 // This provider requires users to provide authentication tokens via request headers.
 // It uses cluster connection details from configuration but does not use any
 // authentication credentials from kubeconfig files.
-type AuthHeadersClusterProvider struct{}
+type AuthHeadersClusterProvider struct {
+	staticConfig *config.StaticConfig
+}
 
 var _ Provider = &AuthHeadersClusterProvider{}
 
@@ -85,7 +87,7 @@ func newAuthHeadersClusterProvider(cfg *config.StaticConfig) (Provider, error) {
 
 	klog.V(1).Infof("Auth-headers provider initialized - all requests must include valid headers")
 
-	return &AuthHeadersClusterProvider{}, nil
+	return &AuthHeadersClusterProvider{staticConfig: cfg}, nil
 }
 
 func (p *AuthHeadersClusterProvider) IsOpenShift(ctx context.Context) bool {
@@ -106,10 +108,56 @@ func (p *AuthHeadersClusterProvider) GetTargetParameterName() string {
 }
 
 func (p *AuthHeadersClusterProvider) GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error) {
-	// _, err := New(ctx)
-	// if err != nil {
-	// 	return nil, err
+	// authHeaders, ok := ctx.Value(AuthHeadersContextKey).(*K8sAuthHeaders)
+	// if !ok {
+	// 	return nil, errors.New("authHeaders required")
 	// }
+
+	// decodedCA, err := authHeaders.GetDecodedCertificateAuthorityData()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to decode certificate authority data: %w", err)
+	// }
+
+	// restConfig := &rest.Config{
+	// 	Host:        authHeaders.ClusterURL,
+	// 	BearerToken: authHeaders.AuthorizationToken,
+	// 	TLSClientConfig: rest.TLSClientConfig{
+	// 		Insecure: false,
+	// 		CAData:   decodedCA,
+	// 	},
+	// }
+
+	// _ := clientcmd.NewDefaultClientConfig(*restConfig, nil)
+
+	// // Create a REST config with only cluster connection details (no auth)
+	// restConfig := &rest.Config{
+	// 	Host:    cluster.Server,
+	// 	APIPath: m.cfg.APIPath,
+	// 	TLSClientConfig: rest.TLSClientConfig{
+	// 		Insecure:   cluster.InsecureSkipTLSVerify,
+	// 		ServerName: cluster.TLSServerName,
+	// 		CAData:     cluster.CertificateAuthorityData,
+	// 		CAFile:     cluster.CertificateAuthority,
+	// 	},
+	// 	UserAgent: rest.DefaultKubernetesUserAgent(),
+	// 	QPS:       m.cfg.QPS,
+	// 	Burst:     m.cfg.Burst,
+	// 	Timeout:   m.cfg.Timeout,
+	// }
+
+	// // Create a minimal clientcmd config without any authentication
+	// minimalConfig := clientcmdapi.NewConfig()
+	// minimalConfig.Clusters["cluster"] = &clientcmdapi.Cluster{
+	// 	Server:                   cluster.Server,
+	// 	InsecureSkipTLSVerify:    cluster.InsecureSkipTLSVerify,
+	// 	CertificateAuthority:     cluster.CertificateAuthority,
+	// 	CertificateAuthorityData: cluster.CertificateAuthorityData,
+	// 	TLSServerName:            cluster.TLSServerName,
+	// }
+	// minimalConfig.Contexts["auth-headers-context"] = &clientcmdapi.Context{
+	// 	Cluster: "cluster",
+	// }
+	// minimalConfig.CurrentContext = "auth-headers-context"
 
 	// derivedCfg := &rest.Config{
 	// 	Host:    authHeaders.ClusterURL,
