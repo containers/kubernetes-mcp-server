@@ -477,6 +477,27 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-END -->
 
+### Prompts
+
+Prompts guide the LLM through multi-step workflows using existing tools. They provide structured instructions for complex operations that benefit from AI reasoning and interpretation.
+
+<!-- AVAILABLE-PROMPTSETS-PROMPTS-START -->
+
+<details>
+
+<summary>core</summary>
+
+- **cluster_health_check** - Guide for performing comprehensive health check on Kubernetes/OpenShift clusters. Provides step-by-step instructions for examining cluster operators, nodes, pods, workloads, storage, and events to identify issues affecting cluster stability.
+  - `check_events` (`string`) - Include recent warning events in the health check (may increase execution time). Valid values: 'true', 'false', 'yes', 'no', '1', '0'. Default: 'true'
+  - `output_format` (`string`) - Output format for results: 'text' (human-readable) or 'json' (machine-readable). Valid values: 'text', 'json'. Default: 'text'
+  - `verbose` (`string`) - Enable detailed output with additional context and resource-level details. Valid values: 'true', 'false', 'yes', 'no', '1', '0'. Default: 'false'
+  - `namespace` (`string`) - Limit health check to specific namespace (optional, defaults to all namespaces). Valid values: any Kubernetes namespace name or leave empty for all namespaces
+
+</details>
+
+
+<!-- AVAILABLE-PROMPTSETS-PROMPTS-END -->
+
 ## 🧑‍💻 Development <a id="development"></a>
 
 ### Running with mcp-inspector

@@ -31,6 +31,7 @@ type StaticConfig struct {
 	// When true, disable tools annotated with destructiveHint=true
 	DisableDestructive bool     `toml:"disable_destructive,omitempty"`
 	Toolsets           []string `toml:"toolsets,omitempty"`
+	Promptsets         []string `toml:"promptsets,omitempty"`
 	EnabledTools       []string `toml:"enabled_tools,omitempty"`
 	DisabledTools      []string `toml:"disabled_tools,omitempty"`
 

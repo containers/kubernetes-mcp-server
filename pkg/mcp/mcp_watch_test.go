@@ -54,12 +54,33 @@ func (s *WatchKubeConfigSuite) WaitForNotification() *mcp.JSONRPCNotification {
 	return notification
 }
 
+// WaitForToolsNotification waits for a tools/list_changed notification specifically
+func (s *WatchKubeConfigSuite) WaitForToolsNotification() *mcp.JSONRPCNotification {
+	withTimeout, cancel := context.WithTimeout(s.T().Context(), 5*time.Second)
+	defer cancel()
+	var notification *mcp.JSONRPCNotification
+	s.OnNotification(func(n mcp.JSONRPCNotification) {
+		if n.Method == "notifications/tools/list_changed" {
+			notification = &n
+		}
+	})
+	for notification == nil {
+		select {
+		case <-withTimeout.Done():
+			s.FailNow("timeout waiting for tools/list_changed notification")
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	return notification
+}
+
 func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
 	// Given
 	s.InitMcpClient()
 	// When
 	s.WriteKubeconfig()
-	notification := s.WaitForNotification()
+	notification := s.WaitForToolsNotification()
 	// Then
 	s.NotNil(notification, "WatchKubeConfig did not notify")
 	s.Equal("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change")
