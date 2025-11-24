@@ -128,6 +128,49 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 			s.Equal("true", u.Query().Get("health"), "Unexpected query parameter health")
 		})
 	})
+
+	s.Run("Rejects absolute URLs in endpoint", func() {
+		s.Config = test.Must(config.ReadToml([]byte(`
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			insecure = true
+		`)))
+		k := NewKiali(s.Config, s.MockServer.Config())
+
+		s.Run("rejects http URLs", func() {
+			_, err := k.validateAndGetURL("http://other-server.com/api")
+			s.Require().Error(err, "Expected error for absolute URL")
+			s.ErrorContains(err, "endpoint must be a relative path", "Unexpected error message")
+		})
+
+		s.Run("rejects https URLs", func() {
+			_, err := k.validateAndGetURL("https://other-server.com/api")
+			s.Require().Error(err, "Expected error for absolute URL")
+			s.ErrorContains(err, "endpoint must be a relative path", "Unexpected error message")
+		})
+
+		s.Run("rejects URLs with host but no scheme", func() {
+			_, err := k.validateAndGetURL("//other-server.com/api")
+			s.Require().Error(err, "Expected error for URL with host")
+			s.ErrorContains(err, "endpoint must be a relative path", "Unexpected error message")
+		})
+	})
+
+	s.Run("Preserves fragment in endpoint", func() {
+		s.Config = test.Must(config.ReadToml([]byte(`
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			insecure = true
+		`)))
+		k := NewKiali(s.Config, s.MockServer.Config())
+
+		full, err := k.validateAndGetURL("/api/path#section")
+		s.Require().NoError(err, "Expected no error validating URL with fragment")
+		u, err := url.Parse(full)
+		s.Require().NoError(err, "Expected to parse full URL")
+		s.Equal("/api/path", u.Path, "Unexpected path in parsed URL")
+		s.Equal("section", u.Fragment, "Unexpected fragment in parsed URL")
+	})
 }
 
 // CurrentAuthorizationHeader behavior is now implicit via executeRequest using Manager.BearerToken
