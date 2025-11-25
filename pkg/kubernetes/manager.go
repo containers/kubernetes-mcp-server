@@ -113,7 +113,7 @@ func NewAuthHeadersClusterManager(authHeaders *K8sAuthHeaders, config *config.St
 			KeyData:  keyData,
 		},
 	}
-	// Create a dummy kubeconfig clientcmdapi.Config for in-cluster config to be used in places where clientcmd.ClientConfig is required
+	// Create a dummy kubeconfig clientcmdapi.Config to be used in places where clientcmd.ClientConfig is required.
 	clientCmdConfig := clientcmdapi.NewConfig()
 	clientCmdConfig.Clusters["cluster"] = &clientcmdapi.Cluster{
 		Server:                authHeaders.Server,
