@@ -54,13 +54,6 @@ build-all-platforms: clean tidy format lint ## Build the project for all platfor
 		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
 
-.PHONY: python-publish
-python-publish: ## Publish the python packages
-	cd ./python && \
-	sed -i "s/version = \".*\"/version = \"$(GIT_TAG_VERSION)\"/" pyproject.toml && \
-	uv build && \
-	uv publish
-
 .PHONY: test
 test: ## Run the tests
 	go test -count=1 -v ./...
