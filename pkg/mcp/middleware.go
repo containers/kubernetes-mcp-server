@@ -36,6 +36,7 @@ func customAuthHeadersPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHa
 
 		var authHeaders *internalk8s.K8sAuthHeaders = nil
 		var err error = nil
+		// Try to parse auth headers from tool params meta.
 		if req.GetParams() != nil {
 			if toolParams, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
 				toolParamsMeta := toolParams.GetMeta()
@@ -46,21 +47,23 @@ func customAuthHeadersPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHa
 			}
 		}
 
+		// If auth headers are not found in tool params meta, try to parse from request extra.
 		if authHeaders == nil && req.GetExtra() != nil && req.GetExtra().Header != nil {
-			// Convert http.Header to map[string]any
+			// Convert http.Header to map[string]any with lowercased keys.
 			headerMap := make(map[string]any)
 			for key, values := range req.GetExtra().Header {
 				if len(values) > 0 {
 					headerMap[strings.ToLower(key)] = values[0]
 				}
 			}
+			// Filter auth headers to only include the ones that are allowed.
 			authHeaders, err = internalk8s.NewK8sAuthHeadersFromHeaders(headerMap)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		// add auth headers to context
+		// Add auth headers to context
 		if authHeaders != nil {
 			ctx = context.WithValue(ctx, internalk8s.AuthHeadersContextKey, authHeaders)
 		}

@@ -12,14 +12,18 @@ import (
 type HeaderKey string
 
 const (
-	CustomClusterURLHeader    = HeaderKey("kubernetes-cluster-url")
-	CustomAuthorizationHeader = HeaderKey("kubernetes-authorization")
+	// CustomServerHeader is the Kubernetes cluster URL.
+	CustomServerHeader = HeaderKey("kubernetes-server")
 	// CustomCertificateAuthorityData is the base64-encoded CA certificate.
 	CustomCertificateAuthorityDataHeader = HeaderKey("kubernetes-certificate-authority-data")
+	// CustomAuthorizationHeader is the optional bearer token for authentication.
+	CustomAuthorizationHeader = HeaderKey("kubernetes-authorization")
 	// CustomClientCertificateData is the base64-encoded client certificate.
 	CustomClientCertificateDataHeader = HeaderKey("kubernetes-client-certificate-data")
 	// CustomClientKeyData is the base64-encoded client key.
 	CustomClientKeyDataHeader = HeaderKey("kubernetes-client-key-data")
+	// CustomInsecureSkipTLSVerify is the optional flag to skip TLS verification.
+	CustomInsecureSkipTLSVerifyHeader = HeaderKey("kubernetes-insecure-skip-tls-verify")
 
 	OAuthAuthorizationHeader = HeaderKey("Authorization")
 
