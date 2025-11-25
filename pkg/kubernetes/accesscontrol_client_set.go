@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
+	"k8s.io/client-go/tools/clientcmd"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
 
@@ -22,18 +23,21 @@ import (
 // Only a limited set of functions are implemented with a single point of access to the kubernetes API where
 // apiVersion and kinds are checked for allowed access
 type AccessControlClientset struct {
-	cfg *rest.Config
 	kubernetes.Interface
+	staticConfig    *config.StaticConfig
+	clientCmdConfig clientcmd.ClientConfig
+	cfg             *rest.Config
 	restMapper      meta.ResettableRESTMapper
 	discoveryClient discovery.CachedDiscoveryInterface
 	dynamicClient   dynamic.Interface
 	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
 }
 
-func NewAccessControlClientset(staticConfig *config.StaticConfig, restConfig *rest.Config) (*AccessControlClientset, error) {
-	rest.CopyConfig(restConfig)
+func NewAccessControlClientset(staticConfig *config.StaticConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*AccessControlClientset, error) {
 	acc := &AccessControlClientset{
-		cfg: rest.CopyConfig(restConfig),
+		staticConfig:    staticConfig,
+		clientCmdConfig: clientCmdConfig,
+		cfg:             rest.CopyConfig(restConfig),
 	}
 	if acc.cfg.UserAgent == "" {
 		acc.cfg.UserAgent = rest.DefaultKubernetesUserAgent()
@@ -110,4 +114,9 @@ func (a *AccessControlClientset) SelfSubjectAccessReviews() (authorizationv1.Sel
 // Deprecated: use AuthenticationV1().TokenReviews() directly
 func (a *AccessControlClientset) TokenReview() (authenticationv1.TokenReviewInterface, error) {
 	return a.AuthenticationV1().TokenReviews(), nil
+}
+
+// ToRawKubeConfigLoader returns the clientcmd.ClientConfig object (genericclioptions.RESTClientGetter)
+func (a *AccessControlClientset) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	return a.clientCmdConfig
 }

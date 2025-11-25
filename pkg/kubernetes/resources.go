@@ -38,7 +38,7 @@ func (k *Kubernetes) ResourcesList(ctx context.Context, gvk *schema.GroupVersion
 	// Check if operation is allowed for all namespaces (applicable for namespaced resources)
 	isNamespaced, _ := k.isNamespaced(gvk)
 	if isNamespaced && !k.canIUse(ctx, gvr, namespace, "list") && namespace == "" {
-		namespace = k.manager.configuredNamespace()
+		namespace = k.configuredNamespace()
 	}
 	if options.AsTable {
 		return k.resourcesListAsTable(ctx, gvk, gvr, namespace, options)

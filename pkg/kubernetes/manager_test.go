@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -44,12 +45,12 @@ func (s *ManagerTestSuite) TestNewInClusterManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as in cluster", func() {
-				rawConfig, err := manager.clientCmdConfig.RawConfig()
+				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.Equal("in-cluster", rawConfig.CurrentContext, "expected current context to be 'in-cluster'")
 			})
 			s.Run("sets default user-agent", func() {
-				s.Contains(manager.accessControlClientSet.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
+				s.Contains(manager.accessControlClientset.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
 			})
 		})
 		s.Run("with explicit kubeconfig", func() {
@@ -89,19 +90,19 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
-				rawConfig, err := manager.clientCmdConfig.RawConfig()
+				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.NotEqual("in-cluster", rawConfig.CurrentContext, "expected current context to NOT be 'in-cluster'")
 				s.Equal("fake-context", rawConfig.CurrentContext, "expected current context to be 'fake-context' as in kubeconfig")
 			})
 			s.Run("loads correct config", func() {
-				s.Contains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfig, "expected kubeconfig path to match")
+				s.Contains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfig, "expected kubeconfig path to match")
 			})
 			s.Run("sets default user-agent", func() {
-				s.Contains(manager.accessControlClientSet.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
+				s.Contains(manager.accessControlClientset.cfg.UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.accessControlClientSet.cfg.Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.accessControlClientset.cfg.Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig in config", func() {
@@ -114,17 +115,17 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
-				rawConfig, err := manager.clientCmdConfig.RawConfig()
+				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.NotEqual("in-cluster", rawConfig.CurrentContext, "expected current context to NOT be 'in-cluster'")
 				s.Equal("fake-context", rawConfig.CurrentContext, "expected current context to be 'fake-context' as in kubeconfig")
 			})
 			s.Run("loads correct config (explicit)", func() {
-				s.NotContains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfigInEnv, "expected kubeconfig path to NOT match env")
-				s.Contains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfigExplicit, "expected kubeconfig path to match explicit")
+				s.NotContains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigInEnv, "expected kubeconfig path to NOT match env")
+				s.Contains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigExplicit, "expected kubeconfig path to match explicit")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.accessControlClientSet.cfg.Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.accessControlClientset.cfg.Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig context (valid)", func() {
@@ -140,16 +141,16 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
-				rawConfig, err := manager.clientCmdConfig.RawConfig()
+				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.NotEqual("in-cluster", rawConfig.CurrentContext, "expected current context to NOT be 'in-cluster'")
 				s.Equal("not-the-mock-server", rawConfig.CurrentContext, "expected current context to be 'not-the-mock-server' as in explicit context")
 			})
 			s.Run("loads correct config", func() {
-				s.Contains(manager.clientCmdConfig.ConfigAccess().GetLoadingPrecedence(), kubeconfigFile, "expected kubeconfig path to match")
+				s.Contains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigFile, "expected kubeconfig path to match")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.accessControlClientSet.cfg.Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.accessControlClientset.cfg.Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig context (invalid)", func() {
@@ -194,6 +195,36 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.ErrorIs(err, ErrorKubeconfigInClusterNotAllowed)
 			s.ErrorContains(err, "kubeconfig manager cannot be used in in-cluster deployments")
 		})
+	})
+}
+
+func (s *ManagerTestSuite) TestNewManager() {
+	s.Run("with nil config returns error", func() {
+		manager, err := newManager(nil, &rest.Config{}, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
+		s.Require().Error(err)
+		s.EqualError(err, "config cannot be nil", "expected 'config cannot be nil' error")
+		s.Nil(manager, "expected nil manager when config is nil")
+	})
+
+	s.Run("with nil restConfig returns error", func() {
+		manager, err := newManager(&config.StaticConfig{}, nil, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
+		s.Require().Error(err)
+		s.EqualError(err, "restConfig cannot be nil", "expected 'restConfig cannot be nil' error")
+		s.Nil(manager, "expected nil manager when restConfig is nil")
+	})
+
+	s.Run("with nil clientCmdConfig returns error", func() {
+		manager, err := newManager(&config.StaticConfig{}, &rest.Config{}, nil)
+		s.Require().Error(err)
+		s.EqualError(err, "clientCmdConfig cannot be nil", "expected 'clientCmdConfig cannot be nil' error")
+		s.Nil(manager, "expected nil manager when clientCmdConfig is nil")
+	})
+
+	s.Run("with all nil parameters returns config error first", func() {
+		manager, err := newManager(nil, nil, nil)
+		s.Require().Error(err)
+		s.EqualError(err, "config cannot be nil", "expected 'config cannot be nil' error as first check")
+		s.Nil(manager, "expected nil manager when all parameters are nil")
 	})
 }
 

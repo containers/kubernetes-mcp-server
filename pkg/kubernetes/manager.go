@@ -7,12 +7,9 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/helm"
 	"github.com/fsnotify/fsnotify"
 	authenticationv1api "k8s.io/api/authentication/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -20,14 +17,12 @@ import (
 )
 
 type Manager struct {
-	clientCmdConfig        clientcmd.ClientConfig
-	accessControlClientSet *AccessControlClientset
+	accessControlClientset *AccessControlClientset
 
 	staticConfig         *config.StaticConfig
 	CloseWatchKubeConfig CloseWatchKubeConfig
 }
 
-var _ helm.Kubernetes = (*Manager)(nil)
 var _ Openshift = (*Manager)(nil)
 
 var (
@@ -92,16 +87,24 @@ func NewInClusterManager(config *config.StaticConfig) (*Manager, error) {
 }
 
 func newManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
+	if config == nil {
+		return nil, errors.New("config cannot be nil")
+	}
+	if restConfig == nil {
+		return nil, errors.New("restConfig cannot be nil")
+	}
+	if clientCmdConfig == nil {
+		return nil, errors.New("clientCmdConfig cannot be nil")
+	}
 	k8s := &Manager{
-		staticConfig:    config,
-		clientCmdConfig: clientCmdConfig,
+		staticConfig: config,
 	}
 	var err error
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
 	//k8s.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
-	k8s.accessControlClientSet, err = NewAccessControlClientset(k8s.staticConfig, restConfig)
+	k8s.accessControlClientset, err = NewAccessControlClientset(k8s.staticConfig, clientCmdConfig, restConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -109,10 +112,7 @@ func newManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdC
 }
 
 func (m *Manager) WatchKubeConfig(onKubeConfigChange func() error) {
-	if m.clientCmdConfig == nil {
-		return
-	}
-	kubeConfigFiles := m.clientCmdConfig.ConfigAccess().GetLoadingPrecedence()
+	kubeConfigFiles := m.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence()
 	if len(kubeConfigFiles) == 0 {
 		return
 	}
@@ -150,40 +150,8 @@ func (m *Manager) Close() {
 	}
 }
 
-func (m *Manager) configuredNamespace() string {
-	if ns, _, nsErr := m.clientCmdConfig.Namespace(); nsErr == nil {
-		return ns
-	}
-	return ""
-}
-
-func (m *Manager) NamespaceOrDefault(namespace string) string {
-	if namespace == "" {
-		return m.configuredNamespace()
-	}
-	return namespace
-}
-
-func (m *Manager) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
-	return m.accessControlClientSet.DiscoveryClient(), nil
-}
-
-func (m *Manager) ToRESTMapper() (meta.RESTMapper, error) {
-	return m.accessControlClientSet.RESTMapper(), nil
-}
-
-// ToRESTConfig returns the rest.Config object (genericclioptions.RESTClientGetter)
-func (m *Manager) ToRESTConfig() (*rest.Config, error) {
-	return m.accessControlClientSet.cfg, nil
-}
-
-// ToRawKubeConfigLoader returns the clientcmd.ClientConfig object (genericclioptions.RESTClientGetter)
-func (m *Manager) ToRawKubeConfigLoader() clientcmd.ClientConfig {
-	return m.clientCmdConfig
-}
-
 func (m *Manager) VerifyToken(ctx context.Context, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
-	tokenReviewClient := m.accessControlClientSet.AuthenticationV1().TokenReviews()
+	tokenReviewClient := m.accessControlClientset.AuthenticationV1().TokenReviews()
 	tokenReview := &authenticationv1api.TokenReview{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "authentication.k8s.io/v1",
@@ -216,50 +184,44 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		if m.staticConfig.RequireOAuth {
 			return nil, errors.New("oauth token required")
 		}
-		return &Kubernetes{manager: m}, nil
+		return &Kubernetes{m.accessControlClientset}, nil
 	}
 	klog.V(5).Infof("%s header found (Bearer), using provided bearer token", OAuthAuthorizationHeader)
 	derivedCfg := &rest.Config{
-		Host:          m.accessControlClientSet.cfg.Host,
-		APIPath:       m.accessControlClientSet.cfg.APIPath,
-		WrapTransport: m.accessControlClientSet.cfg.WrapTransport,
+		Host:          m.accessControlClientset.cfg.Host,
+		APIPath:       m.accessControlClientset.cfg.APIPath,
+		WrapTransport: m.accessControlClientset.cfg.WrapTransport,
 		// Copy only server verification TLS settings (CA bundle and server name)
 		TLSClientConfig: rest.TLSClientConfig{
-			Insecure:   m.accessControlClientSet.cfg.Insecure,
-			ServerName: m.accessControlClientSet.cfg.ServerName,
-			CAFile:     m.accessControlClientSet.cfg.CAFile,
-			CAData:     m.accessControlClientSet.cfg.CAData,
+			Insecure:   m.accessControlClientset.cfg.Insecure,
+			ServerName: m.accessControlClientset.cfg.ServerName,
+			CAFile:     m.accessControlClientset.cfg.CAFile,
+			CAData:     m.accessControlClientset.cfg.CAData,
 		},
 		BearerToken: strings.TrimPrefix(authorization, "Bearer "),
 		// pass custom UserAgent to identify the client
 		UserAgent:   CustomUserAgent,
-		QPS:         m.accessControlClientSet.cfg.QPS,
-		Burst:       m.accessControlClientSet.cfg.Burst,
-		Timeout:     m.accessControlClientSet.cfg.Timeout,
+		QPS:         m.accessControlClientset.cfg.QPS,
+		Burst:       m.accessControlClientset.cfg.Burst,
+		Timeout:     m.accessControlClientset.cfg.Timeout,
 		Impersonate: rest.ImpersonationConfig{},
 	}
-	clientCmdApiConfig, err := m.clientCmdConfig.RawConfig()
+	clientCmdApiConfig, err := m.accessControlClientset.clientCmdConfig.RawConfig()
 	if err != nil {
 		if m.staticConfig.RequireOAuth {
 			klog.Errorf("failed to get kubeconfig: %v", err)
 			return nil, errors.New("failed to get kubeconfig")
 		}
-		return &Kubernetes{manager: m}, nil
+		return &Kubernetes{m.accessControlClientset}, nil
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
-	derived := &Kubernetes{
-		manager: &Manager{
-			clientCmdConfig: clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil),
-			staticConfig:    m.staticConfig,
-		},
-	}
-	derived.manager.accessControlClientSet, err = NewAccessControlClientset(derived.manager.staticConfig, derivedCfg)
+	derived, err := NewAccessControlClientset(m.staticConfig, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
 	if err != nil {
 		if m.staticConfig.RequireOAuth {
 			klog.Errorf("failed to get kubeconfig: %v", err)
 			return nil, errors.New("failed to get kubeconfig")
 		}
-		return &Kubernetes{manager: m}, nil
+		return &Kubernetes{m.accessControlClientset}, nil
 	}
-	return derived, nil
+	return &Kubernetes{derived}, nil
 }
