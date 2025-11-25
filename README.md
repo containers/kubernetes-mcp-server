@@ -388,16 +388,17 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `tail` (`integer`) - Number of lines to retrieve from the end of logs (default: 100)
   - `workload` (`string`) **(required)** - Name of the workload to get logs for
 
-- **kiali_get_traces** - Gets traces for a specific resource (app, service, workload) in a namespace
-  - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional)
-  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided)
-  - `limit` (`integer`) - Maximum number of traces to return (default: 100)
-  - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional)
-  - `namespace` (`string`) **(required)** - Namespace to get resources from
-  - `resource_name` (`string`) **(required)** - Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).
-  - `resource_type` (`string`) **(required)** - Type of resource to get metrics for (app, service, workload)
-  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional)
-  - `tags` (`string`) - JSON string of tags to filter traces (optional)
+- **kiali_get_traces** - Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.
+  - `traceId` (`string`) - Unique identifier of the trace to retrieve detailed information for. If provided, this will return detailed trace information and other parameters (resource_type, namespace, resource_name) are not required.
+  - `resource_type` (`string`) - Type of resource to get traces for (app, service, workload). Required if traceId is not provided.
+  - `namespace` (`string`) - Namespace to get resources from. Required if traceId is not provided.
+  - `resource_name` (`string`) - Name of the resource to get traces for. Required if traceId is not provided.
+  - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided, only used when traceId is not provided)
+  - `endMicros` (`string`) - End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided, only used when traceId is not provided)
+  - `limit` (`integer`) - Maximum number of traces to return (default: 100, only used when traceId is not provided)
+  - `minDuration` (`integer`) - Minimum trace duration in microseconds (optional, only used when traceId is not provided)
+  - `tags` (`string`) - JSON string of tags to filter traces (optional, only used when traceId is not provided)
+  - `clusterName` (`string`) - Cluster name for multi-cluster environments (optional, only used when traceId is not provided)
 
 </details>
 
