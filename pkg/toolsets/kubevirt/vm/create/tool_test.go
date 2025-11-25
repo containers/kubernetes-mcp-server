@@ -1,4 +1,4 @@
-package create
+package create_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	k8stesting "github.com/containers/kubernetes-mcp-server/pkg/kubernetes/testing"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	kubevirttesting "github.com/containers/kubernetes-mcp-server/pkg/kubevirt/testing"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/create"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -35,8 +35,20 @@ func newTestKubernetesClient(
 	return k8stesting.NewFakeKubernetesClient(runtime.NewScheme(), gvrToListKind, objects...)
 }
 
+// getVMCreateHandler retrieves the vm_create handler from the Tools() function
+func getVMCreateHandler(t *testing.T) api.ToolHandlerFunc {
+	tools := create.Tools()
+	if len(tools) != 1 {
+		t.Fatalf("Expected 1 tool, got %d", len(tools))
+	}
+	if tools[0].Tool.Name != "vm_create" {
+		t.Fatalf("Expected tool name 'vm_create', got '%s'", tools[0].Tool.Name)
+	}
+	return tools[0].Handler
+}
+
 // ============================================================================
-// Tests for create() - Main Tool Handler
+// Tests for vm_create Tool Handler (via Tools() public API)
 // ============================================================================
 
 func TestCreate(t *testing.T) {
@@ -169,9 +181,10 @@ func TestCreate(t *testing.T) {
 				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
 			}
 
-			result, err := create(params)
+			handler := getVMCreateHandler(t)
+			result, err := handler(params)
 			if err != nil {
-				t.Errorf("create() unexpected Go error: %v", err)
+				t.Errorf("handler() unexpected Go error: %v", err)
 				return
 			}
 
@@ -285,9 +298,10 @@ func TestCreateWithSize(t *testing.T) {
 				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
 			}
 
-			result, err := create(params)
+			handler := getVMCreateHandler(t)
+			result, err := handler(params)
 			if err != nil {
-				t.Errorf("create() unexpected Go error: %v", err)
+				t.Errorf("handler() unexpected Go error: %v", err)
 				return
 			}
 
@@ -420,9 +434,10 @@ func TestCreateWithDataSources(t *testing.T) {
 				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
 			}
 
-			result, err := create(params)
+			handler := getVMCreateHandler(t)
+			result, err := handler(params)
 			if err != nil {
-				t.Errorf("create() unexpected Go error: %v", err)
+				t.Errorf("handler() unexpected Go error: %v", err)
 				return
 			}
 
@@ -513,9 +528,10 @@ func TestCreateWithPreferences(t *testing.T) {
 				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
 			}
 
-			result, err := create(params)
+			handler := getVMCreateHandler(t)
+			result, err := handler(params)
 			if err != nil {
-				t.Errorf("create() unexpected Go error: %v", err)
+				t.Errorf("handler() unexpected Go error: %v", err)
 				return
 			}
 
@@ -544,568 +560,11 @@ func TestCreateWithPreferences(t *testing.T) {
 }
 
 // ============================================================================
-// Tests for parseCreateParameters()
-// ============================================================================
-
-func TestParseCreateParameters(t *testing.T) {
-	tests := []struct {
-		name      string
-		args      map[string]any
-		wantErr   bool
-		checkFunc func(t *testing.T, params *createParameters)
-	}{
-		{
-			name: "parses basic parameters",
-			args: map[string]any{
-				"namespace": "test-ns",
-				"name":      "test-vm",
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, params *createParameters) {
-				if params.Namespace != "test-ns" {
-					t.Errorf("Namespace = %q, want 'test-ns'", params.Namespace)
-				}
-				if params.Name != "test-vm" {
-					t.Errorf("Name = %q, want 'test-vm'", params.Name)
-				}
-				if params.Workload != "fedora" {
-					t.Errorf("Workload = %q, want 'fedora' (default)", params.Workload)
-				}
-				if params.Autostart != false {
-					t.Errorf("Autostart = %v, want false (default)", params.Autostart)
-				}
-				if params.Storage != "30Gi" {
-					t.Errorf("Storage = %q, want '30Gi' (default)", params.Storage)
-				}
-			},
-		},
-		{
-			name: "parses custom storage parameter",
-			args: map[string]any{
-				"namespace": "test-ns",
-				"name":      "test-vm",
-				"storage":   "100Gi",
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, params *createParameters) {
-				if params.Storage != "100Gi" {
-					t.Errorf("Storage = %q, want '100Gi'", params.Storage)
-				}
-			},
-		},
-		{
-			name: "parses autostart parameter",
-			args: map[string]any{
-				"namespace": "test-ns",
-				"name":      "test-vm",
-				"autostart": true,
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, params *createParameters) {
-				if params.Autostart != true {
-					t.Errorf("Autostart = %v, want true", params.Autostart)
-				}
-			},
-		},
-		{
-			name: "normalizes performance parameter",
-			args: map[string]any{
-				"namespace":   "test-ns",
-				"name":        "test-vm",
-				"performance": "compute-optimized",
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, params *createParameters) {
-				if params.Performance != "c1" {
-					t.Errorf("Performance = %q, want 'c1'", params.Performance)
-				}
-			},
-		},
-		{
-			name: "missing namespace returns error",
-			args: map[string]any{
-				"name": "test-vm",
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing name returns error",
-			args: map[string]any{
-				"namespace": "test-ns",
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			params := api.ToolHandlerParams{
-				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
-			}
-
-			result, err := parseCreateParameters(params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseCreateParameters() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && tt.checkFunc != nil {
-				tt.checkFunc(t, result)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Tests for buildTemplateParams()
-// ============================================================================
-
-func TestBuildTemplateParams(t *testing.T) {
-	tests := []struct {
-		name                  string
-		createParams          *createParameters
-		matchedDataSource     *kubevirt.DataSourceInfo
-		instancetype          *kubevirt.InstancetypeInfo
-		preference            *kubevirt.PreferenceInfo
-		expectedRunStrategy   string
-		expectedUseDataSource bool
-		expectedContainerDisk string
-	}{
-		{
-			name: "basic VM with autostart false",
-			createParams: &createParameters{
-				Namespace: "test-ns",
-				Name:      "test-vm",
-				Workload:  "fedora",
-				Autostart: false,
-			},
-			matchedDataSource:     nil,
-			instancetype:          nil,
-			preference:            nil,
-			expectedRunStrategy:   "Halted",
-			expectedUseDataSource: false,
-			expectedContainerDisk: "quay.io/containerdisks/fedora:latest",
-		},
-		{
-			name: "VM with autostart true",
-			createParams: &createParameters{
-				Namespace: "test-ns",
-				Name:      "test-vm",
-				Workload:  "fedora",
-				Autostart: true,
-			},
-			matchedDataSource:     nil,
-			instancetype:          nil,
-			preference:            nil,
-			expectedRunStrategy:   "Always",
-			expectedUseDataSource: false,
-			expectedContainerDisk: "quay.io/containerdisks/fedora:latest",
-		},
-		{
-			name: "VM with DataSource",
-			createParams: &createParameters{
-				Namespace: "test-ns",
-				Name:      "test-vm",
-				Workload:  "fedora",
-				Autostart: false,
-			},
-			matchedDataSource: &kubevirt.DataSourceInfo{
-				Name:      "fedora",
-				Namespace: "os-images",
-				Source:    "registry.example.com/fedora:latest",
-			},
-			instancetype:          nil,
-			preference:            nil,
-			expectedRunStrategy:   "Halted",
-			expectedUseDataSource: true,
-			expectedContainerDisk: "",
-		},
-		{
-			name: "VM with built-in containerdisk (no namespace)",
-			createParams: &createParameters{
-				Namespace: "test-ns",
-				Name:      "test-vm",
-				Workload:  "fedora",
-				Autostart: false,
-			},
-			matchedDataSource: &kubevirt.DataSourceInfo{
-				Name:      "fedora",
-				Namespace: "",
-				Source:    "quay.io/containerdisks/fedora:latest",
-			},
-			instancetype:          nil,
-			preference:            nil,
-			expectedRunStrategy:   "Halted",
-			expectedUseDataSource: false,
-			expectedContainerDisk: "quay.io/containerdisks/fedora:latest",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildTemplateParams(tt.createParams, tt.matchedDataSource, tt.instancetype, tt.preference)
-
-			if result.RunStrategy != tt.expectedRunStrategy {
-				t.Errorf("RunStrategy = %q, want %q", result.RunStrategy, tt.expectedRunStrategy)
-			}
-			if result.UseDataSource != tt.expectedUseDataSource {
-				t.Errorf("UseDataSource = %v, want %v", result.UseDataSource, tt.expectedUseDataSource)
-			}
-			if result.ContainerDisk != tt.expectedContainerDisk {
-				t.Errorf("ContainerDisk = %q, want %q", result.ContainerDisk, tt.expectedContainerDisk)
-			}
-			if result.Namespace != tt.createParams.Namespace {
-				t.Errorf("Namespace = %q, want %q", result.Namespace, tt.createParams.Namespace)
-			}
-			if result.Name != tt.createParams.Name {
-				t.Errorf("Name = %q, want %q", result.Name, tt.createParams.Name)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Tests for renderVMYaml()
-// ============================================================================
-
-func TestRenderVMYaml(t *testing.T) {
-	tests := []struct {
-		name      string
-		params    vmParams
-		wantErr   bool
-		checkFunc func(t *testing.T, yaml string)
-	}{
-		{
-			name: "renders VM with Halted runStrategy",
-			params: vmParams{
-				Namespace:     "test-ns",
-				Name:          "test-vm",
-				ContainerDisk: "quay.io/containerdisks/fedora:latest",
-				RunStrategy:   "Halted",
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, yaml string) {
-				if !strings.Contains(yaml, "runStrategy: Halted") {
-					t.Error("Expected runStrategy: Halted in rendered YAML")
-				}
-				if !strings.Contains(yaml, "name: test-vm") {
-					t.Error("Expected name: test-vm in rendered YAML")
-				}
-				if !strings.Contains(yaml, "namespace: test-ns") {
-					t.Error("Expected namespace: test-ns in rendered YAML")
-				}
-			},
-		},
-		{
-			name: "renders VM with Always runStrategy",
-			params: vmParams{
-				Namespace:     "test-ns",
-				Name:          "test-vm",
-				ContainerDisk: "quay.io/containerdisks/fedora:latest",
-				RunStrategy:   "Always",
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, yaml string) {
-				if !strings.Contains(yaml, "runStrategy: Always") {
-					t.Error("Expected runStrategy: Always in rendered YAML")
-				}
-			},
-		},
-		{
-			name: "renders VM with instancetype",
-			params: vmParams{
-				Namespace:        "test-ns",
-				Name:             "test-vm",
-				ContainerDisk:    "quay.io/containerdisks/fedora:latest",
-				Instancetype:     "u1.medium",
-				InstancetypeKind: "VirtualMachineClusterInstancetype",
-				RunStrategy:      "Halted",
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, yaml string) {
-				if !strings.Contains(yaml, "instancetype:") {
-					t.Error("Expected instancetype section in rendered YAML")
-				}
-				if !strings.Contains(yaml, "name: u1.medium") {
-					t.Error("Expected name: u1.medium in instancetype section")
-				}
-				if !strings.Contains(yaml, "kind: VirtualMachineClusterInstancetype") {
-					t.Error("Expected kind: VirtualMachineClusterInstancetype in instancetype section")
-				}
-			},
-		},
-		{
-			name: "renders VM with DataSource",
-			params: vmParams{
-				Namespace:           "test-ns",
-				Name:                "test-vm",
-				UseDataSource:       true,
-				DataSourceName:      "fedora",
-				DataSourceNamespace: "os-images",
-				RunStrategy:         "Halted",
-			},
-			wantErr: false,
-			checkFunc: func(t *testing.T, yaml string) {
-				if !strings.Contains(yaml, "dataVolumeTemplates:") {
-					t.Error("Expected dataVolumeTemplates in rendered YAML")
-				}
-				if !strings.Contains(yaml, "sourceRef:") {
-					t.Error("Expected sourceRef in rendered YAML")
-				}
-				if !strings.Contains(yaml, "name: fedora") {
-					t.Error("Expected DataSource name in rendered YAML")
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			yaml, err := renderVMYaml(tt.params)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("renderVMYaml() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && tt.checkFunc != nil {
-				tt.checkFunc(t, yaml)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Tests for resolveContainerDisk()
-// ============================================================================
-
-func TestResolveContainerDisk(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"fedora", "fedora", "quay.io/containerdisks/fedora:latest"},
-		{"ubuntu", "ubuntu", "quay.io/containerdisks/ubuntu:24.04"},
-		{"rhel8", "rhel8", "registry.redhat.io/rhel8/rhel-guest-image:latest"},
-		{"rhel9", "rhel9", "registry.redhat.io/rhel9/rhel-guest-image:latest"},
-		{"rhel10", "rhel10", "registry.redhat.io/rhel10/rhel-guest-image:latest"},
-		{"centos", "centos", "quay.io/containerdisks/centos-stream:9-latest"},
-		{"centos-stream", "centos-stream", "quay.io/containerdisks/centos-stream:9-latest"},
-		{"debian", "debian", "quay.io/containerdisks/debian:latest"},
-		{"opensuse", "opensuse", "quay.io/containerdisks/opensuse-tumbleweed:1.0.0"},
-		{"opensuse-tumbleweed", "opensuse-tumbleweed", "quay.io/containerdisks/opensuse-tumbleweed:1.0.0"},
-		{"opensuse-leap", "opensuse-leap", "quay.io/containerdisks/opensuse-leap:15.6"},
-		{"case insensitive", "FEDORA", "quay.io/containerdisks/fedora:latest"},
-		{"with whitespace", " ubuntu ", "quay.io/containerdisks/ubuntu:24.04"},
-		{"custom image", "quay.io/myrepo/myimage:v1", "quay.io/myrepo/myimage:v1"},
-		{"with tag", "myimage:latest", "myimage:latest"},
-		{"unknown OS", "customos", "customos"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := resolveContainerDisk(tt.input)
-			if result != tt.expected {
-				t.Errorf("resolveContainerDisk(%s) = %s, want %s", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Tests for normalizePerformance()
-// ============================================================================
-
-func TestNormalizePerformance(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"general-purpose full", "general-purpose", "u1"},
-		{"general-purpose no dash", "generalpurpose", "u1"},
-		{"general", "general", "u1"},
-		{"overcommitted", "overcommitted", "o1"},
-		{"compute", "compute", "c1"},
-		{"compute-optimized full", "compute-optimized", "c1"},
-		{"compute-optimized no dash", "computeoptimized", "c1"},
-		{"memory", "memory", "m1"},
-		{"memory-optimized full", "memory-optimized", "m1"},
-		{"memory-optimized no dash", "memoryoptimized", "m1"},
-		{"u1 short form", "u1", "u1"},
-		{"o1 short form", "o1", "o1"},
-		{"c1 short form", "c1", "c1"},
-		{"m1 short form", "m1", "m1"},
-		{"uppercase", "GENERAL-PURPOSE", "u1"},
-		{"with spaces", " compute ", "c1"},
-		{"empty defaults to u1", "", "u1"},
-		{"unknown defaults to u1", "unknown", "u1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := normalizePerformance(tt.input)
-			if result != tt.expected {
-				t.Errorf("normalizePerformance(%s) = %s, want %s", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Tests for Parameter Helpers
-// ============================================================================
-
-func TestGetRequiredString(t *testing.T) {
-	tests := []struct {
-		name      string
-		args      map[string]any
-		key       string
-		expected  string
-		wantError bool
-	}{
-		{
-			name:      "returns string value",
-			args:      map[string]any{"key": "value"},
-			key:       "key",
-			expected:  "value",
-			wantError: false,
-		},
-		{
-			name:      "returns error when key missing",
-			args:      map[string]any{},
-			key:       "missing",
-			wantError: true,
-		},
-		{
-			name:      "returns error when value is not string",
-			args:      map[string]any{"key": 123},
-			key:       "key",
-			wantError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			params := api.ToolHandlerParams{
-				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
-			}
-
-			result, err := getRequiredString(params, tt.key)
-			if tt.wantError {
-				if err == nil {
-					t.Error("Expected error but got nil")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-				if result != tt.expected {
-					t.Errorf("getRequiredString() = %q, want %q", result, tt.expected)
-				}
-			}
-		})
-	}
-}
-
-func TestGetOptionalString(t *testing.T) {
-	tests := []struct {
-		name     string
-		args     map[string]any
-		key      string
-		expected string
-	}{
-		{
-			name:     "returns string value",
-			args:     map[string]any{"key": "value"},
-			key:      "key",
-			expected: "value",
-		},
-		{
-			name:     "returns empty when key missing",
-			args:     map[string]any{},
-			key:      "missing",
-			expected: "",
-		},
-		{
-			name:     "returns empty when value is not string",
-			args:     map[string]any{"key": 123},
-			key:      "key",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			params := api.ToolHandlerParams{
-				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
-			}
-
-			result := getOptionalString(params, tt.key)
-			if result != tt.expected {
-				t.Errorf("getOptionalString() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestGetOptionalBool(t *testing.T) {
-	tests := []struct {
-		name     string
-		args     map[string]any
-		key      string
-		expected bool
-	}{
-		{
-			name:     "returns true when value is true",
-			args:     map[string]any{"key": true},
-			key:      "key",
-			expected: true,
-		},
-		{
-			name:     "returns false when value is false",
-			args:     map[string]any{"key": false},
-			key:      "key",
-			expected: false,
-		},
-		{
-			name:     "returns false when key missing",
-			args:     map[string]any{},
-			key:      "missing",
-			expected: false,
-		},
-		{
-			name:     "returns false when value is not boolean",
-			args:     map[string]any{"key": "not a bool"},
-			key:      "key",
-			expected: false,
-		},
-		{
-			name:     "returns false when value is number",
-			args:     map[string]any{"key": 1},
-			key:      "key",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			params := api.ToolHandlerParams{
-				ToolCallRequest: &mockToolCallRequest{arguments: tt.args},
-			}
-
-			result := getOptionalBool(params, tt.key)
-			if result != tt.expected {
-				t.Errorf("getOptionalBool() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Tests for Tools()
+// Tests for Tools() - Public API
 // ============================================================================
 
 func TestTools(t *testing.T) {
-	tools := Tools()
+	tools := create.Tools()
 
 	if len(tools) != 1 {
 		t.Errorf("Expected 1 tool, got %d", len(tools))
