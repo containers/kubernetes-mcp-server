@@ -35,7 +35,7 @@ func customAuthHeadersPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHa
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 
 		var authHeaders *internalk8s.K8sAuthHeaders = nil
-		var err error = nil
+		var err error
 		// Try to parse auth headers from tool params meta.
 		if req.GetParams() != nil {
 			if toolParams, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
