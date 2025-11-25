@@ -15,6 +15,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
@@ -156,6 +157,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&core.Toolset{},
 		&config.Toolset{},
 		&helm.Toolset{},
+		&kiali.Toolset{},
 		&kubevirt.Toolset{},
 	}
 	for _, testCase := range testCases {
