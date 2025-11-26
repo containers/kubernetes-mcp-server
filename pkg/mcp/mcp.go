@@ -82,6 +82,9 @@ func NewServer(configuration Configuration) (*Server, error) {
 			}),
 	}
 
+	if configuration.ClusterProviderStrategy == config.ClusterProviderAuthHeaders {
+		s.server.AddReceivingMiddleware(customAuthHeadersPropagationMiddleware)
+	}
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
 	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now

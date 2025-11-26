@@ -3,7 +3,9 @@ _output/
 .vscode/
 .docusaurus/
 node_modules/
+.DS_Store
 
+config-dev.toml
 .npmrc
 kubernetes-mcp-server
 !charts/kubernetes-mcp-server
