@@ -67,8 +67,16 @@ func TestMain(m *testing.M) {
 	envTest = &envtest.Environment{
 		BinaryAssetsDirectory: filepath.Join(envTestDir, "k8s", versionDir),
 		CRDs: []*apiextensionsv1spec.CustomResourceDefinition{
+			// OpenShift
 			CRD("project.openshift.io", "v1", "projects", "Project", "project", false),
 			CRD("route.openshift.io", "v1", "routes", "Route", "route", true),
+			// Kubevirt
+			CRD("kubevirt.io", "v1", "virtualmachines", "VirtualMachine", "virtualmachine", true),
+			CRD("cdi.kubevirt.io", "v1beta1", "datasources", "DataSource", "datasource", true),
+			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterinstancetypes", "VirtualMachineClusterInstancetype", "virtualmachineclusterinstancetype", false),
+			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
+			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterpreferences", "VirtualMachineClusterPreference", "virtualmachineclusterpreference", false),
+			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachinepreferences", "VirtualMachinePreference", "virtualmachinepreference", true),
 		},
 	}
 	// Configure API server for faster CRD establishment and test performance

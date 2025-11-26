@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	k8stesting "github.com/containers/kubernetes-mcp-server/pkg/kubernetes/testing"
 	kubevirttesting "github.com/containers/kubernetes-mcp-server/pkg/kubevirt/testing"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic/fake"
 )
 
 func TestMatchDataSource(t *testing.T) {
@@ -327,12 +327,12 @@ func TestExtractDataSourceInfo(t *testing.T) {
 
 func TestResolvePreference(t *testing.T) {
 	tests := []struct {
-		name                string
-		preferences         []PreferenceInfo
-		explicitPreference  string
-		workload            string
-		matchedDataSource   *DataSourceInfo
-		expected            string
+		name               string
+		preferences        []PreferenceInfo
+		explicitPreference string
+		workload           string
+		matchedDataSource  *DataSourceInfo
+		expected           string
 	}{
 		{
 			name:               "explicit preference takes priority",
@@ -422,7 +422,7 @@ func TestResolveInstancetype(t *testing.T) {
 			expected:      "c1.large",
 		},
 		{
-			name: "returns empty when no match",
+			name:     "returns empty when no match",
 			expected: "",
 		},
 	}
@@ -473,9 +473,9 @@ func TestSearchDataSources(t *testing.T) {
 			gvrToListKind := map[schema.GroupVersionResource]string{
 				{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "datasources"}: "DataSourceList",
 			}
-			k8s := k8stesting.NewFakeKubernetesClient(runtime.NewScheme(), gvrToListKind, tt.objects...)
+			fakeDynamicClient := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), gvrToListKind, tt.objects...)
 
-			result := SearchDataSources(context.Background(), k8s.AccessControlClientset().DynamicClient())
+			result := SearchDataSources(context.Background(), fakeDynamicClient)
 			if len(result) != tt.wantCount {
 				t.Errorf("SearchDataSources() returned %d results, want %d", len(result), tt.wantCount)
 			}
@@ -488,10 +488,10 @@ func TestSearchDataSources(t *testing.T) {
 
 func TestSearchPreferences(t *testing.T) {
 	tests := []struct {
-		name       string
-		objects    []runtime.Object
-		namespace  string
-		wantNames  []string
+		name      string
+		objects   []runtime.Object
+		namespace string
+		wantNames []string
 	}{
 		{
 			name: "finds cluster and namespaced preferences",
@@ -516,9 +516,9 @@ func TestSearchPreferences(t *testing.T) {
 				{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterpreferences"}: "VirtualMachineClusterPreferenceList",
 				{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachinepreferences"}:        "VirtualMachinePreferenceList",
 			}
-			k8s := k8stesting.NewFakeKubernetesClient(runtime.NewScheme(), gvrToListKind, tt.objects...)
+			fakeDynamicClient := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), gvrToListKind, tt.objects...)
 
-			result := SearchPreferences(context.Background(), k8s.AccessControlClientset().DynamicClient(), tt.namespace)
+			result := SearchPreferences(context.Background(), fakeDynamicClient, tt.namespace)
 			if len(result) != len(tt.wantNames) {
 				t.Errorf("SearchPreferences() returned %d results, want %d", len(result), len(tt.wantNames))
 			}
@@ -538,10 +538,10 @@ func TestSearchPreferences(t *testing.T) {
 
 func TestSearchInstancetypes(t *testing.T) {
 	tests := []struct {
-		name       string
-		objects    []runtime.Object
-		namespace  string
-		wantNames  []string
+		name      string
+		objects   []runtime.Object
+		namespace string
+		wantNames []string
 	}{
 		{
 			name: "finds cluster and namespaced instancetypes",
@@ -566,9 +566,9 @@ func TestSearchInstancetypes(t *testing.T) {
 				{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterinstancetypes"}: "VirtualMachineClusterInstancetypeList",
 				{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineinstancetypes"}:        "VirtualMachineInstancetypeList",
 			}
-			k8s := k8stesting.NewFakeKubernetesClient(runtime.NewScheme(), gvrToListKind, tt.objects...)
+			fakeDynamicClient := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), gvrToListKind, tt.objects...)
 
-			result := SearchInstancetypes(context.Background(), k8s.AccessControlClientset().DynamicClient(), tt.namespace)
+			result := SearchInstancetypes(context.Background(), fakeDynamicClient, tt.namespace)
 			if len(result) != len(tt.wantNames) {
 				t.Errorf("SearchInstancetypes() returned %d results, want %d", len(result), len(tt.wantNames))
 			}
