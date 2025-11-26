@@ -196,6 +196,34 @@ uvx kubernetes-mcp-server@latest --help
 | `--toolsets`              | Comma-separated list of toolsets to enable. Check the [🛠️ Tools and Functionalities](#tools-and-functionalities) section for more information.                                                                                                                                               |
 | `--disable-multi-cluster` | If set, the MCP server will disable multi-cluster support and will only use the current context from the kubeconfig file. This is useful if you want to restrict the MCP server to a single cluster.                                                                                          |
 
+#### Custom Prompts Configuration
+
+The server supports defining custom [MCP prompts](https://modelcontextprotocol.io/docs/concepts/prompts) directly in your configuration file, allowing you to create custom workflows without recompiling. See [docs/PROMPTS.md](docs/PROMPTS.md) for detailed documentation.
+
+**Configuration file example:**
+
+```toml
+# Define prompts inline in your config.toml
+[[prompts]]
+name = "my-custom-prompt"
+description = "A custom troubleshooting workflow"
+
+[[prompts.arguments]]
+name = "resource_name"
+required = true
+
+[[prompts.messages]]
+role = "user"
+content = "Help me troubleshoot {{resource_name}}"
+
+[[prompts.messages]]
+role = "assistant"
+content = "I'll investigate {{resource_name}} for you."
+
+# Optionally disable built-in embedded prompts
+disable_embedded_prompts = false
+```
+
 ## 🛠️ Tools and Functionalities <a id="tools-and-functionalities"></a>
 
 The Kubernetes MCP server supports enabling or disabling specific groups of tools and functionalities (tools, resources, prompts, and so on) via the `--toolsets` command-line flag or `toolsets` configuration option.

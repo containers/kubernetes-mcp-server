@@ -44,6 +44,9 @@ type Toolset interface {
 	// Will be used to generate documentation and help text.
 	GetDescription() string
 	GetTools(o internalk8s.Openshift) []ServerTool
+	// GetPrompts returns the prompts provided by this toolset.
+	// Returns nil if the toolset doesn't provide any prompts.
+	GetPrompts(o internalk8s.Openshift) []ServerPrompt
 }
 
 type ToolCallRequest interface {

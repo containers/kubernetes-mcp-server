@@ -42,7 +42,10 @@ func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
 	notification := s.WaitForNotification(5 * time.Second)
 	// Then
 	s.NotNil(notification, "WatchKubeConfig did not notify")
-	s.Equal("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change")
+	s.True(
+		notification.Method == "notifications/tools/list_changed" || notification.Method == "notifications/prompts/list_changed",
+		"WatchKubeConfig did not notify tools or prompts change, got: %s", notification.Method,
+	)
 }
 
 func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
@@ -121,7 +124,10 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeOnAPIGroupAddition() {
 
 	// Then
 	s.NotNil(notification, "cluster state watcher did not notify")
-	s.Equal("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change")
+	s.True(
+		notification.Method == "notifications/tools/list_changed" || notification.Method == "notifications/prompts/list_changed",
+		"cluster state watcher did not notify tools or prompts change, got: %s", notification.Method,
+	)
 }
 
 func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {

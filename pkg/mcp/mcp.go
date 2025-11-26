@@ -62,10 +62,11 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
-	configuration *Configuration
-	server        *mcp.Server
-	enabledTools  []string
-	p             internalk8s.Provider
+	configuration  *Configuration
+	server         *mcp.Server
+	enabledTools   []string
+	enabledPrompts []string
+	p              internalk8s.Provider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
@@ -77,7 +78,7 @@ func NewServer(configuration Configuration) (*Server, error) {
 			},
 			&mcp.ServerOptions{
 				HasResources: false,
-				HasPrompts:   false,
+				HasPrompts:   true,
 				HasTools:     true,
 			}),
 	}
@@ -159,7 +160,102 @@ func (s *Server) reloadToolsets() error {
 		}
 		s.server.AddTool(goSdkTool, goSdkToolHandler)
 	}
+
+	// Track previously enabled prompts
+	previousPrompts := s.enabledPrompts
+
+	// Build and register prompts from all toolsets
+	applicablePrompts := make([]api.ServerPrompt, 0)
+	s.enabledPrompts = make([]string, 0)
+
+	// Load embedded toolset prompts (unless disabled)
+	if !s.configuration.DisableEmbeddedPrompts {
+		for _, toolset := range s.configuration.Toolsets() {
+			prompts := toolset.GetPrompts(s.p)
+			if prompts == nil {
+				continue
+			}
+			for _, prompt := range prompts {
+				applicablePrompts = append(applicablePrompts, prompt)
+				s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
+			}
+		}
+	}
+
+	// Load config-based prompts and merge (config prompts override embedded prompts with same name)
+	configPrompts, err := s.loadConfigPrompts()
+	if err != nil {
+		return fmt.Errorf("failed to load config-based prompts: %w", err)
+	}
+
+	// Merge: config prompts override embedded prompts with same name
+	applicablePrompts = mergePrompts(applicablePrompts, configPrompts)
+
+	// Update enabled prompts list
+	s.enabledPrompts = make([]string, 0)
+	for _, prompt := range applicablePrompts {
+		s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
+	}
+
+	// Remove prompts that are no longer applicable
+	promptsToRemove := make([]string, 0)
+	for _, oldPrompt := range previousPrompts {
+		if !slices.Contains(s.enabledPrompts, oldPrompt) {
+			promptsToRemove = append(promptsToRemove, oldPrompt)
+		}
+	}
+	s.server.RemovePrompts(promptsToRemove...)
+
+	// Register all applicable prompts
+	for _, prompt := range applicablePrompts {
+		mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
+		if err != nil {
+			return fmt.Errorf("failed to convert prompt %s: %v", prompt.Prompt.Name, err)
+		}
+		s.server.AddPrompt(mcpPrompt, promptHandler)
+	}
+
+	// start new watch
+	s.p.WatchTargets(s.reloadToolsets)
 	return nil
+}
+
+// loadConfigPrompts loads prompts from TOML configuration
+func (s *Server) loadConfigPrompts() ([]api.ServerPrompt, error) {
+	// No prompts defined in config
+	if len(s.configuration.Prompts) == 0 {
+		return nil, nil
+	}
+
+	loader := api.NewPromptLoader()
+	if err := loader.LoadFromConfig(s.configuration.Prompts); err != nil {
+		return nil, fmt.Errorf("failed to load prompts from config: %w", err)
+	}
+
+	return loader.GetServerPrompts(), nil
+}
+
+// mergePrompts merges two slices of prompts, with prompts in override taking precedence
+// over prompts in base when they have the same name
+func mergePrompts(base, override []api.ServerPrompt) []api.ServerPrompt {
+	// Create a map of override prompts by name for quick lookup
+	overrideMap := make(map[string]api.ServerPrompt)
+	for _, prompt := range override {
+		overrideMap[prompt.Prompt.Name] = prompt
+	}
+
+	// Build result: start with base prompts, skipping any that are overridden
+	result := make([]api.ServerPrompt, 0, len(base)+len(override))
+	for _, prompt := range base {
+		if _, exists := overrideMap[prompt.Prompt.Name]; !exists {
+			result = append(result, prompt)
+		}
+	}
+
+	// Add all override prompts
+	result = append(result, override...)
+
+	return result
 }
 
 func (s *Server) ServeStdio(ctx context.Context) error {

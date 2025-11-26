@@ -35,6 +35,8 @@ func (t *TestToolset) GetDescription() string { return t.description }
 
 func (t *TestToolset) GetTools(_ kubernetes.Openshift) []api.ServerTool { return nil }
 
+func (t *TestToolset) GetPrompts(_ kubernetes.Openshift) []api.ServerPrompt { return nil }
+
 var _ api.Toolset = (*TestToolset)(nil)
 
 func (s *ToolsetsSuite) TestToolsetNames() {
