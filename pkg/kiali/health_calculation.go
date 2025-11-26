@@ -23,7 +23,7 @@ func computeMeshHealthSummary(healthData json.RawMessage, requestedNamespaces []
 
 	rateInterval := queryParams["rateInterval"]
 	if rateInterval == "" {
-		rateInterval = "10m"
+		rateInterval = DefaultRateInterval
 	}
 
 	// Parse the health JSON into ClustersNamespaceHealth structure

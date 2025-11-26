@@ -352,7 +352,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `graphType` (`string`) - Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'
   - `namespace` (`string`) - Optional single namespace to include in the graph (alternative to namespaces)
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
-  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '60s'
+  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '10m'
 
 - **kiali_manage_istio_config** - Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects
   - `action` (`string`) **(required)** - Action to perform: list, get, create, patch, or delete
@@ -374,7 +374,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `duration` (`string`) - Time range to get metrics for (optional string - if provided, gets metrics; if empty, get default 1800s).
   - `namespace` (`string`) **(required)** - Namespace to get resources from
   - `quantiles` (`string`) - Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional
-  - `rateInterval` (`string`) - Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '1m'
+  - `rateInterval` (`string`) - Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'
   - `reporter` (`string`) - Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'
   - `requestProtocol` (`string`) - Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional
   - `resource_name` (`string`) **(required)** - Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).

@@ -10,7 +10,7 @@ import (
 // WorkloadsList returns the list of workloads across specified namespaces.
 func (k *Kiali) WorkloadsList(ctx context.Context, namespaces string) (string, error) {
 
-	endpoint := WorkloadsEndpoint + "?health=true&istioResources=true&rateInterval=60s"
+	endpoint := WorkloadsEndpoint + "?health=true&istioResources=true&rateInterval=" + DefaultRateInterval
 	if namespaces != "" {
 		endpoint += "&namespaces=" + url.QueryEscape(namespaces)
 	}
@@ -26,7 +26,7 @@ func (k *Kiali) WorkloadDetails(ctx context.Context, namespace string, workload 
 	if workload == "" {
 		return "", fmt.Errorf("workload name is required")
 	}
-	endpoint := fmt.Sprintf(WorkloadDetailsEndpoint, url.PathEscape(namespace), url.PathEscape(workload)) + "?validate=true&rateInterval=60s&health=true"
+	endpoint := fmt.Sprintf(WorkloadDetailsEndpoint, url.PathEscape(namespace), url.PathEscape(workload)) + "?validate=true&rateInterval=" + DefaultRateInterval + "&health=true"
 
 	return k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
 }

@@ -9,7 +9,7 @@ import (
 
 // ServicesList returns the list of services across specified namespaces.
 func (k *Kiali) ServicesList(ctx context.Context, namespaces string) (string, error) {
-	endpoint := ServicesEndpoint + "?health=true&istioResources=true&rateInterval=60s&onlyDefinitions=false"
+	endpoint := ServicesEndpoint + "?health=true&istioResources=true&rateInterval=" + DefaultRateInterval + "&onlyDefinitions=false"
 	if namespaces != "" {
 		endpoint += "&namespaces=" + url.QueryEscape(namespaces)
 	}
@@ -25,7 +25,7 @@ func (k *Kiali) ServiceDetails(ctx context.Context, namespace string, service st
 	if service == "" {
 		return "", fmt.Errorf("service name is required")
 	}
-	endpoint := fmt.Sprintf(ServiceDetailsEndpoint, url.PathEscape(namespace), url.PathEscape(service)) + "?validate=true&rateInterval=60s"
+	endpoint := fmt.Sprintf(ServiceDetailsEndpoint, url.PathEscape(namespace), url.PathEscape(service)) + "?validate=true&rateInterval=" + DefaultRateInterval
 
 	return k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
 }

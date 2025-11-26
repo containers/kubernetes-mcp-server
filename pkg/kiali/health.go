@@ -12,7 +12,7 @@ import (
 //   - namespaces: comma-separated list of namespaces (optional, if empty returns health for all accessible namespaces)
 //   - queryParams: optional query parameters map for filtering health data (e.g., "type", "rateInterval", "queryTime")
 //   - type: health type - "app", "service", or "workload" (default: "app")
-//   - rateInterval: rate interval for fetching error rate (default: "10m")
+//   - rateInterval: rate interval for fetching error rate (default: DefaultRateInterval, which is "10m")
 //   - queryTime: Unix timestamp for the prometheus query (optional)
 func (k *Kiali) Health(ctx context.Context, namespaces string, queryParams map[string]string) (string, error) {
 	// Build query parameters

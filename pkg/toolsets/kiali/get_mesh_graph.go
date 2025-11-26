@@ -8,6 +8,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 )
 
 func initGetMeshGraph() []api.ServerTool {
@@ -29,7 +30,7 @@ func initGetMeshGraph() []api.ServerTool {
 					},
 					"rateInterval": {
 						Type:        "string",
-						Description: "Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '60s'",
+						Description: "Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '10m'",
 					},
 					"graphType": {
 						Type:        "string",
@@ -88,9 +89,11 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 
 	// Extract optional query parameters
 	queryParams := make(map[string]string)
-	if rateInterval, ok := params.GetArguments()["rateInterval"].(string); ok && rateInterval != "" {
-		queryParams["rateInterval"] = rateInterval
+	rateInterval := kialiclient.DefaultRateInterval // default
+	if v, ok := params.GetArguments()["rateInterval"].(string); ok && v != "" {
+		rateInterval = v
 	}
+	queryParams["rateInterval"] = rateInterval
 	if graphType, ok := params.GetArguments()["graphType"].(string); ok && graphType != "" {
 		queryParams["graphType"] = graphType
 	}

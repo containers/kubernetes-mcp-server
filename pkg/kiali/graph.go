@@ -18,7 +18,7 @@ func (k *Kiali) Graph(ctx context.Context, namespaces []string, queryParams map[
 	q := u.Query()
 	// Static graph parameters per requirements
 	// Defaults with optional overrides via queryParams
-	duration := "60s"
+	duration := DefaultRateInterval
 	graphType := "versionedApp"
 	if v, ok := queryParams["rateInterval"]; ok && strings.TrimSpace(v) != "" {
 		duration = strings.TrimSpace(v)

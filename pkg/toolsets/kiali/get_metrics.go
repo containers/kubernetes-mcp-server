@@ -65,7 +65,7 @@ func initGetMetrics() []api.ServerTool {
 					},
 					"rateInterval": {
 						Type:        "string",
-						Description: "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '1m'",
+						Description: "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'",
 					},
 					"direction": {
 						Type:        "string",
@@ -135,9 +135,11 @@ func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 	if step, ok := params.GetArguments()["step"].(string); ok && step != "" {
 		queryParams["step"] = step
 	}
-	if rateInterval, ok := params.GetArguments()["rateInterval"].(string); ok && rateInterval != "" {
-		queryParams["rateInterval"] = rateInterval
+	rateInterval := kialiclient.DefaultRateInterval // default
+	if v, ok := params.GetArguments()["rateInterval"].(string); ok && v != "" {
+		rateInterval = v
 	}
+	queryParams["rateInterval"] = rateInterval
 	if direction, ok := params.GetArguments()["direction"].(string); ok && direction != "" {
 		queryParams["direction"] = direction
 	}
