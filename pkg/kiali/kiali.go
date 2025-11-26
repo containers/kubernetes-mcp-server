@@ -88,24 +88,15 @@ func (k *Kiali) createHTTPClient() *http.Client {
 
 	// If a custom Certificate Authority is configured, load and add it
 	if caValue := strings.TrimSpace(k.certificateAuthority); caValue != "" {
-		var caPEM []byte
-		var err error
-
-		// Check if it's a file path (not inline PEM content)
-		if !isPEMContent(caValue) {
-			// Treat as file path - read the certificate from file
-			caPEM, err = os.ReadFile(caValue)
-			if err != nil {
-				klog.Errorf("failed to read CA certificate from file %s: %v; proceeding without custom CA", caValue, err)
-				return &http.Client{
-					Transport: &http.Transport{
-						TLSClientConfig: tlsConfig,
-					},
-				}
+		// Read the certificate from file
+		caPEM, err := os.ReadFile(caValue)
+		if err != nil {
+			klog.Errorf("failed to read CA certificate from file %s: %v; proceeding without custom CA", caValue, err)
+			return &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: tlsConfig,
+				},
 			}
-		} else {
-			// Treat as inline PEM content (for backward compatibility)
-			caPEM = []byte(caValue)
 		}
 
 		// Start with the host system pool when possible so we don't drop system roots

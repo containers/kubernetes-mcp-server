@@ -99,7 +99,7 @@ certificate_authority = "` + s.caFile + `"
 	s.Equal(s.caFile, kcfg.CertificateAuthority, "Absolute path should be preserved")
 }
 
-func (s *ConfigSuite) TestConfigParser_PreservesInlinePEM() {
+func (s *ConfigSuite) TestConfigParser_RejectsInlinePEM() {
 	inlinePEM := `-----BEGIN CERTIFICATE-----
 MIIDXTCCAkWgAwIBAgIJAKL7YQ+O2UE3MA0GCSqGSIb3DQEBCQUAMEUxCzAJBgNV
 -----END CERTIFICATE-----`
@@ -114,37 +114,11 @@ certificate_authority = """` + inlinePEM + `"""
 	s.Require().NoError(err, "Failed to write config file")
 
 	cfg, err := config.Read(configFile)
-	s.Require().NoError(err, "Failed to read config")
 
-	kialiCfg, ok := cfg.GetToolsetConfig("kiali")
-	s.Require().True(ok, "Kiali config should be present")
-	kcfg, ok := kialiCfg.(*Config)
-	s.Require().True(ok, "Kiali config should be of type *Config")
-
-	// Inline PEM should be preserved as-is
-	s.Equal(inlinePEM, kcfg.CertificateAuthority, "Inline PEM should be preserved")
-}
-
-func (s *ConfigSuite) TestIsPEMContent() {
-	s.Run("detects PEM content", func() {
-		pem := "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----"
-		s.True(isPEMContent(pem), "Should detect PEM content")
-	})
-
-	s.Run("detects PEM with leading whitespace", func() {
-		pem := "  \n  -----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----"
-		s.True(isPEMContent(pem), "Should detect PEM content with leading whitespace")
-	})
-
-	s.Run("detects file path", func() {
-		path := "/path/to/ca.crt"
-		s.False(isPEMContent(path), "Should not detect file path as PEM")
-	})
-
-	s.Run("detects relative file path", func() {
-		path := "ca.crt"
-		s.False(isPEMContent(path), "Should not detect relative path as PEM")
-	})
+	// Parser should reject inline PEM content during parsing
+	s.Require().Error(err, "Parser should reject inline PEM content")
+	s.Contains(err.Error(), "certificate_authority must be a file path, not inline PEM content", "Error message should indicate inline PEM is not allowed")
+	s.Nil(cfg, "Config should be nil when parsing fails")
 }
 
 func TestConfig(t *testing.T) {

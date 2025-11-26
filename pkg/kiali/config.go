@@ -34,14 +34,13 @@ func (c *Config) Validate() error {
 	if strings.EqualFold(u.Scheme, "https") && !c.Insecure && strings.TrimSpace(c.CertificateAuthority) == "" {
 		return errors.New("certificate_authority is required for https when insecure is false")
 	}
+	// Validate that certificate_authority is a file path, not inline PEM content
+	if caValue := strings.TrimSpace(c.CertificateAuthority); caValue != "" {
+		if strings.HasPrefix(caValue, "-----BEGIN") {
+			return errors.New("certificate_authority must be a file path, not inline PEM content")
+		}
+	}
 	return nil
-}
-
-// isPEMContent checks if the string appears to be inline PEM content
-// (starts with "-----BEGIN" which is the standard PEM header)
-func isPEMContent(s string) bool {
-	trimmed := strings.TrimSpace(s)
-	return strings.HasPrefix(trimmed, "-----BEGIN")
 }
 
 func kialiToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (config.Extended, error) {
@@ -50,9 +49,15 @@ func kialiToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.M
 		return nil, err
 	}
 
-	// If certificate_authority is provided and appears to be a file path (not inline PEM),
-	// resolve it relative to the config directory if it's a relative path
-	if cfg.CertificateAuthority != "" && !isPEMContent(cfg.CertificateAuthority) {
+	// Validate that certificate_authority is a file path, not inline PEM content
+	if caValue := strings.TrimSpace(cfg.CertificateAuthority); caValue != "" {
+		if strings.HasPrefix(caValue, "-----BEGIN") {
+			return nil, errors.New("certificate_authority must be a file path, not inline PEM content")
+		}
+	}
+
+	// If certificate_authority is provided, resolve it relative to the config directory if it's a relative path
+	if cfg.CertificateAuthority != "" {
 		configDir := config.ConfigDirPathFromContext(ctx)
 		if configDir != "" && !filepath.IsAbs(cfg.CertificateAuthority) {
 			cfg.CertificateAuthority = filepath.Join(configDir, cfg.CertificateAuthority)

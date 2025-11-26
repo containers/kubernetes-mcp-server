@@ -60,12 +60,24 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
 
 1. **Config Parser (`pkg/toolsets/<toolset>/config.go`):**
    - Accept `certificate_authority` as a string field in your toolset config struct.
-   - In the toolset parser function, check if the value is a file path (not inline PEM starting with `-----BEGIN`).
-   - Resolve relative paths using `config.ConfigDirPathFromContext(ctx)` to make them relative to the config file directory.
+   - In the toolset parser function, resolve relative paths using `config.ConfigDirPathFromContext(ctx)` to make them relative to the config file directory.
    - Store the resolved absolute path in the config struct.
+   - Validate in the `Validate()` method that `certificate_authority` is a file path (not inline PEM content starting with `-----BEGIN`).
 
    Example:
    ```go
+   func (c *Config) Validate() error {
+       // ... other validations ...
+       
+       // Validate that certificate_authority is a file path, not inline PEM content
+       if caValue := strings.TrimSpace(c.CertificateAuthority); caValue != "" {
+           if strings.HasPrefix(caValue, "-----BEGIN") {
+               return errors.New("certificate_authority must be a file path, not inline PEM content")
+           }
+       }
+       return nil
+   }
+   
    func toolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (config.Extended, error) {
        var cfg Config
        if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
@@ -73,7 +85,7 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
        }
        
        // Resolve relative CA file paths
-       if cfg.CertificateAuthority != "" && !isPEMContent(cfg.CertificateAuthority) {
+       if cfg.CertificateAuthority != "" {
            configDir := config.ConfigDirPathFromContext(ctx)
            if configDir != "" && !filepath.IsAbs(cfg.CertificateAuthority) {
                cfg.CertificateAuthority = filepath.Join(configDir, cfg.CertificateAuthority)
@@ -85,9 +97,8 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
    ```
 
 2. **Client Implementation:**
-   - When using the CA certificate, check if the value is a file path or inline PEM.
-   - If it's a file path, read it using `os.ReadFile()`.
-   - For backward compatibility, you may support inline PEM content (detected by checking if it starts with `-----BEGIN`), but file paths are the preferred and documented method.
+   - When using the CA certificate, read it from the file path using `os.ReadFile()`.
+   - Only file paths are supported; inline PEM content is not allowed.
 
    Example:
    ```go
@@ -95,18 +106,10 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
        tlsConfig := &tls.Config{InsecureSkipVerify: c.insecure}
        
        if caValue := strings.TrimSpace(c.certificateAuthority); caValue != "" {
-           var caPEM []byte
-           var err error
-           
-           if !isPEMContent(caValue) {
-               // File path - read from file
-               caPEM, err = os.ReadFile(caValue)
-               if err != nil {
-                   // Handle error appropriately
-               }
-           } else {
-               // Inline PEM (backward compatibility)
-               caPEM = []byte(caValue)
+           // Read the certificate from file
+           caPEM, err := os.ReadFile(caValue)
+           if err != nil {
+               // Handle error appropriately
            }
            
            // Use caPEM to configure TLS...
@@ -117,9 +120,9 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
    ```
 
 3. **Documentation:**
-   - Document that `certificate_authority` accepts a file path.
+   - Document that `certificate_authority` accepts only a file path (absolute or relative).
    - Mention that relative paths are resolved relative to the config file directory.
-   - Optionally note that inline PEM is supported for backward compatibility, but file paths are recommended.
+   - Note that inline PEM content is not supported.
 
 **Reference Implementation:**
 - See `pkg/kiali/config.go` and `pkg/kiali/kiali.go` for a complete example.
