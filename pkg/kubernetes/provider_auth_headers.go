@@ -27,25 +27,27 @@ func init() {
 // newAuthHeadersClusterProvider creates a provider that requires header-based authentication.
 // Users must provide tokens via request headers (server URL, Token or client certificate and key).
 func newAuthHeadersClusterProvider(cfg *config.StaticConfig) (Provider, error) {
-	klog.V(1).Infof("Auth-headers provider initialized - all requests must include valid headers")
+	klog.V(1).Infof("Auth-headers provider initialized - all requests must include valid k8s auth headers")
 
 	return &AuthHeadersClusterProvider{staticConfig: cfg}, nil
 }
 
 func (p *AuthHeadersClusterProvider) IsOpenShift(ctx context.Context) bool {
+	klog.V(1).Infof("IsOpenShift not supported for auth-headers provider. Returning false.")
 	return false
 }
 
 func (p *AuthHeadersClusterProvider) VerifyToken(ctx context.Context, target, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
-	return nil, nil, fmt.Errorf("auth-headers VerifyToken not implemented")
+	return nil, nil, fmt.Errorf("VerifyToken not supported for auth-headers provider")
 }
 
 func (p *AuthHeadersClusterProvider) GetTargets(_ context.Context) ([]string, error) {
-	// Single cluster mode
+	klog.V(1).Infof("GetTargets not supported for auth-headers provider. Returning empty list.")
 	return []string{""}, nil
 }
 
 func (p *AuthHeadersClusterProvider) GetTargetParameterName() string {
+	klog.V(1).Infof("GetTargetParameterName not supported for auth-headers provider. Returning empty name.")
 	return ""
 }
 
@@ -64,10 +66,12 @@ func (p *AuthHeadersClusterProvider) GetDerivedKubernetes(ctx context.Context, t
 }
 
 func (p *AuthHeadersClusterProvider) GetDefaultTarget() string {
+	klog.V(1).Infof("GetDefaultTarget not supported for auth-headers provider. Returning empty name.")
 	return ""
 }
 
 func (p *AuthHeadersClusterProvider) WatchTargets(watch func() error) {
+	klog.V(1).Infof("WatchTargets not supported for auth-headers provider. Ignoring watch function.")
 }
 
 func (p *AuthHeadersClusterProvider) Close() {

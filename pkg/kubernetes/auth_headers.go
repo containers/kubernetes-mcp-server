@@ -11,10 +11,6 @@ type AuthType string
 type ContextKey string
 
 const (
-	// AuthTypeToken represents token-based authentication.
-	AuthTypeToken AuthType = "token"
-	// AuthTypeClientCertificate represents client certificate authentication.
-	AuthTypeClientCertificate AuthType = "client_certificate"
 	// AuthHeadersContextKey is the context key for the Kubernetes authentication headers.
 	AuthHeadersContextKey ContextKey = "k8s_auth_headers"
 )
@@ -40,11 +36,12 @@ func GetDecodedData(data string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(data)
 }
 
+// NewK8sAuthHeadersFromHeaders creates a new K8sAuthHeaders from the provided headers.
 func NewK8sAuthHeadersFromHeaders(data map[string]any) (*K8sAuthHeaders, error) {
 	var ok bool
 	var err error
 
-	// Initialize auth headers.
+	// Initialize auth headers with default values.
 	authHeaders := &K8sAuthHeaders{
 		InsecureSkipTLSVerify: false,
 	}
@@ -92,21 +89,20 @@ func NewK8sAuthHeadersFromHeaders(data map[string]any) (*K8sAuthHeaders, error) 
 	}
 
 	// Check if a valid authentication type is provided.
-	_, err = authHeaders.GetAuthType()
-	if err != nil {
+	if !authHeaders.IsValid() {
 		return nil, fmt.Errorf("either %s header for token authentication or (%s and %s) headers for client certificate authentication required", CustomAuthorizationHeader, CustomClientCertificateDataHeader, CustomClientKeyDataHeader)
 	}
 
 	return authHeaders, nil
 }
 
-// GetAuthType returns the authentication type based on the provided headers.
-func (h *K8sAuthHeaders) GetAuthType() (AuthType, error) {
+// IsValid checks if the authentication headers are valid.
+func (h *K8sAuthHeaders) IsValid() bool {
 	if h.AuthorizationToken != "" {
-		return AuthTypeToken, nil
+		return true
 	}
 	if h.ClientCertificateData != nil && h.ClientKeyData != nil {
-		return AuthTypeClientCertificate, nil
+		return true
 	}
-	return "", fmt.Errorf("invalid authentication type")
+	return false
 }
