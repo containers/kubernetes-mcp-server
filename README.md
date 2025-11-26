@@ -322,6 +322,13 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - Name of the resource
   - `namespace` (`string`) - Optional Namespace to delete the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will delete resource from configured namespace
 
+- **resources_scale** - Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource
+  - `apiVersion` (`string`) **(required)** - apiVersion of the resource (examples of valid apiVersion are apps/v1)
+  - `kind` (`string`) **(required)** - kind of the resource (examples of valid kind are: StatefulSet, Deployment)
+  - `name` (`string`) **(required)** - Name of the resource
+  - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
+  - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
+
 </details>
 
 <details>
@@ -397,7 +404,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `resource_name` (`string`) - Name of the resource to get traces for. Required if traceId is not provided.
   - `resource_type` (`string`) - Type of resource to get traces for (app, service, workload). Required if traceId is not provided.
   - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided, only used when traceId is not provided)
-  - `tags` (`string`) - JSON string of tags to filter traces (optional, only used when traceId is not provided) 
+  - `tags` (`string`) - JSON string of tags to filter traces (optional, only used when traceId is not provided)
   - `traceId` (`string`) - Unique identifier of the trace to retrieve detailed information for. If provided, this will return detailed trace information and other parameters (resource_type, namespace, resource_name) are not required.
 
 </details>
