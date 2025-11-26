@@ -9,56 +9,60 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-func initManageIstioConfig() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        "kiali_manage_istio_config",
-			Description: "Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"action": {
-						Type:        "string",
-						Description: "Action to perform: list, get, create, patch, or delete",
+func initManageIstioConfig(isOpenshift bool) []api.ServerTool {
+	name := "kiali_manage_istio_config"
+	if isOpenshift {
+		name = "ossm_manage_istio_config"
+	}
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        name,
+				Description: "Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"action": {
+							Type:        "string",
+							Description: "Action to perform: list, get, create, patch, or delete",
+						},
+						"namespace": {
+							Type:        "string",
+							Description: "Namespace containing the Istio object",
+						},
+						"group": {
+							Type:        "string",
+							Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
+						},
+						"version": {
+							Type:        "string",
+							Description: "API version of the Istio object (e.g., 'v1', 'v1beta1')",
+						},
+						"kind": {
+							Type:        "string",
+							Description: "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
+						},
+						"name": {
+							Type:        "string",
+							Description: "Name of the Istio object",
+						},
+						"json_data": {
+							Type:        "string",
+							Description: "JSON data to apply or create the object",
+						},
 					},
-					"namespace": {
-						Type:        "string",
-						Description: "Namespace containing the Istio object",
-					},
-					"group": {
-						Type:        "string",
-						Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
-					},
-					"version": {
-						Type:        "string",
-						Description: "API version of the Istio object (e.g., 'v1', 'v1beta1')",
-					},
-					"kind": {
-						Type:        "string",
-						Description: "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
-					},
-					"name": {
-						Type:        "string",
-						Description: "Name of the Istio object",
-					},
-					"json_data": {
-						Type:        "string",
-						Description: "JSON data to apply or create the object",
-					},
+					Required: []string{"action"},
 				},
-				Required: []string{"action"},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Manage Istio Config: List, Get, Create, Patch, Delete",
-				ReadOnlyHint:    ptr.To(false),
-				DestructiveHint: ptr.To(true),
-				IdempotentHint:  ptr.To(true),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: istioConfigHandler,
-	})
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "Manage Istio Config: List, Get, Create, Patch, Delete",
+					ReadOnlyHint:    ptr.To(false),
+					DestructiveHint: ptr.To(true),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: istioConfigHandler,
+		},
+	}
 }
 
 func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

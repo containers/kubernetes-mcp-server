@@ -32,75 +32,82 @@ var opsMap = map[string]resourceOperations{
 	},
 }
 
-func initGetMetrics() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
+func initGetMetrics(isOpenshift bool) []api.ServerTool {
+	name := "kiali_get_metrics"
+	if isOpenshift {
+		name = "ossm_get_metrics"
+	}
+	desc := "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh"
+	if isOpenshift {
+		desc = strings.ReplaceAll(desc, "Kubernetes", "Openshift")
+	}
 
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        "kiali_get_metrics",
-			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"resource_type": {
-						Type:        "string",
-						Description: "Type of resource to get details for (service, workload)",
-						Enum:        []any{"service", "workload"},
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        name,
+				Description: desc,
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"resource_type": {
+							Type:        "string",
+							Description: "Type of resource to get details for (service, workload)",
+							Enum:        []any{"service", "workload"},
+						},
+						"namespace": {
+							Type:        "string",
+							Description: "Namespace to get resources from",
+						},
+						"resource_name": {
+							Type:        "string",
+							Description: "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
+						},
+						"duration": {
+							Type:        "string",
+							Description: "Time range to get metrics for (optional string - if provided, gets metrics; if empty, get default 1800s).",
+						},
+						"step": {
+							Type:        "string",
+							Description: "Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds",
+						},
+						"rateInterval": {
+							Type:        "string",
+							Description: "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '1m'",
+						},
+						"direction": {
+							Type:        "string",
+							Description: "Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'",
+						},
+						"reporter": {
+							Type:        "string",
+							Description: "Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'",
+						},
+						"requestProtocol": {
+							Type:        "string",
+							Description: "Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional",
+						},
+						"quantiles": {
+							Type:        "string",
+							Description: "Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional",
+						},
+						"byLabels": {
+							Type:        "string",
+							Description: "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
+						},
 					},
-					"namespace": {
-						Type:        "string",
-						Description: "Namespace to get resources from",
-					},
-					"resource_name": {
-						Type:        "string",
-						Description: "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
-					},
-					"duration": {
-						Type:        "string",
-						Description: "Time range to get metrics for (optional string - if provided, gets metrics; if empty, get default 1800s).",
-					},
-					"step": {
-						Type:        "string",
-						Description: "Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds",
-					},
-					"rateInterval": {
-						Type:        "string",
-						Description: "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '1m'",
-					},
-					"direction": {
-						Type:        "string",
-						Description: "Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'",
-					},
-					"reporter": {
-						Type:        "string",
-						Description: "Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'",
-					},
-					"requestProtocol": {
-						Type:        "string",
-						Description: "Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional",
-					},
-					"quantiles": {
-						Type:        "string",
-						Description: "Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional",
-					},
-					"byLabels": {
-						Type:        "string",
-						Description: "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
-					},
+					Required: []string{"resource_type", "namespace", "resource_name"},
 				},
-				Required: []string{"resource_type", "namespace", "resource_name"},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Get Metrics for a Resource",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(true),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: resourceMetricsHandler,
-	})
-
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "Get Metrics for a Resource",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: resourceMetricsHandler,
+		},
+	}
 }
 
 func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
