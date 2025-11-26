@@ -46,6 +46,9 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("KUBECONFIG", "/dev/null")     // Avoid interference from existing kubeconfig
 	_ = os.Setenv("KUBERNETES_SERVICE_HOST", "") // Avoid interference from in-cluster config
 	_ = os.Setenv("KUBERNETES_SERVICE_PORT", "") // Avoid interference from in-cluster config
+	// Set high rate limits to avoid client-side throttling in tests
+	_ = os.Setenv("KUBE_CLIENT_QPS", "1000")
+	_ = os.Setenv("KUBE_CLIENT_BURST", "2000")
 	envTestDir, err := store.DefaultStoreDir()
 	if err != nil {
 		panic(err)

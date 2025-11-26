@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -96,6 +98,10 @@ func newManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdC
 	if clientCmdConfig == nil {
 		return nil, errors.New("clientCmdConfig cannot be nil")
 	}
+
+	// Apply QPS and Burst from environment variables if set (primarily for testing)
+	applyRateLimitFromEnv(restConfig)
+
 	k8s := &Manager{
 		staticConfig: config,
 	}
@@ -224,4 +230,22 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return &Kubernetes{m.accessControlClientset}, nil
 	}
 	return &Kubernetes{derived}, nil
+}
+
+// applyRateLimitFromEnv applies QPS and Burst rate limits from environment variables if set.
+// This is primarily useful for tests to avoid client-side rate limiting.
+// Environment variables:
+//   - KUBE_CLIENT_QPS: Sets the QPS (queries per second) limit
+//   - KUBE_CLIENT_BURST: Sets the burst limit
+func applyRateLimitFromEnv(cfg *rest.Config) {
+	if qpsStr := os.Getenv("KUBE_CLIENT_QPS"); qpsStr != "" {
+		if qps, err := strconv.ParseFloat(qpsStr, 32); err == nil {
+			cfg.QPS = float32(qps)
+		}
+	}
+	if burstStr := os.Getenv("KUBE_CLIENT_BURST"); burstStr != "" {
+		if burst, err := strconv.Atoi(burstStr); err == nil {
+			cfg.Burst = burst
+		}
+	}
 }
