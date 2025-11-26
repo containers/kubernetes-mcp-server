@@ -78,11 +78,12 @@ certificate_authority = "ca.crt"
 func (s *ConfigSuite) TestConfigParser_PreservesAbsolutePath() {
 	// Create a config file with absolute path
 	configFile := filepath.Join(s.tempDir, "config.toml")
-	// Use literal string (triple quotes) in TOML to avoid issues with backslashes on Windows
+	// Convert backslashes to forward slashes for TOML compatibility on Windows
+	caFileForTOML := filepath.ToSlash(s.caFile)
 	configContent := `
 [toolset_configs.kiali]
 url = "https://kiali.example/"
-certificate_authority = """` + s.caFile + `"""
+certificate_authority = "` + caFileForTOML + `"
 `
 	err := os.WriteFile(configFile, []byte(configContent), 0644)
 	s.Require().NoError(err, "Failed to write config file")
@@ -97,7 +98,9 @@ certificate_authority = """` + s.caFile + `"""
 	s.Require().True(ok, "Kiali config should be of type *Config")
 
 	// Absolute path should be preserved
-	s.Equal(s.caFile, kcfg.CertificateAuthority, "Absolute path should be preserved")
+	actualPath := filepath.Clean(filepath.FromSlash(kcfg.CertificateAuthority))
+	expectedPath := filepath.Clean(s.caFile)
+	s.Equal(expectedPath, actualPath, "Absolute path should be preserved")
 }
 
 func (s *ConfigSuite) TestConfigParser_RejectsInlinePEM() {
