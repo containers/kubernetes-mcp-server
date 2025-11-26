@@ -42,9 +42,6 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 	var wg sync.WaitGroup
 	wg.Add(4)
 
-	// Local variable to store health data for computation (not included in response)
-	var healthData json.RawMessage
-
 	// Graph
 	go func() {
 		defer wg.Done()
@@ -58,7 +55,7 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 		resp.Graph = data
 	}()
 
-	// Health - stored locally for MeshHealthSummary calculation, but not included in response
+	// Health - compute MeshHealthSummary inside the goroutine
 	go func() {
 		defer wg.Done()
 		data, err := k.getHealth(ctx, cleaned, queryParams)
@@ -68,7 +65,15 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 			errorsMu.Unlock()
 			return
 		}
-		healthData = data
+		// Compute mesh health summary from health data
+		if len(data) > 0 {
+			summary := computeMeshHealthSummary(data, cleaned, queryParams)
+			if summary != nil {
+				errorsMu.Lock()
+				resp.MeshHealthSummary = summary
+				errorsMu.Unlock()
+			}
+		}
 	}()
 
 	// Mesh status
@@ -98,14 +103,6 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 	}()
 
 	wg.Wait()
-
-	// Compute mesh health summary from health data (even if not included in response)
-	if len(healthData) > 0 {
-		summary := computeMeshHealthSummary(healthData, cleaned, queryParams)
-		if summary != nil {
-			resp.MeshHealthSummary = summary
-		}
-	}
 
 	// If no errors occurred, omit the errors map in the final JSON
 	if len(resp.Errors) == 0 {
