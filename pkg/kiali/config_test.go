@@ -78,10 +78,11 @@ certificate_authority = "ca.crt"
 func (s *ConfigSuite) TestConfigParser_PreservesAbsolutePath() {
 	// Create a config file with absolute path
 	configFile := filepath.Join(s.tempDir, "config.toml")
+	// Use literal string (triple quotes) in TOML to avoid issues with backslashes on Windows
 	configContent := `
 [toolset_configs.kiali]
 url = "https://kiali.example/"
-certificate_authority = "` + s.caFile + `"
+certificate_authority = """` + s.caFile + `"""
 `
 	err := os.WriteFile(configFile, []byte(configContent), 0644)
 	s.Require().NoError(err, "Failed to write config file")
