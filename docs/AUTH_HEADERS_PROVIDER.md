@@ -1,21 +1,22 @@
 # Auth-Headers Provider
 
-The `auth-headers` cluster provider strategy enables multi-tenant Kubernetes MCP server deployments where each user authenticates with their own Kubernetes token via HTTP request headers.
+The `auth-headers` cluster provider strategy enables multi-tenant Kubernetes MCP server deployments where each request provides complete cluster connection details and authentication via HTTP headers or MCP tool parameters.
 
 ## Overview
 
 This provider:
-- **Requires authentication via request headers** (`Authorization` or `kubernetes-authorization`)
-- **Extracts cluster connection details** from kubeconfig (server URL, CA certificates)
-- **Strips all authentication credentials** from the kubeconfig
-- **Creates dynamic Kubernetes clients** per request using the provided bearer tokens
+- **Requires cluster connection details per request** via custom headers (server URL, CA certificate)
+- **Requires authentication per request** via bearer token OR client certificates
+- **Does not use kubeconfig** - all configuration comes from request headers
+- **Creates dynamic Kubernetes clients** per request using the provided credentials
 
 ## Use Cases
 
-- **Multi-tenant SaaS deployments** - Single MCP server instance serving multiple users
-- **Zero-trust architectures** - No stored credentials, authentication per request
-- **OIDC/OAuth integration** - Users authenticate via identity provider, tokens forwarded to Kubernetes
+- **Multi-tenant SaaS deployments** - Single MCP server instance serving multiple users/clusters
+- **Zero-trust architectures** - No stored credentials, complete authentication per request
+- **Dynamic cluster access** - Connect to different clusters without server configuration
 - **Auditing & compliance** - Each request uses the user's actual identity for Kubernetes RBAC
+- **Temporary access** - Short-lived credentials without persistent configuration
 
 ## Configuration
 
@@ -24,35 +25,40 @@ This provider:
 ```bash
 kubernetes-mcp-server \
   --port 8080 \
-  --kubeconfig /path/to/kubeconfig \
   --cluster-provider-strategy auth-headers
 ```
 
 The server will:
-1. Read cluster connection details from the kubeconfig
-2. Automatically enable `--require-oauth`
-3. Reject any requests without valid bearer tokens
+1. Accept requests with cluster connection details in headers
+2. Create a Kubernetes client dynamically for each request
+3. Reject any requests without required authentication headers
 
 ### TOML Configuration
 
 ```toml
 cluster_provider_strategy = "auth-headers"
-kubeconfig = "/path/to/kubeconfig"
-require_oauth = true
-validate_token = true  # Optional: validate tokens against Kubernetes API
+# No kubeconfig needed - all details come from request headers
 ```
 
-### With Token Validation
+### Required Headers
 
-```bash
-kubernetes-mcp-server \
-  --port 8080 \
-  --kubeconfig /path/to/kubeconfig \
-  --cluster-provider-strategy auth-headers \
-  --validate-token
-```
+Each request must include the following custom headers:
 
-This validates each token using Kubernetes TokenReview API before allowing operations.
+**Required for all requests:**
+- `kubernetes-server` - Kubernetes API server URL (e.g., `https://kubernetes.example.com:6443`)
+- `kubernetes-certificate-authority-data` - Base64-encoded CA certificate
+
+**Authentication (choose one):**
+
+Option 1: Bearer Token
+- `kubernetes-authorization` - Bearer token (e.g., `Bearer eyJhbGci...`)
+
+Option 2: Client Certificate
+- `kubernetes-client-certificate-data` - Base64-encoded client certificate
+- `kubernetes-client-key-data` - Base64-encoded client key
+
+**Optional:**
+- `kubernetes-insecure-skip-tls-verify` - Set to `true` to skip TLS verification (not recommended for production)
 
 ## How It Works
 
@@ -60,38 +66,79 @@ This validates each token using Kubernetes TokenReview API before allowing opera
 
 When the server starts:
 ```
-Kubeconfig → Extract cluster info (server URL, CA cert) → Create base manager
-                                  ↓
-                        Strip all auth credentials
-                                  ↓
-                        Ready to accept requests
+Server starts with auth-headers provider
+         ↓
+No kubeconfig or credentials loaded
+         ↓
+Ready to accept requests with headers
 ```
 
 ### 2. Request Processing
 
 For each MCP request:
 ```
-HTTP Request → Extract Authorization header → Create derived Kubernetes client
-                              ↓                           ↓
-                    "Bearer <token>"           Uses token for authentication
-                                                           ↓
-                                               Execute Kubernetes operation
+HTTP Request with custom headers
+         ↓
+Extract kubernetes-server, kubernetes-certificate-authority-data
+         ↓
+Extract authentication (token OR client cert/key)
+         ↓
+Create K8sAuthHeaders struct
+         ↓
+Build rest.Config dynamically
+         ↓
+Create new Kubernetes client
+         ↓
+Execute Kubernetes operation
+         ↓
+Discard client after request
 ```
 
-### 3. Security Model
+### 3. Header Extraction
+
+Headers can be provided in two ways:
+
+**A. HTTP Request Headers** (standard way):
+```
+POST /mcp HTTP/1.1
+kubernetes-server: https://k8s.example.com:6443
+kubernetes-certificate-authority-data: LS0tLS1CRUdJ...
+kubernetes-authorization: Bearer eyJhbGci...
+```
+
+**B. MCP Tool Parameters Meta** (advanced):
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "pods_list",
+    "arguments": {"namespace": "default"},
+    "_meta": {
+      "kubernetes-server": "https://k8s.example.com:6443",
+      "kubernetes-certificate-authority-data": "LS0tLS1CRUdJ...",
+      "kubernetes-authorization": "Bearer eyJhbGci..."
+    }
+  }
+}
+```
+
+### 4. Security Model
 
 ```
 ┌──────────────────┐
-│   MCP Client     │ (User's application)
+│   MCP Client     │
 │  (Claude, etc)   │
 └────────┬─────────┘
-         │ Bearer <user-token>
+         │ All cluster info + auth in headers
          ↓
 ┌──────────────────┐
 │   MCP Server     │
 │  (auth-headers)  │
+│  NO CREDENTIALS  │
+│     STORED       │
 └────────┬─────────┘
-         │ Uses user's token
+         │ Creates temporary client
          ↓
 ┌──────────────────┐
 │  Kubernetes API  │
@@ -99,7 +146,7 @@ HTTP Request → Extract Authorization header → Create derived Kubernetes clie
 └──────────────────┘
          ↓
     RBAC enforced with
-    user's actual identity
+    credentials from headers
 ```
 
 ## Client Usage
@@ -107,14 +154,24 @@ HTTP Request → Extract Authorization header → Create derived Kubernetes clie
 ### Using the Go MCP Client
 
 ```go
-import "github.com/mark3labs/mcp-go/client/transport"
+import (
+    "encoding/base64"
+    "github.com/mark3labs/mcp-go/client/transport"
+)
 
-// Get user's Kubernetes token (from OIDC, service account, etc.)
-userToken := getUserKubernetesToken()
+// Get cluster connection details
+serverURL := "https://k8s.example.com:6443"
+caCert := getCAcertificate() // PEM-encoded CA certificate
+token := getUserKubernetesToken()
+
+// Encode CA certificate to base64
+caCertBase64 := base64.StdEncoding.EncodeToString(caCert)
 
 client := NewMCPClient(
     transport.WithHTTPHeaders(map[string]string{
-        "Authorization": "Bearer " + userToken
+        "kubernetes-server":                      serverURL,
+        "kubernetes-certificate-authority-data":  caCertBase64,
+        "kubernetes-authorization":               "Bearer " + token,
     })
 )
 ```
@@ -127,7 +184,27 @@ client := NewMCPClient(
     "kubernetes": {
       "url": "https://mcp-server.example.com/sse",
       "headers": {
-        "Authorization": "Bearer YOUR_KUBERNETES_TOKEN"
+        "kubernetes-server": "https://k8s.example.com:6443",
+        "kubernetes-certificate-authority-data": "LS0tLS1CRUdJTi...",
+        "kubernetes-authorization": "Bearer YOUR_KUBERNETES_TOKEN"
+      }
+    }
+  }
+}
+```
+
+### Using Client Certificates
+
+```json
+{
+  "mcpServers": {
+    "kubernetes": {
+      "url": "https://mcp-server.example.com/sse",
+      "headers": {
+        "kubernetes-server": "https://k8s.example.com:6443",
+        "kubernetes-certificate-authority-data": "LS0tLS1CRUdJTi...",
+        "kubernetes-client-certificate-data": "LS0tLS1CRUdJTi...",
+        "kubernetes-client-key-data": "LS0tLS1CRUdJTi..."
       }
     }
   }
@@ -137,9 +214,12 @@ client := NewMCPClient(
 ### Using cURL
 
 ```bash
+# With bearer token
 curl -X POST https://mcp-server.example.com/mcp \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer eyJhbGci..." \
+  -H "kubernetes-server: https://k8s.example.com:6443" \
+  -H "kubernetes-certificate-authority-data: LS0tLS1CRUdJTi..." \
+  -H "kubernetes-authorization: Bearer eyJhbGci..." \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -151,132 +231,38 @@ curl -X POST https://mcp-server.example.com/mcp \
   }'
 ```
 
-## Comparison with Other Providers
+### Getting Required Values
 
-| Feature | auth-headers | kubeconfig | in-cluster | disabled |
-|---------|--------------|------------|------------|----------|
-| **Multi-tenant** | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| **Multi-cluster** | ❌ No | ✅ Yes | ❌ No | ❌ No |
-| **Per-request auth** | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| **Requires headers** | ✅ Required | ❌ Optional | ❌ Optional | ❌ Optional |
-| **Stored credentials** | ❌ None | ✅ Kubeconfig | ✅ SA token | ✅ Kubeconfig |
-| **Use case** | SaaS/Multi-user | Local dev | In-cluster | Single cluster |
+#### 1. Kubernetes Server URL
 
-## Security Considerations
-
-### ✅ Advantages
-
-- **No stored credentials** - Server doesn't store any Kubernetes authentication
-- **Per-request authentication** - Each request uses fresh, user-specific token
-- **RBAC enforcement** - Kubernetes enforces permissions using actual user identity
-- **Token expiration** - Short-lived tokens automatically expire
-- **Audit trails** - Kubernetes audit logs show actual user, not service account
-
-### ⚠️ Important Notes
-
-1. **Tokens in transit** - Use HTTPS to protect tokens in HTTP headers
-2. **Token validation** - Enable `--validate-token` for additional security
-3. **Rate limiting** - Consider implementing rate limiting per token/user
-4. **Token rotation** - Clients must handle token refresh/expiration
-5. **Network security** - Ensure MCP server can reach Kubernetes API
-
-## Example Deployment
-
-### Docker Compose
-
-```yaml
-version: '3.8'
-services:
-  kubernetes-mcp-server:
-    image: quay.io/containers/kubernetes_mcp_server:latest
-    ports:
-      - "8080:8080"
-    command:
-      - --port=8080
-      - --kubeconfig=/kubeconfig/config
-      - --cluster-provider-strategy=auth-headers
-      - --validate-token
-    volumes:
-      - ./kubeconfig:/kubeconfig:ro
-    environment:
-      - LOG_LEVEL=1
+```bash
+kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
 ```
 
-### Kubernetes Deployment
+#### 2. CA Certificate (base64)
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kubernetes-mcp-server
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: kubernetes-mcp-server
-  template:
-    metadata:
-      labels:
-        app: kubernetes-mcp-server
-    spec:
-      containers:
-      - name: server
-        image: quay.io/containers/kubernetes_mcp_server:latest
-        args:
-        - --port=8080
-        - --kubeconfig=/kubeconfig/config
-        - --cluster-provider-strategy=auth-headers
-        - --validate-token
-        ports:
-        - containerPort: 8080
-        volumeMounts:
-        - name: kubeconfig
-          mountPath: /kubeconfig
-          readOnly: true
-      volumes:
-      - name: kubeconfig
-        configMap:
-          name: cluster-kubeconfig
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kubernetes-mcp-server
-spec:
-  selector:
-    app: kubernetes-mcp-server
-  ports:
-  - port: 80
-    targetPort: 8080
+```bash
+kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}'
 ```
 
-## Troubleshooting
+#### 3. Bearer Token
 
-### Error: "bearer token required in Authorization header"
+```bash
+# From current context
+kubectl config view --minify --raw -o jsonpath='{.users[0].user.token}'
 
-**Cause**: Request missing authentication header
+# Or get a service account token
+kubectl create token <service-account-name> -n <namespace>
+```
 
-**Solution**: Include `Authorization: Bearer <token>` header in all requests
+#### 4. Client Certificate (base64)
 
-### Error: "auth-headers ClusterProviderStrategy cannot be used in in-cluster deployments"
+```bash
+kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}'
+```
 
-**Cause**: Trying to use auth-headers provider from within a Kubernetes cluster
+#### 5. Client Key (base64)
 
-**Solution**: Use `in-cluster` or `disabled` strategy for in-cluster deployments, or explicitly set a kubeconfig path
-
-### Error: "token-based authentication required"
-
-**Cause**: `RequireOAuth` is enabled but no token provided
-
-**Solution**: Ensure client sends bearer token in Authorization header
-
-### Warning: "auth-headers ClusterProviderStrategy requires OAuth authentication, enabling RequireOAuth"
-
-**Info**: This is expected - auth-headers provider automatically enables OAuth requirement
-
-## Related Documentation
-
-- [OIDC/OAuth Setup Guide](./KEYCLOAK_OIDC_SETUP.md)
-- [Getting Started](./GETTING_STARTED_KUBERNETES.md)
-- [Claude Integration](./GETTING_STARTED_CLAUDE_CODE.md)
-
+```bash
+kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}'
+```
