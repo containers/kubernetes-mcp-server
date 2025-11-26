@@ -210,7 +210,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	if err != nil {
 		if m.staticConfig.RequireOAuth {
 			klog.Errorf("failed to get kubeconfig: %v", err)
-			return nil, errors.New("failed to get kubeconfig")
+			return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 		}
 		return &Kubernetes{m.accessControlClientset}, nil
 	}
@@ -218,8 +218,8 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	derived, err := NewAccessControlClientset(m.staticConfig, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
 	if err != nil {
 		if m.staticConfig.RequireOAuth {
-			klog.Errorf("failed to get kubeconfig: %v", err)
-			return nil, errors.New("failed to get kubeconfig")
+			klog.Errorf("failed to create derived clientset: %v", err)
+			return nil, fmt.Errorf("failed to create derived clientset: %w", err)
 		}
 		return &Kubernetes{m.accessControlClientset}, nil
 	}
