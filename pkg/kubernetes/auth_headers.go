@@ -101,7 +101,7 @@ func (h *K8sAuthHeaders) IsValid() bool {
 	if h.AuthorizationToken != "" {
 		return true
 	}
-	if h.ClientCertificateData != nil && h.ClientKeyData != nil {
+	if len(h.ClientCertificateData) > 0 && len(h.ClientKeyData) > 0 {
 		return true
 	}
 	return false
