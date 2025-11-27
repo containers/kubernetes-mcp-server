@@ -2,29 +2,20 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1spec "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	toolswatch "k8s.io/client-go/tools/watch"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/env"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/remote"
@@ -49,6 +40,8 @@ func TestMain(m *testing.M) {
 	// Set high rate limits to avoid client-side throttling in tests
 	_ = os.Setenv("KUBE_CLIENT_QPS", "1000")
 	_ = os.Setenv("KUBE_CLIENT_BURST", "2000")
+	//// Enable control plane output to see API server logs
+	//_ = os.Setenv("KUBEBUILDER_ATTACH_CONTROL_PLANE_OUTPUT", "true")
 	envTestDir, err := store.DefaultStoreDir()
 	if err != nil {
 		panic(err)
@@ -73,7 +66,21 @@ func TestMain(m *testing.M) {
 	versionDir := envTestEnv.Platform.BaseName(*envTestEnv.Version.AsConcrete())
 	envTest = &envtest.Environment{
 		BinaryAssetsDirectory: filepath.Join(envTestDir, "k8s", versionDir),
+		CRDs: []*apiextensionsv1spec.CustomResourceDefinition{
+			CRD("project.openshift.io", "v1", "projects", "Project", "project", false),
+			CRD("route.openshift.io", "v1", "routes", "Route", "route", true),
+		},
 	}
+	// Configure API server for faster CRD establishment and test performance
+	envTest.ControlPlane.GetAPIServer().Configure().
+		// Increase concurrent request limits for faster parallel operations
+		Set("max-requests-inflight", "1000").
+		Set("max-mutating-requests-inflight", "500").
+		// Speed up namespace cleanup with more workers
+		Set("delete-collection-workers", "10") //.
+	// Enable verbose logging for debugging
+	//Set("v", "9")
+
 	adminSystemMasterBaseConfig, _ := envTest.Start()
 	au := test.Must(envTest.AddUser(envTestUser, adminSystemMasterBaseConfig))
 	envTestRestConfig = au.Config()
@@ -194,99 +201,4 @@ func (s *BaseMcpSuite) InitMcpClient(options ...transport.StreamableHTTPCOption)
 	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
-}
-
-// EnvTestInOpenShift sets up the kubernetes environment to seem to be running OpenShift
-func EnvTestInOpenShift(ctx context.Context) error {
-	crdTemplate := `
-          {
-            "apiVersion": "apiextensions.k8s.io/v1",
-            "kind": "CustomResourceDefinition",
-            "metadata": {"name": "%s"},
-            "spec": {
-              "group": "%s",
-              "versions": [{
-                "name": "v1","served": true,"storage": true,
-                "schema": {"openAPIV3Schema": {"type": "object","x-kubernetes-preserve-unknown-fields": true}}
-              }],
-              "scope": "%s",
-              "names": {"plural": "%s","singular": "%s","kind": "%s"}
-            }
-          }`
-	tasks, _ := errgroup.WithContext(ctx)
-	tasks.Go(func() error {
-		return EnvTestCrdApply(ctx, fmt.Sprintf(crdTemplate, "projects.project.openshift.io", "project.openshift.io",
-			"Cluster", "projects", "project", "Project"))
-	})
-	tasks.Go(func() error {
-		return EnvTestCrdApply(ctx, fmt.Sprintf(crdTemplate, "routes.route.openshift.io", "route.openshift.io",
-			"Namespaced", "routes", "route", "Route"))
-	})
-	return tasks.Wait()
-}
-
-// EnvTestInOpenShiftClear clears the kubernetes environment so it no longer seems to be running OpenShift
-func EnvTestInOpenShiftClear(ctx context.Context) error {
-	tasks, _ := errgroup.WithContext(ctx)
-	tasks.Go(func() error { return EnvTestCrdDelete(ctx, "projects.project.openshift.io") })
-	tasks.Go(func() error { return EnvTestCrdDelete(ctx, "routes.route.openshift.io") })
-	return tasks.Wait()
-}
-
-// EnvTestCrdWaitUntilReady waits for a CRD to be established
-func EnvTestCrdWaitUntilReady(ctx context.Context, name string) error {
-	apiExtensionClient := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
-	watcher, err := apiExtensionClient.CustomResourceDefinitions().Watch(ctx, metav1.ListOptions{
-		FieldSelector: "metadata.name=" + name,
-	})
-	if err != nil {
-		return fmt.Errorf("unable to watch CRDs: %w", err)
-	}
-	_, err = toolswatch.UntilWithoutRetry(ctx, watcher, func(event watch.Event) (bool, error) {
-		for _, c := range event.Object.(*apiextensionsv1spec.CustomResourceDefinition).Status.Conditions {
-			if c.Type == apiextensionsv1spec.Established && c.Status == apiextensionsv1spec.ConditionTrue {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to wait for CRD: %w", err)
-	}
-	return nil
-}
-
-// EnvTestCrdApply creates a CRD from the provided resource string and waits for it to be established
-func EnvTestCrdApply(ctx context.Context, resource string) error {
-	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
-	var crd = &apiextensionsv1spec.CustomResourceDefinition{}
-	err := json.Unmarshal([]byte(resource), crd)
-	if err != nil {
-		return fmt.Errorf("failed to create CRD %v", err)
-	}
-	_, err = apiExtensionsV1Client.CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create CRD %v", err)
-	}
-	return EnvTestCrdWaitUntilReady(ctx, crd.Name)
-}
-
-// crdDelete deletes a CRD by name and waits for it to be removed
-func EnvTestCrdDelete(ctx context.Context, name string) error {
-	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
-	err := apiExtensionsV1Client.CustomResourceDefinitions().Delete(ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: ptr.To(int64(0)),
-	})
-	iteration := 0
-	for iteration < 100 {
-		if _, derr := apiExtensionsV1Client.CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{}); derr != nil {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-		iteration++
-	}
-	if err != nil {
-		return errors.Wrap(err, "failed to delete CRD")
-	}
-	return nil
 }
