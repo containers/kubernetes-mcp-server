@@ -5,7 +5,7 @@ config:
   # Inline agent configuration - no separate agent.yaml file needed
   agent:
     type: "builtin.openai-agent"
-    model: "gpt-4"  # Change to your model
+    model: "gpt-5"  # Change to your model
   # Before running, set environment variables:
   #   export MODEL_BASE_URL="https://api.openai.com/v1"
   #   export MODEL_KEY="sk-..."
