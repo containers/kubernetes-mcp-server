@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 )
@@ -40,9 +41,9 @@ bcA1Aec41vELGW/ag54wDAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQUFAAOCAQEA
 k4LleEW5M4H4GmRlQTs8E3NYOdvJVE3EbsDNfhRghoWThg2y2pzSn3pGPqYzTBH/
 c320GOMHQ4jf4nbT5eE5yt5oUq9sJ9A132K0YI7HLSITedXOW3U4p2qY5S29JMW
 bJ1x75c5S3zNTf0CphQRY5yqgy4S7y2N1M6o3TlU1pe3y7hqOXE9z5SsImaj8xZ
-fXHqX5u1y5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q
-5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q
-5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q
+fXHqX5u1y5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q
+5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q
+5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q
 -----END CERTIFICATE-----`
 	s.caFile = filepath.Join(s.tempDir, "ca.crt")
 	err = os.WriteFile(s.caFile, []byte(caContent), 0644)
@@ -50,19 +51,17 @@ fXHqX5u1y5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q
 }
 
 func (s *ConfigSuite) TestConfigParser_ResolvesRelativePath() {
-	// Create a config file in the temp directory
-	configFile := filepath.Join(s.tempDir, "config.toml")
-	configContent := `
-[toolset_configs.kiali]
-url = "https://kiali.example/"
-certificate_authority = "ca.crt"
-`
-	err := os.WriteFile(configFile, []byte(configContent), 0644)
-	s.Require().NoError(err, "Failed to write config file")
+	// Create CA file in temp directory
+	caFile := filepath.Join(s.tempDir, "ca.crt")
+	err := os.WriteFile(caFile, []byte("test ca content"), 0644)
+	s.Require().NoError(err, "Failed to write CA file")
 
-	// Read config - Read() automatically sets the config directory path
-	cfg, err := config.Read(configFile)
-	s.Require().NoError(err, "Failed to read config")
+	// Read config with configDirPath set to tempDir to resolve relative paths
+	cfg := test.Must(config.ReadToml([]byte(`
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		certificate_authority = "ca.crt"
+	`), config.WithDirPath(s.tempDir)))
 
 	// Get Kiali config
 	kialiCfg, ok := cfg.GetToolsetConfig("kiali")
@@ -71,26 +70,19 @@ certificate_authority = "ca.crt"
 	s.Require().True(ok, "Kiali config should be of type *Config")
 
 	// Verify the path was resolved to absolute
-	expectedPath := s.caFile
+	expectedPath := caFile
 	s.Equal(expectedPath, kcfg.CertificateAuthority, "Relative path should be resolved to absolute path")
 }
 
 func (s *ConfigSuite) TestConfigParser_PreservesAbsolutePath() {
-	// Create a config file with absolute path
-	configFile := filepath.Join(s.tempDir, "config.toml")
 	// Convert backslashes to forward slashes for TOML compatibility on Windows
 	caFileForTOML := filepath.ToSlash(s.caFile)
-	configContent := `
-[toolset_configs.kiali]
-url = "https://kiali.example/"
-certificate_authority = "` + caFileForTOML + `"
-`
-	err := os.WriteFile(configFile, []byte(configContent), 0644)
-	s.Require().NoError(err, "Failed to write config file")
 
-	// Read config - Read() automatically sets the config directory path
-	cfg, err := config.Read(configFile)
-	s.Require().NoError(err, "Failed to read config")
+	cfg := test.Must(config.ReadToml([]byte(`
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		certificate_authority = "` + caFileForTOML + `"
+	`)))
 
 	kialiCfg, ok := cfg.GetToolsetConfig("kiali")
 	s.Require().True(ok, "Kiali config should be present")
@@ -107,17 +99,12 @@ func (s *ConfigSuite) TestConfigParser_RejectsInlinePEM() {
 	inlinePEM := `-----BEGIN CERTIFICATE-----
 MIIDXTCCAkWgAwIBAgIJAKL7YQ+O2UE3MA0GCSqGSIb3DQEBCQUAMEUxCzAJBgNV
 -----END CERTIFICATE-----`
-	// Create a config file with inline PEM
-	configFile := filepath.Join(s.tempDir, "config.toml")
-	configContent := `
-[toolset_configs.kiali]
-url = "https://kiali.example/"
-certificate_authority = """` + inlinePEM + `"""
-`
-	err := os.WriteFile(configFile, []byte(configContent), 0644)
-	s.Require().NoError(err, "Failed to write config file")
 
-	cfg, err := config.Read(configFile)
+	cfg, err := config.ReadToml([]byte(`
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		certificate_authority = """` + inlinePEM + `"""
+	`))
 
 	// Parser should reject inline PEM content during parsing
 	s.Require().Error(err, "Parser should reject inline PEM content")

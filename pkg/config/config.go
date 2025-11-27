@@ -95,6 +95,13 @@ func withDirPath(path string) ReadConfigOpt {
 	}
 }
 
+// WithDirPath returns a ReadConfigOpt that sets the config directory path.
+// Used by tests that need to resolve relative file paths.
+func WithDirPath(path string) ReadConfigOpt {
+
+	return withDirPath(path)
+}
+
 // Read reads the toml file and returns the StaticConfig, with any opts applied.
 func Read(configPath string, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	configData, err := os.ReadFile(configPath)
