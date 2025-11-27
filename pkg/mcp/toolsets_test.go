@@ -203,6 +203,10 @@ func (s *ToolsetsSuite) InitMcpClient() {
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP())
 }
 
+// assertJsonSnapshot compares actual data against a JSON snapshot file.
+// When the snapshot doesn't match, the test fails with instructions on how to update it.
+// Set UPDATE_TOOLSETS_JSON=1 environment variable to regenerate snapshot files.
+// Example: UPDATE_TOOLSETS_JSON=1 go test ./pkg/mcp -v
 func (s *ToolsetsSuite) assertJsonSnapshot(snapshotFile string, actual any) {
 	_, file, _, _ := runtime.Caller(1)
 	snapshotPath := filepath.Join(filepath.Dir(file), "testdata", snapshotFile)
