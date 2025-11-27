@@ -147,6 +147,9 @@ func (s *ConfigSuite) TestReadConfigValid() {
 }
 
 func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
+	if HasDefaultOverrides() {
+		s.T().Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
+	}
 	validConfigPath := s.writeConfig(`
 		port = "1337"
 	`)
