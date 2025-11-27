@@ -306,7 +306,7 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	gvk, err := parseGroupVersionKind(params.GetArguments())
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed get/update resource scale, %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale, %w", err)), nil
 	}
 
 	name := params.GetArguments()["name"]
@@ -373,7 +373,7 @@ func getResourceClient(params api.ToolHandlerParams, gvk *schema.GroupVersionKin
 
 	isNamespaced, err := params.IsNamespaced(gvk)
 	if err != nil {
-		return nil, fmt.Errorf("failed to determine if resource is namespaceable")
+		return nil, fmt.Errorf("failed to determine if resource is namespaced")
 	}
 
 	if isNamespaced {

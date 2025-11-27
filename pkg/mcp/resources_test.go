@@ -630,13 +630,13 @@ func (s *ResourcesSuite) TestResourcesScale() {
 	s.Run("resources_scale with missing apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed get/update resource scale, missing argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
+		s.Equalf("failed to get/update resource scale, missing argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
 	s.Run("resources_scale with missing kind returns error", func() {
 		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{"apiVersion": "apps/v1"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed get/update resource scale, missing argument kind", toolResult.Content[0].(mcp.TextContent).Text,
+		s.Equalf("failed to get/update resource scale, missing argument kind", toolResult.Content[0].(mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
 	s.Run("resources_scale with missing name returns error", func() {
