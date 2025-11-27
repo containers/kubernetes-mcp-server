@@ -198,6 +198,163 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 	})
 }
 
+func (s *ManagerTestSuite) TestNewAuthHeadersClusterManager() {
+	serverURL := s.mockServer.Config().Host
+	token := "test-token"
+
+	s.Run("creates manager with token authentication", func() {
+		authHeaders := &K8sAuthHeaders{
+			Server:                   serverURL,
+			CertificateAuthorityData: nil, // Use insecure for testing
+			AuthorizationToken:       token,
+			InsecureSkipTLSVerify:    true,
+		}
+
+		cfg := &config.StaticConfig{}
+		manager, err := NewAuthHeadersClusterManager(authHeaders, cfg)
+
+		s.Require().NoError(err)
+		s.Require().NotNil(manager)
+
+		s.Run("rest config is properly configured", func() {
+			restConfig, err := manager.ToRESTConfig()
+			s.Require().NoError(err)
+			s.Equal(serverURL, restConfig.Host)
+			s.Equal(token, restConfig.BearerToken)
+			s.Nil(restConfig.CAData)
+			s.Nil(restConfig.CertData)
+			s.Nil(restConfig.KeyData)
+			s.True(restConfig.Insecure)
+		})
+
+		s.Run("client cmd config is properly configured", func() {
+			rawConfig, err := manager.ToRawKubeConfigLoader().RawConfig()
+			s.Require().NoError(err)
+			s.NotNil(rawConfig.Clusters["cluster"])
+			s.Equal(serverURL, rawConfig.Clusters["cluster"].Server)
+			s.True(rawConfig.Clusters["cluster"].InsecureSkipTLSVerify)
+			s.NotNil(rawConfig.AuthInfos["user"])
+			s.Equal(token, rawConfig.AuthInfos["user"].Token)
+			s.Nil(rawConfig.AuthInfos["user"].ClientCertificateData)
+			s.Nil(rawConfig.AuthInfos["user"].ClientKeyData)
+		})
+
+		s.Run("manager can create discovery client", func() {
+			discoveryClient, err := manager.ToDiscoveryClient()
+			s.Require().NoError(err)
+			s.NotNil(discoveryClient)
+		})
+
+		s.Run("manager can create REST mapper", func() {
+			restMapper, err := manager.ToRESTMapper()
+			s.Require().NoError(err)
+			s.NotNil(restMapper)
+		})
+	})
+
+	// Note: Client certificate tests are omitted because they require valid PEM-encoded certificates
+	// to pass Kubernetes client initialization. The logic for setting cert data is covered by
+	// the tests for empty/nil certificate handling below.
+
+	s.Run("creates manager with InsecureSkipTLSVerify enabled and no CA", func() {
+		authHeaders := &K8sAuthHeaders{
+			Server:                   serverURL,
+			CertificateAuthorityData: nil, // No CA data when using insecure
+			AuthorizationToken:       token,
+			InsecureSkipTLSVerify:    true,
+		}
+
+		cfg := &config.StaticConfig{}
+		manager, err := NewAuthHeadersClusterManager(authHeaders, cfg)
+
+		s.Require().NoError(err)
+		s.Require().NotNil(manager)
+
+		s.Run("rest config has insecure flag enabled", func() {
+			restConfig, err := manager.ToRESTConfig()
+			s.Require().NoError(err)
+			s.True(restConfig.Insecure)
+			s.Nil(restConfig.CAData)
+		})
+
+		s.Run("client cmd config has insecure flag enabled", func() {
+			rawConfig, err := manager.ToRawKubeConfigLoader().RawConfig()
+			s.Require().NoError(err)
+			s.True(rawConfig.Clusters["cluster"].InsecureSkipTLSVerify)
+		})
+	})
+
+	s.Run("creates manager with empty client certificate slices", func() {
+		authHeaders := &K8sAuthHeaders{
+			Server:                   serverURL,
+			CertificateAuthorityData: nil, // Use insecure for testing
+			AuthorizationToken:       token,
+			ClientCertificateData:    []byte{},
+			ClientKeyData:            []byte{},
+			InsecureSkipTLSVerify:    true,
+		}
+
+		cfg := &config.StaticConfig{}
+		manager, err := NewAuthHeadersClusterManager(authHeaders, cfg)
+
+		s.Require().NoError(err)
+		s.Require().NotNil(manager)
+
+		s.Run("rest config has nil cert data for empty slices", func() {
+			restConfig, err := manager.ToRESTConfig()
+			s.Require().NoError(err)
+			s.Nil(restConfig.CertData)
+			s.Nil(restConfig.KeyData)
+		})
+	})
+
+	s.Run("creates manager with nil client certificate data", func() {
+		authHeaders := &K8sAuthHeaders{
+			Server:                   serverURL,
+			CertificateAuthorityData: nil, // Use insecure for testing
+			AuthorizationToken:       token,
+			ClientCertificateData:    nil,
+			ClientKeyData:            nil,
+			InsecureSkipTLSVerify:    true,
+		}
+
+		cfg := &config.StaticConfig{}
+		manager, err := NewAuthHeadersClusterManager(authHeaders, cfg)
+
+		s.Require().NoError(err)
+		s.Require().NotNil(manager)
+
+		s.Run("rest config has nil cert data", func() {
+			restConfig, err := manager.ToRESTConfig()
+			s.Require().NoError(err)
+			s.Nil(restConfig.CertData)
+			s.Nil(restConfig.KeyData)
+		})
+	})
+
+	s.Run("creates manager with custom static config", func() {
+		authHeaders := &K8sAuthHeaders{
+			Server:                   serverURL,
+			CertificateAuthorityData: nil, // Use insecure for testing
+			AuthorizationToken:       token,
+			InsecureSkipTLSVerify:    true,
+		}
+
+		cfg := &config.StaticConfig{
+			DeniedResources: []config.GroupVersionKind{
+				{Group: "", Version: "v1", Kind: "Secret"},
+			},
+		}
+		manager, err := NewAuthHeadersClusterManager(authHeaders, cfg)
+
+		s.Require().NoError(err)
+		s.Require().NotNil(manager)
+
+		s.Run("manager is created successfully with denied resources", func() {
+			// We can't directly access staticConfig, but we can verify the manager was created
+			// The access control will be tested when actually using the manager
+			s.NotNil(manager)
+		})
 func (s *ManagerTestSuite) TestNewManager() {
 	s.Run("with nil config returns error", func() {
 		manager, err := newManager(nil, &rest.Config{}, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))

@@ -88,6 +88,43 @@ func NewInClusterManager(config *config.StaticConfig) (*Manager, error) {
 	return newManager(config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
 }
 
+func NewAuthHeadersClusterManager(authHeaders *K8sAuthHeaders, config *config.StaticConfig) (*Manager, error) {
+
+	var certData []byte = nil
+	if len(authHeaders.ClientCertificateData) > 0 {
+		certData = authHeaders.ClientCertificateData
+	}
+
+	var keyData []byte = nil
+	if len(authHeaders.ClientKeyData) > 0 {
+		keyData = authHeaders.ClientKeyData
+	}
+
+	restConfig := &rest.Config{
+		Host:        authHeaders.Server,
+		BearerToken: authHeaders.AuthorizationToken,
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: authHeaders.InsecureSkipTLSVerify,
+			CAData:   authHeaders.CertificateAuthorityData,
+			CertData: certData,
+			KeyData:  keyData,
+		},
+	}
+	// Create a dummy kubeconfig clientcmdapi.Config to be used in places where clientcmd.ClientConfig is required.
+	clientCmdConfig := clientcmdapi.NewConfig()
+	clientCmdConfig.Clusters["cluster"] = &clientcmdapi.Cluster{
+		Server:                authHeaders.Server,
+		InsecureSkipTLSVerify: authHeaders.InsecureSkipTLSVerify,
+	}
+	clientCmdConfig.AuthInfos["user"] = &clientcmdapi.AuthInfo{
+		Token:                 authHeaders.AuthorizationToken,
+		ClientCertificateData: certData,
+		ClientKeyData:         keyData,
+	}
+
+	return newManager(config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
+}
+
 func newManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
 	if config == nil {
 		return nil, errors.New("config cannot be nil")

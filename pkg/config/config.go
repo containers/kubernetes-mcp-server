@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	ClusterProviderKubeConfig = "kubeconfig"
-	ClusterProviderInCluster  = "in-cluster"
-	ClusterProviderDisabled   = "disabled"
+	ClusterProviderKubeConfig  = "kubeconfig"
+	ClusterProviderInCluster   = "in-cluster"
+	ClusterProviderAuthHeaders = "auth-headers"
+	ClusterProviderDisabled    = "disabled"
 )
 
 // StaticConfig is the configuration for the server.
