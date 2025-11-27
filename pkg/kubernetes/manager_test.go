@@ -200,28 +200,28 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 
 func (s *ManagerTestSuite) TestNewManager() {
 	s.Run("with nil config returns error", func() {
-		manager, err := newManager(nil, &rest.Config{}, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
+		manager, err := NewManager(nil, &rest.Config{}, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
 		s.Require().Error(err)
 		s.EqualError(err, "config cannot be nil", "expected 'config cannot be nil' error")
 		s.Nil(manager, "expected nil manager when config is nil")
 	})
 
 	s.Run("with nil restConfig returns error", func() {
-		manager, err := newManager(&config.StaticConfig{}, nil, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
+		manager, err := NewManager(&config.StaticConfig{}, nil, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
 		s.Require().Error(err)
 		s.EqualError(err, "restConfig cannot be nil", "expected 'restConfig cannot be nil' error")
 		s.Nil(manager, "expected nil manager when restConfig is nil")
 	})
 
 	s.Run("with nil clientCmdConfig returns error", func() {
-		manager, err := newManager(&config.StaticConfig{}, &rest.Config{}, nil)
+		manager, err := NewManager(&config.StaticConfig{}, &rest.Config{}, nil)
 		s.Require().Error(err)
 		s.EqualError(err, "clientCmdConfig cannot be nil", "expected 'clientCmdConfig cannot be nil' error")
 		s.Nil(manager, "expected nil manager when clientCmdConfig is nil")
 	})
 
 	s.Run("with all nil parameters returns config error first", func() {
-		manager, err := newManager(nil, nil, nil)
+		manager, err := NewManager(nil, nil, nil)
 		s.Require().Error(err)
 		s.EqualError(err, "config cannot be nil", "expected 'config cannot be nil' error as first check")
 		s.Nil(manager, "expected nil manager when all parameters are nil")

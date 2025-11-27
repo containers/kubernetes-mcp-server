@@ -158,7 +158,7 @@ users:
 			badConfig := test.Must(config.ReadToml([]byte(`
 				kubeconfig = "` + strings.ReplaceAll(badKubeconfigPath, `\`, `\\`) + `"
 			`)))
-			badManager, _ := newManager(badConfig, testManager.accessControlClientset.cfg, testManager.accessControlClientset.clientCmdConfig)
+			badManager, _ := NewManager(badConfig, testManager.accessControlClientset.cfg, testManager.accessControlClientset.clientCmdConfig)
 			// Replace the clientCmdConfig with one that will fail
 			pathOptions := clientcmd.NewDefaultPathOptions()
 			pathOptions.LoadingRules.ExplicitPath = badKubeconfigPath
@@ -194,7 +194,7 @@ users:
 			s.T().Cleanup(testManager.Close)
 
 			// Now create a bad manager with RequireOAuth=true
-			badManager, _ := newManager(testStaticConfig, testManager.accessControlClientset.cfg, testManager.accessControlClientset.clientCmdConfig)
+			badManager, _ := NewManager(testStaticConfig, testManager.accessControlClientset.cfg, testManager.accessControlClientset.clientCmdConfig)
 			// Replace the clientCmdConfig with one that will fail
 			pathOptions := clientcmd.NewDefaultPathOptions()
 			pathOptions.LoadingRules.ExplicitPath = badKubeconfigPath
