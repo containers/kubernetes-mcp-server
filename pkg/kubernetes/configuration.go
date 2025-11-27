@@ -32,13 +32,16 @@ func IsInCluster(cfg *config.StaticConfig) bool {
 }
 
 func (k *Kubernetes) NamespaceOrDefault(namespace string) string {
-	return k.manager.NamespaceOrDefault(namespace)
+	if namespace == "" {
+		return k.configuredNamespace()
+	}
+	return namespace
 }
 
 // ConfigurationContextsDefault returns the current context name
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
-	cfg, err := k.manager.clientCmdConfig.RawConfig()
+	cfg, err := k.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
 		return "", err
 	}
@@ -48,7 +51,7 @@ func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
 // ConfigurationContextsList returns the list of available context names
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
-	cfg, err := k.manager.clientCmdConfig.RawConfig()
+	cfg, err := k.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +74,7 @@ func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
 func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
 	var cfg clientcmdapi.Config
 	var err error
-	if cfg, err = k.manager.clientCmdConfig.RawConfig(); err != nil {
+	if cfg, err = k.ToRawKubeConfigLoader().RawConfig(); err != nil {
 		return nil, err
 	}
 	if minify {

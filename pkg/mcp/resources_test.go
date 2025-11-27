@@ -401,7 +401,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 			_, err = apiExtensionsV1Client.CustomResourceDefinitions().Get(s.T().Context(), "customs.example.com", metav1.GetOptions{})
 			s.Nilf(err, "custom resource definition not found")
 		})
-		s.Require().NoError(EnvTestCrdWaitUntilReady(s.T().Context(), "customs.example.com"))
+		s.Require().NoError(EnvTestWaitForAPIResourceCondition(s.T().Context(), "example.com", "v1", "customs", true))
 	})
 
 	s.Run("resources_create_or_update creates custom resource", func() {

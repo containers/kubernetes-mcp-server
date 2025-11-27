@@ -40,7 +40,7 @@ func newKubeConfigClusterProvider(cfg *config.StaticConfig) (Provider, error) {
 		return nil, err
 	}
 
-	rawConfig, err := m.clientCmdConfig.RawConfig()
+	rawConfig, err := m.accessControlClientset.clientCmdConfig.RawConfig()
 	if err != nil {
 		return nil, err
 	}
