@@ -69,9 +69,7 @@ func (k *Kiali) GetMeshGraph(ctx context.Context, namespaces []string, queryPara
 		if len(data) > 0 {
 			summary := computeMeshHealthSummary(data, cleaned, queryParams)
 			if summary != nil {
-				errorsMu.Lock()
 				resp.MeshHealthSummary = summary
-				errorsMu.Unlock()
 			}
 		}
 	}()
