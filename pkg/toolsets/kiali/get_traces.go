@@ -40,73 +40,76 @@ var tracesOpsMap = map[string]tracesOperations{
 	},
 }
 
-func initGetTraces() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
+func initGetTraces(isOpenshift bool) []api.ServerTool {
+	name := "kiali_get_traces"
+	if isOpenshift {
+		name = "ossm_get_traces"
+	}
 
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        "kiali_get_traces",
-			Description: "Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"traceId": {
-						Type:        "string",
-						Description: "Unique identifier of the trace to retrieve detailed information for. If provided, this will return detailed trace information and other parameters (resource_type, namespace, resource_name) are not required.",
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        name,
+				Description: "Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"traceId": {
+							Type:        "string",
+							Description: "Unique identifier of the trace to retrieve detailed information for. If provided, this will return detailed trace information and other parameters (resource_type, namespace, resource_name) are not required.",
+						},
+						"resource_type": {
+							Type:        "string",
+							Description: "Type of resource to get traces for (app, service, workload). Required if traceId is not provided.",
+							Enum:        []any{"app", "service", "workload"},
+						},
+						"namespace": {
+							Type:        "string",
+							Description: "Namespace to get resources from. Required if traceId is not provided.",
+						},
+						"resource_name": {
+							Type:        "string",
+							Description: "Name of the resource to get traces for. Required if traceId is not provided.",
+						},
+						"startMicros": {
+							Type:        "string",
+							Description: "Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided, only used when traceId is not provided)",
+						},
+						"endMicros": {
+							Type:        "string",
+							Description: "End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided, only used when traceId is not provided)",
+						},
+						"limit": {
+							Type:        "integer",
+							Description: "Maximum number of traces to return (default: 100, only used when traceId is not provided)",
+							Minimum:     ptr.To(float64(1)),
+						},
+						"minDuration": {
+							Type:        "integer",
+							Description: "Minimum trace duration in microseconds (optional, only used when traceId is not provided)",
+							Minimum:     ptr.To(float64(0)),
+						},
+						"tags": {
+							Type:        "string",
+							Description: "JSON string of tags to filter traces (optional, only used when traceId is not provided)",
+						},
+						"clusterName": {
+							Type:        "string",
+							Description: "Cluster name for multi-cluster environments (optional, only used when traceId is not provided)",
+						},
 					},
-					"resource_type": {
-						Type:        "string",
-						Description: "Type of resource to get traces for (app, service, workload). Required if traceId is not provided.",
-						Enum:        []any{"app", "service", "workload"},
-					},
-					"namespace": {
-						Type:        "string",
-						Description: "Namespace to get resources from. Required if traceId is not provided.",
-					},
-					"resource_name": {
-						Type:        "string",
-						Description: "Name of the resource to get traces for. Required if traceId is not provided.",
-					},
-					"startMicros": {
-						Type:        "string",
-						Description: "Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided, only used when traceId is not provided)",
-					},
-					"endMicros": {
-						Type:        "string",
-						Description: "End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided, only used when traceId is not provided)",
-					},
-					"limit": {
-						Type:        "integer",
-						Description: "Maximum number of traces to return (default: 100, only used when traceId is not provided)",
-						Minimum:     ptr.To(float64(1)),
-					},
-					"minDuration": {
-						Type:        "integer",
-						Description: "Minimum trace duration in microseconds (optional, only used when traceId is not provided)",
-						Minimum:     ptr.To(float64(0)),
-					},
-					"tags": {
-						Type:        "string",
-						Description: "JSON string of tags to filter traces (optional, only used when traceId is not provided)",
-					},
-					"clusterName": {
-						Type:        "string",
-						Description: "Cluster name for multi-cluster environments (optional, only used when traceId is not provided)",
-					},
+					Required: []string{},
 				},
-				Required: []string{},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Get Traces for a Resource or Trace Details",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(true),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: TracesHandler,
-	})
-
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "Get Traces for a Resource or Trace Details",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: TracesHandler,
+		},
+	}
 }
 
 func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

@@ -79,6 +79,8 @@ type StaticConfig struct {
 
 	// Internal: the config.toml directory, to help resolve relative file paths
 	configDirPath string
+	// ToolsetKialiName allows overriding the registered name of the Kiali toolset downstream builds
+	ToolsetKialiName string
 }
 
 type GroupVersionKind struct {

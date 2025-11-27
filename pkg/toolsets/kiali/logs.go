@@ -10,52 +10,54 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-func initLogs() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
-
+func initLogs(isOpenshift bool) []api.ServerTool {
+	name := "kiali_get_workload_logs"
+	if isOpenshift {
+		name = "ossm_get_workload_logs"
+	}
 	// Workload logs tool
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        "workload_logs",
-			Description: "Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"namespace": {
-						Type:        "string",
-						Description: "Namespace containing the workload",
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        name,
+				Description: "Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"namespace": {
+							Type:        "string",
+							Description: "Namespace containing the workload",
+						},
+						"workload": {
+							Type:        "string",
+							Description: "Name of the workload to get logs for",
+						},
+						"container": {
+							Type:        "string",
+							Description: "Optional container name to filter logs. If not provided, automatically detects and uses the main application container (excludes istio-proxy and istio-init)",
+						},
+						"since": {
+							Type:        "string",
+							Description: "Time duration to fetch logs from (e.g., '5m', '1h', '30s'). If not provided, returns recent logs",
+						},
+						"tail": {
+							Type:        "integer",
+							Description: "Number of lines to retrieve from the end of logs (default: 100)",
+							Minimum:     ptr.To(float64(1)),
+						},
 					},
-					"workload": {
-						Type:        "string",
-						Description: "Name of the workload to get logs for",
-					},
-					"container": {
-						Type:        "string",
-						Description: "Optional container name to filter logs. If not provided, automatically detects and uses the main application container (excludes istio-proxy and istio-init)",
-					},
-					"since": {
-						Type:        "string",
-						Description: "Time duration to fetch logs from (e.g., '5m', '1h', '30s'). If not provided, returns recent logs",
-					},
-					"tail": {
-						Type:        "integer",
-						Description: "Number of lines to retrieve from the end of logs (default: 100)",
-						Minimum:     ptr.To(float64(1)),
-					},
+					Required: []string{"namespace", "workload"},
 				},
-				Required: []string{"namespace", "workload"},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Workload: Logs",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: workloadLogsHandler,
-	})
-
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "Workload: Logs",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(false),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: workloadLogsHandler,
+		},
+	}
 }
 
 func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

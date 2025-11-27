@@ -10,44 +10,48 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-func initGetMeshGraph() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        "kiali_get_mesh_graph",
-			Description: "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Use this for high-level overviews",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"namespace": {
-						Type:        "string",
-						Description: "Optional single namespace to include in the graph (alternative to namespaces)",
+func initGetMeshGraph(isOpenshift bool) []api.ServerTool {
+	name := "kiali_get_mesh_graph"
+	if isOpenshift {
+		name = "ossm_get_mesh_graph"
+	}
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        name,
+				Description: "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Use this for high-level overviews",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"namespace": {
+							Type:        "string",
+							Description: "Optional single namespace to include in the graph (alternative to namespaces)",
+						},
+						"namespaces": {
+							Type:        "string",
+							Description: "Optional comma-separated list of namespaces to include in the graph",
+						},
+						"rateInterval": {
+							Type:        "string",
+							Description: "Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '60s'",
+						},
+						"graphType": {
+							Type:        "string",
+							Description: "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'",
+						},
 					},
-					"namespaces": {
-						Type:        "string",
-						Description: "Optional comma-separated list of namespaces to include in the graph",
-					},
-					"rateInterval": {
-						Type:        "string",
-						Description: "Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '60s'",
-					},
-					"graphType": {
-						Type:        "string",
-						Description: "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'",
-					},
+					Required: []string{},
 				},
-				Required: []string{},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Topology: Mesh, Graph, Health, and Status",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: getMeshGraphHandler,
-	})
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "Topology: Mesh, Graph, Health, and Status",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(false),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: getMeshGraphHandler,
+		},
+	}
 }
 
 func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

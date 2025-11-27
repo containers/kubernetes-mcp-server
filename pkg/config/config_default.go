@@ -6,12 +6,16 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// DefaultOverridesProvider is used to retrieve the overrides.
+// It points to defaultOverrides by default, and can be replaced in tests.
+var DefaultOverridesProvider = defaultOverrides
+
 func Default() *StaticConfig {
 	defaultConfig := StaticConfig{
 		ListOutput: "table",
 		Toolsets:   []string{"core", "config", "helm"},
 	}
-	overrides := defaultOverrides()
+	overrides := DefaultOverridesProvider()
 	mergedConfig := mergeConfig(defaultConfig, overrides)
 	return &mergedConfig
 }
@@ -19,7 +23,7 @@ func Default() *StaticConfig {
 // HasDefaultOverrides indicates whether the internal defaultOverrides function
 // provides any overrides or an empty StaticConfig.
 func HasDefaultOverrides() bool {
-	overrides := defaultOverrides()
+	overrides := DefaultOverridesProvider()
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(overrides); err != nil {
 		// If marshaling fails, assume no overrides

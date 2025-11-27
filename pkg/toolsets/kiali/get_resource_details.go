@@ -39,42 +39,49 @@ var listDetailsOpsMap = map[string]listDetailsOperations{
 	},
 }
 
-func initGetResourceDetails() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
+func initGetResourceDetails(isOpenshift bool) []api.ServerTool {
+	name := "kiali_get_resource_details"
+	if isOpenshift {
+		name = "ossm_get_resource_details"
+	}
+	desc := "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh"
+	if isOpenshift {
+		desc = strings.ReplaceAll(desc, "Kubernetes", "Openshift")
+	}
 
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        "kiali_get_resource_details",
-			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"resource_type": {
-						Type:        "string",
-						Description: "Type of resource to get details for (service, workload)",
-						Enum:        []any{"service", "workload"},
-					},
-					"namespaces": {
-						Type:        "string",
-						Description: "Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces",
-					},
-					"resource_name": {
-						Type:        "string",
-						Description: "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        name,
+				Description: desc,
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"resource_type": {
+							Type:        "string",
+							Description: "Type of resource to get details for (service, workload)",
+							Enum:        []any{"service", "workload"},
+						},
+						"namespaces": {
+							Type:        "string",
+							Description: "Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces",
+						},
+						"resource_name": {
+							Type:        "string",
+							Description: "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
+						},
 					},
 				},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "List or Resource Details",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(true),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: resourceDetailsHandler,
-	})
-
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "List or Resource Details",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: resourceDetailsHandler,
+		},
+	}
 }
 
 func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
