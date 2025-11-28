@@ -24,7 +24,7 @@ func (s *ConfigSuite) SetupTest() {
 
 	// Create a test CA certificate file
 	s.caFile = filepath.Join(s.tempDir, "ca.crt")
-	err := os.WriteFile(s.caFile, []byte("test ca content"), 0644)
+	err = os.WriteFile(s.caFile, []byte("test ca content"), 0644)
 	s.Require().NoError(err, "Failed to write CA file")
 }
 
