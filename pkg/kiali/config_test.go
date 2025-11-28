@@ -76,11 +76,13 @@ func (s *ConfigSuite) TestConfigParser_PreservesAbsolutePath() {
 func (s *ConfigSuite) TestConfigParser_RejectsInvalidFile() {
 	// Use a non-existent file path
 	nonExistentFile := filepath.Join(s.tempDir, "non-existent.crt")
+	// Convert backslashes to forward slashes for TOML compatibility on Windows
+	nonExistentFileForTOML := filepath.ToSlash(nonExistentFile)
 
 	cfg, err := config.ReadToml([]byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
-		certificate_authority = "` + nonExistentFile + `"
+		certificate_authority = "` + nonExistentFileForTOML + `"
 	`))
 
 	// Validate should reject invalid file path
