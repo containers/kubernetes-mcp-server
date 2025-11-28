@@ -79,6 +79,7 @@ func initGetTraces() []api.ServerTool {
 						Type:        "integer",
 						Description: "Maximum number of traces to return (default: 100, only used when traceId is not provided)",
 						Minimum:     ptr.To(float64(1)),
+						Default:     api.ToRawMessage(kialiclient.DefaultLimit),
 					},
 					"minDuration": {
 						Type:        "integer",
@@ -175,34 +176,14 @@ func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		endMicros = strconv.FormatInt(endTime.UnixMicro(), 10)
 	}
 	queryParams["endMicros"] = endMicros
-	// Handle limit: convert integer to string if provided
-	if limit := params.GetArguments()["limit"]; limit != nil {
-		switch v := limit.(type) {
-		case float64:
-			queryParams["limit"] = fmt.Sprintf("%.0f", v)
-		case int:
-			queryParams["limit"] = fmt.Sprintf("%d", v)
-		case int64:
-			queryParams["limit"] = fmt.Sprintf("%d", v)
-		case string:
-			if v != "" {
-				queryParams["limit"] = v
-			}
-		}
+	if err := setQueryParam(params, queryParams, "limit", kialiclient.DefaultLimit); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
+
 	// Handle minDuration: convert integer to string if provided
 	if minDuration := params.GetArguments()["minDuration"]; minDuration != nil {
-		switch v := minDuration.(type) {
-		case float64:
-			queryParams["minDuration"] = fmt.Sprintf("%.0f", v)
-		case int:
-			queryParams["minDuration"] = fmt.Sprintf("%d", v)
-		case int64:
-			queryParams["minDuration"] = fmt.Sprintf("%d", v)
-		case string:
-			if v != "" {
-				queryParams["minDuration"] = v
-			}
+		if err := setQueryParam(params, queryParams, "minDuration", ""); err != nil {
+			return api.NewToolCallResult("", err), nil
 		}
 	}
 	if tags, ok := params.GetArguments()["tags"].(string); ok && tags != "" {

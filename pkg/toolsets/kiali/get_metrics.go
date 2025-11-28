@@ -57,23 +57,27 @@ func initGetMetrics() []api.ServerTool {
 					},
 					"duration": {
 						Type:        "string",
-						Description: "Time range to get metrics for (optional string - if provided, gets metrics; if empty, get default 1800s).",
+						Description: "Time range to get metrics for (optional string - if provided, gets metrics (e.g., '1m', '5m', '1h'); if empty, get default 30m).", Default: api.ToRawMessage(kialiclient.DefaultDuration),
 					},
 					"step": {
 						Type:        "string",
 						Description: "Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds",
+						Default:     api.ToRawMessage(kialiclient.DefaultStep),
 					},
 					"rateInterval": {
 						Type:        "string",
 						Description: "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'",
+						Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
 					},
 					"direction": {
 						Type:        "string",
 						Description: "Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'",
+						Default:     api.ToRawMessage(kialiclient.DefaultDirection),
 					},
 					"reporter": {
 						Type:        "string",
 						Description: "Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'",
+						Default:     api.ToRawMessage(kialiclient.DefaultReporter),
 					},
 					"requestProtocol": {
 						Type:        "string",
@@ -82,6 +86,7 @@ func initGetMetrics() []api.ServerTool {
 					"quantiles": {
 						Type:        "string",
 						Description: "Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional",
+						Default:     api.ToRawMessage(kialiclient.DefaultQuantiles),
 					},
 					"byLabels": {
 						Type:        "string",
@@ -129,28 +134,26 @@ func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 	}
 
 	queryParams := make(map[string]string)
-	if duration, ok := params.GetArguments()["duration"].(string); ok && duration != "" {
-		queryParams["duration"] = duration
+	if err := setQueryParam(params, queryParams, "duration", kialiclient.DefaultDuration); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
-	if step, ok := params.GetArguments()["step"].(string); ok && step != "" {
-		queryParams["step"] = step
+	if err := setQueryParam(params, queryParams, "step", kialiclient.DefaultStep); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
-	rateInterval := kialiclient.DefaultRateInterval // default
-	if v, ok := params.GetArguments()["rateInterval"].(string); ok && v != "" {
-		rateInterval = v
+	if err := setQueryParam(params, queryParams, "rateInterval", kialiclient.DefaultRateInterval); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
-	queryParams["rateInterval"] = rateInterval
-	if direction, ok := params.GetArguments()["direction"].(string); ok && direction != "" {
-		queryParams["direction"] = direction
+	if err := setQueryParam(params, queryParams, "direction", kialiclient.DefaultDirection); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
-	if reporter, ok := params.GetArguments()["reporter"].(string); ok && reporter != "" {
-		queryParams["reporter"] = reporter
+	if err := setQueryParam(params, queryParams, "reporter", kialiclient.DefaultReporter); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
 	if requestProtocol, ok := params.GetArguments()["requestProtocol"].(string); ok && requestProtocol != "" {
 		queryParams["requestProtocol"] = requestProtocol
 	}
-	if quantiles, ok := params.GetArguments()["quantiles"].(string); ok && quantiles != "" {
-		queryParams["quantiles"] = quantiles
+	if err := setQueryParam(params, queryParams, "quantiles", kialiclient.DefaultQuantiles); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
 	if byLabels, ok := params.GetArguments()["byLabels"].(string); ok && byLabels != "" {
 		queryParams["byLabels"] = byLabels
