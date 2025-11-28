@@ -76,7 +76,7 @@ func TestConfig(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected error for invalid config path, got nil")
 		}
-		expected := "open invalid-path-to-config.toml: "
+		expected := "failed to load main config file invalid-path-to-config.toml:"
 		if !strings.HasPrefix(err.Error(), expected) {
 			t.Fatalf("Expected error to be %s, got %s", expected, err.Error())
 		}

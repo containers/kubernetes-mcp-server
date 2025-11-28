@@ -64,7 +64,7 @@ func (s *ToolsetConfigSuite) TestReadConfigValid() {
 		timeout = 30
 	`)
 
-	config, err := Read(validConfigPath)
+	config, err := Read(validConfigPath, "")
 	s.Run("returns no error for valid file with registered toolset config", func() {
 		s.Require().NoError(err, "Expected no error for valid file, got %v", err)
 	})
@@ -92,7 +92,7 @@ func (s *ToolsetConfigSuite) TestReadConfigInvalidToolsetConfig() {
 		timeout = 30
 	`)
 
-	config, err := Read(invalidConfigPath)
+	config, err := Read(invalidConfigPath, "")
 	s.Run("returns error for invalid toolset config", func() {
 		s.Require().NotNil(err, "Expected error for invalid toolset config, got nil")
 		s.ErrorContains(err, "validation error forced by test", "Expected validation error from toolset config")
@@ -110,7 +110,7 @@ func (s *ToolsetConfigSuite) TestReadConfigUnregisteredToolsetConfig() {
 		timeout = 30
 	`)
 
-	config, err := Read(unregisteredConfigPath)
+	config, err := Read(unregisteredConfigPath, "")
 	s.Run("returns no error for unregistered toolset config", func() {
 		s.Require().NoError(err, "Expected no error for unregistered toolset config, got %v", err)
 	})

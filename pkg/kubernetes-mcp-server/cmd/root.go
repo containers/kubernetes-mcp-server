@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/spf13/cobra"
@@ -57,6 +59,7 @@ const (
 	flagVersion              = "version"
 	flagLogLevel             = "log-level"
 	flagConfig               = "config"
+	flagConfigDir            = "config-dir"
 	flagPort                 = "port"
 	flagSSEBaseUrl           = "sse-base-url"
 	flagKubeconfig           = "kubeconfig"
@@ -92,6 +95,7 @@ type MCPServerOptions struct {
 	DisableMultiCluster  bool
 
 	ConfigPath   string
+	ConfigDir    string
 	StaticConfig *config.StaticConfig
 
 	genericiooptions.IOStreams
@@ -129,6 +133,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Version, flagVersion, o.Version, "Print version information and quit")
 	cmd.Flags().IntVar(&o.LogLevel, flagLogLevel, o.LogLevel, "Set the log level (from 0 to 9)")
 	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
+	cmd.Flags().StringVar(&o.ConfigDir, flagConfigDir, o.ConfigDir, "Path to drop-in configuration directory (files loaded in lexical order).")
 	cmd.Flags().StringVar(&o.Port, flagPort, o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
 	cmd.Flags().StringVar(&o.SSEBaseUrl, flagSSEBaseUrl, o.SSEBaseUrl, "SSE public base URL to use when sending the endpoint message (e.g. https://example.com)")
 	cmd.Flags().StringVar(&o.Kubeconfig, flagKubeconfig, o.Kubeconfig, "Path to the kubeconfig file to use for authentication")
@@ -155,7 +160,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 
 func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
 	if m.ConfigPath != "" {
-		cnf, err := config.Read(m.ConfigPath)
+		cnf, err := config.Read(m.ConfigPath, m.ConfigDir)
 		if err != nil {
 			return err
 		}
@@ -325,11 +330,18 @@ func (m *MCPServerOptions) Run() error {
 		oidcProvider = provider
 	}
 
-	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: m.StaticConfig})
+	mcpServer, err := mcp.NewServer(mcp.Configuration{
+		StaticConfig: m.StaticConfig,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
 	defer mcpServer.Close()
+
+	// Set up SIGHUP handler for configuration reload
+	if m.ConfigPath != "" || m.ConfigDir != "" {
+		m.setupSIGHUPHandler(mcpServer)
+	}
 
 	if m.StaticConfig.Port != "" {
 		ctx := context.Background()
@@ -342,4 +354,34 @@ func (m *MCPServerOptions) Run() error {
 	}
 
 	return nil
+}
+
+// setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP.
+// This is a blocking call that runs in a separate goroutine.
+func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) {
+	sigHupCh := make(chan os.Signal, 1)
+	signal.Notify(sigHupCh, syscall.SIGHUP)
+
+	go func() {
+		for range sigHupCh {
+			klog.V(1).Info("Received SIGHUP signal, reloading configuration...")
+
+			// Reload config from files
+			newConfig, err := config.Read(m.ConfigPath, m.ConfigDir)
+			if err != nil {
+				klog.Errorf("Failed to reload configuration from disk: %v", err)
+				continue
+			}
+
+			// Apply the new configuration to the MCP server
+			if err := mcpServer.ReloadConfiguration(newConfig); err != nil {
+				klog.Errorf("Failed to apply reloaded configuration: %v", err)
+				continue
+			}
+
+			klog.V(1).Info("Configuration reloaded successfully via SIGHUP")
+		}
+	}()
+
+	klog.V(2).Info("SIGHUP handler registered for configuration reload")
 }
