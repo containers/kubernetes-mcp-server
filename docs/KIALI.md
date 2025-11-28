@@ -30,6 +30,6 @@ When the `kiali` toolset is enabled, a Kiali toolset configuration is required v
 - Missing Kiali configuration when `kiali` toolset is enabled → set `[toolset_configs.kiali].url` in the config TOML.
 - Invalid URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL.
 - TLS certificate validation:
-  - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the path to the CA certificate file. Relative paths are resolved relative to the directory containing the config file. You may also provide inline PEM content (starting with `-----BEGIN CERTIFICATE-----`) for backward compatibility, though file paths are recommended for consistency with other Red Hat-maintained components.
+  - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the path to the CA certificate file. Relative paths are resolved relative to the directory containing the config file. Only file paths are supported; inline PEM content is not allowed.
   - For non-production environments you can set `[toolset_configs.kiali].insecure = true` to skip certificate verification.
 
