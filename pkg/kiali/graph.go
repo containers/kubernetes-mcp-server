@@ -16,26 +16,16 @@ func (k *Kiali) Graph(ctx context.Context, namespaces []string, queryParams map[
 		return "", err
 	}
 	q := u.Query()
-	// Static graph parameters per requirements
-	// Defaults with optional overrides via queryParams
-	duration := DefaultRateInterval
-	graphType := "versionedApp"
-	if v, ok := queryParams["rateInterval"]; ok && strings.TrimSpace(v) != "" {
-		duration = strings.TrimSpace(v)
-	}
-	if v, ok := queryParams["graphType"]; ok && strings.TrimSpace(v) != "" {
-		graphType = strings.TrimSpace(v)
-	}
-	q.Set("duration", duration)
-	q.Set("graphType", graphType)
-	q.Set("includeIdleEdges", "false")
-	q.Set("injectServiceNodes", "true")
-	q.Set("boxBy", "cluster,namespace,app")
-	q.Set("ambientTraffic", "none")
-	q.Set("appenders", "deadNode,istio,serviceEntry,meshCheck,workloadEntry,health")
-	q.Set("rateGrpc", "requests")
-	q.Set("rateHttp", "requests")
-	q.Set("rateTcp", "sent")
+	q.Set("duration", queryParams["rateInterval"])
+	q.Set("graphType", queryParams["graphType"])
+	q.Set("includeIdleEdges", DefaultIncludeIdleEdges)
+	q.Set("injectServiceNodes", DefaultInjectServiceNodes)
+	q.Set("boxBy", DefaultBoxBy)
+	q.Set("ambientTraffic", DefaultAmbientTraffic)
+	q.Set("appenders", DefaultAppenders)
+	q.Set("rateGrpc", DefaultRateGrpc)
+	q.Set("rateHttp", DefaultRateHttp)
+	q.Set("rateTcp", DefaultRateTcp)
 	// Optional namespaces param
 	cleaned := make([]string, 0, len(namespaces))
 	for _, ns := range namespaces {

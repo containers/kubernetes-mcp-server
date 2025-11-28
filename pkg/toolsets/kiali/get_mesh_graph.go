@@ -30,11 +30,13 @@ func initGetMeshGraph() []api.ServerTool {
 					},
 					"rateInterval": {
 						Type:        "string",
-						Description: "Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '10m'",
+						Description: "Rate interval for fetching (e.g., '10m', '5m', '1h').",
+						Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
 					},
 					"graphType": {
 						Type:        "string",
-						Description: "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'",
+						Description: "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
+						Default:     api.ToRawMessage(kialiclient.DefaultGraphType),
 					},
 				},
 				Required: []string{},
@@ -89,13 +91,11 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 
 	// Extract optional query parameters
 	queryParams := make(map[string]string)
-	rateInterval := kialiclient.DefaultRateInterval // default
-	if v, ok := params.GetArguments()["rateInterval"].(string); ok && v != "" {
-		rateInterval = v
+	if err := setQueryParam(params, queryParams, "rateInterval", kialiclient.DefaultRateInterval); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
-	queryParams["rateInterval"] = rateInterval
-	if graphType, ok := params.GetArguments()["graphType"].(string); ok && graphType != "" {
-		queryParams["graphType"] = graphType
+	if err := setQueryParam(params, queryParams, "graphType", kialiclient.DefaultGraphType); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
 	k := params.NewKiali()
 	content, err := k.GetMeshGraph(params.Context, namespaces, queryParams)
