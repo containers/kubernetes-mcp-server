@@ -70,8 +70,9 @@ format: ## Format the code
 tidy: ## Tidy up the go modules
 	go mod tidy
 
+# Download and install golangci-lint if not already installed
 .PHONY: golangci-lint
-golangci-lint: ## Download and install golangci-lint if not already installed
+golangci-lint:
 		@[ -f $(GOLANGCI_LINT) ] || { \
     	set -e ;\
     	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
@@ -121,6 +122,10 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 .PHONY: local-env-teardown
 local-env-teardown: ## Tear down the local Kind cluster
 	$(MAKE) kind-delete-cluster
+
+.PHONY: print-git-tag-version
+print-git-tag-version: ## Print the GIT_TAG_VERSION
+	@echo $(GIT_TAG_VERSION)
 
 # Include build configuration files
 -include build/*.mk
