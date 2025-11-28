@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -35,31 +34,12 @@ func (s *WatchKubeConfigSuite) WriteKubeconfig() {
 	_ = f.Close()
 }
 
-// WaitForNotification waits for an MCP server notification or fails the test after a timeout
-func (s *WatchKubeConfigSuite) WaitForNotification() *mcp.JSONRPCNotification {
-	withTimeout, cancel := context.WithTimeout(s.T().Context(), 5*time.Second)
-	defer cancel()
-	var notification *mcp.JSONRPCNotification
-	s.OnNotification(func(n mcp.JSONRPCNotification) {
-		notification = &n
-	})
-	for notification == nil {
-		select {
-		case <-withTimeout.Done():
-			s.FailNow("timeout waiting for WatchKubeConfig notification")
-		default:
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-	return notification
-}
-
 func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
 	// Given
 	s.InitMcpClient()
 	// When
 	s.WriteKubeconfig()
-	notification := s.WaitForNotification()
+	notification := s.WaitForNotification(5 * time.Second)
 	// Then
 	s.NotNil(notification, "WatchKubeConfig did not notify")
 	s.Equal("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change")
@@ -87,7 +67,7 @@ func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
 		// Reload Config without OpenShift
 		s.mockServer.ResetHandlers()
 		s.WriteKubeconfig()
-		s.WaitForNotification()
+		s.WaitForNotification(5 * time.Second)
 
 		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
 		s.Require().NoError(err, "call ListTools failed")
@@ -100,4 +80,85 @@ func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
 
 func TestWatchKubeConfig(t *testing.T) {
 	suite.Run(t, new(WatchKubeConfigSuite))
+}
+
+type WatchClusterStateSuite struct {
+	BaseMcpSuite
+	mockServer *test.MockServer
+	handler    *test.DiscoveryClientHandler
+}
+
+func (s *WatchClusterStateSuite) SetupTest() {
+	s.BaseMcpSuite.SetupTest()
+	// Configure fast polling for tests
+	s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "100")
+	s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "50")
+	s.mockServer = test.NewMockServer()
+	s.handler = &test.DiscoveryClientHandler{}
+	s.mockServer.Handle(s.handler)
+	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+}
+
+func (s *WatchClusterStateSuite) TearDownTest() {
+	s.BaseMcpSuite.TearDownTest()
+	if s.mockServer != nil {
+		s.mockServer.Close()
+	}
+}
+
+func (s *WatchClusterStateSuite) AddAPIGroup(groupName string) {
+	s.handler.Groups = append(s.handler.Groups, groupName)
+}
+
+func (s *WatchClusterStateSuite) TestNotifiesToolsChangeOnAPIGroupAddition() {
+	// Given - Initialize with basic API groups
+	s.InitMcpClient()
+
+	// When - Add a new API group to simulate cluster state change
+	s.AddAPIGroup(`{"name":"custom.example.com","versions":[{"groupVersion":"custom.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"custom.example.com/v1","version":"v1"}}`)
+
+	notification := s.WaitForNotification(10 * time.Second)
+
+	// Then
+	s.NotNil(notification, "cluster state watcher did not notify")
+	s.Equal("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change")
+}
+
+func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
+	s.InitMcpClient()
+
+	s.Run("OpenShift tool is not available initially", func() {
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Require().NoError(err, "call ListTools failed")
+		s.Require().NotNil(tools, "list tools failed")
+		for _, tool := range tools.Tools {
+			s.Require().Falsef(tool.Name == "projects_list", "expected OpenShift tool to not be available initially")
+		}
+	})
+
+	s.Run("OpenShift tool is added after cluster becomes OpenShift", func() {
+		// Simulate cluster becoming OpenShift by adding OpenShift API groups
+		s.mockServer.ResetHandlers()
+		s.mockServer.Handle(&test.InOpenShiftHandler{})
+
+		notification := s.WaitForNotification(10 * time.Second)
+		s.NotNil(notification, "cluster state watcher did not notify")
+
+		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		s.Require().NoError(err, "call ListTools failed")
+		s.Require().NotNil(tools, "list tools failed")
+
+		var found bool
+		for _, tool := range tools.Tools {
+			if tool.Name == "projects_list" {
+				found = true
+				break
+			}
+		}
+		s.Truef(found, "expected OpenShift tool to be available after cluster state change")
+	})
+}
+
+func TestWatchClusterState(t *testing.T) {
+	suite.Run(t, new(WatchClusterStateSuite))
 }

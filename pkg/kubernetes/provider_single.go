@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	authenticationv1api "k8s.io/api/authentication/v1"
 )
 
@@ -13,8 +14,10 @@ import (
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
-	strategy string
-	manager  *Manager
+	strategy            string
+	manager             *Manager
+	kubeconfigWatcher   *watcher.Kubeconfig
+	clusterStateWatcher *watcher.ClusterState
 }
 
 var _ Provider = &singleClusterProvider{}
@@ -48,8 +51,10 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 		}
 
 		return &singleClusterProvider{
-			manager:  m,
-			strategy: strategy,
+			manager:             m,
+			strategy:            strategy,
+			kubeconfigWatcher:   watcher.NewKubeconfig(m.accessControlClientset.clientCmdConfig),
+			clusterStateWatcher: watcher.NewClusterState(m.accessControlClientset.DiscoveryClient()),
 		}, nil
 	}
 }
@@ -85,11 +90,17 @@ func (p *singleClusterProvider) GetTargetParameterName() string {
 	return ""
 }
 
-func (p *singleClusterProvider) WatchTargets(watch func() error) {
-	p.manager.WatchKubeConfig(watch)
-	p.manager.WatchClusterState(DefaultClusterStatePollInterval, DefaultClusterStateDebounceWindow, watch)
+func (p *singleClusterProvider) WatchTargets(reload McpReload) {
+	reloadWithCacheInvalidate := func() error {
+		// Invalidate all cached managers to force reloading on next access
+		p.manager.Invalidate()
+		return reload()
+	}
+	p.kubeconfigWatcher.Watch(reloadWithCacheInvalidate)
+	p.clusterStateWatcher.Watch(reloadWithCacheInvalidate)
 }
 
 func (p *singleClusterProvider) Close() {
-	p.manager.Close()
+	_ = p.kubeconfigWatcher.Close()
+	_ = p.clusterStateWatcher.Close()
 }

@@ -88,46 +88,28 @@ func NewServer(configuration Configuration) (*Server, error) {
 		s.server.AddReceivingMiddleware(toolScopedAuthorizationMiddleware)
 	}
 
-	if err := s.reloadKubernetesClusterProvider(); err != nil {
+	var err error
+	s.p, err = internalk8s.NewProvider(s.configuration.StaticConfig)
+	if err != nil {
 		return nil, err
 	}
-	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
+	err = s.reloadToolsets()
+	if err != nil {
+		return nil, err
+	}
+	s.p.WatchTargets(s.reloadToolsets)
 
 	return s, nil
 }
 
-func (s *Server) reloadKubernetesClusterProvider() error {
+func (s *Server) reloadToolsets() error {
 	ctx := context.Background()
 
-	newProvider, err := internalk8s.NewProvider(s.configuration.StaticConfig)
+	targets, err := s.p.GetTargets(ctx)
 	if err != nil {
 		return err
 	}
 
-	targets, err := newProvider.GetTargets(ctx)
-	if err != nil {
-		newProvider.Close()
-		return err
-	}
-
-	if s.p != nil {
-		s.p.Close()
-	}
-
-	s.p = newProvider
-
-	if err := s.rebuildTools(targets); err != nil {
-		return err
-	}
-
-	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
-
-	return nil
-}
-
-// rebuildTools rebuilds the MCP tool registry based on the current provider and targets.
-// This is called after the provider has been successfully validated and set.
-func (s *Server) rebuildTools(targets []string) error {
 	filter := CompositeFilter(
 		s.configuration.isToolApplicable,
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), targets),
@@ -170,7 +152,6 @@ func (s *Server) rebuildTools(targets []string) error {
 	}
 	s.server.RemoveTools(toolsToRemove...)
 
-	// Add new tools
 	for _, tool := range applicableTools {
 		goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
 		if err != nil {
@@ -178,7 +159,6 @@ func (s *Server) rebuildTools(targets []string) error {
 		}
 		s.server.AddTool(goSdkTool, goSdkToolHandler)
 	}
-
 	return nil
 }
 

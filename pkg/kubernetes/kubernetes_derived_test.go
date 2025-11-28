@@ -50,7 +50,6 @@ users:
 		s.Run("without authorization header returns original clientset", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			derived, err := testManager.Derived(s.T().Context())
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
@@ -61,7 +60,6 @@ users:
 		s.Run("with invalid authorization header returns original clientset", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "invalid-token")
 			derived, err := testManager.Derived(ctx)
@@ -73,7 +71,6 @@ users:
 		s.Run("with valid bearer token creates derived kubernetes with correct configuration", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
 			derived, err := testManager.Derived(ctx)
@@ -150,7 +147,6 @@ users:
 		s.Run("with bearer token but RawConfig fails returns original clientset", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			// Corrupt the clientCmdConfig by setting it to a config that will fail on RawConfig()
 			// We'll do this by creating a config with an invalid file path
@@ -191,7 +187,6 @@ users:
 			`)))
 			testManager, err := NewKubeconfigManager(workingConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			// Now create a bad manager with RequireOAuth=true
 			badManager, _ := NewManager(testStaticConfig, testManager.accessControlClientset.cfg, testManager.accessControlClientset.clientCmdConfig)
@@ -219,7 +214,6 @@ users:
 		s.Run("with bearer token but invalid rest config returns original clientset", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			// Corrupt the rest config to make NewAccessControlClientset fail
 			// Setting an invalid Host URL should cause client creation to fail
@@ -241,7 +235,6 @@ users:
 		s.Run("with bearer token but invalid rest config returns error", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			// Corrupt the rest config to make NewAccessControlClientset fail
 			testManager.accessControlClientset.cfg.Host = "://invalid-url"
@@ -263,7 +256,6 @@ users:
 		s.Run("with no authorization header returns oauth token required error", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			derived, err := testManager.Derived(s.T().Context())
 			s.Require().Error(err, "expected error for missing oauth token, got nil")
@@ -274,7 +266,6 @@ users:
 		s.Run("with invalid authorization header returns oauth token required error", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "invalid-token")
 			derived, err := testManager.Derived(ctx)
@@ -286,7 +277,6 @@ users:
 		s.Run("with valid bearer token creates derived kubernetes", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
-			s.T().Cleanup(testManager.Close)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
 			derived, err := testManager.Derived(ctx)

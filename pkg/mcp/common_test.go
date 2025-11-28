@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/client/transport"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
@@ -209,4 +211,23 @@ func (s *BaseMcpSuite) InitMcpClient(options ...transport.StreamableHTTPCOption)
 	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
+}
+
+// WaitForNotification waits for an MCP server notification or fails the test after a timeout
+func (s *BaseMcpSuite) WaitForNotification(timeout time.Duration) *mcp.JSONRPCNotification {
+	withTimeout, cancel := context.WithTimeout(s.T().Context(), timeout)
+	defer cancel()
+	var notification *mcp.JSONRPCNotification
+	s.OnNotification(func(n mcp.JSONRPCNotification) {
+		notification = &n
+	})
+	for notification == nil {
+		select {
+		case <-withTimeout.Done():
+			s.FailNow("timeout waiting for MCP notification")
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	return notification
 }

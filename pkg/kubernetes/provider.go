@@ -6,6 +6,9 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
+// McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
+type McpReload func() error
+
 type Provider interface {
 	// Openshift extends the Openshift interface to provide OpenShift specific functionality to toolset providers
 	// TODO: with the configurable toolset implementation and especially the multi-cluster approach
@@ -18,7 +21,8 @@ type Provider interface {
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	GetDefaultTarget() string
 	GetTargetParameterName() string
-	WatchTargets(func() error)
+	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
+	WatchTargets(reload McpReload)
 	Close()
 }
 

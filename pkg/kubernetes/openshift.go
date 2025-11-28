@@ -3,7 +3,7 @@ package kubernetes
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"github.com/containers/kubernetes-mcp-server/pkg/openshift"
 )
 
 type Openshift interface {
@@ -16,9 +16,5 @@ func (m *Manager) IsOpenShift(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	_, err = k.AccessControlClientset().DiscoveryClient().ServerResourcesForGroupVersion(schema.GroupVersion{
-		Group:   "project.openshift.io",
-		Version: "v1",
-	}.String())
-	return err == nil
+	return openshift.IsOpenshift(k.AccessControlClientset().DiscoveryClient())
 }

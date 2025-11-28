@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	authenticationv1api "k8s.io/api/authentication/v1"
 )
 
@@ -17,8 +18,10 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
-	defaultContext string
-	managers       map[string]*Manager
+	defaultContext      string
+	managers            map[string]*Manager
+	kubeconfigWatcher   *watcher.Kubeconfig
+	clusterStateWatcher *watcher.ClusterState
 }
 
 var _ Provider = &kubeConfigClusterProvider{}
@@ -58,8 +61,10 @@ func newKubeConfigClusterProvider(cfg *config.StaticConfig) (Provider, error) {
 	}
 
 	return &kubeConfigClusterProvider{
-		defaultContext: rawConfig.CurrentContext,
-		managers:       allClusterManagers,
+		defaultContext:      rawConfig.CurrentContext,
+		managers:            allClusterManagers,
+		kubeconfigWatcher:   watcher.NewKubeconfig(m.accessControlClientset.clientCmdConfig),
+		clusterStateWatcher: watcher.NewClusterState(m.accessControlClientset.DiscoveryClient()),
 	}, nil
 }
 
@@ -118,14 +123,21 @@ func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
 	return p.defaultContext
 }
 
-func (p *kubeConfigClusterProvider) WatchTargets(onKubeConfigChanged func() error) {
-	m := p.managers[p.defaultContext]
-	m.WatchKubeConfig(onKubeConfigChanged)
-	m.WatchClusterState(DefaultClusterStatePollInterval, DefaultClusterStateDebounceWindow, onKubeConfigChanged)
+func (p *kubeConfigClusterProvider) WatchTargets(reload McpReload) {
+	reloadWithCacheInvalidate := func() error {
+		// Invalidate all cached managers to force reloading on next access
+		for contextName := range p.managers {
+			if m := p.managers[contextName]; m != nil {
+				m.Invalidate()
+			}
+		}
+		return reload()
+	}
+	p.kubeconfigWatcher.Watch(reloadWithCacheInvalidate)
+	p.clusterStateWatcher.Watch(reloadWithCacheInvalidate)
 }
 
 func (p *kubeConfigClusterProvider) Close() {
-	m := p.managers[p.defaultContext]
-
-	m.Close()
+	_ = p.kubeconfigWatcher.Close()
+	_ = p.clusterStateWatcher.Close()
 }
