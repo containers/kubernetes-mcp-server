@@ -98,7 +98,6 @@ func withDirPath(path string) ReadConfigOpt {
 // WithDirPath returns a ReadConfigOpt that sets the config directory path.
 // Used by tests that need to resolve relative file paths.
 func WithDirPath(path string) ReadConfigOpt {
-
 	return withDirPath(path)
 }
 
