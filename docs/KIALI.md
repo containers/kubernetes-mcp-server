@@ -15,9 +15,6 @@ toolsets = ["core", "kiali"]
 url = "https://kiali.example" # Endpoint/route to reach Kiali console
 # insecure = true  # optional: allow insecure TLS (not recommended in production)
 # certificate_authority = "/path/to/ca.crt"  # File path to CA certificate (recommended)
-# certificate_authority = """-----BEGIN CERTIFICATE-----
-# MIID...
-# -----END CERTIFICATE-----"""  # Inline PEM content (supported for backward compatibility)
 # When url is https and insecure is false, certificate_authority is required.
 ```
 
