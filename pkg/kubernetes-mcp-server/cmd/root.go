@@ -262,6 +262,12 @@ func (m *MCPServerOptions) Validate() error {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
 		}
 	}
+	// Validate that certificate_authority is a valid file
+	if caValue := strings.TrimSpace(m.StaticConfig.CertificateAuthority); caValue != "" {
+		if _, err := os.Stat(caValue); err != nil {
+			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
+		}
+	}
 	return nil
 }
 

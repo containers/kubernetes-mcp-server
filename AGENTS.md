@@ -62,17 +62,17 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
    - Accept `certificate_authority` as a string field in your toolset config struct.
    - In the toolset parser function, resolve relative paths using `config.ConfigDirPathFromContext(ctx)` to make them relative to the config file directory.
    - Store the resolved absolute path in the config struct.
-   - Validate in the `Validate()` method that `certificate_authority` is a file path (not inline PEM content starting with `-----BEGIN`).
+   - Validate in the `Validate()` method that `certificate_authority` is a valid file path using `os.Stat()`.
 
    Example:
    ```go
    func (c *Config) Validate() error {
        // ... other validations ...
        
-       // Validate that certificate_authority is a file path, not inline PEM content
+       // Validate that certificate_authority is a valid file
        if caValue := strings.TrimSpace(c.CertificateAuthority); caValue != "" {
-           if strings.HasPrefix(caValue, "-----BEGIN") {
-               return errors.New("certificate_authority must be a file path, not inline PEM content")
+           if _, err := os.Stat(caValue); err != nil {
+               return fmt.Errorf("certificate_authority must be a valid file path: %w", err)
            }
        }
        return nil
@@ -98,7 +98,7 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
 
 2. **Client Implementation:**
    - When using the CA certificate, read it from the file path using `os.ReadFile()`.
-   - Only file paths are supported; inline PEM content is not allowed.
+   - Only valid file paths are supported; the path must exist and be readable.
 
    Example:
    ```go
@@ -122,7 +122,7 @@ To ensure consistency across Red Hat-maintained toolsets and cluster providers, 
 3. **Documentation:**
    - Document that `certificate_authority` accepts only a file path (absolute or relative).
    - Mention that relative paths are resolved relative to the config file directory.
-   - Note that inline PEM content is not supported.
+   - Note that the file path must exist and be readable; invalid paths will cause validation to fail.
 
 **Reference Implementation:**
 - See `pkg/kiali/config.go` and `pkg/kiali/kiali.go` for a complete example.
