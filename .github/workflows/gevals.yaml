@@ -120,11 +120,10 @@ jobs:
           # OpenAI Agent configuration
           MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
           MODEL_KEY: ${{ secrets.MODEL_KEY }}
-          MODEL_NAME: ${{ secrets.MODEL_NAME }}
           # LLM Judge configuration
           JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
-          JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
+          JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }} # we still need this one, as only the agent model is specified in yaml
 
       - name: Cleanup
         if: always()

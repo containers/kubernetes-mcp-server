@@ -62,7 +62,6 @@ The tasks and MCP configuration are shared - only the agent configuration differ
 # Set your model credentials
 export MODEL_BASE_URL='https://your-api-endpoint.com/v1'
 export MODEL_KEY='your-api-key'
-export MODEL_NAME='your-model-name'
 
 # Run the test
 ./gevals eval examples/kube-mcp-server/openai-agent/eval.yaml
