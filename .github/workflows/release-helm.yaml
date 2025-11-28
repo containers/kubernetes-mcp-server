@@ -33,10 +33,20 @@ jobs:
       with:
         version: '3.19.2'
 
-    - name: Extract versions
+    - name: Determine chart version
       id: versions
       run: |
-        CHART_VERSION=$(make helm-print-chart-version)
+        BASE_VERSION=$(make helm-print-chart-version)
+
+        # Use development version for workflow_dispatch, stable version for tags
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          GIT_SHORT_SHA=$(git rev-parse --short HEAD)
+          CHART_VERSION="${BASE_VERSION}-dev.${GIT_SHORT_SHA}"
+          echo "::notice::Creating development release: ${CHART_VERSION}"
+        else
+          CHART_VERSION="${BASE_VERSION}"
+          echo "::notice::Creating stable release: ${CHART_VERSION}"
+        fi
         echo "chart_version=$CHART_VERSION" >> $GITHUB_OUTPUT
         echo "Chart version: $CHART_VERSION"
 
@@ -59,15 +69,25 @@ jobs:
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ steps.versions.outputs.helm_registry }} -u ${{ github.actor }} --password-stdin
 
-    - name: Package Helm chart and push chart to OCI registry
+    - name: Package and push Helm chart
+      env:
+        HELM_CHART_VERSION: ${{ steps.versions.outputs.chart_version }}
       run: make helm-push
 
     - name: Verify chart installation
+      env:
+        HELM_CHART_VERSION: ${{ steps.versions.outputs.chart_version }}
       run: make helm-verify
 
     - name: Generate release summary
       run: |
-        echo "## Helm Chart Release Summary" >> $GITHUB_STEP_SUMMARY
+        if [[ "${{ steps.versions.outputs.chart_version }}" == *"-dev."* ]]; then
+          RELEASE_TYPE="Development"
+        else
+          RELEASE_TYPE="Stable"
+        fi
+
+        echo "## Helm Chart Release Summary ($RELEASE_TYPE)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Chart Name:** ${{ steps.versions.outputs.chart_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Chart Version:** ${{ steps.versions.outputs.chart_version }}" >> $GITHUB_STEP_SUMMARY

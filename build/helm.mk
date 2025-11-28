@@ -1,7 +1,8 @@
 ##@ Helm Chart build targets
 
 HELM_CHART_DIR = ./charts/kubernetes-mcp-server
-HELM_CHART_VERSION = $(shell grep '^version:' $(HELM_CHART_DIR)/Chart.yaml | awk '{print $$2}')
+HELM_CHART_VERSION_BASE = $(shell grep '^version:' $(HELM_CHART_DIR)/Chart.yaml | awk '{print $$2}')
+HELM_CHART_VERSION ?= $(HELM_CHART_VERSION_BASE)
 HELM_PACKAGE_DIR = ./_output/helm-packages
 HELM_REGISTRY ?= ghcr.io
 HELM_REGISTRY_ORG ?= containers
@@ -38,14 +39,17 @@ helm-validate: kubeconform ## Validate Helm chart manifests with kubeconform
 	helm template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas
 
 .PHONY: helm-package
-helm-package: helm-lint helm-template ## Package the Helm chart
+helm-package: helm-lint helm-template ## Package the Helm chart (supports HELM_CHART_VERSION override)
 	@mkdir -p $(HELM_PACKAGE_DIR)
-	@echo "Updating appVersion to $(GIT_TAG_VERSION)..."
-	@sed -i.bak "s/appVersion: .*/appVersion: \"$(GIT_TAG_VERSION)\"/" $(HELM_CHART_DIR)/Chart.yaml
+	@echo "Updating Chart.yaml for packaging..."
+	@sed -i.bak -e "s/version: .*/version: $(HELM_CHART_VERSION)/" \
+	             -e "s/appVersion: .*/appVersion: \"$(GIT_TAG_VERSION)\"/" \
+	             $(HELM_CHART_DIR)/Chart.yaml
 	@echo "Updated Chart.yaml:"
 	@cat $(HELM_CHART_DIR)/Chart.yaml
 	helm package $(HELM_CHART_DIR) --destination $(HELM_PACKAGE_DIR)
 	@mv $(HELM_CHART_DIR)/Chart.yaml.bak $(HELM_CHART_DIR)/Chart.yaml
+	@echo "Chart packaged as version $(HELM_CHART_VERSION)"
 
 .PHONY: helm-push
 helm-push: helm-package ## Push Helm chart to OCI registry (assumes helm registry login has been performed)
