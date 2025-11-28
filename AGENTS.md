@@ -48,6 +48,92 @@ When adding a new tool:
 3. Add the tool to an appropriate toolset (or create a new toolset if needed).
 4. Register the toolset in `pkg/toolsets/` if it's a new toolset.
 
+### Configuration Standards for Red Hat-Maintained Components
+
+To ensure consistency across Red Hat-maintained toolsets and cluster providers, follow these standards when implementing certificate authority (CA) configuration:
+
+#### Certificate Authority (CA) Configuration Standard
+
+**Standard Pattern:** Certificate authorities must be configured using **file paths**, not inline PEM content.
+
+**Implementation Guidelines:**
+
+1. **Config Parser (`pkg/toolsets/<toolset>/config.go`):**
+   - Accept `certificate_authority` as a string field in your toolset config struct.
+   - In the toolset parser function, resolve relative paths using `config.ConfigDirPathFromContext(ctx)` to make them relative to the config file directory.
+   - Store the resolved absolute path in the config struct.
+   - Validate in the `Validate()` method that `certificate_authority` is a valid file path using `os.Stat()`.
+
+   Example:
+   ```go
+   func (c *Config) Validate() error {
+       // ... other validations ...
+       
+       // Validate that certificate_authority is a valid file
+       if caValue := strings.TrimSpace(c.CertificateAuthority); caValue != "" {
+           if _, err := os.Stat(caValue); err != nil {
+               return fmt.Errorf("certificate_authority must be a valid file path: %w", err)
+           }
+       }
+       return nil
+   }
+   
+   func toolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (config.Extended, error) {
+       var cfg Config
+       if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
+           return nil, err
+       }
+       
+       // Resolve relative CA file paths
+       if cfg.CertificateAuthority != "" {
+           configDir := config.ConfigDirPathFromContext(ctx)
+           if configDir != "" && !filepath.IsAbs(cfg.CertificateAuthority) {
+               cfg.CertificateAuthority = filepath.Join(configDir, cfg.CertificateAuthority)
+           }
+       }
+       
+       return &cfg, nil
+   }
+   ```
+
+2. **Client Implementation:**
+   - When using the CA certificate, read it from the file path using `os.ReadFile()`.
+   - Only valid file paths are supported; the path must exist and be readable.
+
+   Example:
+   ```go
+   func (c *Client) createHTTPClient() *http.Client {
+       tlsConfig := &tls.Config{InsecureSkipVerify: c.insecure}
+       
+       if caValue := strings.TrimSpace(c.certificateAuthority); caValue != "" {
+           // Read the certificate from file
+           caPEM, err := os.ReadFile(caValue)
+           if err != nil {
+               // Handle error appropriately
+           }
+           
+           // Use caPEM to configure TLS...
+       }
+       
+       return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+   }
+   ```
+
+3. **Documentation:**
+   - Document that `certificate_authority` accepts only a file path (absolute or relative).
+   - Mention that relative paths are resolved relative to the config file directory.
+   - Note that the file path must exist and be readable; invalid paths will cause validation to fail.
+
+**Reference Implementation:**
+- See `pkg/kiali/config.go` and `pkg/kiali/kiali.go` for a complete example.
+- See `pkg/kubernetes-mcp-server/cmd/root.go` (lines 292-314) for how the main server handles CA files.
+
+**Rationale:**
+- Consistency with ACM cluster provider and other Red Hat-maintained components.
+- Better security practices (certificates stored in files, not in config files).
+- Easier management and rotation of certificates.
+- Clearer separation of configuration and secrets.
+
 ## Building
 
 Use the provided Makefile targets:

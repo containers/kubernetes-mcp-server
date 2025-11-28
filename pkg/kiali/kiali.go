@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -85,8 +86,19 @@ func (k *Kiali) createHTTPClient() *http.Client {
 		InsecureSkipVerify: k.kialiInsecure,
 	}
 
-	// If a custom Certificate Authority PEM is configured, load and add it
-	if caPEM := strings.TrimSpace(k.certificateAuthority); caPEM != "" {
+	// If a custom Certificate Authority is configured, load and add it
+	if caValue := strings.TrimSpace(k.certificateAuthority); caValue != "" {
+		// Read the certificate from file
+		caPEM, err := os.ReadFile(caValue)
+		if err != nil {
+			klog.Errorf("failed to read CA certificate from file %s: %v; proceeding without custom CA", caValue, err)
+			return &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: tlsConfig,
+				},
+			}
+		}
+
 		// Start with the host system pool when possible so we don't drop system roots
 		var certPool *x509.CertPool
 		if systemPool, err := x509.SystemCertPool(); err == nil && systemPool != nil {
@@ -94,10 +106,10 @@ func (k *Kiali) createHTTPClient() *http.Client {
 		} else {
 			certPool = x509.NewCertPool()
 		}
-		if ok := certPool.AppendCertsFromPEM([]byte(caPEM)); ok {
+		if ok := certPool.AppendCertsFromPEM(caPEM); ok {
 			tlsConfig.RootCAs = certPool
 		} else {
-			klog.V(0).Infof("failed to append provided certificate authority PEM; proceeding without custom CA")
+			klog.V(0).Infof("failed to append provided certificate authority; proceeding without custom CA")
 		}
 	}
 

@@ -3,7 +3,10 @@ package kiali
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -33,14 +36,30 @@ func (c *Config) Validate() error {
 	if strings.EqualFold(u.Scheme, "https") && !c.Insecure && strings.TrimSpace(c.CertificateAuthority) == "" {
 		return errors.New("certificate_authority is required for https when insecure is false")
 	}
+	// Validate that certificate_authority is a valid file
+	if caValue := strings.TrimSpace(c.CertificateAuthority); caValue != "" {
+		if _, err := os.Stat(caValue); err != nil {
+			return fmt.Errorf("certificate_authority must be a valid file path: %w", err)
+		}
+	}
 	return nil
 }
 
-func kialiToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (config.Extended, error) {
+func kialiToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (config.Extended, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err
 	}
+
+	// If certificate_authority is provided, resolve it relative to the config directory if it's a relative path
+	if cfg.CertificateAuthority != "" {
+		configDir := config.ConfigDirPathFromContext(ctx)
+		if configDir != "" && !filepath.IsAbs(cfg.CertificateAuthority) {
+			cfg.CertificateAuthority = filepath.Join(configDir, cfg.CertificateAuthority)
+		}
+		// If it's already absolute or configDir is empty, use as-is
+	}
+
 	return &cfg, nil
 }
 

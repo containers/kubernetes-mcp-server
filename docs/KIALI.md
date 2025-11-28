@@ -14,9 +14,7 @@ toolsets = ["core", "kiali"]
 [toolset_configs.kiali]
 url = "https://kiali.example" # Endpoint/route to reach Kiali console
 # insecure = true  # optional: allow insecure TLS (not recommended in production)
-# certificate_authority = """-----BEGIN CERTIFICATE-----
-# MIID...
-# -----END CERTIFICATE-----"""
+# certificate_authority = "/path/to/ca.crt"  # File path to CA certificate
 # When url is https and insecure is false, certificate_authority is required.
 ```
 
@@ -32,6 +30,6 @@ When the `kiali` toolset is enabled, a Kiali toolset configuration is required v
 - Missing Kiali configuration when `kiali` toolset is enabled → set `[toolset_configs.kiali].url` in the config TOML.
 - Invalid URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL.
 - TLS certificate validation:
-  - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the PEM-encoded certificate(s) used by the Kiali server. This field expects inline PEM content, not a file path. You may concatenate multiple PEM blocks to include an intermediate chain.
+  - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the path to the CA certificate file. Relative paths are resolved relative to the directory containing the config file.
   - For non-production environments you can set `[toolset_configs.kiali].insecure = true` to skip certificate verification.
 
