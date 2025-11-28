@@ -31,7 +31,7 @@ type ConfigSuite struct {
 }
 
 func (s *ConfigSuite) TestReadConfigMissingFile() {
-	config, err := Read("non-existent-config.toml")
+	config, err := Read("non-existent-config.toml", "")
 	s.Run("returns error for missing file", func() {
 		s.Require().NotNil(err, "Expected error for missing file, got nil")
 		s.True(errors.Is(err, fs.ErrNotExist), "Expected ErrNotExist, got %v", err)
@@ -53,13 +53,13 @@ func (s *ConfigSuite) TestReadConfigInvalid() {
 		kind = "Role
 	`)
 
-	config, err := Read(invalidConfigPath)
+	config, err := Read(invalidConfigPath, "")
 	s.Run("returns error for invalid file", func() {
 		s.Require().NotNil(err, "Expected error for invalid file, got nil")
 	})
 	s.Run("error message contains toml error with line number", func() {
 		expectedError := "toml: line 9"
-		s.Truef(strings.HasPrefix(err.Error(), expectedError), "Expected error message to contain line number, got %v", err)
+		s.Truef(strings.Contains(err.Error(), expectedError), "Expected error message to contain line number, got %v", err)
 	})
 	s.Run("returns nil config for invalid file", func() {
 		s.Nil(config, "Expected nil config for missing file")
@@ -88,7 +88,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		
 	`)
 
-	config, err := Read(validConfigPath)
+	config, err := Read(validConfigPath, "")
 	s.Require().NotNil(config)
 	s.Run("reads and unmarshalls file", func() {
 		s.Nil(err, "Expected nil error for valid file")
@@ -154,7 +154,7 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 		port = "1337"
 	`)
 
-	config, err := Read(validConfigPath)
+	config, err := Read(validConfigPath, "")
 	s.Require().NotNil(config)
 	s.Run("reads and unmarshalls file", func() {
 		s.Nil(err, "Expected nil error for valid file")
@@ -177,46 +177,209 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 	})
 }
 
-func (s *ConfigSuite) TestMergeConfig() {
-	base := StaticConfig{
-		ListOutput: "table",
-		Toolsets:   []string{"core", "config", "helm"},
-		Port:       "8080",
+func (s *ConfigSuite) TestGetSortedConfigFiles() {
+	tempDir := s.T().TempDir()
+
+	// Create test files
+	files := []string{
+		"10-first.toml",
+		"20-second.toml",
+		"05-before.toml",
+		"99-last.toml",
+		".hidden.toml", // should be ignored
+		"readme.txt",   // should be ignored
+		"invalid",      // should be ignored
 	}
-	s.Run("merges override values on top of base", func() {
-		override := StaticConfig{
-			ListOutput: "json",
-			Port:       "9090",
-		}
 
-		result := mergeConfig(base, override)
+	for _, file := range files {
+		path := filepath.Join(tempDir, file)
+		err := os.WriteFile(path, []byte(""), 0644)
+		s.Require().NoError(err)
+	}
 
-		s.Equal("json", result.ListOutput, "ListOutput should be overridden")
-		s.Equal("9090", result.Port, "Port should be overridden")
+	// Create a subdirectory (should be ignored)
+	subDir := filepath.Join(tempDir, "subdir")
+	err := os.Mkdir(subDir, 0755)
+	s.Require().NoError(err)
+
+	sorted, err := getSortedConfigFiles(tempDir)
+	s.Require().NoError(err)
+
+	s.Run("returns only .toml files", func() {
+		s.Len(sorted, 4, "Expected 4 .toml files")
 	})
 
-	s.Run("preserves base values when override is empty", func() {
-		override := StaticConfig{}
-
-		result := mergeConfig(base, override)
-
-		s.Equal("table", result.ListOutput, "ListOutput should be preserved from base")
-		s.Equal([]string{"core", "config", "helm"}, result.Toolsets, "Toolsets should be preserved from base")
-		s.Equal("8080", result.Port, "Port should be preserved from base")
+	s.Run("sorted in lexical order", func() {
+		expected := []string{
+			filepath.Join(tempDir, "05-before.toml"),
+			filepath.Join(tempDir, "10-first.toml"),
+			filepath.Join(tempDir, "20-second.toml"),
+			filepath.Join(tempDir, "99-last.toml"),
+		}
+		s.Equal(expected, sorted)
 	})
 
-	s.Run("handles partial overrides", func() {
-		override := StaticConfig{
-			Toolsets: []string{"custom"},
-			ReadOnly: true,
+	s.Run("excludes dotfiles", func() {
+		for _, file := range sorted {
+			s.NotContains(file, ".hidden")
 		}
+	})
 
-		result := mergeConfig(base, override)
+	s.Run("excludes non-.toml files", func() {
+		for _, file := range sorted {
+			s.Contains(file, ".toml")
+		}
+	})
+}
 
-		s.Equal("table", result.ListOutput, "ListOutput should be preserved from base")
-		s.Equal([]string{"custom"}, result.Toolsets, "Toolsets should be overridden")
-		s.Equal("8080", result.Port, "Port should be preserved from base since override doesn't specify it")
-		s.True(result.ReadOnly, "ReadOnly should be overridden to true")
+func (s *ConfigSuite) TestDropInConfigPrecedence() {
+	tempDir := s.T().TempDir()
+
+	// Main config file
+	mainConfigPath := s.writeConfig(`
+		log_level = 1
+		port = "8080"
+		list_output = "table"
+		toolsets = ["core", "config"]
+	`)
+
+	// Create drop-in directory
+	dropInDir := filepath.Join(tempDir, "config.d")
+	err := os.Mkdir(dropInDir, 0755)
+	s.Require().NoError(err)
+
+	// First drop-in file
+	dropIn1 := filepath.Join(dropInDir, "10-override.toml")
+	err = os.WriteFile(dropIn1, []byte(`
+		log_level = 5
+		port = "9090"
+	`), 0644)
+	s.Require().NoError(err)
+
+	// Second drop-in file (should override first)
+	dropIn2 := filepath.Join(dropInDir, "20-final.toml")
+	err = os.WriteFile(dropIn2, []byte(`
+		port = "7777"
+		list_output = "yaml"
+	`), 0644)
+	s.Require().NoError(err)
+
+	config, err := Read(mainConfigPath, dropInDir)
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("drop-in overrides main config", func() {
+		s.Equal(5, config.LogLevel, "log_level from 10-override.toml should override main")
+	})
+
+	s.Run("later drop-in overrides earlier drop-in", func() {
+		s.Equal("7777", config.Port, "port from 20-final.toml should override 10-override.toml")
+	})
+
+	s.Run("preserves values not in drop-in files", func() {
+		s.Equal([]string{"core", "config"}, config.Toolsets, "toolsets from main config should be preserved")
+	})
+
+	s.Run("applies all drop-in changes", func() {
+		s.Equal("yaml", config.ListOutput, "list_output from 20-final.toml should be applied")
+	})
+}
+
+func (s *ConfigSuite) TestDropInConfigMissingDirectory() {
+	mainConfigPath := s.writeConfig(`
+		log_level = 3
+		port = "8080"
+	`)
+
+	config, err := Read(mainConfigPath, "/non/existent/directory")
+	s.Require().NoError(err, "Should not error for missing drop-in directory")
+	s.Require().NotNil(config)
+
+	s.Run("loads main config successfully", func() {
+		s.Equal(3, config.LogLevel)
+		s.Equal("8080", config.Port)
+	})
+}
+
+func (s *ConfigSuite) TestDropInConfigEmptyDirectory() {
+	mainConfigPath := s.writeConfig(`
+		log_level = 2
+	`)
+
+	dropInDir := s.T().TempDir()
+
+	config, err := Read(mainConfigPath, dropInDir)
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("loads main config successfully", func() {
+		s.Equal(2, config.LogLevel)
+	})
+}
+
+func (s *ConfigSuite) TestDropInConfigPartialOverride() {
+	tempDir := s.T().TempDir()
+
+	mainConfigPath := s.writeConfig(`
+		log_level = 1
+		port = "8080"
+		list_output = "table"
+		read_only = false
+		toolsets = ["core", "config", "helm"]
+	`)
+
+	dropInDir := filepath.Join(tempDir, "config.d")
+	err := os.Mkdir(dropInDir, 0755)
+	s.Require().NoError(err)
+
+	// Drop-in file with partial config
+	dropIn := filepath.Join(dropInDir, "10-partial.toml")
+	err = os.WriteFile(dropIn, []byte(`
+		read_only = true
+	`), 0644)
+	s.Require().NoError(err)
+
+	config, err := Read(mainConfigPath, dropInDir)
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("overrides specified field", func() {
+		s.True(config.ReadOnly, "read_only should be overridden to true")
+	})
+
+	s.Run("preserves all other fields", func() {
+		s.Equal(1, config.LogLevel)
+		s.Equal("8080", config.Port)
+		s.Equal("table", config.ListOutput)
+		s.Equal([]string{"core", "config", "helm"}, config.Toolsets)
+	})
+}
+
+func (s *ConfigSuite) TestDropInConfigWithArrays() {
+	tempDir := s.T().TempDir()
+
+	mainConfigPath := s.writeConfig(`
+		toolsets = ["core", "config"]
+		enabled_tools = ["tool1", "tool2"]
+	`)
+
+	dropInDir := filepath.Join(tempDir, "config.d")
+	err := os.Mkdir(dropInDir, 0755)
+	s.Require().NoError(err)
+
+	dropIn := filepath.Join(dropInDir, "10-arrays.toml")
+	err = os.WriteFile(dropIn, []byte(`
+		toolsets = ["helm", "logs"]
+	`), 0644)
+	s.Require().NoError(err)
+
+	config, err := Read(mainConfigPath, dropInDir)
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("replaces arrays completely", func() {
+		s.Equal([]string{"helm", "logs"}, config.Toolsets, "toolsets should be completely replaced")
+		s.Equal([]string{"tool1", "tool2"}, config.EnabledTools, "enabled_tools should be preserved")
 	})
 }
 

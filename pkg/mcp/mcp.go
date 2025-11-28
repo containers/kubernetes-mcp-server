@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	authenticationapiv1 "k8s.io/api/authentication/v1"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -201,6 +202,27 @@ func (s *Server) GetTargetParameterName() string {
 
 func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
+}
+
+// ReloadConfiguration reloads the configuration and reinitializes the server.
+// This is intended to be called by the server lifecycle manager when
+// configuration changes are detected.
+func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
+	klog.V(1).Info("Reloading MCP server configuration...")
+
+	// Update the configuration
+	s.configuration.StaticConfig = newConfig
+	// Clear cached values so they get recomputed
+	s.configuration.listOutput = nil
+	s.configuration.toolsets = nil
+
+	// Reload the Kubernetes provider (this will also rebuild tools)
+	if err := s.reloadToolsets(); err != nil {
+		return fmt.Errorf("failed to reload toolsets: %w", err)
+	}
+
+	klog.V(1).Info("MCP server configuration reloaded successfully")
+	return nil
 }
 
 func (s *Server) Close() {
