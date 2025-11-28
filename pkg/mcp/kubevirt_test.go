@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	kubevirttesting "github.com/containers/kubernetes-mcp-server/pkg/kubevirt/testing"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
@@ -96,15 +97,12 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-			s.Equal("test-vm", decodedResult[0].GetName(), "invalid resource name")
-			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-			s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-			s.Equal("quay.io/containerdisks/fedora:latest",
-				decodedResult[0].Object["spec"].(map[string]interface{})["template"].(map[string]interface{})["spec"].(map[string]interface{})["volumes"].([]interface{})[0].(map[string]interface{})["containerDisk"].(map[string]interface{})["image"].(string),
-				"invalid default image")
-			s.Equal("Halted",
-				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
-				"invalid default runStrategy")
+			vm := &decodedResult[0]
+			s.Equal("test-vm", vm.GetName(), "invalid resource name")
+			s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+			s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+			s.Equal("quay.io/containerdisks/fedora:latest", test.FieldString(vm, "spec.template.spec.volumes[0].containerDisk.image"), "invalid default image")
+			s.Equal("Halted", test.FieldString(vm, "spec.runStrategy"), "invalid default runStrategy")
 		})
 	})
 	s.Run("vm_create(workload=ubuntu, instancetype=u1.medium) with instancetype", func() {
@@ -125,21 +123,14 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-			s.Equal("test-vm-2", decodedResult[0].GetName(), "invalid resource name")
-			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-			s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-			s.Equal("quay.io/containerdisks/ubuntu:24.04",
-				decodedResult[0].Object["spec"].(map[string]interface{})["template"].(map[string]interface{})["spec"].(map[string]interface{})["volumes"].([]interface{})[0].(map[string]interface{})["containerDisk"].(map[string]interface{})["image"].(string),
-				"invalid image for ubuntu workload")
-			s.Equal("Halted",
-				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
-				"invalid default runStrategy")
-			s.Equal("VirtualMachineClusterInstancetype",
-				decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["kind"].(string),
-				"invalid memory for u1.medium instanceType")
-			s.Equal("u1.medium",
-				decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["name"].(string),
-				"invalid cpu cores for u1.medium instanceType")
+			vm := &decodedResult[0]
+			s.Equal("test-vm-2", vm.GetName(), "invalid resource name")
+			s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+			s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+			s.Equal("quay.io/containerdisks/ubuntu:24.04", test.FieldString(vm, "spec.template.spec.volumes[0].containerDisk.image"), "invalid image for ubuntu workload")
+			s.Equal("Halted", test.FieldString(vm, "spec.runStrategy"), "invalid default runStrategy")
+			s.Equal("VirtualMachineClusterInstancetype", test.FieldString(vm, "spec.instancetype.kind"), "invalid memory for u1.medium instanceType")
+			s.Equal("u1.medium", test.FieldString(vm, "spec.instancetype.name"), "invalid cpu cores for u1.medium instanceType")
 		})
 	})
 	s.Run("vm_create(workload=rhel, preference=rhel.9) with preference", func() {
@@ -160,21 +151,14 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-			s.Equal("test-vm-3", decodedResult[0].GetName(), "invalid resource name")
-			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-			s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-			s.Equal("rhel",
-				decodedResult[0].Object["spec"].(map[string]interface{})["template"].(map[string]interface{})["spec"].(map[string]interface{})["volumes"].([]interface{})[0].(map[string]interface{})["containerDisk"].(map[string]interface{})["image"].(string),
-				"invalid image for rhel workload")
-			s.Equal("Halted",
-				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
-				"invalid default runStrategy")
-			s.Equal("VirtualMachineClusterPreference",
-				decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["kind"].(string),
-				"invalid preference kind for rhel.9 preference")
-			s.Equal("rhel.9",
-				decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["name"].(string),
-				"invalid preference name for rhel.9 preference")
+			vm := &decodedResult[0]
+			s.Equal("test-vm-3", vm.GetName(), "invalid resource name")
+			s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+			s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+			s.Equal("rhel", test.FieldString(vm, "spec.template.spec.volumes[0].containerDisk.image"), "invalid image for rhel workload")
+			s.Equal("Halted", test.FieldString(vm, "spec.runStrategy"), "invalid default runStrategy")
+			s.Equal("VirtualMachineClusterPreference", test.FieldString(vm, "spec.preference.kind"), "invalid preference kind for rhel.9 preference")
+			s.Equal("rhel.9", test.FieldString(vm, "spec.preference.name"), "invalid preference name for rhel.9 preference")
 		})
 	})
 	s.Run("vm_create(workload=quay.io/myrepo/myimage:v1.0) with custom container disk", func() {
@@ -194,15 +178,12 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-			s.Equal("test-vm-4", decodedResult[0].GetName(), "invalid resource name")
-			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-			s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-			s.Equal("quay.io/myrepo/myimage:v1.0",
-				decodedResult[0].Object["spec"].(map[string]interface{})["template"].(map[string]interface{})["spec"].(map[string]interface{})["volumes"].([]interface{})[0].(map[string]interface{})["containerDisk"].(map[string]interface{})["image"].(string),
-				"invalid image for custom container disk workload")
-			s.Equal("Halted",
-				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
-				"invalid default runStrategy")
+			vm := &decodedResult[0]
+			s.Equal("test-vm-4", vm.GetName(), "invalid resource name")
+			s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+			s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+			s.Equal("quay.io/myrepo/myimage:v1.0", test.FieldString(vm, "spec.template.spec.volumes[0].containerDisk.image"), "invalid image for custom container disk workload")
+			s.Equal("Halted", test.FieldString(vm, "spec.runStrategy"), "invalid default runStrategy")
 		})
 	})
 	s.Run("with size", func() {
@@ -244,15 +225,12 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-5", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				s.Equal("VirtualMachineClusterInstancetype",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["kind"].(string),
-					"invalid instanceType kind for medium size hint")
-				s.Equal("u1.medium",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["name"].(string),
-					"invalid instanceType name for medium size hint")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-5", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Equal("VirtualMachineClusterInstancetype", test.FieldString(vm, "spec.instancetype.kind"), "invalid instanceType kind for medium size hint")
+				s.Equal("u1.medium", test.FieldString(vm, "spec.instancetype.name"), "invalid instanceType name for medium size hint")
 			})
 		})
 		s.Run("vm_create(size=large, performance=compute-optimized) with size and performance hints", func() {
@@ -273,15 +251,12 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-6", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				s.Equal("VirtualMachineClusterInstancetype",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["kind"].(string),
-					"invalid instanceType kind for large size hint")
-				s.Equal("c1.large",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["name"].(string),
-					"invalid instanceType name for large size hint")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-6", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Equal("VirtualMachineClusterInstancetype", test.FieldString(vm, "spec.instancetype.kind"), "invalid instanceType kind for large size hint")
+				s.Equal("c1.large", test.FieldString(vm, "spec.instancetype.name"), "invalid instanceType name for large size hint")
 			})
 		})
 		s.Run("vm_create(size=xlarge) with size hint not matching any instancetype", func() {
@@ -301,11 +276,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-7", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				_, exists := decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"]
-				s.Falsef(exists, "expected no instancetype to be set for xlarge size hint")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-7", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Falsef(test.FieldExists(vm, "spec.instancetype"), "expected no instancetype to be set for xlarge size hint")
 			})
 		})
 	})
@@ -337,30 +312,17 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-8", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				s.Equal("Halted",
-					decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
-					"invalid default runStrategy")
-				s.Equal("VirtualMachineClusterInstancetype",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["kind"].(string),
-					"invalid instanceType kind from DataSource default")
-				s.Equal("u1.medium",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["name"].(string),
-					"invalid instanceType name from DataSource default")
-				s.Equal("VirtualMachineClusterPreference",
-					decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["kind"].(string),
-					"invalid preference kind from DataSource default")
-				s.Equal("fedora",
-					decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["name"].(string),
-					"invalid preference name from DataSource default")
-				s.Equal("DataSource",
-					decodedResult[0].Object["spec"].(map[string]interface{})["dataVolumeTemplates"].([]interface{})[0].(map[string]interface{})["spec"].(map[string]interface{})["sourceRef"].(map[string]interface{})["kind"].(string),
-					"invalid data source kind in dataVolumeTemplates")
-				s.Equal("fedora",
-					decodedResult[0].Object["spec"].(map[string]interface{})["dataVolumeTemplates"].([]interface{})[0].(map[string]interface{})["spec"].(map[string]interface{})["sourceRef"].(map[string]interface{})["name"].(string),
-					"invalid data source name in dataVolumeTemplates")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-8", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Equal("Halted", test.FieldString(vm, "spec.runStrategy"), "invalid default runStrategy")
+				s.Equal("VirtualMachineClusterInstancetype", test.FieldString(vm, "spec.instancetype.kind"), "invalid instanceType kind from DataSource default")
+				s.Equal("u1.medium", test.FieldString(vm, "spec.instancetype.name"), "invalid instanceType name from DataSource default")
+				s.Equal("VirtualMachineClusterPreference", test.FieldString(vm, "spec.preference.kind"), "invalid preference kind from DataSource default")
+				s.Equal("fedora", test.FieldString(vm, "spec.preference.name"), "invalid preference name from DataSource default")
+				s.Equal("DataSource", test.FieldString(vm, "spec.dataVolumeTemplates[0].spec.sourceRef.kind"), "invalid data source kind in dataVolumeTemplates")
+				s.Equal("fedora", test.FieldString(vm, "spec.dataVolumeTemplates[0].spec.sourceRef.name"), "invalid data source name in dataVolumeTemplates")
 			})
 		})
 		s.Run("vm_create(workload=rhel) using DataSource partial name match", func() {
@@ -387,24 +349,15 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-9", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				s.Equal("Halted",
-					decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
-					"invalid default runStrategy")
-				s.Equal("VirtualMachineClusterPreference",
-					decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["kind"].(string),
-					"invalid preference kind from DataSource default")
-				s.Equal("rhel.9",
-					decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["name"].(string),
-					"invalid preference name from DataSource default")
-				s.Equal("DataSource",
-					decodedResult[0].Object["spec"].(map[string]interface{})["dataVolumeTemplates"].([]interface{})[0].(map[string]interface{})["spec"].(map[string]interface{})["sourceRef"].(map[string]interface{})["kind"].(string),
-					"invalid data source kind in dataVolumeTemplates")
-				s.Equal("rhel9",
-					decodedResult[0].Object["spec"].(map[string]interface{})["dataVolumeTemplates"].([]interface{})[0].(map[string]interface{})["spec"].(map[string]interface{})["sourceRef"].(map[string]interface{})["name"].(string),
-					"invalid data source name in dataVolumeTemplates")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-9", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Equal("Halted", test.FieldString(vm, "spec.runStrategy"), "invalid default runStrategy")
+				s.Equal("VirtualMachineClusterPreference", test.FieldString(vm, "spec.preference.kind"), "invalid preference kind from DataSource default")
+				s.Equal("rhel.9", test.FieldString(vm, "spec.preference.name"), "invalid preference name from DataSource default")
+				s.Equal("DataSource", test.FieldString(vm, "spec.dataVolumeTemplates[0].spec.sourceRef.kind"), "invalid data source kind in dataVolumeTemplates")
+				s.Equal("rhel9", test.FieldString(vm, "spec.dataVolumeTemplates[0].spec.sourceRef.name"), "invalid data source name in dataVolumeTemplates")
 			})
 		})
 		s.Run("vm_create(workload=fedora, size=large) with size hint overriding DataSource default instancetype", func() {
@@ -425,18 +378,13 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-10", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				s.Equal("Halted",
-					decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
-					"invalid default runStrategy")
-				s.Equal("VirtualMachineClusterInstancetype",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["kind"].(string),
-					"invalid instanceType kind for large size hint")
-				s.Equal("u1.large",
-					decodedResult[0].Object["spec"].(map[string]interface{})["instancetype"].(map[string]interface{})["name"].(string),
-					"invalid instanceType name for large size hint")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-10", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Equal("Halted", test.FieldString(vm, "spec.runStrategy"), "invalid default runStrategy")
+				s.Equal("VirtualMachineClusterInstancetype", test.FieldString(vm, "spec.instancetype.kind"), "invalid instanceType kind for large size hint")
+				s.Equal("u1.large", test.FieldString(vm, "spec.instancetype.name"), "invalid instanceType name for large size hint")
 			})
 		})
 	})
@@ -469,15 +417,12 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-11", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				s.Equal("VirtualMachineClusterPreference",
-					decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["kind"].(string),
-					"invalid preference kind for rhel.9 preference")
-				s.Equal("rhel.9",
-					decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["name"].(string),
-					"invalid preference name for rhel.9 preference")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-11", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Equal("VirtualMachineClusterPreference", test.FieldString(vm, "spec.preference.kind"), "invalid preference kind for rhel.9 preference")
+				s.Equal("rhel.9", test.FieldString(vm, "spec.preference.name"), "invalid preference name for rhel.9 preference")
 			})
 		})
 		s.Run("vm_create(workload=fedora, preference=custom.preference) with explicit preference overriding auto-selected preference", func() {
@@ -498,12 +443,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
 					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
-				s.Equal("test-vm-12", decodedResult[0].GetName(), "invalid resource name")
-				s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
-				s.NotEmptyf(decodedResult[0].GetUID(), "invalid uid, got %v", decodedResult[0].GetUID())
-				s.Equal("custom.preference",
-					decodedResult[0].Object["spec"].(map[string]interface{})["preference"].(map[string]interface{})["name"].(string),
-					"invalid preference name for explicit custom.preference")
+				vm := &decodedResult[0]
+				s.Equal("test-vm-12", vm.GetName(), "invalid resource name")
+				s.Equal("default", vm.GetNamespace(), "invalid resource namespace")
+				s.NotEmptyf(vm.GetUID(), "invalid uid, got %v", vm.GetUID())
+				s.Equal("custom.preference", test.FieldString(vm, "spec.preference.name"), "invalid preference name for explicit custom.preference")
 			})
 		})
 	})

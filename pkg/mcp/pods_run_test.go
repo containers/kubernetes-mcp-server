@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -46,15 +47,14 @@ func (s *PodsRunSuite) TestPodsRun() {
 				"invalid pod name, expected random, got %v", decodedNilNamespace[0].GetName())
 		})
 		s.Run("returns pod with labels", func() {
-			labels := decodedNilNamespace[0].Object["metadata"].(map[string]interface{})["labels"].(map[string]interface{})
-			s.NotEqualf("", labels["app.kubernetes.io/name"], "invalid labels, expected app.kubernetes.io/name, got %v", labels)
-			s.NotEqualf("", labels["app.kubernetes.io/component"], "invalid labels, expected app.kubernetes.io/component, got %v", labels)
-			s.Equalf("kubernetes-mcp-server", labels["app.kubernetes.io/managed-by"], "invalid labels, expected app.kubernetes.io/managed-by, got %v", labels)
-			s.Equalf("kubernetes-mcp-server-run-sandbox", labels["app.kubernetes.io/part-of"], "invalid labels, expected app.kubernetes.io/part-of, got %v", labels)
+			labels := test.FieldValue(&decodedNilNamespace[0], "metadata.labels").(map[string]interface{})
+			s.Contains(labels["app.kubernetes.io/name"], "kubernetes-mcp-server-run-", "invalid labels, expected app.kubernetes.io/name")
+			s.Contains(labels["app.kubernetes.io/component"], "kubernetes-mcp-server-run-", "invalid labels, expected app.kubernetes.io/component")
+			s.Equal("kubernetes-mcp-server", labels["app.kubernetes.io/managed-by"], "invalid labels, expected app.kubernetes.io/managed-by")
+			s.Equal("kubernetes-mcp-server-run-sandbox", labels["app.kubernetes.io/part-of"], "invalid labels, expected app.kubernetes.io/part-of")
 		})
 		s.Run("returns pod with nginx container", func() {
-			containers := decodedNilNamespace[0].Object["spec"].(map[string]interface{})["containers"].([]interface{})
-			s.Equalf("nginx", containers[0].(map[string]interface{})["image"], "invalid container name, expected nginx, got %v", containers[0].(map[string]interface{})["image"])
+			s.Equal("nginx", test.FieldString(&decodedNilNamespace[0], "spec.containers[0].image"), "invalid container image, expected nginx")
 		})
 	})
 	s.Run("pods_run(image=nginx, namespace=nil, port=80)", func() {
@@ -74,18 +74,17 @@ func (s *PodsRunSuite) TestPodsRun() {
 			s.Equalf("Service", decodedNamespaceAndPort[1].GetKind(), "invalid service kind, expected Service, got %v", decodedNamespaceAndPort[1].GetKind())
 		})
 		s.Run("returns pod with port", func() {
-			containers := decodedNamespaceAndPort[0].Object["spec"].(map[string]interface{})["containers"].([]interface{})
-			ports := containers[0].(map[string]interface{})["ports"].([]interface{})
-			s.Equalf(int64(80), ports[0].(map[string]interface{})["containerPort"], "invalid container port, expected 80, got %v", ports[0].(map[string]interface{})["containerPort"])
+			pod := &decodedNamespaceAndPort[0]
+			s.Equal(int64(80), test.FieldInt(pod, "spec.containers[0].ports[0].containerPort"), "invalid container port, expected 80")
 		})
 		s.Run("returns service with port and selector", func() {
-			ports := decodedNamespaceAndPort[1].Object["spec"].(map[string]interface{})["ports"].([]interface{})
-			s.Equalf(int64(80), ports[0].(map[string]interface{})["port"], "invalid service port, expected 80, got %v", ports[0].(map[string]interface{})["port"])
-			s.Equalf(int64(80), ports[0].(map[string]interface{})["targetPort"], "invalid service target port, expected 80, got %v", ports[0].(map[string]interface{})["targetPort"])
-			selector := decodedNamespaceAndPort[1].Object["spec"].(map[string]interface{})["selector"].(map[string]interface{})
-			s.NotEqualf("", selector["app.kubernetes.io/name"], "invalid service selector, expected app.kubernetes.io/name, got %v", selector)
-			s.Equalf("kubernetes-mcp-server", selector["app.kubernetes.io/managed-by"], "invalid service selector, expected app.kubernetes.io/managed-by, got %v", selector)
-			s.Equalf("kubernetes-mcp-server-run-sandbox", selector["app.kubernetes.io/part-of"], "invalid service selector, expected app.kubernetes.io/part-of, got %v", selector)
+			svc := &decodedNamespaceAndPort[1]
+			s.Equal(int64(80), test.FieldInt(svc, "spec.ports[0].port"), "invalid service port, expected 80")
+			s.Equal(int64(80), test.FieldInt(svc, "spec.ports[0].targetPort"), "invalid service target port, expected 80")
+			selectorMap := test.FieldValue(svc, "spec.selector").(map[string]interface{})
+			s.NotEqual("", selectorMap["app.kubernetes.io/name"], "invalid service selector, expected app.kubernetes.io/name")
+			s.Equal("kubernetes-mcp-server", selectorMap["app.kubernetes.io/managed-by"], "invalid service selector, expected app.kubernetes.io/managed-by")
+			s.Equal("kubernetes-mcp-server-run-sandbox", selectorMap["app.kubernetes.io/part-of"], "invalid service selector, expected app.kubernetes.io/part-of")
 		})
 	})
 }
@@ -136,8 +135,8 @@ func (s *PodsRunSuite) TestPodsRunInOpenShift() {
 			s.Equalf("Route", decodedPodServiceRoute[2].GetKind(), "invalid route kind, expected Route, got %v", decodedPodServiceRoute[2].GetKind())
 		})
 		s.Run("returns route with port", func() {
-			targetPort := decodedPodServiceRoute[2].Object["spec"].(map[string]interface{})["port"].(map[string]interface{})["targetPort"].(int64)
-			s.Equalf(int64(80), targetPort, "invalid route target port, expected 80, got %v", targetPort)
+			route := &decodedPodServiceRoute[2]
+			s.Equal(int64(80), test.FieldInt(route, "spec.port.targetPort"), "invalid route target port, expected 80")
 		})
 	})
 }
