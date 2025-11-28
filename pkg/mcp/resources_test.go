@@ -8,6 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 )
 
@@ -602,6 +604,122 @@ func (s *ResourcesSuite) TestResourcesDeleteDenied() {
 		allowedResource, err := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "name": "allowed-configmap-to-delete"})
 		s.Falsef(allowedResource.IsError, "call tool should not fail")
 		s.Nilf(err, "call tool should not return error object")
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesScale() {
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	deploymentName := "deployment-to-scale"
+	_, _ = kc.AppsV1().Deployments("default").Create(s.T().Context(), &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: deploymentName},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To(int32(2)),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": deploymentName},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": deploymentName}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}},
+				},
+			},
+		},
+	}, metav1.CreateOptions{})
+
+	s.Run("resources_scale with missing apiVersion returns error", func() {
+		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Equalf("failed to get/update resource scale, missing argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
+	s.Run("resources_scale with missing kind returns error", func() {
+		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{"apiVersion": "apps/v1"})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Equalf("failed to get/update resource scale, missing argument kind", toolResult.Content[0].(mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
+	s.Run("resources_scale with missing name returns error", func() {
+		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{"apiVersion": "apps/v1", "kind": "Deployment"})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Equalf("failed to get/update resource scale, missing argument name", toolResult.Content[0].(mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
+	s.Run("resources_scale get returns current scale", func() {
+		result, err := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"namespace":  "default",
+			"name":       deploymentName,
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		})
+		s.Run("returns scale yaml", func() {
+			content := result.Content[0].(mcp.TextContent).Text
+			s.Truef(strings.HasPrefix(content, "# Current resource scale (YAML) is below"),
+				"Expected success message, got %v", content)
+			var decodedScale unstructured.Unstructured
+			err = yaml.Unmarshal([]byte(strings.TrimPrefix(content, "# Current resource scale (YAML) is below\n")), &decodedScale)
+			s.Nilf(err, "invalid tool result content %v", err)
+			replicas, found, _ := unstructured.NestedInt64(decodedScale.Object, "spec", "replicas")
+			s.Truef(found, "replicas not found in scale object")
+			s.Equalf(int64(2), replicas, "expected 2 replicas, got %d", replicas)
+		})
+	})
+	s.Run("resources_scale update changes the scale", func() {
+		result, err := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"namespace":  "default",
+			"name":       deploymentName,
+			"scale":      5,
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		})
+		s.Run("returns updated scale yaml", func() {
+			content := result.Content[0].(mcp.TextContent).Text
+			var decodedScale unstructured.Unstructured
+			err = yaml.Unmarshal([]byte(strings.TrimPrefix(content, "# Current resource scale (YAML) is below\n")), &decodedScale)
+			s.Nilf(err, "invalid tool result content %v", err)
+			replicas, found, _ := unstructured.NestedInt64(decodedScale.Object, "spec", "replicas")
+			s.Truef(found, "replicas not found in scale object")
+			s.Equalf(int64(5), replicas, "expected 5 replicas after update, got %d", replicas)
+		})
+		s.Run("deployment was actually scaled", func() {
+			deployment, _ := kc.AppsV1().Deployments("default").Get(s.T().Context(), deploymentName, metav1.GetOptions{})
+			s.Equalf(int32(5), *deployment.Spec.Replicas, "expected 5 replicas in deployment, got %d", *deployment.Spec.Replicas)
+		})
+	})
+	s.Run("resources_scale with nonexistent resource returns error", func() {
+		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"namespace":  "default",
+			"name":       "nonexistent-deployment",
+		})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Containsf(toolResult.Content[0].(mcp.TextContent).Text, "not found",
+			"expected not found error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
+	s.Run("resources_scale with resource that does not support scale subresource returns error", func() {
+		configMapName := "configmap-without-scale"
+		_, _ = kc.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: configMapName},
+			Data:       map[string]string{"key": "value"},
+		}, metav1.CreateOptions{})
+		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"namespace":  "default",
+			"name":       configMapName,
+		})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Containsf(toolResult.Content[0].(mcp.TextContent).Text, "the server could not find the requested resource",
+			"expected scale subresource not found error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
 }
 
