@@ -15,8 +15,8 @@ func (k *Kiali) MeshStatus(ctx context.Context) (string, error) {
 		return "", err
 	}
 	q := u.Query()
-	q.Set("includeGateways", "false")
-	q.Set("includeWaypoints", "false")
+	q.Set("includeGateways", DefaultIncludeGateways)
+	q.Set("includeWaypoints", DefaultIncludeWaypoints)
 	u.RawQuery = q.Encode()
 	return k.executeRequest(ctx, http.MethodGet, u.String(), "", nil)
 }
