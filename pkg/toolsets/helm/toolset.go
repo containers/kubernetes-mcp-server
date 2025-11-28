@@ -26,6 +26,10 @@ func (t *Toolset) GetTools(_ internalk8s.Openshift) []api.ServerTool {
 	)
 }
 
+func (t *Toolset) IsValid(_ *internalk8s.Kubernetes) bool {
+	return true
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

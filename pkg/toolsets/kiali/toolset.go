@@ -1,6 +1,7 @@
 package kiali
 
 import (
+	"context"
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -29,6 +30,19 @@ func (t *Toolset) GetTools(_ internalk8s.Openshift) []api.ServerTool {
 		initLogs(),
 		initGetTraces(),
 	)
+}
+
+func (t *Toolset) IsValid(k *internalk8s.Kubernetes) bool {
+	// Create a Kiali client
+	kialiClient := k.NewKiali()
+
+	// Check if Kiali is actually accessible by making a lightweight API call
+	// We'll try to get the mesh status as it's a simple endpoint that doesn't require parameters
+	ctx := context.Background()
+	_, err := kialiClient.MeshStatus(ctx)
+
+	// If we can successfully call Kiali, it's valid
+	return err == nil
 }
 
 func init() {
