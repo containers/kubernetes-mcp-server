@@ -11,7 +11,8 @@
       "type": "object",
       "properties": {
         "graphType": {
-          "description": "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'",
+          "default": "versionedApp",
+          "description": "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
           "type": "string"
         },
         "namespace": {
@@ -23,7 +24,8 @@
           "type": "string"
         },
         "rateInterval": {
-          "description": "Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '10m'",
+          "default": "10m",
+          "description": "Rate interval for fetching (e.g., '10m', '5m', '1h').",
           "type": "string"
         }
       }
@@ -47,11 +49,13 @@
           "type": "string"
         },
         "direction": {
+          "default": "outbound",
           "description": "Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'",
           "type": "string"
         },
         "duration": {
-          "description": "Time range to get metrics for (optional string - if provided, gets metrics; if empty, get default 1800s).",
+          "default": "30m",
+          "description": "Time range to get metrics for (optional string - if provided, gets metrics (e.g., '1m', '5m', '1h'); if empty, get default 30m).",
           "type": "string"
         },
         "namespace": {
@@ -59,14 +63,17 @@
           "type": "string"
         },
         "quantiles": {
+          "default": "0.5,0.95,0.99,0.999",
           "description": "Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional",
           "type": "string"
         },
         "rateInterval": {
+          "default": "10m",
           "description": "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'",
           "type": "string"
         },
         "reporter": {
+          "default": "source",
           "description": "Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'",
           "type": "string"
         },
@@ -87,6 +94,7 @@
           "type": "string"
         },
         "step": {
+          "default": "15",
           "description": "Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds",
           "type": "string"
         }
@@ -152,6 +160,7 @@
           "type": "string"
         },
         "limit": {
+          "default": "100",
           "description": "Maximum number of traces to return (default: 100, only used when traceId is not provided)",
           "minimum": 1,
           "type": "integer"
