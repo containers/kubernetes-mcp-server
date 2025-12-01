@@ -7,7 +7,7 @@ import (
 
 type Kubeconfig struct {
 	clientcmd.ClientConfig
-	close func() error
+	close func()
 }
 
 var _ Watcher = (*Kubeconfig)(nil)
@@ -46,14 +46,13 @@ func (w *Kubeconfig) Watch(onChange func() error) {
 		}
 	}()
 	if w.close != nil {
-		_ = w.close()
+		w.close()
 	}
-	w.close = watcher.Close
+	w.close = func() { _ = watcher.Close() }
 }
 
-func (w *Kubeconfig) Close() error {
+func (w *Kubeconfig) Close() {
 	if w.close != nil {
-		return w.close()
+		w.close()
 	}
-	return nil
 }

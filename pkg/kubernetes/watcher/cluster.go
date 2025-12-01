@@ -137,7 +137,7 @@ func (w *ClusterState) Watch(onChange func() error) {
 }
 
 // Close stops the cluster state watcher
-func (w *ClusterState) Close() error {
+func (w *ClusterState) Close() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -146,17 +146,17 @@ func (w *ClusterState) Close() error {
 	}
 
 	if w.stopCh == nil || w.stoppedCh == nil {
-		return nil
+		return // Already closed
 	}
 
 	if !w.started {
-		return nil
+		return
 	}
 
 	select {
 	case <-w.stopCh:
 		// Already closed or stopped
-		return nil
+		return
 	default:
 		close(w.stopCh)
 		w.mu.Unlock()
@@ -167,7 +167,6 @@ func (w *ClusterState) Close() error {
 		w.stopCh = make(chan struct{})
 		w.stoppedCh = make(chan struct{})
 	}
-	return nil
 }
 
 func (w *ClusterState) captureState() clusterState {

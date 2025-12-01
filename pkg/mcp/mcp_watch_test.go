@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -43,6 +44,19 @@ func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
 	// Then
 	s.NotNil(notification, "WatchKubeConfig did not notify")
 	s.Equal("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change")
+}
+
+func (s *WatchKubeConfigSuite) TestNotifiesToolsChangeMultipleTimes() {
+	// Given
+	s.InitMcpClient()
+	// When
+	for i := 0; i < 3; i++ {
+		s.WriteKubeconfig()
+		notification := s.WaitForNotification(5 * time.Second)
+		// Then
+		s.NotNil(notification, "WatchKubeConfig did not notify on iteration %d", i)
+		s.Equalf("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change on iteration %d", i)
+	}
 }
 
 func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
@@ -122,6 +136,20 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeOnAPIGroupAddition() {
 	// Then
 	s.NotNil(notification, "cluster state watcher did not notify")
 	s.Equal("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change")
+}
+
+func (s *WatchClusterStateSuite) TestNotifiesToolsChangeMultipleTimes() {
+	// Given - Initialize with basic API groups
+	s.InitMcpClient()
+
+	// When - Add multiple API groups to simulate cluster state changes
+	for i := 0; i < 3; i++ {
+		name := fmt.Sprintf("custom-%d", i)
+		s.AddAPIGroup(`{"name":"` + name + `.example.com","versions":[{"groupVersion":"` + name + `.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"` + name + `.example.com/v1","version":"v1"}}`)
+		notification := s.WaitForNotification(10 * time.Second)
+		s.NotNil(notification, "cluster state watcher did not notify on iteration %d", i)
+		s.Equalf("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change on iteration %d", i)
+	}
 }
 
 func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {

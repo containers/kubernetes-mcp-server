@@ -47,7 +47,7 @@ func (s *KubeconfigTestSuite) TestNewKubeconfig() {
 func (s *KubeconfigTestSuite) TestWatch() {
 	s.Run("triggers onChange callback on file modification", func() {
 		watcher := NewKubeconfig(s.clientConfig)
-		defer func() { _ = watcher.Close() }()
+		s.T().Cleanup(watcher.Close)
 
 		var changeDetected atomic.Bool
 		onChange := func() error {
@@ -91,7 +91,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 
 	s.Run("handles multiple file changes", func() {
 		watcher := NewKubeconfig(s.clientConfig)
-		defer func() { _ = watcher.Close() }()
+		s.T().Cleanup(watcher.Close)
 
 		var callCount atomic.Int32
 		onChange := func() error {
@@ -120,7 +120,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 
 	s.Run("handles onChange callback errors gracefully", func() {
 		watcher := NewKubeconfig(s.clientConfig)
-		defer func() { _ = watcher.Close() }()
+		s.T().Cleanup(watcher.Close)
 
 		var errorReturned atomic.Bool
 		onChange := func() error {
@@ -146,7 +146,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 
 	s.Run("replaces previous watcher on subsequent Watch calls", func() {
 		watcher := NewKubeconfig(s.clientConfig)
-		defer func() { _ = watcher.Close() }()
+		s.T().Cleanup(watcher.Close)
 
 		var secondWatcherActive atomic.Bool
 
@@ -187,9 +187,9 @@ func (s *KubeconfigTestSuite) TestClose() {
 			close: nil,
 		}
 
-		err := watcher.Close()
-
-		s.NoError(err)
+		s.NotPanics(func() {
+			watcher.Close()
+		})
 	})
 
 	s.Run("closes watcher successfully", func() {
@@ -202,9 +202,9 @@ func (s *KubeconfigTestSuite) TestClose() {
 			return watcher.close != nil
 		}), "timeout waiting for watcher to be ready")
 
-		err := watcher.Close()
-
-		s.NoError(err)
+		s.NotPanics(func() {
+			watcher.Close()
+		})
 	})
 
 	s.Run("stops triggering onChange after close", func() {
@@ -221,8 +221,7 @@ func (s *KubeconfigTestSuite) TestClose() {
 			return watcher.close != nil
 		}), "timeout waiting for watcher to be ready")
 
-		err := watcher.Close()
-		s.NoError(err)
+		watcher.Close()
 
 		countAfterClose := callCount.Load()
 
@@ -231,7 +230,7 @@ func (s *KubeconfigTestSuite) TestClose() {
 
 		// Wait a reasonable amount of time to verify no callbacks are triggered
 		// Using WaitForCondition with a condition that should NOT become true
-		err = test.WaitForCondition(50*time.Millisecond, func() bool {
+		err := test.WaitForCondition(50*time.Millisecond, func() bool {
 			return callCount.Load() > countAfterClose
 		})
 		// We expect this to timeout (return error) because no callbacks should be triggered
@@ -249,11 +248,10 @@ func (s *KubeconfigTestSuite) TestClose() {
 			return watcher.close != nil
 		}), "timeout waiting for watcher to be ready")
 
-		err1 := watcher.Close()
-		err2 := watcher.Close()
-
-		s.NoError(err1, "first close should succeed")
-		s.NoError(err2, "second close should succeed")
+		s.NotPanics(func() {
+			watcher.Close()
+			watcher.Close()
+		})
 	})
 }
 

@@ -173,7 +173,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		go func() {
 			watcher.Watch(onChange)
 		}()
-		defer func() { _ = watcher.Close() }()
+		s.T().Cleanup(watcher.Close)
 
 		// Wait for the watcher to capture initial state
 		s.waitForWatcherState(watcher)
@@ -210,7 +210,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		go func() {
 			watcher.Watch(onChange)
 		}()
-		s.T().Cleanup(func() { _ = watcher.Close() })
+		s.T().Cleanup(watcher.Close)
 
 		// Wait for initial state capture
 		s.waitForWatcherState(watcher)
@@ -244,7 +244,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		go func() {
 			watcher.Watch(onChange)
 		}()
-		s.T().Cleanup(func() { _ = watcher.Close() })
+		s.T().Cleanup(watcher.Close)
 
 		// Wait for the watcher to capture initial state
 		s.waitForWatcherState(watcher)
@@ -277,7 +277,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		go func() {
 			watcher.Watch(onChange)
 		}()
-		s.T().Cleanup(func() { _ = watcher.Close() })
+		s.T().Cleanup(watcher.Close)
 
 		// Wait for the watcher to start and capture initial state
 		s.waitForWatcherState(watcher)
@@ -317,11 +317,8 @@ func (s *ClusterStateTestSuite) TestClose() {
 		// Wait for the watcher to start
 		s.waitForWatcherState(watcher)
 
-		err := watcher.Close()
+		watcher.Close()
 
-		s.Run("returns no error", func() {
-			s.NoError(err)
-		})
 		s.Run("stops polling", func() {
 			beforeCount := callCount.Load()
 			// Wait longer than poll interval to verify no more polling
@@ -343,14 +340,9 @@ func (s *ClusterStateTestSuite) TestClose() {
 		onChange := func() error { return nil }
 		watcher.Watch(onChange)
 
-		err1 := watcher.Close()
-		err2 := watcher.Close()
-
-		s.Run("first close succeeds", func() {
-			s.NoError(err1)
-		})
-		s.Run("second close succeeds", func() {
-			s.NoError(err2)
+		s.NotPanics(func() {
+			watcher.Close()
+			watcher.Close()
 		})
 	})
 
@@ -390,11 +382,12 @@ func (s *ClusterStateTestSuite) TestClose() {
 		}), "timeout waiting for debounce timer to start")
 
 		// Close the watcher before debounce window expires
-		err := watcher.Close()
-		s.NoError(err, "close should succeed")
+		watcher.Close()
 
-		// Verify onChange was not called (debounce timer was stopped)
-		s.Equal(int32(0), callCount.Load(), "onChange should not be called because debounce timer was stopped")
+		s.Run("debounce timer is stopped", func() {
+			// Verify onChange was not called (debounce timer was stopped)
+			s.Equal(int32(0), callCount.Load(), "onChange should not be called because debounce timer was stopped")
+		})
 	})
 
 	s.Run("handles close with nil channels", func() {
@@ -403,11 +396,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 			stoppedCh: nil,
 		}
 
-		err := watcher.Close()
-
-		s.Run("returns no error", func() {
-			s.NoError(err)
-		})
+		s.NotPanics(watcher.Close)
 	})
 
 	s.Run("handles close on unstarted watcher", func() {
@@ -420,11 +409,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		// Close the stoppedCh channel since the goroutine never started
 		close(watcher.stoppedCh)
 
-		err := watcher.Close()
-
-		s.Run("returns no error", func() {
-			s.NoError(err)
-		})
+		s.NotPanics(watcher.Close)
 	})
 }
 
