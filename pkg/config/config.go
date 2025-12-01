@@ -89,15 +89,11 @@ type GroupVersionKind struct {
 
 type ReadConfigOpt func(cfg *StaticConfig)
 
-func withDirPath(path string) ReadConfigOpt {
+// WithDirPath returns a ReadConfigOpt that sets the config directory path.
+func WithDirPath(path string) ReadConfigOpt {
 	return func(cfg *StaticConfig) {
 		cfg.configDirPath = path
 	}
-}
-
-// WithDirPath returns a ReadConfigOpt that sets the config directory path.
-func WithDirPath(path string) ReadConfigOpt {
-	return withDirPath(path)
 }
 
 // Read reads the toml file and returns the StaticConfig, with any opts applied.
@@ -114,7 +110,7 @@ func Read(configPath string, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	}
 	dirPath := filepath.Dir(absPath)
 
-	cfg, err := ReadToml(configData, append(opts, withDirPath(dirPath))...)
+	cfg, err := ReadToml(configData, append(opts, WithDirPath(dirPath))...)
 	if err != nil {
 		return nil, err
 	}

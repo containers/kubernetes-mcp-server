@@ -17,23 +17,14 @@ type ConfigSuite struct {
 }
 
 func (s *ConfigSuite) SetupTest() {
-	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "kiali-config-test-*")
-	s.Require().NoError(err, "Failed to create temp directory")
-	s.tempDir = tempDir
-
 	// Create a test CA certificate file
+	s.tempDir = s.T().TempDir()
 	s.caFile = filepath.Join(s.tempDir, "ca.crt")
-	err = os.WriteFile(s.caFile, []byte("test ca content"), 0644)
+	err := os.WriteFile(s.caFile, []byte("test ca content"), 0644)
 	s.Require().NoError(err, "Failed to write CA file")
 }
 
 func (s *ConfigSuite) TestConfigParser_ResolvesRelativePath() {
-	// Create CA file in temp directory
-	caFile := filepath.Join(s.tempDir, "ca.crt")
-	err := os.WriteFile(caFile, []byte("test ca content"), 0644)
-	s.Require().NoError(err, "Failed to write CA file")
-
 	// Read config with configDirPath set to tempDir to resolve relative paths
 	cfg := test.Must(config.ReadToml([]byte(`
 		[toolset_configs.kiali]
@@ -48,8 +39,7 @@ func (s *ConfigSuite) TestConfigParser_ResolvesRelativePath() {
 	s.Require().True(ok, "Kiali config should be of type *Config")
 
 	// Verify the path was resolved to absolute
-	expectedPath := caFile
-	s.Equal(expectedPath, kcfg.CertificateAuthority, "Relative path should be resolved to absolute path")
+	s.Equal(s.caFile, kcfg.CertificateAuthority, "Relative path should be resolved to absolute path")
 }
 
 func (s *ConfigSuite) TestConfigParser_PreservesAbsolutePath() {
