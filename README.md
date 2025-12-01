@@ -208,12 +208,13 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset | Description                                                                                                                                                          | Default |
-|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config  | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
-| core    | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
-| helm    | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
-| kiali   | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
+| Toolset  | Description                                                                                                                                                          | Default |
+|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
+| core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
+| helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
+| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
+| kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -348,11 +349,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kiali</summary>
 
-- **kiali_get_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Use this for high-level overviews
-  - `graphType` (`string`) - Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'. Default: 'versionedApp'
+- **kiali_get_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
+  - `graphType` (`string`) - Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'
   - `namespace` (`string`) - Optional single namespace to include in the graph (alternative to namespaces)
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
-  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h'). Default: '10m'
+  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h').
 
 - **kiali_manage_istio_config** - Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects
   - `action` (`string`) **(required)** - Action to perform: list, get, create, patch, or delete
@@ -371,7 +372,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **kiali_get_metrics** - Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh
   - `byLabels` (`string`) - Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional
   - `direction` (`string`) - Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'
-  - `duration` (`string`) - Time range to get metrics for (optional string - if provided, gets metrics; if empty, get default 1800s).
+  - `duration` (`string`) - Time range to get metrics for (optional string - if provided, gets metrics (e.g., '1m', '5m', '1h'); if empty, get default 30m).
   - `namespace` (`string`) **(required)** - Namespace to get resources from
   - `quantiles` (`string`) - Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional
   - `rateInterval` (`string`) - Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'
@@ -397,8 +398,25 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `resource_name` (`string`) - Name of the resource to get traces for. Required if traceId is not provided.
   - `resource_type` (`string`) - Type of resource to get traces for (app, service, workload). Required if traceId is not provided.
   - `startMicros` (`string`) - Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided, only used when traceId is not provided)
-  - `tags` (`string`) - JSON string of tags to filter traces (optional, only used when traceId is not provided) 
+  - `tags` (`string`) - JSON string of tags to filter traces (optional, only used when traceId is not provided)
   - `traceId` (`string`) - Unique identifier of the trace to retrieve detailed information for. If provided, this will return detailed trace information and other parameters (resource_type, namespace, resource_name) are not required.
+
+</details>
+
+<details>
+
+<summary>kubevirt</summary>
+
+- **vm_create** - Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.
+  - `autostart` (`boolean`) - Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.
+  - `instancetype` (`string`) - Optional instance type name for the VM (e.g., 'u1.small', 'u1.medium', 'u1.large')
+  - `name` (`string`) **(required)** - The name of the virtual machine
+  - `namespace` (`string`) **(required)** - The namespace for the virtual machine
+  - `performance` (`string`) - Optional performance family hint for the VM instance type (e.g., 'u1' for general-purpose, 'o1' for overcommitted, 'c1' for compute-optimized, 'm1' for memory-optimized). Defaults to 'u1' (general-purpose) if not specified.
+  - `preference` (`string`) - Optional preference name for the VM
+  - `size` (`string`) - Optional workload size hint for the VM (e.g., 'small', 'medium', 'large', 'xlarge'). Used to auto-select an appropriate instance type if not explicitly specified.
+  - `storage` (`string`) - Optional storage size for the VM's root disk when using DataSources (e.g., '30Gi', '50Gi', '100Gi'). Defaults to 30Gi. Ignored when using container disks.
+  - `workload` (`string`) - The workload for the VM. Accepts OS names (e.g., 'fedora' (default), 'ubuntu', 'centos', 'centos-stream', 'debian', 'rhel', 'opensuse', 'opensuse-tumbleweed', 'opensuse-leap') or full container disk image URLs
 
 </details>
 
