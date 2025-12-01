@@ -11,6 +11,15 @@ import (
 )
 
 // FieldString retrieves a string field from an unstructured object using JSONPath-like notation.
+// Returns the string value, or empty string if not found or not a string.
+//
+// IMPORTANT: This function cannot distinguish between "field doesn't exist", "field is nil",
+// and "field exists with empty string value". When asserting empty string values (""),
+// you should also verify the field exists using FieldExists:
+//
+//	s.True(test.FieldExists(obj, "spec.emptyField"), "field should exist")
+//	s.Equal("", test.FieldString(obj, "spec.emptyField"), "field should be empty string")
+//
 // Examples:
 //   - "spec.runStrategy"
 //   - "spec.template.spec.volumes[0].containerDisk.image"
@@ -36,7 +45,15 @@ func FieldExists(obj *unstructured.Unstructured, path string) bool {
 }
 
 // FieldInt retrieves an integer field from an unstructured object using JSONPath-like notation.
-// Returns 0 if the field is not found or is not an integer type (int, int64, int32).
+// Returns the integer value (int64), or 0 if not found or not an integer type (int, int64, int32).
+//
+// IMPORTANT: This function cannot distinguish between "field doesn't exist", "field is nil",
+// and "field exists with value 0". When asserting zero values (0), you should also verify
+// the field exists using FieldExists:
+//
+//	s.True(test.FieldExists(obj, "spec.zeroValue"), "field should exist")
+//	s.Equal(int64(0), test.FieldInt(obj, "spec.zeroValue"), "field should be 0")
+//
 // Examples:
 //   - "spec.replicas"
 //   - "spec.ports[0].containerPort"
@@ -73,6 +90,7 @@ func FieldValue(obj *unstructured.Unstructured, path string) interface{} {
 
 // Field is the core helper that traverses an unstructured object using JSONPath-like notation.
 // It supports both dot notation (foo.bar) and array indexing (foo[0].bar).
+// Returns (nil, false) if any intermediate field is nil, as we cannot traverse through nil.
 func Field(obj interface{}, path string) (interface{}, bool) {
 	if obj == nil || path == "" {
 		return nil, false
@@ -82,7 +100,7 @@ func Field(obj interface{}, path string) (interface{}, bool) {
 	segments := parsePath(path)
 	current := obj
 
-	for _, segment := range segments {
+	for i, segment := range segments {
 		if segment.isArray {
 			// Handle array indexing
 			slice, ok := current.([]interface{})
@@ -101,6 +119,10 @@ func Field(obj interface{}, path string) (interface{}, bool) {
 			}
 			val, exists := m[segment.field]
 			if !exists {
+				return nil, false
+			}
+			// If this is an intermediate field and value is nil, we can't traverse further
+			if val == nil && i < len(segments)-1 {
 				return nil, false
 			}
 			current = val

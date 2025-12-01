@@ -135,6 +135,17 @@ func (s *UnstructuredSuite) TestFieldString() {
 			}
 			s.Equal("", FieldString(obj, "spec.volumes[-1].name"))
 		})
+		s.Run("returns empty string when intermediate field is nil", func() {
+			obj := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": nil,
+				},
+			}
+			// Can't traverse through nil intermediate field
+			s.Equal("", FieldString(obj, "spec.foo.bar"))
+			// But spec itself exists (with nil value)
+			s.True(FieldExists(obj, "spec"))
+		})
 		s.Run("handles path with consecutive dots gracefully", func() {
 			obj := &unstructured.Unstructured{
 				Object: map[string]interface{}{
