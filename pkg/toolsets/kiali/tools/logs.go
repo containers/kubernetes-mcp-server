@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"fmt"
@@ -7,15 +7,16 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func initLogs() []api.ServerTool {
+func InitLogs() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
-
+	name := defaults.ToolsetName() + "_workload_logs"
 	// Workload logs tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_workload_logs",
+			Name:        name,
 			Description: "Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

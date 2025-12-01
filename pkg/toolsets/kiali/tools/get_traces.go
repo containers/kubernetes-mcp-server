@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
 type tracesOperations struct {
@@ -40,12 +41,12 @@ var tracesOpsMap = map[string]tracesOperations{
 	},
 }
 
-func initGetTraces() []api.ServerTool {
+func InitGetTraces() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
-
+	name := defaults.ToolsetName() + "_get_traces"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_get_traces",
+			Name:        name,
 			Description: "Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

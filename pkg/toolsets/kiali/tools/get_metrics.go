@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
 type resourceOperations struct {
@@ -32,12 +33,12 @@ var opsMap = map[string]resourceOperations{
 	},
 }
 
-func initGetMetrics() []api.ServerTool {
+func InitGetMetrics() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
-
+	name := defaults.ToolsetName() + "_get_metrics"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_get_metrics",
+			Name:        name,
 			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",

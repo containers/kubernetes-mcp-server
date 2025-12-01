@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"fmt"
@@ -9,13 +9,15 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func initGetMeshGraph() []api.ServerTool {
+func InitGetMeshGraph() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
+	name := defaults.ToolsetName() + "_mesh_graph"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_get_mesh_graph",
+			Name:        name,
 			Description: "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
