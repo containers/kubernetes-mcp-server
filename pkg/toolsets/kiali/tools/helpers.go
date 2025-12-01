@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"encoding/json"
