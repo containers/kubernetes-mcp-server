@@ -71,3 +71,24 @@ func WaitForHealthz(tcpAddr *net.TCPAddr) error {
 	}
 	return fmt.Errorf("healthz endpoint returned 404 after retries")
 }
+
+func WaitForCondition(timeout time.Duration, condition func() bool) error {
+	done := make(chan struct{})
+	go func() {
+		for {
+			if condition() {
+				close(done)
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	select {
+	case <-done:
+		// Condition met
+	case <-time.After(timeout):
+		return fmt.Errorf("timeout waiting for condition")
+	}
+	return nil
+}
