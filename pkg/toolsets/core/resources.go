@@ -6,10 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -326,30 +323,18 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	resourceClient, err := getResourceClient(params, gvk, ns)
-	if err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-
-	scale, err := resourceClient.Get(params.Context, n, metav1.GetOptions{}, "scale")
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get scale subresource: %w", err)), nil
-	}
-
-	if desiredScale, shouldScale := params.GetArguments()["scale"]; shouldScale {
-		newScale, err := parseScaleValue(desiredScale)
+	var desiredScale int64
+	scaleVal, shouldScale := params.GetArguments()["scale"]
+	if shouldScale {
+		desiredScale, err = parseScaleValue(scaleVal)
 		if err != nil {
 			return api.NewToolCallResult("", err), nil
 		}
+	}
 
-		if err := unstructured.SetNestedField(scale.Object, newScale, "spec", "replicas"); err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to set replicas in new unstructured object: %w", err)), nil
-		}
-
-		scale, err = resourceClient.Update(params.Context, scale, metav1.UpdateOptions{}, "scale")
-		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to update scale of resource: %w", err)), nil
-		}
+	scale, err := params.ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
 	}
 
 	marshalled, err := output.MarshalYaml(scale)
@@ -358,28 +343,6 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	return api.NewToolCallResult("# Current resource scale (YAML) is below\n"+marshalled, err), nil
-}
-
-func getResourceClient(params api.ToolHandlerParams, gvk *schema.GroupVersionKind, ns string) (dynamic.ResourceInterface, error) {
-	restMapper, err := params.ToRESTMapper()
-	if err != nil {
-		return nil, fmt.Errorf("encountered internal error while trying to get resource client")
-	}
-
-	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get gvr for resource, %w", err)
-	}
-
-	isNamespaced, err := params.IsNamespaced(gvk)
-	if err != nil {
-		return nil, fmt.Errorf("failed to determine if resource is namespaced")
-	}
-
-	if isNamespaced {
-		return params.AccessControlClientset().DynamicClient().Resource(mapping.Resource).Namespace(ns), nil
-	}
-	return params.AccessControlClientset().DynamicClient().Resource(mapping.Resource), nil
 }
 
 func parseScaleValue(desiredScale interface{}) (int64, error) {
