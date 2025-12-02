@@ -29,7 +29,8 @@ permissions:
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # For issue_comment events, use PR number as group to avoid different PRs canceling each other.
+  group: ${{ github.workflow }}-${{ github.event_name == 'issue_comment' && format('pr-{0}', github.event.issue.number) || github.ref }}
   cancel-in-progress: true
 
 env:
