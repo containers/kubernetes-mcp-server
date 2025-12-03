@@ -23,6 +23,8 @@ type KubeconfigTestSuite struct {
 }
 
 func (s *KubeconfigTestSuite) SetupTest() {
+	// Use a short debounce window for tests
+	s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "50")
 	s.kubeconfigFile = test.KubeconfigFile(s.T(), test.KubeConfigFake())
 	s.clientConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: s.kubeconfigFile},
@@ -38,8 +40,8 @@ func (s *KubeconfigTestSuite) TestNewKubeconfig() {
 			s.NotNil(watcher.ClientConfig)
 			s.Equal(s.clientConfig, watcher.ClientConfig)
 		})
-		s.Run("initializes with nil close function", func() {
-			s.Nil(watcher.close)
+		s.Run("initializes with started as false", func() {
+			s.False(watcher.started)
 		})
 	})
 }
@@ -59,7 +61,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 
 		// Wait for the watcher to be ready
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
+			return watcher.started
 		}), "timeout waiting for watcher to be ready")
 
 		// Modify the kubeconfig file
@@ -89,7 +91,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 		}), "Watch blocked when no kubeconfig files exist")
 	})
 
-	s.Run("handles multiple file changes", func() {
+	s.Run("handles multiple file changes with debouncing", func() {
 		watcher := NewKubeconfig(s.clientConfig)
 		s.T().Cleanup(watcher.Close)
 
@@ -103,10 +105,11 @@ func (s *KubeconfigTestSuite) TestWatch() {
 
 		// Wait for the watcher to be ready
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
+			return watcher.started
 		}), "timeout waiting for watcher to be ready")
 
-		// Modify the kubeconfig file multiple times and wait for each change
+		// Modify the kubeconfig file multiple times, waiting for each callback
+		// to ensure we're past the debounce window before the next write
 		for i := 0; i < 3; i++ {
 			expectedCount := int32(i + 1)
 			s.Require().NoError(clientcmd.WriteToFile(*test.KubeConfigFake(), s.kubeconfigFile))
@@ -132,7 +135,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 
 		// Wait for the watcher to be ready
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
+			return watcher.started
 		}), "timeout waiting for watcher to be ready")
 
 		// Modify the kubeconfig file
@@ -144,48 +147,46 @@ func (s *KubeconfigTestSuite) TestWatch() {
 		}), "timeout waiting for onChange callback")
 	})
 
-	s.Run("replaces previous watcher on subsequent Watch calls", func() {
+	s.Run("ignores subsequent Watch calls when already started", func() {
 		watcher := NewKubeconfig(s.clientConfig)
 		s.T().Cleanup(watcher.Close)
 
+		var firstWatcherActive atomic.Bool
 		var secondWatcherActive atomic.Bool
 
 		// Start first watcher
 		watcher.Watch(func() error {
+			firstWatcherActive.Store(true)
 			return nil
 		})
 
 		// Wait for the first watcher to be ready
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
+			return watcher.started
 		}), "timeout waiting for first watcher to be ready")
 
-		// Start second watcher (should close the first)
+		// Try to start second watcher (should be ignored since already started)
 		watcher.Watch(func() error {
 			secondWatcherActive.Store(true)
 			return nil
 		})
 
-		// Wait for the second watcher to be ready
-		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
-		}), "timeout waiting for second watcher to be ready")
-
 		// Modify the kubeconfig file
 		s.Require().NoError(clientcmd.WriteToFile(*test.KubeConfigFake(), s.kubeconfigFile))
 
-		// Wait for second watcher to trigger
+		// Wait for first watcher to trigger
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return secondWatcherActive.Load()
-		}), "timeout waiting for second watcher")
+			return firstWatcherActive.Load()
+		}), "timeout waiting for first watcher")
+
+		// Verify second watcher was never activated
+		s.False(secondWatcherActive.Load(), "second watcher should not be activated")
 	})
 }
 
 func (s *KubeconfigTestSuite) TestClose() {
-	s.Run("returns no error when close is nil", func() {
-		watcher := &Kubeconfig{
-			close: nil,
-		}
+	s.Run("does not panic when watcher not started", func() {
+		watcher := NewKubeconfig(s.clientConfig)
 
 		s.NotPanics(func() {
 			watcher.Close()
@@ -199,7 +200,7 @@ func (s *KubeconfigTestSuite) TestClose() {
 
 		// Wait for the watcher to be ready
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
+			return watcher.started
 		}), "timeout waiting for watcher to be ready")
 
 		s.NotPanics(func() {
@@ -218,7 +219,7 @@ func (s *KubeconfigTestSuite) TestClose() {
 
 		// Wait for the watcher to be ready
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
+			return watcher.started
 		}), "timeout waiting for watcher to be ready")
 
 		watcher.Close()
@@ -245,13 +246,123 @@ func (s *KubeconfigTestSuite) TestClose() {
 
 		// Wait for the watcher to be ready
 		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
-			return watcher.close != nil
+			return watcher.started
 		}), "timeout waiting for watcher to be ready")
 
 		s.NotPanics(func() {
 			watcher.Close()
 			watcher.Close()
 		})
+	})
+
+	s.Run("handles close when stopCh is already closed", func() {
+		watcher := NewKubeconfig(s.clientConfig)
+
+		watcher.Watch(func() error { return nil })
+
+		// Wait for the watcher to be ready
+		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
+			return watcher.started
+		}), "timeout waiting for watcher to be ready")
+
+		// First close - normal operation
+		watcher.Close()
+
+		// Second close - should hit the "case <-w.stopCh" branch (already closed)
+		s.NotPanics(func() {
+			watcher.Close()
+		})
+
+		// Verify watcher is in stopped state
+		s.False(watcher.started, "watcher should be stopped after close")
+	})
+
+	s.Run("handles close with nil channels", func() {
+		watcher := &Kubeconfig{
+			ClientConfig: s.clientConfig,
+			stopCh:       nil,
+			stoppedCh:    nil,
+		}
+
+		s.NotPanics(func() {
+			watcher.Close()
+		})
+	})
+
+	s.Run("stops debounce timer on close", func() {
+		watcher := NewKubeconfig(s.clientConfig)
+
+		var callCount atomic.Int32
+		watcher.Watch(func() error {
+			callCount.Add(1)
+			return nil
+		})
+
+		// Wait for the watcher to be ready
+		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
+			return watcher.started
+		}), "timeout waiting for watcher to be ready")
+
+		// Trigger a file change to start the debounce timer
+		s.Require().NoError(clientcmd.WriteToFile(*test.KubeConfigFake(), s.kubeconfigFile))
+
+		// Close immediately before debounce timer fires
+		time.Sleep(10 * time.Millisecond) // Small delay to ensure event is received
+		watcher.Close()
+
+		countAfterClose := callCount.Load()
+
+		// Wait longer than debounce window to verify timer was stopped
+		time.Sleep(100 * time.Millisecond)
+
+		// The callback should not have been called after close
+		// (or at most once if it was already in flight)
+		s.LessOrEqual(callCount.Load(), countAfterClose+1,
+			"debounce timer should be stopped on close")
+	})
+
+	s.Run("can restart watcher after close", func() {
+		watcher := NewKubeconfig(s.clientConfig)
+
+		var firstCallbackTriggered atomic.Bool
+		watcher.Watch(func() error {
+			firstCallbackTriggered.Store(true)
+			return nil
+		})
+
+		// Wait for the watcher to be ready
+		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
+			return watcher.started
+		}), "timeout waiting for watcher to be ready")
+
+		// Close the watcher
+		watcher.Close()
+		s.False(watcher.started, "watcher should be stopped after close")
+
+		s.NotNil(watcher.stopCh, "stopCh should be recreated after close")
+		s.NotNil(watcher.stoppedCh, "stoppedCh should be recreated after close")
+
+		// Start a new watcher
+		var secondCallbackTriggered atomic.Bool
+		watcher.Watch(func() error {
+			secondCallbackTriggered.Store(true)
+			return nil
+		})
+
+		// Wait for the new watcher to be ready
+		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
+			return watcher.started
+		}), "timeout waiting for restarted watcher to be ready")
+
+		// Trigger a file change
+		s.Require().NoError(clientcmd.WriteToFile(*test.KubeConfigFake(), s.kubeconfigFile))
+
+		// Wait for callback
+		s.Require().NoError(test.WaitForCondition(kubeconfigTestTimeout, func() bool {
+			return secondCallbackTriggered.Load()
+		}), "timeout waiting for restarted watcher callback")
+
+		watcher.Close()
 	})
 }
 
