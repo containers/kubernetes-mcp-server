@@ -103,11 +103,16 @@ func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
 		})
 
 		s.Run("Keeps watching for further changes", func() {
-			s.kubeconfig.CurrentContext = "context-2"
-			s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig))
+			kubeconfig := *s.kubeconfig
+			kubeconfig.CurrentContext = "context-2"
+			s.Require().NoError(clientcmd.WriteToFile(kubeconfig, s.staticConfig.KubeConfig))
 			s.Require().NoError(waitForCallback(5 * time.Second))
 
 			s.Run("Replaces default target with new context", func() {
+				// In Windows systems, fsnotify may trigger multiple events for a single file change,
+				s.Require().NoError(test.WaitForCondition(5*time.Second, func() bool {
+					return provider.GetDefaultTarget() == "context-2"
+				}))
 				s.Equal("context-2", provider.GetDefaultTarget(), "Expected default target context to be updated")
 			})
 		})
