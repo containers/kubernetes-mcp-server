@@ -15,12 +15,9 @@ import (
 //   - namespace: the namespace containing the workload
 //   - workload: the name of the workload
 //   - container: container name (optional, will be auto-detected if not provided)
-//   - service: service name (optional)
 //   - duration: time duration (e.g., "5m", "1h") - optional
-//   - logType: type of logs (app, proxy, ztunnel, waypoint) - optional
-//   - sinceTime: Unix timestamp for start time - optional
 //   - maxLines: maximum number of lines to return - optional
-func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload string, container string, service string, duration string, logType string, sinceTime string, maxLines string) (string, error) {
+func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload string, container string, duration string, maxLines string) (string, error) {
 	if namespace == "" {
 		return "", fmt.Errorf("namespace is required")
 	}
@@ -77,7 +74,7 @@ func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload str
 			continue
 		}
 
-		podLogs, err := k.PodLogs(ctx, namespace, pod.Name, podContainer, workload, service, duration, logType, sinceTime, maxLines)
+		podLogs, err := k.PodLogs(ctx, namespace, pod.Name, podContainer, workload, duration, maxLines)
 		if err != nil {
 			// Log the error but continue with other pods
 			allLogs = append(allLogs, fmt.Sprintf("Error getting logs for pod %s: %v", pod.Name, err))
@@ -101,12 +98,9 @@ func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload str
 //   - podName: the name of the pod
 //   - container: container name (optional, will be auto-detected if not provided)
 //   - workload: workload name (optional)
-//   - service: service name (optional)
 //   - duration: time duration (e.g., "5m", "1h") - optional
-//   - logType: type of logs (app, proxy, ztunnel, waypoint) - optional
-//   - sinceTime: Unix timestamp for start time - optional
 //   - maxLines: maximum number of lines to return - optional
-func (k *Kiali) PodLogs(ctx context.Context, namespace string, podName string, container string, workload string, service string, duration string, logType string, sinceTime string, maxLines string) (string, error) {
+func (k *Kiali) PodLogs(ctx context.Context, namespace string, podName string, container string, workload string, duration string, maxLines string) (string, error) {
 	if namespace == "" {
 		return "", fmt.Errorf("namespace is required")
 	}
@@ -167,17 +161,8 @@ func (k *Kiali) PodLogs(ctx context.Context, namespace string, podName string, c
 	if workload != "" {
 		q.Set("workload", workload)
 	}
-	if service != "" {
-		q.Set("service", service)
-	}
 	if duration != "" {
 		q.Set("duration", duration)
-	}
-	if logType != "" {
-		q.Set("logType", logType)
-	}
-	if sinceTime != "" {
-		q.Set("sinceTime", sinceTime)
 	}
 	if maxLines != "" {
 		q.Set("maxLines", maxLines)
