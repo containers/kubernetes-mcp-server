@@ -346,16 +346,11 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func parseScaleValue(desiredScale interface{}) (int64, error) {
-	switch s := desiredScale.(type) {
-	case float64:
-		return int64(s), nil
-	case int:
-		return int64(s), nil
-	case int64:
-		return s, nil
-	default:
-		return 0, fmt.Errorf("failed to parse scale parameter: expected integer, got %T", desiredScale)
+	v, err := api.ParseInt64(desiredScale)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse scale parameter: %w", err)
 	}
+	return v, nil
 }
 
 func parseGroupVersionKind(arguments map[string]interface{}) (*schema.GroupVersionKind, error) {

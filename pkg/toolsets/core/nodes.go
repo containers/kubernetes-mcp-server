@@ -108,15 +108,10 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	tailLines := params.GetArguments()["tailLines"]
 	var tailInt int64
 	if tailLines != nil {
-		// Convert to int64 - safely handle both float64 (JSON number) and int types
-		switch v := tailLines.(type) {
-		case float64:
-			tailInt = int64(v)
-		case int:
-		case int64:
-			tailInt = v
-		default:
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tailLines)), nil
+		var err error
+		tailInt, err = api.ParseInt64(tailLines)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse tailLines parameter: %w", err)), nil
 		}
 	}
 	ret, err := params.NodesLog(params, name, query, tailInt)

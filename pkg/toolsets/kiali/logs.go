@@ -86,14 +86,11 @@ func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 
 	// Convert tail to maxLines
 	if tail != nil {
-		switch v := tail.(type) {
-		case float64:
-			maxLines = fmt.Sprintf("%.0f", v)
-		case int:
-			maxLines = fmt.Sprintf("%d", v)
-		case int64:
-			maxLines = fmt.Sprintf("%d", v)
+		tailInt, err := api.ParseInt64(tail)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: %w", err)), nil
 		}
+		maxLines = fmt.Sprintf("%d", tailInt)
 	}
 
 	// If no container specified, we need to get workload details first to find the main app container

@@ -397,16 +397,10 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	tail := params.GetArguments()["tail"]
 	var tailInt int64
 	if tail != nil {
-		// Convert to int64 - safely handle both float64 (JSON number) and int types
-		switch v := tail.(type) {
-		case float64:
-			tailInt = int64(v)
-		case int:
-			tailInt = int64(v)
-		case int64:
-			tailInt = v
-		default:
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tail)), nil
+		var err error
+		tailInt, err = api.ParseInt64(tail)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: %w", err)), nil
 		}
 	}
 
