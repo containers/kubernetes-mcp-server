@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"fmt"
@@ -7,13 +7,15 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func initManageIstioConfig() []api.ServerTool {
+func InitManageIstioConfig() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
+	name := defaults.ToolsetName() + "_manage_istio_config"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_manage_istio_config",
+			Name:        name,
 			Description: "Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
