@@ -190,7 +190,7 @@ uvx kubernetes-mcp-server@latest --help
 | `--port`                  | Starts the MCP server in Streamable HTTP mode (path /mcp) and Server-Sent Event (SSE) (path /sse) mode and listens on the specified port .                                                                                                                                                    |
 | `--log-level`             | Sets the logging level (values [from 0-9](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md)). Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
 | `--config`                | (Optional) Path to the main TOML configuration file. See [Drop-in Configuration](#drop-in-configuration) section below for details.                                                                                                                                                          |
-| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. See [Drop-in Configuration](#drop-in-configuration) section below for details.                                                                                                         |
+| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Drop-in Configuration](#drop-in-configuration) section below for details.                       |
 | `--kubeconfig`            | Path to the Kubernetes configuration file. If not provided, it will try to resolve the configuration (in-cluster, default location, etc.).                                                                                                                                                    |
 | `--list-output`           | Output format for resource list operations (one of: yaml, table) (default "table")                                                                                                                                                                                                            |
 | `--read-only`             | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
@@ -212,6 +212,7 @@ Configuration values are loaded and merged in the following order (later sources
 
 #### How Drop-in Files Work
 
+- **Default Directory**: If `--config-dir` is not specified, the server looks for drop-in files in `conf.d/` relative to the main config file's directory (when `--config` is provided)
 - **File Naming**: Use numeric prefixes to control loading order (e.g., `00-base.toml`, `10-cluster.toml`, `99-override.toml`)
 - **File Extension**: Only `.toml` files are processed; dotfiles (starting with `.`) are ignored
 - **Partial Configuration**: Drop-in files can contain only a subset of configuration options
@@ -248,20 +249,25 @@ The server will:
 
 #### Example: Using Both Config Methods
 
-**Command:**
+**Command (using default `conf.d` directory):**
 ```shell
-kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
-                      --config-dir /etc/kubernetes-mcp-server/config.d/
+kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml
 ```
 
 **Directory structure:**
 ```
 /etc/kubernetes-mcp-server/
 ├── config.toml              # Main configuration
-└── config.d/
+└── conf.d/                  # Default drop-in directory (automatically loaded)
     ├── 00-base.toml         # Base overrides
     ├── 10-toolsets.toml     # Toolset-specific config
     └── 99-local.toml        # Local overrides
+```
+
+**Command (with explicit `--config-dir`):**
+```shell
+kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
+                      --config-dir /etc/kubernetes-mcp-server/config.d/
 ```
 
 **Example drop-in file** (`10-toolsets.toml`):
@@ -280,7 +286,7 @@ read_only = true
 **To apply changes:**
 ```shell
 # Edit config files
-vim /etc/kubernetes-mcp-server/config.d/99-local.toml
+vim /etc/kubernetes-mcp-server/conf.d/99-local.toml
 
 # Reload without restarting
 pkill -HUP kubernetes-mcp-server
