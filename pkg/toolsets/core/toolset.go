@@ -30,6 +30,11 @@ func (t *Toolset) GetTools(o internalk8s.Openshift) []api.ServerTool {
 	)
 }
 
+func (t *Toolset) GetPrompts(_ internalk8s.Openshift) []api.ServerPrompt {
+	// Core toolset prompts will be loaded from embedded YAML files
+	return initPrompts()
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

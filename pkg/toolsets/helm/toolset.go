@@ -26,6 +26,11 @@ func (t *Toolset) GetTools(_ internalk8s.Openshift) []api.ServerTool {
 	)
 }
 
+func (t *Toolset) GetPrompts(_ internalk8s.Openshift) []api.ServerPrompt {
+	// Helm toolset does not provide prompts
+	return nil
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

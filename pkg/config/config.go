@@ -72,6 +72,12 @@ type StaticConfig struct {
 	// This map holds raw TOML primitives that will be parsed by registered toolset parsers
 	ToolsetConfigs map[string]toml.Primitive `toml:"toolset_configs,omitempty"`
 
+	// Prompt configuration
+	// Inline prompt definitions in TOML
+	Prompts []PromptConfig `toml:"prompts,omitempty"`
+	// When true, disable embedded prompts from toolsets and use only config-defined ones
+	DisableEmbeddedPrompts bool `toml:"disable_embedded_prompts,omitempty"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]Extended
 	// Internal: parsed toolset configs (not exposed to TOML package)
@@ -85,6 +91,27 @@ type GroupVersionKind struct {
 	Group   string `toml:"group"`
 	Version string `toml:"version"`
 	Kind    string `toml:"kind,omitempty"`
+}
+
+// PromptConfig represents an inline prompt definition in TOML
+type PromptConfig struct {
+	Name        string                 `toml:"name"`
+	Description string                 `toml:"description"`
+	Arguments   []PromptArgumentConfig `toml:"arguments,omitempty"`
+	Messages    []PromptMessageConfig  `toml:"messages"`
+}
+
+// PromptArgumentConfig represents a prompt argument in TOML
+type PromptArgumentConfig struct {
+	Name        string `toml:"name"`
+	Description string `toml:"description"`
+	Required    bool   `toml:"required"`
+}
+
+// PromptMessageConfig represents a prompt message in TOML
+type PromptMessageConfig struct {
+	Role    string `toml:"role"`
+	Content string `toml:"content"`
 }
 
 type ReadConfigOpt func(cfg *StaticConfig)
