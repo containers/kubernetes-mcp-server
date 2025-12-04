@@ -7,15 +7,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 )
 
 const (
+	// eventuallyTick is the polling interval for Eventually assertions
+	eventuallyTick = time.Millisecond
 	// watcherStateTimeout is the maximum time to wait for the watcher to capture initial state
 	watcherStateTimeout = 100 * time.Millisecond
+	watcherPollTimeout  = 250 * time.Millisecond
 )
 
 type ClusterStateTestSuite struct {
@@ -33,13 +37,13 @@ func (s *ClusterStateTestSuite) TearDownTest() {
 	}
 }
 
-// waitForWatcherState waits for the watcher to capture initial state
-func (s *ClusterStateTestSuite) waitForWatcherState(watcher *ClusterState) {
-	s.NoError(test.WaitForCondition(watcherStateTimeout, func() bool {
+// waitForWatcherInitialState waits for the watcher to capture initial state
+func (s *ClusterStateTestSuite) waitForWatcherInitialState(watcher *ClusterState) {
+	s.Eventually(func() bool {
 		watcher.mu.Lock()
 		defer watcher.mu.Unlock()
 		return len(watcher.lastKnownState.apiGroups) > 0
-	}), "timeout waiting for watcher to capture initial state")
+	}, watcherStateTimeout, eventuallyTick, "timeout waiting for watcher to capture initial state")
 }
 
 func (s *ClusterStateTestSuite) TestNewClusterState() {
@@ -175,8 +179,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}()
 		s.T().Cleanup(watcher.Close)
 
-		// Wait for the watcher to capture initial state
-		s.waitForWatcherState(watcher)
+		s.waitForWatcherInitialState(watcher)
 
 		s.Run("captures API groups", func() {
 			s.NotEmpty(watcher.lastKnownState.apiGroups, "should capture at least one API group (apps)")
@@ -212,8 +215,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}()
 		s.T().Cleanup(watcher.Close)
 
-		// Wait for initial state capture
-		s.waitForWatcherState(watcher)
+		s.waitForWatcherInitialState(watcher)
 
 		// Modify the handler to add new API groups
 		handler.Groups = []string{
@@ -221,9 +223,9 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}
 
 		// Wait for change detection - the watcher invalidates the cache on each poll
-		s.Require().NoError(test.WaitForCondition(500*time.Millisecond, func() bool {
+		s.Eventually(func() bool {
 			return callCount.Load() >= 1
-		}), "timeout waiting for onChange callback")
+		}, watcherPollTimeout, eventuallyTick, "timeout waiting for onChange callback")
 
 		s.GreaterOrEqual(callCount.Load(), int32(1), "onChange should be called at least once")
 	})
@@ -247,7 +249,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		s.T().Cleanup(watcher.Close)
 
 		// Wait for the watcher to capture initial state
-		s.waitForWatcherState(watcher)
+		s.waitForWatcherInitialState(watcher)
 
 		s.Run("detects OpenShift via API groups", func() {
 			s.True(watcher.lastKnownState.isOpenShift)
@@ -280,7 +282,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		s.T().Cleanup(watcher.Close)
 
 		// Wait for the watcher to start and capture initial state
-		s.waitForWatcherState(watcher)
+		s.waitForWatcherInitialState(watcher)
 
 		// Modify the handler to trigger a change
 		handler.Groups = []string{
@@ -288,9 +290,9 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}
 
 		// Wait for onChange to be called (which returns an error)
-		s.Require().NoError(test.WaitForCondition(500*time.Millisecond, func() bool {
+		s.Eventually(func() bool {
 			return errorCallCount.Load() >= 1
-		}), "timeout waiting for onChange callback")
+		}, watcherPollTimeout, eventuallyTick, "timeout waiting for onChange callback")
 
 		s.GreaterOrEqual(errorCallCount.Load(), int32(1), "onChange should be called even when it returns an error")
 	})
@@ -303,6 +305,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 
 		watcher := NewClusterState(discoveryClient)
 		watcher.pollInterval = 50 * time.Millisecond
+		watcher.debounceWindow = 10 * time.Millisecond
 
 		var callCount atomic.Int32
 		onChange := func() error {
@@ -315,18 +318,17 @@ func (s *ClusterStateTestSuite) TestClose() {
 		}()
 
 		// Wait for the watcher to start
-		s.waitForWatcherState(watcher)
+		s.waitForWatcherInitialState(watcher)
 
 		watcher.Close()
 
 		s.Run("stops polling", func() {
 			beforeCount := callCount.Load()
 			// Wait longer than poll interval to verify no more polling
-			// We expect this to timeout because no callbacks should be triggered after close
-			err := test.WaitForCondition(150*time.Millisecond, func() bool {
+			// We expect this to never happen because no callbacks should be triggered after close
+			s.Never(func() bool {
 				return callCount.Load() > beforeCount
-			})
-			s.Error(err, "should timeout because no polling occurs after close")
+			}, watcherPollTimeout, eventuallyTick, "should not poll after close")
 			afterCount := callCount.Load()
 			s.Equal(beforeCount, afterCount, "should not poll after close")
 		})
@@ -367,7 +369,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		}()
 
 		// Wait for the watcher to start
-		s.waitForWatcherState(watcher)
+		s.waitForWatcherInitialState(watcher)
 
 		// Modify the handler to trigger a change and start the debounce timer
 		handler.Groups = []string{
@@ -375,11 +377,11 @@ func (s *ClusterStateTestSuite) TestClose() {
 		}
 
 		// Wait for the change to be detected (debounce timer starts)
-		s.Require().NoError(test.WaitForCondition(200*time.Millisecond, func() bool {
+		s.Eventually(func() bool {
 			watcher.mu.Lock()
 			defer watcher.mu.Unlock()
 			return watcher.debounceTimer != nil
-		}), "timeout waiting for debounce timer to start")
+		}, watcherPollTimeout, eventuallyTick, "timeout waiting for debounce timer to start")
 
 		// Close the watcher before debounce window expires
 		watcher.Close()
