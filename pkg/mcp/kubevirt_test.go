@@ -453,6 +453,221 @@ func (s *KubevirtSuite) TestCreate() {
 	})
 }
 
+func (s *KubevirtSuite) TestVMLifecycle() {
+	// Create a test VM in Halted state for start tests
+	dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+	vm := &unstructured.Unstructured{}
+	vm.SetUnstructuredContent(map[string]interface{}{
+		"apiVersion": "kubevirt.io/v1",
+		"kind":       "VirtualMachine",
+		"metadata": map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+		},
+		"spec": map[string]interface{}{
+			"runStrategy": "Halted",
+		},
+	})
+	_, err := dynamicClient.Resource(schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "virtualmachines",
+	}).Namespace("default").Create(s.T().Context(), vm, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create test VM")
+
+	s.Run("vm_lifecycle missing required params", func() {
+		testCases := []string{"name", "namespace", "action"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"name":      "test-vm-lifecycle",
+					"namespace": "default",
+					"action":    "start",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_lifecycle", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_lifecycle invalid action", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "invalid",
+		})
+		s.Require().Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail due to invalid action")
+		s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "invalid action"),
+			"Expected invalid action message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
+
+	s.Run("vm_lifecycle action=start on halted VM", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "start",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine started successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			s.Equal("test-vm-lifecycle", decodedResult[0].GetName(), "invalid resource name")
+			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
+			s.Equal("Always",
+				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
+				"expected runStrategy to be Always after start")
+		})
+	})
+
+	s.Run("vm_lifecycle action=start on already running VM (idempotent)", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "start",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content showing VM was already running", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			expectedPrefix := fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already running", "test-vm-lifecycle", "default")
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, expectedPrefix),
+				"Expected already running message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			s.Equal("Always",
+				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
+				"expected runStrategy to remain Always")
+		})
+	})
+
+	s.Run("vm_lifecycle action=stop on running VM", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "stop",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine stopped successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			s.Equal("test-vm-lifecycle", decodedResult[0].GetName(), "invalid resource name")
+			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
+			s.Equal("Halted",
+				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
+				"expected runStrategy to be Halted after stop")
+		})
+	})
+
+	s.Run("vm_lifecycle action=stop on already stopped VM (idempotent)", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "stop",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content showing VM was already stopped", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			expectedPrefix := fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already stopped", "test-vm-lifecycle", "default")
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, expectedPrefix),
+				"Expected already stopped message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			s.Equal("Halted",
+				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
+				"expected runStrategy to remain Halted")
+		})
+	})
+
+	s.Run("vm_lifecycle action=restart on stopped VM", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "restart",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content showing VM restarted from stopped state", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine restarted successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			s.Equal("Always",
+				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
+				"expected runStrategy to be Always after restart from Halted")
+		})
+	})
+
+	s.Run("vm_lifecycle action=restart on running VM", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "restart",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine restarted successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			s.Equal("test-vm-lifecycle", decodedResult[0].GetName(), "invalid resource name")
+			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
+			s.Equal("Always",
+				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
+				"expected runStrategy to be Always after restart")
+		})
+	})
+
+	s.Run("vm_lifecycle on non-existent VM", func() {
+		for _, action := range []string{"start", "stop", "restart"} {
+			s.Run("action="+action, func() {
+				toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+					"name":      "non-existent-vm",
+					"namespace": "default",
+					"action":    action,
+				})
+				s.Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail for non-existent VM")
+				s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "failed to get VirtualMachine"),
+					"Expected error message about VM not found, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			})
+		}
+	})
+}
+
 func TestKubevirt(t *testing.T) {
 	suite.Run(t, new(KubevirtSuite))
 }
