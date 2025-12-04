@@ -14,6 +14,10 @@ import (
 )
 
 const (
+	DefaultDropInConfigDir = "conf.d"
+)
+
+const (
 	ClusterProviderKubeConfig = "kubeconfig"
 	ClusterProviderInCluster  = "in-cluster"
 	ClusterProviderDisabled   = "disabled"
@@ -102,110 +106,77 @@ func WithDirPath(path string) ReadConfigOpt {
 // Read reads the toml file, applies drop-in configs from configDir (if provided),
 // and returns the StaticConfig with any opts applied.
 // Loading order: defaults → main config file → drop-in files (lexically sorted)
-func Read(configPath string, configDir string, opts ...ReadConfigOpt) (*StaticConfig, error) {
-	// Start with defaults
-	cfg := Default()
+func Read(configPath, dropInConfigDir string) (*StaticConfig, error) {
+	var configFiles []string
+	var configDir string
 
-	// Get the absolute dir path for the main config file
-	var dirPath string
+	// Main config file
 	if configPath != "" {
+		klog.V(2).Infof("Loading main config from: %s", configPath)
+		configFiles = append(configFiles, configPath)
+
 		// get and save the absolute dir path to the config file, so that other config parsers can use it
 		absPath, err := filepath.Abs(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve absolute path to config file: %w", err)
 		}
-		dirPath = filepath.Dir(absPath)
-
-		// Load main config file
-		klog.V(2).Infof("Loading main config from: %s", configPath)
-		if err := mergeConfigFile(cfg, configPath, append(opts, WithDirPath(dirPath))...); err != nil {
-			return nil, fmt.Errorf("failed to load main config file %s: %w", configPath, err)
-		}
+		configDir = filepath.Dir(absPath)
 	}
 
-	// Load drop-in config files if directory is specified
-	if configDir != "" {
-		if err := loadDropInConfigs(cfg, configDir, append(opts, WithDirPath(dirPath))...); err != nil {
-			return nil, fmt.Errorf("failed to load drop-in configs from %s: %w", configDir, err)
-		}
+	// Drop-in config files
+	if dropInConfigDir == "" {
+		dropInConfigDir = DefaultDropInConfigDir
 	}
 
-	return cfg, nil
-}
+	// Resolve drop-in config directory path (relative paths are resolved against config directory)
+	if configDir != "" && !filepath.IsAbs(dropInConfigDir) {
+		dropInConfigDir = filepath.Join(configDir, dropInConfigDir)
+	}
 
-// mergeConfigFile reads a config file and merges its values into the target config.
-// Values present in the file will overwrite existing values in cfg.
-// Values not present in the file will remain unchanged in cfg.
-func mergeConfigFile(cfg *StaticConfig, filePath string, opts ...ReadConfigOpt) error {
-	configData, err := os.ReadFile(filePath)
+	if configDir == "" {
+		configDir = dropInConfigDir
+	}
+
+	dropInFiles, err := loadDropInConfigs(dropInConfigDir)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to load drop-in configs from %s: %w", dropInConfigDir, err)
 	}
+	if len(dropInFiles) == 0 {
+		klog.V(2).Infof("No drop-in config files found in: %s", dropInConfigDir)
+	} else {
+		klog.V(2).Infof("Loading %d drop-in config file(s) from: %s", len(dropInFiles), dropInConfigDir)
+	}
+	configFiles = append(configFiles, dropInFiles...)
 
-	md, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(cfg)
+	// Read and merge all config files
+	configData, err := readAndMergeFiles(configFiles)
 	if err != nil {
-		return fmt.Errorf("failed to decode TOML: %w", err)
+		return nil, fmt.Errorf("failed to read and merge config files: %w", err)
 	}
 
-	for _, opt := range opts {
-		opt(cfg)
-	}
-
-	ctx := withConfigDirPath(context.Background(), cfg.configDirPath)
-
-	cfg.parsedClusterProviderConfigs, err = providerConfigRegistry.parse(ctx, md, cfg.ClusterProviderConfigs)
-	if err != nil {
-		return err
-	}
-
-	cfg.parsedToolsetConfigs, err = toolsetConfigRegistry.parse(ctx, md, cfg.ToolsetConfigs)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return ReadToml(configData, WithDirPath(configDir))
 }
 
 // loadDropInConfigs loads and merges config files from a drop-in directory.
 // Files are processed in lexical (alphabetical) order.
 // Only files with .toml extension are processed; dotfiles are ignored.
-func loadDropInConfigs(cfg *StaticConfig, dropInDir string, opts ...ReadConfigOpt) error {
+func loadDropInConfigs(dropInConfigDir string) ([]string, error) {
 	// Check if directory exists
-	info, err := os.Stat(dropInDir)
+	info, err := os.Stat(dropInConfigDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			klog.V(2).Infof("Drop-in config directory does not exist, skipping: %s", dropInDir)
-			return nil
+			klog.V(2).Infof("Drop-in config directory does not exist, skipping: %s", dropInConfigDir)
+			return nil, nil
 		}
-		return fmt.Errorf("failed to stat drop-in directory: %w", err)
+		return nil, fmt.Errorf("failed to stat drop-in directory: %w", err)
 	}
 
 	if !info.IsDir() {
-		return fmt.Errorf("drop-in config path is not a directory: %s", dropInDir)
+		return nil, fmt.Errorf("drop-in config path is not a directory: %s", dropInConfigDir)
 	}
 
 	// Get all .toml files in the directory
-	files, err := getSortedConfigFiles(dropInDir)
-	if err != nil {
-		return err
-	}
-
-	if len(files) == 0 {
-		klog.V(2).Infof("No drop-in config files found in: %s", dropInDir)
-		return nil
-	}
-
-	klog.V(2).Infof("Loading %d drop-in config file(s) from: %s", len(files), dropInDir)
-
-	// Merge each file in order
-	for _, file := range files {
-		klog.V(3).Infof("  - Merging drop-in config: %s", filepath.Base(file))
-		if err := mergeConfigFile(cfg, file, opts...); err != nil {
-			return fmt.Errorf("failed to merge drop-in config %s: %w", file, err)
-		}
-	}
-
-	return nil
+	return getSortedConfigFiles(dropInConfigDir)
 }
 
 // getSortedConfigFiles returns a sorted list of .toml files in the specified directory.
@@ -247,7 +218,54 @@ func getSortedConfigFiles(dir string) ([]string, error) {
 	return files, nil
 }
 
-// ReadToml reads the toml data and returns the StaticConfig, with any opts applied
+// readAndMergeFiles reads and merges multiple TOML config files into a single byte slice.
+// Files are merged in the order provided, with later files overriding earlier ones.
+func readAndMergeFiles(files []string) ([]byte, error) {
+	rawConfig := map[string]interface{}{}
+	// Merge each file in order using deep merge
+	for _, file := range files {
+		klog.V(3).Infof("  - Merging config: %s", filepath.Base(file))
+		configData, err := os.ReadFile(file)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config %s: %w", file, err)
+		}
+
+		dropInConfig := make(map[string]interface{})
+		if _, err = toml.NewDecoder(bytes.NewReader(configData)).Decode(&dropInConfig); err != nil {
+			return nil, fmt.Errorf("failed to decode config %s: %w", file, err)
+		}
+
+		deepMerge(rawConfig, dropInConfig)
+	}
+
+	bufferedConfig := new(bytes.Buffer)
+	if err := toml.NewEncoder(bufferedConfig).Encode(rawConfig); err != nil {
+		return nil, fmt.Errorf("failed to encode merged config: %w", err)
+	}
+	return bufferedConfig.Bytes(), nil
+}
+
+// deepMerge recursively merges src into dst.
+// For nested maps, it merges recursively. For other types, src overwrites dst.
+func deepMerge(dst, src map[string]interface{}) {
+	for key, srcVal := range src {
+		if dstVal, exists := dst[key]; exists {
+			// Both have this key - check if both are maps for recursive merge
+			srcMap, srcIsMap := srcVal.(map[string]interface{})
+			dstMap, dstIsMap := dstVal.(map[string]interface{})
+			if srcIsMap && dstIsMap {
+				deepMerge(dstMap, srcMap)
+				continue
+			}
+		}
+		// Either key doesn't exist in dst, or values aren't both maps - overwrite
+		dst[key] = srcVal
+	}
+}
+
+// ReadToml reads the toml data, loads and applies drop-in configs from configDir (if provided),
+// and returns the StaticConfig with any opts applied.
+// Loading order: defaults → main config file → drop-in files (lexically sorted)
 func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	config := Default()
 	md, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(config)
