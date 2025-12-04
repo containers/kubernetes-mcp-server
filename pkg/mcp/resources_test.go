@@ -723,6 +723,94 @@ func (s *ResourcesSuite) TestResourcesScale() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesScaleDenied() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		denied_resources = [
+			{ group = "apps", version = "v1" },
+			{ group = "", version = "v1", kind = "ReplicationController" }
+		]
+	`), s.Cfg), "Expected to parse denied resources config")
+	s.InitMcpClient()
+	s.Run("resources_scale get (denied by kind)", func() {
+		deniedByKind, err := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ReplicationController",
+			"namespace":  "default",
+			"name":       "nonexistent-rc",
+		})
+		s.Run("has error", func() {
+			s.Truef(deniedByKind.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes denial", func() {
+			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: /v1, Kind=ReplicationController"
+			s.Regexpf(expectedMessage, msg,
+				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+		})
+	})
+	s.Run("resources_scale update (denied by kind)", func() {
+		deniedByKind, err := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ReplicationController",
+			"namespace":  "default",
+			"name":       "nonexistent-rc",
+			"scale":      1337,
+		})
+		s.Run("has error", func() {
+			s.Truef(deniedByKind.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes denial", func() {
+			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: /v1, Kind=ReplicationController"
+			s.Regexpf(expectedMessage, msg,
+				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+		})
+	})
+	s.Run("resources_scale get (denied by group)", func() {
+		deniedByGroup, err := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "StatefulSet",
+			"namespace":  "default",
+			"name":       "nonexistent-statefulset",
+		})
+		s.Run("has error", func() {
+			s.Truef(deniedByGroup.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes denial", func() {
+			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: apps/v1, Kind=StatefulSet"
+			s.Regexpf(expectedMessage, msg,
+				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+		})
+	})
+	s.Run("resources_scale update (denied by group)", func() {
+		deniedByGroup, err := s.CallTool("resources_scale", map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "StatefulSet",
+			"namespace":  "default",
+			"name":       "nonexistent-statefulset",
+			"scale":      1337,
+		})
+		s.Run("has error", func() {
+			s.Truef(deniedByGroup.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes denial", func() {
+			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: apps/v1, Kind=StatefulSet"
+			s.Regexpf(expectedMessage, msg,
+				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+		})
+	})
+}
+
 func TestResources(t *testing.T) {
 	suite.Run(t, new(ResourcesSuite))
 }
