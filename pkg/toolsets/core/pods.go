@@ -205,8 +205,12 @@ func initPods() []api.ServerTool {
 						Type:        "boolean",
 						Description: "Return previous terminated container logs (Optional)",
 					},
+					"query": {
+						Type:        "string",
+						Description: "filter logs by query",
+					},
 				},
-				Required: []string{"name"},
+				Required: []string{"name", "query"},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Pods: Log",
@@ -404,7 +408,13 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 	}
 
-	ret, err := params.PodsLog(params.Context, ns.(string), name.(string), container.(string), previousBool, tailInt)
+	query := params.GetArguments()["query"]
+	if query == nil {
+		query = ""
+	}
+
+	ret, err := params.PodsLog(params.Context, ns.(string), name.(string), container.(string), previousBool, tailInt,
+		query.(string))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s log in namespace %s: %v", name, ns, err)), nil
 	} else if ret == "" {
