@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
@@ -129,6 +130,117 @@ func TestConfig(t *testing.T) {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedDisableDestruction, out.String(), err)
 		}
 	})
+}
+
+type CmdSuite struct {
+	suite.Suite
+	testDataDir string
+}
+
+func (s *CmdSuite) SetupSuite() {
+	_, file, _, _ := runtime.Caller(0)
+	s.testDataDir = filepath.Join(filepath.Dir(file), "testdata")
+}
+
+func (s *CmdSuite) TestConfigDir() {
+	s.Run("set with --config-dir standalone", func() {
+		dropInDir := s.T().TempDir()
+		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-config.toml"), []byte(`
+			list_output = "yaml"
+			read_only = true
+			disable_destructive = true
+		`), 0644))
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", dropInDir})
+		s.Require().NoError(rootCmd.Execute())
+		s.Contains(out.String(), "ListOutput: yaml")
+		s.Contains(out.String(), "Read-only mode: true")
+		s.Contains(out.String(), "Disable destructive tools: true")
+	})
+	s.Run("--config-dir path is a file throws error", func() {
+		tempDir := s.T().TempDir()
+		filePath := filepath.Join(tempDir, "not-a-directory.toml")
+		s.Require().NoError(os.WriteFile(filePath, []byte("log_level = 1"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", filePath})
+		err := rootCmd.Execute()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "drop-in config path is not a directory")
+	})
+	s.Run("nonexistent --config-dir is silently skipped", func() {
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", "/nonexistent/path/to/config-dir"})
+		err := rootCmd.Execute()
+		s.Require().NoError(err, "Nonexistent directories should be gracefully skipped")
+		s.Contains(out.String(), "ListOutput: table", "Default values should be used")
+	})
+	s.Run("--config with --config-dir merges configs", func() {
+		tempDir := s.T().TempDir()
+		mainConfigPath := filepath.Join(tempDir, "config.toml")
+		s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
+			list_output = "table"
+			read_only = false
+		`), 0644))
+
+		dropInDir := filepath.Join(tempDir, "conf.d")
+		s.Require().NoError(os.Mkdir(dropInDir, 0755))
+		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-override.toml"), []byte(`
+			read_only = true
+			disable_destructive = true
+		`), 0644))
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config", mainConfigPath, "--config-dir", dropInDir})
+		s.Require().NoError(rootCmd.Execute())
+		s.Contains(out.String(), "ListOutput: table", "list_output from main config")
+		s.Contains(out.String(), "Read-only mode: true", "read_only overridden by drop-in")
+		s.Contains(out.String(), "Disable destructive tools: true", "disable_destructive from drop-in")
+	})
+	s.Run("multiple drop-in files are merged in order", func() {
+		dropInDir := s.T().TempDir()
+		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-first.toml"), []byte(`
+			list_output = "yaml"
+			read_only = true
+		`), 0644))
+		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "20-second.toml"), []byte(`
+			list_output = "table"
+			disable_destructive = true
+		`), 0644))
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", dropInDir})
+		s.Require().NoError(rootCmd.Execute())
+		s.Contains(out.String(), "ListOutput: table", "list_output from 20-second.toml (last wins)")
+		s.Contains(out.String(), "Read-only mode: true", "read_only from 10-first.toml")
+		s.Contains(out.String(), "Disable destructive tools: true", "disable_destructive from 20-second.toml")
+	})
+	s.Run("flags take precedence over --config-dir", func() {
+		dropInDir := s.T().TempDir()
+		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-config.toml"), []byte(`
+			list_output = "yaml"
+			read_only = true
+			disable_destructive = true
+		`), 0644))
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--list-output=table", "--read-only=false", "--disable-destructive=false", "--config-dir", dropInDir})
+		s.Require().NoError(rootCmd.Execute())
+		s.Contains(out.String(), "ListOutput: table", "flag takes precedence")
+		s.Contains(out.String(), "Read-only mode: false", "flag takes precedence")
+		s.Contains(out.String(), "Disable destructive tools: false", "flag takes precedence")
+	})
+}
+
+func TestCmd(t *testing.T) {
+	suite.Run(t, new(CmdSuite))
 }
 
 func TestToolsets(t *testing.T) {
