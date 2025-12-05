@@ -104,7 +104,7 @@ jobs:
 
       - name: Run gevals evaluation
         id: gevals
-        uses: genmcp/gevals/.github/actions/gevals-action@main
+        uses: genmcp/gevals/.github/actions/gevals-action@v0.0.1
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           gevals-version: 'latest'
