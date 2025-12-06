@@ -1,0 +1,17 @@
+kind: Task
+metadata:
+  name: "Unhealthy Namespaces"
+  category: "High-Level Observability & Health"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash          
+  prompt:
+    inline: Are there any unhealthy namespaces in my mesh right now?
