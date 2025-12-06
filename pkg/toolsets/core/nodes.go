@@ -93,6 +93,55 @@ func initNodes() []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: nodesTop},
+		{Tool: api.Tool{
+			Name:        "node_files",
+			Description: "Perform file operations (put, get, list) on a Kubernetes node filesystem by creating a privileged pod. WARNING: Requires privileged access to the node. This tool creates a temporary privileged pod that mounts the node's root filesystem to perform file operations. The pod is automatically deleted after the operation completes.",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"node_name": {
+						Type:        "string",
+						Description: "Name of the node to access",
+					},
+					"operation": {
+						Type:        "string",
+						Description: "Operation to perform: 'put' (copy from local to node), 'get' (copy from node to local), or 'list' (list files in a directory)",
+						Enum:        []any{"put", "get", "list"},
+					},
+					"source_path": {
+						Type:        "string",
+						Description: "Source path for the operation. For 'put': local file path. For 'get': node file path. For 'list': node directory path",
+					},
+					"dest_path": {
+						Type:        "string",
+						Description: "Destination path for the operation. For 'put': node file path. For 'get': local file path (optional, defaults to current directory). Not used for 'list'.",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace to create the temporary pod in (optional, defaults to 'default')",
+						Default:     api.ToRawMessage("default"),
+					},
+					"image": {
+						Type:        "string",
+						Description: "Container image to use for the privileged pod (optional, defaults to 'busybox')",
+						Default:     api.ToRawMessage("busybox"),
+					},
+					"privileged": {
+						Type:        "boolean",
+						Description: "Whether to run the container as privileged. Required for accessing node files. Set to false only if your use case doesn't require privileged access (default: true)",
+						Default:     api.ToRawMessage(true),
+					},
+				},
+				Required: []string{"node_name", "operation", "source_path"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Node: Files",
+				ReadOnlyHint:    ptr.To(false),
+				DestructiveHint: ptr.To(true),
+				IdempotentHint:  ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: nodeFiles},
 	}
 }
 
@@ -183,4 +232,60 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	return api.NewToolCallResult(buf.String(), nil), nil
+}
+
+func nodeFiles(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	args := params.GetArguments()
+
+	// Extract required parameters
+	nodeName, ok := args["node_name"].(string)
+	if !ok || nodeName == "" {
+		return api.NewToolCallResult("", errors.New("missing required argument: node_name")), nil
+	}
+
+	operation, ok := args["operation"].(string)
+	if !ok || operation == "" {
+		return api.NewToolCallResult("", errors.New("missing required argument: operation")), nil
+	}
+
+	sourcePath, ok := args["source_path"].(string)
+	if !ok || sourcePath == "" {
+		return api.NewToolCallResult("", errors.New("missing required argument: source_path")), nil
+	}
+
+	// Extract optional parameters with defaults
+	destPath, _ := args["dest_path"].(string)
+	namespace, _ := args["namespace"].(string)
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	image, _ := args["image"].(string)
+	if image == "" {
+		image = "busybox"
+	}
+
+	privileged := true
+	if privArg, ok := args["privileged"].(bool); ok {
+		privileged = privArg
+	}
+
+	// Create NodeFilesOptions
+	opts := kubernetes.NodeFilesOptions{
+		NodeName:   nodeName,
+		Operation:  operation,
+		SourcePath: sourcePath,
+		DestPath:   destPath,
+		Namespace:  namespace,
+		Image:      image,
+		Privileged: privileged,
+	}
+
+	// Call the NodesFiles function
+	ret, err := params.NodesFiles(params.Context, opts)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to perform node file operation: %v", err)), nil
+	}
+
+	return api.NewToolCallResult(ret, nil), nil
 }
