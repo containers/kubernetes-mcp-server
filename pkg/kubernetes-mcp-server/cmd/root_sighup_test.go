@@ -204,6 +204,49 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 	})
 }
 
+func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
+	// Create initial config with one prompt
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+        [[prompts]]
+        name = "initial-prompt"
+        description = "Initial prompt"
+
+        [[prompts.messages]]
+        role = "user"
+        content = "Initial message"
+    `), 0644))
+	s.InitServer(configPath, "")
+
+	prompts, err := s.server.GetPrompts()
+	s.Require().NoError(err)
+	s.Len(prompts, 1)
+	s.Equal("initial-prompt", prompts[0].Prompt.Name)
+
+	// Update config with new prompt
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+        [[prompts]]
+        name = "updated-prompt"
+        description = "Updated prompt"
+
+        [[prompts.messages]]
+        role = "user"
+        content = "Updated message"
+    `), 0644))
+
+	// Send SIGHUP
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	// Verify prompts were reloaded
+	s.Require().Eventually(func() bool {
+		prompts, err := s.server.GetPrompts()
+		if err != nil {
+			return false
+		}
+		return len(prompts) == 1 && prompts[0].Prompt.Name == "updated-prompt"
+	}, 2*time.Second, 50*time.Millisecond)
+}
+
 func TestSIGHUP(t *testing.T) {
 	suite.Run(t, new(SIGHUPSuite))
 }

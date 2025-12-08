@@ -292,6 +292,27 @@ vim /etc/kubernetes-mcp-server/conf.d/99-local.toml
 pkill -HUP kubernetes-mcp-server
 ```
 
+### MCP Prompts
+
+The server supports MCP prompts for workflow templates. Define custom prompts in `config.toml`:
+
+```toml
+[[prompts]]
+name = "my-workflow"
+title = "my workflow"
+description = "Custom workflow"
+
+[[prompts.arguments]]
+name = "resource_name"
+required = true
+
+[[prompts.messages]]
+role = "user"
+content = "Help me with {{resource_name}}"
+```
+
+See docs/PROMPTS.md for detailed documentation.
+
 ## 🛠️ Tools and Functionalities <a id="tools-and-functionalities"></a>
 
 The Kubernetes MCP server supports enabling or disabling specific groups of tools and functionalities (tools, resources, prompts, and so on) via the `--toolsets` command-line flag or `toolsets` configuration option.

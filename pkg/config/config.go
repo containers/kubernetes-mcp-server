@@ -74,6 +74,13 @@ type StaticConfig struct {
 	// This map holds raw TOML primitives that will be parsed by registered toolset parsers
 	ToolsetConfigs map[string]toml.Primitive `toml:"toolset_configs,omitempty"`
 
+	// Prompt configuration
+	// Raw TOML primitive for prompt definitions, parsed later
+	// Note: Uses toml:"-" because Primitive can't be encoded, only decoded
+	Prompts         toml.Primitive `toml:"-"`
+	promptsDefined  bool           // Internal: tracks if prompts were defined in config
+	promptsMetadata toml.MetaData  // Internal: metadata for prompts decoding
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]configapi.Extended
 	// Internal: parsed toolset configs (not exposed to TOML package)
@@ -280,6 +287,18 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		return nil, err
 	}
 
+	// Store prompts primitive if defined
+	if md.IsDefined("prompts") {
+		var temp struct {
+			Prompts toml.Primitive `toml:"prompts"`
+		}
+		// Re-decode to get the primitive
+		tempMd, _ := toml.NewDecoder(bytes.NewReader(configData)).Decode(&temp)
+		config.Prompts = temp.Prompts
+		config.promptsDefined = true
+		config.promptsMetadata = tempMd
+	}
+
 	return config, nil
 }
 
@@ -308,4 +327,14 @@ func (c *StaticConfig) GetToolsetConfig(name string) (configapi.Extended, bool) 
 
 func (c *StaticConfig) IsRequireOAuth() bool {
 	return c.RequireOAuth
+}
+
+// HasPrompts returns whether prompts were defined in the configuration
+func (c *StaticConfig) HasPrompts() bool {
+	return c.promptsDefined
+}
+
+// GetPromptsMetadata returns the TOML metadata for prompts
+func (c *StaticConfig) GetPromptsMetadata() toml.MetaData {
+	return c.promptsMetadata
 }
