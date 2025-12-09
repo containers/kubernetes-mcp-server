@@ -81,6 +81,9 @@ type StaticConfig struct {
 	promptsDefined  bool           // Internal: tracks if prompts were defined in config
 	promptsMetadata toml.MetaData  // Internal: metadata for prompts decoding
 
+	// When true, disable toolset-defined prompts (only use config-defined prompts)
+	DisableToolsetPrompts bool `toml:"disable_toolset_prompts,omitempty"`
+
 	// Server instructions to be provided by the MCP server to the MCP client
 	// This can be used to provide specific instructions on how the client should use the server
 	ServerInstructions string `toml:"server_instructions,omitempty"`
