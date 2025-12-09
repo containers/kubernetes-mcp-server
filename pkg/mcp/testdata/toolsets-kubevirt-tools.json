@@ -81,8 +81,7 @@
   {
     "annotations": {
       "title": "Virtual Machine: Lifecycle",
-      "destructiveHint": false,
-      "idempotentHint": true,
+      "destructiveHint": true,
       "openWorldHint": false
     },
     "description": "Manage VirtualMachine lifecycle: start, stop, or restart a VM",

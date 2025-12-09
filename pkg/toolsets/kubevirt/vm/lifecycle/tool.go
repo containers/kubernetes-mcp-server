@@ -48,8 +48,8 @@ func Tools() []api.ServerTool {
 				Annotations: api.ToolAnnotations{
 					Title:           "Virtual Machine: Lifecycle",
 					ReadOnlyHint:    ptr.To(false),
-					DestructiveHint: ptr.To(false),
-					IdempotentHint:  ptr.To(true),
+					DestructiveHint: ptr.To(true),
+					IdempotentHint:  ptr.To(false),
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
@@ -137,4 +137,3 @@ func getRequiredString(params api.ToolHandlerParams, key string) (string, error)
 	}
 	return str, nil
 }
-
