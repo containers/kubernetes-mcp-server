@@ -164,10 +164,10 @@ func (s *ParamsSuite) TestOptionalString() {
 		s.Equal("fallback", result)
 	})
 
-	s.Run("returns default when value is empty string", func() {
+	s.Run("returns empty string when value is empty string", func() {
 		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": ""}}}
 		result := OptionalString(params, "name", "default")
-		s.Equal("default", result)
+		s.Equal("", result)
 	})
 
 	s.Run("returns empty string when default is empty and key is missing", func() {

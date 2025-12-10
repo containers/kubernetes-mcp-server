@@ -55,9 +55,6 @@ func OptionalString(params ToolHandlerParams, key, defaultVal string) string {
 	if !ok {
 		return defaultVal
 	}
-	if str == "" {
-		return defaultVal
-	}
 	return str
 }
 
