@@ -3,7 +3,7 @@ package kubernetes
 import (
 	"context"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 )
 
 // McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
@@ -26,7 +26,7 @@ type Provider interface {
 	Close()
 }
 
-func NewProvider(cfg *config.StaticConfig) (Provider, error) {
+func NewProvider(cfg configapi.BaseConfig) (Provider, error) {
 	strategy := resolveStrategy(cfg)
 
 	factory, err := getProviderFactory(strategy)
@@ -37,18 +37,18 @@ func NewProvider(cfg *config.StaticConfig) (Provider, error) {
 	return factory(cfg)
 }
 
-func resolveStrategy(cfg *config.StaticConfig) string {
-	if cfg.ClusterProviderStrategy != "" {
-		return cfg.ClusterProviderStrategy
+func resolveStrategy(cfg configapi.BaseConfig) string {
+	if cfg.GetClusterProviderStrategy() != "" {
+		return cfg.GetClusterProviderStrategy()
 	}
 
-	if cfg.KubeConfig != "" {
-		return config.ClusterProviderKubeConfig
+	if cfg.GetKubeConfigPath() != "" {
+		return configapi.ClusterProviderKubeConfig
 	}
 
 	if _, inClusterConfigErr := InClusterConfig(); inClusterConfigErr == nil {
-		return config.ClusterProviderInCluster
+		return configapi.ClusterProviderInCluster
 	}
 
-	return config.ClusterProviderKubeConfig
+	return configapi.ClusterProviderKubeConfig
 }

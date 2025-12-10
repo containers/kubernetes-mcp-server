@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	authenticationv1api "k8s.io/api/authentication/v1"
 )
@@ -15,7 +15,7 @@ import (
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
-	staticConfig        *config.StaticConfig
+	config              configapi.BaseConfig
 	strategy            string
 	manager             *Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
@@ -25,18 +25,18 @@ type singleClusterProvider struct {
 var _ Provider = &singleClusterProvider{}
 
 func init() {
-	RegisterProvider(config.ClusterProviderInCluster, newSingleClusterProvider(config.ClusterProviderInCluster))
-	RegisterProvider(config.ClusterProviderDisabled, newSingleClusterProvider(config.ClusterProviderDisabled))
+	RegisterProvider(configapi.ClusterProviderInCluster, newSingleClusterProvider(configapi.ClusterProviderInCluster))
+	RegisterProvider(configapi.ClusterProviderDisabled, newSingleClusterProvider(configapi.ClusterProviderDisabled))
 }
 
 // newSingleClusterProvider creates a provider that manages a single cluster.
 // When used within a cluster or with an 'in-cluster' strategy, it uses an InClusterManager.
 // Otherwise, it uses a KubeconfigManager.
 func newSingleClusterProvider(strategy string) ProviderFactory {
-	return func(cfg *config.StaticConfig) (Provider, error) {
+	return func(cfg configapi.BaseConfig) (Provider, error) {
 		ret := &singleClusterProvider{
-			staticConfig: cfg,
-			strategy:     strategy,
+			config:   cfg,
+			strategy: strategy,
 		}
 		if err := ret.reset(); err != nil {
 			return nil, err
@@ -46,16 +46,16 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 }
 
 func (p *singleClusterProvider) reset() error {
-	if p.staticConfig != nil && p.staticConfig.KubeConfig != "" && p.strategy == config.ClusterProviderInCluster {
+	if p.config != nil && p.config.GetKubeConfigPath() != "" && p.strategy == configapi.ClusterProviderInCluster {
 		return fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy",
-			p.staticConfig.KubeConfig)
+			p.config.GetKubeConfigPath())
 	}
 
 	var err error
-	if p.strategy == config.ClusterProviderInCluster || IsInCluster(p.staticConfig) {
-		p.manager, err = NewInClusterManager(p.staticConfig)
+	if p.strategy == configapi.ClusterProviderInCluster || IsInCluster(p.config) {
+		p.manager, err = NewInClusterManager(p.config)
 	} else {
-		p.manager, err = NewKubeconfigManager(p.staticConfig, "")
+		p.manager, err = NewKubeconfigManager(p.config, "")
 	}
 	if err != nil {
 		if errors.Is(err, ErrorInClusterNotInCluster) {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	authenticationv1api "k8s.io/api/authentication/v1"
 )
@@ -19,7 +19,7 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
-	staticConfig        *config.StaticConfig
+	config              configapi.BaseConfig
 	defaultContext      string
 	managers            map[string]*Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
@@ -29,15 +29,15 @@ type kubeConfigClusterProvider struct {
 var _ Provider = &kubeConfigClusterProvider{}
 
 func init() {
-	RegisterProvider(config.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
+	RegisterProvider(configapi.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
 }
 
 // newKubeConfigClusterProvider creates a provider that manages multiple clusters
 // via kubeconfig contexts.
 // Internally, it leverages a KubeconfigManager for each context, initializing them
 // lazily when requested.
-func newKubeConfigClusterProvider(cfg *config.StaticConfig) (Provider, error) {
-	ret := &kubeConfigClusterProvider{staticConfig: cfg}
+func newKubeConfigClusterProvider(cfg configapi.BaseConfig) (Provider, error) {
+	ret := &kubeConfigClusterProvider{config: cfg}
 	if err := ret.reset(); err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func newKubeConfigClusterProvider(cfg *config.StaticConfig) (Provider, error) {
 }
 
 func (p *kubeConfigClusterProvider) reset() error {
-	m, err := NewKubeconfigManager(p.staticConfig, "")
+	m, err := NewKubeconfigManager(p.config, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
 			return fmt.Errorf("kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %v", err)
@@ -85,7 +85,7 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 
 	baseManager := p.managers[p.defaultContext]
 
-	m, err := NewKubeconfigManager(baseManager.staticConfig, context)
+	m, err := NewKubeconfigManager(baseManager.config, context)
 	if err != nil {
 		return nil, err
 	}

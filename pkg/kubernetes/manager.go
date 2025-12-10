@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	authenticationv1api "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -20,7 +20,7 @@ import (
 type Manager struct {
 	accessControlClientset *AccessControlClientset
 
-	staticConfig *config.StaticConfig
+	config configapi.BaseConfig
 }
 
 var _ Openshift = (*Manager)(nil)
@@ -30,14 +30,14 @@ var (
 	ErrorInClusterNotInCluster         = errors.New("in-cluster manager cannot be used outside of a cluster")
 )
 
-func NewKubeconfigManager(config *config.StaticConfig, kubeconfigContext string) (*Manager, error) {
+func NewKubeconfigManager(config configapi.BaseConfig, kubeconfigContext string) (*Manager, error) {
 	if IsInCluster(config) {
 		return nil, ErrorKubeconfigInClusterNotAllowed
 	}
 
 	pathOptions := clientcmd.NewDefaultPathOptions()
-	if config.KubeConfig != "" {
-		pathOptions.LoadingRules.ExplicitPath = config.KubeConfig
+	if config.GetKubeConfigPath() != "" {
+		pathOptions.LoadingRules.ExplicitPath = config.GetKubeConfigPath()
 	}
 	clientCmdConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		pathOptions.LoadingRules,
@@ -54,9 +54,9 @@ func NewKubeconfigManager(config *config.StaticConfig, kubeconfigContext string)
 	return NewManager(config, restConfig, clientCmdConfig)
 }
 
-func NewInClusterManager(config *config.StaticConfig) (*Manager, error) {
-	if config.KubeConfig != "" {
-		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %v", config.KubeConfig, ErrorKubeconfigInClusterNotAllowed)
+func NewInClusterManager(config configapi.BaseConfig) (*Manager, error) {
+	if config.GetKubeConfigPath() != "" {
+		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %v", config.GetKubeConfigPath(), ErrorKubeconfigInClusterNotAllowed)
 	}
 
 	if !IsInCluster(config) {
@@ -86,7 +86,7 @@ func NewInClusterManager(config *config.StaticConfig) (*Manager, error) {
 	return NewManager(config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
 }
 
-func NewManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
+func NewManager(config configapi.BaseConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
 	if config == nil {
 		return nil, errors.New("config cannot be nil")
 	}
@@ -101,14 +101,14 @@ func NewManager(config *config.StaticConfig, restConfig *rest.Config, clientCmdC
 	applyRateLimitFromEnv(restConfig)
 
 	k8s := &Manager{
-		staticConfig: config,
+		config: config,
 	}
 	var err error
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
 	//k8s.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
-	k8s.accessControlClientset, err = NewAccessControlClientset(k8s.staticConfig, clientCmdConfig, restConfig)
+	k8s.accessControlClientset, err = NewAccessControlClientset(k8s.config, clientCmdConfig, restConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (m *Manager) VerifyToken(ctx context.Context, token, audience string) (*aut
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	authorization, ok := ctx.Value(OAuthAuthorizationHeader).(string)
 	if !ok || !strings.HasPrefix(authorization, "Bearer ") {
-		if m.staticConfig.RequireOAuth {
+		if m.config.IsRequireOAuth() {
 			return nil, errors.New("oauth token required")
 		}
 		return &Kubernetes{m.accessControlClientset}, nil
@@ -173,16 +173,16 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	}
 	clientCmdApiConfig, err := m.accessControlClientset.clientCmdConfig.RawConfig()
 	if err != nil {
-		if m.staticConfig.RequireOAuth {
+		if m.config.IsRequireOAuth() {
 			klog.Errorf("failed to get kubeconfig: %v", err)
 			return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 		}
 		return &Kubernetes{m.accessControlClientset}, nil
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
-	derived, err := NewAccessControlClientset(m.staticConfig, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
+	derived, err := NewAccessControlClientset(m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
 	if err != nil {
-		if m.staticConfig.RequireOAuth {
+		if m.config.IsRequireOAuth() {
 			klog.Errorf("failed to create derived clientset: %v", err)
 			return nil, fmt.Errorf("failed to create derived clientset: %w", err)
 		}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	"k8s.io/klog/v2"
 )
 
@@ -17,16 +18,10 @@ const (
 	DefaultDropInConfigDir = "conf.d"
 )
 
-const (
-	ClusterProviderKubeConfig = "kubeconfig"
-	ClusterProviderInCluster  = "in-cluster"
-	ClusterProviderDisabled   = "disabled"
-)
-
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
-	DeniedResources []GroupVersionKind `toml:"denied_resources"`
+	DeniedResources []configapi.GroupVersionKind `toml:"denied_resources"`
 
 	LogLevel   int    `toml:"log_level,omitzero"`
 	Port       string `toml:"port,omitempty"`
@@ -80,19 +75,15 @@ type StaticConfig struct {
 	ToolsetConfigs map[string]toml.Primitive `toml:"toolset_configs,omitempty"`
 
 	// Internal: parsed provider configs (not exposed to TOML package)
-	parsedClusterProviderConfigs map[string]Extended
+	parsedClusterProviderConfigs map[string]configapi.Extended
 	// Internal: parsed toolset configs (not exposed to TOML package)
-	parsedToolsetConfigs map[string]Extended
+	parsedToolsetConfigs map[string]configapi.Extended
 
 	// Internal: the config.toml directory, to help resolve relative file paths
 	configDirPath string
 }
 
-type GroupVersionKind struct {
-	Group   string `toml:"group"`
-	Version string `toml:"version"`
-	Kind    string `toml:"kind,omitempty"`
-}
+var _ configapi.BaseConfig = (*StaticConfig)(nil)
 
 type ReadConfigOpt func(cfg *StaticConfig)
 
@@ -292,13 +283,29 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	return config, nil
 }
 
-func (c *StaticConfig) GetProviderConfig(strategy string) (Extended, bool) {
-	config, ok := c.parsedClusterProviderConfigs[strategy]
-
-	return config, ok
+func (c *StaticConfig) GetClusterProviderStrategy() string {
+	return c.ClusterProviderStrategy
 }
 
-func (c *StaticConfig) GetToolsetConfig(name string) (Extended, bool) {
+func (c *StaticConfig) GetDeniedResources() []configapi.GroupVersionKind {
+	return c.DeniedResources
+}
+
+func (c *StaticConfig) GetKubeConfigPath() string {
+	return c.KubeConfig
+}
+
+func (c *StaticConfig) GetProviderConfig(strategy string) (configapi.Extended, bool) {
+	cfg, ok := c.parsedClusterProviderConfigs[strategy]
+
+	return cfg, ok
+}
+
+func (c *StaticConfig) GetToolsetConfig(name string) (configapi.Extended, bool) {
 	cfg, ok := c.parsedToolsetConfigs[name]
 	return cfg, ok
+}
+
+func (c *StaticConfig) IsRequireOAuth() bool {
+	return c.RequireOAuth
 }

@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
 
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
@@ -223,7 +224,7 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 		m.StaticConfig.CertificateAuthority = m.CertificateAuthority
 	}
 	if cmd.Flag(flagDisableMultiCluster).Changed && m.DisableMultiCluster {
-		m.StaticConfig.ClusterProviderStrategy = config.ClusterProviderDisabled
+		m.StaticConfig.ClusterProviderStrategy = configapi.ClusterProviderDisabled
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
@@ -24,7 +24,7 @@ import (
 // apiVersion and kinds are checked for allowed access
 type AccessControlClientset struct {
 	kubernetes.Interface
-	staticConfig    *config.StaticConfig
+	config          configapi.BaseConfig
 	clientCmdConfig clientcmd.ClientConfig
 	cfg             *rest.Config
 	restMapper      meta.ResettableRESTMapper
@@ -33,9 +33,9 @@ type AccessControlClientset struct {
 	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
 }
 
-func NewAccessControlClientset(staticConfig *config.StaticConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*AccessControlClientset, error) {
+func NewAccessControlClientset(config configapi.BaseConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*AccessControlClientset, error) {
 	acc := &AccessControlClientset{
-		staticConfig:    staticConfig,
+		config:          config,
 		clientCmdConfig: clientCmdConfig,
 		cfg:             rest.CopyConfig(restConfig),
 	}
@@ -44,9 +44,9 @@ func NewAccessControlClientset(staticConfig *config.StaticConfig, clientCmdConfi
 	}
 	acc.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return &AccessControlRoundTripper{
-			delegate:     original,
-			staticConfig: staticConfig,
-			restMapper:   acc.restMapper,
+			delegate:                original,
+			deniedResourcesProvider: config,
+			restMapper:              acc.restMapper,
 		}
 	})
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(acc.cfg)

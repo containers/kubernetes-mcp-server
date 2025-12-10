@@ -77,7 +77,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived.AccessControlClientset(), testManager.accessControlClientset, "expected new derived clientset, got original clientset")
-			s.Equal(derived.AccessControlClientset().staticConfig, testStaticConfig, "staticConfig not properly wired to derived clientset")
+			s.Equal(derived.AccessControlClientset().config, testStaticConfig, "config not properly wired to derived clientset")
 
 			s.Run("RestConfig is correctly copied and sensitive fields are omitted", func() {
 				derivedCfg := derived.AccessControlClientset().cfg
@@ -130,7 +130,7 @@ users:
 			s.Run("derived kubernetes has initialized clients", func() {
 				// Verify that the derived kubernetes has proper clients initialized
 				s.NotNilf(derived.AccessControlClientset(), "expected accessControlClientSet to be initialized")
-				s.Equalf(testStaticConfig, derived.AccessControlClientset().staticConfig, "staticConfig not properly wired to derived clientset")
+				s.Equalf(testStaticConfig, derived.AccessControlClientset().config, "config not properly wired to derived clientset")
 				s.NotNilf(derived.AccessControlClientset().RESTMapper(), "expected accessControlRESTMapper to be initialized")
 				s.NotNilf(derived.AccessControlClientset().DiscoveryClient(), "expected discoveryClient to be initialized")
 				s.NotNilf(derived.AccessControlClientset().DynamicClient(), "expected dynamicClient to be initialized")
@@ -283,7 +283,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived.AccessControlClientset(), testManager.accessControlClientset, "expected new derived clientset, got original clientset")
-			s.Equal(derived.AccessControlClientset().staticConfig, testStaticConfig, "staticConfig not properly wired to derived clientset")
+			s.Equal(derived.AccessControlClientset().config, testStaticConfig, "config not properly wired to derived clientset")
 
 			derivedCfg := derived.AccessControlClientset().cfg
 			s.Require().NotNil(derivedCfg, "derived config is nil")

@@ -1,7 +1,7 @@
 package kubernetes
 
 import (
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -22,9 +22,9 @@ var InClusterConfig = func() (*rest.Config, error) {
 	return inClusterConfig, err
 }
 
-func IsInCluster(cfg *config.StaticConfig) bool {
+func IsInCluster(cfg configapi.ClusterProvider) bool {
 	// Even if running in-cluster, if a kubeconfig is provided, we consider it as out-of-cluster
-	if cfg != nil && cfg.KubeConfig != "" {
+	if cfg != nil && cfg.GetKubeConfigPath() != "" {
 		return false
 	}
 	restConfig, err := InClusterConfig()

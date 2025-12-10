@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -136,11 +137,11 @@ func (s *ConfigSuite) TestReadConfigValid() {
 	s.Run("denied_resources", func() {
 		s.Require().Lenf(config.DeniedResources, 2, "Expected 2 denied resources, got %d", len(config.DeniedResources))
 		s.Run("contains apps/v1/Deployment", func() {
-			s.Contains(config.DeniedResources, GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+			s.Contains(config.DeniedResources, configapi.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
 				"Expected denied resources to contain apps/v1/Deployment")
 		})
 		s.Run("contains rbac.authorization.k8s.io/v1/Role", func() {
-			s.Contains(config.DeniedResources, GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
+			s.Contains(config.DeniedResources, configapi.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
 				"Expected denied resources to contain rbac.authorization.k8s.io/v1/Role")
 		})
 	})
@@ -777,16 +778,16 @@ func (s *ConfigSuite) TestDropInWithDeniedResources() {
 
 	s.Run("drop-in replaces denied_resources array", func() {
 		s.Len(config.DeniedResources, 2, "denied_resources should have 2 entries from drop-in")
-		s.Contains(config.DeniedResources, GroupVersionKind{
+		s.Contains(config.DeniedResources, configapi.GroupVersionKind{
 			Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole",
 		})
-		s.Contains(config.DeniedResources, GroupVersionKind{
+		s.Contains(config.DeniedResources, configapi.GroupVersionKind{
 			Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding",
 		})
 	})
 
 	s.Run("original denied_resources from main config are replaced", func() {
-		s.NotContains(config.DeniedResources, GroupVersionKind{
+		s.NotContains(config.DeniedResources, configapi.GroupVersionKind{
 			Group: "apps", Version: "v1", Kind: "Deployment",
 		}, "original entry should be replaced by drop-in")
 	})
