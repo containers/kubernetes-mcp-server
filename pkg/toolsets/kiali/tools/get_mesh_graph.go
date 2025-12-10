@@ -32,12 +32,12 @@ func InitGetMeshGraph() []api.ServerTool {
 					},
 					"rateInterval": {
 						Type:        "string",
-						Description: "Rate interval for fetching (e.g., '10m', '5m', '1h').",
+						Description: "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
 						Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
 					},
 					"graphType": {
 						Type:        "string",
-						Description: "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
+						Description: "Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
 						Default:     api.ToRawMessage(kialiclient.DefaultGraphType),
 					},
 				},

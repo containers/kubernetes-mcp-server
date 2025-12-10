@@ -25,30 +25,6 @@ func TestGetStringArgOrDefault(t *testing.T) {
 		wantErr    bool
 	}{
 		{
-			name:       "rateInterval trims and converts to seconds",
-			args:       map[string]any{"rateInterval": " 5m "},
-			key:        "rateInterval",
-			defaultVal: "10m",
-			want:       "300",
-			wantErr:    false,
-		},
-		{
-			name:       "rateInterval empty returns default converted to seconds",
-			args:       map[string]any{"rateInterval": ""},
-			key:        "rateInterval",
-			defaultVal: "10m",
-			want:       "600",
-			wantErr:    false,
-		},
-		{
-			name:       "rateInterval invalid suffix returns error",
-			args:       map[string]any{"rateInterval": "5x"},
-			key:        "rateInterval",
-			defaultVal: "10m",
-			want:       "",
-			wantErr:    true,
-		},
-		{
 			name:       "returns default when string is whitespace",
 			args:       map[string]any{"graphType": "   "},
 			key:        "graphType",
@@ -137,46 +113,6 @@ func TestGetStringArgOrDefault(t *testing.T) {
 	}
 }
 
-func TestRateIntervalToSeconds(t *testing.T) {
-	tests := []struct {
-		in       string
-		want     int64
-		wantErr  bool
-		testName string
-	}{
-		{in: "10m", want: 600, wantErr: false, testName: "minutes"},
-		{in: "10", want: 10, wantErr: false, testName: "no suffix seconds"},
-		{in: "10s", want: 10, wantErr: false, testName: "seconds suffix"},
-		{in: "1h", want: 3600, wantErr: false, testName: "hours"},
-		{in: "2d", want: 172800, wantErr: false, testName: "days"},
-		{in: " 5m ", want: 300, wantErr: false, testName: "trim spaces"},
-		{in: "0m", want: 0, wantErr: false, testName: "zero value"},
-		{in: "", want: 0, wantErr: true, testName: "empty"},
-		{in: "m", want: 0, wantErr: true, testName: "missing number"},
-		{in: "5x", want: 0, wantErr: true, testName: "invalid suffix"},
-		{in: "10.5m", want: 0, wantErr: true, testName: "decimal not allowed"},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.testName, func(t *testing.T) {
-			got, err := rateIntervalToSeconds(tt.in)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil (input=%q, got=%d)", tt.in, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.want {
-				t.Fatalf("rateIntervalToSeconds(%q) = %d, want %d", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestSetQueryParam(t *testing.T) {
 	type args struct {
 		key        string
@@ -214,7 +150,7 @@ func TestSetQueryParam(t *testing.T) {
 			wantValue: "source",
 		},
 		{
-			name: "converts special default duration",
+			name: "uses default duration without conversion",
 			in: args{
 				key:        "duration",
 				defaultVal: "10m",
@@ -222,10 +158,10 @@ func TestSetQueryParam(t *testing.T) {
 				args:       map[string]any{},
 			},
 			wantKey:   "duration",
-			wantValue: "600",
+			wantValue: "10m",
 		},
 		{
-			name: "converts special provided duration",
+			name: "uses provided duration without conversion",
 			in: args{
 				key:        "duration",
 				defaultVal: "10m",
@@ -233,18 +169,7 @@ func TestSetQueryParam(t *testing.T) {
 				args:       map[string]any{"duration": "2h"},
 			},
 			wantKey:   "duration",
-			wantValue: "7200",
-		},
-		{
-			name: "returns custom error for invalid rateInterval",
-			in: args{
-				key:        "rateInterval",
-				defaultVal: "10m",
-				errMsg:     "invalid rateInterval: invalid rateInterval/duration suffix: \"x\", values must be in the format '10m', '5m', '1h', '2d' or seconds",
-				args:       map[string]any{"rateInterval": "5x"},
-			},
-			wantKey: "rateInterval",
-			wantErr: "invalid rateInterval: invalid rateInterval/duration suffix: \"x\", values must be in the format '10m', '5m', '1h', '2d' or seconds",
+			wantValue: "2h",
 		},
 		{
 			name: "accepts numeric tail",
