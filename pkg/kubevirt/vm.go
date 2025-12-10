@@ -62,6 +62,13 @@ func UpdateVirtualMachine(ctx context.Context, client dynamic.Interface, vm *uns
 		Update(ctx, vm, metav1.UpdateOptions{})
 }
 
+// DeleteVirtualMachine deletes a VirtualMachine by namespace and name
+func DeleteVirtualMachine(ctx context.Context, client dynamic.Interface, namespace, name string) error {
+	return client.Resource(VirtualMachineGVR).
+		Namespace(namespace).
+		Delete(ctx, name, metav1.DeleteOptions{})
+}
+
 // StartVM starts a VirtualMachine by updating its runStrategy to Always
 // Returns the updated VM and true if the VM was started, false if it was already running
 func StartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (*unstructured.Unstructured, bool, error) {

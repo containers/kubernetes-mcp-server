@@ -327,3 +327,41 @@ func TestRestartVMNotFound(t *testing.T) {
 		t.Errorf("Error = %v, want to contain 'failed to get VirtualMachine'", err)
 	}
 }
+
+func TestDeleteVM(t *testing.T) {
+	scheme := runtime.NewScheme()
+	initialVM := createTestVM("test-vm", "default", RunStrategyAlways)
+	client := fake.NewSimpleDynamicClient(scheme, initialVM)
+	ctx := context.Background()
+
+	err := DeleteVirtualMachine(ctx, client, "default", "test-vm")
+	if err != nil {
+		t.Errorf("Unexpected error during deletion: %v", err)
+		return
+	}
+
+	// Verify the VM is deleted
+	_, err = GetVirtualMachine(ctx, client, "default", "test-vm")
+	if err == nil {
+		t.Errorf("Expected error when getting deleted VM, got nil")
+		return
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Error = %v, want to contain 'not found'", err)
+	}
+}
+
+func TestDeleteVMNotFound(t *testing.T) {
+	scheme := runtime.NewScheme()
+	client := fake.NewSimpleDynamicClient(scheme)
+	ctx := context.Background()
+
+	err := DeleteVirtualMachine(ctx, client, "default", "non-existent-vm")
+	if err == nil {
+		t.Errorf("Expected error for non-existent VM deletion, got nil")
+		return
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Error = %v, want to contain 'not found'", err)
+	}
+}
