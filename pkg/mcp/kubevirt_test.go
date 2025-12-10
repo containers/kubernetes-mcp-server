@@ -651,8 +651,30 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 		})
 	})
 
+	s.Run("vm_lifecycle action=delete on running VM", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "delete",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine deleted successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			s.Equal("test-vm-lifecycle", decodedResult[0].GetName(), "invalid resource name")
+			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
+		})
+	})
+
 	s.Run("vm_lifecycle on non-existent VM", func() {
-		for _, action := range []string{"start", "stop", "restart"} {
+		for _, action := range []string{"start", "stop", "restart", "delete"} {
 			s.Run("action="+action, func() {
 				toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
 					"name":      "non-existent-vm",
