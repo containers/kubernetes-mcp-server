@@ -122,7 +122,7 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list resources:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_list (denied by group)", func() {
@@ -136,7 +136,7 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list resources:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_list (not denied) returns list", func() {
@@ -299,7 +299,7 @@ func (s *ResourcesSuite) TestResourcesGetDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get resource:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_get (denied by group)", func() {
@@ -313,7 +313,7 @@ func (s *ResourcesSuite) TestResourcesGetDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get resource:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_get (not denied) returns resource", func() {
@@ -464,7 +464,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to create or update resources:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_create_or_update (denied by group)", func() {
@@ -479,7 +479,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to create or update resources:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_create_or_update (not denied) creates or updates resource", func() {
@@ -583,7 +583,7 @@ func (s *ResourcesSuite) TestResourcesDeleteDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to delete resource:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_delete (denied by group)", func() {
@@ -597,7 +597,7 @@ func (s *ResourcesSuite) TestResourcesDeleteDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to delete resource:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_delete (not denied) deletes resource", func() {
@@ -747,7 +747,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: /v1, Kind=ReplicationController"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_scale update (denied by kind)", func() {
@@ -767,7 +767,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: /v1, Kind=ReplicationController"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByKind.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_scale get (denied by group)", func() {
@@ -786,7 +786,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: apps/v1, Kind=StatefulSet"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("resources_scale update (denied by group)", func() {
@@ -806,7 +806,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: apps/v1, Kind=StatefulSet"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, deniedByGroup.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

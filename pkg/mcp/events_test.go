@@ -137,7 +137,7 @@ func (s *EventsSuite) TestEventsListDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list events in all namespaces:(.+:)? resource not allowed: /v1, Kind=Event"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }
