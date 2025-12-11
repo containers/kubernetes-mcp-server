@@ -1,4 +1,4 @@
-package config
+package api
 
 const (
 	ClusterProviderKubeConfig = "kubeconfig"
@@ -18,20 +18,20 @@ type ClusterProvider interface {
 	GetKubeConfigPath() string
 }
 
-// Extended is the interface that all configuration extensions must implement.
+// ExtendedConfig is the interface that all configuration extensions must implement.
 // Each extended config manager registers a factory function to parse its config from TOML primitives
-type Extended interface {
+type ExtendedConfig interface {
 	// Validate validates the extended configuration.  Returns an error if the configuration is invalid.
 	Validate() error
 }
 
-type ExtendedProvider interface {
+type ExtendedConfigProvider interface {
 	// GetProviderConfig returns the extended configuration for the given provider strategy.
 	// The boolean return value indicates whether the configuration was found.
-	GetProviderConfig(strategy string) (Extended, bool)
+	GetProviderConfig(strategy string) (ExtendedConfig, bool)
 	// GetToolsetConfig returns the extended configuration for the given toolset name.
 	// The boolean return value indicates whether the configuration was found.
-	GetToolsetConfig(name string) (Extended, bool)
+	GetToolsetConfig(name string) (ExtendedConfig, bool)
 }
 
 type GroupVersionKind struct {
@@ -49,5 +49,5 @@ type BaseConfig interface {
 	AuthProvider
 	ClusterProvider
 	DeniedResourcesProvider
-	ExtendedProvider
+	ExtendedConfigProvider
 }

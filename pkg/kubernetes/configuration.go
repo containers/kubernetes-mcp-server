@@ -1,7 +1,7 @@
 package kubernetes
 
 import (
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -22,7 +22,7 @@ var InClusterConfig = func() (*rest.Config, error) {
 	return inClusterConfig, err
 }
 
-func IsInCluster(cfg configapi.ClusterProvider) bool {
+func IsInCluster(cfg api.ClusterProvider) bool {
 	// Even if running in-cluster, if a kubeconfig is provided, we consider it as out-of-cluster
 	if cfg != nil && cfg.GetKubeConfigPath() != "" {
 		return false
@@ -31,17 +31,10 @@ func IsInCluster(cfg configapi.ClusterProvider) bool {
 	return err == nil && restConfig != nil
 }
 
-func (k *Kubernetes) NamespaceOrDefault(namespace string) string {
-	if namespace == "" {
-		return k.configuredNamespace()
-	}
-	return namespace
-}
-
 // ConfigurationContextsDefault returns the current context name
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
-	cfg, err := k.ToRawKubeConfigLoader().RawConfig()
+	cfg, err := k.AccessControlClientset().ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
 		return "", err
 	}
@@ -51,7 +44,7 @@ func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
 // ConfigurationContextsList returns the list of available context names
 // TODO: Should be moved to the Provider level ?
 func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
-	cfg, err := k.ToRawKubeConfigLoader().RawConfig()
+	cfg, err := k.AccessControlClientset().ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +67,7 @@ func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
 func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
 	var cfg clientcmdapi.Config
 	var err error
-	if cfg, err = k.ToRawKubeConfigLoader().RawConfig(); err != nil {
+	if cfg, err = k.AccessControlClientset().ToRawKubeConfigLoader().RawConfig(); err != nil {
 		return nil, err
 	}
 	if minify {

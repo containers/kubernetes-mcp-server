@@ -3,7 +3,7 @@ package kubernetes
 import (
 	"context"
 
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
 // McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
@@ -15,7 +15,7 @@ type Provider interface {
 	// extending this interface might not be a good idea anymore.
 	// For the kubecontext case, a user might be targeting both an OpenShift flavored cluster and a vanilla Kubernetes cluster.
 	// See: https://github.com/containers/kubernetes-mcp-server/pull/372#discussion_r2421592315
-	Openshift
+	api.Openshift
 	TokenVerifier
 	GetTargets(ctx context.Context) ([]string, error)
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
@@ -26,7 +26,7 @@ type Provider interface {
 	Close()
 }
 
-func NewProvider(cfg configapi.BaseConfig) (Provider, error) {
+func NewProvider(cfg api.BaseConfig) (Provider, error) {
 	strategy := resolveStrategy(cfg)
 
 	factory, err := getProviderFactory(strategy)
@@ -37,18 +37,18 @@ func NewProvider(cfg configapi.BaseConfig) (Provider, error) {
 	return factory(cfg)
 }
 
-func resolveStrategy(cfg configapi.BaseConfig) string {
+func resolveStrategy(cfg api.BaseConfig) string {
 	if cfg.GetClusterProviderStrategy() != "" {
 		return cfg.GetClusterProviderStrategy()
 	}
 
 	if cfg.GetKubeConfigPath() != "" {
-		return configapi.ClusterProviderKubeConfig
+		return api.ClusterProviderKubeConfig
 	}
 
 	if _, inClusterConfigErr := InClusterConfig(); inClusterConfigErr == nil {
-		return configapi.ClusterProviderInCluster
+		return api.ClusterProviderInCluster
 	}
 
-	return configapi.ClusterProviderKubeConfig
+	return api.ClusterProviderKubeConfig
 }

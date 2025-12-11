@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"sort"
 
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
 // ProviderFactory creates a new Provider instance for a given strategy.
 // Implementations should validate that the Manager is compatible with their strategy
 // (e.g., kubeconfig provider should reject in-cluster managers).
-type ProviderFactory func(cfg configapi.BaseConfig) (Provider, error)
+type ProviderFactory func(cfg api.BaseConfig) (Provider, error)
 
 var providerFactories = make(map[string]ProviderFactory)
 

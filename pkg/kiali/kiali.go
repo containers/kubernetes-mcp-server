@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 )
@@ -24,7 +24,7 @@ type Kiali struct {
 }
 
 // NewKiali creates a new Kiali instance
-func NewKiali(configProvider config.ExtendedProvider, kubernetes *rest.Config) *Kiali {
+func NewKiali(configProvider api.ExtendedConfigProvider, kubernetes *rest.Config) *Kiali {
 	kiali := &Kiali{bearerToken: kubernetes.BearerToken}
 	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
 		if kc, ok := cfg.(*Config); ok && kc != nil {

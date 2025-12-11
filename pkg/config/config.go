@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/klog/v2"
 )
 
@@ -21,7 +21,7 @@ const (
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
-	DeniedResources []configapi.GroupVersionKind `toml:"denied_resources"`
+	DeniedResources []api.GroupVersionKind `toml:"denied_resources"`
 
 	LogLevel   int    `toml:"log_level,omitzero"`
 	Port       string `toml:"port,omitempty"`
@@ -82,15 +82,15 @@ type StaticConfig struct {
 	promptsMetadata toml.MetaData  // Internal: metadata for prompts decoding
 
 	// Internal: parsed provider configs (not exposed to TOML package)
-	parsedClusterProviderConfigs map[string]configapi.Extended
+	parsedClusterProviderConfigs map[string]api.ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML package)
-	parsedToolsetConfigs map[string]configapi.Extended
+	parsedToolsetConfigs map[string]api.ExtendedConfig
 
 	// Internal: the config.toml directory, to help resolve relative file paths
 	configDirPath string
 }
 
-var _ configapi.BaseConfig = (*StaticConfig)(nil)
+var _ api.BaseConfig = (*StaticConfig)(nil)
 
 type ReadConfigOpt func(cfg *StaticConfig)
 
@@ -306,7 +306,7 @@ func (c *StaticConfig) GetClusterProviderStrategy() string {
 	return c.ClusterProviderStrategy
 }
 
-func (c *StaticConfig) GetDeniedResources() []configapi.GroupVersionKind {
+func (c *StaticConfig) GetDeniedResources() []api.GroupVersionKind {
 	return c.DeniedResources
 }
 
@@ -314,13 +314,13 @@ func (c *StaticConfig) GetKubeConfigPath() string {
 	return c.KubeConfig
 }
 
-func (c *StaticConfig) GetProviderConfig(strategy string) (configapi.Extended, bool) {
+func (c *StaticConfig) GetProviderConfig(strategy string) (api.ExtendedConfig, bool) {
 	cfg, ok := c.parsedClusterProviderConfigs[strategy]
 
 	return cfg, ok
 }
 
-func (c *StaticConfig) GetToolsetConfig(name string) (configapi.Extended, bool) {
+func (c *StaticConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
 	cfg, ok := c.parsedToolsetConfigs[name]
 	return cfg, ok
 }

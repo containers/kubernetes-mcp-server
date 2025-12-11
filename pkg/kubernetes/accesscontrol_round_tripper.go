@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"strings"
 
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type AccessControlRoundTripper struct {
 	delegate                http.RoundTripper
-	deniedResourcesProvider configapi.DeniedResourcesProvider
+	deniedResourcesProvider api.DeniedResourcesProvider
 	restMapper              meta.RESTMapper
 }
 

@@ -20,26 +20,20 @@ import (
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	"k8s.io/utils/ptr"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
 // DefaultTailLines is the default number of lines to retrieve from the end of the logs
 const DefaultTailLines = int64(100)
 
-type PodsTopOptions struct {
-	metav1.ListOptions
-	AllNamespaces bool
-	Namespace     string
-	Name          string
-}
-
-func (k *Kubernetes) PodsListInAllNamespaces(ctx context.Context, options ResourceListOptions) (runtime.Unstructured, error) {
+func (k *Kubernetes) PodsListInAllNamespaces(ctx context.Context, options api.ListOptions) (runtime.Unstructured, error) {
 	return k.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
 	}, "", options)
 }
 
-func (k *Kubernetes) PodsListInNamespace(ctx context.Context, namespace string, options ResourceListOptions) (runtime.Unstructured, error) {
+func (k *Kubernetes) PodsListInNamespace(ctx context.Context, namespace string, options api.ListOptions) (runtime.Unstructured, error) {
 	return k.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
 	}, namespace, options)
@@ -48,11 +42,11 @@ func (k *Kubernetes) PodsListInNamespace(ctx context.Context, namespace string, 
 func (k *Kubernetes) PodsGet(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
 	return k.ResourcesGet(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
-	}, k.NamespaceOrDefault(namespace), name)
+	}, k.AccessControlClientset().NamespaceOrDefault(namespace), name)
 }
 
 func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (string, error) {
-	namespace = k.NamespaceOrDefault(namespace)
+	namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
 	pod, err := k.ResourcesGet(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
 	if err != nil {
 		return "", err
@@ -95,7 +89,7 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 }
 
 func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
-	pods := k.AccessControlClientset().CoreV1().Pods(k.NamespaceOrDefault(namespace))
+	pods := k.AccessControlClientset().CoreV1().Pods(k.AccessControlClientset().NamespaceOrDefault(namespace))
 
 	logOptions := &v1.PodLogOptions{
 		Container: container,
@@ -136,7 +130,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 	var resources []any
 	pod := &v1.Pod{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.NamespaceOrDefault(namespace), Labels: labels},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.AccessControlClientset().NamespaceOrDefault(namespace), Labels: labels},
 		Spec: v1.PodSpec{Containers: []v1.Container{{
 			Name:            name,
 			Image:           image,
@@ -148,7 +142,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 		pod.Spec.Containers[0].Ports = []v1.ContainerPort{{ContainerPort: port}}
 		resources = append(resources, &v1.Service{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.NamespaceOrDefault(namespace), Labels: labels},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.AccessControlClientset().NamespaceOrDefault(namespace), Labels: labels},
 			Spec: v1.ServiceSpec{
 				Selector: labels,
 				Type:     v1.ServiceTypeClusterIP,
@@ -163,7 +157,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 				"kind":       "Route",
 				"metadata": map[string]interface{}{
 					"name":      name,
-					"namespace": k.NamespaceOrDefault(namespace),
+					"namespace": k.AccessControlClientset().NamespaceOrDefault(namespace),
 					"labels":    labels,
 				},
 				"spec": map[string]interface{}{
@@ -202,7 +196,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 	return k.resourcesCreateOrUpdate(ctx, toCreate)
 }
 
-func (k *Kubernetes) PodsTop(ctx context.Context, options PodsTopOptions) (*metrics.PodMetricsList, error) {
+func (k *Kubernetes) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metrics.PodMetricsList, error) {
 	// TODO, maybe move to mcp Tools setup and omit in case metrics aren't available in the target cluster
 	if !k.supportsGroupVersion(metrics.GroupName + "/" + metricsv1beta1api.SchemeGroupVersion.Version) {
 		return nil, errors.New("metrics API is not available")
@@ -211,7 +205,7 @@ func (k *Kubernetes) PodsTop(ctx context.Context, options PodsTopOptions) (*metr
 	if options.AllNamespaces && namespace == "" {
 		namespace = ""
 	} else {
-		namespace = k.NamespaceOrDefault(namespace)
+		namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
 	}
 	var err error
 	versionedMetrics := &metricsv1beta1api.PodMetricsList{}
@@ -232,7 +226,7 @@ func (k *Kubernetes) PodsTop(ctx context.Context, options PodsTopOptions) (*metr
 }
 
 func (k *Kubernetes) PodsExec(ctx context.Context, namespace, name, container string, command []string) (string, error) {
-	namespace = k.NamespaceOrDefault(namespace)
+	namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
 	pods := k.AccessControlClientset().CoreV1().Pods(namespace)
 	pod, err := pods.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -260,11 +254,15 @@ func (k *Kubernetes) PodsExec(ctx context.Context, namespace, name, container st
 		Name(name).
 		SubResource("exec")
 	execRequest.VersionedParams(podExecOptions, ParameterCodec)
-	spdyExec, err := remotecommand.NewSPDYExecutor(k.AccessControlClientset().cfg, "POST", execRequest.URL())
+	restConfig, err := k.AccessControlClientset().ToRESTConfig()
 	if err != nil {
 		return "", err
 	}
-	webSocketExec, err := remotecommand.NewWebSocketExecutor(k.AccessControlClientset().cfg, "GET", execRequest.URL().String())
+	spdyExec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", execRequest.URL())
+	if err != nil {
+		return "", err
+	}
+	webSocketExec, err := remotecommand.NewWebSocketExecutor(restConfig, "GET", execRequest.URL().String())
 	if err != nil {
 		return "", err
 	}

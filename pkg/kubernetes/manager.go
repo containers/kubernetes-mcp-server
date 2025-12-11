@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	authenticationv1api "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -20,17 +20,17 @@ import (
 type Manager struct {
 	accessControlClientset *AccessControlClientset
 
-	config configapi.BaseConfig
+	config api.BaseConfig
 }
 
-var _ Openshift = (*Manager)(nil)
+var _ api.Openshift = (*Manager)(nil)
 
 var (
 	ErrorKubeconfigInClusterNotAllowed = errors.New("kubeconfig manager cannot be used in in-cluster deployments")
 	ErrorInClusterNotInCluster         = errors.New("in-cluster manager cannot be used outside of a cluster")
 )
 
-func NewKubeconfigManager(config configapi.BaseConfig, kubeconfigContext string) (*Manager, error) {
+func NewKubeconfigManager(config api.BaseConfig, kubeconfigContext string) (*Manager, error) {
 	if IsInCluster(config) {
 		return nil, ErrorKubeconfigInClusterNotAllowed
 	}
@@ -54,7 +54,7 @@ func NewKubeconfigManager(config configapi.BaseConfig, kubeconfigContext string)
 	return NewManager(config, restConfig, clientCmdConfig)
 }
 
-func NewInClusterManager(config configapi.BaseConfig) (*Manager, error) {
+func NewInClusterManager(config api.BaseConfig) (*Manager, error) {
 	if config.GetKubeConfigPath() != "" {
 		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %v", config.GetKubeConfigPath(), ErrorKubeconfigInClusterNotAllowed)
 	}
@@ -86,7 +86,7 @@ func NewInClusterManager(config configapi.BaseConfig) (*Manager, error) {
 	return NewManager(config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
 }
 
-func NewManager(config configapi.BaseConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
+func NewManager(config api.BaseConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
 	if config == nil {
 		return nil, errors.New("config cannot be nil")
 	}
@@ -105,7 +105,7 @@ func NewManager(config configapi.BaseConfig, restConfig *rest.Config, clientCmdC
 	}
 	var err error
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
-	//k8s.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
+	//k8s.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
 	k8s.accessControlClientset, err = NewAccessControlClientset(k8s.config, clientCmdConfig, restConfig)
@@ -153,22 +153,22 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	}
 	klog.V(5).Infof("%s header found (Bearer), using provided bearer token", OAuthAuthorizationHeader)
 	derivedCfg := &rest.Config{
-		Host:          m.accessControlClientset.cfg.Host,
-		APIPath:       m.accessControlClientset.cfg.APIPath,
-		WrapTransport: m.accessControlClientset.cfg.WrapTransport,
+		Host:          m.accessControlClientset.RESTConfig().Host,
+		APIPath:       m.accessControlClientset.RESTConfig().APIPath,
+		WrapTransport: m.accessControlClientset.RESTConfig().WrapTransport,
 		// Copy only server verification TLS settings (CA bundle and server name)
 		TLSClientConfig: rest.TLSClientConfig{
-			Insecure:   m.accessControlClientset.cfg.Insecure,
-			ServerName: m.accessControlClientset.cfg.ServerName,
-			CAFile:     m.accessControlClientset.cfg.CAFile,
-			CAData:     m.accessControlClientset.cfg.CAData,
+			Insecure:   m.accessControlClientset.RESTConfig().Insecure,
+			ServerName: m.accessControlClientset.RESTConfig().ServerName,
+			CAFile:     m.accessControlClientset.RESTConfig().CAFile,
+			CAData:     m.accessControlClientset.RESTConfig().CAData,
 		},
 		BearerToken: strings.TrimPrefix(authorization, "Bearer "),
 		// pass custom UserAgent to identify the client
 		UserAgent:   CustomUserAgent,
-		QPS:         m.accessControlClientset.cfg.QPS,
-		Burst:       m.accessControlClientset.cfg.Burst,
-		Timeout:     m.accessControlClientset.cfg.Timeout,
+		QPS:         m.accessControlClientset.RESTConfig().QPS,
+		Burst:       m.accessControlClientset.RESTConfig().Burst,
+		Timeout:     m.accessControlClientset.RESTConfig().Timeout,
 		Impersonate: rest.ImpersonationConfig{},
 	}
 	clientCmdApiConfig, err := m.accessControlClientset.clientCmdConfig.RawConfig()

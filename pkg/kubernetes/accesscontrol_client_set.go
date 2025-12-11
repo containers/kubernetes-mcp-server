@@ -4,15 +4,12 @@ import (
 	"fmt"
 	"net/http"
 
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	authenticationv1 "k8s.io/client-go/kubernetes/typed/authentication/v1"
-	authorizationv1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
-	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
@@ -24,50 +21,56 @@ import (
 // apiVersion and kinds are checked for allowed access
 type AccessControlClientset struct {
 	kubernetes.Interface
-	config          configapi.BaseConfig
+	config          api.BaseConfig
 	clientCmdConfig clientcmd.ClientConfig
-	cfg             *rest.Config
+	restConfig      *rest.Config
 	restMapper      meta.ResettableRESTMapper
 	discoveryClient discovery.CachedDiscoveryInterface
 	dynamicClient   dynamic.Interface
 	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
 }
 
-func NewAccessControlClientset(config configapi.BaseConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*AccessControlClientset, error) {
+var _ api.KubernetesClientSet = (*AccessControlClientset)(nil)
+
+func NewAccessControlClientset(config api.BaseConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*AccessControlClientset, error) {
 	acc := &AccessControlClientset{
 		config:          config,
 		clientCmdConfig: clientCmdConfig,
-		cfg:             rest.CopyConfig(restConfig),
+		restConfig:      rest.CopyConfig(restConfig),
 	}
-	if acc.cfg.UserAgent == "" {
-		acc.cfg.UserAgent = rest.DefaultKubernetesUserAgent()
+	if acc.restConfig.UserAgent == "" {
+		acc.restConfig.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
-	acc.cfg.Wrap(func(original http.RoundTripper) http.RoundTripper {
+	acc.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return &AccessControlRoundTripper{
 			delegate:                original,
 			deniedResourcesProvider: config,
 			restMapper:              acc.restMapper,
 		}
 	})
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(acc.cfg)
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(acc.restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discovery client: %v", err)
 	}
 	acc.discoveryClient = memory.NewMemCacheClient(discoveryClient)
 	acc.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(acc.discoveryClient)
-	acc.Interface, err = kubernetes.NewForConfig(acc.cfg)
+	acc.Interface, err = kubernetes.NewForConfig(acc.restConfig)
 	if err != nil {
 		return nil, err
 	}
-	acc.dynamicClient, err = dynamic.NewForConfig(acc.cfg)
+	acc.dynamicClient, err = dynamic.NewForConfig(acc.restConfig)
 	if err != nil {
 		return nil, err
 	}
-	acc.metricsV1beta1, err = metricsv1beta1.NewForConfig(acc.cfg)
+	acc.metricsV1beta1, err = metricsv1beta1.NewForConfig(acc.restConfig)
 	if err != nil {
 		return nil, err
 	}
 	return acc, nil
+}
+
+func (a *AccessControlClientset) RESTConfig() *rest.Config {
+	return a.restConfig
 }
 
 func (a *AccessControlClientset) RESTMapper() meta.ResettableRESTMapper {
@@ -86,34 +89,31 @@ func (a *AccessControlClientset) MetricsV1beta1Client() *metricsv1beta1.MetricsV
 	return a.metricsV1beta1
 }
 
-// Nodes returns NodeInterface
-// Deprecated: use CoreV1().Nodes() directly
-func (a *AccessControlClientset) Nodes() (corev1.NodeInterface, error) {
-	return a.CoreV1().Nodes(), nil
+func (a *AccessControlClientset) configuredNamespace() string {
+	if ns, _, nsErr := a.ToRawKubeConfigLoader().Namespace(); nsErr == nil {
+		return ns
+	}
+	return ""
 }
 
-// Pods returns PodInterface
-// Deprecated: use CoreV1().Pods(namespace) directly
-func (a *AccessControlClientset) Pods(namespace string) (corev1.PodInterface, error) {
-	return a.CoreV1().Pods(namespace), nil
+func (a *AccessControlClientset) NamespaceOrDefault(namespace string) string {
+	if namespace == "" {
+		return a.configuredNamespace()
+	}
+	return namespace
 }
 
-// Services returns ServiceInterface
-// Deprecated: use CoreV1().Services(namespace) directly
-func (a *AccessControlClientset) Services(namespace string) (corev1.ServiceInterface, error) {
-	return a.CoreV1().Services(namespace), nil
+func (a *AccessControlClientset) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	return a.DiscoveryClient(), nil
 }
 
-// SelfSubjectAccessReviews returns SelfSubjectAccessReviewInterface
-// Deprecated: use AuthorizationV1().SelfSubjectAccessReviews() directly
-func (a *AccessControlClientset) SelfSubjectAccessReviews() (authorizationv1.SelfSubjectAccessReviewInterface, error) {
-	return a.AuthorizationV1().SelfSubjectAccessReviews(), nil
+func (a *AccessControlClientset) ToRESTMapper() (meta.RESTMapper, error) {
+	return a.RESTMapper(), nil
 }
 
-// TokenReview returns TokenReviewInterface
-// Deprecated: use AuthenticationV1().TokenReviews() directly
-func (a *AccessControlClientset) TokenReview() (authenticationv1.TokenReviewInterface, error) {
-	return a.AuthenticationV1().TokenReviews(), nil
+// ToRESTConfig returns the rest.Config object (genericclioptions.RESTClientGetter)
+func (a *AccessControlClientset) ToRESTConfig() (*rest.Config, error) {
+	return a.RESTConfig(), nil
 }
 
 // ToRawKubeConfigLoader returns the clientcmd.ClientConfig object (genericclioptions.RESTClientGetter)

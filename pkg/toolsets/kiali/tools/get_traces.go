@@ -112,12 +112,12 @@ func InitGetTraces() []api.ServerTool {
 }
 
 func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	k := params.NewKiali()
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
 
 	// Check if traceId is provided - if so, get trace details directly
 	if traceIdVal, ok := params.GetArguments()["traceId"].(string); ok && traceIdVal != "" {
 		traceId := strings.TrimSpace(traceIdVal)
-		content, err := k.TraceDetails(params.Context, traceId)
+		content, err := kiali.TraceDetails(params.Context, traceId)
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to get trace details: %v", err)), nil
 		}
@@ -193,7 +193,7 @@ func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if clusterName, ok := params.GetArguments()["clusterName"].(string); ok && clusterName != "" {
 		queryParams["clusterName"] = clusterName
 	}
-	content, err := ops.tracesFunc(params.Context, k, namespace, resourceName, queryParams)
+	content, err := ops.tracesFunc(params.Context, kiali, namespace, resourceName, queryParams)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get %s traces: %v", ops.singularName, err)), nil
 	}

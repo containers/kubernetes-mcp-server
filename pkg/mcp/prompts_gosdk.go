@@ -56,9 +56,10 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 		}
 
 		params := api.PromptHandlerParams{
-			Context:           ctx,
-			Kubernetes:        k8s,
-			PromptCallRequest: &promptCallRequestAdapter{request: request},
+			Context:                ctx,
+			ExtendedConfigProvider: s.configuration,
+			KubernetesClient:       k8s,
+			PromptCallRequest:      &promptCallRequestAdapter{request: request},
 		}
 
 		result, err := serverPrompt.Handler(params)

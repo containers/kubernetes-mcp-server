@@ -1,10 +1,6 @@
 package api
 
-import (
-	"context"
-
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-)
+import "context"
 
 // ServerPrompt represents a prompt that can be registered with the MCP server.
 // Prompts provide pre-defined workflow templates and guidance to AI assistants.
@@ -88,7 +84,8 @@ func NewPromptCallResult(description string, messages []PromptMessage, err error
 // PromptHandlerParams contains the parameters passed to a prompt handler
 type PromptHandlerParams struct {
 	context.Context
-	*internalk8s.Kubernetes
+	ExtendedConfigProvider
+	KubernetesClient
 	PromptCallRequest
 }
 

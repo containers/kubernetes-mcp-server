@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	authenticationv1api "k8s.io/api/authentication/v1"
 )
@@ -19,7 +19,7 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
-	config              configapi.BaseConfig
+	config              api.BaseConfig
 	defaultContext      string
 	managers            map[string]*Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
@@ -29,14 +29,14 @@ type kubeConfigClusterProvider struct {
 var _ Provider = &kubeConfigClusterProvider{}
 
 func init() {
-	RegisterProvider(configapi.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
+	RegisterProvider(api.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
 }
 
 // newKubeConfigClusterProvider creates a provider that manages multiple clusters
 // via kubeconfig contexts.
 // Internally, it leverages a KubeconfigManager for each context, initializing them
 // lazily when requested.
-func newKubeConfigClusterProvider(cfg configapi.BaseConfig) (Provider, error) {
+func newKubeConfigClusterProvider(cfg api.BaseConfig) (Provider, error) {
 	ret := &kubeConfigClusterProvider{config: cfg}
 	if err := ret.reset(); err != nil {
 		return nil, err

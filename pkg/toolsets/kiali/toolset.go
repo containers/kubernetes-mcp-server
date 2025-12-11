@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiTools "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
@@ -22,7 +21,7 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ internalk8s.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		kialiTools.InitGetMeshGraph(),
 		kialiTools.InitManageIstioConfig(),

@@ -92,7 +92,7 @@ func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 		return api.NewToolCallResult("", fmt.Errorf("resource_type is required")), nil
 	}
 
-	k := params.NewKiali()
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
 
 	ops, ok := listDetailsOpsMap[resourceType]
 	if !ok {
@@ -104,7 +104,7 @@ func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 		if count := len(strings.Split(namespaces, ",")); count != 1 {
 			return api.NewToolCallResult("", fmt.Errorf("exactly one namespace must be provided for %s details", ops.singularName)), nil
 		}
-		content, err := ops.detailsFunc(params.Context, k, namespaces, resourceName)
+		content, err := ops.detailsFunc(params.Context, kiali, namespaces, resourceName)
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to get %s details: %v", ops.singularName, err)), nil
 		}
@@ -112,7 +112,7 @@ func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 	}
 
 	// Otherwise, list resources (supports multiple namespaces)
-	content, err := ops.listFunc(params.Context, k, namespaces)
+	content, err := ops.listFunc(params.Context, kiali, namespaces)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list %ss: %v", ops.singularName, err)), nil
 	}

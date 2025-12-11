@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	configapi "github.com/containers/kubernetes-mcp-server/pkg/api/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -32,7 +32,7 @@ type ToolsetConfigForTest struct {
 	Timeout  int    `toml:"timeout"`
 }
 
-var _ configapi.Extended = (*ToolsetConfigForTest)(nil)
+var _ api.ExtendedConfig = (*ToolsetConfigForTest)(nil)
 
 func (t *ToolsetConfigForTest) Validate() error {
 	if t.Endpoint == "force-error" {
@@ -41,7 +41,7 @@ func (t *ToolsetConfigForTest) Validate() error {
 	return nil
 }
 
-func toolsetConfigForTestParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (configapi.Extended, error) {
+func toolsetConfigForTestParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
 	var toolsetConfigForTest ToolsetConfigForTest
 	if err := md.PrimitiveDecode(primitive, &toolsetConfigForTest); err != nil {
 		return nil, err
@@ -128,7 +128,7 @@ func (s *ToolsetConfigSuite) TestReadConfigUnregisteredToolsetConfig() {
 
 func (s *ToolsetConfigSuite) TestConfigDirPathInContext() {
 	var capturedDirPath string
-	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (configapi.Extended, error) {
+	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
 		capturedDirPath = ConfigDirPathFromContext(ctx)
 		var toolsetConfigForTest ToolsetConfigForTest
 		if err := md.PrimitiveDecode(primitive, &toolsetConfigForTest); err != nil {
@@ -300,7 +300,7 @@ func (s *ToolsetConfigSuite) TestStandaloneConfigDirWithExtendedConfig() {
 func (s *ToolsetConfigSuite) TestConfigDirPathInContextStandalone() {
 	// Test that configDirPath is correctly set in context for standalone --config-dir
 	var capturedDirPath string
-	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (configapi.Extended, error) {
+	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
 		capturedDirPath = ConfigDirPathFromContext(ctx)
 		var toolsetConfigForTest ToolsetConfigForTest
 		if err := md.PrimitiveDecode(primitive, &toolsetConfigForTest); err != nil {

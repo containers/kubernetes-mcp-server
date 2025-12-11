@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
 
@@ -93,8 +94,8 @@ func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 
 	// WorkloadLogs handles container auto-detection internally, so we can pass empty string
 	// if container is not specified
-	k := params.NewKiali()
-	logs, err := k.WorkloadLogs(params.Context, namespace, workload, container, duration, maxLines)
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	logs, err := kiali.WorkloadLogs(params.Context, namespace, workload, container, duration, maxLines)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get workload logs: %v", err)), nil
 	}
