@@ -82,6 +82,7 @@ func NewServer(configuration Configuration) (*Server, error) {
 				HasResources: false,
 				HasPrompts:   true,
 				HasTools:     true,
+				Instructions: configuration.ServerInstructions,
 			}),
 	}
 

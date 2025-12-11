@@ -81,6 +81,10 @@ type StaticConfig struct {
 	promptsDefined  bool           // Internal: tracks if prompts were defined in config
 	promptsMetadata toml.MetaData  // Internal: metadata for prompts decoding
 
+	// Server instructions to be provided by the MCP server to the MCP client
+	// This can be used to provide specific instructions on how the client should use the server
+	ServerInstructions string `toml:"server_instructions,omitempty"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]configapi.Extended
 	// Internal: parsed toolset configs (not exposed to TOML package)
