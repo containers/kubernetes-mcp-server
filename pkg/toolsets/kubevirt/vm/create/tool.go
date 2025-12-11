@@ -160,39 +160,26 @@ type createParameters struct {
 
 // parseCreateParameters parses and validates input parameters
 func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, error) {
-	namespace, err := getRequiredString(params, "namespace")
+	namespace, err := api.RequiredString(params, "namespace")
 	if err != nil {
 		return nil, err
 	}
 
-	name, err := getRequiredString(params, "name")
+	name, err := api.RequiredString(params, "name")
 	if err != nil {
 		return nil, err
-	}
-
-	workload := getOptionalString(params, "workload")
-	if workload == "" {
-		workload = "fedora" // Default to fedora if not specified
-	}
-
-	performance := normalizePerformance(getOptionalString(params, "performance"))
-	autostart := getOptionalBool(params, "autostart")
-
-	storage := getOptionalString(params, "storage")
-	if storage == "" {
-		storage = "30Gi" // Default storage size
 	}
 
 	return &createParameters{
 		Namespace:    namespace,
 		Name:         name,
-		Workload:     workload,
-		Instancetype: getOptionalString(params, "instancetype"),
-		Preference:   getOptionalString(params, "preference"),
-		Size:         getOptionalString(params, "size"),
-		Performance:  performance,
-		Storage:      storage,
-		Autostart:    autostart,
+		Workload:     api.OptionalString(params, "workload", "fedora"),
+		Instancetype: api.OptionalString(params, "instancetype", ""),
+		Preference:   api.OptionalString(params, "preference", ""),
+		Size:         api.OptionalString(params, "size", ""),
+		Performance:  normalizePerformance(api.OptionalString(params, "performance", "")),
+		Storage:      api.OptionalString(params, "storage", "30Gi"),
+		Autostart:    api.OptionalBool(params, "autostart", false),
 	}, nil
 }
 
@@ -291,45 +278,6 @@ func normalizePerformance(performance string) string {
 
 	// Default to "u1" (general-purpose) if not recognized or empty
 	return "u1"
-}
-
-func getRequiredString(params api.ToolHandlerParams, key string) (string, error) {
-	args := params.GetArguments()
-	val, ok := args[key]
-	if !ok {
-		return "", fmt.Errorf("%s parameter required", key)
-	}
-	str, ok := val.(string)
-	if !ok {
-		return "", fmt.Errorf("%s parameter must be a string", key)
-	}
-	return str, nil
-}
-
-func getOptionalString(params api.ToolHandlerParams, key string) string {
-	args := params.GetArguments()
-	val, ok := args[key]
-	if !ok {
-		return ""
-	}
-	str, ok := val.(string)
-	if !ok {
-		return ""
-	}
-	return str
-}
-
-func getOptionalBool(params api.ToolHandlerParams, key string) bool {
-	args := params.GetArguments()
-	val, ok := args[key]
-	if !ok {
-		return false
-	}
-	b, ok := val.(bool)
-	if !ok {
-		return false
-	}
-	return b
 }
 
 // resolveContainerDisk resolves OS names to container disk images from quay.io/containerdisks

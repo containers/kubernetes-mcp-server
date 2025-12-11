@@ -107,9 +107,9 @@ func (s *HelmSuite) TestHelmInstallDenied() {
 		s.Run("describes denial", func() {
 			msg := toolResult.Content[0].(mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
-			s.Truef(strings.HasPrefix(msg, "failed to install helm chart"), "expected descriptive error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(msg, "failed to install helm chart"), "expected descriptive error, got %v", msg)
 			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
-			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }
@@ -230,9 +230,9 @@ func (s *HelmSuite) TestHelmListDenied() {
 		s.Run("describes denial", func() {
 			msg := toolResult.Content[0].(mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
-			s.Truef(strings.HasPrefix(msg, "failed to list helm releases"), "expected descriptive error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(msg, "failed to list helm releases"), "expected descriptive error, got %v", msg)
 			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
-			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

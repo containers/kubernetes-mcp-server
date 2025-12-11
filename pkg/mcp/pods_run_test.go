@@ -105,7 +105,7 @@ func (s *PodsRunSuite) TestPodsRunDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to run pod  in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, podsRun.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

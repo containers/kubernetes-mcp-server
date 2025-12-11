@@ -233,7 +233,7 @@ func (s *NodesTopSuite) TestNodesTopDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get nodes top:(.+:)? resource not allowed: metrics.k8s.io/v1beta1, Kind=NodeMetrics"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

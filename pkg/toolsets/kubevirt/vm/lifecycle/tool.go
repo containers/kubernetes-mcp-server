@@ -39,7 +39,7 @@ func Tools() []api.ServerTool {
 						},
 						"action": {
 							Type:        "string",
-							Enum:        []any{"start", "stop", "restart"},
+							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart)},
 							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
 						},
 					},
@@ -60,17 +60,17 @@ func Tools() []api.ServerTool {
 
 func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	// Parse input parameters
-	namespace, err := getRequiredString(params, "namespace")
+	namespace, err := api.RequiredString(params, "namespace")
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	name, err := getRequiredString(params, "name")
+	name, err := api.RequiredString(params, "name")
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	action, err := getRequiredString(params, "action")
+	action, err := api.RequiredString(params, "action")
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
@@ -123,17 +123,4 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	return api.NewToolCallResult(message+marshalledYaml, nil), nil
-}
-
-func getRequiredString(params api.ToolHandlerParams, key string) (string, error) {
-	args := params.GetArguments()
-	val, ok := args[key]
-	if !ok {
-		return "", fmt.Errorf("%s parameter required", key)
-	}
-	str, ok := val.(string)
-	if !ok {
-		return "", fmt.Errorf("%s parameter must be a string", key)
-	}
-	return str, nil
 }
