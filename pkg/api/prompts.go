@@ -28,40 +28,40 @@ func (s *ServerPrompt) IsClusterAware() bool {
 // Prompt represents the metadata and content of an MCP prompt.
 // See MCP specification: https://spec.modelcontextprotocol.io/specification/server/prompts/
 type Prompt struct {
-	Name        string           `yaml:"name" json:"name" toml:"name"`
-	Title       string           `yaml:"title,omitempty" json:"title,omitempty" toml:"title,omitempty"`
-	Description string           `yaml:"description,omitempty" json:"description,omitempty" toml:"description,omitempty"`
-	Arguments   []PromptArgument `yaml:"arguments,omitempty" json:"arguments,omitempty" toml:"arguments,omitempty"`
-	Templates   []PromptTemplate `yaml:"messages,omitempty" json:"messages,omitempty" toml:"messages,omitempty"`
+	Name        string           `json:"name" toml:"name"`
+	Title       string           `json:"title,omitempty" toml:"title,omitempty"`
+	Description string           `json:"description,omitempty" toml:"description,omitempty"`
+	Arguments   []PromptArgument `json:"arguments,omitempty" toml:"arguments,omitempty"`
+	Templates   []PromptTemplate `json:"messages,omitempty" toml:"messages,omitempty"`
 }
 
 // PromptArgument defines a parameter that can be passed to a prompt.
 // See MCP specification: https://spec.modelcontextprotocol.io/specification/server/prompts/
 type PromptArgument struct {
-	Name        string `yaml:"name" json:"name" toml:"name"`
-	Description string `yaml:"description,omitempty" json:"description,omitempty" toml:"description,omitempty"`
-	Required    bool   `yaml:"required" json:"required" toml:"required"`
+	Name        string `json:"name" toml:"name"`
+	Description string `json:"description,omitempty" toml:"description,omitempty"`
+	Required    bool   `json:"required" toml:"required"`
 }
 
 // PromptTemplate represents a message template from configuration with placeholders like {{arg}}.
 // This is used for configuration parsing and gets rendered into PromptMessage at runtime.
 type PromptTemplate struct {
-	Role    string `yaml:"role" json:"role" toml:"role"`
-	Content string `yaml:"content" json:"content" toml:"content"`
+	Role    string `json:"role" toml:"role"`
+	Content string `json:"content" toml:"content"`
 }
 
 // PromptMessage represents a single message in a prompt response.
 // See MCP specification: https://spec.modelcontextprotocol.io/specification/server/prompts/
 type PromptMessage struct {
-	Role    string        `yaml:"role" json:"role" toml:"role"`
-	Content PromptContent `yaml:"content" json:"content" toml:"content"`
+	Role    string        `json:"role" toml:"role"`
+	Content PromptContent `json:"content" toml:"content"`
 }
 
 // PromptContent represents the content of a prompt message.
 // See MCP specification: https://spec.modelcontextprotocol.io/specification/server/prompts/
 type PromptContent struct {
-	Type string `yaml:"type" json:"type" toml:"type"`
-	Text string `yaml:"text,omitempty" json:"text,omitempty" toml:"text,omitempty"`
+	Type string `json:"type" toml:"type"`
+	Text string `json:"text,omitempty" toml:"text,omitempty"`
 }
 
 // PromptCallRequest interface for accessing prompt call arguments

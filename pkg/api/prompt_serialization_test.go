@@ -6,7 +6,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/yaml.v3"
 )
 
 // PromptSerializationSuite tests serialization of prompt data structures
@@ -42,33 +41,6 @@ func (s *PromptSerializationSuite) TestPromptJSONSerialization() {
 		s.Equal(original.Arguments[0].Name, unmarshaled.Arguments[0].Name)
 		s.Require().Len(unmarshaled.Templates, 1)
 		s.Equal(original.Templates[0].Content, unmarshaled.Templates[0].Content)
-	})
-}
-
-func (s *PromptSerializationSuite) TestPromptYAMLSerialization() {
-	s.Run("marshals and unmarshals Prompt correctly", func() {
-		original := Prompt{
-			Name:        "test-prompt",
-			Title:       "Test Prompt",
-			Description: "A test prompt",
-			Arguments: []PromptArgument{
-				{Name: "arg1", Description: "First argument", Required: true},
-			},
-			Templates: []PromptTemplate{
-				{Role: "user", Content: "Hello {{arg1}}"},
-			},
-		}
-
-		data, err := yaml.Marshal(original)
-		s.Require().NoError(err, "failed to marshal Prompt to YAML")
-
-		var unmarshaled Prompt
-		err = yaml.Unmarshal(data, &unmarshaled)
-		s.Require().NoError(err, "failed to unmarshal Prompt from YAML")
-
-		s.Equal(original.Name, unmarshaled.Name)
-		s.Equal(original.Title, unmarshaled.Title)
-		s.Equal(original.Description, unmarshaled.Description)
 	})
 }
 
@@ -152,15 +124,6 @@ func (s *PromptSerializationSuite) TestPromptArgumentSerialization() {
 		s.Require().NoError(err)
 		s.Equal(arg.Name, jsonArg.Name)
 		s.True(jsonArg.Required)
-
-		// YAML
-		yamlData, err := yaml.Marshal(arg)
-		s.Require().NoError(err)
-		var yamlArg PromptArgument
-		err = yaml.Unmarshal(yamlData, &yamlArg)
-		s.Require().NoError(err)
-		s.Equal(arg.Name, yamlArg.Name)
-		s.True(yamlArg.Required)
 	})
 
 	s.Run("serializes optional argument", func() {
@@ -227,15 +190,6 @@ func (s *PromptSerializationSuite) TestPromptMessageSerialization() {
 		s.Equal(msg.Role, jsonMsg.Role)
 		s.Equal(msg.Content.Type, jsonMsg.Content.Type)
 		s.Equal(msg.Content.Text, jsonMsg.Content.Text)
-
-		// YAML
-		yamlData, err := yaml.Marshal(msg)
-		s.Require().NoError(err)
-		var yamlMsg PromptMessage
-		err = yaml.Unmarshal(yamlData, &yamlMsg)
-		s.Require().NoError(err)
-		s.Equal(msg.Role, yamlMsg.Role)
-		s.Equal(msg.Content.Text, yamlMsg.Content.Text)
 	})
 }
 
@@ -254,15 +208,6 @@ func (s *PromptSerializationSuite) TestPromptContentSerialization() {
 		s.Require().NoError(err)
 		s.Equal(content.Type, jsonContent.Type)
 		s.Equal(content.Text, jsonContent.Text)
-
-		// YAML
-		yamlData, err := yaml.Marshal(content)
-		s.Require().NoError(err)
-		var yamlContent PromptContent
-		err = yaml.Unmarshal(yamlData, &yamlContent)
-		s.Require().NoError(err)
-		s.Equal(content.Type, yamlContent.Type)
-		s.Equal(content.Text, yamlContent.Text)
 	})
 }
 
