@@ -17,14 +17,14 @@ require (
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sync v0.19.0
 	helm.sh/helm/v3 v3.19.2
-	k8s.io/api v0.34.2
+	k8s.io/api v0.34.3
 	k8s.io/apiextensions-apiserver v0.34.2
-	k8s.io/apimachinery v0.34.2
+	k8s.io/apimachinery v0.34.3
 	k8s.io/cli-runtime v0.34.2
-	k8s.io/client-go v0.34.2
+	k8s.io/client-go v0.34.3
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubectl v0.34.2
-	k8s.io/metrics v0.34.2
+	k8s.io/metrics v0.34.3
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20250211091558-894df3a7e664
