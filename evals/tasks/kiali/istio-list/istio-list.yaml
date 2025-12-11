@@ -19,7 +19,7 @@ steps:
       spec:
         hosts:
         - "productpage"
-        - "productpage-bookinfo.apps-crc.testing"  # <--- TU URL EXACTA
+        - "productpage-bookinfo.apps-crc.testing" 
         gateways:
         - bookinfo-gateway
         - mesh # Para que afecte también si un microservicio llama a otro internamente
@@ -35,8 +35,7 @@ steps:
               subset: v1
       EOF
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "productpage-forced-failure"
   cleanup:
     inline: |-
       #!/usr/bin/env bash  

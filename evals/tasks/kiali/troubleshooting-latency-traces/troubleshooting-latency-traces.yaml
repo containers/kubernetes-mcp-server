@@ -8,8 +8,7 @@ steps:
     inline: |-
       #!/usr/bin/env bash
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "30 minutes"
   cleanup:
     inline: |-
       #!/usr/bin/env bash   

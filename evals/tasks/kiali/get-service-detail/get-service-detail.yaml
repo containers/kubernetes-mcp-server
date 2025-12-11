@@ -1,17 +1,15 @@
 kind: Task
 metadata:
-  name: "Show topology bookinfo"
-  category: "High-Level Observability & Health"
+  name: "get-service-detail"
   difficulty: easy
 steps:
   setup:
       inline: |-
         #!/usr/bin/env bash
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "service: details"
   cleanup:
     inline: |-
       #!/usr/bin/env bash          
   prompt:
-    inline: Show me the topology of the bookinfo namespace.
+    inline: Give me information about my service details in the namespace bookinfo.

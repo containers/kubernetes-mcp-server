@@ -32,8 +32,7 @@ steps:
                   host: productpage
         EOF
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "fault injection"
   cleanup:
     inline: |-
       #!/usr/bin/env bash

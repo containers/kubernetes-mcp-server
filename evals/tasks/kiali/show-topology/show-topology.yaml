@@ -1,6 +1,6 @@
 kind: Task
 metadata:
-  name: "Status Kiali and Istio"
+  name: "Show topology bookinfo"
   category: "High-Level Observability & Health"
   difficulty: easy
 steps:
@@ -8,10 +8,9 @@ steps:
       inline: |-
         #!/usr/bin/env bash
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "topology of the **bookinfo**"
   cleanup:
     inline: |-
       #!/usr/bin/env bash          
   prompt:
-    inline: Give me a status report on the interaction between Kiali and Istio components
+    inline: Show me the topology of the bookinfo namespace.

@@ -9,8 +9,7 @@ steps:
         #!/usr/bin/env bash
         oc patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "false"}}}}}'
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "details-v1"
   cleanup:
     inline: |-
       #!/usr/bin/env bash   

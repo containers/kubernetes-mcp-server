@@ -1,6 +1,6 @@
 kind: Task
 metadata:
-  name: "Unhealthy Namespaces"
+  name: "Status Kiali and Istio"
   category: "High-Level Observability & Health"
   difficulty: easy
 steps:
@@ -8,10 +8,9 @@ steps:
       inline: |-
         #!/usr/bin/env bash
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "Istio Version"
   cleanup:
     inline: |-
       #!/usr/bin/env bash          
   prompt:
-    inline: Are there any unhealthy namespaces in my mesh right now?
+    inline: Give me a status report on the interaction between Kiali and Istio components
