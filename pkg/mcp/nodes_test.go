@@ -200,6 +200,186 @@ func (s *NodesSuite) TestNodesLog() {
 	}
 }
 
+func (s *NodesSuite) TestNodesLogWithArrayQuery() {
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Get Node response
+		if req.URL.Path == "/api/v1/nodes/existing-node" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"apiVersion": "v1",
+				"kind": "Node",
+				"metadata": {
+					"name": "existing-node"
+				}
+			}`))
+			return
+		}
+		// Get Proxy Logs
+		if req.URL.Path == "/api/v1/nodes/existing-node/proxy/logs" {
+			w.Header().Set("Content-Type", "text/plain")
+			query := req.URL.Query().Get("query")
+			var logContent string
+			switch query {
+			case "/kubelet.log":
+				logContent = "Kubelet log line 1\nKubelet log line 2\n"
+			case "/kube-proxy.log":
+				logContent = "Kube-proxy log line 1\nKube-proxy log line 2\n"
+			case "/empty.log":
+				logContent = ""
+			default:
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(logContent))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	s.InitMcpClient()
+
+	s.Run("nodes_log(name=existing-node, query=[/kubelet.log, /kube-proxy.log])", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": []interface{}{"/kubelet.log", "/kube-proxy.log"},
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("no error", func() {
+			s.Falsef(toolResult.IsError, "call tool should succeed")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("returns logs from both files with separators", func() {
+			result := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(result, "=== Logs for query: /kubelet.log ===", "should contain kubelet log header")
+			s.Contains(result, "Kubelet log line 1\nKubelet log line 2\n", "should contain kubelet log content")
+			s.Contains(result, "=== Logs for query: /kube-proxy.log ===", "should contain kube-proxy log header")
+			s.Contains(result, "Kube-proxy log line 1\nKube-proxy log line 2\n", "should contain kube-proxy log content")
+		})
+	})
+
+	s.Run("nodes_log(name=existing-node, query=[])", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": []interface{}{},
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes empty array", func() {
+			expectedMessage := "failed to get node log, query array cannot be empty"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+
+	s.Run("nodes_log(name=existing-node, query=[''])", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": []interface{}{""},
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes empty string in array", func() {
+			expectedMessage := "failed to get node log, query array element 0 cannot be empty"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+
+	s.Run("nodes_log(name=existing-node, query=[123])", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": []interface{}{123},
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes non-string element in array", func() {
+			expectedMessage := "failed to get node log, query array element 0 is not a string"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+
+	s.Run("nodes_log(name=existing-node, query=[/kubelet.log, /empty.log])", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": []interface{}{"/kubelet.log", "/empty.log"},
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("no error", func() {
+			s.Falsef(toolResult.IsError, "call tool should succeed")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("handles empty log in array", func() {
+			result := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(result, "=== Logs for query: /kubelet.log ===", "should contain kubelet log header")
+			s.Contains(result, "Kubelet log line 1\nKubelet log line 2\n", "should contain kubelet log content")
+			s.Contains(result, "=== Logs for query: /empty.log ===", "should contain empty log header")
+			s.Contains(result, "The node existing-node has not logged any message yet for query '/empty.log' or the log file is empty", "should contain empty log message")
+		})
+	})
+
+	s.Run("nodes_log(name=existing-node, query=[/missing.log])", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": []interface{}{"/missing.log"},
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes missing log file", func() {
+			expectedMessage := "failed to get node log for existing-node: failed to get node logs: the server could not find the requested resource"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+
+	s.Run("nodes_log(name=existing-node, query=[/missing1.log, /missing2.log])", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": []interface{}{"/missing1.log", "/missing2.log"},
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes missing log file with query when multiple queries", func() {
+			expectedMessage := "failed to get node log for existing-node (query: /missing1.log): failed to get node logs: the server could not find the requested resource"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+
+	s.Run("nodes_log(name=existing-node, query='')", func() {
+		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+			"name":  "existing-node",
+			"query": "",
+		})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes empty string query", func() {
+			expectedMessage := "failed to get node log, query cannot be empty"
+			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+}
+
 func (s *NodesSuite) TestNodesLogDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "Node" } ]
