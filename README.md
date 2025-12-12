@@ -329,9 +329,9 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 |----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
 | config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
 | core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
-| helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
 | kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
 | kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
+| helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -451,33 +451,13 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <details>
 
-<summary>helm</summary>
-
-- **helm_install** - Install a Helm chart in the current or provided namespace
-  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
-  - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
-  - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
-  - `values` (`object`) - Values to pass to the Helm chart (Optional)
-
-- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
-  - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
-  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
-
-- **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
-  - `name` (`string`) **(required)** - Name of the Helm release to uninstall
-  - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
-
-</details>
-
-<details>
-
 <summary>kiali</summary>
 
-- **kiali_get_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
-  - `graphType` (`string`) - Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'
+- **kiali_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
+  - `graphType` (`string`) - Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'
   - `namespace` (`string`) - Optional single namespace to include in the graph (alternative to namespaces)
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
-  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h').
+  - `rateInterval` (`string`) - Optional rate interval for fetching (e.g., '10m', '5m', '1h').
 
 - **kiali_manage_istio_config** - Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects
   - `action` (`string`) **(required)** - Action to perform: list, get, create, patch, or delete
@@ -546,6 +526,26 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+
+</details>
+
+<details>
+
+<summary>helm</summary>
+
+- **helm_install** - Install a Helm chart in the current or provided namespace
+  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
+  - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
+  - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
+  - `values` (`object`) - Values to pass to the Helm chart (Optional)
+
+- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
+  - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
+  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
+
+- **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
+  - `name` (`string`) **(required)** - Name of the Helm release to uninstall
+  - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
 
 </details>
 
