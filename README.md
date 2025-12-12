@@ -294,7 +294,7 @@ pkill -HUP kubernetes-mcp-server
 
 ### MCP Prompts
 
-The server supports MCP prompts for workflow templates. Define custom prompts in `config.toml`:
+1. The server supports MCP prompts for workflow templates. Define custom prompts in `config.toml`:
 
 ```toml
 [[prompts]]
@@ -310,6 +310,8 @@ required = true
 role = "user"
 content = "Help me with {{resource_name}}"
 ```
+
+2. Toolset prompts implemented by toolset developers
 
 See docs/PROMPTS.md for detailed documentation.
 

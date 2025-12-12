@@ -167,6 +167,22 @@ func (s *Server) reloadToolsets() error {
 	// Track previously enabled prompts
 	previousPrompts := s.enabledPrompts
 
+	// Build and register prompts from all toolsets
+	applicablePrompts := make([]api.ServerPrompt, 0)
+	s.enabledPrompts = make([]string, 0)
+
+	// Load embedded toolset prompts
+	for _, toolset := range s.configuration.Toolsets() {
+		prompts := toolset.GetPrompts()
+		if prompts == nil {
+			continue
+		}
+		for _, prompt := range prompts {
+			applicablePrompts = append(applicablePrompts, prompt)
+			s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
+		}
+	}
+
 	// Load config prompts into registry
 	prompts.Clear()
 	if s.configuration.HasPrompts() {
@@ -180,9 +196,12 @@ func (s *Server) reloadToolsets() error {
 	// Get prompts from registry
 	configPrompts := prompts.ConfigPrompts()
 
+	// Merge: config prompts override embedded prompts with same name
+	applicablePrompts = mergePrompts(applicablePrompts, configPrompts)
+
 	// Update enabled prompts list
 	s.enabledPrompts = make([]string, 0)
-	for _, prompt := range configPrompts {
+	for _, prompt := range applicablePrompts {
 		s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
 	}
 
@@ -195,8 +214,8 @@ func (s *Server) reloadToolsets() error {
 	}
 	s.server.RemovePrompts(promptsToRemove...)
 
-	// Register all config prompts
-	for _, prompt := range configPrompts {
+	// Register all applicable prompts
+	for _, prompt := range applicablePrompts {
 		mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
 		if err != nil {
 			return fmt.Errorf("failed to convert prompt %s: %v", prompt.Prompt.Name, err)

@@ -32,6 +32,11 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	)
 }
 
+func (t *Toolset) GetPrompts() []api.ServerPrompt {
+	// Kiali toolset does not provide prompts
+	return nil
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

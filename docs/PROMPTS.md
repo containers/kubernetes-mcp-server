@@ -60,3 +60,53 @@ Use `{{argument_name}}` placeholders in message content. The template engine rep
 ## Configuration File Location
 
 Place your prompts in the `config.toml` file used by the MCP server. Specify the config file path using the `--config` flag when starting the server.
+
+## Toolset Prompts
+
+Toolsets can provide built-in prompts by implementing the `GetPrompts()` method. This allows toolset developers to ship workflow templates alongside their tools.
+
+### Implementing Toolset Prompts
+
+```go
+func (t *MyToolset) GetPrompts() []api.ServerPrompt {
+    return []api.ServerPrompt{
+        {
+            Prompt: api.Prompt{
+                Name:        "my-workflow",
+                Description: "Custom workflow for my toolset",
+                Arguments: []api.PromptArgument{
+                    {
+                        Name:        "namespace",
+                        Description: "Target namespace",
+                        Required:    true,
+                    },
+                },
+            },
+            Handler: func(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
+                args := params.GetArguments()
+                namespace := args["namespace"]
+
+                // Build messages dynamically based on arguments
+                messages := []api.PromptMessage{
+                    {
+                        Role: "user",
+                        Content: api.PromptContent{
+                            Type: "text",
+                            Text: fmt.Sprintf("Help me with namespace: %s", namespace),
+                        },
+                    },
+                }
+
+                return api.NewPromptCallResult("Workflow description", messages, nil), nil
+            },
+        },
+    }
+}
+```
+
+### Prompt Merging
+
+When both toolset and config prompts exist:
+- Config-defined prompts **override** toolset prompts with the same name
+- This allows administrators to customize built-in workflows
+- Prompts with unique names from both sources are available
