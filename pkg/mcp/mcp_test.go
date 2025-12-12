@@ -1,14 +1,12 @@
 package mcp
 
 import (
-	"context"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/stretchr/testify/suite"
 )
@@ -103,66 +101,25 @@ func TestMcpHeaders(t *testing.T) {
 
 type ServerInstructionsSuite struct {
 	BaseMcpSuite
-	mockServer *test.MockServer
 }
 
-func (s *ServerInstructionsSuite) SetupTest() {
-	s.BaseMcpSuite.SetupTest()
-	s.mockServer = test.NewMockServer()
-	s.mockServer.Handle(&test.DiscoveryClientHandler{})
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
-}
-
-func (s *ServerInstructionsSuite) TearDownTest() {
-	s.BaseMcpSuite.TearDownTest()
-	if s.mockServer != nil {
-		s.mockServer.Close()
-	}
-}
-
-func (s *ServerInstructionsSuite) TestServerInstructions() {
+func (s *ServerInstructionsSuite) TestServerInstructionsEmpty() {
+	s.InitMcpClient()
 	s.Run("returns empty instructions when not configured", func() {
-		s.Cfg.ServerInstructions = ""
-		mcpServer, err := NewServer(Configuration{StaticConfig: s.Cfg})
-		s.Require().NoError(err)
-		s.T().Cleanup(mcpServer.Close)
-
-		testServer := httptest.NewServer(mcpServer.ServeHTTP())
-		s.T().Cleanup(testServer.Close)
-
-		mcpClient, err := client.NewStreamableHttpClient(testServer.URL+"/mcp", transport.WithContinuousListening())
-		s.Require().NoError(err)
-		s.T().Cleanup(func() { _ = mcpClient.Close() })
-
-		err = mcpClient.Start(context.Background())
-		s.Require().NoError(err)
-
-		result, err := mcpClient.Initialize(context.Background(), test.McpInitRequest())
-		s.Require().NoError(err)
-		s.Empty(result.Instructions, "instructions should be empty when not configured")
+		s.Require().NotNil(s.InitializeResult)
+		s.Empty(s.InitializeResult.Instructions, "instructions should be empty when not configured")
 	})
+}
 
+func (s *ServerInstructionsSuite) TestServerInstructionsFromConfiguration() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		server_instructions = "Always use YAML output format for kubectl commands."
+	`), s.Cfg), "Expected to parse server instructions config")
+	s.InitMcpClient()
 	s.Run("returns configured instructions", func() {
-		expectedInstructions := "Always use YAML output format for kubectl commands."
-		s.Cfg.ServerInstructions = expectedInstructions
-
-		mcpServer, err := NewServer(Configuration{StaticConfig: s.Cfg})
-		s.Require().NoError(err)
-		s.T().Cleanup(mcpServer.Close)
-
-		testServer := httptest.NewServer(mcpServer.ServeHTTP())
-		s.T().Cleanup(testServer.Close)
-
-		mcpClient, err := client.NewStreamableHttpClient(testServer.URL+"/mcp", transport.WithContinuousListening())
-		s.Require().NoError(err)
-		s.T().Cleanup(func() { _ = mcpClient.Close() })
-
-		err = mcpClient.Start(context.Background())
-		s.Require().NoError(err)
-
-		result, err := mcpClient.Initialize(context.Background(), test.McpInitRequest())
-		s.Require().NoError(err)
-		s.Equal(expectedInstructions, result.Instructions, "instructions should match configured value")
+		s.Require().NotNil(s.InitializeResult)
+		s.Equal("Always use YAML output format for kubectl commands.", s.InitializeResult.Instructions,
+			"instructions should match configured value")
 	})
 }
 
