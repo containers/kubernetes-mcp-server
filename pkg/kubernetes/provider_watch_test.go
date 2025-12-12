@@ -98,7 +98,7 @@ func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
 			s.Require().NoError(err, "Expected no error from GetDerivedKubernetes for context-1")
 			s.NotNil(k, "Expected Kubernetes from GetDerivedKubernetes for context-1")
 			s.Run("Derived Kubernetes points to correct context", func() {
-				cfg, err := k.AccessControlClientset().ToRawKubeConfigLoader().RawConfig()
+				cfg, err := k.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err, "Expected no error from ToRawKubeConfigLoader")
 				s.Equal("context-1", cfg.CurrentContext, "Expected Kubernetes to point to changed-context")
 			})
@@ -133,7 +133,7 @@ func (s *ProviderWatchTargetsTestSuite) TestSingleClusterProvider() {
 			s.Require().NoError(err, "Expected no error from GetDerivedKubernetes for context-1")
 			s.NotNil(k, "Expected Kubernetes from GetDerivedKubernetes for context-1")
 			s.Run("Derived Kubernetes points to correct context", func() {
-				cfg, err := k.AccessControlClientset().ToRawKubeConfigLoader().RawConfig()
+				cfg, err := k.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err, "Expected no error from ToRawKubeConfigLoader")
 				s.Equal("context-1", cfg.CurrentContext, "Expected Kubernetes to point to changed-context")
 			})
@@ -148,7 +148,7 @@ func (s *ProviderWatchTargetsTestSuite) TestSingleClusterProvider() {
 				k, err := provider.GetDerivedKubernetes(s.T().Context(), "")
 				s.Require().NoError(err, "Expected no error from GetDerivedKubernetes for context-2")
 				s.NotNil(k, "Expected Kubernetes from GetDerivedKubernetes for context-2")
-				cfg, err := k.AccessControlClientset().ToRawKubeConfigLoader().RawConfig()
+				cfg, err := k.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err, "Expected no error from ToRawKubeConfigLoader")
 				s.Equal("context-2", cfg.CurrentContext, "Expected Kubernetes to point to changed-context")
 			})

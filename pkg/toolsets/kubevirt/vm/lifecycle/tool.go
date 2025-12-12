@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -76,12 +75,7 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	// Type assert to concrete type to access AccessControlClientset
-	k8s, ok := params.KubernetesClient.(*kubernetes.Kubernetes)
-	if !ok {
-		return api.NewToolCallResult("", fmt.Errorf("kubernetes client type assertion failed")), nil
-	}
-	dynamicClient := k8s.AccessControlClientset().DynamicClient()
+	dynamicClient := params.DynamicClient()
 
 	var vm *unstructured.Unstructured
 	var message string

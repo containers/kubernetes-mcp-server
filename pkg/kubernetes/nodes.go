@@ -19,11 +19,11 @@ func (k *Kubernetes) NodesLog(ctx context.Context, name string, query string, ta
 	// - /var/log/kube-proxy.log - kube-proxy logs
 	// - /var/log/containers/ - container logs
 
-	if _, err := k.AccessControlClientset().CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
+	if _, err := k.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
 		return "", fmt.Errorf("failed to get node %s: %w", name, err)
 	}
 
-	req := k.AccessControlClientset().CoreV1().RESTClient().
+	req := k.CoreV1().RESTClient().
 		Get().
 		AbsPath("api", "v1", "nodes", name, "proxy", "logs")
 	req.Param("query", query)
@@ -50,11 +50,11 @@ func (k *Kubernetes) NodesStatsSummary(ctx context.Context, name string) (string
 	// https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/
 	// This endpoint provides CPU, memory, filesystem, and network statistics
 
-	if _, err := k.AccessControlClientset().CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
+	if _, err := k.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
 		return "", fmt.Errorf("failed to get node %s: %w", name, err)
 	}
 
-	result := k.AccessControlClientset().CoreV1().RESTClient().
+	result := k.CoreV1().RESTClient().
 		Get().
 		AbsPath("api", "v1", "nodes", name, "proxy", "stats", "summary").
 		Do(ctx)
@@ -78,13 +78,13 @@ func (k *Kubernetes) NodesTop(ctx context.Context, options api.NodesTopOptions) 
 	versionedMetrics := &metricsv1beta1api.NodeMetricsList{}
 	var err error
 	if options.Name != "" {
-		m, err := k.AccessControlClientset().MetricsV1beta1Client().NodeMetricses().Get(ctx, options.Name, metav1.GetOptions{})
+		m, err := k.MetricsV1beta1Client().NodeMetricses().Get(ctx, options.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get metrics for node %s: %w", options.Name, err)
 		}
 		versionedMetrics.Items = []metricsv1beta1api.NodeMetrics{*m}
 	} else {
-		versionedMetrics, err = k.AccessControlClientset().MetricsV1beta1Client().NodeMetricses().List(ctx, options.ListOptions)
+		versionedMetrics, err = k.MetricsV1beta1Client().NodeMetricses().List(ctx, options.ListOptions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list node metrics: %w", err)
 		}

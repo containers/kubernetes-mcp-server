@@ -112,7 +112,7 @@ func InitGetTraces() []api.ServerTool {
 }
 
 func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 
 	// Check if traceId is provided - if so, get trace details directly
 	if traceIdVal, ok := params.GetArguments()["traceId"].(string); ok && traceIdVal != "" {

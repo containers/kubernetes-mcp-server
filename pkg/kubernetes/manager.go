@@ -18,7 +18,7 @@ import (
 )
 
 type Manager struct {
-	accessControlClientset *AccessControlClientset
+	kubernetes *Kubernetes
 
 	config api.BaseConfig
 }
@@ -108,7 +108,7 @@ func NewManager(config api.BaseConfig, restConfig *rest.Config, clientCmdConfig 
 	//k8s.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
-	k8s.accessControlClientset, err = NewAccessControlClientset(k8s.config, clientCmdConfig, restConfig)
+	k8s.kubernetes, err = NewKubernetes(k8s.config, clientCmdConfig, restConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func NewManager(config api.BaseConfig, restConfig *rest.Config, clientCmdConfig 
 }
 
 func (m *Manager) VerifyToken(ctx context.Context, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
-	tokenReviewClient := m.accessControlClientset.AuthenticationV1().TokenReviews()
+	tokenReviewClient := m.kubernetes.AuthenticationV1().TokenReviews()
 	tokenReview := &authenticationv1api.TokenReview{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "authentication.k8s.io/v1",
@@ -149,51 +149,51 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		if m.config.IsRequireOAuth() {
 			return nil, errors.New("oauth token required")
 		}
-		return &Kubernetes{m.accessControlClientset}, nil
+		return m.kubernetes, nil
 	}
 	klog.V(5).Infof("%s header found (Bearer), using provided bearer token", OAuthAuthorizationHeader)
 	derivedCfg := &rest.Config{
-		Host:          m.accessControlClientset.RESTConfig().Host,
-		APIPath:       m.accessControlClientset.RESTConfig().APIPath,
-		WrapTransport: m.accessControlClientset.RESTConfig().WrapTransport,
+		Host:          m.kubernetes.RESTConfig().Host,
+		APIPath:       m.kubernetes.RESTConfig().APIPath,
+		WrapTransport: m.kubernetes.RESTConfig().WrapTransport,
 		// Copy only server verification TLS settings (CA bundle and server name)
 		TLSClientConfig: rest.TLSClientConfig{
-			Insecure:   m.accessControlClientset.RESTConfig().Insecure,
-			ServerName: m.accessControlClientset.RESTConfig().ServerName,
-			CAFile:     m.accessControlClientset.RESTConfig().CAFile,
-			CAData:     m.accessControlClientset.RESTConfig().CAData,
+			Insecure:   m.kubernetes.RESTConfig().Insecure,
+			ServerName: m.kubernetes.RESTConfig().ServerName,
+			CAFile:     m.kubernetes.RESTConfig().CAFile,
+			CAData:     m.kubernetes.RESTConfig().CAData,
 		},
 		BearerToken: strings.TrimPrefix(authorization, "Bearer "),
 		// pass custom UserAgent to identify the client
 		UserAgent:   CustomUserAgent,
-		QPS:         m.accessControlClientset.RESTConfig().QPS,
-		Burst:       m.accessControlClientset.RESTConfig().Burst,
-		Timeout:     m.accessControlClientset.RESTConfig().Timeout,
+		QPS:         m.kubernetes.RESTConfig().QPS,
+		Burst:       m.kubernetes.RESTConfig().Burst,
+		Timeout:     m.kubernetes.RESTConfig().Timeout,
 		Impersonate: rest.ImpersonationConfig{},
 	}
-	clientCmdApiConfig, err := m.accessControlClientset.clientCmdConfig.RawConfig()
+	clientCmdApiConfig, err := m.kubernetes.clientCmdConfig.RawConfig()
 	if err != nil {
 		if m.config.IsRequireOAuth() {
 			klog.Errorf("failed to get kubeconfig: %v", err)
 			return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 		}
-		return &Kubernetes{m.accessControlClientset}, nil
+		return m.kubernetes, nil
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
-	derived, err := NewAccessControlClientset(m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
+	derived, err := NewKubernetes(m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
 	if err != nil {
 		if m.config.IsRequireOAuth() {
-			klog.Errorf("failed to create derived clientset: %v", err)
-			return nil, fmt.Errorf("failed to create derived clientset: %w", err)
+			klog.Errorf("failed to create derived client: %v", err)
+			return nil, fmt.Errorf("failed to create derived client: %w", err)
 		}
-		return &Kubernetes{m.accessControlClientset}, nil
+		return m.kubernetes, nil
 	}
-	return &Kubernetes{derived}, nil
+	return derived, nil
 }
 
 // Invalidate invalidates the cached discovery information.
 func (m *Manager) Invalidate() {
-	m.accessControlClientset.DiscoveryClient().Invalidate()
+	m.kubernetes.DiscoveryClient().Invalidate()
 }
 
 // applyRateLimitFromEnv applies QPS and Burst rate limits from environment variables if set.
