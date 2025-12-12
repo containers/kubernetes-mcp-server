@@ -42,11 +42,11 @@ func (k *Kubernetes) PodsListInNamespace(ctx context.Context, namespace string, 
 func (k *Kubernetes) PodsGet(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
 	return k.ResourcesGet(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
-	}, k.AccessControlClientset().NamespaceOrDefault(namespace), name)
+	}, k.NamespaceOrDefault(namespace), name)
 }
 
 func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (string, error) {
-	namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
+	namespace = k.NamespaceOrDefault(namespace)
 	pod, err := k.ResourcesGet(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
 	if err != nil {
 		return "", err
@@ -60,7 +60,7 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 
 	// Delete managed service
 	if isManaged {
-		services := k.AccessControlClientset().CoreV1().Services(namespace)
+		services := k.CoreV1().Services(namespace)
 		if sl, _ := services.List(ctx, metav1.ListOptions{
 			LabelSelector: managedLabelSelector.String(),
 		}); sl != nil {
@@ -72,7 +72,7 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 
 	// Delete managed Route
 	if isManaged && k.supportsGroupVersion("route.openshift.io/v1") {
-		routeResources := k.AccessControlClientset().DynamicClient().
+		routeResources := k.DynamicClient().
 			Resource(schema.GroupVersionResource{Group: "route.openshift.io", Version: "v1", Resource: "routes"}).
 			Namespace(namespace)
 		if rl, _ := routeResources.List(ctx, metav1.ListOptions{
@@ -89,7 +89,7 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 }
 
 func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
-	pods := k.AccessControlClientset().CoreV1().Pods(k.AccessControlClientset().NamespaceOrDefault(namespace))
+	pods := k.CoreV1().Pods(k.NamespaceOrDefault(namespace))
 
 	logOptions := &v1.PodLogOptions{
 		Container: container,
@@ -130,7 +130,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 	var resources []any
 	pod := &v1.Pod{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.AccessControlClientset().NamespaceOrDefault(namespace), Labels: labels},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.NamespaceOrDefault(namespace), Labels: labels},
 		Spec: v1.PodSpec{Containers: []v1.Container{{
 			Name:            name,
 			Image:           image,
@@ -142,7 +142,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 		pod.Spec.Containers[0].Ports = []v1.ContainerPort{{ContainerPort: port}}
 		resources = append(resources, &v1.Service{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.AccessControlClientset().NamespaceOrDefault(namespace), Labels: labels},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.NamespaceOrDefault(namespace), Labels: labels},
 			Spec: v1.ServiceSpec{
 				Selector: labels,
 				Type:     v1.ServiceTypeClusterIP,
@@ -157,7 +157,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 				"kind":       "Route",
 				"metadata": map[string]interface{}{
 					"name":      name,
-					"namespace": k.AccessControlClientset().NamespaceOrDefault(namespace),
+					"namespace": k.NamespaceOrDefault(namespace),
 					"labels":    labels,
 				},
 				"spec": map[string]interface{}{
@@ -205,18 +205,18 @@ func (k *Kubernetes) PodsTop(ctx context.Context, options api.PodsTopOptions) (*
 	if options.AllNamespaces && namespace == "" {
 		namespace = ""
 	} else {
-		namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
+		namespace = k.NamespaceOrDefault(namespace)
 	}
 	var err error
 	versionedMetrics := &metricsv1beta1api.PodMetricsList{}
 	if options.Name != "" {
-		m, err := k.AccessControlClientset().MetricsV1beta1Client().PodMetricses(namespace).Get(ctx, options.Name, metav1.GetOptions{})
+		m, err := k.MetricsV1beta1Client().PodMetricses(namespace).Get(ctx, options.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get metrics for pod %s/%s: %w", namespace, options.Name, err)
 		}
 		versionedMetrics.Items = []metricsv1beta1api.PodMetrics{*m}
 	} else {
-		versionedMetrics, err = k.AccessControlClientset().MetricsV1beta1Client().PodMetricses(namespace).List(ctx, options.ListOptions)
+		versionedMetrics, err = k.MetricsV1beta1Client().PodMetricses(namespace).List(ctx, options.ListOptions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list pod metrics in namespace %s: %w", namespace, err)
 		}
@@ -226,8 +226,8 @@ func (k *Kubernetes) PodsTop(ctx context.Context, options api.PodsTopOptions) (*
 }
 
 func (k *Kubernetes) PodsExec(ctx context.Context, namespace, name, container string, command []string) (string, error) {
-	namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
-	pods := k.AccessControlClientset().CoreV1().Pods(namespace)
+	namespace = k.NamespaceOrDefault(namespace)
+	pods := k.CoreV1().Pods(namespace)
 	pod, err := pods.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return "", err
@@ -247,14 +247,14 @@ func (k *Kubernetes) PodsExec(ctx context.Context, namespace, name, container st
 	}
 	// Compute URL
 	// https://github.com/kubernetes/kubectl/blob/5366de04e168bcbc11f5e340d131a9ca8b7d0df4/pkg/cmd/exec/exec.go#L382-L397
-	execRequest := k.AccessControlClientset().CoreV1().RESTClient().
+	execRequest := k.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
 		Namespace(namespace).
 		Name(name).
 		SubResource("exec")
 	execRequest.VersionedParams(podExecOptions, ParameterCodec)
-	restConfig, err := k.AccessControlClientset().ToRESTConfig()
+	restConfig, err := k.ToRESTConfig()
 	if err != nil {
 		return "", err
 	}

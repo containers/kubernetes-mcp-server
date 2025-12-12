@@ -66,8 +66,8 @@ func (p *singleClusterProvider) reset() error {
 	}
 
 	p.Close()
-	p.kubeconfigWatcher = watcher.NewKubeconfig(p.manager.accessControlClientset.clientCmdConfig)
-	p.clusterStateWatcher = watcher.NewClusterState(p.manager.accessControlClientset.DiscoveryClient())
+	p.kubeconfigWatcher = watcher.NewKubeconfig(p.manager.kubernetes.clientCmdConfig)
+	p.clusterStateWatcher = watcher.NewClusterState(p.manager.kubernetes.DiscoveryClient())
 	return nil
 }
 

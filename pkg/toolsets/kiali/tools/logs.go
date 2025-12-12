@@ -94,7 +94,7 @@ func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 
 	// WorkloadLogs handles container auto-detection internally, so we can pass empty string
 	// if container is not specified
-	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	logs, err := kiali.WorkloadLogs(params.Context, namespace, workload, container, duration, maxLines)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get workload logs: %v", err)), nil

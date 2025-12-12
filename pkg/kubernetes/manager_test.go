@@ -45,12 +45,12 @@ func (s *ManagerTestSuite) TestNewInClusterManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as in cluster", func() {
-				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
+				rawConfig, err := manager.kubernetes.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.Equal("in-cluster", rawConfig.CurrentContext, "expected current context to be 'in-cluster'")
 			})
 			s.Run("sets default user-agent", func() {
-				s.Contains(manager.accessControlClientset.RESTConfig().UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
+				s.Contains(manager.kubernetes.RESTConfig().UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
 			})
 		})
 		s.Run("with explicit kubeconfig", func() {
@@ -90,19 +90,19 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
-				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
+				rawConfig, err := manager.kubernetes.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.NotEqual("in-cluster", rawConfig.CurrentContext, "expected current context to NOT be 'in-cluster'")
 				s.Equal("fake-context", rawConfig.CurrentContext, "expected current context to be 'fake-context' as in kubeconfig")
 			})
 			s.Run("loads correct config", func() {
-				s.Contains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfig, "expected kubeconfig path to match")
+				s.Contains(manager.kubernetes.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfig, "expected kubeconfig path to match")
 			})
 			s.Run("sets default user-agent", func() {
-				s.Contains(manager.accessControlClientset.RESTConfig().UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
+				s.Contains(manager.kubernetes.RESTConfig().UserAgent, "("+runtime.GOOS+"/"+runtime.GOARCH+")")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.accessControlClientset.RESTConfig().Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.kubernetes.RESTConfig().Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig in config", func() {
@@ -115,17 +115,17 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
-				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
+				rawConfig, err := manager.kubernetes.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.NotEqual("in-cluster", rawConfig.CurrentContext, "expected current context to NOT be 'in-cluster'")
 				s.Equal("fake-context", rawConfig.CurrentContext, "expected current context to be 'fake-context' as in kubeconfig")
 			})
 			s.Run("loads correct config (explicit)", func() {
-				s.NotContains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigInEnv, "expected kubeconfig path to NOT match env")
-				s.Contains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigExplicit, "expected kubeconfig path to match explicit")
+				s.NotContains(manager.kubernetes.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigInEnv, "expected kubeconfig path to NOT match env")
+				s.Contains(manager.kubernetes.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigExplicit, "expected kubeconfig path to match explicit")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.accessControlClientset.RESTConfig().Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.kubernetes.RESTConfig().Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig context (valid)", func() {
@@ -141,16 +141,16 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
-				rawConfig, err := manager.accessControlClientset.ToRawKubeConfigLoader().RawConfig()
+				rawConfig, err := manager.kubernetes.ToRawKubeConfigLoader().RawConfig()
 				s.Require().NoError(err)
 				s.NotEqual("in-cluster", rawConfig.CurrentContext, "expected current context to NOT be 'in-cluster'")
 				s.Equal("not-the-mock-server", rawConfig.CurrentContext, "expected current context to be 'not-the-mock-server' as in explicit context")
 			})
 			s.Run("loads correct config", func() {
-				s.Contains(manager.accessControlClientset.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigFile, "expected kubeconfig path to match")
+				s.Contains(manager.kubernetes.ToRawKubeConfigLoader().ConfigAccess().GetLoadingPrecedence(), kubeconfigFile, "expected kubeconfig path to match")
 			})
 			s.Run("rest config host points to mock server", func() {
-				s.Equal(s.mockServer.Config().Host, manager.accessControlClientset.RESTConfig().Host, "expected rest config host to match mock server")
+				s.Equal(s.mockServer.Config().Host, manager.kubernetes.RESTConfig().Host, "expected rest config host to match mock server")
 			})
 		})
 		s.Run("with valid kubeconfig in env and explicit kubeconfig context (invalid)", func() {

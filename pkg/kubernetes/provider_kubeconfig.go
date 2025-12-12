@@ -53,7 +53,7 @@ func (p *kubeConfigClusterProvider) reset() error {
 		return err
 	}
 
-	rawConfig, err := m.accessControlClientset.clientCmdConfig.RawConfig()
+	rawConfig, err := m.kubernetes.clientCmdConfig.RawConfig()
 	if err != nil {
 		return err
 	}
@@ -70,8 +70,8 @@ func (p *kubeConfigClusterProvider) reset() error {
 	}
 
 	p.Close()
-	p.kubeconfigWatcher = watcher.NewKubeconfig(m.accessControlClientset.clientCmdConfig)
-	p.clusterStateWatcher = watcher.NewClusterState(m.accessControlClientset.DiscoveryClient())
+	p.kubeconfigWatcher = watcher.NewKubeconfig(m.kubernetes.clientCmdConfig)
+	p.clusterStateWatcher = watcher.NewClusterState(m.kubernetes.DiscoveryClient())
 	p.defaultContext = rawConfig.CurrentContext
 
 	return nil

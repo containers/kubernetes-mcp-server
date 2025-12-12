@@ -43,7 +43,10 @@ type NodesTopOptions struct {
 	Name string
 }
 
-type KubernetesClientSet interface {
+// KubernetesClient defines the interface for Kubernetes operations that tool and prompt handlers need.
+// This interface abstracts the concrete Kubernetes implementation to allow controlled access to the underlying resource APIs,
+// better decoupling, and testability.
+type KubernetesClient interface {
 	genericclioptions.RESTClientGetter
 	kubernetes.Interface
 	// NamespaceOrDefault returns the provided namespace or the default configured namespace if empty
@@ -53,18 +56,8 @@ type KubernetesClientSet interface {
 	DiscoveryClient() discovery.CachedDiscoveryInterface
 	DynamicClient() dynamic.Interface
 	MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client
-}
 
-// KubernetesClient defines the interface for Kubernetes operations that tool and prompt handlers need.
-// This interface abstracts the concrete Kubernetes implementation to allow for better decoupling
-// and testability. The pkg/kubernetes.Kubernetes type implements this interface.
-//
-// For toolsets that need direct access to the Kubernetes clientset (e.g., for DynamicClient),
-// they can type-assert to ClientsetProvider.
-type KubernetesClient interface {
-	// AccessControlClientset provides access to the underlying Kubernetes clientset with access control enforced
-	AccessControlClientset() KubernetesClientSet
-
+	// TODO: To be removed in next iteration
 	// --- Resource Operations ---
 
 	// ResourcesList lists resources of the specified GroupVersionKind

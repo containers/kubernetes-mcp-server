@@ -12,5 +12,5 @@ func (m *Manager) IsOpenShift(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	return openshift.IsOpenshift(k.AccessControlClientset().DiscoveryClient())
+	return openshift.IsOpenshift(k.DiscoveryClient())
 }
