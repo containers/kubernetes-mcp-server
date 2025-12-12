@@ -54,6 +54,7 @@ jobs:
        contains(github.event.comment.body, '/run-gevals'))
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
+      kiali-run: ${{ steps.check.outputs.kiali-run }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-ref: ${{ steps.check.outputs.pr-ref }}
     steps:
@@ -78,6 +79,12 @@ jobs:
             echo "should-run=true" >> $GITHUB_OUTPUT
             echo "pr-ref=${{ github.ref }}" >> $GITHUB_OUTPUT
           fi
+          TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
+          if [[ "$TASK_FILTER" =~ kiali ]]; then
+            echo "kiali-run=true" >> $GITHUB_OUTPUT             
+          else
+            echo "kiali-run=false" >> $GITHUB_OUTPUT  
+          fi
 
   # Run gevals evaluation with Kind cluster
   run-evaluation:
@@ -99,8 +106,14 @@ jobs:
       - name: Setup Kind cluster
         run: make kind-create-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }}
 
+      - name: Install Istio/Kiali and bookinfo demo
+        if: needs.check-trigger.outputs.kiali-run == 'true'
+        run: make setup-kiali
+
       - name: Start MCP server
         run: make run-server
+        env:
+          TOOLSETS: ${{ needs.check-trigger.outputs.kiali-run == 'true' && 'kiali' || '' }}
 
       - name: Run gevals evaluation
         id: gevals

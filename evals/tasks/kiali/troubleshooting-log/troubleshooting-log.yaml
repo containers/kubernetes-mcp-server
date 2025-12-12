@@ -1,0 +1,44 @@
+kind: Task
+metadata:
+  name: "Get log productpage due 500"
+  category: "Troubleshooting & Debugging"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+        set -euo pipefail
+        cat <<'EOF' | kubectl apply -f -
+          apiVersion: networking.istio.io/v1alpha3
+          kind: VirtualService
+          metadata:
+            name: productpage-fault
+            namespace: bookinfo
+            labels:
+              gevals.kiali.io/test: gevals-testing
+          spec:
+            hosts:
+            - "productpage"
+            - "productpage.bookinfo.svc.cluster.local"
+            - "productpage-bookinfo.apps-crc.testing"  # <--- ¡AQUÍ ESTÁ LA CLAVE!
+            http:
+            - fault:
+                abort:
+                  httpStatus: 500
+                  percentage:
+                    value: 100
+              route:
+              - destination:
+                  host: productpage
+        EOF
+  verify:
+    contains: "fault injection"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      set -euo pipefail
+      NS="bookinfo"
+      LABEL="gevals.kiali.io/test=gevals-testing"
+      kubectl delete virtualservice -n "$NS" -l "$LABEL" --ignore-not-found     
+  prompt:
+    inline: Why is the productpage service returning 500 errors?

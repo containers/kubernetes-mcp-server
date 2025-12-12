@@ -1,0 +1,16 @@
+kind: Task
+metadata:
+  name: "Show topology bookinfo"
+  category: "High-Level Observability & Health"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+  verify:
+    contains: "topology of the **bookinfo**"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash          
+  prompt:
+    inline: Show me the topology of the bookinfo namespace.

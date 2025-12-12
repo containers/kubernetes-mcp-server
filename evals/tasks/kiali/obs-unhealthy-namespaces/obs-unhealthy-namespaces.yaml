@@ -1,0 +1,62 @@
+kind: Task
+metadata:
+  name: "Unhealthy Namespaces"
+  category: "High-Level Observability & Health"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+        set -euo pipefail
+        cat <<'EOF' | kubectl apply -f -
+        kind: DestinationRule
+        apiVersion: networking.istio.io/v1
+        metadata:
+          namespace: bookinfo
+          name: ratings
+          labels:
+            gevals.kiali.io/test: delete-fault-injection
+          annotations: ~
+        spec:
+          host: ratings.bookinfo.svc.cluster.local
+          subsets:
+          - name: v1
+            labels:
+              version: v1
+          trafficPolicy: ~
+
+        ---
+        apiVersion: networking.istio.io/v1
+        kind: VirtualService
+        metadata:
+          name: ratings
+          namespace: bookinfo
+          labels:
+            gevals.kiali.io/test: fault-abort
+        spec:
+          hosts:
+          - ratings
+          http:
+          - fault:
+              abort:
+                httpStatus: 500
+                percentage:
+                  value: 100
+            route:
+            - destination:
+                host: ratings
+                subset: v1
+        EOF
+  verify:
+    contains: "1 unhealthy namespace"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash   
+      set -euo pipefail
+      NS="bookinfo"
+      LABEL="gevals.kiali.io/test=fault-abort"
+      kubectl delete virtualservice -n "$NS" -l "$LABEL" --ignore-not-found
+      kubectl delete destinationrule -n "$NS" -l "$LABEL" --ignore-not-found     
+  prompt:
+    inline: Are there any unhealthy namespaces in my mesh right now?
+

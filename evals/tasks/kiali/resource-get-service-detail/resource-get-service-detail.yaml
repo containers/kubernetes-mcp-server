@@ -1,0 +1,16 @@
+kind: Task
+metadata:
+  name: "Get service detail"
+  category: "Resource Inspection"
+  difficulty: easy
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+  verify:
+    contains: "health status"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash          
+  prompt:
+    inline: Get the full details and health status for the details service

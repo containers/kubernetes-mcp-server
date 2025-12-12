@@ -12,7 +12,7 @@ config:
       apiKeyKey: JUDGE_API_KEY
       modelNameKey: JUDGE_MODEL_NAME
   taskSets:
-    - glob: ../tasks/*/*.yaml
+    - glob: ../tasks/*/*/*.yaml
       assertions:
         toolsUsed:
           - server: kubernetes
