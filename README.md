@@ -568,3 +568,7 @@ make build
 # Run the Kubernetes MCP server with mcp-inspector
 npx @modelcontextprotocol/inspector@latest $(pwd)/kubernetes-mcp-server
 ```
+
+---
+
+mcp-name: io.github.containers/kubernetes-mcp-server

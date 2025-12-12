@@ -1,0 +1,68 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.github.containers/kubernetes-mcp-server",
+  "description": "A Model Context Protocol (MCP) server for Kubernetes and OpenShift",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/containers/kubernetes-mcp-server",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "kubernetes-mcp-server",
+      "version": "0.0.0",
+      "transport": {
+        "type": "stdio"
+      }
+    },
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "kubernetes-mcp-server",
+      "version": "0.0.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    },
+    {
+      "registryType": "oci",
+      "identifier": "quay.io/containers/kubernetes_mcp_server:0.0.0",
+      "version": "0.0.0",
+      "runtimeHint": "docker",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-v",
+          "description": "Volume mount for kubeconfig access (host_path:container_path)",
+          "format": "string",
+          "isRequired": true,
+          "placeholder": "~/.kube/config:/kubeconfig:ro"
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "description": "Environment variable to set the kubeconfig path inside the container",
+          "format": "string",
+          "isRequired": true,
+          "default": "KUBECONFIG=/kubeconfig"
+        },
+        {
+          "type": "named",
+          "name": "-p",
+          "description": "Port mapping for MCP server HTTP endpoint (host_port:container_port)",
+          "format": "string",
+          "isRequired": true,
+          "default": "8080:8080"
+        }
+      ],
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8080/mcp"
+      }
+    }
+  ]
+}

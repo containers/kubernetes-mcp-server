@@ -41,7 +41,8 @@ npm-copy-project-files: npm-copy-binaries ## Copy the project files to the main 
 	@echo '"author": {"name": "Marc Nuri", "url": "https://www.marcnuri.com"},' >> $(MAIN_PACKAGE_JSON)
 	@echo '"license": "Apache-2.0",' >> $(MAIN_PACKAGE_JSON)
 	@echo '"bugs": {"url": "https://github.com/containers/kubernetes-mcp-server/issues"},' >> $(MAIN_PACKAGE_JSON)
-	@echo '"homepage": "https://github.com/containers/kubernetes-mcp-server#readme"' >> $(MAIN_PACKAGE_JSON)
+	@echo '"homepage": "https://github.com/containers/kubernetes-mcp-server#readme",' >> $(MAIN_PACKAGE_JSON)
+	@echo '"mcpName": "io.github.containers/kubernetes-mcp-server"' >> $(MAIN_PACKAGE_JSON)
 	@echo '}' >> $(MAIN_PACKAGE_JSON)
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
 		OS_PACKAGE_JSON=./npm/$(NPM_PACKAGE)-$(os)-$(arch)/package.json; \
