@@ -363,67 +363,6 @@ func (s *McpToolsetPromptsSuite) TestPromptsNotExposedWhenToolsetDisabled() {
 	})
 }
 
-func (s *McpToolsetPromptsSuite) TestDisableToolsetPromptsConfig() {
-	testToolset := &mockToolsetWithPrompts{
-		name:        "test-toolset",
-		description: "Test toolset",
-		prompts: []api.ServerPrompt{
-			{
-				Prompt: api.Prompt{
-					Name:        "toolset-prompt",
-					Description: "Should be disabled",
-				},
-				Handler: func(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
-					return api.NewPromptCallResult("Toolset", []api.PromptMessage{}, nil), nil
-				},
-			},
-		},
-	}
-
-	toolsets.Clear()
-	toolsets.Register(testToolset)
-
-	// Add config prompt
-	cfg, err := config.ReadToml([]byte(`
-toolsets = ["test-toolset"]
-disable_toolset_prompts = true
-
-[[prompts]]
-name = "config-prompt"
-description = "Config prompt only"
-
-[[prompts.messages]]
-role = "user"
-content = "From config"
-	`))
-	s.Require().NoError(err)
-	// Preserve kubeconfig from SetupTest
-	cfg.KubeConfig = s.Cfg.KubeConfig
-	s.Cfg = cfg
-
-	s.InitMcpClient()
-
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
-
-	s.Run("ListPrompts returns prompts", func() {
-		s.NoError(err)
-		s.Require().NotNil(prompts)
-	})
-
-	s.Run("only config prompts are available", func() {
-		s.Require().NotNil(prompts)
-		s.Require().Len(prompts.Prompts, 1)
-		s.Equal("config-prompt", prompts.Prompts[0].Name)
-	})
-
-	s.Run("toolset prompts are not available when disabled", func() {
-		s.Require().NotNil(prompts)
-		for _, prompt := range prompts.Prompts {
-			s.NotEqual("toolset-prompt", prompt.Name)
-		}
-	})
-}
-
 // Mock toolset for testing
 type mockToolsetWithPrompts struct {
 	name        string
@@ -443,7 +382,7 @@ func (m *mockToolsetWithPrompts) GetTools(_ api.Openshift) []api.ServerTool {
 	return nil
 }
 
-func (m *mockToolsetWithPrompts) GetPrompts(_ api.Openshift) []api.ServerPrompt {
+func (m *mockToolsetWithPrompts) GetPrompts() []api.ServerPrompt {
 	return m.prompts
 }
 

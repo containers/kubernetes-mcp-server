@@ -68,7 +68,7 @@ Toolsets can provide built-in prompts by implementing the `GetPrompts()` method.
 ### Implementing Toolset Prompts
 
 ```go
-func (t *MyToolset) GetPrompts(o internalk8s.Openshift) []api.ServerPrompt {
+func (t *MyToolset) GetPrompts() []api.ServerPrompt {
     return []api.ServerPrompt{
         {
             Prompt: api.Prompt{
@@ -102,18 +102,6 @@ func (t *MyToolset) GetPrompts(o internalk8s.Openshift) []api.ServerPrompt {
         },
     }
 }
-```
-
-### Disabling Toolset Prompts
-
-Add `disable_toolset_prompts = true` in your `config.toml` to use only config-defined prompts:
-
-```toml
-disable_toolset_prompts = true
-
-[[prompts]]
-name = "my-custom-prompt"
-# ... rest of config
 ```
 
 ### Prompt Merging

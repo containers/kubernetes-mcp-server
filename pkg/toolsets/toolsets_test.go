@@ -34,7 +34,7 @@ func (t *TestToolset) GetDescription() string { return t.description }
 
 func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
 
-func (t *TestToolset) GetPrompts(_ api.Openshift) []api.ServerPrompt { return nil }
+func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
 var _ api.Toolset = (*TestToolset)(nil)
 

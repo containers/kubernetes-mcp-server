@@ -171,17 +171,15 @@ func (s *Server) reloadToolsets() error {
 	applicablePrompts := make([]api.ServerPrompt, 0)
 	s.enabledPrompts = make([]string, 0)
 
-	// Load embedded toolset prompts (unless disabled)
-	if !s.configuration.DisableToolsetPrompts {
-		for _, toolset := range s.configuration.Toolsets() {
-			prompts := toolset.GetPrompts(s.p)
-			if prompts == nil {
-				continue
-			}
-			for _, prompt := range prompts {
-				applicablePrompts = append(applicablePrompts, prompt)
-				s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
-			}
+	// Load embedded toolset prompts
+	for _, toolset := range s.configuration.Toolsets() {
+		prompts := toolset.GetPrompts()
+		if prompts == nil {
+			continue
+		}
+		for _, prompt := range prompts {
+			applicablePrompts = append(applicablePrompts, prompt)
+			s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
 		}
 	}
 

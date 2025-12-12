@@ -311,7 +311,7 @@ role = "user"
 content = "Help me with {{resource_name}}"
 ```
 
-2. Toolset prompts implemented by toolset developers (can be disabled with disable_toolset_prompts = true)
+2. Toolset prompts implemented by toolset developers
 
 See docs/PROMPTS.md for detailed documentation.
 
