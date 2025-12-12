@@ -315,7 +315,7 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	ns = params.AccessControlClientset().NamespaceOrDefault(ns)
+	ns = params.NamespaceOrDefault(ns)
 
 	n, ok := name.(string)
 	if !ok {

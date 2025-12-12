@@ -160,7 +160,7 @@ func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 		queryParams["byLabels"] = byLabels
 	}
 
-	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	content, err := ops.metricsFunc(params.Context, kiali, namespace, resourceName, queryParams)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get %s metrics: %v", ops.singularName, err)), nil

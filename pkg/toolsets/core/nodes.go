@@ -13,7 +13,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 func initNodes() []api.ServerTool {
@@ -150,13 +149,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	// Get the list of nodes to extract their allocatable resources
-	// Type assert to concrete type to access AccessControlClientset
-	k8s, ok := params.KubernetesClient.(*kubernetes.Kubernetes)
-	if !ok {
-		return api.NewToolCallResult("", fmt.Errorf("kubernetes client type assertion failed")), nil
-	}
-
-	nodeList, err := k8s.AccessControlClientset().CoreV1().Nodes().List(params, metav1.ListOptions{
+	nodeList, err := params.CoreV1().Nodes().List(params, metav1.ListOptions{
 		LabelSelector: nodesTopOptions.LabelSelector,
 	})
 	if err != nil {

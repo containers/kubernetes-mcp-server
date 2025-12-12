@@ -99,7 +99,7 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if err := setQueryParam(params, queryParams, "graphType", kialiclient.DefaultGraphType); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
-	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	content, err := kiali.GetMeshGraph(params.Context, namespaces, queryParams)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh graph: %v", err)), nil
