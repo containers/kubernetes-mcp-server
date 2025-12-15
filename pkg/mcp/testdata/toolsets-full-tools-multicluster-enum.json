@@ -212,8 +212,20 @@
           "type": "string"
         },
         "query": {
-          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
-          "type": "string"
+          "description": "query specifies service(s) or files from which to return logs (required). Can be a single string or array of strings. Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"kubelet.log\" or \"kube-proxy.log\"), or [\"kubelet\", \"kube-proxy.log\"] for multiple sources",
+          "oneOf": [
+            {
+              "description": "Single query specifying a service or file from which to return logs. Example: \"kubelet\" or \"kubelet.log\"",
+              "type": "string"
+            },
+            {
+              "description": "Array of queries specifying multiple services or files from which to return logs",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
         },
         "tailLines": {
           "default": 100,

@@ -28,8 +28,20 @@ func initNodes() []api.ServerTool {
 						Description: "Name of the node to get logs from",
 					},
 					"query": {
-						Type:        "string",
-						Description: `query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "/var/log/kubelet.log" or "/var/log/kube-proxy.log")`,
+						OneOf: []*jsonschema.Schema{
+							{
+								Type:        "string",
+								Description: `Single query specifying a service or file from which to return logs. Example: "kubelet" or "kubelet.log"`,
+							},
+							{
+								Type:        "array",
+								Description: `Array of queries specifying multiple services or files from which to return logs`,
+								Items: &jsonschema.Schema{
+									Type: "string",
+								},
+							},
+						},
+						Description: `query specifies service(s) or files from which to return logs (required). Can be a single string or array of strings. Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "kubelet.log" or "kube-proxy.log"), or ["kubelet", "kube-proxy.log"] for multiple sources`,
 					},
 					"tailLines": {
 						Type:        "integer",
@@ -100,10 +112,38 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if !ok || name == "" {
 		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument name")), nil
 	}
-	query, ok := params.GetArguments()["query"].(string)
-	if !ok || query == "" {
+
+	// Handle query parameter - can be string or array of strings
+	var queries []string
+	queryArg := params.GetArguments()["query"]
+	if queryArg == nil {
 		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument query")), nil
 	}
+
+	switch v := queryArg.(type) {
+	case string:
+		if v == "" {
+			return api.NewToolCallResult("", errors.New("failed to get node log, query cannot be empty")), nil
+		}
+		queries = []string{v}
+	case []interface{}:
+		if len(v) == 0 {
+			return api.NewToolCallResult("", errors.New("failed to get node log, query array cannot be empty")), nil
+		}
+		for i, item := range v {
+			str, ok := item.(string)
+			if !ok {
+				return api.NewToolCallResult("", fmt.Errorf("failed to get node log, query array element %d is not a string", i)), nil
+			}
+			if str == "" {
+				return api.NewToolCallResult("", fmt.Errorf("failed to get node log, query array element %d cannot be empty", i)), nil
+			}
+			queries = append(queries, str)
+		}
+	default:
+		return api.NewToolCallResult("", fmt.Errorf("failed to get node log, query must be a string or array of strings, got %T", queryArg)), nil
+	}
+
 	tailLines := params.GetArguments()["tailLines"]
 	var tailInt int64
 	if tailLines != nil {
@@ -113,13 +153,43 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			return api.NewToolCallResult("", fmt.Errorf("failed to parse tailLines parameter: %w", err)), nil
 		}
 	}
-	ret, err := params.NodesLog(params, name, query, tailInt)
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
-	} else if ret == "" {
-		ret = fmt.Sprintf("The node %s has not logged any message yet or the log file is empty", name)
+
+	// Fetch logs for each query and concatenate results
+	var results string
+	for i, query := range queries {
+		ret, err := params.NodesLog(params, name, query, tailInt)
+		if err != nil {
+			// Only include query in error message if there are multiple queries
+			if len(queries) > 1 {
+				return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s (query: %s): %v", name, query, err)), nil
+			}
+			return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
+		}
+
+		if len(queries) > 1 {
+			// Add separator between multiple queries
+			if i > 0 {
+				results += "\n\n"
+			}
+			results += fmt.Sprintf("=== Logs for query: %s ===\n", query)
+		}
+
+		if ret == "" {
+			if len(queries) > 1 {
+				results += fmt.Sprintf("The node %s has not logged any message yet for query '%s' or the log file is empty\n", name, query)
+			} else {
+				results = fmt.Sprintf("The node %s has not logged any message yet or the log file is empty", name)
+			}
+		} else {
+			results += ret
+		}
 	}
-	return api.NewToolCallResult(ret, nil), nil
+
+	if results == "" {
+		results = fmt.Sprintf("The node %s has not logged any message yet or the log file is empty", name)
+	}
+
+	return api.NewToolCallResult(results, nil), nil
 }
 
 func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
