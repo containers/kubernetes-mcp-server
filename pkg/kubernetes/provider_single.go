@@ -8,7 +8,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
-	authenticationv1api "k8s.io/api/authentication/v1"
 )
 
 // singleClusterProvider implements Provider for managing a single
@@ -73,13 +72,6 @@ func (p *singleClusterProvider) reset() error {
 
 func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.manager.IsOpenShift(ctx)
-}
-
-func (p *singleClusterProvider) VerifyToken(ctx context.Context, target, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
-	if target != "" {
-		return nil, nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy", p.strategy)
-	}
-	return p.manager.VerifyToken(ctx, token, audience)
 }
 
 func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {

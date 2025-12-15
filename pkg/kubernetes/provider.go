@@ -16,7 +16,6 @@ type Provider interface {
 	// For the kubecontext case, a user might be targeting both an OpenShift flavored cluster and a vanilla Kubernetes cluster.
 	// See: https://github.com/containers/kubernetes-mcp-server/pull/372#discussion_r2421592315
 	api.Openshift
-	TokenVerifier
 	GetTargets(ctx context.Context) ([]string, error)
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	GetDefaultTarget() string

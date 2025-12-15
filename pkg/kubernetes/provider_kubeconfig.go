@@ -8,7 +8,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
-	authenticationv1api "k8s.io/api/authentication/v1"
 )
 
 // KubeConfigTargetParameterName is the parameter name used to specify
@@ -97,14 +96,6 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 
 func (p *kubeConfigClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.managers[p.defaultContext].IsOpenShift(ctx)
-}
-
-func (p *kubeConfigClusterProvider) VerifyToken(ctx context.Context, context, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
-	m, err := p.managerForContext(context)
-	if err != nil {
-		return nil, nil, err
-	}
-	return m.VerifyToken(ctx, token, audience)
 }
 
 func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, error) {
