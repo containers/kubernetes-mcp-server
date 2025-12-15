@@ -57,6 +57,43 @@ content = "I'll retrieve and analyze the logs for you."
 ### Argument Substitution
 Use `{{argument_name}}` placeholders in message content. The template engine replaces these with actual values when the prompt is called.
 
+## Built-in Prompts
+
+The Kubernetes MCP Server includes several built-in prompts that are always available:
+
+### `cluster-health-check`
+
+Performs a comprehensive health assessment of your Kubernetes or OpenShift cluster.
+
+**Arguments:**
+- `namespace` (optional): Limit the health check to a specific namespace. Default: all namespaces.
+- `verbose` (optional): Enable detailed resource-level information. Values: `true` or `false`. Default: `false`.
+- `check_events` (optional): Include recent warning/error events in the analysis. Values: `true` or `false`. Default: `true`.
+
+**What it checks:**
+- **Nodes**: Status and conditions (Ready, MemoryPressure, DiskPressure, etc.)
+- **Cluster Operators** (OpenShift only): Available and degraded status
+- **Pods**: Phase, container statuses, restart counts, and common issues (CrashLoopBackOff, ImagePullBackOff, etc.)
+- **Workload Controllers**: Deployments, StatefulSets, and DaemonSets replica status
+- **Persistent Volume Claims**: Binding status
+- **Events**: Recent warning and error events from the last hour
+
+**Example usage:**
+```
+Check the health of my cluster
+```
+
+Or with specific parameters:
+```
+Check the health of namespace production with verbose output
+```
+
+The prompt gathers comprehensive diagnostic data and presents it to the LLM for analysis, which will provide:
+1. Overall health status (Healthy, Warning, or Critical)
+2. Critical issues requiring immediate attention
+3. Warnings and recommendations
+4. Summary by component
+
 ## Configuration File Location
 
 Place your prompts in the `config.toml` file used by the MCP server. Specify the config file path using the `--config` flag when starting the server.
