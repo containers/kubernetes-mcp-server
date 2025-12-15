@@ -1,11 +1,14 @@
 package kubernetes
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/version"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -96,24 +99,28 @@ func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container str
 		Previous:  previous,
 	}
 
-	// Only set tailLines if a value is provided (non-zero)
-	if tail > 0 {
-		logOptions.TailLines = &tail
-	} else {
-		// Default to DefaultTailLines lines when not specified
-		logOptions.TailLines = ptr.To(DefaultTailLines)
+	req := pods.GetLogs(name, logOptions)
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return "", errors.New("failed to open get Log stream")
+	}
+	defer stream.Close()
+
+	logData := make([]string, 0)
+	scanner := bufio.NewScanner(stream)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, query) {
+			logData = append(logData, line)
+		}
 	}
 
-	req := pods.GetLogs(name, logOptions)
-	res := req.Do(ctx)
-	if res.Error() != nil {
-		return "", res.Error()
+	rows := int64(len(logData))
+	if rows >= tail {
+		logData = logData[rows-tail : rows]
 	}
-	rawData, err := res.Raw()
-	if err != nil {
-		return "", err
-	}
-	return string(rawData), nil
+	result := strings.Join(logData, "\n")
+	return result, nil
 }
 
 func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string, port int32) ([]*unstructured.Unstructured, error) {
