@@ -255,7 +255,7 @@ func initPods() []api.ServerTool {
 
 func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	labelSelector := params.GetArguments()["labelSelector"]
-	resourceListOptions := kubernetes.ResourceListOptions{
+	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 	if labelSelector != nil {
@@ -273,7 +273,7 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if ns == nil {
 		return api.NewToolCallResult("", errors.New("failed to list pods in namespace, missing argument namespace")), nil
 	}
-	resourceListOptions := kubernetes.ResourceListOptions{
+	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 	labelSelector := params.GetArguments()["labelSelector"]
@@ -320,7 +320,7 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	podsTopOptions := kubernetes.PodsTopOptions{AllNamespaces: true}
+	podsTopOptions := api.PodsTopOptions{AllNamespaces: true}
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		podsTopOptions.Namespace = v
 	}

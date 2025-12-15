@@ -103,3 +103,108 @@ func (s *ParamsSuite) TestErrInvalidInt64Type() {
 		s.Equal("invalid", typeErr.Value)
 	})
 }
+
+// mockToolCallRequest implements ToolCallRequest for testing
+type mockToolCallRequest struct {
+	args map[string]any
+}
+
+func (m *mockToolCallRequest) GetArguments() map[string]any {
+	return m.args
+}
+
+func (s *ParamsSuite) TestRequiredString() {
+	s.Run("returns string value when present", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": "test-value"}}}
+		result, err := RequiredString(params, "name")
+		s.NoError(err)
+		s.Equal("test-value", result)
+	})
+
+	s.Run("returns error when key is missing", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		result, err := RequiredString(params, "name")
+		s.Error(err)
+		s.Equal("", result)
+		s.Contains(err.Error(), "name parameter required")
+	})
+
+	s.Run("returns error when value is not a string", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": 123}}}
+		result, err := RequiredString(params, "name")
+		s.Error(err)
+		s.Equal("", result)
+		s.Contains(err.Error(), "name parameter must be a string")
+	})
+
+	s.Run("returns empty string when value is empty string", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": ""}}}
+		result, err := RequiredString(params, "name")
+		s.NoError(err)
+		s.Equal("", result)
+	})
+}
+
+func (s *ParamsSuite) TestOptionalString() {
+	s.Run("returns string value when present", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": "test-value"}}}
+		result := OptionalString(params, "name", "default")
+		s.Equal("test-value", result)
+	})
+
+	s.Run("returns default when key is missing", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		result := OptionalString(params, "name", "default-value")
+		s.Equal("default-value", result)
+	})
+
+	s.Run("returns default when value is not a string", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": 123}}}
+		result := OptionalString(params, "name", "fallback")
+		s.Equal("fallback", result)
+	})
+
+	s.Run("returns empty string when value is empty string", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": ""}}}
+		result := OptionalString(params, "name", "default")
+		s.Equal("", result)
+	})
+
+	s.Run("returns empty string when default is empty and key is missing", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		result := OptionalString(params, "name", "")
+		s.Equal("", result)
+	})
+}
+
+func (s *ParamsSuite) TestOptionalBool() {
+	s.Run("returns true when value is true", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"enabled": true}}}
+		result := OptionalBool(params, "enabled", false)
+		s.True(result)
+	})
+
+	s.Run("returns false when value is false", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"enabled": false}}}
+		result := OptionalBool(params, "enabled", true)
+		s.False(result)
+	})
+
+	s.Run("returns default when key is missing", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		result := OptionalBool(params, "enabled", true)
+		s.True(result)
+	})
+
+	s.Run("returns default when value is not a bool", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"enabled": "true"}}}
+		result := OptionalBool(params, "enabled", true)
+		s.True(result)
+	})
+
+	s.Run("returns false default when key is missing", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		result := OptionalBool(params, "enabled", false)
+		s.False(result)
+	})
+}

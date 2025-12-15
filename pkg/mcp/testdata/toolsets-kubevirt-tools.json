@@ -77,5 +77,41 @@
       ]
     },
     "name": "vm_create"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Lifecycle",
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "description": "Manage VirtualMachine lifecycle: start, stop, or restart a VM",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+          "enum": [
+            "start",
+            "stop",
+            "restart"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the virtual machine",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name",
+        "action"
+      ]
+    },
+    "name": "vm_lifecycle"
   }
 ]

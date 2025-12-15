@@ -166,7 +166,7 @@ func (s *PodsSuite) TestPodsListDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list pods in all namespaces:(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, podsList.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 	s.Run("pods_list_in_namespace (denied)", func() {
@@ -180,7 +180,7 @@ func (s *PodsSuite) TestPodsListDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list pods in namespace ns-1:(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, podsListInNamespace.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }
@@ -354,7 +354,7 @@ func (s *PodsSuite) TestPodsGetDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get pod a-pod-in-default in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, podsGet.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }
@@ -457,7 +457,7 @@ func (s *PodsSuite) TestPodsDeleteDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to delete pod a-pod-in-default in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, podsDelete.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }
@@ -611,7 +611,7 @@ func (s *PodsSuite) TestPodsLogDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get pod a-pod-in-default log in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, podsLog.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

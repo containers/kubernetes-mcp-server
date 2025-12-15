@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
 type listDetailsOperations struct {
@@ -39,12 +40,12 @@ var listDetailsOpsMap = map[string]listDetailsOperations{
 	},
 }
 
-func initGetResourceDetails() []api.ServerTool {
+func InitGetResourceDetails() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
-
+	name := defaults.ToolsetName() + "_get_resource_details"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_get_resource_details",
+			Name:        name,
 			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -91,7 +92,7 @@ func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 		return api.NewToolCallResult("", fmt.Errorf("resource_type is required")), nil
 	}
 
-	k := params.NewKiali()
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
 
 	ops, ok := listDetailsOpsMap[resourceType]
 	if !ok {
@@ -103,7 +104,7 @@ func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 		if count := len(strings.Split(namespaces, ",")); count != 1 {
 			return api.NewToolCallResult("", fmt.Errorf("exactly one namespace must be provided for %s details", ops.singularName)), nil
 		}
-		content, err := ops.detailsFunc(params.Context, k, namespaces, resourceName)
+		content, err := ops.detailsFunc(params.Context, kiali, namespaces, resourceName)
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to get %s details: %v", ops.singularName, err)), nil
 		}
@@ -111,7 +112,7 @@ func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 	}
 
 	// Otherwise, list resources (supports multiple namespaces)
-	content, err := ops.listFunc(params.Context, k, namespaces)
+	content, err := ops.listFunc(params.Context, kiali, namespaces)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list %ss: %v", ops.singularName, err)), nil
 	}

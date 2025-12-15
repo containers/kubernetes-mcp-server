@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"fmt"
@@ -9,13 +9,15 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func initGetMeshGraph() []api.ServerTool {
+func InitGetMeshGraph() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
+	name := defaults.ToolsetName() + "_mesh_graph"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_get_mesh_graph",
+			Name:        name,
 			Description: "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -30,12 +32,12 @@ func initGetMeshGraph() []api.ServerTool {
 					},
 					"rateInterval": {
 						Type:        "string",
-						Description: "Rate interval for fetching (e.g., '10m', '5m', '1h').",
+						Description: "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
 						Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
 					},
 					"graphType": {
 						Type:        "string",
-						Description: "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
+						Description: "Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
 						Default:     api.ToRawMessage(kialiclient.DefaultGraphType),
 					},
 				},
@@ -97,8 +99,8 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if err := setQueryParam(params, queryParams, "graphType", kialiclient.DefaultGraphType); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
-	k := params.NewKiali()
-	content, err := k.GetMeshGraph(params.Context, namespaces, queryParams)
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	content, err := kiali.GetMeshGraph(params.Context, namespaces, queryParams)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh graph: %v", err)), nil
 	}

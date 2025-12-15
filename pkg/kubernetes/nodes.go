@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/metrics/pkg/apis/metrics"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -69,12 +70,7 @@ func (k *Kubernetes) NodesStatsSummary(ctx context.Context, name string) (string
 	return string(rawData), nil
 }
 
-type NodesTopOptions struct {
-	metav1.ListOptions
-	Name string
-}
-
-func (k *Kubernetes) NodesTop(ctx context.Context, options NodesTopOptions) (*metrics.NodeMetricsList, error) {
+func (k *Kubernetes) NodesTop(ctx context.Context, options api.NodesTopOptions) (*metrics.NodeMetricsList, error) {
 	// TODO, maybe move to mcp Tools setup and omit in case metrics aren't available in the target cluster
 	if !k.supportsGroupVersion(metrics.GroupName + "/" + metricsv1beta1api.SchemeGroupVersion.Version) {
 		return nil, errors.New("metrics API is not available")

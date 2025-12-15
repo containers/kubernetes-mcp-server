@@ -5,15 +5,10 @@ import (
 	"fmt"
 
 	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-// Extended is the interface that all configuration extensions must implement.
-// Each extended config manager registers a factory function to parse its config from TOML primitives
-type Extended interface {
-	Validate() error
-}
-
-type ExtendedConfigParser func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (Extended, error)
+type ExtendedConfigParser func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error)
 
 type extendedConfigRegistry struct {
 	parsers map[string]ExtendedConfigParser
@@ -33,11 +28,11 @@ func (r *extendedConfigRegistry) register(name string, parser ExtendedConfigPars
 	r.parsers[name] = parser
 }
 
-func (r *extendedConfigRegistry) parse(ctx context.Context, metaData toml.MetaData, configs map[string]toml.Primitive) (map[string]Extended, error) {
+func (r *extendedConfigRegistry) parse(ctx context.Context, metaData toml.MetaData, configs map[string]toml.Primitive) (map[string]api.ExtendedConfig, error) {
 	if len(configs) == 0 {
-		return make(map[string]Extended), nil
+		return make(map[string]api.ExtendedConfig), nil
 	}
-	parsedConfigs := make(map[string]Extended, len(configs))
+	parsedConfigs := make(map[string]api.ExtendedConfig, len(configs))
 
 	for name, primitive := range configs {
 		parser, ok := r.parsers[name]

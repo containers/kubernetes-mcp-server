@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
@@ -26,7 +26,7 @@ func (o *OpenShift) IsOpenShift(_ context.Context) bool {
 	return true
 }
 
-var _ internalk8s.Openshift = (*OpenShift)(nil)
+var _ api.Openshift = (*OpenShift)(nil)
 
 func main() {
 	// Snyk reports false positive unless we flow the args through filepath.Clean and filepath.Localize in this specific order

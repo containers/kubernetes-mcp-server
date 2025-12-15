@@ -189,12 +189,129 @@ uvx kubernetes-mcp-server@latest --help
 |---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--port`                  | Starts the MCP server in Streamable HTTP mode (path /mcp) and Server-Sent Event (SSE) (path /sse) mode and listens on the specified port .                                                                                                                                                    |
 | `--log-level`             | Sets the logging level (values [from 0-9](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md)). Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
+| `--config`                | (Optional) Path to the main TOML configuration file. See [Drop-in Configuration](#drop-in-configuration) section below for details.                                                                                                                                                          |
+| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Drop-in Configuration](#drop-in-configuration) section below for details.                       |
 | `--kubeconfig`            | Path to the Kubernetes configuration file. If not provided, it will try to resolve the configuration (in-cluster, default location, etc.).                                                                                                                                                    |
 | `--list-output`           | Output format for resource list operations (one of: yaml, table) (default "table")                                                                                                                                                                                                            |
 | `--read-only`             | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
 | `--disable-destructive`   | If set, the MCP server will disable all destructive operations (delete, update, etc.) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without accidentally making changes. This option has no effect when `--read-only` is used.                            |
 | `--toolsets`              | Comma-separated list of toolsets to enable. Check the [🛠️ Tools and Functionalities](#tools-and-functionalities) section for more information.                                                                                                                                               |
 | `--disable-multi-cluster` | If set, the MCP server will disable multi-cluster support and will only use the current context from the kubeconfig file. This is useful if you want to restrict the MCP server to a single cluster.                                                                                          |
+
+### Drop-in Configuration <a id="drop-in-configuration"></a>
+
+The Kubernetes MCP server supports flexible configuration through both a main config file and drop-in files. **Both are optional** - you can use either, both, or neither (server will use built-in defaults).
+
+#### Configuration Loading Order
+
+Configuration values are loaded and merged in the following order (later sources override earlier ones):
+
+1. **Internal Defaults** - Always loaded (hardcoded default values)
+2. **Main Configuration File** - Optional, loaded via `--config` flag
+3. **Drop-in Files** - Optional, loaded from `--config-dir` in **lexical (alphabetical) order**
+
+#### How Drop-in Files Work
+
+- **Default Directory**: If `--config-dir` is not specified, the server looks for drop-in files in `conf.d/` relative to the main config file's directory (when `--config` is provided)
+- **File Naming**: Use numeric prefixes to control loading order (e.g., `00-base.toml`, `10-cluster.toml`, `99-override.toml`)
+- **File Extension**: Only `.toml` files are processed; dotfiles (starting with `.`) are ignored
+- **Partial Configuration**: Drop-in files can contain only a subset of configuration options
+- **Merge Behavior**: Values present in a drop-in file override previous values; missing values are preserved
+
+#### Dynamic Configuration Reload
+
+To reload configuration after modifying config files, send a `SIGHUP` signal to the running server process.
+
+**Prerequisite**: SIGHUP reload requires the server to be started with either the `--config` flag or `--config-dir` flag (or both). If neither is specified, SIGHUP signals will be ignored.
+
+**How to reload:**
+
+```shell
+# Find the process ID
+ps aux | grep kubernetes-mcp-server
+
+# Send SIGHUP to reload configuration
+kill -HUP <pid>
+
+# Or use pkill
+pkill -HUP kubernetes-mcp-server
+```
+
+The server will:
+- Reload the main config file and all drop-in files
+- Update configuration values (log level, output format, etc.)
+- Rebuild the toolset registry with new tool configurations
+- Log the reload status
+
+**Note**: Changing `kubeconfig` or cluster-related settings requires a server restart. Only tool configurations, log levels, and output formats can be reloaded dynamically.
+
+**Note**: SIGHUP reload is not available on Windows. On Windows, restart the server to reload configuration.
+
+#### Example: Using Both Config Methods
+
+**Command (using default `conf.d` directory):**
+```shell
+kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml
+```
+
+**Directory structure:**
+```
+/etc/kubernetes-mcp-server/
+├── config.toml              # Main configuration
+└── conf.d/                  # Default drop-in directory (automatically loaded)
+    ├── 00-base.toml         # Base overrides
+    ├── 10-toolsets.toml     # Toolset-specific config
+    └── 99-local.toml        # Local overrides
+```
+
+**Command (with explicit `--config-dir`):**
+```shell
+kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
+                      --config-dir /etc/kubernetes-mcp-server/config.d/
+```
+
+**Example drop-in file** (`10-toolsets.toml`):
+```toml
+# Override only the toolsets - all other config preserved
+toolsets = ["core", "config", "helm", "logs"]
+```
+
+**Example drop-in file** (`99-local.toml`):
+```toml
+# Local development overrides
+log_level = 9
+read_only = true
+```
+
+**To apply changes:**
+```shell
+# Edit config files
+vim /etc/kubernetes-mcp-server/conf.d/99-local.toml
+
+# Reload without restarting
+pkill -HUP kubernetes-mcp-server
+```
+
+### MCP Prompts
+
+The server supports MCP prompts for workflow templates. Define custom prompts in `config.toml`:
+
+```toml
+[[prompts]]
+name = "my-workflow"
+title = "my workflow"
+description = "Custom workflow"
+
+[[prompts.arguments]]
+name = "resource_name"
+required = true
+
+[[prompts.messages]]
+role = "user"
+content = "Help me with {{resource_name}}"
+```
+
+See docs/PROMPTS.md for detailed documentation.
 
 ## 🛠️ Tools and Functionalities <a id="tools-and-functionalities"></a>
 
@@ -212,9 +329,9 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 |----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
 | config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
 | core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
-| helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
 | kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
 | kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
+| helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -334,33 +451,13 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <details>
 
-<summary>helm</summary>
-
-- **helm_install** - Install a Helm chart in the current or provided namespace
-  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
-  - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
-  - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
-  - `values` (`object`) - Values to pass to the Helm chart (Optional)
-
-- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
-  - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
-  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
-
-- **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
-  - `name` (`string`) **(required)** - Name of the Helm release to uninstall
-  - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
-
-</details>
-
-<details>
-
 <summary>kiali</summary>
 
-- **kiali_get_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
-  - `graphType` (`string`) - Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'
+- **kiali_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
+  - `graphType` (`string`) - Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'
   - `namespace` (`string`) - Optional single namespace to include in the graph (alternative to namespaces)
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
-  - `rateInterval` (`string`) - Rate interval for fetching (e.g., '10m', '5m', '1h').
+  - `rateInterval` (`string`) - Optional rate interval for fetching (e.g., '10m', '5m', '1h').
 
 - **kiali_manage_istio_config** - Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects
   - `action` (`string`) **(required)** - Action to perform: list, get, create, patch, or delete
@@ -389,7 +486,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `resource_type` (`string`) **(required)** - Type of resource to get details for (service, workload)
   - `step` (`string`) - Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds
 
-- **workload_logs** - Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.
+- **kiali_workload_logs** - Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.
   - `container` (`string`) - Optional container name to filter logs. If not provided, automatically detects and uses the main application container (excludes istio-proxy and istio-init)
   - `namespace` (`string`) **(required)** - Namespace containing the workload
   - `since` (`string`) - Time duration to fetch logs from (e.g., '5m', '1h', '30s'). If not provided, returns recent logs
@@ -424,6 +521,31 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `size` (`string`) - Optional workload size hint for the VM (e.g., 'small', 'medium', 'large', 'xlarge'). Used to auto-select an appropriate instance type if not explicitly specified.
   - `storage` (`string`) - Optional storage size for the VM's root disk when using DataSources (e.g., '30Gi', '50Gi', '100Gi'). Defaults to 30Gi. Ignored when using container disks.
   - `workload` (`string`) - The workload for the VM. Accepts OS names (e.g., 'fedora' (default), 'ubuntu', 'centos', 'centos-stream', 'debian', 'rhel', 'opensuse', 'opensuse-tumbleweed', 'opensuse-leap') or full container disk image URLs
+
+- **vm_lifecycle** - Manage VirtualMachine lifecycle: start, stop, or restart a VM
+  - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
+  - `name` (`string`) **(required)** - The name of the virtual machine
+  - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+
+</details>
+
+<details>
+
+<summary>helm</summary>
+
+- **helm_install** - Install a Helm chart in the current or provided namespace
+  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
+  - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
+  - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
+  - `values` (`object`) - Values to pass to the Helm chart (Optional)
+
+- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
+  - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
+  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
+
+- **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
+  - `name` (`string`) **(required)** - Name of the Helm release to uninstall
+  - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
 
 </details>
 

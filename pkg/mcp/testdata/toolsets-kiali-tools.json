@@ -1,39 +1,6 @@
 [
   {
     "annotations": {
-      "title": "Topology: Mesh, Graph, Health, and Status",
-      "readOnlyHint": true,
-      "destructiveHint": false,
-      "openWorldHint": true
-    },
-    "description": "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "graphType": {
-          "default": "versionedApp",
-          "description": "Type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
-          "type": "string"
-        },
-        "namespace": {
-          "description": "Optional single namespace to include in the graph (alternative to namespaces)",
-          "type": "string"
-        },
-        "namespaces": {
-          "description": "Optional comma-separated list of namespaces to include in the graph",
-          "type": "string"
-        },
-        "rateInterval": {
-          "default": "10m",
-          "description": "Rate interval for fetching (e.g., '10m', '5m', '1h').",
-          "type": "string"
-        }
-      }
-    },
-    "name": "kiali_get_mesh_graph"
-  },
-  {
-    "annotations": {
       "title": "Get Metrics for a Resource",
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -251,6 +218,39 @@
   },
   {
     "annotations": {
+      "title": "Topology: Mesh, Graph, Health, and Status",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "description": "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "graphType": {
+          "default": "versionedApp",
+          "description": "Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Optional single namespace to include in the graph (alternative to namespaces)",
+          "type": "string"
+        },
+        "namespaces": {
+          "description": "Optional comma-separated list of namespaces to include in the graph",
+          "type": "string"
+        },
+        "rateInterval": {
+          "default": "10m",
+          "description": "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
+          "type": "string"
+        }
+      }
+    },
+    "name": "kiali_mesh_graph"
+  },
+  {
+    "annotations": {
       "title": "Workload: Logs",
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -287,6 +287,6 @@
         "workload"
       ]
     },
-    "name": "workload_logs"
+    "name": "kiali_workload_logs"
   }
 ]

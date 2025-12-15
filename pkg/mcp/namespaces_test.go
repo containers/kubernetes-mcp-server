@@ -60,7 +60,7 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list namespaces:(.+:)? resource not allowed: /v1, Kind=Namespace"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }
@@ -165,7 +165,7 @@ func (s *NamespacesSuite) TestProjectsListInOpenShiftDenied() {
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list projects:(.+:)? resource not allowed: project.openshift.io/v1, Kind=Project"
 			s.Regexpf(expectedMessage, msg,
-				"expected descriptive error '%s', got %v", expectedMessage, projectsList.Content[0].(mcp.TextContent).Text)
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

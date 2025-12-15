@@ -56,9 +56,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForNonAPIResources() {
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:     mockDelegate,
-		staticConfig: nil,
-		restMapper:   s.restMapper,
+		delegate:                mockDelegate,
+		deniedResourcesProvider: nil,
+		restMapper:              s.restMapper,
 	}
 
 	testCases := []string{"healthz", "readyz", "livez", "metrics", "version"}
@@ -84,9 +84,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDiscoveryRequests()
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:     mockDelegate,
-		staticConfig: nil,
-		restMapper:   s.restMapper,
+		delegate:                mockDelegate,
+		deniedResourcesProvider: nil,
+		restMapper:              s.restMapper,
 	}
 
 	testCases := []string{"/api", "/apis", "/api/v1", "/api/v1/", "/apis/apps", "/apis/apps/v1", "/apis/batch/v1"}
@@ -112,9 +112,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:     mockDelegate,
-		staticConfig: nil, // nil config allows all resources
-		restMapper:   s.restMapper,
+		delegate:                mockDelegate,
+		deniedResourcesProvider: nil, // nil config allows all resources
+		restMapper:              s.restMapper,
 	}
 
 	s.Run("List all pods is allowed", func() {
@@ -182,15 +182,15 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 		},
 	}
 	rt := &AccessControlRoundTripper{
-		delegate:     mockDelegate,
-		staticConfig: config.Default(),
-		restMapper:   s.restMapper,
+		delegate:                mockDelegate,
+		deniedResourcesProvider: config.Default(),
+		restMapper:              s.restMapper,
 	}
 
 	s.Run("Specific resource kind is denied", func() {
 		s.Require().NoError(toml.Unmarshal([]byte(`
 			denied_resources = [ { version = "v1", kind = "Pod" } ]
-		`), rt.staticConfig), "Expected to parse denied resources config")
+		`), rt.deniedResourcesProvider), "Expected to parse denied resources config")
 
 		s.Run("List pods is denied", func() {
 			delegateCalled = false
@@ -217,7 +217,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	s.Run("Entire group/version is denied", func() {
 		s.Require().NoError(toml.Unmarshal([]byte(`
 			denied_resources = [ { version = "v1", kind = "" } ]
-		`), rt.staticConfig), "Expected to v1 denied resources config")
+		`), rt.deniedResourcesProvider), "Expected to v1 denied resources config")
 
 		s.Run("Pods in core/v1 are denied", func() {
 			delegateCalled = false
@@ -231,7 +231,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	})
 
 	s.Run("RESTMapper error for unknown resource", func() {
-		rt.staticConfig = nil
+		rt.deniedResourcesProvider = nil
 		delegateCalled = false
 		req := httptest.NewRequest("GET", "/api/v1/unknownresources", nil)
 		resp, err := rt.RoundTrip(req)

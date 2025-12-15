@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/stretchr/testify/suite"
@@ -96,4 +97,32 @@ func (s *McpHeadersSuite) TestAuthorizationHeaderPropagation() {
 
 func TestMcpHeaders(t *testing.T) {
 	suite.Run(t, new(McpHeadersSuite))
+}
+
+type ServerInstructionsSuite struct {
+	BaseMcpSuite
+}
+
+func (s *ServerInstructionsSuite) TestServerInstructionsEmpty() {
+	s.InitMcpClient()
+	s.Run("returns empty instructions when not configured", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Empty(s.InitializeResult.Instructions, "instructions should be empty when not configured")
+	})
+}
+
+func (s *ServerInstructionsSuite) TestServerInstructionsFromConfiguration() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		server_instructions = "Always use YAML output format for kubectl commands."
+	`), s.Cfg), "Expected to parse server instructions config")
+	s.InitMcpClient()
+	s.Run("returns configured instructions", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Equal("Always use YAML output format for kubectl commands.", s.InitializeResult.Instructions,
+			"instructions should match configured value")
+	})
+}
+
+func TestServerInstructions(t *testing.T) {
+	suite.Run(t, new(ServerInstructionsSuite))
 }

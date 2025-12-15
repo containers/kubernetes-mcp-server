@@ -10,11 +10,10 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initResources(o internalk8s.Openshift) []api.ServerTool {
+func initResources(o api.Openshift) []api.ServerTool {
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
 	if o.IsOpenShift(context.Background()) {
 		commonApiVersion += ", route.openshift.io/v1 Route"
@@ -183,7 +182,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		namespace = ""
 	}
 	labelSelector := params.GetArguments()["labelSelector"]
-	resourceListOptions := internalk8s.ResourceListOptions{
+	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 
@@ -316,7 +315,7 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	ns = params.NamespaceOrDefault(ns)
+	ns = params.AccessControlClientset().NamespaceOrDefault(ns)
 
 	n, ok := name.(string)
 	if !ok {

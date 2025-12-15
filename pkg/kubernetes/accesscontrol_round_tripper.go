@@ -5,15 +5,15 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type AccessControlRoundTripper struct {
-	delegate     http.RoundTripper
-	staticConfig *config.StaticConfig
-	restMapper   meta.RESTMapper
+	delegate                http.RoundTripper
+	deniedResourcesProvider api.DeniedResourcesProvider
+	restMapper              meta.RESTMapper
 }
 
 func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -39,11 +39,11 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 func (rt *AccessControlRoundTripper) isAllowed(
 	gvk schema.GroupVersionKind,
 ) bool {
-	if rt.staticConfig == nil {
+	if rt.deniedResourcesProvider == nil {
 		return true
 	}
 
-	for _, val := range rt.staticConfig.DeniedResources {
+	for _, val := range rt.deniedResourcesProvider.GetDeniedResources() {
 		// If kind is empty, that means Group/Version pair is denied entirely
 		if val.Kind == "" {
 			if gvk.Group == val.Group && gvk.Version == val.Version {

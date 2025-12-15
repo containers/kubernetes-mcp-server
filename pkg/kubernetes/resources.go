@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 	authv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,12 +26,7 @@ const (
 	AppKubernetesPartOf    = "app.kubernetes.io/part-of"
 )
 
-type ResourceListOptions struct {
-	metav1.ListOptions
-	AsTable bool
-}
-
-func (k *Kubernetes) ResourcesList(ctx context.Context, gvk *schema.GroupVersionKind, namespace string, options ResourceListOptions) (runtime.Unstructured, error) {
+func (k *Kubernetes) ResourcesList(ctx context.Context, gvk *schema.GroupVersionKind, namespace string, options api.ListOptions) (runtime.Unstructured, error) {
 	gvr, err := k.resourceFor(gvk)
 	if err != nil {
 		return nil, err
@@ -39,7 +35,7 @@ func (k *Kubernetes) ResourcesList(ctx context.Context, gvk *schema.GroupVersion
 	// Check if operation is allowed for all namespaces (applicable for namespaced resources)
 	isNamespaced, _ := k.isNamespaced(gvk)
 	if isNamespaced && !k.canIUse(ctx, gvr, namespace, "list") && namespace == "" {
-		namespace = k.configuredNamespace()
+		namespace = k.AccessControlClientset().NamespaceOrDefault("")
 	}
 	if options.AsTable {
 		return k.resourcesListAsTable(ctx, gvk, gvr, namespace, options)
@@ -55,7 +51,7 @@ func (k *Kubernetes) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionK
 
 	// If it's a namespaced resource and namespace wasn't provided, try to use the default configured one
 	if namespaced, nsErr := k.isNamespaced(gvk); nsErr == nil && namespaced {
-		namespace = k.NamespaceOrDefault(namespace)
+		namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
 	}
 	return k.AccessControlClientset().DynamicClient().Resource(*gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
@@ -82,7 +78,7 @@ func (k *Kubernetes) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersi
 
 	// If it's a namespaced resource and namespace wasn't provided, try to use the default configured one
 	if namespaced, nsErr := k.isNamespaced(gvk); nsErr == nil && namespaced {
-		namespace = k.NamespaceOrDefault(namespace)
+		namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
 	}
 	return k.AccessControlClientset().DynamicClient().Resource(*gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
@@ -106,7 +102,7 @@ func (k *Kubernetes) ResourcesScale(
 			AccessControlClientset().
 			DynamicClient().
 			Resource(*gvr).
-			Namespace(k.NamespaceOrDefault(namespace))
+			Namespace(k.AccessControlClientset().NamespaceOrDefault(namespace))
 	} else {
 		resourceClient = k.
 			AccessControlClientset().DynamicClient().Resource(*gvr)
@@ -134,7 +130,7 @@ func (k *Kubernetes) ResourcesScale(
 // resourcesListAsTable retrieves a list of resources in a table format.
 // It's almost identical to the dynamic.DynamicClient implementation, but it uses a specific Accept header to request the table format.
 // dynamic.DynamicClient does not provide a way to set the HTTP header (TODO: create an issue to request this feature)
-func (k *Kubernetes) resourcesListAsTable(ctx context.Context, gvk *schema.GroupVersionKind, gvr *schema.GroupVersionResource, namespace string, options ResourceListOptions) (runtime.Unstructured, error) {
+func (k *Kubernetes) resourcesListAsTable(ctx context.Context, gvk *schema.GroupVersionKind, gvr *schema.GroupVersionResource, namespace string, options api.ListOptions) (runtime.Unstructured, error) {
 	var url []string
 	if len(gvr.Group) == 0 {
 		url = append(url, "api")
@@ -189,7 +185,7 @@ func (k *Kubernetes) resourcesCreateOrUpdate(ctx context.Context, resources []*u
 		namespace := obj.GetNamespace()
 		// If it's a namespaced resource and namespace wasn't provided, try to use the default configured one
 		if namespaced, nsErr := k.isNamespaced(&gvk); nsErr == nil && namespaced {
-			namespace = k.NamespaceOrDefault(namespace)
+			namespace = k.AccessControlClientset().NamespaceOrDefault(namespace)
 		}
 		resources[i], rErr = k.AccessControlClientset().DynamicClient().Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{
 			FieldManager: version.BinaryName,

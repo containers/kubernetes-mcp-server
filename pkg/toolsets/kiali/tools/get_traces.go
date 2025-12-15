@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
 type tracesOperations struct {
@@ -40,12 +41,12 @@ var tracesOpsMap = map[string]tracesOperations{
 	},
 }
 
-func initGetTraces() []api.ServerTool {
+func InitGetTraces() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
-
+	name := defaults.ToolsetName() + "_get_traces"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_get_traces",
+			Name:        name,
 			Description: "Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -111,12 +112,12 @@ func initGetTraces() []api.ServerTool {
 }
 
 func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	k := params.NewKiali()
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
 
 	// Check if traceId is provided - if so, get trace details directly
 	if traceIdVal, ok := params.GetArguments()["traceId"].(string); ok && traceIdVal != "" {
 		traceId := strings.TrimSpace(traceIdVal)
-		content, err := k.TraceDetails(params.Context, traceId)
+		content, err := kiali.TraceDetails(params.Context, traceId)
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to get trace details: %v", err)), nil
 		}
@@ -192,7 +193,7 @@ func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if clusterName, ok := params.GetArguments()["clusterName"].(string); ok && clusterName != "" {
 		queryParams["clusterName"] = clusterName
 	}
-	content, err := ops.tracesFunc(params.Context, k, namespace, resourceName, queryParams)
+	content, err := ops.tracesFunc(params.Context, kiali, namespace, resourceName, queryParams)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get %s traces: %v", ops.singularName, err)), nil
 	}

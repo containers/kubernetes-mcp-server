@@ -9,12 +9,14 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	authenticationapiv1 "k8s.io/api/authentication/v1"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/prompts"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
@@ -62,10 +64,11 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
-	configuration *Configuration
-	server        *mcp.Server
-	enabledTools  []string
-	p             internalk8s.Provider
+	configuration  *Configuration
+	server         *mcp.Server
+	enabledTools   []string
+	enabledPrompts []string
+	p              internalk8s.Provider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
@@ -77,8 +80,9 @@ func NewServer(configuration Configuration) (*Server, error) {
 			},
 			&mcp.ServerOptions{
 				HasResources: false,
-				HasPrompts:   false,
+				HasPrompts:   true,
 				HasTools:     true,
+				Instructions: configuration.ServerInstructions,
 			}),
 	}
 
@@ -159,7 +163,73 @@ func (s *Server) reloadToolsets() error {
 		}
 		s.server.AddTool(goSdkTool, goSdkToolHandler)
 	}
+
+	// Track previously enabled prompts
+	previousPrompts := s.enabledPrompts
+
+	// Load config prompts into registry
+	prompts.Clear()
+	if s.configuration.HasPrompts() {
+		ctx := context.Background()
+		md := s.configuration.GetPromptsMetadata()
+		if err := prompts.LoadFromToml(ctx, s.configuration.Prompts, md); err != nil {
+			return fmt.Errorf("failed to parse prompts from config: %w", err)
+		}
+	}
+
+	// Get prompts from registry
+	configPrompts := prompts.ConfigPrompts()
+
+	// Update enabled prompts list
+	s.enabledPrompts = make([]string, 0)
+	for _, prompt := range configPrompts {
+		s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
+	}
+
+	// Remove prompts that are no longer applicable
+	promptsToRemove := make([]string, 0)
+	for _, oldPrompt := range previousPrompts {
+		if !slices.Contains(s.enabledPrompts, oldPrompt) {
+			promptsToRemove = append(promptsToRemove, oldPrompt)
+		}
+	}
+	s.server.RemovePrompts(promptsToRemove...)
+
+	// Register all config prompts
+	for _, prompt := range configPrompts {
+		mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
+		if err != nil {
+			return fmt.Errorf("failed to convert prompt %s: %v", prompt.Prompt.Name, err)
+		}
+		s.server.AddPrompt(mcpPrompt, promptHandler)
+	}
+
+	// start new watch
+	s.p.WatchTargets(s.reloadToolsets)
 	return nil
+}
+
+// mergePrompts merges two slices of prompts, with prompts in override taking precedence
+// over prompts in base when they have the same name
+func mergePrompts(base, override []api.ServerPrompt) []api.ServerPrompt {
+	// Create a map of override prompts by name for quick lookup
+	overrideMap := make(map[string]api.ServerPrompt)
+	for _, prompt := range override {
+		overrideMap[prompt.Prompt.Name] = prompt
+	}
+
+	// Build result: start with base prompts, skipping any that are overridden
+	result := make([]api.ServerPrompt, 0, len(base)+len(override))
+	for _, prompt := range base {
+		if _, exists := overrideMap[prompt.Prompt.Name]; !exists {
+			result = append(result, prompt)
+		}
+	}
+
+	// Add all override prompts
+	result = append(result, override...)
+
+	return result
 }
 
 func (s *Server) ServeStdio(ctx context.Context) error {
@@ -201,6 +271,32 @@ func (s *Server) GetTargetParameterName() string {
 
 func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
+}
+
+// GetPrompts returns the currently loaded prompts from the registry
+func (s *Server) GetPrompts() ([]api.ServerPrompt, error) {
+	return prompts.ConfigPrompts(), nil
+}
+
+// ReloadConfiguration reloads the configuration and reinitializes the server.
+// This is intended to be called by the server lifecycle manager when
+// configuration changes are detected.
+func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
+	klog.V(1).Info("Reloading MCP server configuration...")
+
+	// Update the configuration
+	s.configuration.StaticConfig = newConfig
+	// Clear cached values so they get recomputed
+	s.configuration.listOutput = nil
+	s.configuration.toolsets = nil
+
+	// Reload the Kubernetes provider (this will also rebuild tools)
+	if err := s.reloadToolsets(); err != nil {
+		return fmt.Errorf("failed to reload toolsets: %w", err)
+	}
+
+	klog.V(1).Info("MCP server configuration reloaded successfully")
+	return nil
 }
 
 func (s *Server) Close() {

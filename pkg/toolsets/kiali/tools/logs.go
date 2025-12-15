@@ -1,22 +1,23 @@
-package kiali
+package tools
 
 import (
-	"encoding/json"
 	"fmt"
 
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func initLogs() []api.ServerTool {
+func InitLogs() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
-
+	name := defaults.ToolsetName() + "_workload_logs"
 	// Workload logs tool
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "workload_logs",
+			Name:        name,
 			Description: "Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -62,7 +63,6 @@ func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	// Extract required parameters
 	namespace, _ := params.GetArguments()["namespace"].(string)
 	workload, _ := params.GetArguments()["workload"].(string)
-	k := params.NewKiali()
 	if namespace == "" {
 		return api.NewToolCallResult("", fmt.Errorf("namespace parameter is required")), nil
 	}
@@ -76,8 +76,7 @@ func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	tail := params.GetArguments()["tail"]
 
 	// Convert parameters to Kiali API format
-	var duration, logType, sinceTime, maxLines string
-	var service string // We don't have service parameter in our schema, but Kiali API supports it
+	var duration, maxLines string
 
 	// Convert since to duration (Kiali expects duration format like "5m", "1h")
 	if since != "" {
@@ -93,56 +92,10 @@ func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 		maxLines = fmt.Sprintf("%d", tailInt)
 	}
 
-	// If no container specified, we need to get workload details first to find the main app container
-	if container == "" {
-		workloadDetails, err := k.WorkloadDetails(params.Context, namespace, workload)
-		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to get workload details: %v", err)), nil
-		}
-
-		// Parse the workload details JSON to extract container names
-		var workloadData struct {
-			Pods []struct {
-				Name       string `json:"name"`
-				Containers []struct {
-					Name string `json:"name"`
-				} `json:"containers"`
-			} `json:"pods"`
-		}
-
-		if err := json.Unmarshal([]byte(workloadDetails), &workloadData); err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse workload details: %v", err)), nil
-		}
-
-		if len(workloadData.Pods) == 0 {
-			return api.NewToolCallResult("", fmt.Errorf("no pods found for workload %s in namespace %s", workload, namespace)), nil
-		}
-
-		// Find the main application container (not istio-proxy or istio-init)
-		for _, pod := range workloadData.Pods {
-			for _, c := range pod.Containers {
-				if c.Name != "istio-proxy" && c.Name != "istio-init" {
-					container = c.Name
-					break
-				}
-			}
-			if container != "" {
-				break
-			}
-		}
-
-		// If no app container found, use the first container
-		if container == "" && len(workloadData.Pods) > 0 && len(workloadData.Pods[0].Containers) > 0 {
-			container = workloadData.Pods[0].Containers[0].Name
-		}
-	}
-
-	if container == "" {
-		return api.NewToolCallResult("", fmt.Errorf("no container found for workload %s in namespace %s", workload, namespace)), nil
-	}
-
-	// Use the WorkloadLogs method with the correct parameters
-	logs, err := k.WorkloadLogs(params.Context, namespace, workload, container, service, duration, logType, sinceTime, maxLines)
+	// WorkloadLogs handles container auto-detection internally, so we can pass empty string
+	// if container is not specified
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	logs, err := kiali.WorkloadLogs(params.Context, namespace, workload, container, duration, maxLines)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get workload logs: %v", err)), nil
 	}

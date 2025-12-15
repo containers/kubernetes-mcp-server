@@ -1,19 +1,22 @@
-package kiali
+package tools
 
 import (
 	"fmt"
 
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func initManageIstioConfig() []api.ServerTool {
+func InitManageIstioConfig() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
+	name := defaults.ToolsetName() + "_manage_istio_config"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        "kiali_manage_istio_config",
+			Name:        name,
 			Description: "Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
@@ -72,8 +75,8 @@ func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if err := validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
-	k := params.NewKiali()
-	content, err := k.IstioConfig(params.Context, action, namespace, group, version, kind, name, jsonData)
+	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	content, err := kiali.IstioConfig(params.Context, action, namespace, group, version, kind, name, jsonData)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve Istio configuration: %v", err)), nil
 	}

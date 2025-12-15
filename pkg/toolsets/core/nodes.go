@@ -136,7 +136,7 @@ func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error
 }
 
 func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	nodesTopOptions := kubernetes.NodesTopOptions{}
+	nodesTopOptions := api.NodesTopOptions{}
 	if v, ok := params.GetArguments()["name"].(string); ok {
 		nodesTopOptions.Name = v
 	}
@@ -150,12 +150,13 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	// Get the list of nodes to extract their allocatable resources
-	nodes, err := params.AccessControlClientset().Nodes()
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes client: %v", err)), nil
+	// Type assert to concrete type to access AccessControlClientset
+	k8s, ok := params.KubernetesClient.(*kubernetes.Kubernetes)
+	if !ok {
+		return api.NewToolCallResult("", fmt.Errorf("kubernetes client type assertion failed")), nil
 	}
 
-	nodeList, err := nodes.List(params, metav1.ListOptions{
+	nodeList, err := k8s.AccessControlClientset().CoreV1().Nodes().List(params, metav1.ListOptions{
 		LabelSelector: nodesTopOptions.LabelSelector,
 	})
 	if err != nil {
