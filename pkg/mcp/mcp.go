@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	authenticationapiv1 "k8s.io/api/authentication/v1"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
@@ -269,15 +268,6 @@ func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
 		// https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#listening-for-messages-from-the-server
 		Stateless: false,
 	})
-}
-
-// KubernetesApiVerifyToken verifies the given token with the audience by
-// sending an TokenReview request to API Server for the specified cluster.
-func (s *Server) KubernetesApiVerifyToken(ctx context.Context, cluster, token, audience string) (*authenticationapiv1.UserInfo, []string, error) {
-	if s.p == nil {
-		return nil, nil, fmt.Errorf("kubernetes cluster provider is not initialized")
-	}
-	return s.p.VerifyToken(ctx, cluster, token, audience)
 }
 
 // GetTargetParameterName returns the parameter name used for target identification in MCP requests
