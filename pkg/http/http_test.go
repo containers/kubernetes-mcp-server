@@ -241,7 +241,7 @@ func TestHealthCheck(t *testing.T) {
 		})
 	})
 	// Health exposed even when require Authorization
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true,  ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
 		if err != nil {
 			t.Fatalf("Failed to get health check endpoint with OAuth: %v", err)
@@ -262,7 +262,7 @@ func TestWellKnownReverseProxy(t *testing.T) {
 		".well-known/openid-configuration",
 	}
 	// With No Authorization URL configured
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ValidateToken: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true,  ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		for _, path := range cases {
 			resp, err := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
 			t.Cleanup(func() { _ = resp.Body.Close() })
@@ -285,7 +285,6 @@ func TestWellKnownReverseProxy(t *testing.T) {
 	invalidPayloadConfig := &config.StaticConfig{
 		AuthorizationURL:        invalidPayloadServer.URL,
 		RequireOAuth:            true,
-		ValidateToken:           true,
 		ClusterProviderStrategy: api.ClusterProviderKubeConfig,
 	}
 	testCaseWithContext(t, &httpContext{StaticConfig: invalidPayloadConfig}, func(ctx *httpContext) {
@@ -315,7 +314,6 @@ func TestWellKnownReverseProxy(t *testing.T) {
 	staticConfig := &config.StaticConfig{
 		AuthorizationURL:        testServer.URL,
 		RequireOAuth:            true,
-		ValidateToken:           true,
 		ClusterProviderStrategy: api.ClusterProviderKubeConfig,
 	}
 	testCaseWithContext(t, &httpContext{StaticConfig: staticConfig}, func(ctx *httpContext) {
@@ -365,7 +363,6 @@ func TestWellKnownHeaderPropagation(t *testing.T) {
 	staticConfig := &config.StaticConfig{
 		AuthorizationURL:        testServer.URL,
 		RequireOAuth:            true,
-		ValidateToken:           true,
 		ClusterProviderStrategy: api.ClusterProviderKubeConfig,
 	}
 	testCaseWithContext(t, &httpContext{StaticConfig: staticConfig}, func(ctx *httpContext) {
@@ -479,7 +476,6 @@ func TestWellKnownOverrides(t *testing.T) {
 	baseConfig := config.StaticConfig{
 		AuthorizationURL:        testServer.URL,
 		RequireOAuth:            true,
-		ValidateToken:           true,
 		ClusterProviderStrategy: api.ClusterProviderKubeConfig,
 	}
 	// With Dynamic Client Registration disabled
