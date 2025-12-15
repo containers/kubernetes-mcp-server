@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/prompts"
 )
 
 type ClusterHealthCheckSuite struct {
@@ -13,11 +11,19 @@ type ClusterHealthCheckSuite struct {
 }
 
 func (s *ClusterHealthCheckSuite) TestPromptIsRegistered() {
-	s.Run("cluster-health-check prompt is registered", func() {
-		configPrompts := prompts.ConfigPrompts()
+	s.Run("cluster-health-check prompt is registered via GetPrompts", func() {
+		// Create a new instance of the core toolset
+		toolset := &Toolset{}
 
+		// Get prompts from the toolset
+		prompts := toolset.GetPrompts()
+
+		s.Require().NotNil(prompts, "GetPrompts should not return nil")
+		s.Require().NotEmpty(prompts, "GetPrompts should return at least one prompt")
+
+		// Find the cluster-health-check prompt
 		var foundHealthCheck bool
-		for _, prompt := range configPrompts {
+		for _, prompt := range prompts {
 			if prompt.Prompt.Name == "cluster-health-check" {
 				foundHealthCheck = true
 
@@ -31,14 +37,17 @@ func (s *ClusterHealthCheckSuite) TestPromptIsRegistered() {
 
 				// Check namespace argument
 				s.Equal("namespace", prompt.Prompt.Arguments[0].Name)
+				s.NotEmpty(prompt.Prompt.Arguments[0].Description)
 				s.False(prompt.Prompt.Arguments[0].Required)
 
 				// Check verbose argument
 				s.Equal("verbose", prompt.Prompt.Arguments[1].Name)
+				s.NotEmpty(prompt.Prompt.Arguments[1].Description)
 				s.False(prompt.Prompt.Arguments[1].Required)
 
 				// Check check_events argument
 				s.Equal("check_events", prompt.Prompt.Arguments[2].Name)
+				s.NotEmpty(prompt.Prompt.Arguments[2].Description)
 				s.False(prompt.Prompt.Arguments[2].Required)
 
 				// Verify handler is set
