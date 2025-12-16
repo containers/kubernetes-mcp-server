@@ -96,7 +96,7 @@ type KubernetesClient interface {
 	// PodsDelete deletes a pod and its managed resources
 	PodsDelete(ctx context.Context, namespace, name string) (string, error)
 	// PodsLog retrieves logs from a pod container
-	PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error)
+	PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64, query string) (string, error)
 	// PodsRun creates and runs a new pod with optional service and route
 	PodsRun(ctx context.Context, namespace, name, image string, port int32) ([]*unstructured.Unstructured, error)
 	// PodsTop retrieves pod metrics

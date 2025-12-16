@@ -210,7 +210,7 @@ func initPods() []api.ServerTool {
 						Description: "filter logs by query",
 					},
 				},
-				Required: []string{"name", "query"},
+				Required: []string{"name"},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Pods: Log",
@@ -413,8 +413,7 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		query = ""
 	}
 
-	ret, err := params.PodsLog(params.Context, ns.(string), name.(string), container.(string), previousBool, tailInt,
-		query.(string))
+	ret, err := params.PodsLog(params.Context, ns.(string), name.(string), container.(string), previousBool, tailInt, query.(string))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s log in namespace %s: %v", name, ns, err)), nil
 	} else if ret == "" {

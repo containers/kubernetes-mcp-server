@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,10 +22,6 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/metrics/pkg/apis/metrics"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
-	"k8s.io/utils/ptr"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
 // DefaultTailLines is the default number of lines to retrieve from the end of the logs
@@ -91,7 +88,7 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 		k.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
 }
 
-func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
+func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64, query string) (string, error) {
 	pods := k.AccessControlClientset().CoreV1().Pods(k.AccessControlClientset().NamespaceOrDefault(namespace))
 
 	logOptions := &v1.PodLogOptions{
