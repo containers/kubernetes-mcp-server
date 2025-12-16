@@ -283,8 +283,6 @@ func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 
 func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 	s.MockServer.ResetHandlers()
-	tokenReviewHandler := test.NewTokenReviewHandler()
-	s.MockServer.Handle(tokenReviewHandler)
 
 	cases := []string{"", "mcp-server"}
 	for _, audience := range cases {
@@ -294,7 +292,6 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 		s.StartClient(transport.WithHTTPHeaders(map[string]string{
 			"Authorization": "Bearer " + tokenBasicNotExpired,
 		}))
-		tokenReviewHandler.TokenReviewed = false
 
 		s.Run(fmt.Sprintf("Protected resource with audience = '%s'", audience), func() {
 			s.Run("Initialize returns OK for VALID Authorization header", func() {
@@ -312,8 +309,6 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 
 func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	s.MockServer.ResetHandlers()
-	tokenReviewHandler := test.NewTokenReviewHandler()
-	s.MockServer.Handle(tokenReviewHandler)
 
 	oidcTestServer := NewOidcTestServer(s.T())
 	s.T().Cleanup(oidcTestServer.Close)
@@ -330,7 +325,6 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	s.StartClient(transport.WithHTTPHeaders(map[string]string{
 		"Authorization": "Bearer " + validOidcToken,
 	}))
-	tokenReviewHandler.TokenReviewed = false
 
 	s.Run("Protected resource", func() {
 		s.Run("Initialize returns OK for VALID OIDC Authorization header", func() {
@@ -347,8 +341,6 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 
 func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	s.MockServer.ResetHandlers()
-	tokenReviewHandler := test.NewTokenReviewHandler()
-	s.MockServer.Handle(tokenReviewHandler)
 
 	oidcTestServer := NewOidcTestServer(s.T())
 	s.T().Cleanup(oidcTestServer.Close)
@@ -377,7 +369,6 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	s.StartClient(transport.WithHTTPHeaders(map[string]string{
 		"Authorization": "Bearer " + validOidcClientToken,
 	}))
-	tokenReviewHandler.TokenReviewed = false
 
 	s.Run("Protected resource", func() {
 		s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {

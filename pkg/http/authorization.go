@@ -41,7 +41,6 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	    2.1. Raw Token Validation (oidcProvider is nil):
 //	         - The token is validated offline for basic sanity checks (expiration).
 //	         - If OAuthAudience is set, the token is validated against the audience.
-//	         - If ValidateToken is set, the token is then used against the Kubernetes API Server for TokenReview.
 //
 //	         see TestAuthorizationRawToken
 //
@@ -49,7 +48,6 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - The token is validated offline for basic sanity checks (audience and expiration).
 //	         - If OAuthAudience is set, the token is validated against the audience.
 //	         - The token is then validated against the OIDC Provider.
-//	         - If ValidateToken is set, the token is then used against the Kubernetes API Server for TokenReview.
 //
 //	         see TestAuthorizationOidcToken
 //
@@ -59,7 +57,6 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - The token is then validated against the OIDC Provider.
 //	         - If the token is valid, an external account token exchange is performed using
 //	           the OIDC Provider to obtain a new token with the specified audience and scopes.
-//	         - If ValidateToken is set, the exchanged token is then used against the Kubernetes API Server for TokenReview.
 //
 //	         see TestAuthorizationOidcTokenExchange
 func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, httpClient *http.Client) func(http.Handler) http.Handler {
