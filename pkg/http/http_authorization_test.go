@@ -286,16 +286,9 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 	tokenReviewHandler := test.NewTokenReviewHandler()
 	s.MockServer.Handle(tokenReviewHandler)
 
-	cases := []struct {
-		audience string
-	}{
-		{""},
-		{""},
-		{"mcp-server"},
-		{"mcp-server"},
-	}
-	for _, c := range cases {
-		s.StaticConfig.OAuthAudience = c.audience
+	cases := []string{"", "mcp-server"}
+	for _, audience := range cases {
+		s.StaticConfig.OAuthAudience = audience
 		s.logBuffer.Reset()
 		s.StartServer()
 		s.StartClient(transport.WithHTTPHeaders(map[string]string{
@@ -303,7 +296,7 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 		}))
 		tokenReviewHandler.TokenReviewed = false
 
-		s.Run(fmt.Sprintf("Protected resource with audience = '%s'", c.audience), func() {
+		s.Run(fmt.Sprintf("Protected resource with audience = '%s'", audience), func() {
 			s.Run("Initialize returns OK for VALID Authorization header", func() {
 				result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
 				s.Require().NoError(err, "Expected no error creating initial request")
