@@ -33,8 +33,8 @@ func IsInCluster(cfg api.ClusterProvider) bool {
 
 // ConfigurationContextsDefault returns the current context name
 // TODO: Should be moved to the Provider level ?
-func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
-	cfg, err := k.ToRawKubeConfigLoader().RawConfig()
+func (c *Core) ConfigurationContextsDefault() (string, error) {
+	cfg, err := c.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
 		return "", err
 	}
@@ -43,8 +43,8 @@ func (k *Kubernetes) ConfigurationContextsDefault() (string, error) {
 
 // ConfigurationContextsList returns the list of available context names
 // TODO: Should be moved to the Provider level ?
-func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
-	cfg, err := k.ToRawKubeConfigLoader().RawConfig()
+func (c *Core) ConfigurationContextsList() (map[string]string, error) {
+	cfg, err := c.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -64,10 +64,10 @@ func (k *Kubernetes) ConfigurationContextsList() (map[string]string, error) {
 // If minify is true, keeps only the current-context and the relevant pieces of the configuration for that context.
 // If minify is false, all contexts, clusters, auth-infos, and users are returned in the configuration.
 // TODO: Should be moved to the Provider level ?
-func (k *Kubernetes) ConfigurationView(minify bool) (runtime.Object, error) {
+func (c *Core) ConfigurationView(minify bool) (runtime.Object, error) {
 	var cfg clientcmdapi.Config
 	var err error
-	if cfg, err = k.ToRawKubeConfigLoader().RawConfig(); err != nil {
+	if cfg, err = c.ToRawKubeConfigLoader().RawConfig(); err != nil {
 		return nil, err
 	}
 	if minify {

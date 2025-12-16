@@ -10,6 +10,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -203,7 +204,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	ret, err := params.ResourcesList(params, gvk, ns, resourceListOptions)
+	ret, err := kubernetes.NewCore(params).ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %v", err)), nil
 	}
@@ -234,7 +235,7 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	ret, err := params.ResourcesGet(params, gvk, ns, n)
+	ret, err := kubernetes.NewCore(params).ResourcesGet(params, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %v", err)), nil
 	}
@@ -252,7 +253,7 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := params.ResourcesCreateOrUpdate(params, r)
+	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %v", err)), nil
 	}
@@ -287,7 +288,7 @@ func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	err = params.ResourcesDelete(params, gvk, ns, n)
+	err = kubernetes.NewCore(params).ResourcesDelete(params, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %v", err)), nil
 	}
@@ -315,8 +316,6 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	ns = params.NamespaceOrDefault(ns)
-
 	n, ok := name.(string)
 	if !ok {
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
@@ -331,7 +330,7 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 	}
 
-	scale, err := params.ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
+	scale, err := kubernetes.NewCore(params).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
 	}

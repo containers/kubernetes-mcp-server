@@ -13,6 +13,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 func initNodes() []api.ServerTool {
@@ -113,7 +114,7 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			return api.NewToolCallResult("", fmt.Errorf("failed to parse tailLines parameter: %w", err)), nil
 		}
 	}
-	ret, err := params.NodesLog(params, name, query, tailInt)
+	ret, err := kubernetes.NewCore(params).NodesLog(params, name, query, tailInt)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
 	} else if ret == "" {
@@ -127,7 +128,7 @@ func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error
 	if !ok || name == "" {
 		return api.NewToolCallResult("", errors.New("failed to get node stats summary, missing argument name")), nil
 	}
-	ret, err := params.NodesStatsSummary(params, name)
+	ret, err := kubernetes.NewCore(params).NodesStatsSummary(params, name)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node stats summary for %s: %v", name, err)), nil
 	}
@@ -143,7 +144,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		nodesTopOptions.LabelSelector = v
 	}
 
-	nodeMetrics, err := params.NodesTop(params, nodesTopOptions)
+	nodeMetrics, err := kubernetes.NewCore(params).NodesTop(params, nodesTopOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %v", err)), nil
 	}

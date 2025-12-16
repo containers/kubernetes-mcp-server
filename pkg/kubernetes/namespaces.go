@@ -8,14 +8,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func (k *Kubernetes) NamespacesList(ctx context.Context, options api.ListOptions) (runtime.Unstructured, error) {
-	return k.ResourcesList(ctx, &schema.GroupVersionKind{
+func (c *Core) NamespacesList(ctx context.Context, options api.ListOptions) (runtime.Unstructured, error) {
+	return c.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Namespace",
 	}, "", options)
 }
 
-func (k *Kubernetes) ProjectsList(ctx context.Context, options api.ListOptions) (runtime.Unstructured, error) {
-	return k.ResourcesList(ctx, &schema.GroupVersionKind{
+func (c *Core) ProjectsList(ctx context.Context, options api.ListOptions) (runtime.Unstructured, error) {
+	return c.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "project.openshift.io", Version: "v1", Kind: "Project",
 	}, "", options)
 }

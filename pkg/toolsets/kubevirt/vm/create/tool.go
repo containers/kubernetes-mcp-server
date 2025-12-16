@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -131,7 +132,7 @@ func create(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	// Create the VM in the cluster
-	resources, err := params.ResourcesCreateOrUpdate(params, vmYaml)
+	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, vmYaml)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create VirtualMachine: %w", err)), nil
 	}
