@@ -75,7 +75,7 @@ func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if err := validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
-	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	content, err := kiali.IstioConfig(params.Context, action, namespace, group, version, kind, name, jsonData)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve Istio configuration: %v", err)), nil

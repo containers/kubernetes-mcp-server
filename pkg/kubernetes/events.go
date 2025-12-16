@@ -11,9 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func (k *Kubernetes) EventsList(ctx context.Context, namespace string) ([]map[string]any, error) {
+func (c *Core) EventsList(ctx context.Context, namespace string) ([]map[string]any, error) {
 	var eventMap []map[string]any
-	raw, err := k.ResourcesList(ctx, &schema.GroupVersionKind{
+	raw, err := c.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Event",
 	}, namespace, api.ListOptions{})
 	if err != nil {

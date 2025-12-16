@@ -92,7 +92,7 @@ func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 		return api.NewToolCallResult("", fmt.Errorf("resource_type is required")), nil
 	}
 
-	kiali := kialiclient.NewKiali(params, params.AccessControlClientset().RESTConfig())
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 
 	ops, ok := listDetailsOpsMap[resourceType]
 	if !ok {
