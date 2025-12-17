@@ -8,6 +8,7 @@ import (
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.opentelemetry.io/otel"
 	"k8s.io/klog/v2"
 )
 
@@ -58,4 +59,59 @@ func toolScopedAuthorizationMiddleware(next mcp.MethodHandler) mcp.MethodHandler
 		}
 		return next(ctx, method, req)
 	}
+}
+
+// traceContextPropagationMiddleware extracts distributed trace context from MCP request metadata
+// and propagates it into the Go context. This enables distributed tracing across MCP protocol boundaries.
+//
+// The traceparent and tracestate headers should be propagated through the _meta field in MCP requests.
+func traceContextPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		// Extract trace context from request params metadata
+		if params := req.GetParams(); params != nil {
+			if callParams, ok := params.(interface{ GetMeta() map[string]any }); ok {
+				meta := callParams.GetMeta()
+				if len(meta) > 0 {
+					carrier := &metaCarrier{meta: meta}
+
+					ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
+
+					if traceparent, ok := meta["traceparent"].(string); ok {
+						klog.V(6).Infof("Extracted trace context from MCP request: traceparent=%s", traceparent)
+					}
+				}
+			}
+		}
+
+		return next(ctx, method, req)
+	}
+}
+
+// metaCarrier adapts an MCP Meta map to the OpenTelemetry TextMapCarrier interface
+type metaCarrier struct {
+	meta map[string]any
+}
+
+// Get retrieves a value from the metadata map
+func (c *metaCarrier) Get(key string) string {
+	if val, ok := c.meta[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+// Set is a no-op for extraction (only used for injection)
+func (c *metaCarrier) Set(key, value string) {
+	// Not used during extraction
+}
+
+// Keys returns all keys in the metadata map
+func (c *metaCarrier) Keys() []string {
+	keys := make([]string, 0, len(c.meta))
+	for k := range c.meta {
+		keys = append(keys, k)
+	}
+	return keys
 }
