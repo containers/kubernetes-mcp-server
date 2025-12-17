@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/spf13/cobra"
@@ -337,7 +338,13 @@ func (m *MCPServerOptions) Run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
-	defer mcpServer.Close()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := mcpServer.Shutdown(shutdownCtx); err != nil {
+			klog.Errorf("MCP server shutdown error: %v", err)
+		}
+	}()
 
 	// Set up SIGHUP handler for configuration reload
 	if m.ConfigPath != "" || m.ConfigDir != "" {
