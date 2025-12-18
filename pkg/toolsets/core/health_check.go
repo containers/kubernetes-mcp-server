@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 // clusterHealthCheckHandler implements the cluster health check prompt
@@ -29,7 +30,7 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 			Version: "v1",
 			Kind:    "Namespace",
 		}
-		_, err := params.ResourcesGet(params, nsGVK, "", namespace)
+		_, err := kubernetes.NewCore(params).ResourcesGet(params, nsGVK, "", namespace)
 		if err != nil {
 			// Namespace doesn't exist - show warning and proceed with cluster-wide check
 			namespaceWarning = fmt.Sprintf("Namespace '%s' not found or not accessible. Showing cluster-wide information instead.", namespace)
@@ -149,7 +150,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 	}
 
 	// Count namespaces
-	namespaceList, err := params.NamespacesList(params, api.ListOptions{})
+	namespaceList, err := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{})
 	if err == nil {
 		if items, ok := namespaceList.UnstructuredContent()["items"].([]interface{}); ok {
 			diag.TotalNamespaces = len(items)
@@ -167,7 +168,7 @@ func gatherNodeDiagnostics(params api.PromptHandlerParams) (string, error) {
 		Kind:    "Node",
 	}
 
-	nodeList, err := params.ResourcesList(params, gvk, "", api.ListOptions{})
+	nodeList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, "", api.ListOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -240,9 +241,9 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 	var err error
 
 	if namespace != "" {
-		podList, err = params.PodsListInNamespace(params, namespace, api.ListOptions{})
+		podList, err = kubernetes.NewCore(params).PodsListInNamespace(params, namespace, api.ListOptions{})
 	} else {
-		podList, err = params.PodsListInAllNamespaces(params, api.ListOptions{})
+		podList, err = kubernetes.NewCore(params).PodsListInAllNamespaces(params, api.ListOptions{})
 	}
 
 	if err != nil {
@@ -334,7 +335,7 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 		Kind:    kind,
 	}
 
-	workloadList, err := params.ResourcesList(params, gvk, namespace, api.ListOptions{})
+	workloadList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, namespace, api.ListOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -420,7 +421,7 @@ func gatherPVCDiagnostics(params api.PromptHandlerParams, namespace string) (str
 		Kind:    "PersistentVolumeClaim",
 	}
 
-	pvcList, err := params.ResourcesList(params, gvk, namespace, api.ListOptions{})
+	pvcList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, namespace, api.ListOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -469,7 +470,7 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 		Kind:    "ClusterOperator",
 	}
 
-	operatorList, err := params.ResourcesList(params, gvk, "", api.ListOptions{})
+	operatorList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, "", api.ListOptions{})
 	if err != nil {
 		// Not an OpenShift cluster
 		return "", err
@@ -546,7 +547,7 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 		namespaces = []string{"default", "kube-system"}
 
 		// Add OpenShift namespaces
-		nsList, err := params.NamespacesList(params, api.ListOptions{})
+		nsList, err := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{})
 		if err == nil {
 			if items, ok := nsList.UnstructuredContent()["items"].([]interface{}); ok {
 				for _, item := range items {
@@ -570,7 +571,7 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 	recentEvents := []string{}
 
 	for _, ns := range namespaces {
-		eventMaps, err := params.EventsList(params, ns)
+		eventMaps, err := kubernetes.NewCore(params).EventsList(params, ns)
 		if err != nil {
 			continue
 		}

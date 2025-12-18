@@ -83,10 +83,7 @@ func (s *WatchKubeConfigSuite) TestNotifiesToolsChangeMultipleTimes() {
 		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
 		// Then
 		s.NotNil(notification, "WatchKubeConfig did not notify on iteration %d", i)
-		s.True(
-			notification.Method == "notifications/tools/list_changed" || notification.Method == "notifications/prompts/list_changed",
-			"WatchKubeConfig did not notify tools or prompts change on iteration %d, got: %s", i, notification.Method,
-		)
+		s.Equalf("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change on iteration %d", i)
 	}
 }
 
@@ -193,10 +190,7 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeMultipleTimes() {
 		s.AddAPIGroup(`{"name":"` + name + `.example.com","versions":[{"groupVersion":"` + name + `.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"` + name + `.example.com/v1","version":"v1"}}`)
 		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
 		s.NotNil(notification, "cluster state watcher did not notify on iteration %d", i)
-		s.True(
-			notification.Method == "notifications/tools/list_changed" || notification.Method == "notifications/prompts/list_changed",
-			"cluster state watcher did not notify tools or prompts change on iteration %d, got: %s", i, notification.Method,
-		)
+		s.Equalf("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change on iteration %d", i)
 	}
 }
 
