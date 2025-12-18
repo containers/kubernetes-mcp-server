@@ -6,7 +6,9 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
@@ -14,32 +16,32 @@ import (
 
 // clusterHealthCheckHandler implements the cluster health check prompt
 func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
+	// Parse arguments (GetArguments returns map[string]string for prompts)
 	args := params.GetArguments()
-
-	// Parse arguments
 	namespace := args["namespace"]
-	verbose := args["verbose"] == "true"
 	checkEvents := args["check_events"] != "false" // default true
+
+	klog.Info("Starting cluster health check...")
 
 	// Check if namespace exists if specified
 	namespaceWarning := ""
 	requestedNamespace := namespace
 	if namespace != "" {
-		nsGVK := &schema.GroupVersionKind{
-			Group:   "",
-			Version: "v1",
-			Kind:    "Namespace",
-		}
-		_, err := kubernetes.NewCore(params).ResourcesGet(params, nsGVK, "", namespace)
+		_, err := params.CoreV1().Namespaces().Get(params.Context, namespace, metav1.GetOptions{})
 		if err != nil {
 			// Namespace doesn't exist - show warning and proceed with cluster-wide check
 			namespaceWarning = fmt.Sprintf("Namespace '%s' not found or not accessible. Showing cluster-wide information instead.", namespace)
 			namespace = "" // Fall back to cluster-wide check
+			klog.Warningf("Namespace '%s' not found, performing cluster-wide health check", requestedNamespace)
+		} else {
+			klog.Infof("Performing health check for namespace: %s", namespace)
 		}
+	} else {
+		klog.Info("Performing cluster-wide health check")
 	}
 
 	// Gather cluster diagnostics using the KubernetesClient interface
-	diagnostics, err := gatherClusterDiagnostics(params, namespace, verbose, checkEvents)
+	diagnostics, err := gatherClusterDiagnostics(params, namespace, checkEvents)
 	if err != nil {
 		return nil, fmt.Errorf("failed to gather cluster diagnostics: %w", err)
 	}
@@ -94,7 +96,7 @@ type clusterDiagnostics struct {
 }
 
 // gatherClusterDiagnostics collects comprehensive diagnostic data from the cluster
-func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, verbose bool, checkEvents bool) (*clusterDiagnostics, error) {
+func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, checkEvents bool) (*clusterDiagnostics, error) {
 	diag := &clusterDiagnostics{
 		CollectionTime:  time.Now(),
 		NamespaceScoped: namespace != "",
@@ -102,126 +104,136 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 	}
 
 	// Gather node diagnostics using ResourcesList
+	klog.Info("Collecting node diagnostics...")
 	nodeDiag, err := gatherNodeDiagnostics(params)
 	if err == nil {
 		diag.Nodes = nodeDiag
+		klog.Info("Node diagnostics collected")
+	} else {
+		klog.Warningf("Failed to collect node diagnostics: %v", err)
 	}
 
 	// Gather pod diagnostics
+	klog.Info("Collecting pod diagnostics...")
 	podDiag, err := gatherPodDiagnostics(params, namespace)
 	if err == nil {
 		diag.Pods = podDiag
+		klog.Info("Pod diagnostics collected")
+	} else {
+		klog.Warningf("Failed to collect pod diagnostics: %v", err)
 	}
 
 	// Gather workload diagnostics
+	klog.Info("Collecting deployment diagnostics...")
 	deployDiag, err := gatherWorkloadDiagnostics(params, "Deployment", namespace)
 	if err == nil {
 		diag.Deployments = deployDiag
+		klog.Info("Deployment diagnostics collected")
+	} else {
+		klog.Warningf("Failed to collect deployment diagnostics: %v", err)
 	}
 
+	klog.Info("Collecting statefulset diagnostics...")
 	stsDiag, err := gatherWorkloadDiagnostics(params, "StatefulSet", namespace)
 	if err == nil {
 		diag.StatefulSets = stsDiag
+		klog.Info("StatefulSet diagnostics collected")
+	} else {
+		klog.Warningf("Failed to collect statefulset diagnostics: %v", err)
 	}
 
+	klog.Info("Collecting daemonset diagnostics...")
 	dsDiag, err := gatherWorkloadDiagnostics(params, "DaemonSet", namespace)
 	if err == nil {
 		diag.DaemonSets = dsDiag
+		klog.Info("DaemonSet diagnostics collected")
+	} else {
+		klog.Warningf("Failed to collect daemonset diagnostics: %v", err)
 	}
 
 	// Gather PVC diagnostics
+	klog.Info("Collecting PVC diagnostics...")
 	pvcDiag, err := gatherPVCDiagnostics(params, namespace)
 	if err == nil {
 		diag.PVCs = pvcDiag
+		klog.Info("PVC diagnostics collected")
+	} else {
+		klog.Warningf("Failed to collect PVC diagnostics: %v", err)
 	}
 
 	// Gather cluster operator diagnostics (OpenShift only)
+	klog.Info("Checking for cluster operators (OpenShift)...")
 	operatorDiag, err := gatherClusterOperatorDiagnostics(params)
 	if err == nil {
 		diag.ClusterOperators = operatorDiag
+		klog.Info("Cluster operator diagnostics collected")
 	}
 
 	// Gather recent events if requested
 	if checkEvents {
+		klog.Info("Collecting recent events...")
 		eventDiag, err := gatherEventDiagnostics(params, namespace)
 		if err == nil {
 			diag.Events = eventDiag
+			klog.Info("Event diagnostics collected")
+		} else {
+			klog.Warningf("Failed to collect event diagnostics: %v", err)
 		}
 	}
 
 	// Count namespaces
+	klog.Info("Counting namespaces...")
 	namespaceList, err := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{})
 	if err == nil {
 		if items, ok := namespaceList.UnstructuredContent()["items"].([]interface{}); ok {
 			diag.TotalNamespaces = len(items)
+			klog.Infof("Found %d namespaces", diag.TotalNamespaces)
 		}
 	}
 
+	klog.Info("Cluster health check data collection completed")
 	return diag, nil
 }
 
-// gatherNodeDiagnostics collects node status using ResourcesList
+// gatherNodeDiagnostics collects node status using CoreV1 clientset
 func gatherNodeDiagnostics(params api.PromptHandlerParams) (string, error) {
-	gvk := &schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Node",
-	}
-
-	nodeList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, "", api.ListOptions{})
+	nodeList, err := params.CoreV1().Nodes().List(params.Context, metav1.ListOptions{})
 	if err != nil {
 		return "", err
 	}
 
-	items, ok := nodeList.UnstructuredContent()["items"].([]interface{})
-	if !ok || len(items) == 0 {
+	if len(nodeList.Items) == 0 {
 		return "No nodes found", nil
 	}
 
 	var sb strings.Builder
-	totalNodes := len(items)
+	totalNodes := len(nodeList.Items)
 	healthyNodes := 0
 	nodesWithIssues := []string{}
 
-	for _, item := range items {
-		nodeMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		metadata, _ := nodeMap["metadata"].(map[string]interface{})
-		name, _ := metadata["name"].(string)
-
-		status, _ := nodeMap["status"].(map[string]interface{})
-		conditions, _ := status["conditions"].([]interface{})
-
+	for _, node := range nodeList.Items {
 		nodeStatus := "Unknown"
 		issues := []string{}
 
 		// Parse node conditions
-		for _, cond := range conditions {
-			condMap, _ := cond.(map[string]interface{})
-			condType, _ := condMap["type"].(string)
-			condStatus, _ := condMap["status"].(string)
-			message, _ := condMap["message"].(string)
-
-			if condType == "Ready" {
-				if condStatus == "True" {
+		for _, cond := range node.Status.Conditions {
+			if cond.Type == v1.NodeReady {
+				if cond.Status == v1.ConditionTrue {
 					nodeStatus = "Ready"
 					healthyNodes++
 				} else {
 					nodeStatus = "NotReady"
-					issues = append(issues, fmt.Sprintf("Not ready: %s", message))
+					issues = append(issues, fmt.Sprintf("Not ready: %s", cond.Message))
 				}
-			} else if condStatus == "True" && condType != "Ready" {
+			} else if cond.Status == v1.ConditionTrue {
 				// Pressure conditions
-				issues = append(issues, fmt.Sprintf("%s: %s", condType, message))
+				issues = append(issues, fmt.Sprintf("%s: %s", cond.Type, cond.Message))
 			}
 		}
 
 		// Only report nodes with issues
 		if len(issues) > 0 {
-			nodesWithIssues = append(nodesWithIssues, fmt.Sprintf("- **%s** (Status: %s)\n%s", name, nodeStatus, "  - "+strings.Join(issues, "\n  - ")))
+			nodesWithIssues = append(nodesWithIssues, fmt.Sprintf("- **%s** (Status: %s)\n%s", node.Name, nodeStatus, "  - "+strings.Join(issues, "\n  - ")))
 		}
 	}
 
@@ -571,46 +583,40 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 	recentEvents := []string{}
 
 	for _, ns := range namespaces {
-		eventMaps, err := kubernetes.NewCore(params).EventsList(params, ns)
+		eventList, err := params.CoreV1().Events(ns).List(params.Context, metav1.ListOptions{})
 		if err != nil {
 			continue
 		}
 
-		for _, eventMap := range eventMaps {
-			eventType, _ := eventMap["type"].(string)
-
+		for _, event := range eventList.Items {
 			// Only include Warning and Error events
-			if eventType != string(v1.EventTypeWarning) && eventType != "Error" {
+			if event.Type != string(v1.EventTypeWarning) && event.Type != "Error" {
 				continue
 			}
 
-			lastSeen, _ := eventMap["lastTimestamp"].(string)
-			lastSeenTime, err := time.Parse(time.RFC3339, lastSeen)
-			if err != nil || lastSeenTime.Before(oneHourAgo) {
+			// Check timestamp
+			lastSeenTime := event.LastTimestamp.Time
+			if lastSeenTime.IsZero() {
+				lastSeenTime = event.EventTime.Time
+			}
+			if lastSeenTime.Before(oneHourAgo) {
 				continue
 			}
 
-			reason, _ := eventMap["reason"].(string)
-			message, _ := eventMap["message"].(string)
-			count, _ := eventMap["count"].(int32)
-
-			involvedObject, _ := eventMap["involvedObject"].(map[string]interface{})
-			objectKind, _ := involvedObject["kind"].(string)
-			objectName, _ := involvedObject["name"].(string)
-
-			if eventType == string(v1.EventTypeWarning) {
+			if event.Type == string(v1.EventTypeWarning) {
 				totalWarnings++
 			} else {
 				totalErrors++
 			}
 
 			// Limit message length
+			message := event.Message
 			if len(message) > 150 {
 				message = message[:150] + "..."
 			}
 
 			recentEvents = append(recentEvents, fmt.Sprintf("- **%s/%s** in `%s` (%s, Count: %d)\n  - %s",
-				objectKind, objectName, ns, reason, count, message))
+				event.InvolvedObject.Kind, event.InvolvedObject.Name, ns, event.Reason, event.Count, message))
 		}
 	}
 
@@ -715,4 +721,30 @@ func formatHealthCheckPrompt(diag *clusterDiagnostics) string {
 	sb.WriteString("**Please analyze the above diagnostic data and provide your comprehensive health assessment.**\n")
 
 	return sb.String()
+}
+
+// initHealthChecks initializes the cluster health check prompts
+func initHealthChecks() []api.ServerPrompt {
+	return []api.ServerPrompt{
+		{
+			Prompt: api.Prompt{
+				Name:        "cluster-health-check",
+				Title:       "Cluster Health Check",
+				Description: "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
+				Arguments: []api.PromptArgument{
+					{
+						Name:        "namespace",
+						Description: "Optional namespace to limit health check scope (default: all namespaces)",
+						Required:    false,
+					},
+					{
+						Name:        "check_events",
+						Description: "Include recent warning/error events (true/false, default: true)",
+						Required:    false,
+					},
+				},
+			},
+			Handler: clusterHealthCheckHandler,
+		},
+	}
 }

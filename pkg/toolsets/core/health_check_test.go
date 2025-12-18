@@ -33,22 +33,17 @@ func (s *ClusterHealthCheckSuite) TestPromptIsRegistered() {
 				s.Contains(prompt.Prompt.Description, "comprehensive health assessment")
 
 				// Verify arguments
-				s.Require().Len(prompt.Prompt.Arguments, 3, "should have 3 arguments")
+				s.Require().Len(prompt.Prompt.Arguments, 2, "should have 2 arguments")
 
 				// Check namespace argument
 				s.Equal("namespace", prompt.Prompt.Arguments[0].Name)
 				s.NotEmpty(prompt.Prompt.Arguments[0].Description)
 				s.False(prompt.Prompt.Arguments[0].Required)
 
-				// Check verbose argument
-				s.Equal("verbose", prompt.Prompt.Arguments[1].Name)
+				// Check check_events argument
+				s.Equal("check_events", prompt.Prompt.Arguments[1].Name)
 				s.NotEmpty(prompt.Prompt.Arguments[1].Description)
 				s.False(prompt.Prompt.Arguments[1].Required)
-
-				// Check check_events argument
-				s.Equal("check_events", prompt.Prompt.Arguments[2].Name)
-				s.NotEmpty(prompt.Prompt.Arguments[2].Description)
-				s.False(prompt.Prompt.Arguments[2].Required)
 
 				// Verify handler is set
 				s.NotNil(prompt.Handler, "handler should be set")

@@ -30,33 +30,9 @@ func (t *Toolset) GetTools(o api.Openshift) []api.ServerTool {
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
-	return []api.ServerPrompt{
-		{
-			Prompt: api.Prompt{
-				Name:        "cluster-health-check",
-				Title:       "Cluster Health Check",
-				Description: "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
-				Arguments: []api.PromptArgument{
-					{
-						Name:        "namespace",
-						Description: "Optional namespace to limit health check scope (default: all namespaces)",
-						Required:    false,
-					},
-					{
-						Name:        "verbose",
-						Description: "Enable detailed resource-level information (true/false, default: false)",
-						Required:    false,
-					},
-					{
-						Name:        "check_events",
-						Description: "Include recent warning/error events (true/false, default: true)",
-						Required:    false,
-					},
-				},
-			},
-			Handler: clusterHealthCheckHandler,
-		},
-	}
+	return slices.Concat(
+		initHealthChecks(),
+	)
 }
 
 func init() {
