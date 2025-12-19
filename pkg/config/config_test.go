@@ -76,6 +76,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		list_output = "yaml"
 		read_only = true
 		disable_destructive = true
+		stateless = true
 
 		toolsets = ["core", "config", "helm", "metrics"]
 		
@@ -116,6 +117,9 @@ func (s *ConfigSuite) TestReadConfigValid() {
 	s.Run("disable_destructive parsed correctly", func() {
 		s.Truef(config.DisableDestructive, "Expected DisableDestructive to be true, got %v", config.DisableDestructive)
 	})
+	s.Run("stateless parsed correctly", func() {
+		s.Truef(config.Stateless, "Expected Stateless to be true, got %v", config.Stateless)
+	})
 	s.Run("toolsets", func() {
 		s.Require().Lenf(config.Toolsets, 4, "Expected 4 toolsets, got %d", len(config.Toolsets))
 		for _, toolset := range []string{"core", "config", "helm", "metrics"} {
@@ -144,6 +148,39 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			s.Contains(config.DeniedResources, api.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
 				"Expected denied resources to contain rbac.authorization.k8s.io/v1/Role")
 		})
+	})
+}
+
+func (s *ConfigSuite) TestReadConfigStatelessDefaults() {
+	// Test that stateless defaults to false when not specified
+	configPath := s.writeConfig(`
+		log_level = 1
+		port = "8080"
+	`)
+
+	config, err := Read(configPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("stateless defaults to false", func() {
+		s.Falsef(config.Stateless, "Expected Stateless to default to false, got %v", config.Stateless)
+	})
+}
+
+func (s *ConfigSuite) TestReadConfigStatelessExplicitFalse() {
+	// Test that stateless can be explicitly set to false
+	configPath := s.writeConfig(`
+		log_level = 1
+		port = "8080"
+		stateless = false
+	`)
+
+	config, err := Read(configPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("stateless explicit false", func() {
+		s.Falsef(config.Stateless, "Expected Stateless to be false, got %v", config.Stateless)
 	})
 }
 
@@ -337,6 +374,7 @@ func (s *ConfigSuite) TestDropInConfigPartialOverride() {
 	dropIn := filepath.Join(dropInDir, "10-partial.toml")
 	err = os.WriteFile(dropIn, []byte(`
 		read_only = true
+		stateless = true
 	`), 0644)
 	s.Require().NoError(err)
 
@@ -346,6 +384,7 @@ func (s *ConfigSuite) TestDropInConfigPartialOverride() {
 
 	s.Run("overrides specified field", func() {
 		s.True(config.ReadOnly, "read_only should be overridden to true")
+		s.True(config.Stateless, "stateless should be overridden to true")
 	})
 
 	s.Run("preserves all other fields", func() {

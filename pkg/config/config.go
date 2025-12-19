@@ -31,10 +31,17 @@ type StaticConfig struct {
 	// When true, expose only tools annotated with readOnlyHint=true
 	ReadOnly bool `toml:"read_only,omitempty"`
 	// When true, disable tools annotated with destructiveHint=true
-	DisableDestructive bool     `toml:"disable_destructive,omitempty"`
-	Toolsets           []string `toml:"toolsets,omitempty"`
-	EnabledTools       []string `toml:"enabled_tools,omitempty"`
-	DisabledTools      []string `toml:"disabled_tools,omitempty"`
+	DisableDestructive bool `toml:"disable_destructive,omitempty"`
+	// Stateless configures the MCP server to operate in stateless mode.
+	// When true, the server will not send notifications to clients (e.g., tools/list_changed, prompts/list_changed).
+	// This is useful for container deployments, load balancing, and serverless environments where
+	// maintaining client state is not desired or possible. However, this disables dynamic tool
+	// and prompt updates, requiring clients to manually refresh their tool/prompt lists.
+	// Defaults to false (stateful mode with notifications enabled).
+	Stateless     bool     `toml:"stateless,omitempty"`
+	Toolsets      []string `toml:"toolsets,omitempty"`
+	EnabledTools  []string `toml:"enabled_tools,omitempty"`
+	DisabledTools []string `toml:"disabled_tools,omitempty"`
 
 	// Authorization-related fields
 	// RequireOAuth indicates whether the server requires OAuth for authentication.

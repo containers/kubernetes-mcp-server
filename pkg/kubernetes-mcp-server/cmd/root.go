@@ -68,6 +68,7 @@ const (
 	flagListOutput           = "list-output"
 	flagReadOnly             = "read-only"
 	flagDisableDestructive   = "disable-destructive"
+	flagStateless            = "stateless"
 	flagRequireOAuth         = "require-oauth"
 	flagOAuthAudience        = "oauth-audience"
 	flagAuthorizationURL     = "authorization-url"
@@ -86,6 +87,7 @@ type MCPServerOptions struct {
 	ListOutput           string
 	ReadOnly             bool
 	DisableDestructive   bool
+	Stateless            bool
 	RequireOAuth         bool
 	OAuthAudience        string
 	AuthorizationURL     string
@@ -140,6 +142,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.ListOutput, flagListOutput, o.ListOutput, "Output format for resource list operations (one of: "+strings.Join(output.Names, ", ")+"). Defaults to "+o.StaticConfig.ListOutput+".")
 	cmd.Flags().BoolVar(&o.ReadOnly, flagReadOnly, o.ReadOnly, "If true, only tools annotated with readOnlyHint=true are exposed")
 	cmd.Flags().BoolVar(&o.DisableDestructive, flagDisableDestructive, o.DisableDestructive, "If true, tools annotated with destructiveHint=true are disabled")
+	cmd.Flags().BoolVar(&o.Stateless, flagStateless, o.Stateless, "If true, run the MCP server in stateless mode (disables tool/prompt change notifications). Useful for container deployments and load balancing. Default is false (stateful mode)")
 	cmd.Flags().BoolVar(&o.RequireOAuth, flagRequireOAuth, o.RequireOAuth, "If true, requires OAuth authorization as defined in the Model Context Protocol (MCP) specification. This flag is ignored if transport type is stdio")
 	_ = cmd.Flags().MarkHidden(flagRequireOAuth)
 	cmd.Flags().StringVar(&o.OAuthAudience, flagOAuthAudience, o.OAuthAudience, "OAuth audience for token claims validation. Optional. If not set, the audience is not validated. Only valid if require-oauth is enabled.")
@@ -197,6 +200,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagDisableDestructive).Changed {
 		m.StaticConfig.DisableDestructive = m.DisableDestructive
+	}
+	if cmd.Flag(flagStateless).Changed {
+		m.StaticConfig.Stateless = m.Stateless
 	}
 	if cmd.Flag(flagToolsets).Changed {
 		m.StaticConfig.Toolsets = m.Toolsets
@@ -277,6 +283,7 @@ func (m *MCPServerOptions) Run() error {
 	klog.V(1).Infof(" - ListOutput: %s", m.StaticConfig.ListOutput)
 	klog.V(1).Infof(" - Read-only mode: %t", m.StaticConfig.ReadOnly)
 	klog.V(1).Infof(" - Disable destructive tools: %t", m.StaticConfig.DisableDestructive)
+	klog.V(1).Infof(" - Stateless mode: %t", m.StaticConfig.Stateless)
 
 	strategy := m.StaticConfig.ClusterProviderStrategy
 	if strategy == "" {

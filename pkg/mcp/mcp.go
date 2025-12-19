@@ -264,9 +264,14 @@ func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
 	return mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
 		return s.server
 	}, &mcp.StreamableHTTPOptions{
-		// For clients to be able to listen to tool changes, we need to set the server stateful
+		// Stateless mode configuration from server settings.
+		// When Stateless is true, the server will not send notifications to clients
+		// (e.g., tools/list_changed, prompts/list_changed). This disables dynamic
+		// tool and prompt updates but is useful for container deployments, load
+		// balancing, and serverless environments where maintaining client state
+		// is not desired or possible.
 		// https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#listening-for-messages-from-the-server
-		Stateless: false,
+		Stateless: s.configuration.Stateless,
 	})
 }
 
