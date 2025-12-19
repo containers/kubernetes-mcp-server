@@ -71,7 +71,7 @@ func (s *McpTransportSuite) TestStatelessConfiguration() {
 		// of StreamableHTTPOptions as it's not exposed, but we can verify the server works)
 		httpClient, err := client.NewStreamableHttpClient(fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port), transport.WithContinuousListening())
 		s.Require().NoError(err, "Expected no error creating Streamable HTTP MCP client")
-		defer httpClient.Close()
+		defer func() { _ = httpClient.Close() }()
 
 		startErr := httpClient.Start(s.T().Context())
 		s.Require().NoError(startErr, "Expected no error starting Streamable HTTP MCP client")
@@ -104,7 +104,7 @@ func (s *StatelessMcpTransportSuite) TestStatelessMode() {
 		// Test that the HTTP handler works in stateless mode
 		httpClient, err := client.NewStreamableHttpClient(fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port), transport.WithContinuousListening())
 		s.Require().NoError(err, "Expected no error creating Streamable HTTP MCP client")
-		defer httpClient.Close()
+		defer func() { _ = httpClient.Close() }()
 
 		startErr := httpClient.Start(s.T().Context())
 		s.Require().NoError(startErr, "Expected no error starting Streamable HTTP MCP client")

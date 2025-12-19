@@ -262,4 +262,3 @@ func (h *InOpenShiftHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		return
 	}
 }
-
