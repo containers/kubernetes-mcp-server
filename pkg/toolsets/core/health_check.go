@@ -247,69 +247,44 @@ func gatherNodeDiagnostics(params api.PromptHandlerParams) (string, error) {
 	return sb.String(), nil
 }
 
-// gatherPodDiagnostics collects pod status using existing methods
+// gatherPodDiagnostics collects pod status using CoreV1 clientset
 func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (string, error) {
-	var podList interface{ UnstructuredContent() map[string]interface{} }
-	var err error
-
-	if namespace != "" {
-		podList, err = kubernetes.NewCore(params).PodsListInNamespace(params, namespace, api.ListOptions{})
-	} else {
-		podList, err = kubernetes.NewCore(params).PodsListInAllNamespaces(params, api.ListOptions{})
-	}
-
+	podList, err := params.CoreV1().Pods(namespace).List(params.Context, metav1.ListOptions{})
 	if err != nil {
 		return "", err
 	}
 
-	items, ok := podList.UnstructuredContent()["items"].([]interface{})
-	if !ok {
+	if len(podList.Items) == 0 {
 		return "No pods found", nil
 	}
 
-	totalPods := len(items)
+	totalPods := len(podList.Items)
 	problemPods := []string{}
 
-	for _, item := range items {
-		podMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		metadata, _ := podMap["metadata"].(map[string]interface{})
-		name, _ := metadata["name"].(string)
-		ns, _ := metadata["namespace"].(string)
-
-		status, _ := podMap["status"].(map[string]interface{})
-		phase, _ := status["phase"].(string)
-		containerStatuses, _ := status["containerStatuses"].([]interface{})
-
+	for _, pod := range podList.Items {
 		issues := []string{}
 		restarts := int32(0)
 		readyCount := 0
-		totalContainers := len(containerStatuses)
+		totalContainers := len(pod.Status.ContainerStatuses)
 
 		// Check container statuses
-		for _, cs := range containerStatuses {
-			csMap, _ := cs.(map[string]interface{})
-			ready, _ := csMap["ready"].(bool)
-			restartCount, _ := csMap["restartCount"].(float64)
-			restarts += int32(restartCount)
-
-			if ready {
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.Ready {
 				readyCount++
 			}
+			restarts += cs.RestartCount
 
-			state, _ := csMap["state"].(map[string]interface{})
-			if waiting, ok := state["waiting"].(map[string]interface{}); ok {
-				reason, _ := waiting["reason"].(string)
-				message, _ := waiting["message"].(string)
+			// Check waiting state
+			if cs.State.Waiting != nil {
+				reason := cs.State.Waiting.Reason
 				if reason == "CrashLoopBackOff" || reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-					issues = append(issues, fmt.Sprintf("Container waiting: %s - %s", reason, message))
+					issues = append(issues, fmt.Sprintf("Container waiting: %s - %s", reason, cs.State.Waiting.Message))
 				}
 			}
-			if terminated, ok := state["terminated"].(map[string]interface{}); ok {
-				reason, _ := terminated["reason"].(string)
+
+			// Check terminated state
+			if cs.State.Terminated != nil {
+				reason := cs.State.Terminated.Reason
 				if reason == "Error" || reason == "OOMKilled" {
 					issues = append(issues, fmt.Sprintf("Container terminated: %s", reason))
 				}
@@ -317,14 +292,14 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 		}
 
 		// Check pod phase
-		if phase != "Running" && phase != "Succeeded" {
-			issues = append(issues, fmt.Sprintf("Pod in %s phase", phase))
+		if pod.Status.Phase != v1.PodRunning && pod.Status.Phase != v1.PodSucceeded {
+			issues = append(issues, fmt.Sprintf("Pod in %s phase", pod.Status.Phase))
 		}
 
 		// Report pods with issues or high restart count
 		if len(issues) > 0 || restarts > 5 {
 			problemPods = append(problemPods, fmt.Sprintf("- **%s/%s** (Phase: %s, Ready: %d/%d, Restarts: %d)\n  - %s",
-				ns, name, phase, readyCount, totalContainers, restarts, strings.Join(issues, "\n  - ")))
+				pod.Namespace, pod.Name, pod.Status.Phase, readyCount, totalContainers, restarts, strings.Join(issues, "\n  - ")))
 		}
 	}
 
@@ -339,79 +314,86 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 	return sb.String(), nil
 }
 
-// gatherWorkloadDiagnostics collects workload controller status
+// gatherWorkloadDiagnostics collects workload controller status using AppsV1 clientset
 func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, namespace string) (string, error) {
-	gvk := &schema.GroupVersionKind{
-		Group:   "apps",
-		Version: "v1",
-		Kind:    kind,
-	}
-
-	workloadList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, namespace, api.ListOptions{})
-	if err != nil {
-		return "", err
-	}
-
-	items, ok := workloadList.UnstructuredContent()["items"].([]interface{})
-	if !ok || len(items) == 0 {
-		return fmt.Sprintf("No %ss found", kind), nil
-	}
-
 	workloadsWithIssues := []string{}
 
-	for _, item := range items {
-		workloadMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
+	switch kind {
+	case "Deployment":
+		deploymentList, err := params.AppsV1().Deployments(namespace).List(params.Context, metav1.ListOptions{})
+		if err != nil {
+			return "", err
+		}
+		if len(deploymentList.Items) == 0 {
+			return "No Deployments found", nil
 		}
 
-		metadata, _ := workloadMap["metadata"].(map[string]interface{})
-		name, _ := metadata["name"].(string)
-		ns, _ := metadata["namespace"].(string)
+		for _, deployment := range deploymentList.Items {
+			issues := []string{}
+			ready := fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, deployment.Status.Replicas)
 
-		status, _ := workloadMap["status"].(map[string]interface{})
-		spec, _ := workloadMap["spec"].(map[string]interface{})
-		issues := []string{}
-		ready := "Unknown"
-
-		switch kind {
-		case "Deployment":
-			replicas, _ := status["replicas"].(float64)
-			readyReplicas, _ := status["readyReplicas"].(float64)
-			unavailableReplicas, _ := status["unavailableReplicas"].(float64)
-
-			ready = fmt.Sprintf("%d/%d", int(readyReplicas), int(replicas))
-
-			if unavailableReplicas > 0 {
-				issues = append(issues, fmt.Sprintf("%d replicas unavailable", int(unavailableReplicas)))
+			if deployment.Status.UnavailableReplicas > 0 {
+				issues = append(issues, fmt.Sprintf("%d replicas unavailable", deployment.Status.UnavailableReplicas))
 			}
 
-		case "StatefulSet":
-			specReplicas, _ := spec["replicas"].(float64)
-			readyReplicas, _ := status["readyReplicas"].(float64)
-
-			ready = fmt.Sprintf("%d/%d", int(readyReplicas), int(specReplicas))
-
-			if readyReplicas < specReplicas {
-				issues = append(issues, fmt.Sprintf("Only %d/%d replicas ready", int(readyReplicas), int(specReplicas)))
-			}
-
-		case "DaemonSet":
-			desiredNumberScheduled, _ := status["desiredNumberScheduled"].(float64)
-			numberReady, _ := status["numberReady"].(float64)
-			numberUnavailable, _ := status["numberUnavailable"].(float64)
-
-			ready = fmt.Sprintf("%d/%d", int(numberReady), int(desiredNumberScheduled))
-
-			if numberUnavailable > 0 {
-				issues = append(issues, fmt.Sprintf("%d pods unavailable", int(numberUnavailable)))
+			if len(issues) > 0 {
+				workloadsWithIssues = append(workloadsWithIssues, fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
+					deployment.Namespace, deployment.Name, ready, strings.Join(issues, "\n  - ")))
 			}
 		}
 
-		if len(issues) > 0 {
-			workloadsWithIssues = append(workloadsWithIssues, fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
-				ns, name, ready, strings.Join(issues, "\n  - ")))
+	case "StatefulSet":
+		statefulSetList, err := params.AppsV1().StatefulSets(namespace).List(params.Context, metav1.ListOptions{})
+		if err != nil {
+			return "", err
 		}
+		if len(statefulSetList.Items) == 0 {
+			return "No StatefulSets found", nil
+		}
+
+		for _, sts := range statefulSetList.Items {
+			issues := []string{}
+			specReplicas := int32(1)
+			if sts.Spec.Replicas != nil {
+				specReplicas = *sts.Spec.Replicas
+			}
+			ready := fmt.Sprintf("%d/%d", sts.Status.ReadyReplicas, specReplicas)
+
+			if sts.Status.ReadyReplicas < specReplicas {
+				issues = append(issues, fmt.Sprintf("Only %d/%d replicas ready", sts.Status.ReadyReplicas, specReplicas))
+			}
+
+			if len(issues) > 0 {
+				workloadsWithIssues = append(workloadsWithIssues, fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
+					sts.Namespace, sts.Name, ready, strings.Join(issues, "\n  - ")))
+			}
+		}
+
+	case "DaemonSet":
+		daemonSetList, err := params.AppsV1().DaemonSets(namespace).List(params.Context, metav1.ListOptions{})
+		if err != nil {
+			return "", err
+		}
+		if len(daemonSetList.Items) == 0 {
+			return "No DaemonSets found", nil
+		}
+
+		for _, ds := range daemonSetList.Items {
+			issues := []string{}
+			ready := fmt.Sprintf("%d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
+
+			if ds.Status.NumberUnavailable > 0 {
+				issues = append(issues, fmt.Sprintf("%d pods unavailable", ds.Status.NumberUnavailable))
+			}
+
+			if len(issues) > 0 {
+				workloadsWithIssues = append(workloadsWithIssues, fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
+					ds.Namespace, ds.Name, ready, strings.Join(issues, "\n  - ")))
+			}
+		}
+
+	default:
+		return "", fmt.Errorf("unsupported workload kind: %s", kind)
 	}
 
 	var sb strings.Builder
@@ -425,41 +407,23 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 	return sb.String(), nil
 }
 
-// gatherPVCDiagnostics collects PVC status
+// gatherPVCDiagnostics collects PVC status using CoreV1 clientset
 func gatherPVCDiagnostics(params api.PromptHandlerParams, namespace string) (string, error) {
-	gvk := &schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "PersistentVolumeClaim",
-	}
-
-	pvcList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, namespace, api.ListOptions{})
+	pvcList, err := params.CoreV1().PersistentVolumeClaims(namespace).List(params.Context, metav1.ListOptions{})
 	if err != nil {
 		return "", err
 	}
 
-	items, ok := pvcList.UnstructuredContent()["items"].([]interface{})
-	if !ok || len(items) == 0 {
+	if len(pvcList.Items) == 0 {
 		return "No PVCs found", nil
 	}
 
 	pvcsWithIssues := []string{}
 
-	for _, item := range items {
-		pvcMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		metadata, _ := pvcMap["metadata"].(map[string]interface{})
-		name, _ := metadata["name"].(string)
-		ns, _ := metadata["namespace"].(string)
-
-		status, _ := pvcMap["status"].(map[string]interface{})
-		phase, _ := status["phase"].(string)
-
-		if phase != "Bound" {
-			pvcsWithIssues = append(pvcsWithIssues, fmt.Sprintf("- **%s/%s** (Status: %s)\n  - PVC not bound", ns, name, phase))
+	for _, pvc := range pvcList.Items {
+		if pvc.Status.Phase != v1.ClaimBound {
+			pvcsWithIssues = append(pvcsWithIssues, fmt.Sprintf("- **%s/%s** (Status: %s)\n  - PVC not bound",
+				pvc.Namespace, pvc.Name, pvc.Status.Phase))
 		}
 	}
 
