@@ -36,7 +36,7 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 	// Initialize server with initial config
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	})
+	}, nil, nil)
 	s.Require().NoError(err)
 	s.Require().NotNil(server)
 	s.server = server
@@ -111,7 +111,7 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 func (s *ConfigReloadSuite) TestConfigurationValues() {
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	})
+	}, nil, nil)
 	s.Require().NoError(err)
 	s.server = server
 
@@ -139,7 +139,7 @@ func (s *ConfigReloadSuite) TestConfigurationValues() {
 func (s *ConfigReloadSuite) TestMultipleReloads() {
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	})
+	}, nil, nil)
 	s.Require().NoError(err)
 	s.server = server
 
@@ -176,7 +176,7 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	})
+	}, nil, nil)
 	s.Require().NoError(err)
 	s.server = server
 
@@ -212,7 +212,7 @@ func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
 func (s *ConfigReloadSuite) TestServerLifecycle() {
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	})
+	}, nil, nil)
 	s.Require().NoError(err)
 
 	s.Run("server closes without panic", func() {

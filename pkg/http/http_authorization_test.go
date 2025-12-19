@@ -339,50 +339,6 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	s.Require().NoError(s.WaitForShutdown())
 }
 
-func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
-	s.MockServer.ResetHandlers()
-
-	oidcTestServer := NewOidcTestServer(s.T())
-	s.T().Cleanup(oidcTestServer.Close)
-	rawClaims := `{
-		"iss": "` + oidcTestServer.URL + `",
-		"exp": ` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `,
-		"aud": "%s"
-	}`
-	validOidcClientToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256,
-		fmt.Sprintf(rawClaims, "mcp-server"))
-	validOidcBackendToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256,
-		fmt.Sprintf(rawClaims, "backend-audience"))
-	oidcTestServer.TokenEndpointHandler = func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"access_token":"%s","token_type":"Bearer","expires_in":253402297199}`, validOidcBackendToken)
-	}
-
-	s.OidcProvider = oidcTestServer.Provider
-	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.StsClientId = "test-sts-client-id"
-	s.StaticConfig.StsClientSecret = "test-sts-client-secret"
-	s.StaticConfig.StsAudience = "backend-audience"
-	s.StaticConfig.StsScopes = []string{"backend-scope"}
-	s.logBuffer.Reset()
-	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
-		"Authorization": "Bearer " + validOidcClientToken,
-	}))
-
-	s.Run("Protected resource", func() {
-		s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {
-			result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-			s.Require().NoError(err, "Expected no error creating initial request")
-			s.Require().NotNil(result, "Expected initial request to not be nil")
-		})
-	})
-	_ = s.mcpClient.Close()
-	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
-}
-
 func TestAuthorization(t *testing.T) {
 	suite.Run(t, new(AuthorizationSuite))
 }

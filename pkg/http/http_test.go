@@ -56,7 +56,7 @@ func (s *BaseHttpSuite) StartServer() {
 	s.Require().NoError(err, "Expected no error getting random port address")
 	s.StaticConfig.Port = strconv.Itoa(tcpAddr.Port)
 
-	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig})
+	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig}, s.OidcProvider, nil)
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.Require().NotNil(s.mcpServer, "MCP server should not be nil")
 	var timeoutCtx, cancelCtx context.Context
@@ -116,7 +116,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 		t.Fatalf("Failed to close random port listener: %v", randomPortErr)
 	}
 	c.StaticConfig.Port = fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
-	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: c.StaticConfig})
+	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: c.StaticConfig}, c.OidcProvider, nil)
 	if err != nil {
 		t.Fatalf("Failed to create MCP server: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestHealthCheck(t *testing.T) {
 		})
 	})
 	// Health exposed even when require Authorization
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true,  ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
 		if err != nil {
 			t.Fatalf("Failed to get health check endpoint with OAuth: %v", err)
@@ -262,7 +262,7 @@ func TestWellKnownReverseProxy(t *testing.T) {
 		".well-known/openid-configuration",
 	}
 	// With No Authorization URL configured
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true,  ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		for _, path := range cases {
 			resp, err := http.Get(fmt.Sprintf("http://%s/%s", ctx.HttpAddress, path))
 			t.Cleanup(func() { _ = resp.Body.Close() })
