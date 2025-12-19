@@ -213,13 +213,15 @@ func (s *BaseMcpSuite) InitMcpClient(options ...transport.StreamableHTTPCOption)
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
 }
 
-// WaitForNotification waits for an MCP server notification or fails the test after a timeout
-func (s *BaseMcpSuite) WaitForNotification(timeout time.Duration) *mcp.JSONRPCNotification {
+// WaitForNotification wait for a specific MCP notification method within the given timeout duration.
+func (s *BaseMcpSuite) WaitForNotification(timeout time.Duration, method string) *mcp.JSONRPCNotification {
 	withTimeout, cancel := context.WithTimeout(s.T().Context(), timeout)
 	defer cancel()
 	var notification *mcp.JSONRPCNotification
 	s.OnNotification(func(n mcp.JSONRPCNotification) {
-		notification = &n
+		if n.Method == method {
+			notification = &n
+		}
 	})
 	for notification == nil {
 		select {

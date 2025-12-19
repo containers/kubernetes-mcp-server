@@ -41,7 +41,6 @@ func (s *AuthorizationSuite) SetupTest() {
 	// Default Auth settings (overridden in tests as needed)
 	s.OidcProvider = nil
 	s.StaticConfig.RequireOAuth = true
-	s.StaticConfig.ValidateToken = true
 	s.StaticConfig.OAuthAudience = ""
 	s.StaticConfig.StsClientId = ""
 	s.StaticConfig.StsClientSecret = ""
@@ -270,48 +269,6 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedOidcValidation() {
 	})
 }
 
-func (s *AuthorizationSuite) TestAuthorizationUnauthorizedKubernetesValidation() {
-	// Failed Kubernetes TokenReview
-	s.StaticConfig.OAuthAudience = "mcp-server"
-	oidcTestServer := NewOidcTestServer(s.T())
-	s.T().Cleanup(oidcTestServer.Close)
-	rawClaims := `{
-		"iss": "` + oidcTestServer.URL + `",
-		"exp": ` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `,
-		"aud": "mcp-server"
-	}`
-	validOidcToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256, rawClaims)
-	s.OidcProvider = oidcTestServer.Provider
-	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
-		"Authorization": "Bearer " + validOidcToken,
-	}))
-
-	s.Run("Initialize returns error for INVALID KUBERNETES Authorization header", func() {
-		_, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().Error(err, "Expected error creating initial request")
-		s.ErrorContains(err, "transport error: request failed with status 401: Unauthorized: Invalid token")
-	})
-
-	s.Run("Protected resource with INVALID KUBERNETES Authorization header", func() {
-		resp := s.HttpGet("Bearer " + validOidcToken)
-		s.T().Cleanup(func() { _ = resp.Body.Close })
-
-		s.Run("returns 401 - Unauthorized status", func() {
-			s.Equal(401, resp.StatusCode, "Expected HTTP 401 for INVALID KUBERNETES Authorization header")
-		})
-		s.Run("returns WWW-Authenticate header", func() {
-			authHeader := resp.Header.Get("WWW-Authenticate")
-			expected := `Bearer realm="Kubernetes MCP Server", audience="mcp-server", error="invalid_token"`
-			s.Equal(expected, authHeader, "Expected WWW-Authenticate header to match")
-		})
-		s.Run("logs error", func() {
-			s.Contains(s.logBuffer.String(), "Authentication failed - JWT validation error", "Expected log entry for JWT validation error")
-			s.Contains(s.logBuffer.String(), "kubernetes API token validation error: failed to create token review", "Expected log entry for Kubernetes TokenReview error details")
-		})
-	})
-}
-
 func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 	s.StaticConfig.RequireOAuth = false
 	s.StartServer()
@@ -326,42 +283,21 @@ func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 
 func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 	s.MockServer.ResetHandlers()
-	tokenReviewHandler := test.NewTokenReviewHandler()
-	s.MockServer.Handle(tokenReviewHandler)
 
-	cases := []struct {
-		audience      string
-		validateToken bool
-	}{
-		{"", false},           // No audience, no validation
-		{"", true},            // No audience, validation enabled
-		{"mcp-server", false}, // Audience set, no validation
-		{"mcp-server", true},  // Audience set, validation enabled
-	}
-	for _, c := range cases {
-		s.StaticConfig.OAuthAudience = c.audience
-		s.StaticConfig.ValidateToken = c.validateToken
+	cases := []string{"", "mcp-server"}
+	for _, audience := range cases {
+		s.StaticConfig.OAuthAudience = audience
 		s.logBuffer.Reset()
 		s.StartServer()
 		s.StartClient(transport.WithHTTPHeaders(map[string]string{
 			"Authorization": "Bearer " + tokenBasicNotExpired,
 		}))
-		tokenReviewHandler.TokenReviewed = false
 
-		s.Run(fmt.Sprintf("Protected resource with audience = '%s' and validate-token = '%t'", c.audience, c.validateToken), func() {
+		s.Run(fmt.Sprintf("Protected resource with audience = '%s'", audience), func() {
 			s.Run("Initialize returns OK for VALID Authorization header", func() {
 				result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
 				s.Require().NoError(err, "Expected no error creating initial request")
 				s.Require().NotNil(result, "Expected initial request to not be nil")
-			})
-
-			s.Run("Performs token validation accordingly", func() {
-				if tokenReviewHandler.TokenReviewed == true && !c.validateToken {
-					s.Fail("Expected token review to be skipped when validate-token is false, but it was performed")
-				}
-				if tokenReviewHandler.TokenReviewed == false && c.validateToken {
-					s.Fail("Expected token review to be performed when validate-token is true, but it was skipped")
-				}
 			})
 		})
 		_ = s.mcpClient.Close()
@@ -373,8 +309,6 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 
 func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	s.MockServer.ResetHandlers()
-	tokenReviewHandler := test.NewTokenReviewHandler()
-	s.MockServer.Handle(tokenReviewHandler)
 
 	oidcTestServer := NewOidcTestServer(s.T())
 	s.T().Cleanup(oidcTestServer.Close)
@@ -385,44 +319,28 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	}`
 	validOidcToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256, rawClaims)
 
-	cases := []bool{false, true}
-	for _, validateToken := range cases {
-		s.OidcProvider = oidcTestServer.Provider
-		s.StaticConfig.OAuthAudience = "mcp-server"
-		s.StaticConfig.ValidateToken = validateToken
-		s.StartServer()
-		s.StartClient(transport.WithHTTPHeaders(map[string]string{
-			"Authorization": "Bearer " + validOidcToken,
-		}))
-		tokenReviewHandler.TokenReviewed = false
+	s.OidcProvider = oidcTestServer.Provider
+	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.StartServer()
+	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+		"Authorization": "Bearer " + validOidcToken,
+	}))
 
-		s.Run(fmt.Sprintf("Protected resource with validate-token = '%t'", validateToken), func() {
-			s.Run("Initialize returns OK for VALID OIDC Authorization header", func() {
-				result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-				s.Require().NoError(err, "Expected no error creating initial request")
-				s.Require().NotNil(result, "Expected initial request to not be nil")
-			})
-
-			s.Run("Performs token validation accordingly for VALID OIDC Authorization header", func() {
-				if tokenReviewHandler.TokenReviewed == true && !validateToken {
-					s.Fail("Expected token review to be skipped when validate-token is false, but it was performed")
-				}
-				if tokenReviewHandler.TokenReviewed == false && validateToken {
-					s.Fail("Expected token review to be performed when validate-token is true, but it was skipped")
-				}
-			})
+	s.Run("Protected resource", func() {
+		s.Run("Initialize returns OK for VALID OIDC Authorization header", func() {
+			result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
+			s.Require().NoError(err, "Expected no error creating initial request")
+			s.Require().NotNil(result, "Expected initial request to not be nil")
 		})
-		_ = s.mcpClient.Close()
-		s.mcpClient = nil
-		s.StopServer()
-		s.Require().NoError(s.WaitForShutdown())
-	}
+	})
+	_ = s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
 }
 
 func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	s.MockServer.ResetHandlers()
-	tokenReviewHandler := test.NewTokenReviewHandler()
-	s.MockServer.Handle(tokenReviewHandler)
 
 	oidcTestServer := NewOidcTestServer(s.T())
 	s.T().Cleanup(oidcTestServer.Close)
@@ -440,43 +358,29 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 		_, _ = fmt.Fprintf(w, `{"access_token":"%s","token_type":"Bearer","expires_in":253402297199}`, validOidcBackendToken)
 	}
 
-	cases := []bool{false, true}
-	for _, validateToken := range cases {
-		s.OidcProvider = oidcTestServer.Provider
-		s.StaticConfig.OAuthAudience = "mcp-server"
-		s.StaticConfig.ValidateToken = validateToken
-		s.StaticConfig.StsClientId = "test-sts-client-id"
-		s.StaticConfig.StsClientSecret = "test-sts-client-secret"
-		s.StaticConfig.StsAudience = "backend-audience"
-		s.StaticConfig.StsScopes = []string{"backend-scope"}
-		s.logBuffer.Reset()
-		s.StartServer()
-		s.StartClient(transport.WithHTTPHeaders(map[string]string{
-			"Authorization": "Bearer " + validOidcClientToken,
-		}))
-		tokenReviewHandler.TokenReviewed = false
+	s.OidcProvider = oidcTestServer.Provider
+	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.StaticConfig.StsClientId = "test-sts-client-id"
+	s.StaticConfig.StsClientSecret = "test-sts-client-secret"
+	s.StaticConfig.StsAudience = "backend-audience"
+	s.StaticConfig.StsScopes = []string{"backend-scope"}
+	s.logBuffer.Reset()
+	s.StartServer()
+	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+		"Authorization": "Bearer " + validOidcClientToken,
+	}))
 
-		s.Run(fmt.Sprintf("Protected resource with validate-token='%t'", validateToken), func() {
-			s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {
-				result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-				s.Require().NoError(err, "Expected no error creating initial request")
-				s.Require().NotNil(result, "Expected initial request to not be nil")
-			})
-
-			s.Run("Performs token validation accordingly for VALID OIDC EXCHANGE Authorization header", func() {
-				if tokenReviewHandler.TokenReviewed == true && !validateToken {
-					s.Fail("Expected token review to be skipped when validate-token is false, but it was performed")
-				}
-				if tokenReviewHandler.TokenReviewed == false && validateToken {
-					s.Fail("Expected token review to be performed when validate-token is true, but it was skipped")
-				}
-			})
+	s.Run("Protected resource", func() {
+		s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {
+			result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
+			s.Require().NoError(err, "Expected no error creating initial request")
+			s.Require().NotNil(result, "Expected initial request to not be nil")
 		})
-		_ = s.mcpClient.Close()
-		s.mcpClient = nil
-		s.StopServer()
-		s.Require().NoError(s.WaitForShutdown())
-	}
+	})
+	_ = s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
 }
 
 func TestAuthorization(t *testing.T) {

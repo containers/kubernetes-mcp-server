@@ -41,8 +41,6 @@ type StaticConfig struct {
 	RequireOAuth bool `toml:"require_oauth,omitempty"`
 	// OAuthAudience is the valid audience for the OAuth tokens, used for offline JWT claim validation.
 	OAuthAudience string `toml:"oauth_audience,omitempty"`
-	// ValidateToken indicates whether the server should validate the token against the Kubernetes API Server using TokenReview.
-	ValidateToken bool `toml:"validate_token,omitempty"`
 	// AuthorizationURL is the URL of the OIDC authorization server.
 	// It is used for token validation and for STS token exchange.
 	AuthorizationURL string `toml:"authorization_url,omitempty"`
