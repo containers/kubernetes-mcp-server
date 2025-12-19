@@ -39,11 +39,11 @@ const (
 )
 
 type TokenExchanger interface {
-	Exchange(ctx context.Context, cfg TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error)
+	Exchange(ctx context.Context, cfg *TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error)
 }
 
 // injectClientAuth adds client credentials to the request based on auth style
-func injectClientAuth(cfg TargetTokenExchangeConfig, data url.Values, header http.Header) {
+func injectClientAuth(cfg *TargetTokenExchangeConfig, data url.Values, header http.Header) {
 	if cfg.ClientID == "" {
 		return
 	}
