@@ -67,7 +67,6 @@ Performs a comprehensive health assessment of your Kubernetes or OpenShift clust
 
 **Arguments:**
 - `namespace` (optional): Limit the health check to a specific namespace. Default: all namespaces.
-- `verbose` (optional): Enable detailed resource-level information. Values: `true` or `false`. Default: `false`.
 - `check_events` (optional): Include recent warning/error events in the analysis. Values: `true` or `false`. Default: `true`.
 
 **What it checks:**
@@ -85,7 +84,12 @@ Check the health of my cluster
 
 Or with specific parameters:
 ```
-Check the health of namespace production with verbose output
+Check the health of namespace production
+```
+
+You can also skip event checking for faster results:
+```
+Check the health of my cluster without events
 ```
 
 The prompt gathers comprehensive diagnostic data and presents it to the LLM for analysis, which will provide:
