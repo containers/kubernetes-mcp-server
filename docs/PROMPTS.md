@@ -55,7 +55,7 @@ content = "I'll retrieve and analyze the logs for you."
 - **required** (optional): Whether the argument must be provided (default: false)
 
 ### Argument Substitution
-Use `{{argument_name}}` placeholders in message content. The template engine replaces these with actual values when the prompt is called.
+Use `{{argument_name}}` placeholders in message content. The template engine replaces these with actual values when the prompt is called. If an optional argument is not provided, its placeholder is removed from the output.
 
 ## Configuration File Location
 

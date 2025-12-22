@@ -36,7 +36,7 @@ func createPromptHandler(prompt api.Prompt) api.PromptHandlerFunc {
 		// Render messages with argument substitution
 		messages := make([]api.PromptMessage, 0, len(prompt.Templates))
 		for _, template := range prompt.Templates {
-			content := substituteArguments(template.Content, args)
+			content := substituteArguments(template.Content, prompt.Arguments, args)
 			messages = append(messages, api.PromptMessage{
 				Role: template.Role,
 				Content: api.PromptContent{
@@ -50,12 +50,18 @@ func createPromptHandler(prompt api.Prompt) api.PromptHandlerFunc {
 	}
 }
 
-// substituteArguments replaces {{argument}} placeholders in content with actual values
-func substituteArguments(content string, args map[string]string) string {
+// substituteArguments replaces {{argument}} placeholders in content with actual values.
+// For optional arguments not provided, their placeholders are removed.
+func substituteArguments(content string, promptArgs []api.PromptArgument, args map[string]string) string {
 	result := content
-	for key, value := range args {
-		placeholder := fmt.Sprintf("{{%s}}", key)
-		result = strings.ReplaceAll(result, placeholder, value)
+	for _, promptArg := range promptArgs {
+		placeholder := fmt.Sprintf("{{%s}}", promptArg.Name)
+		if value, exists := args[promptArg.Name]; exists {
+			result = strings.ReplaceAll(result, placeholder, value)
+		} else if !promptArg.Required {
+			// Remove placeholder for optional arguments not provided
+			result = strings.ReplaceAll(result, placeholder, "")
+		}
 	}
 	return result
 }
