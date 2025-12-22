@@ -63,7 +63,6 @@ func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
 }
 
 func (s *WatchKubeConfigSuite) TestNotifiesPromptsChange() {
-	s.T().Skip("Enable when prompt unmarshalling is fixed") // TODO: Fix prompt unmarshalling issue
 	// Given
 	s.InitMcpClient()
 	// When
@@ -88,7 +87,6 @@ func (s *WatchKubeConfigSuite) TestNotifiesToolsChangeMultipleTimes() {
 }
 
 func (s *WatchKubeConfigSuite) TestNotifiesPromptsChangeMultipleTimes() {
-	s.T().Skip("Enable when prompt unmarshalling is fixed") // TODO: Fix prompt unmarshalling issue
 	// Given
 	s.InitMcpClient()
 	// When

@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/BurntSushi/toml"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 )
@@ -13,36 +13,22 @@ type McpPromptsSuite struct {
 	BaseMcpSuite
 }
 
-// loadPromptsConfig is a helper to parse prompts config and merge it with the test config
-func (s *McpPromptsSuite) loadPromptsConfig(configData string) {
-	cfg, err := config.ReadToml([]byte(configData))
-	s.Require().NoError(err, "Expected to parse prompts config")
-
-	// Copy the parsed prompts to the test config
-	kubeconfig := s.Cfg.KubeConfig
-	listOutput := s.Cfg.ListOutput
-
-	s.Cfg = cfg
-	s.Cfg.KubeConfig = kubeconfig
-	s.Cfg.ListOutput = listOutput
-}
-
 func (s *McpPromptsSuite) TestListPrompts() {
-	s.loadPromptsConfig(`
-[[prompts]]
-name = "test-prompt"
-title = "Test Prompt"
-description = "A test prompt for integration testing"
-
-[[prompts.arguments]]
-name = "test_arg"
-description = "A test argument"
-required = true
-
-[[prompts.messages]]
-role = "user"
-content = "Test message with {{test_arg}}"
-	`)
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		[[prompts]]
+		name = "test-prompt"
+		title = "Test Prompt"
+		description = "A test prompt for integration testing"
+		
+		[[prompts.arguments]]
+		name = "test_arg"
+		description = "A test argument"
+		required = true
+		
+		[[prompts.messages]]
+		role = "user"
+		content = "Test message with {{test_arg}}"
+	`), s.Cfg), "Expected to parse prompts config")
 
 	s.InitMcpClient()
 
@@ -75,20 +61,20 @@ content = "Test message with {{test_arg}}"
 }
 
 func (s *McpPromptsSuite) TestGetPrompt() {
-	s.loadPromptsConfig(`
-[[prompts]]
-name = "substitution-prompt"
-description = "Test argument substitution"
-
-[[prompts.arguments]]
-name = "name"
-description = "Name to substitute"
-required = true
-
-[[prompts.messages]]
-role = "user"
-content = "Hello {{name}}!"
-	`)
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		[[prompts]]
+		name = "substitution-prompt"
+		description = "Test argument substitution"
+		
+		[[prompts.arguments]]
+		name = "name"
+		description = "Name to substitute"
+		required = true
+		
+		[[prompts.messages]]
+		role = "user"
+		content = "Hello {{name}}!"
+	`), s.Cfg), "Expected to parse prompts config")
 
 	s.InitMcpClient()
 
@@ -119,20 +105,20 @@ content = "Hello {{name}}!"
 }
 
 func (s *McpPromptsSuite) TestGetPromptMissingRequiredArgument() {
-	s.loadPromptsConfig(`
-[[prompts]]
-name = "required-arg-prompt"
-description = "Test required argument validation"
-
-[[prompts.arguments]]
-name = "required_arg"
-description = "A required argument"
-required = true
-
-[[prompts.messages]]
-role = "user"
-content = "Content with {{required_arg}}"
-	`)
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		[[prompts]]
+		name = "required-arg-prompt"
+		description = "Test required argument validation"
+		
+		[[prompts.arguments]]
+		name = "required_arg"
+		description = "A required argument"
+		required = true
+		
+		[[prompts.messages]]
+		role = "user"
+		content = "Content with {{required_arg}}"
+	`), s.Cfg), "Expected to parse prompts config")
 
 	s.InitMcpClient()
 

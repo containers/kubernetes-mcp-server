@@ -167,36 +167,16 @@ func (s *Server) reloadToolsets() error {
 	previousPrompts := s.enabledPrompts
 
 	// Build and register prompts from all toolsets
-	applicablePrompts := make([]api.ServerPrompt, 0)
-	s.enabledPrompts = make([]string, 0)
-
+	toolsetPrompts := make([]api.ServerPrompt, 0)
 	// Load embedded toolset prompts
 	for _, toolset := range s.configuration.Toolsets() {
-		prompts := toolset.GetPrompts()
-		if prompts == nil {
-			continue
-		}
-		for _, prompt := range prompts {
-			applicablePrompts = append(applicablePrompts, prompt)
-			s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
-		}
+		toolsetPrompts = append(toolsetPrompts, toolset.GetPrompts()...)
 	}
 
-	// Load config prompts into registry
-	prompts.Clear()
-	if s.configuration.HasPrompts() {
-		ctx := context.Background()
-		md := s.configuration.GetPromptsMetadata()
-		if err := prompts.LoadFromToml(ctx, s.configuration.Prompts, md); err != nil {
-			return fmt.Errorf("failed to parse prompts from config: %w", err)
-		}
-	}
-
-	// Get prompts from registry
-	configPrompts := prompts.ConfigPrompts()
+	configPrompts := prompts.ToServerPrompts(s.configuration.Prompts)
 
 	// Merge: config prompts override embedded prompts with same name
-	applicablePrompts = mergePrompts(applicablePrompts, configPrompts)
+	applicablePrompts := prompts.MergePrompts(toolsetPrompts, configPrompts)
 
 	// Update enabled prompts list
 	s.enabledPrompts = make([]string, 0)
@@ -225,29 +205,6 @@ func (s *Server) reloadToolsets() error {
 	// start new watch
 	s.p.WatchTargets(s.reloadToolsets)
 	return nil
-}
-
-// mergePrompts merges two slices of prompts, with prompts in override taking precedence
-// over prompts in base when they have the same name
-func mergePrompts(base, override []api.ServerPrompt) []api.ServerPrompt {
-	// Create a map of override prompts by name for quick lookup
-	overrideMap := make(map[string]api.ServerPrompt)
-	for _, prompt := range override {
-		overrideMap[prompt.Prompt.Name] = prompt
-	}
-
-	// Build result: start with base prompts, skipping any that are overridden
-	result := make([]api.ServerPrompt, 0, len(base)+len(override))
-	for _, prompt := range base {
-		if _, exists := overrideMap[prompt.Prompt.Name]; !exists {
-			result = append(result, prompt)
-		}
-	}
-
-	// Add all override prompts
-	result = append(result, override...)
-
-	return result
 }
 
 func (s *Server) ServeStdio(ctx context.Context) error {
@@ -287,9 +244,9 @@ func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
 }
 
-// GetPrompts returns the currently loaded prompts from the registry
-func (s *Server) GetPrompts() ([]api.ServerPrompt, error) {
-	return prompts.ConfigPrompts(), nil
+// GetEnabledPrompts returns the names of the currently enabled prompts
+func (s *Server) GetEnabledPrompts() []string {
+	return s.enabledPrompts
 }
 
 // ReloadConfiguration reloads the configuration and reinitializes the server.

@@ -87,7 +87,19 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			{group = "apps", version = "v1", kind = "Deployment"},
 			{group = "rbac.authorization.k8s.io", version = "v1", kind = "Role"}
 		]
-		
+
+		[[prompts]]
+		name = "k8s-troubleshoot"
+		title = "Troubleshoot Kubernetes"
+		description = "Troubleshoot common Kubernetes issues"
+		arguments = [
+			{name = "namespace", description = "Target namespace", required = true},
+			{name = "resource", description = "Resource type to check", required = false}
+		]
+		messages = [
+			{role = "user", content = "Check the health of resources in namespace {{namespace}}{{resource}}"}
+		]
+
 	`)
 
 	config, err := Read(validConfigPath, "")
@@ -147,6 +159,33 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		s.Run("contains rbac.authorization.k8s.io/v1/Role", func() {
 			s.Contains(config.DeniedResources, api.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
 				"Expected denied resources to contain rbac.authorization.k8s.io/v1/Role")
+		})
+	})
+	s.Run("prompts", func() {
+		s.Require().Lenf(config.Prompts, 1, "Expected 1 prompt, got %d", len(config.Prompts))
+		prompt := config.Prompts[0]
+		s.Run("name parsed correctly", func() {
+			s.Equal("k8s-troubleshoot", prompt.Name)
+		})
+		s.Run("title parsed correctly", func() {
+			s.Equal("Troubleshoot Kubernetes", prompt.Title)
+		})
+		s.Run("description parsed correctly", func() {
+			s.Equal("Troubleshoot common Kubernetes issues", prompt.Description)
+		})
+		s.Run("arguments parsed correctly", func() {
+			s.Require().Len(prompt.Arguments, 2)
+			s.Equal("namespace", prompt.Arguments[0].Name)
+			s.Equal("Target namespace", prompt.Arguments[0].Description)
+			s.True(prompt.Arguments[0].Required)
+			s.Equal("resource", prompt.Arguments[1].Name)
+			s.Equal("Resource type to check", prompt.Arguments[1].Description)
+			s.False(prompt.Arguments[1].Required)
+		})
+		s.Run("messages parsed correctly", func() {
+			s.Require().Len(prompt.Templates, 1)
+			s.Equal("user", prompt.Templates[0].Role)
+			s.Equal("Check the health of resources in namespace {{namespace}}{{resource}}", prompt.Templates[0].Content)
 		})
 	})
 }

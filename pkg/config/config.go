@@ -28,10 +28,6 @@ type StaticConfig struct {
 	SSEBaseURL string `toml:"sse_base_url,omitempty"`
 	KubeConfig string `toml:"kubeconfig,omitempty"`
 	ListOutput string `toml:"list_output,omitempty"`
-	// When true, expose only tools annotated with readOnlyHint=true
-	ReadOnly bool `toml:"read_only,omitempty"`
-	// When true, disable tools annotated with destructiveHint=true
-	DisableDestructive bool `toml:"disable_destructive,omitempty"`
 	// Stateless configures the MCP server to operate in stateless mode.
 	// When true, the server will not send notifications to clients (e.g., tools/list_changed, prompts/list_changed).
 	// This is useful for container deployments, load balancing, and serverless environments where
@@ -39,9 +35,16 @@ type StaticConfig struct {
 	// and prompt updates, requiring clients to manually refresh their tool/prompt lists.
 	// Defaults to false (stateful mode with notifications enabled).
 	Stateless     bool     `toml:"stateless,omitempty"`
-	Toolsets      []string `toml:"toolsets,omitempty"`
+	// When true, expose only tools annotated with readOnlyHint=true
+	ReadOnly bool `toml:"read_only,omitempty"`
+	// When true, disable tools annotated with destructiveHint=true
+	DisableDestructive bool     `toml:"disable_destructive,omitempty"`
+	Toolsets           []string `toml:"toolsets,omitempty"`
+	// Tool configuration
 	EnabledTools  []string `toml:"enabled_tools,omitempty"`
 	DisabledTools []string `toml:"disabled_tools,omitempty"`
+	// Prompt configuration
+	Prompts []api.Prompt `toml:"prompts,omitempty"`
 
 	// Authorization-related fields
 	// RequireOAuth indicates whether the server requires OAuth for authentication.
@@ -78,13 +81,6 @@ type StaticConfig struct {
 	// Toolset-specific configurations
 	// This map holds raw TOML primitives that will be parsed by registered toolset parsers
 	ToolsetConfigs map[string]toml.Primitive `toml:"toolset_configs,omitempty"`
-
-	// Prompt configuration
-	// Raw TOML primitive for prompt definitions, parsed later
-	// Note: Uses toml:"-" because Primitive can't be encoded, only decoded
-	Prompts         toml.Primitive `toml:"-"`
-	promptsDefined  bool           // Internal: tracks if prompts were defined in config
-	promptsMetadata toml.MetaData  // Internal: metadata for prompts decoding
 
 	// Server instructions to be provided by the MCP server to the MCP client
 	// This can be used to provide specific instructions on how the client should use the server
@@ -296,18 +292,6 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		return nil, err
 	}
 
-	// Store prompts primitive if defined
-	if md.IsDefined("prompts") {
-		var temp struct {
-			Prompts toml.Primitive `toml:"prompts"`
-		}
-		// Re-decode to get the primitive
-		tempMd, _ := toml.NewDecoder(bytes.NewReader(configData)).Decode(&temp)
-		config.Prompts = temp.Prompts
-		config.promptsDefined = true
-		config.promptsMetadata = tempMd
-	}
-
 	return config, nil
 }
 
@@ -336,14 +320,4 @@ func (c *StaticConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) 
 
 func (c *StaticConfig) IsRequireOAuth() bool {
 	return c.RequireOAuth
-}
-
-// HasPrompts returns whether prompts were defined in the configuration
-func (c *StaticConfig) HasPrompts() bool {
-	return c.promptsDefined
-}
-
-// GetPromptsMetadata returns the TOML metadata for prompts
-func (c *StaticConfig) GetPromptsMetadata() toml.MetaData {
-	return c.promptsMetadata
 }

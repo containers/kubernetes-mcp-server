@@ -1,45 +1,14 @@
 package prompts
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-var configPrompts []api.ServerPrompt
-
-// Clear removes all registered prompts
-func Clear() {
-	configPrompts = []api.ServerPrompt{}
-}
-
-// Register registers prompts to be available in the MCP server
-func Register(prompts ...api.ServerPrompt) {
-	configPrompts = append(configPrompts, prompts...)
-}
-
-// ConfigPrompts returns all prompts loaded from configuration
-func ConfigPrompts() []api.ServerPrompt {
-	return configPrompts
-}
-
-// LoadFromToml parses prompts from TOML configuration data and registers them
-func LoadFromToml(ctx context.Context, primitive toml.Primitive, md toml.MetaData) error {
-	var prompts []api.Prompt
-	if err := md.PrimitiveDecode(primitive, &prompts); err != nil {
-		return fmt.Errorf("failed to parse prompts from TOML: %w", err)
-	}
-
-	serverPrompts := createServerPrompts(prompts)
-	Register(serverPrompts...)
-	return nil
-}
-
-// createServerPrompts converts Prompt definitions to ServerPrompts with handlers
-func createServerPrompts(prompts []api.Prompt) []api.ServerPrompt {
+// ToServerPrompts converts Prompt definitions to ServerPrompts with handlers
+func ToServerPrompts(prompts []api.Prompt) []api.ServerPrompt {
 	serverPrompts := make([]api.ServerPrompt, 0, len(prompts))
 	for _, prompt := range prompts {
 		serverPrompts = append(serverPrompts, api.ServerPrompt{
@@ -88,5 +57,28 @@ func substituteArguments(content string, args map[string]string) string {
 		placeholder := fmt.Sprintf("{{%s}}", key)
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
+	return result
+}
+
+// MergePrompts merges two slices of prompts, with prompts in override taking precedence
+// over prompts in base when they have the same name
+func MergePrompts(base, override []api.ServerPrompt) []api.ServerPrompt {
+	// Create a map of override prompts by name for quick lookup
+	overrideMap := make(map[string]api.ServerPrompt)
+	for _, prompt := range override {
+		overrideMap[prompt.Prompt.Name] = prompt
+	}
+
+	// Build result: start with base prompts, skipping any that are overridden
+	result := make([]api.ServerPrompt, 0, len(base)+len(override))
+	for _, prompt := range base {
+		if _, exists := overrideMap[prompt.Prompt.Name]; !exists {
+			result = append(result, prompt)
+		}
+	}
+
+	// Add all override prompts
+	result = append(result, override...)
+
 	return result
 }
