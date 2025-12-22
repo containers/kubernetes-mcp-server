@@ -23,25 +23,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 			IdempotentHint:  ptr.Deref(tool.Tool.Annotations.IdempotentHint, false),
 			OpenWorldHint:   tool.Tool.Annotations.OpenWorldHint,
 		},
-	}
-	if tool.Tool.InputSchema != nil {
-		schema, err := json.Marshal(tool.Tool.InputSchema)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to marshal tool input schema for tool %s: %v", tool.Tool.Name, err)
-		}
-		// TODO: temporary fix to append an empty properties object (some client have trouble parsing a schema without properties)
-		// As opposed, Gemini had trouble for a while when properties was present but empty.
-		// https://github.com/containers/kubernetes-mcp-server/issues/340
-		if string(schema) == `{"type":"object"}` {
-			schema = []byte(`{"type":"object","properties":{}}`)
-		}
-
-		var fixedSchema map[string]interface{}
-		if err := json.Unmarshal(schema, &fixedSchema); err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal tool input schema for tool %s: %v", tool.Tool.Name, err)
-		}
-
-		goSdkTool.InputSchema = fixedSchema
+		InputSchema: tool.Tool.InputSchema,
 	}
 	goSdkHandler := func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toolCallRequest, err := GoSdkToolCallRequestToToolCallRequest(request)
