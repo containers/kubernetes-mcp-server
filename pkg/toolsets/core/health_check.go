@@ -14,9 +14,38 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
+// podHighRestartThreshold is the number of container restarts above which a pod
+// is flagged as having issues, even if it's currently running without errors.
+const podHighRestartThreshold = 5
+
+// initHealthChecks initializes the cluster health check prompts
+func initHealthChecks() []api.ServerPrompt {
+	return []api.ServerPrompt{
+		{
+			Prompt: api.Prompt{
+				Name:        "cluster-health-check",
+				Title:       "Cluster Health Check",
+				Description: "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
+				Arguments: []api.PromptArgument{
+					{
+						Name:        "namespace",
+						Description: "Optional namespace to limit health check scope (default: all namespaces)",
+						Required:    false,
+					},
+					{
+						Name:        "check_events",
+						Description: "Include recent warning/error events (true/false, default: true)",
+						Required:    false,
+					},
+				},
+			},
+			Handler: clusterHealthCheckHandler,
+		},
+	}
+}
+
 // clusterHealthCheckHandler implements the cluster health check prompt
 func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
-	// Parse arguments (GetArguments returns map[string]string for prompts)
 	args := params.GetArguments()
 	namespace := args["namespace"]
 	checkEvents := args["check_events"] != "false" // default true
@@ -40,7 +69,6 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 		klog.Info("Performing cluster-wide health check")
 	}
 
-	// Gather cluster diagnostics using the KubernetesClient interface
 	diagnostics, err := gatherClusterDiagnostics(params, namespace, checkEvents)
 	if err != nil {
 		return nil, fmt.Errorf("failed to gather cluster diagnostics: %w", err)
@@ -183,12 +211,10 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 
 	// Count namespaces
 	klog.Info("Counting namespaces...")
-	namespaceList, err := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{})
+	namespaceList, err := params.CoreV1().Namespaces().List(params.Context, metav1.ListOptions{})
 	if err == nil {
-		if items, ok := namespaceList.UnstructuredContent()["items"].([]interface{}); ok {
-			diag.TotalNamespaces = len(items)
-			klog.Infof("Found %d namespaces", diag.TotalNamespaces)
-		}
+		diag.TotalNamespaces = len(namespaceList.Items)
+		klog.Infof("Found %d namespaces", diag.TotalNamespaces)
 	}
 
 	klog.Info("Cluster health check data collection completed")
@@ -209,11 +235,11 @@ func gatherNodeDiagnostics(params api.PromptHandlerParams) (string, error) {
 	var sb strings.Builder
 	totalNodes := len(nodeList.Items)
 	healthyNodes := 0
-	nodesWithIssues := []string{}
+	var nodesWithIssues []string
 
 	for _, node := range nodeList.Items {
 		nodeStatus := "Unknown"
-		issues := []string{}
+		var issues []string
 
 		// Parse node conditions
 		for _, cond := range node.Status.Conditions {
@@ -259,10 +285,10 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 	}
 
 	totalPods := len(podList.Items)
-	problemPods := []string{}
+	var problemPods []string
 
 	for _, pod := range podList.Items {
-		issues := []string{}
+		var issues []string
 		restarts := int32(0)
 		readyCount := 0
 		totalContainers := len(pod.Status.ContainerStatuses)
@@ -297,7 +323,7 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 		}
 
 		// Report pods with issues or high restart count
-		if len(issues) > 0 || restarts > 5 {
+		if len(issues) > 0 || restarts > podHighRestartThreshold {
 			problemPods = append(problemPods, fmt.Sprintf("- **%s/%s** (Phase: %s, Ready: %d/%d, Restarts: %d)\n  - %s",
 				pod.Namespace, pod.Name, pod.Status.Phase, readyCount, totalContainers, restarts, strings.Join(issues, "\n  - ")))
 		}
@@ -316,7 +342,7 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 
 // gatherWorkloadDiagnostics collects workload controller status using AppsV1 clientset
 func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, namespace string) (string, error) {
-	workloadsWithIssues := []string{}
+	var workloadsWithIssues []string
 
 	switch kind {
 	case "Deployment":
@@ -329,7 +355,7 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 		}
 
 		for _, deployment := range deploymentList.Items {
-			issues := []string{}
+			var issues []string
 			ready := fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, deployment.Status.Replicas)
 
 			if deployment.Status.UnavailableReplicas > 0 {
@@ -352,7 +378,7 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 		}
 
 		for _, sts := range statefulSetList.Items {
-			issues := []string{}
+			var issues []string
 			specReplicas := int32(1)
 			if sts.Spec.Replicas != nil {
 				specReplicas = *sts.Spec.Replicas
@@ -379,7 +405,7 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 		}
 
 		for _, ds := range daemonSetList.Items {
-			issues := []string{}
+			var issues []string
 			ready := fmt.Sprintf("%d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
 
 			if ds.Status.NumberUnavailable > 0 {
@@ -418,7 +444,7 @@ func gatherPVCDiagnostics(params api.PromptHandlerParams, namespace string) (str
 		return "No PVCs found", nil
 	}
 
-	pvcsWithIssues := []string{}
+	var pvcsWithIssues []string
 
 	for _, pvc := range pvcList.Items {
 		if pvc.Status.Phase != v1.ClaimBound {
@@ -457,7 +483,7 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 		return "No cluster operators found", nil
 	}
 
-	operatorsWithIssues := []string{}
+	var operatorsWithIssues []string
 
 	for _, item := range items {
 		opMap, ok := item.(map[string]interface{})
@@ -473,7 +499,7 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 
 		available := "Unknown"
 		degraded := "Unknown"
-		issues := []string{}
+		var issues []string
 
 		for _, cond := range conditions {
 			condMap, _ := cond.(map[string]interface{})
@@ -514,7 +540,7 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 
 // gatherEventDiagnostics collects recent warning and error events
 func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (string, error) {
-	namespaces := []string{}
+	var namespaces []string
 
 	if namespace != "" {
 		namespaces = append(namespaces, namespace)
@@ -522,20 +548,12 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 		// Important namespaces
 		namespaces = []string{"default", "kube-system"}
 
-		// Add OpenShift namespaces
-		nsList, err := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{})
+		// Add OpenShift namespaces using typed clientset
+		nsList, err := params.CoreV1().Namespaces().List(params.Context, metav1.ListOptions{})
 		if err == nil {
-			if items, ok := nsList.UnstructuredContent()["items"].([]interface{}); ok {
-				for _, item := range items {
-					nsMap, ok := item.(map[string]interface{})
-					if !ok {
-						continue
-					}
-					metadata, _ := nsMap["metadata"].(map[string]interface{})
-					name, _ := metadata["name"].(string)
-					if strings.HasPrefix(name, "openshift-") {
-						namespaces = append(namespaces, name)
-					}
+			for _, ns := range nsList.Items {
+				if strings.HasPrefix(ns.Name, "openshift-") {
+					namespaces = append(namespaces, ns.Name)
 				}
 			}
 		}
@@ -544,7 +562,7 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 	oneHourAgo := time.Now().Add(-1 * time.Hour)
 	totalWarnings := 0
 	totalErrors := 0
-	recentEvents := []string{}
+	var recentEvents []string
 
 	for _, ns := range namespaces {
 		eventList, err := params.CoreV1().Events(ns).List(params.Context, metav1.ListOptions{})
@@ -554,7 +572,7 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 
 		for _, event := range eventList.Items {
 			// Only include Warning and Error events
-			if event.Type != string(v1.EventTypeWarning) && event.Type != "Error" {
+			if event.Type != v1.EventTypeWarning && event.Type != "Error" {
 				continue
 			}
 
@@ -567,7 +585,7 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 				continue
 			}
 
-			if event.Type == string(v1.EventTypeWarning) {
+			if event.Type == v1.EventTypeWarning {
 				totalWarnings++
 			} else {
 				totalErrors++
@@ -685,30 +703,4 @@ func formatHealthCheckPrompt(diag *clusterDiagnostics) string {
 	sb.WriteString("**Please analyze the above diagnostic data and provide your comprehensive health assessment.**\n")
 
 	return sb.String()
-}
-
-// initHealthChecks initializes the cluster health check prompts
-func initHealthChecks() []api.ServerPrompt {
-	return []api.ServerPrompt{
-		{
-			Prompt: api.Prompt{
-				Name:        "cluster-health-check",
-				Title:       "Cluster Health Check",
-				Description: "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
-				Arguments: []api.PromptArgument{
-					{
-						Name:        "namespace",
-						Description: "Optional namespace to limit health check scope (default: all namespaces)",
-						Required:    false,
-					},
-					{
-						Name:        "check_events",
-						Description: "Include recent warning/error events (true/false, default: true)",
-						Required:    false,
-					},
-				},
-			},
-			Handler: clusterHealthCheckHandler,
-		},
-	}
 }
