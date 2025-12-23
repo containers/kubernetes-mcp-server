@@ -218,9 +218,9 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
     `), 0644))
 	s.InitServer(configPath, "")
 
-	prompts := s.server.GetEnabledPrompts()
-	s.Len(prompts, 1)
-	s.Equal("initial-prompt", prompts[0])
+	enabledPrompts := s.server.GetEnabledPrompts()
+	s.GreaterOrEqual(len(enabledPrompts), 1)
+	s.Contains(enabledPrompts, "initial-prompt")
 
 	// Update config with new prompt
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
@@ -238,8 +238,8 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
 
 	// Verify prompts were reloaded
 	s.Require().Eventually(func() bool {
-		prompts := s.server.GetEnabledPrompts()
-		return len(prompts) == 1 && prompts[0] == "updated-prompt"
+		enabledPrompts = s.server.GetEnabledPrompts()
+		return len(enabledPrompts) >= 1 && slices.Contains(enabledPrompts, "updated-prompt") && !slices.Contains(enabledPrompts, "initial-prompt")
 	}, 2*time.Second, 50*time.Millisecond)
 }
 

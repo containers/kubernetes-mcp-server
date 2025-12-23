@@ -34,7 +34,7 @@ type StaticConfig struct {
 	// maintaining client state is not desired or possible. However, this disables dynamic tool
 	// and prompt updates, requiring clients to manually refresh their tool/prompt lists.
 	// Defaults to false (stateful mode with notifications enabled).
-	Stateless     bool     `toml:"stateless,omitempty"`
+	Stateless bool `toml:"stateless,omitempty"`
 	// When true, expose only tools annotated with readOnlyHint=true
 	ReadOnly bool `toml:"read_only,omitempty"`
 	// When true, disable tools annotated with destructiveHint=true
