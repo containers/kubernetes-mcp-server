@@ -73,10 +73,10 @@ tidy: ## Tidy up the go modules
 # Download and install golangci-lint if not already installed
 .PHONY: golangci-lint
 golangci-lint:
-		@[ -f $(GOLANGCI_LINT) ] || { \
-    	set -e ;\
-    	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
-    	}
+	@[ -f $(GOLANGCI_LINT) ] || { \
+		set -e ;\
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
+	}
 
 .PHONY: lint
 lint: golangci-lint ## Lint the code
@@ -86,14 +86,6 @@ lint: golangci-lint ## Lint the code
 update-readme-tools: ## Update the README.md file with the latest toolsets
 	go run ./internal/tools/update-readme/main.go README.md
 
-##@ Tools
-
-.PHONY: tools
-tools: ## Install all required tools (kind) to ./_output/bin/
-	@echo "Checking and installing required tools to ./_output/bin/ ..."
-	@if [ -f _output/bin/kind ]; then echo "[OK] kind already installed"; else echo "Installing kind..."; $(MAKE) -s kind; fi
-	@echo "All tools ready!"
-
 ##@ Local Development
 
 .PHONY: local-env-setup
@@ -101,7 +93,6 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "========================================="
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "========================================="
-	$(MAKE) tools
 	$(MAKE) kind-create-cluster
 	$(MAKE) keycloak-install
 	$(MAKE) build

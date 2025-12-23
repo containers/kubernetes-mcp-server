@@ -4,6 +4,8 @@ KEYCLOAK_NAMESPACE = keycloak
 KEYCLOAK_ADMIN_USER = admin
 KEYCLOAK_ADMIN_PASSWORD = admin
 
+##@ Keycloak
+
 .PHONY: keycloak-install
 keycloak-install:
 	@echo "Installing Keycloak (dev mode using official image)..."
@@ -49,8 +51,6 @@ keycloak-install:
 .PHONY: keycloak-uninstall
 keycloak-uninstall:
 	@kubectl delete -f dev/config/keycloak/deployment.yaml 2>/dev/null || true
-
-##@ Keycloak
 
 .PHONY: keycloak-status
 keycloak-status: ## Show Keycloak status and connection info

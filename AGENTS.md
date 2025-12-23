@@ -268,9 +268,6 @@ make keycloak-status
 
 # Tail Keycloak logs
 make keycloak-logs
-
-# Install required development tools (like Kind) to ./_output/bin/
-make tools
 ```
 
 **Distribution and Publishing:**
