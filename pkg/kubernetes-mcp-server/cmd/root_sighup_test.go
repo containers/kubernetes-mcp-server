@@ -59,7 +59,7 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
 
 	s.server, err = mcp.NewServer(mcp.Configuration{
 		StaticConfig: cfg,
-	})
+	}, nil, nil)
 	s.Require().NoError(err)
 	// Set up SIGHUP handler
 	opts := &MCPServerOptions{

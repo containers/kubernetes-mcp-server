@@ -9,7 +9,6 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"golang.org/x/oauth2"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/strings/slices"
 
@@ -50,16 +49,7 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - The token is then validated against the OIDC Provider.
 //
 //	         see TestAuthorizationOidcToken
-//
-//	    2.3. OIDC Token Exchange (oidcProvider is not nil, StsClientId and StsAudience are set):
-//	         - The token is validated offline for basic sanity checks (audience and expiration).
-//	         - If OAuthAudience is set, the token is validated against the audience.
-//	         - The token is then validated against the OIDC Provider.
-//	         - If the token is valid, an external account token exchange is performed using
-//	           the OIDC Provider to obtain a new token with the specified audience and scopes.
-//
-//	         see TestAuthorizationOidcTokenExchange
-func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, httpClient *http.Client) func(http.Handler) http.Handler {
+func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == healthEndpoint || slices.Contains(WellKnownEndpoints, r.URL.EscapedPath()) {
@@ -103,27 +93,6 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 				scopes := claims.GetScopes()
 				klog.V(2).Infof("JWT token validated - Scopes: %v", scopes)
 				r = r.WithContext(context.WithValue(r.Context(), mcp.TokenScopesContextKey, scopes))
-			}
-			// Token exchange with OIDC provider
-			sts := NewFromConfig(staticConfig, oidcProvider)
-			// TODO: Maybe the token had already been exchanged, if it has the right audience and scopes, we can skip this step.
-			if err == nil && sts.IsEnabled() {
-				var exchangedToken *oauth2.Token
-				// If the token is valid, we can exchange it for a new token with the specified audience and scopes.
-				ctx := r.Context()
-				if httpClient != nil {
-					ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
-				}
-				exchangedToken, err = sts.ExternalAccountTokenExchange(ctx, &oauth2.Token{
-					AccessToken: claims.Token,
-					TokenType:   "Bearer",
-				})
-				if err == nil {
-					// Replace the original token with the exchanged token
-					token = exchangedToken.AccessToken
-					_, err = ParseJWTClaims(token)
-					r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token)) // TODO: Implement test to verify, THIS IS A CRITICAL PART
-				}
 			}
 			if err != nil {
 				klog.V(1).Infof("Authentication failed - JWT validation error: %s %s from %s, error: %v", r.Method, r.URL.Path, r.RemoteAddr, err)

@@ -56,7 +56,7 @@ func (s *BaseHttpSuite) StartServer() {
 	s.Require().NoError(err, "Expected no error getting random port address")
 	s.StaticConfig.Port = strconv.Itoa(tcpAddr.Port)
 
-	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig})
+	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig}, s.OidcProvider, nil)
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.Require().NotNil(s.mcpServer, "MCP server should not be nil")
 	var timeoutCtx, cancelCtx context.Context
@@ -116,7 +116,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 		t.Fatalf("Failed to close random port listener: %v", randomPortErr)
 	}
 	c.StaticConfig.Port = fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
-	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: c.StaticConfig})
+	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: c.StaticConfig}, c.OidcProvider, nil)
 	if err != nil {
 		t.Fatalf("Failed to create MCP server: %v", err)
 	}

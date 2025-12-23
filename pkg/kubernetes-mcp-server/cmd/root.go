@@ -333,7 +333,7 @@ func (m *MCPServerOptions) Run() error {
 
 	mcpServer, err := mcp.NewServer(mcp.Configuration{
 		StaticConfig: m.StaticConfig,
-	})
+	}, oidcProvider, httpClient)
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}

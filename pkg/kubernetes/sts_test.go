@@ -1,4 +1,4 @@
-package http
+package kubernetes
 
 import (
 	"encoding/base64"
