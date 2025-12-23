@@ -8,6 +8,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type NodesTopSuite struct {
@@ -21,7 +22,7 @@ func (s *NodesTopSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 
-	s.discoveryHandler = &test.DiscoveryClientHandler{}
+	s.discoveryHandler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.discoveryHandler)
 }
 
@@ -33,15 +34,12 @@ func (s *NodesTopSuite) TearDownTest() {
 }
 
 func (s *NodesTopSuite) WithMetricsServer() {
-	s.discoveryHandler.Groups = []string{`{"name":"metrics.k8s.io","versions":[{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}],"preferredVersion":{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}}`}
-	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		// Request Performed by DiscoveryClient to Kube API (Get API Resources)
-		if req.URL.Path == "/apis/metrics.k8s.io/v1beta1" {
-			_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"metrics.k8s.io/v1beta1","resources":[{"name":"nodes","singularName":"","namespaced":false,"kind":"NodeMetrics","verbs":["get","list"]}]}`))
-			return
-		}
-	}))
+	s.discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
+		GroupVersion: "metrics.k8s.io/v1beta1",
+		APIResources: []metav1.APIResource{
+			{Name: "nodes", Kind: "NodeMetrics", Namespaced: false, Verbs: metav1.Verbs{"get", "list"}},
+		},
+	})
 }
 
 func (s *NodesTopSuite) TestNodesTop() {

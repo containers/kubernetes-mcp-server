@@ -48,7 +48,7 @@ func (s *ProviderKubeconfigTestSuite) TestWithNonOpenShiftCluster() {
 }
 
 func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
-	s.mockServer.Handle(&test.InOpenShiftHandler{})
+	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.Run("IsOpenShift returns true", func() {
 		inOpenShift := s.provider.IsOpenShift(s.T().Context())
 		s.True(inOpenShift, "Expected InOpenShift to return true")

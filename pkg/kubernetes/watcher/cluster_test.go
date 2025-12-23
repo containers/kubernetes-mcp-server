@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 
@@ -48,7 +49,7 @@ func (s *ClusterStateTestSuite) waitForWatcherInitialState(watcher *ClusterState
 
 func (s *ClusterStateTestSuite) TestNewClusterState() {
 	s.Run("creates watcher with default settings", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		watcher := NewClusterState(discoveryClient)
@@ -70,7 +71,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 	})
 
 	s.Run("respects CLUSTER_STATE_POLL_INTERVAL_MS environment variable", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "500")
@@ -85,7 +86,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 	})
 
 	s.Run("respects CLUSTER_STATE_DEBOUNCE_WINDOW_MS environment variable", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "250")
@@ -100,7 +101,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 	})
 
 	s.Run("respects both environment variables together", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "100")
@@ -116,7 +117,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 	})
 
 	s.Run("ignores invalid CLUSTER_STATE_POLL_INTERVAL_MS values", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		s.Run("ignores non-numeric value", func() {
@@ -139,7 +140,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 	})
 
 	s.Run("ignores invalid CLUSTER_STATE_DEBOUNCE_WINDOW_MS values", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		s.Run("ignores non-numeric value", func() {
@@ -164,7 +165,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 
 func (s *ClusterStateTestSuite) TestWatch() {
 	s.Run("captures initial cluster state", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 		watcher := NewClusterState(discoveryClient)
 
@@ -195,7 +196,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 
 	s.Run("detects cluster state changes", func() {
 		s.mockServer.ResetHandlers()
-		handler := &test.DiscoveryClientHandler{}
+		handler := test.NewDiscoveryClientHandler()
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
@@ -218,9 +219,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		s.waitForWatcherInitialState(watcher)
 
 		// Modify the handler to add new API groups
-		handler.Groups = []string{
-			`{"name":"custom.example.com","versions":[{"groupVersion":"custom.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"custom.example.com/v1","version":"v1"}}`,
-		}
+		handler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "custom.example.com/v1"})
 
 		// Wait for change detection - the watcher invalidates the cache on each poll
 		s.Eventually(func() bool {
@@ -232,7 +231,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 
 	s.Run("detects OpenShift cluster", func() {
 		s.mockServer.ResetHandlers()
-		s.mockServer.Handle(&test.InOpenShiftHandler{})
+		s.mockServer.Handle(test.NewInOpenShiftHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		watcher := NewClusterState(discoveryClient)
@@ -261,7 +260,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 
 	s.Run("handles onChange callback errors gracefully", func() {
 		s.mockServer.ResetHandlers()
-		handler := &test.DiscoveryClientHandler{}
+		handler := test.NewDiscoveryClientHandler()
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
@@ -285,9 +284,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		s.waitForWatcherInitialState(watcher)
 
 		// Modify the handler to trigger a change
-		handler.Groups = []string{
-			`{"name":"error.trigger","versions":[{"groupVersion":"error.trigger/v1","version":"v1"}],"preferredVersion":{"groupVersion":"error.trigger/v1","version":"v1"}}`,
-		}
+		handler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "error.trigger/v1"})
 
 		// Wait for onChange to be called (which returns an error)
 		s.Eventually(func() bool {
@@ -300,7 +297,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 
 func (s *ClusterStateTestSuite) TestClose() {
 	s.Run("stops watcher gracefully", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		watcher := NewClusterState(discoveryClient)
@@ -335,7 +332,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 	})
 
 	s.Run("handles multiple close calls", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		watcher := NewClusterState(discoveryClient)
@@ -350,7 +347,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 
 	s.Run("stops debounce timer on close", func() {
 		s.mockServer.ResetHandlers()
-		handler := &test.DiscoveryClientHandler{}
+		handler := test.NewDiscoveryClientHandler()
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
@@ -372,9 +369,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		s.waitForWatcherInitialState(watcher)
 
 		// Modify the handler to trigger a change and start the debounce timer
-		handler.Groups = []string{
-			`{"name":"trigger.change","versions":[{"groupVersion":"trigger.change/v1","version":"v1"}],"preferredVersion":{"groupVersion":"trigger.change/v1","version":"v1"}}`,
-		}
+		handler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "trigger.change/v1"})
 
 		// Wait for the change to be detected (debounce timer starts)
 		s.Eventually(func() bool {
@@ -402,7 +397,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 	})
 
 	s.Run("handles close on unstarted watcher", func() {
-		s.mockServer.Handle(&test.DiscoveryClientHandler{})
+		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		watcher := NewClusterState(discoveryClient)
@@ -417,12 +412,10 @@ func (s *ClusterStateTestSuite) TestClose() {
 
 func (s *ClusterStateTestSuite) TestCaptureState() {
 	s.Run("captures API groups sorted alphabetically", func() {
-		handler := &test.DiscoveryClientHandler{
-			Groups: []string{
-				`{"name":"zebra.example.com","versions":[{"groupVersion":"zebra.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"zebra.example.com/v1","version":"v1"}}`,
-				`{"name":"alpha.example.com","versions":[{"groupVersion":"alpha.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"alpha.example.com/v1","version":"v1"}}`,
-			},
-		}
+		handler := test.NewDiscoveryClientHandler(
+			metav1.APIResourceList{GroupVersion: "zebra.example.com/v1"},
+			metav1.APIResourceList{GroupVersion: "alpha.example.com/v1"},
+		)
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
@@ -479,7 +472,7 @@ func (s *ClusterStateTestSuite) TestCaptureState() {
 		// Create first mock server with standard groups
 		mockServer1 := test.NewMockServer()
 		defer mockServer1.Close()
-		handler1 := &test.DiscoveryClientHandler{}
+		handler1 := test.NewDiscoveryClientHandler()
 		mockServer1.Handle(handler1)
 		discoveryClient1 := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(mockServer1.Config()))
 
@@ -489,11 +482,9 @@ func (s *ClusterStateTestSuite) TestCaptureState() {
 		// Create second mock server with additional groups
 		mockServer2 := test.NewMockServer()
 		defer mockServer2.Close()
-		handler2 := &test.DiscoveryClientHandler{
-			Groups: []string{
-				`{"name":"new.group","versions":[{"groupVersion":"new.group/v1","version":"v1"}],"preferredVersion":{"groupVersion":"new.group/v1","version":"v1"}}`,
-			},
-		}
+		handler2 := test.NewDiscoveryClientHandler(
+			metav1.APIResourceList{GroupVersion: "new.group/v1"},
+		)
 		mockServer2.Handle(handler2)
 		discoveryClient2 := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(mockServer2.Config()))
 

@@ -19,7 +19,7 @@ type NodesSuite struct {
 func (s *NodesSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.mockServer.Handle(&test.DiscoveryClientHandler{})
+	s.mockServer.Handle(test.NewDiscoveryClientHandler())
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 }
 

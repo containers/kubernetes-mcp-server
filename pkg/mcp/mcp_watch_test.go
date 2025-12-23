@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type WatchKubeConfigSuite struct {
@@ -101,7 +102,7 @@ func (s *WatchKubeConfigSuite) TestNotifiesPromptsChangeMultipleTimes() {
 }
 
 func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
-	s.mockServer.Handle(&test.InOpenShiftHandler{})
+	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.InitMcpClient()
 
 	s.Run("OpenShift tool is available", func() {
@@ -149,7 +150,7 @@ func (s *WatchClusterStateSuite) SetupTest() {
 	s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
 	s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
 	s.mockServer = test.NewMockServer()
-	s.handler = &test.DiscoveryClientHandler{}
+	s.handler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.handler)
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 }
@@ -161,8 +162,8 @@ func (s *WatchClusterStateSuite) TearDownTest() {
 	}
 }
 
-func (s *WatchClusterStateSuite) AddAPIGroup(groupName string) {
-	s.handler.Groups = append(s.handler.Groups, groupName)
+func (s *WatchClusterStateSuite) AddAPIGroup(groupVersion string) {
+	s.handler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: groupVersion})
 }
 
 func (s *WatchClusterStateSuite) TestNotifiesToolsChangeOnAPIGroupAddition() {
@@ -170,7 +171,7 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeOnAPIGroupAddition() {
 	s.InitMcpClient()
 
 	// When - Add a new API group to simulate cluster state change
-	s.AddAPIGroup(`{"name":"custom.example.com","versions":[{"groupVersion":"custom.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"custom.example.com/v1","version":"v1"}}`)
+	s.AddAPIGroup("custom.example.com/v1")
 
 	notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
 
@@ -185,8 +186,7 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeMultipleTimes() {
 
 	// When - Add multiple API groups to simulate cluster state changes
 	for i := 0; i < 3; i++ {
-		name := fmt.Sprintf("custom-%d", i)
-		s.AddAPIGroup(`{"name":"` + name + `.example.com","versions":[{"groupVersion":"` + name + `.example.com/v1","version":"v1"}],"preferredVersion":{"groupVersion":"` + name + `.example.com/v1","version":"v1"}}`)
+		s.AddAPIGroup(fmt.Sprintf("custom-%d.example.com/v1", i))
 		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
 		s.NotNil(notification, "cluster state watcher did not notify on iteration %d", i)
 		s.Equalf("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change on iteration %d", i)
@@ -208,7 +208,7 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 	s.Run("OpenShift tool is added after cluster becomes OpenShift", func() {
 		// Simulate cluster becoming OpenShift by adding OpenShift API groups
 		s.mockServer.ResetHandlers()
-		s.mockServer.Handle(&test.InOpenShiftHandler{})
+		s.mockServer.Handle(test.NewInOpenShiftHandler())
 
 		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
 		s.NotNil(notification, "cluster state watcher did not notify")

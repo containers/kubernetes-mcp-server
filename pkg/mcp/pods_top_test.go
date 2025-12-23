@@ -9,6 +9,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type PodsTopSuite struct {
@@ -22,7 +23,7 @@ func (s *PodsTopSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 
-	s.discoveryHandler = &test.DiscoveryClientHandler{}
+	s.discoveryHandler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.discoveryHandler)
 }
 
@@ -47,14 +48,14 @@ func (s *PodsTopSuite) TestPodsTopMetricsUnavailable() {
 }
 
 func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
-	s.discoveryHandler.Groups = []string{`{"name":"metrics.k8s.io","versions":[{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}],"preferredVersion":{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}}`}
+	s.discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
+		GroupVersion: "metrics.k8s.io/v1beta1",
+		APIResources: []metav1.APIResource{
+			{Name: "pods", Kind: "PodMetrics", Namespaced: true, Verbs: metav1.Verbs{"get", "list"}},
+		},
+	})
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// Request Performed by DiscoveryClient to Kube API (Get API Resources)
-		if req.URL.Path == "/apis/metrics.k8s.io/v1beta1" {
-			_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"metrics.k8s.io/v1beta1","resources":[{"name":"pods","singularName":"","namespaced":true,"kind":"PodMetrics","verbs":["get","list"]}]}`))
-			return
-		}
 		// Pod Metrics from all namespaces
 		if req.URL.Path == "/apis/metrics.k8s.io/v1beta1/pods" {
 			if req.URL.Query().Get("labelSelector") == "app=pod-ns-5-42" {
@@ -192,14 +193,12 @@ func (s *PodsTopSuite) TestPodsTopDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { group = "metrics.k8s.io", version = "v1beta1" } ]
 	`), s.Cfg), "Expected to parse denied resources config")
-	s.discoveryHandler.Groups = []string{`{"name":"metrics.k8s.io","versions":[{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}],"preferredVersion":{"groupVersion":"metrics.k8s.io/v1beta1","version":"v1beta1"}}`}
-	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// Request Performed by DiscoveryClient to Kube API (Get API Resources)
-		if req.URL.Path == "/apis/metrics.k8s.io/v1beta1" {
-			_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"metrics.k8s.io/v1beta1","resources":[{"name":"pods","singularName":"","namespaced":true,"kind":"PodMetrics","verbs":["get","list"]}]}`))
-			return
-		}
-	}))
+	s.discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
+		GroupVersion: "metrics.k8s.io/v1beta1",
+		APIResources: []metav1.APIResource{
+			{Name: "pods", Kind: "PodMetrics", Namespaced: true, Verbs: metav1.Verbs{"get", "list"}},
+		},
+	})
 	s.InitMcpClient()
 
 	s.Run("pods_top (denied)", func() {

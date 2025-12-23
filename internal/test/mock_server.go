@@ -3,7 +3,6 @@ package test
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/httpstream"
@@ -189,76 +189,127 @@ WaitForStreams:
 }
 
 type DiscoveryClientHandler struct {
-	V1Resources []string
-	Groups      []string
+	// APIResourceLists defines all API groups and their resources.
+	// The handler automatically generates /api, /apis, and /apis/<group>/<version> endpoints.
+	APIResourceLists []metav1.APIResourceList
 }
 
 var _ http.Handler = (*DiscoveryClientHandler)(nil)
 
+// NewDiscoveryClientHandler creates a DiscoveryClientHandler with default Kubernetes resources.
+func NewDiscoveryClientHandler(additionalResources ...metav1.APIResourceList) *DiscoveryClientHandler {
+	handler := &DiscoveryClientHandler{
+		APIResourceLists: []metav1.APIResourceList{
+			{
+				GroupVersion: "v1",
+				APIResources: []metav1.APIResource{
+					{Name: "nodes", Kind: "Node", Namespaced: false, Verbs: metav1.Verbs{"get", "list", "watch"}},
+					{Name: "pods", Kind: "Pod", Namespaced: true, Verbs: metav1.Verbs{"get", "list", "watch", "create", "update", "patch", "delete"}},
+				},
+			},
+			{
+				GroupVersion: "apps/v1",
+				APIResources: []metav1.APIResource{
+					{Name: "deployments", Kind: "Deployment", Namespaced: true, Verbs: metav1.Verbs{"get", "list", "watch", "create", "update", "patch", "delete"}},
+				},
+			},
+		},
+	}
+	handler.APIResourceLists = append(handler.APIResourceLists, additionalResources...)
+	return handler
+}
+
 func (h *DiscoveryClientHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
-	if req.URL.Path == "/api" {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":["v1"],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
-		return
-	}
-	// Request Performed by DiscoveryClient to Kube API (Get API Groups)
-	if req.URL.Path == "/apis" {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"kind":"APIGroupList","apiVersion":"v1","groups":[%s]}`, strings.Join(append(h.Groups,
-			`{"name":"apps","versions":[{"groupVersion":"apps/v1","version":"v1"}],"preferredVersion":{"groupVersion":"apps/v1","version":"v1"}}`,
-		), ","))
-		return
-	}
-	// Request Performed by DiscoveryClient to Kube API (Get API Resources)
-	if req.URL.Path == "/api/v1" {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"kind":"APIResourceList","apiVersion":"v1","resources":[%s]}`, strings.Join(append(h.V1Resources,
-			`{"name":"nodes","singularName":"","namespaced":false,"kind":"Node","verbs":["get","list","watch"]}`,
-			`{"name":"pods","singularName":"","namespaced":true,"kind":"Pod","verbs":["get","list","watch","create","update","patch","delete"]}`,
-		), ","))
-		return
-	}
-	if req.URL.Path == "/apis/apps/v1" {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"apps/v1","resources":[
-			{"name":"deployments","singularName":"","namespaced":true,"kind":"Deployment","verbs":["get","list","watch","create","update","patch","delete"]}
-		]}`))
-		return
-	}
-}
-
-type InOpenShiftHandler struct {
-}
-
-var _ http.Handler = (*InOpenShiftHandler)(nil)
-
-func (h *InOpenShiftHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
 	// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
 	if req.URL.Path == "/api" {
-		_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":[],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
+		WriteObject(w, &metav1.APIVersions{
+			Versions:                   []string{"v1"},
+			ServerAddressByClientCIDRs: []metav1.ServerAddressByClientCIDR{{ClientCIDR: "0.0.0.0/0"}},
+		})
 		return
 	}
+
 	// Request Performed by DiscoveryClient to Kube API (Get API Groups)
 	if req.URL.Path == "/apis" {
-		_, _ = w.Write([]byte(`{
-			"kind":"APIGroupList",
-			"groups":[{
-				"name":"project.openshift.io",
-				"versions":[{"groupVersion":"project.openshift.io/v1","version":"v1"}],
-				"preferredVersion":{"groupVersion":"project.openshift.io/v1","version":"v1"}
-			}]}`))
+		groups := make([]metav1.APIGroup, 0)
+		for _, rl := range h.APIResourceLists {
+			if rl.GroupVersion == "v1" {
+				continue // Skip core API group, it's exposed via /api
+			}
+			group, version := parseGroupVersion(rl.GroupVersion)
+			groups = append(groups, metav1.APIGroup{
+				Name: group,
+				Versions: []metav1.GroupVersionForDiscovery{
+					{GroupVersion: rl.GroupVersion, Version: version},
+				},
+				PreferredVersion: metav1.GroupVersionForDiscovery{GroupVersion: rl.GroupVersion, Version: version},
+			})
+		}
+		WriteObject(w, &metav1.APIGroupList{Groups: groups})
 		return
 	}
-	if req.URL.Path == "/apis/project.openshift.io/v1" {
-		_, _ = w.Write([]byte(`{
-			"kind":"APIResourceList",
-			"apiVersion":"v1",
-			"groupVersion":"project.openshift.io/v1",
-			"resources":[
-				{"name":"projects","singularName":"","namespaced":false,"kind":"Project","verbs":["create","delete","get","list","patch","update","watch"],"shortNames":["pr"]}
-			]}`))
+
+	// Request Performed by DiscoveryClient to Kube API (Get API Resources for core v1)
+	if req.URL.Path == "/api/v1" {
+		for _, rl := range h.APIResourceLists {
+			if rl.GroupVersion == "v1" {
+				WriteObject(w, &rl)
+				return
+			}
+		}
 		return
 	}
+
+	// Request Performed by DiscoveryClient to Kube API (Get API Resources for a group/version)
+	if strings.HasPrefix(req.URL.Path, "/apis/") {
+		pathParts := strings.Split(strings.TrimPrefix(req.URL.Path, "/apis/"), "/")
+		if len(pathParts) == 2 {
+			requestedGV := pathParts[0] + "/" + pathParts[1]
+			for _, rl := range h.APIResourceLists {
+				if rl.GroupVersion == requestedGV {
+					WriteObject(w, &rl)
+					return
+				}
+			}
+		}
+	}
+}
+
+// parseGroupVersion splits a groupVersion string (e.g., "apps/v1") into group and version.
+func parseGroupVersion(gv string) (group, version string) {
+	parts := strings.Split(gv, "/")
+	if len(parts) == 1 {
+		return "", parts[0] // Core API (e.g., "v1")
+	}
+	return parts[0], parts[1]
+}
+
+// AddAPIResourceList adds an API resource list to the handler.
+// This is useful for dynamically modifying the handler during tests.
+func (h *DiscoveryClientHandler) AddAPIResourceList(resourceList metav1.APIResourceList) {
+	h.APIResourceLists = append(h.APIResourceLists, resourceList)
+}
+
+// NewInOpenShiftHandler creates a DiscoveryClientHandler configured for OpenShift clusters.
+// It includes the OpenShift project.openshift.io API group by default.
+// Additional API resource lists can be passed to extend the handler.
+func NewInOpenShiftHandler(additionalResources ...metav1.APIResourceList) *DiscoveryClientHandler {
+	openShiftResources := []metav1.APIResourceList{
+		{
+			GroupVersion: "project.openshift.io/v1",
+			APIResources: []metav1.APIResource{
+				{
+					Name:       "projects",
+					Kind:       "Project",
+					Namespaced: false,
+					ShortNames: []string{"pr"},
+					Verbs:      metav1.Verbs{"create", "delete", "get", "list", "patch", "update", "watch"},
+				},
+			},
+		},
+	}
+	openShiftResources = append(openShiftResources, additionalResources...)
+	return NewDiscoveryClientHandler(openShiftResources...)
 }
