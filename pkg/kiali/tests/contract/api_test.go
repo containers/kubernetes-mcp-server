@@ -1,3 +1,6 @@
+//go:build contract
+// +build contract
+
 package contract
 
 import (
