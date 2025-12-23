@@ -20,15 +20,14 @@ import (
 // that are used by the kubernetes-mcp-server.
 type ContractTestSuite struct {
 	suite.Suite
-	kialiURL                string
-	kialiToken              string
-	httpClient              *http.Client
-	testNS                  string
-	testService             string
-	testWorkload            string
-	testApp                 string
-	testPod                 string
-	createdServiceEntryName string
+	kialiURL     string
+	kialiToken   string
+	httpClient   *http.Client
+	testNS       string
+	testService  string
+	testWorkload string
+	testApp      string
+	testPod      string
 }
 
 func (s *ContractTestSuite) SetupSuite() {
@@ -83,10 +82,10 @@ func (s *ContractTestSuite) apiCall(method, endpoint string, body []byte) (*http
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return resp, nil, err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Log errors for debugging
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
