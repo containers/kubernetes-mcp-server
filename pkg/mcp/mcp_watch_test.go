@@ -19,6 +19,7 @@ type WatchKubeConfigSuite struct {
 
 func (s *WatchKubeConfigSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
+	s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
 	s.mockServer = test.NewMockServer()
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		[[prompts]]
@@ -145,8 +146,8 @@ type WatchClusterStateSuite struct {
 func (s *WatchClusterStateSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	// Configure fast polling for tests
-	s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "100")
-	s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "50")
+	s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
+	s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
 	s.mockServer = test.NewMockServer()
 	s.handler = &test.DiscoveryClientHandler{}
 	s.mockServer.Handle(s.handler)
