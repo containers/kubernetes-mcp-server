@@ -24,6 +24,37 @@ const (
 	sseMessageEndpoint = "/message"
 )
 
+// metricsMiddleware wraps an HTTP handler to record metrics for all requests
+func metricsMiddleware(next http.Handler, metrics *mcp.Server) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+		next.ServeHTTP(rw, r)
+
+		duration := time.Since(start)
+		metrics.GetMetrics().RecordHTTPRequest(r.Context(), r.Method, r.URL.Path, rw.statusCode, duration)
+	})
+}
+
+// responseWriter wraps http.ResponseWriter to capture the status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, httpClient *http.Client) error {
 	mux := http.NewServeMux()
 
@@ -31,9 +62,12 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 		AuthorizationMiddleware(staticConfig, oidcProvider, httpClient)(mux),
 	)
 
+	// Wrap with metrics middleware
+	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
+
 	httpServer := &http.Server{
 		Addr:    ":" + staticConfig.Port,
-		Handler: wrappedMux,
+		Handler: instrumentedHandler,
 	}
 
 	sseServer := mcpServer.ServeSse()

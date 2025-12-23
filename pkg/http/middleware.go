@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"k8s.io/klog/v2"
 )
 
@@ -15,6 +17,11 @@ func RequestMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+
+		// Extract trace context from HTTP headers using OpenTelemetry propagator
+		// This enables distributed tracing for HTTP requests
+		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		r = r.WithContext(ctx)
 
 		start := time.Now()
 

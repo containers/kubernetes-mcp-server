@@ -7,9 +7,16 @@ import (
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes-mcp-server/cmd"
+	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
+	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
 func main() {
+	// Initialize OpenTelemetry tracing
+	cleanup, _ := telemetry.InitTracer(version.BinaryName, version.Version)
+	// Tracing is optional - errors are logged in InitTracer but don't prevent startup
+	defer cleanup()
+
 	flags := pflag.NewFlagSet("kubernetes-mcp-server", pflag.ExitOnError)
 	pflag.CommandLine = flags
 
