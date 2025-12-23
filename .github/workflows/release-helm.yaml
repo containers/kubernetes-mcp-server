@@ -3,7 +3,7 @@ name: Release Helm Chart
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
   workflow_dispatch:
 
 env:

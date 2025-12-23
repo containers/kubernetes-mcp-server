@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - '*'
+      - 'v*'
 
 env:
   IMAGE_NAME: quay.io/containers/kubernetes_mcp_server
