@@ -18,6 +18,7 @@ const (
 	ActionStart   Action = "start"
 	ActionStop    Action = "stop"
 	ActionRestart Action = "restart"
+	ActionDelete  Action = "delete"
 )
 
 func Tools() []api.ServerTool {
@@ -25,7 +26,7 @@ func Tools() []api.ServerTool {
 		{
 			Tool: api.Tool{
 				Name:        "vm_lifecycle",
-				Description: "Manage VirtualMachine lifecycle: start, stop, or restart a VM",
+				Description: "Manage VirtualMachine lifecycle: start, stop, restart, or delete a VM",
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
@@ -39,8 +40,8 @@ func Tools() []api.ServerTool {
 						},
 						"action": {
 							Type:        "string",
-							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart)},
-							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart), string(ActionDelete)},
+							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), 'restart' (stops then starts the VM), or 'delete' (deletes the VM)",
 						},
 					},
 					Required: []string{"namespace", "name", "action"},
@@ -111,6 +112,12 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			return api.NewToolCallResult("", err), nil
 		}
 		message = "# VirtualMachine restarted successfully\n"
+	case ActionDelete:
+		err = kubevirt.DeleteVirtualMachine(params.Context, dynamicClient, namespace, name)
+		if err != nil {
+			return api.NewToolCallResult("", err), nil
+		}
+		message = "# VirtualMachine deleted successfully\n"
 
 	default:
 		return api.NewToolCallResult("", fmt.Errorf("invalid action '%s': must be one of 'start', 'stop', 'restart'", action)), nil
