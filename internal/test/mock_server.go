@@ -229,28 +229,21 @@ func (h *DiscoveryClientHandler) ServeHTTP(w http.ResponseWriter, req *http.Requ
 }
 
 type InOpenShiftHandler struct {
+	DiscoveryClientHandler
 }
 
 var _ http.Handler = (*InOpenShiftHandler)(nil)
 
+func NewInOpenShiftHandler() *InOpenShiftHandler {
+	openShiftHandler := &InOpenShiftHandler{}
+	openShiftHandler.Groups = []string{
+		`{"name":"project.openshift.io","versions":[{"groupVersion":"project.openshift.io/v1","version":"v1"}],"preferredVersion":{"groupVersion":"project.openshift.io/v1","version":"v1"}}`,
+	}
+	return openShiftHandler
+}
+
 func (h *InOpenShiftHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
-	if req.URL.Path == "/api" {
-		_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":[],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
-		return
-	}
-	// Request Performed by DiscoveryClient to Kube API (Get API Groups)
-	if req.URL.Path == "/apis" {
-		_, _ = w.Write([]byte(`{
-			"kind":"APIGroupList",
-			"groups":[{
-				"name":"project.openshift.io",
-				"versions":[{"groupVersion":"project.openshift.io/v1","version":"v1"}],
-				"preferredVersion":{"groupVersion":"project.openshift.io/v1","version":"v1"}
-			}]}`))
-		return
-	}
+	h.DiscoveryClientHandler.ServeHTTP(w, req)
 	if req.URL.Path == "/apis/project.openshift.io/v1" {
 		_, _ = w.Write([]byte(`{
 			"kind":"APIResourceList",

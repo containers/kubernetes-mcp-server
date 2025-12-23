@@ -232,7 +232,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 
 	s.Run("detects OpenShift cluster", func() {
 		s.mockServer.ResetHandlers()
-		s.mockServer.Handle(&test.InOpenShiftHandler{})
+		s.mockServer.Handle(test.NewInOpenShiftHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		watcher := NewClusterState(discoveryClient)

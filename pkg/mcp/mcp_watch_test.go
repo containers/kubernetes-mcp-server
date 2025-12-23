@@ -100,7 +100,7 @@ func (s *WatchKubeConfigSuite) TestNotifiesPromptsChangeMultipleTimes() {
 }
 
 func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
-	s.mockServer.Handle(&test.InOpenShiftHandler{})
+	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.InitMcpClient()
 
 	s.Run("OpenShift tool is available", func() {
@@ -207,7 +207,7 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 	s.Run("OpenShift tool is added after cluster becomes OpenShift", func() {
 		// Simulate cluster becoming OpenShift by adding OpenShift API groups
 		s.mockServer.ResetHandlers()
-		s.mockServer.Handle(&test.InOpenShiftHandler{})
+		s.mockServer.Handle(test.NewInOpenShiftHandler())
 
 		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
 		s.NotNil(notification, "cluster state watcher did not notify")

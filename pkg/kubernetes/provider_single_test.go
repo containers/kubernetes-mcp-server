@@ -48,7 +48,7 @@ func (s *ProviderSingleTestSuite) TestWithNonOpenShiftCluster() {
 }
 
 func (s *ProviderSingleTestSuite) TestWithOpenShiftCluster() {
-	s.mockServer.Handle(&test.InOpenShiftHandler{})
+	s.mockServer.Handle(test.NewInOpenShiftHandler())
 
 	s.Run("IsOpenShift returns true", func() {
 		inOpenShift := s.provider.IsOpenShift(s.T().Context())
