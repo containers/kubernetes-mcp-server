@@ -9,7 +9,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/google/jsonschema-go v0.4.2
 	github.com/mark3labs/mcp-go v0.43.2
-	github.com/modelcontextprotocol/go-sdk v1.1.0
+	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
