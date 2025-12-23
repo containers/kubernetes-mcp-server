@@ -4,65 +4,74 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	authenticationv1api "k8s.io/api/authentication/v1"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
 
 // singleClusterProvider implements Provider for managing a single
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
-	strategy string
-	manager  *Manager
+	config              api.BaseConfig
+	strategy            string
+	manager             *Manager
+	kubeconfigWatcher   *watcher.Kubeconfig
+	clusterStateWatcher *watcher.ClusterState
 }
 
 var _ Provider = &singleClusterProvider{}
 
 func init() {
-	RegisterProvider(config.ClusterProviderInCluster, newSingleClusterProvider(config.ClusterProviderInCluster))
-	RegisterProvider(config.ClusterProviderDisabled, newSingleClusterProvider(config.ClusterProviderDisabled))
+	RegisterProvider(api.ClusterProviderInCluster, newSingleClusterProvider(api.ClusterProviderInCluster))
+	RegisterProvider(api.ClusterProviderDisabled, newSingleClusterProvider(api.ClusterProviderDisabled))
 }
 
 // newSingleClusterProvider creates a provider that manages a single cluster.
 // When used within a cluster or with an 'in-cluster' strategy, it uses an InClusterManager.
 // Otherwise, it uses a KubeconfigManager.
 func newSingleClusterProvider(strategy string) ProviderFactory {
-	return func(cfg *config.StaticConfig) (Provider, error) {
-		if cfg != nil && cfg.KubeConfig != "" && strategy == config.ClusterProviderInCluster {
-			return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy", cfg.KubeConfig)
+	return func(cfg api.BaseConfig) (Provider, error) {
+		ret := &singleClusterProvider{
+			config:   cfg,
+			strategy: strategy,
 		}
-
-		var m *Manager
-		var err error
-		if strategy == config.ClusterProviderInCluster || IsInCluster(cfg) {
-			m, err = NewInClusterManager(cfg)
-		} else {
-			m, err = NewKubeconfigManager(cfg, "")
-		}
-		if err != nil {
-			if errors.Is(err, ErrorInClusterNotInCluster) {
-				return nil, fmt.Errorf("server must be deployed in cluster for the %s ClusterProviderStrategy: %v", strategy, err)
-			}
+		if err := ret.reset(); err != nil {
 			return nil, err
 		}
-
-		return &singleClusterProvider{
-			manager:  m,
-			strategy: strategy,
-		}, nil
+		return ret, nil
 	}
+}
+
+func (p *singleClusterProvider) reset() error {
+	if p.config != nil && p.config.GetKubeConfigPath() != "" && p.strategy == api.ClusterProviderInCluster {
+		return fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy",
+			p.config.GetKubeConfigPath())
+	}
+
+	var err error
+	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p.config) {
+		p.manager, err = NewInClusterManager(p.config)
+	} else {
+		p.manager, err = NewKubeconfigManager(p.config, "")
+	}
+	if err != nil {
+		if errors.Is(err, ErrorInClusterNotInCluster) {
+			return fmt.Errorf("server must be deployed in cluster for the %s ClusterProviderStrategy: %v",
+				p.strategy, err)
+		}
+		return err
+	}
+
+	p.Close()
+	p.kubeconfigWatcher = watcher.NewKubeconfig(p.manager.kubernetes.clientCmdConfig)
+	p.clusterStateWatcher = watcher.NewClusterState(p.manager.kubernetes.DiscoveryClient())
+	return nil
 }
 
 func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.manager.IsOpenShift(ctx)
-}
-
-func (p *singleClusterProvider) VerifyToken(ctx context.Context, target, token, audience string) (*authenticationv1api.UserInfo, []string, error) {
-	if target != "" {
-		return nil, nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy", p.strategy)
-	}
-	return p.manager.VerifyToken(ctx, token, audience)
 }
 
 func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {
@@ -85,10 +94,22 @@ func (p *singleClusterProvider) GetTargetParameterName() string {
 	return ""
 }
 
-func (p *singleClusterProvider) WatchTargets(watch func() error) {
-	p.manager.WatchKubeConfig(watch)
+func (p *singleClusterProvider) WatchTargets(reload McpReload) {
+	reloadWithReset := func() error {
+		if err := p.reset(); err != nil {
+			return err
+		}
+		p.WatchTargets(reload)
+		return reload()
+	}
+	p.kubeconfigWatcher.Watch(reloadWithReset)
+	p.clusterStateWatcher.Watch(reload)
 }
 
 func (p *singleClusterProvider) Close() {
-	p.manager.Close()
+	for _, w := range []watcher.Watcher{p.kubeconfigWatcher, p.clusterStateWatcher} {
+		if !reflect.ValueOf(w).IsNil() {
+			w.Close()
+		}
+	}
 }

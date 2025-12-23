@@ -1,0 +1,100 @@
+name: Release Helm Chart
+
+on:
+  push:
+    tags:
+      - '*'
+  workflow_dispatch:
+
+env:
+  HELM_REGISTRY_USER: ${{ github.actor }}
+  HELM_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+  HELM_REGISTRY_ORG: ${{ github.repository_owner }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release Helm Chart
+    if: github.repository == 'containers/kubernetes-mcp-server'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: '3.19.2'
+
+    - name: Determine chart version
+      id: versions
+      run: |
+        BASE_VERSION=$(make helm-print-chart-version)
+
+        # Use development version for workflow_dispatch, stable version for tags
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          GIT_SHORT_SHA=$(git rev-parse --short HEAD)
+          CHART_VERSION="${BASE_VERSION}-dev.${GIT_SHORT_SHA}"
+          echo "::notice::Creating development release: ${CHART_VERSION}"
+        else
+          CHART_VERSION="${BASE_VERSION}"
+          echo "::notice::Creating stable release: ${CHART_VERSION}"
+        fi
+        echo "chart_version=$CHART_VERSION" >> $GITHUB_OUTPUT
+        echo "Chart version: $CHART_VERSION"
+
+        APP_VERSION=$(make print-git-tag-version)
+        echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+        echo "App version: $APP_VERSION"
+
+        HELM_REGISTRY=$(make helm-print-registry)
+        echo "helm_registry=$HELM_REGISTRY" >> $GITHUB_OUTPUT
+        echo "Helm registry: $HELM_REGISTRY"
+
+        CHART_NAME=$(make helm-print-chart-name)
+        echo "chart_name=$CHART_NAME" >> $GITHUB_OUTPUT
+        echo "Chart name: $CHART_NAME"
+
+    - name: Validate with kubeconform
+      run: make helm-validate
+
+    - name: Login to Helm registry
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ steps.versions.outputs.helm_registry }} -u ${{ github.actor }} --password-stdin
+
+    - name: Package and push Helm chart
+      env:
+        HELM_CHART_VERSION: ${{ steps.versions.outputs.chart_version }}
+      run: make helm-push
+
+    - name: Verify chart installation
+      env:
+        HELM_CHART_VERSION: ${{ steps.versions.outputs.chart_version }}
+      run: make helm-verify
+
+    - name: Generate release summary
+      run: |
+        if [[ "${{ steps.versions.outputs.chart_version }}" == *"-dev."* ]]; then
+          RELEASE_TYPE="Development"
+        else
+          RELEASE_TYPE="Stable"
+        fi
+
+        echo "## Helm Chart Release Summary ($RELEASE_TYPE)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Chart Name:** ${{ steps.versions.outputs.chart_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Chart Version:** ${{ steps.versions.outputs.chart_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **App Version:** ${{ steps.versions.outputs.app_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry:** ${{ steps.versions.outputs.helm_registry }}/${{ github.repository_owner }}/charts" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Installation Command" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "helm install ${{ steps.versions.outputs.chart_name }} oci://${{ steps.versions.outputs.helm_registry }}/${{ github.repository_owner }}/charts/${{ steps.versions.outputs.chart_name }} --set ingress.host=<hostname> --version ${{ steps.versions.outputs.chart_version }} --create-namespace --namespace mcp-system" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

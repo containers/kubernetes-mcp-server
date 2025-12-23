@@ -1,0 +1,50 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: {{.Name}}
+  namespace: {{.Namespace}}
+spec:
+  runStrategy: {{.RunStrategy}}
+{{- if .Instancetype}}
+  instancetype:
+    name: {{.Instancetype}}
+    kind: {{.InstancetypeKind}}
+{{- end}}
+{{- if .Preference}}
+  preference:
+    name: {{.Preference}}
+    kind: {{.PreferenceKind}}
+{{- end}}
+{{- if .UseDataSource}}
+  dataVolumeTemplates:
+  - metadata:
+      name: {{.Name}}-rootdisk
+    spec:
+      sourceRef:
+        kind: DataSource
+        name: {{.DataSourceName}}
+        namespace: {{.DataSourceNamespace}}
+      storage:
+        resources:
+          requests:
+            storage: {{.Storage}}
+{{- end}}
+  template:
+    spec:
+      domain:
+        devices:
+          disks:
+          - name: {{.Name}}-rootdisk
+{{- if not .Instancetype}}
+        memory:
+          guest: 2Gi
+{{- end}}
+      volumes:
+      - name: {{.Name}}-rootdisk
+{{- if .UseDataSource}}
+        dataVolume:
+          name: {{.Name}}-rootdisk
+{{- else}}
+        containerDisk:
+          image: {{.ContainerDisk}}
+{{- end}}

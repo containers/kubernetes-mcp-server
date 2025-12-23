@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: debug-app-logs
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  prompt:
+    inline: "What wrong with my calc-app-pod in the calc-app namespace?"
+  cleanup:
+    file: cleanup.sh
+  verify:
+    contains: "division by zero"

@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: create-canary-deployment
+  difficulty: hard
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "We want to test a new version of our recommendation engine (image tag 1.29) in production without disturbing the existing stable deployment. Can you deploy it as a canary (as engine-v2-1)? We want about 50% of traffic to go to the new version. The current deployment is named engine-v2-0 in the canary-deployment-ns."

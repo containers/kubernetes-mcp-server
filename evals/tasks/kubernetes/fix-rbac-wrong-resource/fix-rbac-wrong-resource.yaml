@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: fix-rbac-wrong-resource
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Why can't I list pods with my pod-reader service account in simple-rbac-setup namespace ? Please fix it."

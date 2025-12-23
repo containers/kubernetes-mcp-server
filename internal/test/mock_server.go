@@ -3,10 +3,12 @@ package test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,6 +59,10 @@ func (m *MockServer) Close() {
 
 func (m *MockServer) Handle(handler http.Handler) {
 	m.restHandlers = append(m.restHandlers, handler.ServeHTTP)
+}
+
+func (m *MockServer) ResetHandlers() {
+	m.restHandlers = make([]http.HandlerFunc, 0)
 }
 
 func (m *MockServer) Config() *rest.Config {
@@ -180,6 +186,46 @@ WaitForStreams:
 	}
 
 	return ctx, nil
+}
+
+type DiscoveryClientHandler struct {
+	V1Resources []string
+	Groups      []string
+}
+
+var _ http.Handler = (*DiscoveryClientHandler)(nil)
+
+func (h *DiscoveryClientHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
+	if req.URL.Path == "/api" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":["v1"],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
+		return
+	}
+	// Request Performed by DiscoveryClient to Kube API (Get API Groups)
+	if req.URL.Path == "/apis" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"kind":"APIGroupList","apiVersion":"v1","groups":[%s]}`, strings.Join(append(h.Groups,
+			`{"name":"apps","versions":[{"groupVersion":"apps/v1","version":"v1"}],"preferredVersion":{"groupVersion":"apps/v1","version":"v1"}}`,
+		), ","))
+		return
+	}
+	// Request Performed by DiscoveryClient to Kube API (Get API Resources)
+	if req.URL.Path == "/api/v1" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"kind":"APIResourceList","apiVersion":"v1","resources":[%s]}`, strings.Join(append(h.V1Resources,
+			`{"name":"nodes","singularName":"","namespaced":false,"kind":"Node","verbs":["get","list","watch"]}`,
+			`{"name":"pods","singularName":"","namespaced":true,"kind":"Pod","verbs":["get","list","watch","create","update","patch","delete"]}`,
+		), ","))
+		return
+	}
+	if req.URL.Path == "/apis/apps/v1" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"apps/v1","resources":[
+			{"name":"deployments","singularName":"","namespaced":true,"kind":"Deployment","verbs":["get","list","watch","create","update","patch","delete"]}
+		]}`))
+		return
+	}
 }
 
 type InOpenShiftHandler struct {

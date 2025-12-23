@@ -10,11 +10,11 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initResources(o internalk8s.Openshift) []api.ServerTool {
+func initResources(o api.Openshift) []api.ServerTool {
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
 	if o.IsOpenShift(context.Background()) {
 		commonApiVersion += ", route.openshift.io/v1 Route"
@@ -138,6 +138,42 @@ func initResources(o internalk8s.Openshift) []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: resourcesDelete},
+		{Tool: api.Tool{
+			Name:        "resources_scale",
+			Description: "Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"apiVersion": {
+						Type:        "string",
+						Description: "apiVersion of the resource (examples of valid apiVersion are apps/v1)",
+					},
+					"kind": {
+						Type:        "string",
+						Description: "kind of the resource (examples of valid kind are: StatefulSet, Deployment)",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace",
+					},
+					"name": {
+						Type:        "string",
+						Description: "Name of the resource",
+					},
+					"scale": {
+						Type:        "integer",
+						Description: "Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it",
+					},
+				},
+				Required: []string{"apiVersion", "kind", "name"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Resources: Scale",
+				DestructiveHint: ptr.To(true),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, Handler: resourcesScale},
 	}
 }
 
@@ -147,7 +183,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		namespace = ""
 	}
 	labelSelector := params.GetArguments()["labelSelector"]
-	resourceListOptions := internalk8s.ResourceListOptions{
+	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 
@@ -168,7 +204,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	ret, err := params.ResourcesList(params, gvk, ns, resourceListOptions)
+	ret, err := kubernetes.NewCore(params).ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %v", err)), nil
 	}
@@ -199,7 +235,7 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	ret, err := params.ResourcesGet(params, gvk, ns, n)
+	ret, err := kubernetes.NewCore(params).ResourcesGet(params, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %v", err)), nil
 	}
@@ -217,7 +253,7 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := params.ResourcesCreateOrUpdate(params, r)
+	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %v", err)), nil
 	}
@@ -252,11 +288,67 @@ func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	err = params.ResourcesDelete(params, gvk, ns, n)
+	err = kubernetes.NewCore(params).ResourcesDelete(params, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %v", err)), nil
 	}
 	return api.NewToolCallResult("Resource deleted successfully", err), nil
+}
+
+func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	namespace := params.GetArguments()["namespace"]
+	if namespace == nil {
+		namespace = ""
+	}
+
+	gvk, err := parseGroupVersionKind(params.GetArguments())
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale, %w", err)), nil
+	}
+
+	name := params.GetArguments()["name"]
+	if name == nil {
+		return api.NewToolCallResult("", errors.New("failed to get/update resource scale, missing argument name")), nil
+	}
+
+	ns, ok := namespace.(string)
+	if !ok {
+		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
+	}
+
+	n, ok := name.(string)
+	if !ok {
+		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
+	}
+
+	var desiredScale int64
+	scaleVal, shouldScale := params.GetArguments()["scale"]
+	if shouldScale {
+		desiredScale, err = parseScaleValue(scaleVal)
+		if err != nil {
+			return api.NewToolCallResult("", err), nil
+		}
+	}
+
+	scale, err := kubernetes.NewCore(params).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
+	}
+
+	marshalled, err := output.MarshalYaml(scale)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to marshall scale to yaml format: %v", scale)), nil
+	}
+
+	return api.NewToolCallResult("# Current resource scale (YAML) is below\n"+marshalled, err), nil
+}
+
+func parseScaleValue(desiredScale interface{}) (int64, error) {
+	v, err := api.ParseInt64(desiredScale)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse scale parameter: %w", err)
+	}
+	return v, nil
 }
 
 func parseGroupVersionKind(arguments map[string]interface{}) (*schema.GroupVersionKind, error) {

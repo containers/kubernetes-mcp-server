@@ -16,7 +16,14 @@ Choose the guide that matches your needs:
 1. **Complete the base setup**: Start with [Getting Started with Kubernetes](GETTING_STARTED_KUBERNETES.md) to create a ServiceAccount and kubeconfig file
 2. **Configure Claude Code**: Then follow the [Claude Code CLI guide](GETTING_STARTED_CLAUDE_CODE.md)
 
+## Other toolsets
+
+- **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
+
 ## Additional Documentation
 
 - **[Keycloak OIDC Setup](KEYCLOAK_OIDC_SETUP.md)** - Developer guide for local Keycloak environment and testing with MCP Inspector
 - **[Main README](../README.md)** - Project overview and general information
+
+
+

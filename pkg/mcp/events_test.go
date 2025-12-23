@@ -32,7 +32,7 @@ func (s *EventsSuite) TestEventsList() {
 	s.Run("events_list (with events)", func() {
 		client := kubernetes.NewForConfigOrDie(envTestRestConfig)
 		for _, ns := range []string{"default", "ns-1"} {
-			_, _ = client.CoreV1().Events(ns).Create(s.T().Context(), &v1.Event{
+			_, eventCreateErr := client.CoreV1().Events(ns).Create(s.T().Context(), &v1.Event{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "an-event-in-" + ns,
 				},
@@ -45,6 +45,7 @@ func (s *EventsSuite) TestEventsList() {
 				Type:    "Normal",
 				Message: "The event message",
 			}, metav1.CreateOptions{})
+			s.Require().NoError(eventCreateErr, "failed to create event in namespace %s", ns)
 		}
 		s.Run("events_list()", func() {
 			toolResult, err := s.CallTool("events_list", map[string]interface{}{})
@@ -132,9 +133,11 @@ func (s *EventsSuite) TestEventsListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			expectedMessage := "failed to list events in all namespaces: resource not allowed: /v1, Kind=Event"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			expectedMessage := "failed to list events in all namespaces:(.+:)? resource not allowed: /v1, Kind=Event"
+			s.Regexpf(expectedMessage, msg,
+				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

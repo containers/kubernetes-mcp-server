@@ -1,0 +1,40 @@
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Installing the Chart
+
+The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified.
+
+Install the Chart using the following command from the root of this directory: 
+
+```shell
+helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
+```
+
+### Optimized OpenShift Deployment
+
+Functionality has been added to the Chart to simplify the deployment to OpenShift Cluster.
+
+{{ template "chart.valuesSection" . }}
+
+## Updating the README
+
+The contents of the README.md file is generated using [helm-docs](https://github.com/norwoodj/helm-docs). Whenever changes are introduced to the Chart and its _Values_, the documentation should be regenerated. 
+
+Execute the following command to regenerate the documentation from within the Helm Chart directory.
+
+```shell
+helm-docs -t README.md.gotmpl
+```

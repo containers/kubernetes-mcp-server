@@ -3,8 +3,11 @@ package kubernetes
 import (
 	"context"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
+
+// McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
+type McpReload func() error
 
 type Provider interface {
 	// Openshift extends the Openshift interface to provide OpenShift specific functionality to toolset providers
@@ -12,17 +15,17 @@ type Provider interface {
 	// extending this interface might not be a good idea anymore.
 	// For the kubecontext case, a user might be targeting both an OpenShift flavored cluster and a vanilla Kubernetes cluster.
 	// See: https://github.com/containers/kubernetes-mcp-server/pull/372#discussion_r2421592315
-	Openshift
-	TokenVerifier
+	api.Openshift
 	GetTargets(ctx context.Context) ([]string, error)
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	GetDefaultTarget() string
 	GetTargetParameterName() string
-	WatchTargets(func() error)
+	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
+	WatchTargets(reload McpReload)
 	Close()
 }
 
-func NewProvider(cfg *config.StaticConfig) (Provider, error) {
+func NewProvider(cfg api.BaseConfig) (Provider, error) {
 	strategy := resolveStrategy(cfg)
 
 	factory, err := getProviderFactory(strategy)
@@ -33,18 +36,18 @@ func NewProvider(cfg *config.StaticConfig) (Provider, error) {
 	return factory(cfg)
 }
 
-func resolveStrategy(cfg *config.StaticConfig) string {
-	if cfg.ClusterProviderStrategy != "" {
-		return cfg.ClusterProviderStrategy
+func resolveStrategy(cfg api.BaseConfig) string {
+	if cfg.GetClusterProviderStrategy() != "" {
+		return cfg.GetClusterProviderStrategy()
 	}
 
-	if cfg.KubeConfig != "" {
-		return config.ClusterProviderKubeConfig
+	if cfg.GetKubeConfigPath() != "" {
+		return api.ClusterProviderKubeConfig
 	}
 
 	if _, inClusterConfigErr := InClusterConfig(); inClusterConfigErr == nil {
-		return config.ClusterProviderInCluster
+		return api.ClusterProviderInCluster
 	}
 
-	return config.ClusterProviderKubeConfig
+	return api.ClusterProviderKubeConfig
 }

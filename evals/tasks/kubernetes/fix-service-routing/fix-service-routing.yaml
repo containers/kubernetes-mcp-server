@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: fix-service-routing
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Please diagnose and fix why the nginx service in namespace 'web' isn't accessible"

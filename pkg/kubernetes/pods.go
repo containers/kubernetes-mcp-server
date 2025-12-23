@@ -12,6 +12,7 @@ import (
 	labelutil "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/tools/remotecommand"
@@ -19,40 +20,34 @@ import (
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	"k8s.io/utils/ptr"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
-// Default number of lines to retrieve from the end of the logs
+// DefaultTailLines is the default number of lines to retrieve from the end of the logs
 const DefaultTailLines = int64(100)
 
-type PodsTopOptions struct {
-	metav1.ListOptions
-	AllNamespaces bool
-	Namespace     string
-	Name          string
-}
-
-func (k *Kubernetes) PodsListInAllNamespaces(ctx context.Context, options ResourceListOptions) (runtime.Unstructured, error) {
-	return k.ResourcesList(ctx, &schema.GroupVersionKind{
+func (c *Core) PodsListInAllNamespaces(ctx context.Context, options api.ListOptions) (runtime.Unstructured, error) {
+	return c.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
 	}, "", options)
 }
 
-func (k *Kubernetes) PodsListInNamespace(ctx context.Context, namespace string, options ResourceListOptions) (runtime.Unstructured, error) {
-	return k.ResourcesList(ctx, &schema.GroupVersionKind{
+func (c *Core) PodsListInNamespace(ctx context.Context, namespace string, options api.ListOptions) (runtime.Unstructured, error) {
+	return c.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
 	}, namespace, options)
 }
 
-func (k *Kubernetes) PodsGet(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
-	return k.ResourcesGet(ctx, &schema.GroupVersionKind{
+func (c *Core) PodsGet(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
+	return c.ResourcesGet(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
-	}, k.NamespaceOrDefault(namespace), name)
+	}, c.NamespaceOrDefault(namespace), name)
 }
 
-func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (string, error) {
-	namespace = k.NamespaceOrDefault(namespace)
-	pod, err := k.ResourcesGet(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
+func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, error) {
+	namespace = c.NamespaceOrDefault(namespace)
+	pod, err := c.ResourcesGet(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
 	if err != nil {
 		return "", err
 	}
@@ -65,10 +60,7 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 
 	// Delete managed service
 	if isManaged {
-		services, err := k.manager.accessControlClientSet.Services(namespace)
-		if err != nil {
-			return "", err
-		}
+		services := c.CoreV1().Services(namespace)
 		if sl, _ := services.List(ctx, metav1.ListOptions{
 			LabelSelector: managedLabelSelector.String(),
 		}); sl != nil {
@@ -79,8 +71,8 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 	}
 
 	// Delete managed Route
-	if isManaged && k.supportsGroupVersion("route.openshift.io/v1") {
-		routeResources := k.manager.dynamicClient.
+	if isManaged && c.supportsGroupVersion("route.openshift.io/v1") {
+		routeResources := c.DynamicClient().
 			Resource(schema.GroupVersionResource{Group: "route.openshift.io", Version: "v1", Resource: "routes"}).
 			Namespace(namespace)
 		if rl, _ := routeResources.List(ctx, metav1.ListOptions{
@@ -93,14 +85,11 @@ func (k *Kubernetes) PodsDelete(ctx context.Context, namespace, name string) (st
 
 	}
 	return "Pod deleted successfully",
-		k.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
+		c.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
 }
 
-func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
-	pods, err := k.manager.accessControlClientSet.Pods(k.NamespaceOrDefault(namespace))
-	if err != nil {
-		return "", err
-	}
+func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
+	pods := c.CoreV1().Pods(c.NamespaceOrDefault(namespace))
 
 	logOptions := &v1.PodLogOptions{
 		Container: container,
@@ -127,7 +116,7 @@ func (k *Kubernetes) PodsLog(ctx context.Context, namespace, name, container str
 	return string(rawData), nil
 }
 
-func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string, port int32) ([]*unstructured.Unstructured, error) {
+func (c *Core) PodsRun(ctx context.Context, namespace, name, image string, port int32) ([]*unstructured.Unstructured, error) {
 	if name == "" {
 		name = version.BinaryName + "-run-" + rand.String(5)
 	}
@@ -141,7 +130,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 	var resources []any
 	pod := &v1.Pod{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.NamespaceOrDefault(namespace), Labels: labels},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: c.NamespaceOrDefault(namespace), Labels: labels},
 		Spec: v1.PodSpec{Containers: []v1.Container{{
 			Name:            name,
 			Image:           image,
@@ -153,7 +142,7 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 		pod.Spec.Containers[0].Ports = []v1.ContainerPort{{ContainerPort: port}}
 		resources = append(resources, &v1.Service{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: k.NamespaceOrDefault(namespace), Labels: labels},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: c.NamespaceOrDefault(namespace), Labels: labels},
 			Spec: v1.ServiceSpec{
 				Selector: labels,
 				Type:     v1.ServiceTypeClusterIP,
@@ -161,14 +150,14 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 			},
 		})
 	}
-	if port > 0 && k.supportsGroupVersion("route.openshift.io/v1") {
+	if port > 0 && c.supportsGroupVersion("route.openshift.io/v1") {
 		resources = append(resources, &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "route.openshift.io/v1",
 				"kind":       "Route",
 				"metadata": map[string]interface{}{
 					"name":      name,
-					"namespace": k.NamespaceOrDefault(namespace),
+					"namespace": c.NamespaceOrDefault(namespace),
 					"labels":    labels,
 				},
 				"spec": map[string]interface{}{
@@ -204,29 +193,41 @@ func (k *Kubernetes) PodsRun(ctx context.Context, namespace, name, image string,
 		}
 		toCreate = append(toCreate, u)
 	}
-	return k.resourcesCreateOrUpdate(ctx, toCreate)
+	return c.resourcesCreateOrUpdate(ctx, toCreate)
 }
 
-func (k *Kubernetes) PodsTop(ctx context.Context, options PodsTopOptions) (*metrics.PodMetricsList, error) {
+func (c *Core) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metrics.PodMetricsList, error) {
 	// TODO, maybe move to mcp Tools setup and omit in case metrics aren't available in the target cluster
-	if !k.supportsGroupVersion(metrics.GroupName + "/" + metricsv1beta1api.SchemeGroupVersion.Version) {
+	if !c.supportsGroupVersion(metrics.GroupName + "/" + metricsv1beta1api.SchemeGroupVersion.Version) {
 		return nil, errors.New("metrics API is not available")
 	}
 	namespace := options.Namespace
 	if options.AllNamespaces && namespace == "" {
 		namespace = ""
 	} else {
-		namespace = k.NamespaceOrDefault(namespace)
+		namespace = c.NamespaceOrDefault(namespace)
 	}
-	return k.manager.accessControlClientSet.PodsMetricses(ctx, namespace, options.Name, options.ListOptions)
+	var err error
+	versionedMetrics := &metricsv1beta1api.PodMetricsList{}
+	if options.Name != "" {
+		m, err := c.MetricsV1beta1Client().PodMetricses(namespace).Get(ctx, options.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get metrics for pod %s/%s: %w", namespace, options.Name, err)
+		}
+		versionedMetrics.Items = []metricsv1beta1api.PodMetrics{*m}
+	} else {
+		versionedMetrics, err = c.MetricsV1beta1Client().PodMetricses(namespace).List(ctx, options.ListOptions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list pod metrics in namespace %s: %w", namespace, err)
+		}
+	}
+	convertedMetrics := &metrics.PodMetricsList{}
+	return convertedMetrics, metricsv1beta1api.Convert_v1beta1_PodMetricsList_To_metrics_PodMetricsList(versionedMetrics, convertedMetrics, nil)
 }
 
-func (k *Kubernetes) PodsExec(ctx context.Context, namespace, name, container string, command []string) (string, error) {
-	namespace = k.NamespaceOrDefault(namespace)
-	pods, err := k.manager.accessControlClientSet.Pods(namespace)
-	if err != nil {
-		return "", err
-	}
+func (c *Core) PodsExec(ctx context.Context, namespace, name, container string, command []string) (string, error) {
+	namespace = c.NamespaceOrDefault(namespace)
+	pods := c.CoreV1().Pods(namespace)
 	pod, err := pods.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return "", err
@@ -244,7 +245,30 @@ func (k *Kubernetes) PodsExec(ctx context.Context, namespace, name, container st
 		Stdout:    true,
 		Stderr:    true,
 	}
-	executor, err := k.manager.accessControlClientSet.PodsExec(namespace, name, podExecOptions)
+	// Compute URL
+	// https://github.com/kubernetes/kubectl/blob/5366de04e168bcbc11f5e340d131a9ca8b7d0df4/pkg/cmd/exec/exec.go#L382-L397
+	execRequest := c.CoreV1().RESTClient().
+		Post().
+		Resource("pods").
+		Namespace(namespace).
+		Name(name).
+		SubResource("exec")
+	execRequest.VersionedParams(podExecOptions, ParameterCodec)
+	restConfig, err := c.ToRESTConfig()
+	if err != nil {
+		return "", err
+	}
+	spdyExec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", execRequest.URL())
+	if err != nil {
+		return "", err
+	}
+	webSocketExec, err := remotecommand.NewWebSocketExecutor(restConfig, "GET", execRequest.URL().String())
+	if err != nil {
+		return "", err
+	}
+	executor, err := remotecommand.NewFallbackExecutor(webSocketExec, spdyExec, func(err error) bool {
+		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
+	})
 	if err != nil {
 		return "", err
 	}

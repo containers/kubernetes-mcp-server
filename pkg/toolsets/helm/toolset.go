@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
@@ -20,10 +19,15 @@ func (t *Toolset) GetDescription() string {
 	return "Tools for managing Helm charts and releases"
 }
 
-func (t *Toolset) GetTools(_ internalk8s.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		initHelm(),
 	)
+}
+
+func (t *Toolset) GetPrompts() []api.ServerPrompt {
+	// Helm toolset does not provide prompts
+	return nil
 }
 
 func init() {

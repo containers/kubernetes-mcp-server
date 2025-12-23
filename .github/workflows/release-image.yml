@@ -8,12 +8,13 @@ on:
       - '*'
 
 env:
-  IMAGE_NAME: quay.io/manusa/kubernetes_mcp_server
+  IMAGE_NAME: quay.io/containers/kubernetes_mcp_server
   TAG: ${{ github.ref_name == 'main' && 'latest' || github.ref_type == 'tag' && github.ref_name && startsWith(github.ref_name, 'v') && github.ref_name || 'unknown' }}
 
 jobs:
   publish-platform-images:
     name: 'Publish: linux-${{ matrix.platform.tag }}'
+    if: github.repository == 'containers/kubernetes-mcp-server'
     strategy:
       fail-fast: true
       matrix:
@@ -25,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Podman # Not available in arm64 image
         run: |
           sudo apt-get update
@@ -47,6 +48,7 @@ jobs:
 
   publish-manifest:
     name: Publish Manifest
+    if: github.repository == 'containers/kubernetes-mcp-server'
     runs-on: ubuntu-latest
     needs: publish-platform-images
     steps:

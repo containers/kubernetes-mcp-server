@@ -1,0 +1,5 @@
+kind: Agent
+metadata:
+  name: "claude-code"
+builtin:
+  type: "claude-code"

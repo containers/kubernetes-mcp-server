@@ -9,21 +9,24 @@ import (
 	"slices"
 	"strings"
 
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
+	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 )
 
 type OpenShift struct{}
 
-func (o *OpenShift) IsOpenShift(ctx context.Context) bool {
+func (o *OpenShift) IsOpenShift(_ context.Context) bool {
 	return true
 }
 
-var _ internalk8s.Openshift = (*OpenShift)(nil)
+var _ api.Openshift = (*OpenShift)(nil)
 
 func main() {
 	// Snyk reports false positive unless we flow the args through filepath.Clean and filepath.Localize in this specific order
@@ -39,7 +42,16 @@ func main() {
 	}
 	// Available Toolsets
 	toolsetsList := toolsets.Toolsets()
+
+	// Get default enabled toolsets
+	defaultConfig := config.Default()
+	defaultToolsetsMap := make(map[string]bool)
+	for _, toolsetName := range defaultConfig.Toolsets {
+		defaultToolsetsMap[toolsetName] = true
+	}
+
 	maxNameLen, maxDescLen := len("Toolset"), len("Description")
+	defaultHeaderLen := len("Default")
 	for _, toolset := range toolsetsList {
 		nameLen := len(toolset.GetName())
 		descLen := len(toolset.GetDescription())
@@ -51,10 +63,14 @@ func main() {
 		}
 	}
 	availableToolsets := strings.Builder{}
-	availableToolsets.WriteString(fmt.Sprintf("| %-*s | %-*s |\n", maxNameLen, "Toolset", maxDescLen, "Description"))
-	availableToolsets.WriteString(fmt.Sprintf("|-%s-|-%s-|\n", strings.Repeat("-", maxNameLen), strings.Repeat("-", maxDescLen)))
+	availableToolsets.WriteString(fmt.Sprintf("| %-*s | %-*s | %-*s |\n", maxNameLen, "Toolset", maxDescLen, "Description", defaultHeaderLen, "Default"))
+	availableToolsets.WriteString(fmt.Sprintf("|-%s-|-%s-|-%s-|\n", strings.Repeat("-", maxNameLen), strings.Repeat("-", maxDescLen), strings.Repeat("-", defaultHeaderLen)))
 	for _, toolset := range toolsetsList {
-		availableToolsets.WriteString(fmt.Sprintf("| %-*s | %-*s |\n", maxNameLen, toolset.GetName(), maxDescLen, toolset.GetDescription()))
+		defaultIndicator := ""
+		if defaultToolsetsMap[toolset.GetName()] {
+			defaultIndicator = "✓"
+		}
+		availableToolsets.WriteString(fmt.Sprintf("| %-*s | %-*s | %-*s |\n", maxNameLen, toolset.GetName(), maxDescLen, toolset.GetDescription(), defaultHeaderLen, defaultIndicator))
 	}
 	updated := replaceBetweenMarkers(
 		string(readme),

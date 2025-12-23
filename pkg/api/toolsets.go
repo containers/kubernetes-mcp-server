@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -40,8 +39,13 @@ type Toolset interface {
 	// Used to identify the toolset in configuration, logs, and command-line arguments.
 	// Examples: "core", "metrics", "helm"
 	GetName() string
+	// GetDescription returns a human-readable description of the toolset.
+	// Will be used to generate documentation and help text.
 	GetDescription() string
-	GetTools(o internalk8s.Openshift) []ServerTool
+	GetTools(o Openshift) []ServerTool
+	// GetPrompts returns the prompts provided by this toolset.
+	// Returns nil if the toolset doesn't provide any prompts.
+	GetPrompts() []ServerPrompt
 }
 
 type ToolCallRequest interface {
@@ -64,7 +68,8 @@ func NewToolCallResult(content string, err error) *ToolCallResult {
 
 type ToolHandlerParams struct {
 	context.Context
-	*internalk8s.Kubernetes
+	ExtendedConfigProvider
+	KubernetesClient
 	ToolCallRequest
 	ListOutput output.Output
 }

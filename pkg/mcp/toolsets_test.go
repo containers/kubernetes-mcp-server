@@ -2,6 +2,9 @@ package mcp
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
@@ -12,18 +15,23 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+const updateJsonEnvVar = "UPDATE_TOOLSETS_JSON"
 
 type ToolsetsSuite struct {
 	suite.Suite
 	originalToolsets []api.Toolset
 	*test.MockServer
 	*test.McpClient
-	Cfg       *configuration.StaticConfig
-	mcpServer *Server
+	Cfg        *configuration.StaticConfig
+	mcpServer  *Server
+	updateJson bool
 }
 
 func (s *ToolsetsSuite) SetupTest() {
@@ -31,6 +39,7 @@ func (s *ToolsetsSuite) SetupTest() {
 	s.MockServer = test.NewMockServer()
 	s.Cfg = configuration.Default()
 	s.Cfg.KubeConfig = s.KubeconfigFile(s.T())
+	s.updateJson = os.Getenv(updateJsonEnvVar) != ""
 }
 
 func (s *ToolsetsSuite) TearDownTest() {
@@ -76,10 +85,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsTools() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools.json")
-			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
-			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
+			s.assertJsonSnapshot("toolsets-full-tools.json", tools.Tools)
 		})
 	})
 }
@@ -97,10 +103,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-openshift.json")
-			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
-			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
+			s.assertJsonSnapshot("toolsets-full-tools-openshift.json", tools.Tools)
 		})
 	})
 }
@@ -123,10 +126,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-multicluster.json")
-			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
-			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
+			s.assertJsonSnapshot("toolsets-full-tools-multicluster.json", tools.Tools)
 		})
 	})
 }
@@ -147,10 +147,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiClusterEnum() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("ListTools returns correct Tool metadata", func() {
-			expectedMetadata := test.ReadFile("testdata", "toolsets-full-tools-multicluster-enum.json")
-			metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
-			s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-			s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
+			s.assertJsonSnapshot("toolsets-full-tools-multicluster-enum.json", tools.Tools)
 		})
 	})
 }
@@ -160,6 +157,8 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&core.Toolset{},
 		&config.Toolset{},
 		&helm.Toolset{},
+		&kiali.Toolset{},
+		&kubevirt.Toolset{},
 	}
 	for _, testCase := range testCases {
 		s.Run("Toolset "+testCase.GetName(), func() {
@@ -173,10 +172,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 				s.NoError(err, "Expected no error from ListTools")
 			})
 			s.Run("ListTools returns correct Tool metadata", func() {
-				expectedMetadata := test.ReadFile("testdata", "toolsets-"+testCase.GetName()+"-tools.json")
-				metadata, err := json.MarshalIndent(tools.Tools, "", "  ")
-				s.Require().NoErrorf(err, "failed to marshal tools metadata: %v", err)
-				s.JSONEq(expectedMetadata, string(metadata), "tools metadata does not match expected")
+				s.assertJsonSnapshot("toolsets-"+testCase.GetName()+"-tools.json", tools.Tools)
 			})
 		})
 	}
@@ -208,7 +204,32 @@ func (s *ToolsetsSuite) InitMcpClient() {
 	var err error
 	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg})
 	s.Require().NoError(err, "Expected no error creating MCP server")
-	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(nil))
+	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP())
+}
+
+// assertJsonSnapshot compares actual data against a JSON snapshot file.
+// When the snapshot doesn't match, the test fails with instructions on how to update it.
+// Set UPDATE_TOOLSETS_JSON=1 environment variable to regenerate snapshot files.
+// Example: UPDATE_TOOLSETS_JSON=1 go test ./pkg/mcp -v
+func (s *ToolsetsSuite) assertJsonSnapshot(snapshotFile string, actual any) {
+	_, file, _, _ := runtime.Caller(1)
+	snapshotPath := filepath.Join(filepath.Dir(file), "testdata", snapshotFile)
+	actualJson, err := json.MarshalIndent(actual, "", "  ")
+	s.Require().NoErrorf(err, "failed to marshal actual data: %v", err)
+	if s.updateJson {
+		err := os.WriteFile(snapshotPath, append(actualJson, '\n'), 0644)
+		s.Require().NoErrorf(err, "failed to write snapshot file %s: %v", snapshotFile, err)
+		s.T().Logf("Updated snapshot: %s", snapshotFile)
+		return
+	}
+	expectedJson := test.ReadFile("testdata", snapshotFile)
+	s.JSONEq(
+		expectedJson,
+		string(actualJson),
+		"snapshot %s does not match - to update snapshots re-run the tests with %s=1",
+		snapshotFile,
+		updateJsonEnvVar,
+	)
 }
 
 func TestToolsets(t *testing.T) {

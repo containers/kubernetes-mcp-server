@@ -1,0 +1,16 @@
+kind: Task
+metadata:
+  name: "Get latency workload"
+  category: "Troubleshooting & Debugging"
+  difficulty: easy
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+  verify:
+    contains: "30 minutes"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash   
+  prompt:
+    inline: Analyze the latency for the reviews workload over the last 30 minutes?

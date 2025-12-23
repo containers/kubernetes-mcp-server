@@ -1,0 +1,117 @@
+[
+  {
+    "annotations": {
+      "title": "Virtual Machine: Create",
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "autostart": {
+          "description": "Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.",
+          "type": "boolean"
+        },
+        "instancetype": {
+          "description": "Optional instance type name for the VM (e.g., 'u1.small', 'u1.medium', 'u1.large')",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the virtual machine",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace for the virtual machine",
+          "type": "string"
+        },
+        "performance": {
+          "description": "Optional performance family hint for the VM instance type (e.g., 'u1' for general-purpose, 'o1' for overcommitted, 'c1' for compute-optimized, 'm1' for memory-optimized). Defaults to 'u1' (general-purpose) if not specified.",
+          "examples": [
+            "general-purpose",
+            "overcommitted",
+            "compute-optimized",
+            "memory-optimized"
+          ],
+          "type": "string"
+        },
+        "preference": {
+          "description": "Optional preference name for the VM",
+          "type": "string"
+        },
+        "size": {
+          "description": "Optional workload size hint for the VM (e.g., 'small', 'medium', 'large', 'xlarge'). Used to auto-select an appropriate instance type if not explicitly specified.",
+          "examples": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "type": "string"
+        },
+        "storage": {
+          "description": "Optional storage size for the VM's root disk when using DataSources (e.g., '30Gi', '50Gi', '100Gi'). Defaults to 30Gi. Ignored when using container disks.",
+          "examples": [
+            "30Gi",
+            "50Gi",
+            "100Gi"
+          ],
+          "type": "string"
+        },
+        "workload": {
+          "description": "The workload for the VM. Accepts OS names (e.g., 'fedora' (default), 'ubuntu', 'centos', 'centos-stream', 'debian', 'rhel', 'opensuse', 'opensuse-tumbleweed', 'opensuse-leap') or full container disk image URLs",
+          "examples": [
+            "fedora",
+            "ubuntu",
+            "centos",
+            "debian",
+            "rhel",
+            "quay.io/containerdisks/fedora:latest"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name"
+      ]
+    },
+    "name": "vm_create"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Lifecycle",
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "description": "Manage VirtualMachine lifecycle: start, stop, or restart a VM",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+          "enum": [
+            "start",
+            "stop",
+            "restart"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the virtual machine",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name",
+        "action"
+      ]
+    },
+    "name": "vm_lifecycle"
+  }
+]

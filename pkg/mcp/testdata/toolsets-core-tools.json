@@ -98,13 +98,13 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "name": {
-          "description": "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
-          "type": "string"
-        },
         "label_selector": {
           "description": "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
           "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
           "type": "string"
         }
       }
@@ -483,5 +483,45 @@
       ]
     },
     "name": "resources_list"
+  },
+  {
+    "annotations": {
+      "title": "Resources: Scale",
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "apiVersion of the resource (examples of valid apiVersion are apps/v1)",
+          "type": "string"
+        },
+        "kind": {
+          "description": "kind of the resource (examples of valid kind are: StatefulSet, Deployment)",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the resource",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace",
+          "type": "string"
+        },
+        "scale": {
+          "description": "Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "name"
+      ]
+    },
+    "name": "resources_scale"
   }
 ]

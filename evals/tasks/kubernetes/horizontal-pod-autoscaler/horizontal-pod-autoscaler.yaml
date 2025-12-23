@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: horizontal-pod-autoscaler
+  difficulty: hard
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Create a HorizontalPodAutoscaler for deployment 'web-app' in namespace 'hpa-test' targeting 50% CPU utilization with min=1 and max=3 replicas"

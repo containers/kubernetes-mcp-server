@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: 1.23
+  GO_VERSION: 1.25
 
 defaults:
   run:
@@ -36,13 +36,13 @@ jobs:
           - ubuntu-latest #x64
           - ubuntu-24.04-arm #arm64
           - windows-latest #x64
-          - macos-13 #x64
+          - macos-15-intel #x64
           - macos-latest #arm64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+        uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Build

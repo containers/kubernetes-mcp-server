@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: create-pod-resources-limits
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Create namespace 'limits-test' with a pod 'resource-limits-pod' using httpd:alpine image. Container 'my-container' should have CPU request 60m, limit 600m, and memory request/limit of 62Mi."

@@ -108,18 +108,13 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	tailLines := params.GetArguments()["tailLines"]
 	var tailInt int64
 	if tailLines != nil {
-		// Convert to int64 - safely handle both float64 (JSON number) and int types
-		switch v := tailLines.(type) {
-		case float64:
-			tailInt = int64(v)
-		case int:
-		case int64:
-			tailInt = v
-		default:
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: expected integer, got %T", tailLines)), nil
+		var err error
+		tailInt, err = api.ParseInt64(tailLines)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse tailLines parameter: %w", err)), nil
 		}
 	}
-	ret, err := params.NodesLog(params, name, query, tailInt)
+	ret, err := kubernetes.NewCore(params).NodesLog(params, name, query, tailInt)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
 	} else if ret == "" {
@@ -133,7 +128,7 @@ func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error
 	if !ok || name == "" {
 		return api.NewToolCallResult("", errors.New("failed to get node stats summary, missing argument name")), nil
 	}
-	ret, err := params.NodesStatsSummary(params, name)
+	ret, err := kubernetes.NewCore(params).NodesStatsSummary(params, name)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node stats summary for %s: %v", name, err)), nil
 	}
@@ -141,7 +136,7 @@ func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error
 }
 
 func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	nodesTopOptions := kubernetes.NodesTopOptions{}
+	nodesTopOptions := api.NodesTopOptions{}
 	if v, ok := params.GetArguments()["name"].(string); ok {
 		nodesTopOptions.Name = v
 	}
@@ -149,18 +144,13 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		nodesTopOptions.LabelSelector = v
 	}
 
-	nodeMetrics, err := params.NodesTop(params, nodesTopOptions)
+	nodeMetrics, err := kubernetes.NewCore(params).NodesTop(params, nodesTopOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %v", err)), nil
 	}
 
 	// Get the list of nodes to extract their allocatable resources
-	nodes, err := params.AccessControlClientset().Nodes()
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes client: %v", err)), nil
-	}
-
-	nodeList, err := nodes.List(params, metav1.ListOptions{
+	nodeList, err := params.CoreV1().Nodes().List(params, metav1.ListOptions{
 		LabelSelector: nodesTopOptions.LabelSelector,
 	})
 	if err != nil {

@@ -1,0 +1,15 @@
+kind: Task
+metadata:
+  name: "get-service-detail"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+  verify:
+    contains: "service: details"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash          
+  prompt:
+    inline: Give me information about my service details in the namespace bookinfo.

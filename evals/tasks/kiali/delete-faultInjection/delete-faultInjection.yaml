@@ -1,0 +1,69 @@
+kind: Task
+metadata:
+  name: "Remove fault Injection"
+  difficulty: easy
+steps:
+  setup: 
+    inline: |-
+      #!/usr/bin/env bash
+      set -euo pipefail
+      cat <<'EOF' | kubectl apply -f -
+      apiVersion: networking.istio.io/v1
+      kind: DestinationRule
+      metadata:
+        namespace: bookinfo
+        name: ratings
+        labels:
+          gevals.kiali.io/test: delete-fault-injection
+      spec:
+        host: ratings.bookinfo.svc.cluster.local
+        subsets:
+        - name: v1
+          labels:
+            version: v1
+      ---
+      apiVersion: networking.istio.io/v1
+      kind: VirtualService
+      metadata:
+        namespace: bookinfo
+        name: ratings
+        labels:
+          gevals.kiali.io/test: delete-fault-injection
+      spec:
+        hosts:
+        - ratings.bookinfo.svc.cluster.local
+        http:
+        - route:
+          - destination:
+              host: ratings.bookinfo.svc.cluster.local
+              subset: v1
+            weight: 100
+          fault:
+            abort:
+              percentage:
+                value: 100
+              httpStatus: 503
+      EOF
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      vs_fault_names="$(kubectl get virtualservice -n "${NAMESPACE}" -o json \
+        | jq -r '[.items[] | select(any(.spec.http[]?; has("fault"))) | .metadata.name] | .[]?')"
+      if [[ -n "${vs_fault_names}" ]]; then
+        exit 1
+      fi
+
+      # Verify DestinationRule 'ratings' does not exist (created during setup)
+      if kubectl get destinationrule ratings -n "${NAMESPACE}" >/dev/null 2>&1; then
+        exit 1
+      fi
+  cleanup: 
+    inline: |-
+      #!/usr/bin/env bash
+      set -euo pipefail
+      NS="bookinfo"
+      LABEL="gevals.kiali.io/test=delete-fault-injection"
+      kubectl delete virtualservice -n "$NS" -l "$LABEL" --ignore-not-found
+      kubectl delete destinationrule -n "$NS" -l "$LABEL" --ignore-not-found
+  prompt:
+    inline: Fix my namespace bookinfo to remove the fault injection.

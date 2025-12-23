@@ -1,5 +1,18 @@
 # Kind cluster management
 
+KIND = $(shell pwd)/_output/tools/bin/kind
+KIND_VERSION ?= v0.30.0
+
+# Download and install kind if not already installed
+.PHONY: kind
+kind:
+	@[ -f $(KIND) ] || { \
+		set -e ;\
+		echo "Installing kind to $(KIND)..." ;\
+		mkdir -p $(shell dirname $(KIND)) ;\
+		GOBIN=$(shell dirname $(KIND)) go install sigs.k8s.io/kind@$(KIND_VERSION) ;\
+	}
+
 KIND_CLUSTER_NAME ?= kubernetes-mcp-server
 
 # Detect container engine (docker or podman)

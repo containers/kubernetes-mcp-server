@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,13 +10,22 @@ import (
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
+
+func McpInitRequest() mcp.InitializeRequest {
+	initRequest := mcp.InitializeRequest{
+		Request: mcp.Request{Method: "initialize"},
+	}
+	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initRequest.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "1.33.7"}
+	return initRequest
+}
 
 type McpClient struct {
 	ctx        context.Context
 	testServer *httptest.Server
 	*client.Client
+	InitializeResult *mcp.InitializeResult
 }
 
 func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...transport.StreamableHTTPCOption) *McpClient {
@@ -28,10 +38,7 @@ func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...transport
 	require.NoError(t, err, "Expected no error creating MCP client")
 	err = ret.Start(t.Context())
 	require.NoError(t, err, "Expected no error starting MCP client")
-	initRequest := mcp.InitializeRequest{}
-	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initRequest.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "1.33.7"}
-	_, err = ret.Initialize(t.Context(), initRequest)
+	ret.InitializeResult, err = ret.Initialize(t.Context(), McpInitRequest())
 	require.NoError(t, err, "Expected no error initializing MCP client")
 	return ret
 }

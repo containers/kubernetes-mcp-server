@@ -1,66 +1,21 @@
 package mcp
 
 import (
-	"context"
 	"net/http"
-	"os"
-	"runtime"
+	"sync"
 	"testing"
-	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
-type WatchKubeConfigSuite struct {
-	BaseMcpSuite
-}
-
-func (s *WatchKubeConfigSuite) SetupTest() {
-	s.BaseMcpSuite.SetupTest()
-	kubeconfig := test.KubeConfigFake()
-	s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
-}
-
-func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		s.T().Skip("Skipping test on non-Unix-like platforms")
-	}
-	// Given
-	s.InitMcpClient()
-	withTimeout, cancel := context.WithTimeout(s.T().Context(), 5*time.Second)
-	defer cancel()
-	var notification *mcp.JSONRPCNotification
-	s.OnNotification(func(n mcp.JSONRPCNotification) {
-		notification = &n
-	})
-	// When
-	f, _ := os.OpenFile(s.Cfg.KubeConfig, os.O_APPEND|os.O_WRONLY, 0644)
-	_, _ = f.WriteString("\n")
-	_ = f.Close()
-	for notification == nil {
-		select {
-		case <-withTimeout.Done():
-			s.FailNow("timeout waiting for WatchKubeConfig notification")
-		default:
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-	// Then
-	s.NotNil(notification, "WatchKubeConfig did not notify")
-	s.Equal("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change")
-}
-
-func TestWatchKubeConfig(t *testing.T) {
-	suite.Run(t, new(WatchKubeConfigSuite))
-}
-
 type McpHeadersSuite struct {
 	BaseMcpSuite
-	mockServer  *test.MockServer
-	pathHeaders map[string]http.Header
+	mockServer     *test.MockServer
+	pathHeaders    map[string]http.Header
+	pathHeadersMux sync.Mutex
 }
 
 func (s *McpHeadersSuite) SetupTest() {
@@ -69,26 +24,12 @@ func (s *McpHeadersSuite) SetupTest() {
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 	s.pathHeaders = make(map[string]http.Header)
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		s.pathHeadersMux.Lock()
 		s.pathHeaders[req.URL.Path] = req.Header.Clone()
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
-		if req.URL.Path == "/api" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":["v1"],"serverAddressByClientCIDRs":[{"clientCIDR":"0.0.0.0/0"}]}`))
-			return
-		}
-		// Request Performed by DiscoveryClient to Kube API (Get API Groups)
-		if req.URL.Path == "/apis" {
-			w.Header().Set("Content-Type", "application/json")
-			//w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[{"name":"apps","versions":[{"groupVersion":"apps/v1","version":"v1"}],"preferredVersion":{"groupVersion":"apps/v1","version":"v1"}}]}`))
-			_, _ = w.Write([]byte(`{"kind":"APIGroupList","apiVersion":"v1","groups":[]}`))
-			return
-		}
-		// Request Performed by DiscoveryClient to Kube API (Get API Resources)
-		if req.URL.Path == "/api/v1" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"kind":"APIResourceList","apiVersion":"v1","resources":[{"name":"pods","singularName":"","namespaced":true,"kind":"Pod","verbs":["get","list","watch","create","update","patch","delete"]}]}`))
-			return
-		}
+		s.pathHeadersMux.Unlock()
+	}))
+	s.mockServer.Handle(&test.DiscoveryClientHandler{})
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Request Performed by DynamicClient
 		if req.URL.Path == "/api/v1/namespaces/default/pods" {
 			w.Header().Set("Content-Type", "application/json")
@@ -100,7 +41,6 @@ func (s *McpHeadersSuite) SetupTest() {
 			w.WriteHeader(200)
 			return
 		}
-		w.WriteHeader(404)
 	}))
 }
 
@@ -116,23 +56,40 @@ func (s *McpHeadersSuite) TestAuthorizationHeaderPropagation() {
 	for _, header := range cases {
 		s.InitMcpClient(transport.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"}))
 		_, _ = s.CallTool("pods_list", map[string]interface{}{})
-		s.Require().Greater(len(s.pathHeaders), 0, "No requests were made to Kube API")
+		s.pathHeadersMux.Lock()
+		pathHeadersLen := len(s.pathHeaders)
+		s.pathHeadersMux.Unlock()
+		s.Require().Greater(pathHeadersLen, 0, "No requests were made to Kube API")
 		s.Run("DiscoveryClient propagates "+header+" header to Kube API", func() {
-			s.Require().NotNil(s.pathHeaders["/api"], "No requests were made to /api")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api"].Get("Authorization"), "Overridden header Authorization not found in request to /api")
-			s.Require().NotNil(s.pathHeaders["/apis"], "No requests were made to /apis")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/apis"].Get("Authorization"), "Overridden header Authorization not found in request to /apis")
-			s.Require().NotNil(s.pathHeaders["/api/v1"], "No requests were made to /api/v1")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api/v1"].Get("Authorization"), "Overridden header Authorization not found in request to /api/v1")
+			s.pathHeadersMux.Lock()
+			apiHeaders := s.pathHeaders["/api"]
+			apisHeaders := s.pathHeaders["/apis"]
+			apiV1Headers := s.pathHeaders["/api/v1"]
+			s.pathHeadersMux.Unlock()
+
+			s.Require().NotNil(apiHeaders, "No requests were made to /api")
+			s.Equal("Bearer a-token-from-mcp-client", apiHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /api")
+			s.Require().NotNil(apisHeaders, "No requests were made to /apis")
+			s.Equal("Bearer a-token-from-mcp-client", apisHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /apis")
+			s.Require().NotNil(apiV1Headers, "No requests were made to /api/v1")
+			s.Equal("Bearer a-token-from-mcp-client", apiV1Headers.Get("Authorization"), "Overridden header Authorization not found in request to /api/v1")
 		})
 		s.Run("DynamicClient propagates "+header+" header to Kube API", func() {
-			s.Require().NotNil(s.pathHeaders["/api/v1/namespaces/default/pods"], "No requests were made to /api/v1/namespaces/default/pods")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api/v1/namespaces/default/pods"].Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods")
+			s.pathHeadersMux.Lock()
+			podsHeaders := s.pathHeaders["/api/v1/namespaces/default/pods"]
+			s.pathHeadersMux.Unlock()
+
+			s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
+			s.Equal("Bearer a-token-from-mcp-client", podsHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods")
 		})
 		_, _ = s.CallTool("pods_delete", map[string]interface{}{"name": "a-pod-to-delete"})
 		s.Run("kubernetes.Interface propagates "+header+" header to Kube API", func() {
-			s.Require().NotNil(s.pathHeaders["/api/v1/namespaces/default/pods/a-pod-to-delete"], "No requests were made to /api/v1/namespaces/default/pods/a-pod-to-delete")
-			s.Equal("Bearer a-token-from-mcp-client", s.pathHeaders["/api/v1/namespaces/default/pods/a-pod-to-delete"].Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods/a-pod-to-delete")
+			s.pathHeadersMux.Lock()
+			podDeleteHeaders := s.pathHeaders["/api/v1/namespaces/default/pods/a-pod-to-delete"]
+			s.pathHeadersMux.Unlock()
+
+			s.Require().NotNil(podDeleteHeaders, "No requests were made to /api/v1/namespaces/default/pods/a-pod-to-delete")
+			s.Equal("Bearer a-token-from-mcp-client", podDeleteHeaders.Get("Authorization"), "Overridden header Authorization not found in request to /api/v1/namespaces/default/pods/a-pod-to-delete")
 		})
 
 	}
@@ -140,4 +97,32 @@ func (s *McpHeadersSuite) TestAuthorizationHeaderPropagation() {
 
 func TestMcpHeaders(t *testing.T) {
 	suite.Run(t, new(McpHeadersSuite))
+}
+
+type ServerInstructionsSuite struct {
+	BaseMcpSuite
+}
+
+func (s *ServerInstructionsSuite) TestServerInstructionsEmpty() {
+	s.InitMcpClient()
+	s.Run("returns empty instructions when not configured", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Empty(s.InitializeResult.Instructions, "instructions should be empty when not configured")
+	})
+}
+
+func (s *ServerInstructionsSuite) TestServerInstructionsFromConfiguration() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		server_instructions = "Always use YAML output format for kubectl commands."
+	`), s.Cfg), "Expected to parse server instructions config")
+	s.InitMcpClient()
+	s.Run("returns configured instructions", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Equal("Always use YAML output format for kubectl commands.", s.InitializeResult.Instructions,
+			"instructions should match configured value")
+	})
+}
+
+func TestServerInstructions(t *testing.T) {
+	suite.Run(t, new(ServerInstructionsSuite))
 }

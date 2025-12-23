@@ -1,0 +1,16 @@
+kind: Task
+metadata:
+  name: "Status Kiali and Istio"
+  category: "High-Level Observability & Health"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+  verify:
+    contains: "Istio Version"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash          
+  prompt:
+    inline: Give me a status report on the interaction between Kiali and Istio components

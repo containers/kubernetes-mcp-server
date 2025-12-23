@@ -16,19 +16,16 @@ LD_FLAGS = -s -w \
 COMMON_BUILD_ARGS = -ldflags "$(LD_FLAGS)"
 
 GOLANGCI_LINT = $(shell pwd)/_output/tools/bin/golangci-lint
-GOLANGCI_LINT_VERSION ?= v2.5.0
+GOLANGCI_LINT_VERSION ?= v2.6.1
 
 # NPM version should not append the -dirty flag
-NPM_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
+GIT_TAG_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
 OSES = darwin linux windows
 ARCHS = amd64 arm64
 
 CLEAN_TARGETS :=
 CLEAN_TARGETS += '$(BINARY_NAME)'
 CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,)))
-CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),./npm/$(BINARY_NAME)-$(os)-$(arch)/bin/))
-CLEAN_TARGETS += ./npm/kubernetes-mcp-server/.npmrc ./npm/kubernetes-mcp-server/LICENSE ./npm/kubernetes-mcp-server/README.md
-CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),./npm/$(BINARY_NAME)-$(os)-$(arch)/.npmrc))
 
 # The help will print out all targets with their descriptions organized bellow their categories. The categories are represented by `##@` and the target descriptions by `##`.
 # The awk commands is responsible to read the entire set of makefiles included in this invocation, looking for lines of the file as xyz: ## something, and then pretty-format the target and help. Then, if there's a line with ##@ something, that gets pretty-printed as a category.
@@ -57,39 +54,13 @@ build-all-platforms: clean tidy format lint ## Build the project for all platfor
 		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
 
-.PHONY: npm-copy-binaries
-npm-copy-binaries: build-all-platforms ## Copy the binaries to each npm package
-	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
-		EXECUTABLE=./$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,); \
-		DIRNAME=$(BINARY_NAME)-$(os)-$(arch); \
-		mkdir -p ./npm/$$DIRNAME/bin; \
-		cp $$EXECUTABLE ./npm/$$DIRNAME/bin/; \
-	))
-
-.PHONY: npm-publish
-npm-publish: npm-copy-binaries ## Publish the npm packages
-	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
-		DIRNAME="$(BINARY_NAME)-$(os)-$(arch)"; \
-		cd npm/$$DIRNAME; \
-		jq '.version = "$(NPM_VERSION)"' package.json > tmp.json && mv tmp.json package.json; \
-		npm publish --tag latest; \
-		cd ../..; \
-	))
-	cp README.md LICENSE ./npm/kubernetes-mcp-server/
-	jq '.version = "$(NPM_VERSION)"' ./npm/kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/kubernetes-mcp-server/package.json; \
-	jq '.optionalDependencies |= with_entries(.value = "$(NPM_VERSION)")' ./npm/kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/kubernetes-mcp-server/package.json; \
-	cd npm/kubernetes-mcp-server && npm publish --tag latest
-
-.PHONY: python-publish
-python-publish: ## Publish the python packages
-	cd ./python && \
-	sed -i "s/version = \".*\"/version = \"$(NPM_VERSION)\"/" pyproject.toml && \
-	uv build && \
-	uv publish
-
 .PHONY: test
 test: ## Run the tests
 	go test -count=1 -v ./...
+
+.PHONY: test-update-snapshots
+test-update-snapshots: ## Update test snapshots for toolset tests
+	UPDATE_TOOLSETS_JSON=1 go test -count=1 -v ./pkg/mcp
 
 .PHONY: format
 format: ## Format the code
@@ -99,12 +70,13 @@ format: ## Format the code
 tidy: ## Tidy up the go modules
 	go mod tidy
 
+# Download and install golangci-lint if not already installed
 .PHONY: golangci-lint
-golangci-lint: ## Download and install golangci-lint if not already installed
-		@[ -f $(GOLANGCI_LINT) ] || { \
-    	set -e ;\
-    	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
-    	}
+golangci-lint:
+	@[ -f $(GOLANGCI_LINT) ] || { \
+		set -e ;\
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
+	}
 
 .PHONY: lint
 lint: golangci-lint ## Lint the code
@@ -114,14 +86,6 @@ lint: golangci-lint ## Lint the code
 update-readme-tools: ## Update the README.md file with the latest toolsets
 	go run ./internal/tools/update-readme/main.go README.md
 
-##@ Tools
-
-.PHONY: tools
-tools: ## Install all required tools (kind) to ./_output/bin/
-	@echo "Checking and installing required tools to ./_output/bin/ ..."
-	@if [ -f _output/bin/kind ]; then echo "[OK] kind already installed"; else echo "Installing kind..."; $(MAKE) -s kind; fi
-	@echo "All tools ready!"
-
 ##@ Local Development
 
 .PHONY: local-env-setup
@@ -129,7 +93,6 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "========================================="
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "========================================="
-	$(MAKE) tools
 	$(MAKE) kind-create-cluster
 	$(MAKE) keycloak-install
 	$(MAKE) build
@@ -150,6 +113,10 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 .PHONY: local-env-teardown
 local-env-teardown: ## Tear down the local Kind cluster
 	$(MAKE) kind-delete-cluster
+
+.PHONY: print-git-tag-version
+print-git-tag-version: ## Print the GIT_TAG_VERSION
+	@echo $(GIT_TAG_VERSION)
 
 # Include build configuration files
 -include build/*.mk

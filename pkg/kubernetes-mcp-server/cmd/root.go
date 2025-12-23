@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/spf13/cobra"
@@ -22,6 +24,7 @@ import (
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
@@ -57,8 +60,7 @@ const (
 	flagVersion              = "version"
 	flagLogLevel             = "log-level"
 	flagConfig               = "config"
-	flagSSEPort              = "sse-port"
-	flagHttpPort             = "http-port"
+	flagConfigDir            = "config-dir"
 	flagPort                 = "port"
 	flagSSEBaseUrl           = "sse-base-url"
 	flagKubeconfig           = "kubeconfig"
@@ -66,9 +68,9 @@ const (
 	flagListOutput           = "list-output"
 	flagReadOnly             = "read-only"
 	flagDisableDestructive   = "disable-destructive"
+	flagStateless            = "stateless"
 	flagRequireOAuth         = "require-oauth"
 	flagOAuthAudience        = "oauth-audience"
-	flagValidateToken        = "validate-token"
 	flagAuthorizationURL     = "authorization-url"
 	flagServerUrl            = "server-url"
 	flagCertificateAuthority = "certificate-authority"
@@ -79,23 +81,22 @@ type MCPServerOptions struct {
 	Version              bool
 	LogLevel             int
 	Port                 string
-	SSEPort              int
-	HttpPort             int
 	SSEBaseUrl           string
 	Kubeconfig           string
 	Toolsets             []string
 	ListOutput           string
 	ReadOnly             bool
 	DisableDestructive   bool
+	Stateless            bool
 	RequireOAuth         bool
 	OAuthAudience        string
-	ValidateToken        bool
 	AuthorizationURL     string
 	CertificateAuthority string
 	ServerURL            string
 	DisableMultiCluster  bool
 
 	ConfigPath   string
+	ConfigDir    string
 	StaticConfig *config.StaticConfig
 
 	genericiooptions.IOStreams
@@ -133,10 +134,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Version, flagVersion, o.Version, "Print version information and quit")
 	cmd.Flags().IntVar(&o.LogLevel, flagLogLevel, o.LogLevel, "Set the log level (from 0 to 9)")
 	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
-	cmd.Flags().IntVar(&o.SSEPort, flagSSEPort, o.SSEPort, "Start a SSE server on the specified port")
-	cmd.Flag(flagSSEPort).Deprecated = "Use --port instead"
-	cmd.Flags().IntVar(&o.HttpPort, flagHttpPort, o.HttpPort, "Start a streamable HTTP server on the specified port")
-	cmd.Flag(flagHttpPort).Deprecated = "Use --port instead"
+	cmd.Flags().StringVar(&o.ConfigDir, flagConfigDir, o.ConfigDir, "Path to drop-in configuration directory (files loaded in lexical order). Defaults to "+config.DefaultDropInConfigDir+" relative to the config file if --config is set.")
 	cmd.Flags().StringVar(&o.Port, flagPort, o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
 	cmd.Flags().StringVar(&o.SSEBaseUrl, flagSSEBaseUrl, o.SSEBaseUrl, "SSE public base URL to use when sending the endpoint message (e.g. https://example.com)")
 	cmd.Flags().StringVar(&o.Kubeconfig, flagKubeconfig, o.Kubeconfig, "Path to the kubeconfig file to use for authentication")
@@ -144,12 +142,11 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.ListOutput, flagListOutput, o.ListOutput, "Output format for resource list operations (one of: "+strings.Join(output.Names, ", ")+"). Defaults to "+o.StaticConfig.ListOutput+".")
 	cmd.Flags().BoolVar(&o.ReadOnly, flagReadOnly, o.ReadOnly, "If true, only tools annotated with readOnlyHint=true are exposed")
 	cmd.Flags().BoolVar(&o.DisableDestructive, flagDisableDestructive, o.DisableDestructive, "If true, tools annotated with destructiveHint=true are disabled")
+	cmd.Flags().BoolVar(&o.Stateless, flagStateless, o.Stateless, "If true, run the MCP server in stateless mode (disables tool/prompt change notifications). Useful for container deployments and load balancing. Default is false (stateful mode)")
 	cmd.Flags().BoolVar(&o.RequireOAuth, flagRequireOAuth, o.RequireOAuth, "If true, requires OAuth authorization as defined in the Model Context Protocol (MCP) specification. This flag is ignored if transport type is stdio")
 	_ = cmd.Flags().MarkHidden(flagRequireOAuth)
 	cmd.Flags().StringVar(&o.OAuthAudience, flagOAuthAudience, o.OAuthAudience, "OAuth audience for token claims validation. Optional. If not set, the audience is not validated. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden(flagOAuthAudience)
-	cmd.Flags().BoolVar(&o.ValidateToken, flagValidateToken, o.ValidateToken, "If true, validates the token against the Kubernetes API Server using TokenReview. Optional. If not set, the token is not validated. Only valid if require-oauth is enabled.")
-	_ = cmd.Flags().MarkHidden(flagValidateToken)
 	cmd.Flags().StringVar(&o.AuthorizationURL, flagAuthorizationURL, o.AuthorizationURL, "OAuth authorization server URL for protected resource endpoint. If not provided, the Kubernetes API server host will be used. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden(flagAuthorizationURL)
 	cmd.Flags().StringVar(&o.ServerURL, flagServerUrl, o.ServerURL, "Server URL of this application. Optional. If set, this url will be served in protected resource metadata endpoint and tokens will be validated with this audience. If not set, expected audience is kubernetes-mcp-server. Only valid if require-oauth is enabled.")
@@ -162,8 +159,8 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 }
 
 func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
-	if m.ConfigPath != "" {
-		cnf, err := config.Read(m.ConfigPath)
+	if m.ConfigPath != "" || m.ConfigDir != "" {
+		cnf, err := config.Read(m.ConfigPath, m.ConfigDir)
 		if err != nil {
 			return err
 		}
@@ -188,10 +185,6 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagPort).Changed {
 		m.StaticConfig.Port = m.Port
-	} else if cmd.Flag(flagSSEPort).Changed {
-		m.StaticConfig.Port = strconv.Itoa(m.SSEPort)
-	} else if cmd.Flag(flagHttpPort).Changed {
-		m.StaticConfig.Port = strconv.Itoa(m.HttpPort)
 	}
 	if cmd.Flag(flagSSEBaseUrl).Changed {
 		m.StaticConfig.SSEBaseURL = m.SSEBaseUrl
@@ -208,6 +201,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	if cmd.Flag(flagDisableDestructive).Changed {
 		m.StaticConfig.DisableDestructive = m.DisableDestructive
 	}
+	if cmd.Flag(flagStateless).Changed {
+		m.StaticConfig.Stateless = m.Stateless
+	}
 	if cmd.Flag(flagToolsets).Changed {
 		m.StaticConfig.Toolsets = m.Toolsets
 	}
@@ -216,9 +212,6 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagOAuthAudience).Changed {
 		m.StaticConfig.OAuthAudience = m.OAuthAudience
-	}
-	if cmd.Flag(flagValidateToken).Changed {
-		m.StaticConfig.ValidateToken = m.ValidateToken
 	}
 	if cmd.Flag(flagAuthorizationURL).Changed {
 		m.StaticConfig.AuthorizationURL = m.AuthorizationURL
@@ -230,7 +223,7 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 		m.StaticConfig.CertificateAuthority = m.CertificateAuthority
 	}
 	if cmd.Flag(flagDisableMultiCluster).Changed && m.DisableMultiCluster {
-		m.StaticConfig.ClusterProviderStrategy = config.ClusterProviderDisabled
+		m.StaticConfig.ClusterProviderStrategy = api.ClusterProviderDisabled
 	}
 }
 
@@ -253,17 +246,14 @@ func (m *MCPServerOptions) initializeLogging() {
 }
 
 func (m *MCPServerOptions) Validate() error {
-	if m.Port != "" && (m.SSEPort > 0 || m.HttpPort > 0) {
-		return fmt.Errorf("--port is mutually exclusive with deprecated --http-port and --sse-port flags")
-	}
 	if output.FromString(m.StaticConfig.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", m.StaticConfig.ListOutput, strings.Join(output.Names, ", "))
 	}
 	if err := toolsets.Validate(m.StaticConfig.Toolsets); err != nil {
 		return err
 	}
-	if !m.StaticConfig.RequireOAuth && (m.StaticConfig.ValidateToken || m.StaticConfig.OAuthAudience != "" || m.StaticConfig.AuthorizationURL != "" || m.StaticConfig.ServerURL != "" || m.StaticConfig.CertificateAuthority != "") {
-		return fmt.Errorf("validate-token, oauth-audience, authorization-url, server-url and certificate-authority are only valid if require-oauth is enabled. Missing --port may implicitly set require-oauth to false")
+	if !m.StaticConfig.RequireOAuth && (m.StaticConfig.OAuthAudience != "" || m.StaticConfig.AuthorizationURL != "" || m.StaticConfig.ServerURL != "" || m.StaticConfig.CertificateAuthority != "") {
+		return fmt.Errorf("oauth-audience, authorization-url, server-url and certificate-authority are only valid if require-oauth is enabled. Missing --port may implicitly set require-oauth to false")
 	}
 	if m.StaticConfig.AuthorizationURL != "" {
 		u, err := url.Parse(m.StaticConfig.AuthorizationURL)
@@ -277,6 +267,12 @@ func (m *MCPServerOptions) Validate() error {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
 		}
 	}
+	// Validate that certificate_authority is a valid file
+	if caValue := strings.TrimSpace(m.StaticConfig.CertificateAuthority); caValue != "" {
+		if _, err := os.Stat(caValue); err != nil {
+			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -287,6 +283,7 @@ func (m *MCPServerOptions) Run() error {
 	klog.V(1).Infof(" - ListOutput: %s", m.StaticConfig.ListOutput)
 	klog.V(1).Infof(" - Read-only mode: %t", m.StaticConfig.ReadOnly)
 	klog.V(1).Infof(" - Disable destructive tools: %t", m.StaticConfig.DisableDestructive)
+	klog.V(1).Infof(" - Stateless mode: %t", m.StaticConfig.Stateless)
 
 	strategy := m.StaticConfig.ClusterProviderStrategy
 	if strategy == "" {
@@ -334,20 +331,58 @@ func (m *MCPServerOptions) Run() error {
 		oidcProvider = provider
 	}
 
-	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: m.StaticConfig})
+	mcpServer, err := mcp.NewServer(mcp.Configuration{
+		StaticConfig: m.StaticConfig,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
 	defer mcpServer.Close()
+
+	// Set up SIGHUP handler for configuration reload
+	if m.ConfigPath != "" || m.ConfigDir != "" {
+		m.setupSIGHUPHandler(mcpServer)
+	}
 
 	if m.StaticConfig.Port != "" {
 		ctx := context.Background()
 		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oidcProvider, httpClient)
 	}
 
-	if err := mcpServer.ServeStdio(); err != nil && !errors.Is(err, context.Canceled) {
+	ctx := context.Background()
+	if err := mcpServer.ServeStdio(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 
 	return nil
+}
+
+// setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP.
+// This is a blocking call that runs in a separate goroutine.
+func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) {
+	sigHupCh := make(chan os.Signal, 1)
+	signal.Notify(sigHupCh, syscall.SIGHUP)
+
+	go func() {
+		for range sigHupCh {
+			klog.V(1).Info("Received SIGHUP signal, reloading configuration...")
+
+			// Reload config from files
+			newConfig, err := config.Read(m.ConfigPath, m.ConfigDir)
+			if err != nil {
+				klog.Errorf("Failed to reload configuration from disk: %v", err)
+				continue
+			}
+
+			// Apply the new configuration to the MCP server
+			if err := mcpServer.ReloadConfiguration(newConfig); err != nil {
+				klog.Errorf("Failed to apply reloaded configuration: %v", err)
+				continue
+			}
+
+			klog.V(1).Info("Configuration reloaded successfully via SIGHUP")
+		}
+	}()
+
+	klog.V(2).Info("SIGHUP handler registered for configuration reload")
 }

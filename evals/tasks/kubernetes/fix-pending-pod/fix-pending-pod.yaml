@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: fix-pending-pod
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "My pod homepage-pod in homepage-ns is stuck in pending state. Can you fix the issue so that pod status is in running state?"

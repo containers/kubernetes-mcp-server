@@ -1,0 +1,21 @@
+kind: Eval
+metadata:
+  name: "kubernetes-basic-operations"
+config:
+  # Inline agent configuration - no separate agent.yaml file needed
+  agent:
+    type: "builtin.claude-code"
+  mcpConfigFile: ../mcp-config.yaml
+  llmJudge:
+    env:
+      baseUrlKey: JUDGE_BASE_URL
+      apiKeyKey: JUDGE_API_KEY
+      modelNameKey: JUDGE_MODEL_NAME
+  taskSets:
+    - glob: ../tasks/*/*/*.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20

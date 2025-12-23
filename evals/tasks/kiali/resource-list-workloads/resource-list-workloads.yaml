@@ -1,0 +1,18 @@
+kind: Task
+metadata:
+  name: "List workloads without sidecar"
+  category: "Resource Inspection"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+        oc patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "false"}}}}}'
+  verify:
+    contains: "details-v1"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash   
+      oc patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "true"}}}}}'
+  prompt:
+    inline: List all workloads in the bookinfo namespace that have missing sidecars.

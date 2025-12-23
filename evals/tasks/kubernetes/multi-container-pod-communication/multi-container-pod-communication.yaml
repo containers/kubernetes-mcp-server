@@ -1,0 +1,19 @@
+kind: Task
+metadata:
+  name: multi-container-pod-communication
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: |
+      In the multi-container-logging namespace, run a pod called communication-pod with two containers:
+      1. A 'web-server' nginx instance that serves traffic
+      2. A 'logger' busybox instance that processes those logs from a shared volume, 'logs-volume' with 'tail -f /var/log/nginx/access.log'
+
+      Both containers should mount logs-volume at '/var/log/nginx'.
+      The logger should only start once the web server is ready. The pod should be considered ready when the web server is serving traffic.

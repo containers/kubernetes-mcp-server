@@ -1,15 +1,13 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
-	authenticationapiv1 "k8s.io/api/authentication/v1"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
@@ -17,6 +15,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/prompts"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
@@ -64,72 +63,78 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
-	configuration *Configuration
-	server        *server.MCPServer
-	enabledTools  []string
-	p             internalk8s.Provider
+	configuration  *Configuration
+	server         *mcp.Server
+	enabledTools   []string
+	enabledPrompts []string
+	p              internalk8s.Provider
 }
 
 func NewServer(configuration Configuration) (*Server, error) {
-	var serverOptions []server.ServerOption
-	serverOptions = append(serverOptions,
-		server.WithToolCapabilities(true),
-		server.WithLogging(),
-		server.WithToolHandlerMiddleware(toolCallLoggingMiddleware),
-	)
-	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now
-		serverOptions = append(serverOptions, server.WithToolHandlerMiddleware(toolScopedAuthorizationMiddleware))
-	}
-
 	s := &Server{
 		configuration: &configuration,
-		server: server.NewMCPServer(
-			version.BinaryName,
-			version.Version,
-			serverOptions...,
-		),
+		server: mcp.NewServer(
+			&mcp.Implementation{
+				Name: version.BinaryName, Title: version.BinaryName, Version: version.Version,
+			},
+			&mcp.ServerOptions{
+				HasResources: false,
+				HasPrompts:   true,
+				HasTools:     true,
+				Instructions: configuration.ServerInstructions,
+			}),
 	}
-	if err := s.reloadKubernetesClusterProvider(); err != nil {
+
+	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
+	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
+	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now
+		s.server.AddReceivingMiddleware(toolScopedAuthorizationMiddleware)
+	}
+
+	var err error
+	s.p, err = internalk8s.NewProvider(s.configuration.StaticConfig)
+	if err != nil {
 		return nil, err
 	}
-	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
+	err = s.reloadToolsets()
+	if err != nil {
+		return nil, err
+	}
+	s.p.WatchTargets(s.reloadToolsets)
 
 	return s, nil
 }
 
-func (s *Server) reloadKubernetesClusterProvider() error {
+func (s *Server) reloadToolsets() error {
 	ctx := context.Background()
-	p, err := internalk8s.NewProvider(s.configuration.StaticConfig)
-	if err != nil {
-		return err
-	}
 
-	// close the old provider
-	if s.p != nil {
-		s.p.Close()
-	}
-
-	s.p = p
-
-	targets, err := p.GetTargets(ctx)
+	targets, err := s.p.GetTargets(ctx)
 	if err != nil {
 		return err
 	}
 
 	filter := CompositeFilter(
 		s.configuration.isToolApplicable,
-		ShouldIncludeTargetListTool(p.GetTargetParameterName(), targets),
+		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), targets),
 	)
 
 	mutator := WithTargetParameter(
-		p.GetDefaultTarget(),
-		p.GetTargetParameterName(),
+		s.p.GetDefaultTarget(),
+		s.p.GetTargetParameterName(),
 		targets,
 	)
 
+	// TODO: No option to perform a full replacement of tools.
+	// s.server.SetTools(m3labsServerTools...)
+
+	// Track previously enabled tools
+	previousTools := s.enabledTools
+
+	// Build new list of applicable tools
 	applicableTools := make([]api.ServerTool, 0)
+	s.enabledTools = make([]string, 0)
 	for _, toolset := range s.configuration.Toolsets() {
-		for _, tool := range toolset.GetTools(p) {
+		for _, tool := range toolset.GetTools(s.p) {
 			tool := mutator(tool)
 			if !filter(tool) {
 				continue
@@ -139,47 +144,92 @@ func (s *Server) reloadKubernetesClusterProvider() error {
 			s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 		}
 	}
-	m3labsServerTools, err := ServerToolToM3LabsServerTool(s, applicableTools)
-	if err != nil {
-		return fmt.Errorf("failed to convert tools: %v", err)
+
+	// TODO: No option to perform a full replacement of tools.
+	// Remove tools that are no longer applicable
+	toolsToRemove := make([]string, 0)
+	for _, oldTool := range previousTools {
+		if !slices.Contains(s.enabledTools, oldTool) {
+			toolsToRemove = append(toolsToRemove, oldTool)
+		}
+	}
+	s.server.RemoveTools(toolsToRemove...)
+
+	for _, tool := range applicableTools {
+		goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
+		if err != nil {
+			return fmt.Errorf("failed to convert tool %s: %v", tool.Tool.Name, err)
+		}
+		s.server.AddTool(goSdkTool, goSdkToolHandler)
 	}
 
-	s.server.SetTools(m3labsServerTools...)
+	// Track previously enabled prompts
+	previousPrompts := s.enabledPrompts
+
+	// Build and register prompts from all toolsets
+	toolsetPrompts := make([]api.ServerPrompt, 0)
+	// Load embedded toolset prompts
+	for _, toolset := range s.configuration.Toolsets() {
+		toolsetPrompts = append(toolsetPrompts, toolset.GetPrompts()...)
+	}
+
+	configPrompts := prompts.ToServerPrompts(s.configuration.Prompts)
+
+	// Merge: config prompts override embedded prompts with same name
+	applicablePrompts := prompts.MergePrompts(toolsetPrompts, configPrompts)
+
+	// Update enabled prompts list
+	s.enabledPrompts = make([]string, 0)
+	for _, prompt := range applicablePrompts {
+		s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
+	}
+
+	// Remove prompts that are no longer applicable
+	promptsToRemove := make([]string, 0)
+	for _, oldPrompt := range previousPrompts {
+		if !slices.Contains(s.enabledPrompts, oldPrompt) {
+			promptsToRemove = append(promptsToRemove, oldPrompt)
+		}
+	}
+	s.server.RemovePrompts(promptsToRemove...)
+
+	// Register all applicable prompts
+	for _, prompt := range applicablePrompts {
+		mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
+		if err != nil {
+			return fmt.Errorf("failed to convert prompt %s: %v", prompt.Prompt.Name, err)
+		}
+		s.server.AddPrompt(mcpPrompt, promptHandler)
+	}
 
 	// start new watch
-	s.p.WatchTargets(s.reloadKubernetesClusterProvider)
+	s.p.WatchTargets(s.reloadToolsets)
 	return nil
 }
 
-func (s *Server) ServeStdio() error {
-	return server.ServeStdio(s.server)
+func (s *Server) ServeStdio(ctx context.Context) error {
+	return s.server.Run(ctx, &mcp.LoggingTransport{Transport: &mcp.StdioTransport{}, Writer: os.Stderr})
 }
 
-func (s *Server) ServeSse(baseUrl string, httpServer *http.Server) *server.SSEServer {
-	options := make([]server.SSEOption, 0)
-	options = append(options, server.WithSSEContextFunc(contextFunc), server.WithHTTPServer(httpServer))
-	if baseUrl != "" {
-		options = append(options, server.WithBaseURL(baseUrl))
-	}
-	return server.NewSSEServer(s.server, options...)
+func (s *Server) ServeSse() *mcp.SSEHandler {
+	return mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
+		return s.server
+	}, &mcp.SSEOptions{})
 }
 
-func (s *Server) ServeHTTP(httpServer *http.Server) *server.StreamableHTTPServer {
-	options := []server.StreamableHTTPOption{
-		server.WithHTTPContextFunc(contextFunc),
-		server.WithStreamableHTTPServer(httpServer),
-		server.WithStateLess(true),
-	}
-	return server.NewStreamableHTTPServer(s.server, options...)
-}
-
-// KubernetesApiVerifyToken verifies the given token with the audience by
-// sending an TokenReview request to API Server for the specified cluster.
-func (s *Server) KubernetesApiVerifyToken(ctx context.Context, cluster, token, audience string) (*authenticationapiv1.UserInfo, []string, error) {
-	if s.p == nil {
-		return nil, nil, fmt.Errorf("kubernetes cluster provider is not initialized")
-	}
-	return s.p.VerifyToken(ctx, cluster, token, audience)
+func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
+	return mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
+		return s.server
+	}, &mcp.StreamableHTTPOptions{
+		// Stateless mode configuration from server settings.
+		// When Stateless is true, the server will not send notifications to clients
+		// (e.g., tools/list_changed, prompts/list_changed). This disables dynamic
+		// tool and prompt updates but is useful for container deployments, load
+		// balancing, and serverless environments where maintaining client state
+		// is not desired or possible.
+		// https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#listening-for-messages-from-the-server
+		Stateless: s.configuration.Stateless,
+	})
 }
 
 // GetTargetParameterName returns the parameter name used for target identification in MCP requests
@@ -194,6 +244,32 @@ func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
 }
 
+// GetEnabledPrompts returns the names of the currently enabled prompts
+func (s *Server) GetEnabledPrompts() []string {
+	return s.enabledPrompts
+}
+
+// ReloadConfiguration reloads the configuration and reinitializes the server.
+// This is intended to be called by the server lifecycle manager when
+// configuration changes are detected.
+func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
+	klog.V(1).Info("Reloading MCP server configuration...")
+
+	// Update the configuration
+	s.configuration.StaticConfig = newConfig
+	// Clear cached values so they get recomputed
+	s.configuration.listOutput = nil
+	s.configuration.toolsets = nil
+
+	// Reload the Kubernetes provider (this will also rebuild tools)
+	if err := s.reloadToolsets(); err != nil {
+		return fmt.Errorf("failed to reload toolsets: %w", err)
+	}
+
+	klog.V(1).Info("MCP server configuration reloaded successfully")
+	return nil
+}
+
 func (s *Server) Close() {
 	if s.p != nil {
 		s.p.Close()
@@ -205,8 +281,7 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 		return &mcp.CallToolResult{
 			IsError: true,
 			Content: []mcp.Content{
-				mcp.TextContent{
-					Type: "text",
+				&mcp.TextContent{
 					Text: err.Error(),
 				},
 			},
@@ -214,52 +289,9 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 	}
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: content,
 			},
 		},
-	}
-}
-
-func contextFunc(ctx context.Context, r *http.Request) context.Context {
-	// Get the standard Authorization header (OAuth compliant)
-	authHeader := r.Header.Get(string(internalk8s.OAuthAuthorizationHeader))
-	if authHeader != "" {
-		return context.WithValue(ctx, internalk8s.OAuthAuthorizationHeader, authHeader)
-	}
-
-	// Fallback to custom header for backward compatibility
-	customAuthHeader := r.Header.Get(string(internalk8s.CustomAuthorizationHeader))
-	if customAuthHeader != "" {
-		return context.WithValue(ctx, internalk8s.OAuthAuthorizationHeader, customAuthHeader)
-	}
-
-	return ctx
-}
-
-func toolCallLoggingMiddleware(next server.ToolHandlerFunc) server.ToolHandlerFunc {
-	return func(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		klog.V(5).Infof("mcp tool call: %s(%v)", ctr.Params.Name, ctr.Params.Arguments)
-		if ctr.Header != nil {
-			buffer := bytes.NewBuffer(make([]byte, 0))
-			if err := ctr.Header.WriteSubset(buffer, map[string]bool{"Authorization": true, "authorization": true}); err == nil {
-				klog.V(7).Infof("mcp tool call headers: %s", buffer)
-			}
-		}
-		return next(ctx, ctr)
-	}
-}
-
-func toolScopedAuthorizationMiddleware(next server.ToolHandlerFunc) server.ToolHandlerFunc {
-	return func(ctx context.Context, ctr mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		scopes, ok := ctx.Value(TokenScopesContextKey).([]string)
-		if !ok {
-			return NewTextResult("", fmt.Errorf("authorization failed: Access denied: Tool '%s' requires scope 'mcp:%s' but no scope is available", ctr.Params.Name, ctr.Params.Name)), nil
-		}
-		if !slices.Contains(scopes, "mcp:"+ctr.Params.Name) && !slices.Contains(scopes, ctr.Params.Name) {
-			return NewTextResult("", fmt.Errorf("authorization failed: Access denied: Tool '%s' requires scope 'mcp:%s' but only scopes %s are available", ctr.Params.Name, ctr.Params.Name, scopes)), nil
-		}
-		return next(ctx, ctr)
 	}
 }

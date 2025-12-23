@@ -113,6 +113,134 @@ The test suite relies on the `setup-envtest` tooling from `sigs.k8s.io/controlle
 The first run downloads a Kubernetes `envtest` environment from the internet, so network access is required.
 Without it some tests will fail during setup.
 
+### Testing Patterns and Guidelines
+
+This project follows specific testing patterns to ensure consistency, maintainability, and quality. When writing tests, adhere to the following guidelines:
+
+#### Test Framework
+
+- **Use `testify/suite`** for organizing tests into suites
+- Tests should be structured using test suites that embed `suite.Suite`
+- Each test file should have a corresponding suite struct (e.g., `UnstructuredSuite`, `KubevirtSuite`)
+- Use the `suite.Run()` function to execute test suites
+
+Example:
+```go
+type MyTestSuite struct {
+    suite.Suite
+}
+
+func (s *MyTestSuite) TestSomething() {
+    s.Run("descriptive scenario name", func() {
+        // test implementation
+    })
+}
+
+func TestMyFeature(t *testing.T) {
+    suite.Run(t, new(MyTestSuite))
+}
+```
+
+#### Behavior-Based Testing
+
+- **Test the public API only** - tests should be black-box and not access internal/private functions
+- **No mocks** - use real implementations and integration testing where possible
+- **Behavior over implementation** - test what the code does, not how it does it
+- Focus on observable behavior and outcomes rather than internal state
+
+#### Test Organization
+
+- **Use nested subtests** with `s.Run()` to organize related test cases
+- **Descriptive names** - subtest names should clearly describe the scenario being tested
+- Group related scenarios together under a parent test (e.g., "edge cases", "with valid input")
+
+Example structure:
+```go
+func (s *MySuite) TestFeature() {
+    s.Run("valid input scenarios", func() {
+        s.Run("handles simple case correctly", func() {
+            // test code
+        })
+        s.Run("handles complex case with nested data", func() {
+            // test code
+        })
+    })
+    s.Run("edge cases", func() {
+        s.Run("returns error for nil input", func() {
+            // test code
+        })
+        s.Run("handles empty input gracefully", func() {
+            // test code
+        })
+    })
+}
+```
+
+#### Assertions
+
+- **One assertion per test case** - each `s.Run()` block should ideally test one specific behavior
+- Use `testify` assertion methods: `s.Equal()`, `s.True()`, `s.False()`, `s.Nil()`, `s.NotNil()`, etc.
+- Provide clear assertion messages when the failure reason might not be obvious
+
+Example:
+```go
+s.Run("returns expected value", func() {
+    result := functionUnderTest()
+    s.Equal("expected", result, "function should return the expected string")
+})
+```
+
+#### Coverage
+
+- **Aim for high test coverage** of the public API
+- Add edge case tests to cover error paths and boundary conditions
+- Common edge cases to consider:
+  - Nil/null inputs
+  - Empty strings, slices, maps
+  - Negative numbers or invalid indices
+  - Type mismatches
+  - Malformed input (e.g., invalid paths, formats)
+
+#### Error Handling
+
+- **Never ignore errors** in production code
+- Always check and handle errors from functions that return them
+- In tests, use `s.Require().NoError(err)` for operations that must succeed for the test to be valid
+- Use `s.Error(err)` or `s.NoError(err)` for testing error conditions
+
+Example:
+```go
+s.Run("returns error for invalid input", func() {
+    result, err := functionUnderTest(invalidInput)
+    s.Error(err, "expected error for invalid input")
+    s.Nil(result, "result should be nil when error occurs")
+})
+```
+
+#### Test Helpers
+
+- Create reusable test helpers in `internal/test/` for common testing utilities
+- Test helpers should be generic and reusable across multiple test files
+- Document test helpers with clear godoc comments explaining their purpose and usage
+
+Example from this project:
+```go
+// FieldString retrieves a string field from an unstructured object using JSONPath-like notation.
+// Examples:
+//   - "spec.runStrategy"
+//   - "spec.template.spec.volumes[0].containerDisk.image"
+func FieldString(obj *unstructured.Unstructured, path string) string {
+    // implementation
+}
+```
+
+#### Examples from the Codebase
+
+Good examples of these patterns can be found in:
+- `internal/test/unstructured_test.go` - demonstrates proper use of testify/suite, nested subtests, and edge case testing
+- `pkg/mcp/kubevirt_test.go` - shows behavior-based testing of the MCP layer
+- `pkg/kubernetes/manager_test.go` - illustrates testing with proper setup/teardown and subtests
+
 ## Linting
 
 Static analysis is performed with `golangci-lint`:
@@ -140,9 +268,6 @@ make keycloak-status
 
 # Tail Keycloak logs
 make keycloak-logs
-
-# Install required development tools (like Kind) to ./_output/bin/
-make tools
 ```
 
 **Distribution and Publishing:**
@@ -177,7 +302,7 @@ When introducing new modules run `make tidy` so that `go.mod` and `go.sum` remai
 The server is distributed as a binary executable, a Docker image, an npm package, and a Python package.
 
 - **Native binaries** for Linux, macOS, and Windows are available in the GitHub releases.
-- A **container image** (Docker) is built and pushed to the `quay.io/manusa/kubernetes_mcp_server` repository.
+- A **container image** (Docker) is built and pushed to the `quay.io/containers/kubernetes_mcp_server` repository.
 - An **npm** package is available at [npmjs.com](https://www.npmjs.com/package/kubernetes-mcp-server).
   It wraps the platform-specific binary and provides a convenient way to run the server using `npx`.
 - A **Python** package is available at [pypi.org](https://pypi.org/project/kubernetes-mcp-server/).

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: kubernetes-mcp-server
+description: Helm Chart for the Kubernetes MCP Server
+home: https://github.com/containers/kubernetes-mcp-server
+keywords:
+  - kubernetes
+  - mcp
+maintainers:
+  - name: Andrew Block
+    email: ablock@redhat.com
+  - name: Marc Nuri
+    email: marc.nuri@redhat.com
+version: 0.1.0
+appVersion: "latest"

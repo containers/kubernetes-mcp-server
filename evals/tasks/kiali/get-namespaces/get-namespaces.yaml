@@ -1,0 +1,15 @@
+kind: Task
+metadata:
+  name: "get-namespaces"
+  difficulty: easy
+steps:
+  setup:
+      inline: |-
+        #!/usr/bin/env bash
+  verify:
+    contains: "bookinfo"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash          
+  prompt:
+    inline: Check namespaces in my mesh.

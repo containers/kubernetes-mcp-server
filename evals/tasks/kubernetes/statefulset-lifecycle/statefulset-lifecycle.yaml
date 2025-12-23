@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: statefulset-lifecycle
+  difficulty: hard
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Deploy a 3-replica StatefulSet db in namespace statefulset-test with each pod mounting a 1Gi PVC at /data containing a file `test` populated with the string `initial_data`. Then, scale back down to 1 replicas."

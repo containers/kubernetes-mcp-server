@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -33,7 +32,9 @@ func (t *TestToolset) GetName() string { return t.name }
 
 func (t *TestToolset) GetDescription() string { return t.description }
 
-func (t *TestToolset) GetTools(_ kubernetes.Openshift) []api.ServerTool { return nil }
+func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
+
+func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
 var _ api.Toolset = (*TestToolset)(nil)
 
