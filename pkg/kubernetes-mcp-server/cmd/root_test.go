@@ -451,3 +451,24 @@ func TestDisableMultiCluster(t *testing.T) {
 		}
 	})
 }
+
+func TestStateless(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - Stateless mode: false") {
+			t.Fatalf("Expected stateless mode false, got %s %v", out, err)
+		}
+	})
+	t.Run("set with --stateless", func(t *testing.T) {
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--stateless"})
+		_ = rootCmd.Execute()
+		expected := `(?m)\" - Stateless mode\: true\"`
+		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
+			t.Fatalf("Expected stateless mode to be %s, got %s %v", expected, out.String(), err)
+		}
+	})
+}
