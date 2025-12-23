@@ -28,7 +28,7 @@ func (s *McpHeadersSuite) SetupTest() {
 		s.pathHeaders[req.URL.Path] = req.Header.Clone()
 		s.pathHeadersMux.Unlock()
 	}))
-	s.mockServer.Handle(&test.DiscoveryClientHandler{})
+	s.mockServer.Handle(test.NewDiscoveryClientHandler())
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Request Performed by DynamicClient
 		if req.URL.Path == "/api/v1/namespaces/default/pods" {

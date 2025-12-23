@@ -34,7 +34,7 @@ type AccessControlRoundTripperTestSuite struct {
 
 func (s *AccessControlRoundTripperTestSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
-	s.mockServer.Handle(&test.DiscoveryClientHandler{})
+	s.mockServer.Handle(test.NewDiscoveryClientHandler())
 
 	clientSet, err := kubernetes.NewForConfig(s.mockServer.Config())
 	s.Require().NoError(err, "Expected no error creating clientset")

@@ -19,7 +19,7 @@ func (s *ConfigReloadSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
 	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
-	s.mockServer.Handle(&test.DiscoveryClientHandler{})
+	s.mockServer.Handle(test.NewDiscoveryClientHandler())
 }
 
 func (s *ConfigReloadSuite) TearDownTest() {

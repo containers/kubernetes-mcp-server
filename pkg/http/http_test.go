@@ -45,7 +45,7 @@ type BaseHttpSuite struct {
 func (s *BaseHttpSuite) SetupTest() {
 	http.DefaultClient.Timeout = 10 * time.Second
 	s.MockServer = test.NewMockServer()
-	s.MockServer.Handle(&test.DiscoveryClientHandler{})
+	s.MockServer.Handle(test.NewDiscoveryClientHandler())
 	s.StaticConfig = config.Default()
 	s.StaticConfig.KubeConfig = s.MockServer.KubeconfigFile(s.T())
 }
