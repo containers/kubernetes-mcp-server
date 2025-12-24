@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# Pre-commit hook to validate that all Kiali endpoints have contract tests
+
+# Get the directory of the hook script
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HOOK_DIR/../.." && pwd)"
+
+# Paths to the files we need to check
+ENDPOINTS_FILE="$REPO_ROOT/pkg/kiali/endpoints.go"
+TEST_FILE="$REPO_ROOT/pkg/kiali/tests/contract/api_test.go"
+VALIDATOR_SCRIPT="$REPO_ROOT/hack/validate-kiali-endpoints.go"
+
+# Check if the files exist
+if [ ! -f "$ENDPOINTS_FILE" ] || [ ! -f "$TEST_FILE" ] || [ ! -f "$VALIDATOR_SCRIPT" ]; then
+    exit 0
+fi
+
+# Check if endpoints.go or api_test.go are in the commit
+if git diff --cached --name-only | grep -q "pkg/kiali/endpoints.go\|pkg/kiali/tests/contract/api_test.go"; then
+    # Build and run the validation script
+    cd "$REPO_ROOT"
+    
+    # Build the validator to a temporary location
+    VALIDATOR_BIN=$(mktemp)
+    if ! go build -o "$VALIDATOR_BIN" "$VALIDATOR_SCRIPT" 2>/dev/null; then
+        echo "Warning: Failed to build validator script, skipping endpoint validation"
+        rm -f "$VALIDATOR_BIN"
+        exit 0
+    fi
+    
+    # Run the validator
+    "$VALIDATOR_BIN" "$ENDPOINTS_FILE" "$TEST_FILE"
+    VALIDATOR_EXIT=$?
+    
+    # Clean up
+    rm -f "$VALIDATOR_BIN"
+    
+    if [ $VALIDATOR_EXIT -ne 0 ]; then
+        echo ""
+        echo "❌ Pre-commit hook failed: Some endpoints are missing contract tests"
+        echo "Please add tests for the missing endpoints before committing."
+        exit 1
+    fi
+fi
+
+exit 0
+
