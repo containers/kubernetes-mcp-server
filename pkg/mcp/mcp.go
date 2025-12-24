@@ -75,12 +75,17 @@ func NewServer(configuration Configuration) (*Server, error) {
 		configuration: &configuration,
 		server: mcp.NewServer(
 			&mcp.Implementation{
-				Name: version.BinaryName, Title: version.BinaryName, Version: version.Version,
+				Name:       version.BinaryName,
+				Title:      version.BinaryName,
+				Version:    version.Version,
+				WebsiteURL: version.WebsiteURL,
 			},
 			&mcp.ServerOptions{
-				HasResources: false,
-				HasPrompts:   true,
-				HasTools:     true,
+				Capabilities: &mcp.ServerCapabilities{
+					Resources: nil,
+					Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
+					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
+				},
 				Instructions: configuration.ServerInstructions,
 			}),
 	}
