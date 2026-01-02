@@ -167,6 +167,7 @@ func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
 		m.StaticConfig = cnf
 	}
 
+	m.loadEnvironmentVariables()
 	m.loadFlags(cmd)
 
 	m.initializeLogging()
@@ -179,7 +180,70 @@ func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
 	return nil
 }
 
+func (m *MCPServerOptions) loadEnvironmentVariables() {
+	// Load configuration from environment variables
+	// Environment variables take precedence over config file but not over command-line flags
+	if v := os.Getenv("MCP_LOG_LEVEL"); v != "" {
+		if level, err := strconv.Atoi(v); err == nil {
+			m.StaticConfig.LogLevel = level
+		}
+	}
+	if v := os.Getenv("MCP_PORT"); v != "" {
+		m.StaticConfig.Port = v
+	}
+	if v := os.Getenv("MCP_SSE_BASE_URL"); v != "" {
+		m.StaticConfig.SSEBaseURL = v
+	}
+	if v := os.Getenv("MCP_KUBECONFIG"); v != "" {
+		m.StaticConfig.KubeConfig = v
+	}
+	if v := os.Getenv("MCP_LIST_OUTPUT"); v != "" {
+		m.StaticConfig.ListOutput = v
+	}
+	if v := os.Getenv("MCP_READ_ONLY"); v != "" {
+		if readOnly, err := strconv.ParseBool(v); err == nil {
+			m.StaticConfig.ReadOnly = readOnly
+		}
+	}
+	if v := os.Getenv("MCP_DISABLE_DESTRUCTIVE"); v != "" {
+		if disableDestructive, err := strconv.ParseBool(v); err == nil {
+			m.StaticConfig.DisableDestructive = disableDestructive
+		}
+	}
+	if v := os.Getenv("MCP_STATELESS"); v != "" {
+		if stateless, err := strconv.ParseBool(v); err == nil {
+			m.StaticConfig.Stateless = stateless
+		}
+	}
+	if v := os.Getenv("MCP_TOOLSETS"); v != "" {
+		m.StaticConfig.Toolsets = strings.Split(v, ",")
+	}
+	if v := os.Getenv("MCP_REQUIRE_OAUTH"); v != "" {
+		if requireOAuth, err := strconv.ParseBool(v); err == nil {
+			m.StaticConfig.RequireOAuth = requireOAuth
+		}
+	}
+	if v := os.Getenv("MCP_OAUTH_AUDIENCE"); v != "" {
+		m.StaticConfig.OAuthAudience = v
+	}
+	if v := os.Getenv("MCP_AUTHORIZATION_URL"); v != "" {
+		m.StaticConfig.AuthorizationURL = v
+	}
+	if v := os.Getenv("MCP_SERVER_URL"); v != "" {
+		m.StaticConfig.ServerURL = v
+	}
+	if v := os.Getenv("MCP_CERTIFICATE_AUTHORITY"); v != "" {
+		m.StaticConfig.CertificateAuthority = v
+	}
+	if v := os.Getenv("MCP_DISABLE_MULTI_CLUSTER"); v != "" {
+		if disableMultiCluster, err := strconv.ParseBool(v); err == nil && disableMultiCluster {
+			m.StaticConfig.ClusterProviderStrategy = api.ClusterProviderDisabled
+		}
+	}
+}
+
 func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
+	// Command-line flags take precedence over environment variables
 	if cmd.Flag(flagLogLevel).Changed {
 		m.StaticConfig.LogLevel = m.LogLevel
 	}

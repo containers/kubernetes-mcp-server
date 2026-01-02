@@ -192,12 +192,89 @@ uvx kubernetes-mcp-server@latest --help
 | `--config`                | (Optional) Path to the main TOML configuration file. See [Drop-in Configuration](#drop-in-configuration) section below for details.                                                                                                                                                          |
 | `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Drop-in Configuration](#drop-in-configuration) section below for details.                       |
 | `--kubeconfig`            | Path to the Kubernetes configuration file. If not provided, it will try to resolve the configuration (in-cluster, default location, etc.).                                                                                                                                                    |
-| `--list-output`           | Output format for resource list operations (one of: yaml, table) (default "table")                                                                                                                                                                                                            |
+| `--list-output`           | Output format for resource list operations (one of: yaml, json, table) (default "table")                                                                                                                                                                                                      |
 | `--read-only`             | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
 | `--disable-destructive`   | If set, the MCP server will disable all destructive operations (delete, update, etc.) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without accidentally making changes. This option has no effect when `--read-only` is used.                            |
 | `--stateless`             | If set, the MCP server will run in stateless mode, disabling tool and prompt change notifications. This is useful for container deployments, load balancing, and serverless environments where maintaining client state is not desired. |
 | `--toolsets`              | Comma-separated list of toolsets to enable. Check the [🛠️ Tools and Functionalities](#tools-and-functionalities) section for more information.                                                                                                                                               |
 | `--disable-multi-cluster` | If set, the MCP server will disable multi-cluster support and will only use the current context from the kubeconfig file. This is useful if you want to restrict the MCP server to a single cluster.                                                                                          |
+
+### Environment Variables
+
+All configuration options can also be set using environment variables. This is particularly useful for container deployments where environment variables are the preferred configuration method.
+
+Environment variables use the `MCP_` prefix and are named after the corresponding command-line flag in uppercase with hyphens replaced by underscores.
+
+**Configuration precedence (highest to lowest):**
+1. Command-line flags
+2. Environment variables
+3. Configuration file (TOML)
+4. Default values
+
+| Environment Variable           | Equivalent Flag             | Example Value          | Description                                                                 |
+|--------------------------------|-----------------------------|------------------------|-----------------------------------------------------------------------------|
+| `MCP_PORT`                     | `--port`                    | `8080`                 | Port for HTTP/SSE server                                                    |
+| `MCP_LOG_LEVEL`                | `--log-level`               | `5`                    | Logging level (0-9)                                                         |
+| `MCP_KUBECONFIG`               | `--kubeconfig`              | `/path/to/kubeconfig`  | Path to kubeconfig file                                                     |
+| `MCP_LIST_OUTPUT`              | `--list-output`             | `json`                 | Output format (yaml, json, or table)                                        |
+| `MCP_READ_ONLY`                | `--read-only`               | `true`                 | Enable read-only mode (true/false)                                          |
+| `MCP_DISABLE_DESTRUCTIVE`      | `--disable-destructive`     | `true`                 | Disable destructive operations (true/false)                                 |
+| `MCP_STATELESS`                | `--stateless`               | `true`                 | Enable stateless mode (true/false)                                          |
+| `MCP_TOOLSETS`                 | `--toolsets`                | `core,config,helm`     | Comma-separated list of toolsets                                            |
+| `MCP_DISABLE_MULTI_CLUSTER`    | `--disable-multi-cluster`   | `true`                 | Disable multi-cluster support (true/false)                                  |
+| `MCP_SSE_BASE_URL`             | `--sse-base-url`            | `https://example.com`  | Public base URL for SSE                                                     |
+| `MCP_REQUIRE_OAUTH`            | `--require-oauth`           | `true`                 | Require OAuth authentication (true/false)                                   |
+| `MCP_OAUTH_AUDIENCE`           | `--oauth-audience`          | `my-audience`          | OAuth token audience                                                        |
+| `MCP_AUTHORIZATION_URL`        | `--authorization-url`       | `https://auth.example` | OAuth authorization server URL                                              |
+| `MCP_SERVER_URL`               | `--server-url`              | `https://mcp.example`  | This server's URL                                                           |
+| `MCP_CERTIFICATE_AUTHORITY`    | `--certificate-authority`   | `/path/to/ca.crt`      | Path to CA certificate                                                      |
+
+**Example: Running in a Docker container with environment variables**
+
+```bash
+docker run -d \
+  -e MCP_PORT=8080 \
+  -e MCP_LIST_OUTPUT=json \
+  -e MCP_READ_ONLY=true \
+  -e MCP_TOOLSETS=core,config \
+  -v ~/.kube/config:/root/.kube/config:ro \
+  quay.io/containers/kubernetes_mcp_server:latest
+```
+
+**Example: Kubernetes Deployment with environment variables**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubernetes-mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubernetes-mcp-server
+  template:
+    metadata:
+      labels:
+        app: kubernetes-mcp-server
+    spec:
+      containers:
+      - name: mcp-server
+        image: quay.io/containers/kubernetes_mcp_server:latest
+        env:
+        - name: MCP_PORT
+          value: "8080"
+        - name: MCP_LIST_OUTPUT
+          value: "json"
+        - name: MCP_READ_ONLY
+          value: "true"
+        - name: MCP_STATELESS
+          value: "true"
+        - name: MCP_TOOLSETS
+          value: "core,config,helm"
+        ports:
+        - containerPort: 8080
+```
 
 ### Drop-in Configuration <a id="drop-in-configuration"></a>
 

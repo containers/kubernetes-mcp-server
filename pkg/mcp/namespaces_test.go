@@ -65,6 +65,33 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 	})
 }
 
+func (s *NamespacesSuite) TestNamespacesListAsJson() {
+	s.Cfg.ListOutput = "json"
+	s.InitMcpClient()
+	s.Run("namespaces_list (list_output=json)", func() {
+		toolResult, err := s.CallTool("namespaces_list", map[string]interface{}{})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Require().NotNil(toolResult, "Expected tool result from call")
+		out := toolResult.Content[0].(mcp.TextContent).Text
+		s.Run("returns valid JSON", func() {
+			var result []map[string]interface{}
+			err := json.Unmarshal([]byte(out), &result)
+			s.NoErrorf(err, "Expected valid JSON output, got error: %v\nOutput: %s", err, out)
+		})
+		s.Run("contains expected namespace data", func() {
+			s.Contains(out, `"name": "ns-1"`, "Expected namespace name in JSON output")
+			s.Contains(out, `"name": "ns-2"`, "Expected namespace name in JSON output")
+			s.Contains(out, `"kind": "Namespace"`, "Expected kind in JSON output")
+		})
+		s.Run("does not contain managedFields", func() {
+			s.NotContains(out, "managedFields", "JSON output should not contain managedFields")
+		})
+	})
+}
+
 func (s *NamespacesSuite) TestNamespacesListAsTable() {
 	s.Cfg.ListOutput = "table"
 	s.InitMcpClient()

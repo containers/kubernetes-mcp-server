@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"encoding/json"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -13,6 +14,8 @@ import (
 var Yaml = &yaml{}
 
 var Table = &table{}
+
+var Json = &jsonOutput{}
 
 type Output interface {
 	// GetName returns the name of the output format, will be used by the CLI to identify the output format.
@@ -26,6 +29,7 @@ type Output interface {
 var Outputs = []Output{
 	Yaml,
 	Table,
+	Json,
 }
 
 var Names []string
@@ -95,6 +99,18 @@ func (p *table) PrintObj(obj runtime.Unstructured) (string, error) {
 	return buf.String(), err
 }
 
+type jsonOutput struct{}
+
+func (p *jsonOutput) GetName() string {
+	return "json"
+}
+func (p *jsonOutput) AsTable() bool {
+	return false
+}
+func (p *jsonOutput) PrintObj(obj runtime.Unstructured) (string, error) {
+	return MarshalJson(obj)
+}
+
 func MarshalYaml(v any) (string, error) {
 	switch t := v.(type) {
 	//case unstructured.UnstructuredList:
@@ -113,6 +129,23 @@ func MarshalYaml(v any) (string, error) {
 		t.SetManagedFields(nil)
 	}
 	ret, err := yml.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
+func MarshalJson(v any) (string, error) {
+	switch t := v.(type) {
+	case *unstructured.UnstructuredList:
+		for i := range t.Items {
+			t.Items[i].SetManagedFields(nil)
+		}
+		v = t.Items
+	case *unstructured.Unstructured:
+		t.SetManagedFields(nil)
+	}
+	ret, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return "", err
 	}

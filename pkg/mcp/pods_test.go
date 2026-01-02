@@ -185,6 +185,57 @@ func (s *PodsSuite) TestPodsListDenied() {
 	})
 }
 
+func (s *PodsSuite) TestPodsListAsJson() {
+	s.Cfg.ListOutput = "json"
+	s.InitMcpClient()
+	s.Run("pods_list (list_output=json)", func() {
+		podsList, err := s.CallTool("pods_list", map[string]interface{}{})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(podsList.IsError, "call tool failed")
+		})
+		s.Require().NotNil(podsList, "Expected tool result from call")
+		outPodsList := podsList.Content[0].(mcp.TextContent).Text
+		s.Run("returns valid JSON", func() {
+			var result []map[string]interface{}
+			err := json.Unmarshal([]byte(outPodsList), &result)
+			s.NoErrorf(err, "Expected valid JSON output, got error: %v\nOutput: %s", err, outPodsList)
+		})
+		s.Run("contains expected pod data", func() {
+			s.Contains(outPodsList, `"name": "a-pod-in-ns-1"`, "Expected pod name in JSON output")
+			s.Contains(outPodsList, `"namespace": "ns-1"`, "Expected namespace in JSON output")
+			s.Contains(outPodsList, `"name": "a-pod-in-default"`, "Expected pod name in JSON output")
+			s.Contains(outPodsList, `"namespace": "default"`, "Expected namespace in JSON output")
+		})
+		s.Run("does not contain managedFields", func() {
+			s.NotContains(outPodsList, "managedFields", "JSON output should not contain managedFields")
+		})
+	})
+	s.Run("pods_list_in_namespace (list_output=json)", func() {
+		podsListInNamespace, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{
+			"namespace": "ns-1",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(podsListInNamespace.IsError, "call tool failed")
+		})
+		s.Require().NotNil(podsListInNamespace, "Expected tool result from call")
+		outPodsListInNamespace := podsListInNamespace.Content[0].(mcp.TextContent).Text
+		s.Run("returns valid JSON", func() {
+			var result []map[string]interface{}
+			err := json.Unmarshal([]byte(outPodsListInNamespace), &result)
+			s.NoErrorf(err, "Expected valid JSON output, got error: %v\nOutput: %s", err, outPodsListInNamespace)
+		})
+		s.Run("contains expected pod data", func() {
+			s.Contains(outPodsListInNamespace, `"name": "a-pod-in-ns-1"`, "Expected pod name in JSON output")
+			s.Contains(outPodsListInNamespace, `"namespace": "ns-1"`, "Expected namespace in JSON output")
+		})
+		s.Run("does not contain pods from other namespaces", func() {
+			s.NotContains(outPodsListInNamespace, `"name": "a-pod-in-default"`, "Should not contain pods from other namespaces")
+		})
+	})
+}
+
 func (s *PodsSuite) TestPodsListAsTable() {
 	s.Cfg.ListOutput = "table"
 	s.InitMcpClient()

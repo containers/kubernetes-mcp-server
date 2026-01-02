@@ -145,6 +145,42 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesListAsJson() {
+	s.Cfg.ListOutput = "json"
+	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
+	s.T().Cleanup(func() {
+		s.Require().NoError(EnvTestInOpenShiftClear(s.T().Context()), "Expected to clear OpenShift test configuration")
+	})
+	s.InitMcpClient()
+
+	s.Run("resources_list(apiVersion=v1, kind=ConfigMap) (list_output=json)", func() {
+		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		_, _ = kc.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "a-configmap-to-list-as-json", Labels: map[string]string{"resource": "config-map"}},
+			Data:       map[string]string{"key": "value"},
+		}, metav1.CreateOptions{})
+		configMapList, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap"})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(configMapList.IsError, "call tool failed")
+		})
+		s.Require().NotNil(configMapList, "Expected tool result from call")
+		outConfigMapList := configMapList.Content[0].(mcp.TextContent).Text
+		s.Run("returns valid JSON", func() {
+			var result []map[string]interface{}
+			err := json.Unmarshal([]byte(outConfigMapList), &result)
+			s.NoErrorf(err, "Expected valid JSON output, got error: %v\nOutput: %s", err, outConfigMapList)
+		})
+		s.Run("contains expected ConfigMap data", func() {
+			s.Contains(outConfigMapList, `"name": "a-configmap-to-list-as-json"`, "Expected ConfigMap name in JSON output")
+			s.Contains(outConfigMapList, `"kind": "ConfigMap"`, "Expected kind in JSON output")
+		})
+		s.Run("does not contain managedFields", func() {
+			s.NotContains(outConfigMapList, "managedFields", "JSON output should not contain managedFields")
+		})
+	})
+}
+
 func (s *ResourcesSuite) TestResourcesListAsTable() {
 	s.Cfg.ListOutput = "table"
 	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")

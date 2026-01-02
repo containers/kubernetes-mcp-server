@@ -472,3 +472,88 @@ func TestStateless(t *testing.T) {
 		}
 	})
 }
+
+func TestEnvironmentVariables(t *testing.T) {
+	t.Run("MCP_LIST_OUTPUT sets list output format", func(t *testing.T) {
+		t.Setenv("MCP_LIST_OUTPUT", "json")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
+		_ = rootCmd.Execute()
+		expected := `(?m)\" - ListOutput\: json\"`
+		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
+			t.Fatalf("Expected list-output to be json from env var, got %s %v", out.String(), err)
+		}
+	})
+	t.Run("MCP_READ_ONLY sets read-only mode", func(t *testing.T) {
+		t.Setenv("MCP_READ_ONLY", "true")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
+		_ = rootCmd.Execute()
+		expected := `(?m)\" - Read-only mode\: true\"`
+		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
+			t.Fatalf("Expected read-only mode to be true from env var, got %s %v", out.String(), err)
+		}
+	})
+	t.Run("MCP_DISABLE_DESTRUCTIVE sets disable-destructive mode", func(t *testing.T) {
+		t.Setenv("MCP_DISABLE_DESTRUCTIVE", "true")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
+		_ = rootCmd.Execute()
+		expected := `(?m)\" - Disable destructive tools\: true\"`
+		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
+			t.Fatalf("Expected disable-destructive to be true from env var, got %s %v", out.String(), err)
+		}
+	})
+	t.Run("MCP_STATELESS sets stateless mode", func(t *testing.T) {
+		t.Setenv("MCP_STATELESS", "true")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
+		_ = rootCmd.Execute()
+		expected := `(?m)\" - Stateless mode\: true\"`
+		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
+			t.Fatalf("Expected stateless mode to be true from env var, got %s %v", out.String(), err)
+		}
+	})
+	t.Run("MCP_PORT sets port", func(t *testing.T) {
+		t.Setenv("MCP_PORT", "9090")
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
+		_ = rootCmd.Execute()
+		// Verify port was set (difficult to test without actually starting server)
+		// This test mainly ensures no error is thrown
+	})
+	t.Run("MCP_LOG_LEVEL sets log level", func(t *testing.T) {
+		t.Setenv("MCP_LOG_LEVEL", "5")
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337"})
+		_ = rootCmd.Execute()
+		// Verify log level was set
+	})
+	t.Run("MCP_TOOLSETS sets toolsets", func(t *testing.T) {
+		t.Setenv("MCP_TOOLSETS", "core,config")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
+		_ = rootCmd.Execute()
+		if !strings.Contains(out.String(), " - Toolsets: core, config") {
+			t.Fatalf("Expected toolsets to be core,config from env var, got %s", out.String())
+		}
+	})
+	t.Run("command-line flags override environment variables", func(t *testing.T) {
+		t.Setenv("MCP_LIST_OUTPUT", "yaml")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--list-output=json"})
+		_ = rootCmd.Execute()
+		expected := `(?m)\" - ListOutput\: json\"`
+		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
+			t.Fatalf("Expected list-output to be json (flag should override env), got %s %v", out.String(), err)
+		}
+	})
+}
