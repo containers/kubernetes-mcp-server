@@ -38,6 +38,11 @@ const (
 	ContentTypeXWWWFormUrlEncoded = "application/x-www-form-urlencoded"
 )
 
+const (
+	StrategyKeycloakV1 = "keycloak-v1"
+	StrategyRFC8693    = "rfc8693"
+)
+
 type TokenExchanger interface {
 	Exchange(ctx context.Context, cfg *TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error)
 }

@@ -4,6 +4,11 @@ var (
 	exchangerRegistry = &tokenExchangerRegistry{exchangers: map[string]TokenExchanger{}}
 )
 
+func init() {
+	RegisterTokenExchanger(StrategyKeycloakV1, &keycloakV1Exchanger{})
+	RegisterTokenExchanger(StrategyRFC8693, &rfc8693Exchanger{})
+}
+
 func RegisterTokenExchanger(strategy string, exchanger TokenExchanger) {
 	exchangerRegistry.register(strategy, exchanger)
 }
