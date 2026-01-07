@@ -57,6 +57,13 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	for key, values := range request.Header {
+		// Skip headers that would cause Keycloak to use the proxy's hostname in URLs
+		lowerKey := strings.ToLower(key)
+		if lowerKey == "host" ||
+			strings.HasPrefix(lowerKey, "x-forwarded-") ||
+			lowerKey == "forwarded" {
+			continue
+		}
 		for _, value := range values {
 			req.Header.Add(key, value)
 		}
