@@ -1,4 +1,4 @@
-# Kiali API Contract Tests
+# Kiali API Backend Tests
 
 This directory contains contract tests for the Kiali API endpoints used by the `kubernetes-mcp-server`. 
 These tests validate that the API contract/interface remains stable and that all endpoints return expected response structures.
@@ -65,26 +65,26 @@ Tests are configured via environment variables:
 ### Run all contract tests
 
 ```bash
-go test ./pkg/kiali/tests/contract/... -v
+go test ./pkg/kiali/tests -v
 ```
 
 ### Run from the test directory
 
 ```bash
-cd pkg/kiali/tests/contract
+cd pkg/kiali/tests
 go test -v
 ```
 
 ### Run a specific test
 
 ```bash
-go test ./pkg/kiali/tests/contract/... -v -run TestAuthInfo
+go test ./pkg/kiali/tests -v -run TestAuthInfo
 ```
 
 ### Run with verbose output
 
 ```bash
-go test ./pkg/kiali/tests/contract/... -v -count=1
+go test ./pkg/kiali/tests -v -count=1
 ```
 
 ## Test Structure
@@ -123,8 +123,8 @@ Some tests automatically extract test data from API responses:
 When adding a new endpoint to `pkg/kiali/endpoints.go`, you must add a corresponding test:
 
 1. Add the endpoint constant to `pkg/kiali/endpoints.go`
-2. Add a test method to `api_test.go` that uses the endpoint constant
-3. The pre-commit hook will validate that all endpoints have tests
+2. Add a test method in `pkg/kiali/tests/` that uses the endpoint constant
+3. The pre-commit hook will validate that all endpoints have tests (static check)
 
 Example:
 
@@ -148,15 +148,14 @@ func (s *ContractTestSuite) TestNewEndpoint() {
 
 A pre-commit hook automatically validates that all endpoints have corresponding tests:
 
-- Location: `.git/hooks/pre-commit`
-- Validator script: `hack/validate-endpoint-tests.go`
-- Runs automatically on commits that modify `endpoints.go` or `api_test.go`
+- Source (versioned): `hack/git-hooks/pre-commit`
+- Installed to: `.git/hooks/pre-commit` (run `hack/install-git-hooks.sh`)
+- Runs automatically on commits that modify `pkg/kiali/endpoints.go` or `pkg/kiali/tests/*.go`
 
 To manually run the validator:
 
 ```bash
-go build -o /tmp/validate-endpoint-tests hack/validate-endpoint-tests.go
-/tmp/validate-endpoint-tests pkg/kiali/endpoints.go pkg/kiali/tests/contract/api_test.go
+go test ./pkg/kiali/tests -run TestAllKialiEndpointsAreCoveredByBackendContractTests -count=1
 ```
 
 ## Troubleshooting
@@ -194,7 +193,7 @@ These tests can be integrated into CI/CD pipelines:
     KIALI_URL: ${{ secrets.KIALI_URL }}
     KIALI_TOKEN: ${{ secrets.KIALI_TOKEN }}
     TEST_NAMESPACE: bookinfo
-  run: go test ./pkg/kiali/tests/contract/... -v
+  run: go test ./pkg/kiali/tests -v
 ```
 
 ## Related Documentation
