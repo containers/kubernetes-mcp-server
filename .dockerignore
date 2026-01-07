@@ -1,0 +1,35 @@
+# Build artifacts and tools (contains platform-specific binaries)
+_output/
+
+# IDE and editor directories
+.idea/
+.vscode/
+
+# Docs
+docs/
+
+# Git
+.git/
+.gitignore
+
+# Built binaries
+kubernetes-mcp-server
+kubernetes-mcp-server-darwin-amd64
+kubernetes-mcp-server-darwin-arm64
+kubernetes-mcp-server-linux-amd64
+kubernetes-mcp-server-linux-arm64
+kubernetes-mcp-server-windows-amd64.exe
+kubernetes-mcp-server-windows-arm64.exe
+
+# NPM package artifacts
+npm/
+
+# PyPI artifacts
+python/
+
+# Keycloak config
+.keycloak-config
+
+# Docker
+Dockerfile
+.dockerignore
