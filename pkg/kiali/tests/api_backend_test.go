@@ -1,3 +1,6 @@
+//go:build contract
+// +build contract
+
 package tests
 
 import (
@@ -381,7 +384,7 @@ func (s *ContractTestSuite) TestPodLogs() {
 			}
 		}
 
-		endpoint := formatEndpoint(kiali.PodsLogsEndpoint, s.testNS, podName)
+		endpoint := formatEndpoint(kiali.PodsLogsEndpoint, s.testNS, podName) + "?container=istio-proxy"
 		resp, _, err := s.apiCall(http.MethodGet, endpoint, nil)
 		s.Require().NoError(err)
 
@@ -461,7 +464,7 @@ func (s *ContractTestSuite) TestWorkloadTraces() {
 
 func (s *ContractTestSuite) TestIstioObjectDetails() {
 	s.Run("returns Istio object details with expected structure", func() {
-		endpoint := formatEndpoint(kiali.IstioObjectEndpoint, s.testNS, "gateway.networking.k8s.io", "v1", "HTTPRoute", "bookinfo") + "?validate=true&help=true"
+		endpoint := formatEndpoint(kiali.IstioObjectEndpoint, s.testNS, "networking.istio.io", "v1", "Gateway", "bookinfo-gateway") + "?validate=true&help=true"
 		resp, body, err := s.apiCall(http.MethodGet, endpoint, nil)
 		s.Require().NoError(err)
 		s.Equal(http.StatusOK, resp.StatusCode, "Expected status 200 for %s", endpoint)

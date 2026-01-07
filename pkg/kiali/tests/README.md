@@ -1,7 +1,10 @@
 # Kiali API Backend Tests
 
-This directory contains contract tests for the Kiali API endpoints used by the `kubernetes-mcp-server`. 
+This directory contains test files. 
+
+The file api_backend_test.go contains contract tests for the Kiali API endpoints used by the `kubernetes-mcp-server`. 
 These tests validate that the API contract/interface remains stable and that all endpoints return expected response structures.
+Are excluded by tests run by default. 
 
 ## Overview
 
@@ -144,18 +147,14 @@ func (s *ContractTestSuite) TestNewEndpoint() {
 }
 ```
 
-## Validation Hook
+## Validation
 
-A pre-commit hook automatically validates that all endpoints have corresponding tests:
+The endpoints_converage_test validates that all endpoints have corresponding tests.
 
-- Source (versioned): `hack/git-hooks/pre-commit`
-- Installed to: `.git/hooks/pre-commit` (run `hack/install-git-hooks.sh`)
-- Runs automatically on commits that modify `pkg/kiali/endpoints.go` or `pkg/kiali/tests/*.go`
-
-To manually run the validator:
+To manually run it:
 
 ```bash
-go test ./pkg/kiali/tests -run TestAllKialiEndpointsAreCoveredByBackendContractTests -count=1
+go test endpoints_coverage_test.go -v
 ```
 
 ## Troubleshooting
