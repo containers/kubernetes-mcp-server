@@ -68,26 +68,26 @@ Tests are configured via environment variables:
 ### Run all contract tests
 
 ```bash
-go test ./pkg/kiali/tests -v
+go test ./pkg/kiali/tests/backend/api_backend_test.go -v
 ```
 
 ### Run from the test directory
 
 ```bash
-cd pkg/kiali/tests
+cd pkg/kiali/tests/backend/api_backend_test.go
 go test -v
 ```
 
 ### Run a specific test
 
 ```bash
-go test ./pkg/kiali/tests -v -run TestAuthInfo
+go test ./pkg/kiali/tests/backend/api_backend_test.go -v -run TestAuthInfo
 ```
 
 ### Run with verbose output
 
 ```bash
-go test ./pkg/kiali/tests -v -count=1
+go test ./pkg/kiali/tests/backend/api_backend_test.go -v -count=1
 ```
 
 ## Test Structure
@@ -126,7 +126,7 @@ Some tests automatically extract test data from API responses:
 When adding a new endpoint to `pkg/kiali/endpoints.go`, you must add a corresponding test:
 
 1. Add the endpoint constant to `pkg/kiali/endpoints.go`
-2. Add a test method in `pkg/kiali/tests/` that uses the endpoint constant
+2. Add a test method in `pkg/kiali/tests/backend/api_backend_test.go` that uses the endpoint constant
 3. The pre-commit hook will validate that all endpoints have tests (static check)
 
 Example:
@@ -154,7 +154,8 @@ The endpoints_converage_test validates that all endpoints have corresponding tes
 To manually run it:
 
 ```bash
-go test endpoints_coverage_test.go -v
+cd pkg/kiali/tests/backend
+go test api_backend_test.go -v
 ```
 
 ## Troubleshooting
