@@ -25,8 +25,7 @@ func TestAllKialiEndpointsAreCoveredByBackendContractTests(t *testing.T) {
 	if len(endpointNames) == 0 {
 		t.Fatalf("no endpoints found in %s (unexpected)", endpointsFile)
 	}
-
-	usedNames, err := parseKialiSelectorUsesInDir(testsDir, filepath.Base(thisFile))
+	usedNames, err := parseKialiSelectorUsesInDir(filepath.Join(testsDir, "backend"), filepath.Base(thisFile))
 	if err != nil {
 		t.Fatalf("failed parsing backend tests under %s: %v", testsDir, err)
 	}
@@ -137,5 +136,3 @@ func parseKialiSelectorUsesInDir(dir, excludeBase string) (map[string]bool, erro
 
 	return combined, nil
 }
-
-

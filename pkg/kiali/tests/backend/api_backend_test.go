@@ -1,7 +1,7 @@
 //go:build contract
 // +build contract
 
-package tests
+package backend
 
 import (
 	"bytes"
