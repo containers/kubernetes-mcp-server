@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -42,6 +43,7 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	eventMap, err := kubernetes.NewCore(params).EventsList(params, namespace.(string))
 	if err != nil {
+		mcplog.HandleK8sError(params.Context, err, "events listing")
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %v", err)), nil
 	}
 	if len(eventMap) == 0 {

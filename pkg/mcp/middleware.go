@@ -5,9 +5,23 @@ import (
 	"context"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/klog/v2"
 )
+
+// sessionInjectionMiddleware injects the MCP session into the context for logging support.
+// This middleware should be added first so all subsequent middleware and handlers have access.
+func sessionInjectionMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		if session := req.GetSession(); session != nil {
+			if serverSession, ok := session.(*mcp.ServerSession); ok {
+				ctx = context.WithValue(ctx, mcplog.MCPSessionContextKey, serverSession)
+			}
+		}
+		return next(ctx, method, req)
+	}
+}
 
 func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {

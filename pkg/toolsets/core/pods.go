@@ -11,6 +11,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -294,6 +295,7 @@ func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	ret, err := kubernetes.NewCore(params).PodsGet(params, ns.(string), name.(string))
 	if err != nil {
+		mcplog.HandleK8sError(params.Context, err, "pod access")
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s in namespace %s: %v", name, ns, err)), nil
 	}
 	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
@@ -310,6 +312,7 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	ret, err := kubernetes.NewCore(params).PodsDelete(params, ns.(string), name.(string))
 	if err != nil {
+		mcplog.HandleK8sError(params.Context, err, "pod deletion")
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete pod %s in namespace %s: %v", name, ns, err)), nil
 	}
 	return api.NewToolCallResult(ret, err), nil
