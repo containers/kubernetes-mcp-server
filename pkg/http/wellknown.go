@@ -87,9 +87,13 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	}
 	writer.Header().Set("Content-Type", "application/json")
 	writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+	withCORSHeaders(writer)
+	writer.WriteHeader(resp.StatusCode)
+	_, _ = writer.Write(body)
+}
+
+func withCORSHeaders(writer http.ResponseWriter) {
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
 	writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	writer.WriteHeader(resp.StatusCode)
-	_, _ = writer.Write(body)
 }
