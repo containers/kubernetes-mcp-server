@@ -56,18 +56,6 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		http.Error(writer, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	for key, values := range request.Header {
-		// Skip headers that would cause Keycloak to use the proxy's hostname in URLs
-		lowerKey := strings.ToLower(key)
-		if lowerKey == "host" ||
-			strings.HasPrefix(lowerKey, "x-forwarded-") ||
-			lowerKey == "forwarded" {
-			continue
-		}
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
 	resp, err := w.httpClient.Do(req.WithContext(request.Context()))
 	if err != nil {
 		http.Error(writer, "Failed to perform request: "+err.Error(), http.StatusInternalServerError)
@@ -97,7 +85,11 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 			writer.Header().Add(key, value)
 		}
 	}
+	writer.Header().Set("Content-Type", "application/json")
 	writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+	writer.Header().Set("Access-Control-Allow-Origin", "*")
+	writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	writer.WriteHeader(resp.StatusCode)
 	_, _ = writer.Write(body)
 }

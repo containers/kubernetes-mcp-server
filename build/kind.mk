@@ -64,6 +64,10 @@ kind-create-cluster: kind kind-create-certs
 		fi; \
 		echo "✅ /etc/hosts entry added"; \
 	fi
+	@echo "Exporting kubeconfig to _output/kubeconfig..."; \
+	mkdir -p _output; \
+	$(KIND) export kubeconfig --name $(KIND_CLUSTER_NAME) --kubeconfig _output/kubeconfig; \
+	echo "✅ Kubeconfig exported to _output/kubeconfig"
 
 .PHONY: kind-delete-cluster
 kind-delete-cluster: kind
