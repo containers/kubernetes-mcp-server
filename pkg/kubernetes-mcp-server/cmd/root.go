@@ -57,43 +57,45 @@ kubernetes-mcp-server --port 8080 --disable-multi-cluster
 )
 
 const (
-	flagVersion              = "version"
-	flagLogLevel             = "log-level"
-	flagConfig               = "config"
-	flagConfigDir            = "config-dir"
-	flagPort                 = "port"
-	flagSSEBaseUrl           = "sse-base-url"
-	flagKubeconfig           = "kubeconfig"
-	flagToolsets             = "toolsets"
-	flagListOutput           = "list-output"
-	flagReadOnly             = "read-only"
-	flagDisableDestructive   = "disable-destructive"
-	flagStateless            = "stateless"
-	flagRequireOAuth         = "require-oauth"
-	flagOAuthAudience        = "oauth-audience"
-	flagAuthorizationURL     = "authorization-url"
-	flagServerUrl            = "server-url"
-	flagCertificateAuthority = "certificate-authority"
-	flagDisableMultiCluster  = "disable-multi-cluster"
+	flagVersion               = "version"
+	flagLogLevel              = "log-level"
+	flagConfig                = "config"
+	flagConfigDir             = "config-dir"
+	flagPort                  = "port"
+	flagSSEBaseUrl            = "sse-base-url"
+	flagKubeconfig            = "kubeconfig"
+	flagToolsets              = "toolsets"
+	flagListOutput            = "list-output"
+	flagReadOnly              = "read-only"
+	flagDisableDestructive    = "disable-destructive"
+	flagStateless             = "stateless"
+	flagRequireOAuth          = "require-oauth"
+	flagOAuthAudience         = "oauth-audience"
+	flagAuthorizationURL      = "authorization-url"
+	flagServerUrl             = "server-url"
+	flagCertificateAuthority  = "certificate-authority"
+	flagDisableMultiCluster   = "disable-multi-cluster"
+	flagDefaultToolsetVersion = "default-toolset-version"
 )
 
 type MCPServerOptions struct {
-	Version              bool
-	LogLevel             int
-	Port                 string
-	SSEBaseUrl           string
-	Kubeconfig           string
-	Toolsets             []string
-	ListOutput           string
-	ReadOnly             bool
-	DisableDestructive   bool
-	Stateless            bool
-	RequireOAuth         bool
-	OAuthAudience        string
-	AuthorizationURL     string
-	CertificateAuthority string
-	ServerURL            string
-	DisableMultiCluster  bool
+	Version               bool
+	LogLevel              int
+	Port                  string
+	SSEBaseUrl            string
+	Kubeconfig            string
+	Toolsets              []string
+	ListOutput            string
+	ReadOnly              bool
+	DisableDestructive    bool
+	Stateless             bool
+	RequireOAuth          bool
+	OAuthAudience         string
+	AuthorizationURL      string
+	CertificateAuthority  string
+	ServerURL             string
+	DisableMultiCluster   bool
+	DefaultToolsetVersion string
 
 	ConfigPath   string
 	ConfigDir    string
@@ -154,6 +156,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.CertificateAuthority, flagCertificateAuthority, o.CertificateAuthority, "Certificate authority path to verify certificates. Optional. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden(flagCertificateAuthority)
 	cmd.Flags().BoolVar(&o.DisableMultiCluster, flagDisableMultiCluster, o.DisableMultiCluster, "Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.")
+	cmd.Flags().StringVar(&o.DefaultToolsetVersion, flagDefaultToolsetVersion, o.DefaultToolsetVersion, "Default version to enable for tools/toolsets, within the enabled tools and toolsets.")
 
 	return cmd
 }
@@ -224,6 +227,12 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagDisableMultiCluster).Changed && m.DisableMultiCluster {
 		m.StaticConfig.ClusterProviderStrategy = api.ClusterProviderDisabled
+	}
+	if cmd.Flag(flagDefaultToolsetVersion).Changed {
+		var v api.Version
+		if err := v.UnmarshalText([]byte(m.DefaultToolsetVersion)); err == nil {
+			m.StaticConfig.DefaultToolsetVersion = v
+		}
 	}
 }
 

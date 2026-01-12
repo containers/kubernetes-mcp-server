@@ -35,6 +35,7 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningPrompts() {
 	testToolset := &mockToolsetWithPrompts{
 		name:        "test-toolset",
 		description: "Test toolset with prompts",
+		version:     api.VersionGA,
 		prompts: []api.ServerPrompt{
 			{
 				Prompt: api.Prompt{
@@ -116,6 +117,7 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningNilPrompts() {
 	testToolset := &mockToolsetWithPrompts{
 		name:        "empty-toolset",
 		description: "Toolset with no prompts",
+		version:     api.VersionGA,
 		prompts:     nil,
 	}
 
@@ -142,6 +144,7 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningEmptyPrompts() {
 	testToolset := &mockToolsetWithPrompts{
 		name:        "empty-slice-toolset",
 		description: "Toolset with empty prompts slice",
+		version:     api.VersionGA,
 		prompts:     []api.ServerPrompt{},
 	}
 
@@ -168,6 +171,7 @@ func (s *McpToolsetPromptsSuite) TestMultipleToolsetsPromptCollection() {
 	toolset1 := &mockToolsetWithPrompts{
 		name:        "toolset1",
 		description: "First toolset",
+		version:     api.VersionGA,
 		prompts: []api.ServerPrompt{
 			{
 				Prompt: api.Prompt{
@@ -184,6 +188,7 @@ func (s *McpToolsetPromptsSuite) TestMultipleToolsetsPromptCollection() {
 	toolset2 := &mockToolsetWithPrompts{
 		name:        "toolset2",
 		description: "Second toolset",
+		version:     api.VersionGA,
 		prompts: []api.ServerPrompt{
 			{
 				Prompt: api.Prompt{
@@ -227,6 +232,7 @@ func (s *McpToolsetPromptsSuite) TestConfigPromptsOverrideToolsetPrompts() {
 	testToolset := &mockToolsetWithPrompts{
 		name:        "test-toolset",
 		description: "Test toolset",
+		version:     api.VersionGA,
 		prompts: []api.ServerPrompt{
 			{
 				Prompt: api.Prompt{
@@ -305,6 +311,7 @@ func (s *McpToolsetPromptsSuite) TestPromptsNotExposedWhenToolsetDisabled() {
 	enabledToolset := &mockToolsetWithPrompts{
 		name:        "enabled-toolset",
 		description: "Enabled toolset",
+		version:     api.VersionGA,
 		prompts: []api.ServerPrompt{
 			{
 				Prompt: api.Prompt{
@@ -321,6 +328,7 @@ func (s *McpToolsetPromptsSuite) TestPromptsNotExposedWhenToolsetDisabled() {
 	disabledToolset := &mockToolsetWithPrompts{
 		name:        "disabled-toolset",
 		description: "Disabled toolset",
+		version:     api.VersionGA,
 		prompts: []api.ServerPrompt{
 			{
 				Prompt: api.Prompt{

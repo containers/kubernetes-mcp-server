@@ -43,7 +43,7 @@ func ToolsetFromString(name string) api.Toolset {
 
 func Validate(toolsets []string) error {
 	for _, toolset := range toolsets {
-		if ToolsetFromString(toolset) == nil {
+		if ToolsetFromString(toolset) == nil && VersionedToolsetFromString(toolset, api.VersionUnknown) == nil {
 			return fmt.Errorf("invalid toolset name: %s, valid names are: %s", toolset, strings.Join(ToolsetNames(), ", "))
 		}
 	}

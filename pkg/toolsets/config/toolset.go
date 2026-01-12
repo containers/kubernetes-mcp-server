@@ -20,7 +20,7 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetVersion() api.Version {
-	return api.VersionAlpha
+	return api.VersionBeta
 }
 
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {

@@ -81,9 +81,9 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 	})
 
-	// Modify the config file to add helm toolset
+	// Modify the config file to add helm toolset (with alpha version to include alpha-versioned tools)
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		toolsets = ["core", "config", "helm"]
+		toolsets = ["core", "config", "helm:alpha"]
 	`), 0644))
 
 	// Send SIGHUP to current process
@@ -97,10 +97,10 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsFromDropInDirectory() {
-	// Create initial config file - with helm enabled
+	// Create initial config file - with helm enabled (with alpha version to include alpha-versioned tools)
 	configPath := filepath.Join(s.tempDir, "config.toml")
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		toolsets = ["core", "config", "helm"]
+		toolsets = ["core", "config", "helm:alpha"]
 	`), 0644))
 
 	// Create initial drop-in file that removes helm
@@ -115,9 +115,9 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsFromDropInDirectory() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 	})
 
-	// Update drop-in file to add helm back
+	// Update drop-in file to add helm back (with alpha version to include alpha-versioned tools)
 	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
-		toolsets = ["core", "config", "helm"]
+		toolsets = ["core", "config", "helm:alpha"]
 	`), 0644))
 
 	// Send SIGHUP
@@ -161,9 +161,9 @@ func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigContinues() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 	})
 
-	// Now fix the config and add helm
+	// Now fix the config and add helm (with alpha version to include alpha-versioned tools)
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		toolsets = ["core", "config", "helm"]
+		toolsets = ["core", "config", "helm:alpha"]
 	`), 0644))
 
 	// Send another SIGHUP
@@ -189,9 +189,9 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 	})
 
-	// Update drop-in file to add helm
+	// Update drop-in file to add helm (with alpha version to include alpha-versioned tools)
 	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
-		toolsets = ["core", "config", "helm"]
+		toolsets = ["core", "config", "helm:alpha"]
 	`), 0644))
 
 	// Send SIGHUP

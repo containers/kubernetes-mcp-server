@@ -299,8 +299,8 @@ func TestToolsets(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolsets: core, config, helm") {
-			t.Fatalf("Expected toolsets 'full', got %s %v", out, err)
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolsets: core, config") {
+			t.Fatalf("Expected toolsets 'core, config', got %s %v", out, err)
 		}
 	})
 	t.Run("set with --toolsets", func(t *testing.T) {
