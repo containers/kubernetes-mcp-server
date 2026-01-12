@@ -3,16 +3,46 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
 )
+
+type Version int
+
+const (
+	VersionUnknown Version = iota
+	VersionAlpha
+	VersionBeta
+	VersionGA
+)
+
+func (v *Version) UnmarshalText(text []byte) error {
+	tmp := VersionUnknown
+	switch strings.ToLower(string(text)) {
+	case "alpha":
+		tmp = VersionAlpha
+	case "beta":
+		tmp = VersionBeta
+	case "ga", "", "stable":
+		tmp = VersionGA
+	default:
+		return fmt.Errorf("unknown version '%s': must be one of 'alpha', 'beta', 'stable', 'ga'", text)
+	}
+
+	*v = tmp
+
+	return nil
+}
 
 type ServerTool struct {
 	Tool               Tool
 	Handler            ToolHandlerFunc
 	ClusterAware       *bool
 	TargetListProvider *bool
+	Version            *Version // Optional version - defaults to toolset version if not set
 }
 
 // IsClusterAware indicates whether the tool can accept a "cluster" or "context" parameter
@@ -46,6 +76,9 @@ type Toolset interface {
 	// GetPrompts returns the prompts provided by this toolset.
 	// Returns nil if the toolset doesn't provide any prompts.
 	GetPrompts() []ServerPrompt
+	// GetVersion returns the version of the toolset.
+	// This version can be overridden by specific tools/prompts (e.g. a toolset may be beta, but have an alpha tool).
+	GetVersion() Version
 }
 
 type ToolCallRequest interface {

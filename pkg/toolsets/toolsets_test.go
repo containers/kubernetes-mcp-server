@@ -26,11 +26,14 @@ func (s *ToolsetsSuite) TearDownTest() {
 type TestToolset struct {
 	name        string
 	description string
+	version     api.Version
 }
 
 func (t *TestToolset) GetName() string { return t.name }
 
 func (t *TestToolset) GetDescription() string { return t.description }
+
+func (t *TestToolset) GetVersion() api.Version { return t.version }
 
 func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
 

@@ -19,6 +19,10 @@ func (t *Toolset) GetDescription() string {
 	return "Tools for managing Helm charts and releases"
 }
 
+func (t *Toolset) GetVersion() api.Version {
+	return api.VersionAlpha
+}
+
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		initHelm(),

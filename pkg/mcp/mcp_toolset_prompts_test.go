@@ -367,8 +367,11 @@ func (s *McpToolsetPromptsSuite) TestPromptsNotExposedWhenToolsetDisabled() {
 type mockToolsetWithPrompts struct {
 	name        string
 	description string
+	version     api.Version
 	prompts     []api.ServerPrompt
 }
+
+var _ api.Toolset = &mockToolsetWithPrompts{}
 
 func (m *mockToolsetWithPrompts) GetName() string {
 	return m.name
@@ -376,6 +379,10 @@ func (m *mockToolsetWithPrompts) GetName() string {
 
 func (m *mockToolsetWithPrompts) GetDescription() string {
 	return m.description
+}
+
+func (m *mockToolsetWithPrompts) GetVersion() api.Version {
+	return m.version
 }
 
 func (m *mockToolsetWithPrompts) GetTools(_ api.Openshift) []api.ServerTool {
