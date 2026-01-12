@@ -5,11 +5,12 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 ## Task Families
 
 - [Kubernetes tasks](kubernetes/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
-- [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing). 
+- [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing).
+- [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
 
 ## Anatomy of a Task
 
-Every subdirectory under `kubernetes/` or `kiali/` defines a single scenario:
+Every subdirectory under `kubernetes/`, `kiali/`, or `kubevirt/` defines a single scenario:
 
 1. `*.yaml` – declarative description consumed by the evaluation harness (prompts, success criteria, required tools).
 2. `setup.sh` / `verify.sh` / `cleanup.sh` – shell hooks (optional) that prime the cluster, assert post-conditions, and reset resources so tasks stay idempotent.
@@ -33,4 +34,3 @@ When a new MCP toolset lands , keep its evaluations isolated by creating a sibli
 3. Any shared fixtures the stack needs (place them in a `shared/` subdirectory if multiple scenarios reuse them).
 
 This structure keeps task stacks discoverable and lets eval harnesses target toolset-specific workflows without mixing concerns from the core Kubernetes or Kiali libraries.
-

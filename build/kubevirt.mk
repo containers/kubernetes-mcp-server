@@ -76,3 +76,6 @@ kubevirt-status: ## Show KubeVirt and CDI status
 	@echo "VirtualMachines (all namespaces):"
 	@kubectl get virtualmachines --all-namespaces || echo "No VirtualMachines found"
 	@echo ""
+	@echo "VirtualMachineInstances (all namespaces):"
+	@kubectl get virtualmachineinstances --all-namespaces || echo "No VirtualMachineInstances found"
+	@echo ""

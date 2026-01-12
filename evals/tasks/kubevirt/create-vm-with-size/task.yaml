@@ -1,0 +1,43 @@
+kind: Task
+metadata:
+  name: "create-vm-with-size"
+  difficulty: easy
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      source evals/tasks/kubevirt/helpers/verify-vm.sh
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      # Wait for VirtualMachine to be created
+      verify_vm_exists "test-vm-size" "$NS" || exit 1
+
+      # Verify that it has an instancetype or direct resources
+      verify_has_resources_or_instancetype "test-vm-size" "$NS" || exit 1
+
+      # Check if instancetype contains 'large' (matching the requested size)
+      verify_instancetype_contains "test-vm-size" "$NS" "large" "requested size 'large'"
+
+      # Verify runStrategy is set and deprecated 'running' field is not used
+      verify_run_strategy "test-vm-size" "$NS" || exit 1
+      verify_no_deprecated_running_field "test-vm-size" "$NS" || exit 1
+
+      # Verify container disk is Fedora (default workload)
+      verify_container_disk "test-vm-size" "$NS" "fedora"
+
+      echo "All validations passed"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine test-vm-size -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: Create a Fedora virtual machine named test-vm-size in the ${EVAL_NAMESPACE:-vm-test} namespace with size 'large'

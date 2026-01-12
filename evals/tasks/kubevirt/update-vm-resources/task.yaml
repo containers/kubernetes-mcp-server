@@ -1,0 +1,72 @@
+kind: Task
+metadata:
+  name: "update-vm-resources"
+  difficulty: hard
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a VM with specific resources (2Gi memory, 1 vCPU)
+      cat <<EOF | kubectl apply -f -
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: test-vm-update
+        namespace: $NS
+      spec:
+        runStrategy: Halted
+        template:
+          spec:
+            domain:
+              cpu:
+                cores: 1
+              memory:
+                guest: 2Gi
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/opensuse-leap:15.6
+      EOF
+
+      # Wait for VM to be created
+      kubectl wait --for=jsonpath='{.metadata.name}'=test-vm-update virtualmachine/test-vm-update -n "$NS" --timeout=30s
+      echo "Initial VM created with 1 vCPU and 2Gi memory"
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      source evals/tasks/kubevirt/helpers/verify-vm.sh
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      # Wait for VirtualMachine to exist
+      verify_vm_exists "test-vm-update" "$NS" || exit 1
+
+      # Verify CPU cores increased
+      verify_cpu_cores "test-vm-update" "$NS" 2 || exit 1
+
+      # Verify memory increased
+      verify_memory_increased "test-vm-update" "$NS" "2Gi" || exit 1
+
+      echo "All validations passed"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine test-vm-update -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |-
+      A VirtualMachine named test-vm-update exists in the ${EVAL_NAMESPACE:-vm-test} namespace.
+
+      It currently has 1 vCPU and 2Gi of memory.
+
+      Please update the VirtualMachine to add an additional vCPU (making it 2 vCPUs total) and increase the memory to at least 3Gi.

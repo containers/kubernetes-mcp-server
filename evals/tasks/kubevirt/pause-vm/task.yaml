@@ -1,0 +1,54 @@
+kind: Task
+metadata:
+  name: "pause-vm"
+  difficulty: medium
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a running VM
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: paused-vm
+        namespace: $NS
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                  - name: containerdisk
+                    disk:
+                      bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            terminationGracePeriodSeconds: 0
+            volumes:
+              - name: containerdisk
+                containerDisk:
+                  image: quay.io/containerdisks/opensuse-leap:15.6
+      EOF
+      kubectl wait --for=create vm/paused-vm -n "${NS}" --timeout 10s
+      kubectl wait --for=condition=Ready vm/paused-vm -n "${NS}" --timeout 20s
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl wait --for=condition=Paused vm/paused-vm -n "${NS}" --timeout 5s || exit 1
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine paused-vm -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      Please pause the virtual machine named paused-vm in the ${EVAL_NAMESPACE:-vm-test} namespace.
