@@ -128,10 +128,9 @@ func (s *Server) reloadToolsets() error {
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), targets),
 	)
 
-	mutator := WithTargetParameter(
-		s.p.GetDefaultTarget(),
-		s.p.GetTargetParameterName(),
-		targets,
+	mutator := ComposeMutators(
+		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), targets),
+		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), targets),
 	)
 
 	// TODO: No option to perform a full replacement of tools.

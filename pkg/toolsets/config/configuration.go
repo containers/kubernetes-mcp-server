@@ -32,6 +32,30 @@ func initConfiguration() []api.ServerTool {
 			TargetListProvider: ptr.To(true),
 			Handler:            contextsList,
 		},
+		// Generic targets list tool for non-kubeconfig providers (e.g., ACM).
+		// The WithTargetListTool mutator will:
+		// - Rename the tool to "{targetParameterName}_list" (e.g., "cluster_list")
+		// - Update the description and title accordingly
+		// - Set the handler with the actual targets
+		{
+			Tool: api.Tool{
+				Name:        "targets_list",
+				Description: "List all available targets",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+				},
+				Annotations: api.ToolAnnotations{
+					Title:           "Targets List",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(false),
+				},
+			},
+			ClusterAware:       ptr.To(false),
+			TargetListProvider: ptr.To(true),
+			Handler:            nil,
+		},
 		{
 			Tool: api.Tool{
 				Name:        "configuration_view",

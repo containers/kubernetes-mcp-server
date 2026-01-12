@@ -30,9 +30,16 @@ func ShouldIncludeTargetListTool(targetName string, targets []string) ToolFilter
 			return false
 		}
 
-		// TODO: this check should be removed or make more generic when we have other
+		// Mutual exclusivity between configuration_contexts_list and targets_list:
+		// - configuration_contexts_list: only for kubeconfig provider (targetName == "context")
+		// - targets_list: only for non-kubeconfig providers (targetName != "context")
+		// Note: targets_list gets mutated to "{targetName}_list" before this filter runs,
+		// so we check for the mutated name pattern
 		if tool.Tool.Name == "configuration_contexts_list" && targetName != kubernetes.KubeConfigTargetParameterName {
-			// let's not include configuration_contexts_list if we aren't targeting contexts in our Provider
+			return false
+		}
+		mutatedTargetsListName := targetName + "_list"
+		if tool.Tool.Name == mutatedTargetsListName && targetName == kubernetes.KubeConfigTargetParameterName {
 			return false
 		}
 
