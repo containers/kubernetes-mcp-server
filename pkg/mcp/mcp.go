@@ -30,7 +30,7 @@ type Configuration struct {
 func (c *Configuration) Toolsets() []api.Toolset {
 	if c.toolsets == nil {
 		for _, toolset := range c.StaticConfig.Toolsets {
-			versioned := toolsets.VersionedToolsetFromString(toolset, c.StaticConfig.DefaultToolsetVersion)
+			versioned := toolsets.VersionedToolsetFromString(toolset, c.DefaultToolsetVersion)
 			if versioned != nil {
 				c.toolsets = append(c.toolsets, versioned)
 			}

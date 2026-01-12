@@ -20,7 +20,7 @@ const (
 )
 
 func (v *Version) UnmarshalText(text []byte) error {
-	tmp := VersionUnknown
+	var tmp Version
 	switch strings.ToLower(string(text)) {
 	case "alpha":
 		tmp = VersionAlpha
