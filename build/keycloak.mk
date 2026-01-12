@@ -1,8 +1,21 @@
 # Keycloak IdP for development and testing
 
+# Detect container engine (docker or podman) - prefer the one that's actually running
+CONTAINER_ENGINE ?= $(shell \
+	if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \
+		echo docker; \
+	elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then \
+		echo podman; \
+	else \
+		command -v docker 2>/dev/null || command -v podman 2>/dev/null; \
+	fi)
+
 KEYCLOAK_NAMESPACE = keycloak
 KEYCLOAK_ADMIN_USER = admin
 KEYCLOAK_ADMIN_PASSWORD = admin
+KEYCLOAK_URL = https://keycloak.127-0-0-1.sslip.io:8443
+# Use --resolve to bypass DNS and connect directly to localhost
+CURL_RESOLVE_OPTS = --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1
 
 ##@ Keycloak
 
@@ -17,8 +30,7 @@ keycloak-install:
 	@kubectl get secret selfsigned-ca-secret -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d > _output/cert-manager-ca/ca.crt
 	@echo "✅ cert-manager CA certificate extracted to _output/cert-manager-ca/ca.crt (bind-mounted to API server)"
 	@echo "Restarting Kubernetes API server to pick up new CA..."
-	@docker exec kubernetes-mcp-server-control-plane pkill -f kube-apiserver || \
-		podman exec kubernetes-mcp-server-control-plane pkill -f kube-apiserver
+	@$(CONTAINER_ENGINE) exec kubernetes-mcp-server-control-plane pkill -f kube-apiserver
 	@echo "Waiting for API server to restart..."
 	@sleep 5
 	@echo "Waiting for API server to be ready..."
@@ -33,7 +45,7 @@ keycloak-install:
 	@kubectl wait --for=condition=ready pod -l app=keycloak -n $(KEYCLOAK_NAMESPACE) --timeout=120s || true
 	@echo "Waiting for Keycloak HTTP endpoint to be available..."
 	@for i in $$(seq 1 30); do \
-		STATUS=$$(curl -sk -o /dev/null -w "%{http_code}" https://keycloak.127-0-0-1.sslip.io:8443/realms/master 2>/dev/null || echo "000"); \
+		STATUS=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -o /dev/null -w "%{http_code}" https://keycloak.127-0-0-1.sslip.io:8443/realms/master 2>/dev/null || echo "000"); \
 		if [ "$$STATUS" = "200" ]; then \
 			echo "✅ Keycloak HTTP endpoint ready"; \
 			break; \
@@ -90,7 +102,7 @@ keycloak-setup-realm:
 	@echo "Using Keycloak at https://keycloak.127-0-0-1.sslip.io:8443"
 	@echo ""
 	@echo "Getting admin access token..."
-	@RESPONSE=$$(curl -sk -X POST "https://keycloak.127-0-0-1.sslip.io:8443/realms/master/protocol/openid-connect/token" \
+	@RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X POST "https://keycloak.127-0-0-1.sslip.io:8443/realms/master/protocol/openid-connect/token" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		-d "username=$(KEYCLOAK_ADMIN_USER)" \
 		-d "password=$(KEYCLOAK_ADMIN_PASSWORD)" \
@@ -110,7 +122,7 @@ keycloak-setup-realm:
 	echo "✅ Successfully obtained access token"; \
 	echo ""; \
 	echo "Creating OpenShift realm..."; \
-	REALM_RESPONSE=$$(curl -sk -w "%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms" \
+	REALM_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/realm/realm-create.json); \
@@ -124,7 +136,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Configuring realm events..."; \
-	EVENT_CONFIG_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X PUT "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift" \
+	EVENT_CONFIG_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X PUT "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/realm/realm-events-config.json); \
@@ -136,7 +148,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Creating mcp:openshift client scope..."; \
-	SCOPE_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
+	SCOPE_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/client-scopes/mcp-openshift.json); \
@@ -150,7 +162,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Adding audience mapper to mcp:openshift scope..."; \
-	SCOPES_LIST=$$(curl -sk -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
+	SCOPES_LIST=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Accept: application/json"); \
 	SCOPE_ID=$$(echo "$$SCOPES_LIST" | jq -r '.[] | select(.name == "mcp:openshift") | .id // empty' 2>/dev/null); \
@@ -158,7 +170,7 @@ keycloak-setup-realm:
 		echo "❌ Failed to find mcp:openshift scope"; \
 		exit 1; \
 	fi; \
-	MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$SCOPE_ID/protocol-mappers/models" \
+	MAPPER_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$SCOPE_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/mappers/openshift-audience.json); \
@@ -172,7 +184,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Creating groups client scope..."; \
-	GROUPS_SCOPE_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
+	GROUPS_SCOPE_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/client-scopes/groups.json); \
@@ -186,7 +198,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Adding group membership mapper to groups scope..."; \
-	SCOPES_LIST=$$(curl -sk -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
+	SCOPES_LIST=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Accept: application/json"); \
 	GROUPS_SCOPE_ID=$$(echo "$$SCOPES_LIST" | jq -r '.[] | select(.name == "groups") | .id // empty' 2>/dev/null); \
@@ -194,7 +206,7 @@ keycloak-setup-realm:
 		echo "❌ Failed to find groups scope"; \
 		exit 1; \
 	fi; \
-	GROUPS_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$GROUPS_SCOPE_ID/protocol-mappers/models" \
+	GROUPS_MAPPER_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$GROUPS_SCOPE_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/mappers/groups-membership.json); \
@@ -208,7 +220,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Creating mcp-server client scope..."; \
-	MCP_SERVER_SCOPE_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
+	MCP_SERVER_SCOPE_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/client-scopes/mcp-server.json); \
@@ -222,7 +234,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Adding audience mapper to mcp-server scope..."; \
-	SCOPES_LIST=$$(curl -sk -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
+	SCOPES_LIST=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Accept: application/json"); \
 	MCP_SERVER_SCOPE_ID=$$(echo "$$SCOPES_LIST" | jq -r '.[] | select(.name == "mcp-server") | .id // empty' 2>/dev/null); \
@@ -230,7 +242,7 @@ keycloak-setup-realm:
 		echo "❌ Failed to find mcp-server scope"; \
 		exit 1; \
 	fi; \
-	MCP_SERVER_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$MCP_SERVER_SCOPE_ID/protocol-mappers/models" \
+	MCP_SERVER_MAPPER_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/client-scopes/$$MCP_SERVER_SCOPE_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/mappers/mcp-server-audience.json); \
@@ -244,7 +256,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Creating openshift service client..."; \
-	OPENSHIFT_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
+	OPENSHIFT_CLIENT_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/clients/openshift.json); \
@@ -258,11 +270,11 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Adding username mapper to openshift client..."; \
-	OPENSHIFT_CLIENTS_LIST=$$(curl -sk -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
+	OPENSHIFT_CLIENTS_LIST=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Accept: application/json"); \
 	OPENSHIFT_CLIENT_ID=$$(echo "$$OPENSHIFT_CLIENTS_LIST" | jq -r '.[] | select(.clientId == "openshift") | .id // empty' 2>/dev/null); \
-	OPENSHIFT_USERNAME_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$OPENSHIFT_CLIENT_ID/protocol-mappers/models" \
+	OPENSHIFT_USERNAME_MAPPER_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$OPENSHIFT_CLIENT_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/mappers/username.json); \
@@ -276,7 +288,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Creating mcp-client public client..."; \
-	MCP_PUBLIC_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
+	MCP_PUBLIC_CLIENT_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/clients/mcp-client.json); \
@@ -290,11 +302,11 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Adding username mapper to mcp-client..."; \
-	MCP_PUBLIC_CLIENTS_LIST=$$(curl -sk -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
+	MCP_PUBLIC_CLIENTS_LIST=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Accept: application/json"); \
 	MCP_PUBLIC_CLIENT_ID=$$(echo "$$MCP_PUBLIC_CLIENTS_LIST" | jq -r '.[] | select(.clientId == "mcp-client") | .id // empty' 2>/dev/null); \
-	MCP_PUBLIC_USERNAME_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_PUBLIC_CLIENT_ID/protocol-mappers/models" \
+	MCP_PUBLIC_USERNAME_MAPPER_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_PUBLIC_CLIENT_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/mappers/username.json); \
@@ -308,7 +320,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Creating mcp-server client with token exchange..."; \
-	MCP_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
+	MCP_CLIENT_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/clients/mcp-server.json); \
@@ -322,7 +334,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Enabling standard token exchange for mcp-server..."; \
-	CLIENTS_LIST=$$(curl -sk -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
+	CLIENTS_LIST=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Accept: application/json"); \
 	MCP_CLIENT_ID=$$(echo "$$CLIENTS_LIST" | jq -r '.[] | select(.clientId == "mcp-server") | .id // empty' 2>/dev/null); \
@@ -330,7 +342,7 @@ keycloak-setup-realm:
 		echo "❌ Failed to find mcp-server client"; \
 		exit 1; \
 	fi; \
-	UPDATE_CLIENT_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X PUT "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID" \
+	UPDATE_CLIENT_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X PUT "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/clients/mcp-server-update.json); \
@@ -342,7 +354,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Getting mcp-server client secret..."; \
-	SECRET_RESPONSE=$$(curl -sk -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID/client-secret" \
+	SECRET_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -X GET "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID/client-secret" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Accept: application/json"); \
 	CLIENT_SECRET=$$(echo "$$SECRET_RESPONSE" | jq -r '.value // empty' 2>/dev/null); \
@@ -353,7 +365,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Adding username mapper to mcp-server client..."; \
-	MCP_USERNAME_MAPPER_RESPONSE=$$(curl -sk -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID/protocol-mappers/models" \
+	MCP_USERNAME_MAPPER_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "HTTPCODE:%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/clients/$$MCP_CLIENT_ID/protocol-mappers/models" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/mappers/username.json); \
@@ -367,7 +379,7 @@ keycloak-setup-realm:
 	fi; \
 	echo ""; \
 	echo "Creating test user mcp/mcp..."; \
-	USER_RESPONSE=$$(curl -sk -w "%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/users" \
+	USER_RESPONSE=$$(curl -sk --resolve keycloak.127-0-0-1.sslip.io:8443:127.0.0.1 -w "%{http_code}" -X POST "https://keycloak.127-0-0-1.sslip.io:8443/admin/realms/openshift/users" \
 		-H "Authorization: Bearer $$TOKEN" \
 		-H "Content-Type: application/json" \
 		-d @dev/config/keycloak/users/mcp.json); \
