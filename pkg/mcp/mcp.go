@@ -21,10 +21,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
-type ContextKey string
-
-const TokenScopesContextKey = ContextKey("TokenScopesContextKey")
-
 type Configuration struct {
 	*config.StaticConfig
 	listOutput output.Output
@@ -97,9 +93,6 @@ func NewServer(configuration Configuration, oidcProvider *oidc.Provider, httpCli
 
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
-	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now
-		s.server.AddReceivingMiddleware(toolScopedAuthorizationMiddleware)
-	}
 
 	var err error
 	s.p, err = internalk8s.NewProvider(s.configuration.StaticConfig)

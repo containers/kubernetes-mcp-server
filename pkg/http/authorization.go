@@ -13,7 +13,6 @@ import (
 	"k8s.io/utils/strings/slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 )
 
 // write401 sends a 401/Unauthorized response with WWW-Authenticate header.
@@ -87,12 +86,6 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 			// Online OIDC provider validation
 			if err == nil {
 				err = claims.ValidateWithProvider(r.Context(), staticConfig.OAuthAudience, oidcProvider)
-			}
-			// Scopes propagation, they are likely to be used for authorization.
-			if err == nil {
-				scopes := claims.GetScopes()
-				klog.V(2).Infof("JWT token validated - Scopes: %v", scopes)
-				r = r.WithContext(context.WithValue(r.Context(), mcp.TokenScopesContextKey, scopes))
 			}
 			if err != nil {
 				klog.V(1).Infof("Authentication failed - JWT validation error: %s %s from %s, error: %v", r.Method, r.URL.Path, r.RemoteAddr, err)
