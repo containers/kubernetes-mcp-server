@@ -15,8 +15,15 @@ kind:
 
 KIND_CLUSTER_NAME ?= kubernetes-mcp-server
 
-# Detect container engine (docker or podman)
-CONTAINER_ENGINE ?= $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
+# Detect container engine (docker or podman) - prefer the one that's actually running
+CONTAINER_ENGINE ?= $(shell \
+	if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \
+		echo docker; \
+	elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then \
+		echo podman; \
+	else \
+		command -v docker 2>/dev/null || command -v podman 2>/dev/null; \
+	fi)
 
 .PHONY: kind-create-certs
 kind-create-certs:
@@ -29,15 +36,15 @@ kind-create-certs:
 
 .PHONY: kind-create-cluster
 kind-create-cluster: kind kind-create-certs
-	@# Set KIND provider for podman on Linux
-	@if [ "$(shell uname -s)" != "Darwin" ] && echo "$(CONTAINER_ENGINE)" | grep -q "podman"; then \
-		export KIND_EXPERIMENTAL_PROVIDER=podman; \
-	fi; \
-	if $(KIND) get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$"; then \
+	@if $(KIND) get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$"; then \
 		echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping creation"; \
 	else \
-		echo "Creating Kind cluster '$(KIND_CLUSTER_NAME)'..."; \
-		$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config dev/config/kind/cluster.yaml; \
+		echo "Creating Kind cluster '$(KIND_CLUSTER_NAME)' with $(CONTAINER_ENGINE)..."; \
+		if [ "$(shell uname -s)" != "Darwin" ] && echo "$(CONTAINER_ENGINE)" | grep -q "podman"; then \
+			KIND_EXPERIMENTAL_PROVIDER=podman $(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config dev/config/kind/cluster.yaml; \
+		else \
+			$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config dev/config/kind/cluster.yaml; \
+		fi; \
 		echo "Adding ingress-ready label to control-plane node..."; \
 		kubectl label node $(KIND_CLUSTER_NAME)-control-plane ingress-ready=true --overwrite; \
 		echo "Installing nginx ingress controller..."; \
@@ -57,11 +64,7 @@ kind-create-cluster: kind kind-create-certs
 		kubectl apply -f dev/config/cert-manager/selfsigned-issuer.yaml; \
 		echo "✅ ClusterIssuer created"; \
 		echo "Adding /etc/hosts entry for Keycloak in control plane..."; \
-		if command -v docker >/dev/null 2>&1 && docker ps --filter "name=$(KIND_CLUSTER_NAME)-control-plane" --format "{{.Names}}" | grep -q "$(KIND_CLUSTER_NAME)-control-plane"; then \
-			docker exec $(KIND_CLUSTER_NAME)-control-plane bash -c 'grep -q "keycloak.127-0-0-1.sslip.io" /etc/hosts || echo "127.0.0.1 keycloak.127-0-0-1.sslip.io" >> /etc/hosts'; \
-		elif command -v podman >/dev/null 2>&1 && podman ps --filter "name=$(KIND_CLUSTER_NAME)-control-plane" --format "{{.Names}}" | grep -q "$(KIND_CLUSTER_NAME)-control-plane"; then \
-			podman exec $(KIND_CLUSTER_NAME)-control-plane bash -c 'grep -q "keycloak.127-0-0-1.sslip.io" /etc/hosts || echo "127.0.0.1 keycloak.127-0-0-1.sslip.io" >> /etc/hosts'; \
-		fi; \
+		$(CONTAINER_ENGINE) exec $(KIND_CLUSTER_NAME)-control-plane bash -c 'grep -q "keycloak.127-0-0-1.sslip.io" /etc/hosts || echo "127.0.0.1 keycloak.127-0-0-1.sslip.io" >> /etc/hosts'; \
 		echo "✅ /etc/hosts entry added"; \
 	fi
 	@echo "Exporting kubeconfig to _output/kubeconfig..."; \
@@ -71,8 +74,8 @@ kind-create-cluster: kind kind-create-certs
 
 .PHONY: kind-delete-cluster
 kind-delete-cluster: kind
-	@# Set KIND provider for podman on Linux
 	@if [ "$(shell uname -s)" != "Darwin" ] && echo "$(CONTAINER_ENGINE)" | grep -q "podman"; then \
-		export KIND_EXPERIMENTAL_PROVIDER=podman; \
-	fi; \
-	$(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
+		KIND_EXPERIMENTAL_PROVIDER=podman $(KIND) delete cluster --name $(KIND_CLUSTER_NAME); \
+	else \
+		$(KIND) delete cluster --name $(KIND_CLUSTER_NAME); \
+	fi
