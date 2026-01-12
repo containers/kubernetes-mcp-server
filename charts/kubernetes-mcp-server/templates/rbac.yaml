@@ -1,0 +1,107 @@
+{{/*
+Generic RBAC resources template.
+This allows downstream forks and users to add custom RBAC resources without
+modifying upstream templates. Define your RBAC needs in values.yaml under:
+  - rbac.extraClusterRoles
+  - rbac.extraClusterRoleBindings
+  - rbac.extraRoles
+  - rbac.extraRoleBindings
+*/}}
+
+{{- range .Values.rbac.extraClusterRoles }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+  {{- toYaml .rules | nindent 2 }}
+{{- end }}
+
+{{- range .Values.rbac.extraClusterRoleBindings }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ .roleRef.kind | default "ClusterRole" }}
+  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .roleRef.name }}
+subjects:
+  {{- if .subjects }}
+  {{- toYaml .subjects | nindent 2 }}
+  {{- else }}
+  - kind: ServiceAccount
+    name: {{ include "kubernetes-mcp-server.serviceAccountName" $ }}
+    namespace: {{ $.Release.Namespace }}
+  {{- end }}
+{{- end }}
+
+{{- range .Values.rbac.extraRoles }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  namespace: {{ .namespace | default $.Release.Namespace }}
+  labels:
+    {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+  {{- toYaml .rules | nindent 2 }}
+{{- end }}
+
+{{- range .Values.rbac.extraRoleBindings }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  namespace: {{ .namespace | default $.Release.Namespace }}
+  labels:
+    {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ .roleRef.kind | default "Role" }}
+  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .roleRef.name }}
+subjects:
+  {{- if .subjects }}
+  {{- toYaml .subjects | nindent 2 }}
+  {{- else }}
+  - kind: ServiceAccount
+    name: {{ include "kubernetes-mcp-server.serviceAccountName" $ }}
+    namespace: {{ $.Release.Namespace }}
+  {{- end }}
+{{- end }}

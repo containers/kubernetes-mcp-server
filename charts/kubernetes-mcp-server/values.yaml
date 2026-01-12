@@ -29,6 +29,44 @@ serviceAccount:
   # -- If not set and create is true, a name is generated using the fullname template
   name: ""
 
+# -- RBAC configuration for the MCP server.
+# -- Use these lists to add custom RBAC resources without modifying templates.
+# -- This is useful for downstream forks that need provider-specific permissions.
+rbac:
+  # -- Extra ClusterRoles to create. Each entry creates a ClusterRole named
+  # -- "<release-fullname>-<name>" with the specified rules.
+  extraClusterRoles: []
+  # - name: my-provider
+  #   rules:
+  #   - apiGroups: [""]
+  #     resources: ["pods"]
+  #     verbs: ["get", "list"]
+
+  # -- Extra ClusterRoleBindings to create. Each entry creates a ClusterRoleBinding
+  # -- that binds to the release's ServiceAccount by default.
+  extraClusterRoleBindings: []
+  # - name: my-provider
+  #   roleRef:
+  #     name: my-provider  # References "<release-fullname>-my-provider" ClusterRole
+
+  # -- Extra Roles to create (namespace-scoped). Each entry creates a Role named
+  # -- "<release-fullname>-<name>" in the specified namespace.
+  extraRoles: []
+  # - name: my-provider
+  #   namespace: some-namespace
+  #   rules:
+  #   - apiGroups: [""]
+  #     resources: ["services"]
+  #     verbs: ["get"]
+
+  # -- Extra RoleBindings to create. Each entry creates a RoleBinding
+  # -- that binds to the release's ServiceAccount by default.
+  extraRoleBindings: []
+  # - name: my-provider
+  #   namespace: some-namespace
+  #   roleRef:
+  #     name: my-provider  # References "<release-fullname>-my-provider" Role
+
 # -- This is for setting Kubernetes Annotations to a Pod.
 # -- For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
