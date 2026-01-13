@@ -27,6 +27,21 @@ helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-serve
 
 Functionality has been added to the Chart to simplify the deployment to OpenShift Cluster.
 
+### RBAC Configuration
+
+The chart supports creating custom RBAC resources. Set `rbac.create: false` to disable all RBAC resource creation.
+
+To bind to an existing cluster role (e.g., `view`, `edit`, `admin`), use `roleRef.external: true`:
+
+```yaml
+rbac:
+  extraClusterRoleBindings:
+    - name: use-view-role
+      roleRef:
+        name: view
+        external: true
+```
+
 {{ template "chart.valuesSection" . }}
 
 ## Updating the README

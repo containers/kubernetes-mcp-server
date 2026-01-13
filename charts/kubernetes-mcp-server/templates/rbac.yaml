@@ -8,12 +8,14 @@ modifying upstream templates. Define your RBAC needs in values.yaml under:
   - rbac.extraRoleBindings
 */}}
 
+{{- if .Values.rbac.create }}
+
 {{- range .Values.rbac.extraClusterRoles }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" $ "suffix" .name) }}
   labels:
     {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
     {{- with .labels }}
@@ -21,7 +23,7 @@ metadata:
     {{- end }}
   {{- with .annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 rules:
   {{- toYaml .rules | nindent 2 }}
@@ -32,7 +34,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" $ "suffix" .name) }}
   labels:
     {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
     {{- with .labels }}
@@ -40,12 +42,16 @@ metadata:
     {{- end }}
   {{- with .annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: {{ .roleRef.kind | default "ClusterRole" }}
-  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .roleRef.name }}
+  {{- if .roleRef.external }}
+  name: {{ .roleRef.name }}
+  {{- else }}
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" $ "suffix" .roleRef.name) }}
+  {{- end }}
 subjects:
   {{- if .subjects }}
   {{- toYaml .subjects | nindent 2 }}
@@ -61,7 +67,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" $ "suffix" .name) }}
   namespace: {{ .namespace | default $.Release.Namespace }}
   labels:
     {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
@@ -70,7 +76,7 @@ metadata:
     {{- end }}
   {{- with .annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 rules:
   {{- toYaml .rules | nindent 2 }}
@@ -81,7 +87,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .name }}
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" $ "suffix" .name) }}
   namespace: {{ .namespace | default $.Release.Namespace }}
   labels:
     {{- include "kubernetes-mcp-server.labels" $ | nindent 4 }}
@@ -90,12 +96,16 @@ metadata:
     {{- end }}
   {{- with .annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: {{ .roleRef.kind | default "Role" }}
-  name: {{ include "kubernetes-mcp-server.fullname" $ }}-{{ .roleRef.name }}
+  {{- if .roleRef.external }}
+  name: {{ .roleRef.name }}
+  {{- else }}
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" $ "suffix" .roleRef.name) }}
+  {{- end }}
 subjects:
   {{- if .subjects }}
   {{- toYaml .subjects | nindent 2 }}
@@ -104,4 +114,6 @@ subjects:
     name: {{ include "kubernetes-mcp-server.serviceAccountName" $ }}
     namespace: {{ $.Release.Namespace }}
   {{- end }}
+{{- end }}
+
 {{- end }}

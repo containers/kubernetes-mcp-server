@@ -71,3 +71,13 @@ Create the image path for the passed in image field
 {{- printf "%s/%s:%s" .registry .repository .version -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Create a suffixed resource name, ensuring the total length doesn't exceed 63 characters.
+Usage: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" $ "suffix" "my-suffix") }}
+*/}}
+{{- define "kubernetes-mcp-server.fullname.suffixed" -}}
+{{- $fullname := include "kubernetes-mcp-server.fullname" .root -}}
+{{- $suffix := .suffix -}}
+{{- printf "%s-%s" $fullname $suffix | trunc 63 | trimSuffix "-" -}}
+{{- end -}}

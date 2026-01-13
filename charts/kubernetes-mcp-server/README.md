@@ -27,6 +27,21 @@ helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-serve
 
 Functionality has been added to the Chart to simplify the deployment to OpenShift Cluster.
 
+### RBAC Configuration
+
+The chart supports creating custom RBAC resources. Set `rbac.create: false` to disable all RBAC resource creation.
+
+To bind to an existing cluster role (e.g., `view`, `edit`, `admin`), use `roleRef.external: true`:
+
+```yaml
+rbac:
+  extraClusterRoleBindings:
+    - name: use-view-role
+      roleRef:
+        name: view
+        external: true
+```
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -51,6 +66,12 @@ Functionality has been added to the Chart to simplify the deployment to OpenShif
 | podAnnotations | object | `{}` | For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/ |
 | podLabels | object | `{}` | For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ |
 | podSecurityContext | object | `{}` | Define the Security Context for the Pod |
+| rbac | object | `{"create":true,"extraClusterRoleBindings":[],"extraClusterRoles":[],"extraRoleBindings":[],"extraRoles":[]}` | When using long names, they will be automatically truncated. |
+| rbac.create | bool | `true` | contents of extraClusterRoles, extraClusterRoleBindings, extraRoles, and extraRoleBindings. |
+| rbac.extraClusterRoleBindings | list | `[]` | without prefixing the release fullname. |
+| rbac.extraClusterRoles | list | `[]` | "<release-fullname>-<name>" with the specified rules. |
+| rbac.extraRoleBindings | list | `[]` | Use roleRef.external: true to reference existing roles without prefixing the release fullname. |
+| rbac.extraRoles | list | `[]` | "<release-fullname>-<name>" in the specified namespace. |
 | readinessProbe.httpGet.path | string | `"/healthz"` |  |
 | readinessProbe.httpGet.port | string | `"http"` |  |
 | replicaCount | int | `1` | This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/ |

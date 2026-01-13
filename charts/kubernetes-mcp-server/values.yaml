@@ -32,7 +32,14 @@ serviceAccount:
 # -- RBAC configuration for the MCP server.
 # -- Use these lists to add custom RBAC resources without modifying templates.
 # -- This is useful for downstream forks that need provider-specific permissions.
+# -- Note: Resource names are limited to 63 characters (Kubernetes DNS naming spec).
+# -- When using long names, they will be automatically truncated.
 rbac:
+  # -- Specifies whether RBAC resources should be created.
+  # -- When set to false, no RBAC resources will be created regardless of the
+  # -- contents of extraClusterRoles, extraClusterRoleBindings, extraRoles, and extraRoleBindings.
+  create: true
+
   # -- Extra ClusterRoles to create. Each entry creates a ClusterRole named
   # -- "<release-fullname>-<name>" with the specified rules.
   extraClusterRoles: []
@@ -44,10 +51,16 @@ rbac:
 
   # -- Extra ClusterRoleBindings to create. Each entry creates a ClusterRoleBinding
   # -- that binds to the release's ServiceAccount by default.
+  # -- Use roleRef.external: true to reference existing cluster roles (e.g., "view", "edit", "admin")
+  # -- without prefixing the release fullname.
   extraClusterRoleBindings: []
   # - name: my-provider
   #   roleRef:
   #     name: my-provider  # References "<release-fullname>-my-provider" ClusterRole
+  # - name: use-view-role
+  #   roleRef:
+  #     name: view
+  #     external: true  # References the existing "view" ClusterRole directly
 
   # -- Extra Roles to create (namespace-scoped). Each entry creates a Role named
   # -- "<release-fullname>-<name>" in the specified namespace.
@@ -61,11 +74,17 @@ rbac:
 
   # -- Extra RoleBindings to create. Each entry creates a RoleBinding
   # -- that binds to the release's ServiceAccount by default.
+  # -- Use roleRef.external: true to reference existing roles without prefixing the release fullname.
   extraRoleBindings: []
   # - name: my-provider
   #   namespace: some-namespace
   #   roleRef:
   #     name: my-provider  # References "<release-fullname>-my-provider" Role
+  # - name: use-existing-role
+  #   namespace: some-namespace
+  #   roleRef:
+  #     name: some-existing-role
+  #     external: true  # References the existing "some-existing-role" Role directly
 
 # -- This is for setting Kubernetes Annotations to a Pod.
 # -- For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
