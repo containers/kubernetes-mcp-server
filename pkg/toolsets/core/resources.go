@@ -41,7 +41,12 @@ func initResources(o api.Openshift) []api.ServerTool {
 					},
 					"labelSelector": {
 						Type:        "string",
-						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the resources by label",
+						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+					},
+					"fieldSelector": {
+						Type:        "string",
+						Description: "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
 						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
 					},
 				},
@@ -193,6 +198,14 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			return api.NewToolCallResult("", fmt.Errorf("labelSelector is not a string")), nil
 		}
 		resourceListOptions.LabelSelector = l
+	}
+	fieldSelector := params.GetArguments()["fieldSelector"]
+	if fieldSelector != nil {
+		f, ok := fieldSelector.(string)
+		if !ok {
+			return api.NewToolCallResult("", fmt.Errorf("fieldSelector is not a string")), nil
+		}
+		resourceListOptions.FieldSelector = f
 	}
 	gvk, err := parseGroupVersionKind(params.GetArguments())
 	if err != nil {

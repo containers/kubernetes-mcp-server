@@ -101,6 +101,59 @@ func (s *ResourcesSuite) TestResourcesList() {
 			s.Lenf(decodedPods, 0, "expected 0 pods, got %d", len(decodedPods))
 		})
 	})
+	s.Run("resources_list with field selector returns filtered pods", func() {
+		// Create an additional pod in default namespace to verify it gets excluded
+		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "resources-field-excluded",
+				Labels: map[string]string{"app": "nginx"},
+			},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+		}, metav1.CreateOptions{})
+
+		s.Run("list pods with metadata.name field selector returns only matching pod", func() {
+			result, err := s.CallTool("resources_list", map[string]interface{}{
+				"apiVersion":    "v1",
+				"kind":          "Pod",
+				"namespace":     "default",
+				"fieldSelector": "metadata.name=a-pod-in-default",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed")
+
+			var decodedPods []unstructured.Unstructured
+			err = yaml.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &decodedPods)
+			s.Nilf(err, "invalid tool result content %v", err)
+
+			s.Lenf(decodedPods, 1, "expected exactly 1 pod, got %d", len(decodedPods))
+			s.Equalf("a-pod-in-default", decodedPods[0].GetName(), "expected a-pod-in-default, got %s", decodedPods[0].GetName())
+			for _, pod := range decodedPods {
+				s.NotEqualf("resources-field-excluded", pod.GetName(), "resources-field-excluded should have been filtered out")
+			}
+		})
+		s.Run("list pods with combined label and field selectors excludes pod with same label but different name", func() {
+			result, err := s.CallTool("resources_list", map[string]interface{}{
+				"apiVersion":    "v1",
+				"kind":          "Pod",
+				"namespace":     "default",
+				"labelSelector": "app=nginx",
+				"fieldSelector": "metadata.name=a-pod-in-default",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed")
+
+			var decodedPods []unstructured.Unstructured
+			err = yaml.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &decodedPods)
+			s.Nilf(err, "invalid tool result content %v", err)
+
+			s.Lenf(decodedPods, 1, "expected exactly 1 pod, got %d", len(decodedPods))
+			s.Equalf("a-pod-in-default", decodedPods[0].GetName(), "expected a-pod-in-default, got %s", decodedPods[0].GetName())
+			for _, pod := range decodedPods {
+				s.NotEqualf("resources-field-excluded", pod.GetName(), "resources-field-excluded has same label but should be filtered by fieldSelector")
+			}
+		})
+	})
 }
 
 func (s *ResourcesSuite) TestResourcesListDenied() {

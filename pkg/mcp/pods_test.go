@@ -697,6 +697,120 @@ func (s *PodsSuite) TestPodsListWithLabelSelector() {
 	})
 }
 
+func (s *PodsSuite) TestPodsListWithFieldSelector() {
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Create multiple pods for field selector testing to verify filtering excludes unwanted pods
+	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "field-selector-target",
+		},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+	}, metav1.CreateOptions{})
+	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "field-selector-excluded",
+		},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+	}, metav1.CreateOptions{})
+
+	s.Run("pods_list(fieldSelector=metadata.name=field-selector-target) returns only matching pod", func() {
+		toolResult, err := s.CallTool("pods_list", map[string]interface{}{
+			"fieldSelector": "metadata.name=field-selector-target",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decoded []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		s.Run("has yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+		})
+		s.Run("returns exactly 1 pod", func() {
+			s.Lenf(decoded, 1, "expected exactly 1 pod, got %v", len(decoded))
+		})
+		s.Run("returns field-selector-target", func() {
+			s.Equalf("field-selector-target", decoded[0].GetName(), "expected field-selector-target, got %v", decoded[0].GetName())
+		})
+		s.Run("excludes field-selector-excluded", func() {
+			for _, pod := range decoded {
+				s.NotEqualf("field-selector-excluded", pod.GetName(), "field-selector-excluded should have been filtered out")
+			}
+		})
+	})
+
+	s.Run("pods_list_in_namespace(fieldSelector=metadata.name=field-selector-target, namespace=default) returns only matching pod", func() {
+		toolResult, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{
+			"namespace":     "default",
+			"fieldSelector": "metadata.name=field-selector-target",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decoded []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		s.Run("has yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+		})
+		s.Run("returns exactly 1 pod", func() {
+			s.Lenf(decoded, 1, "expected exactly 1 pod, got %v", len(decoded))
+		})
+		s.Run("returns field-selector-target", func() {
+			s.Equalf("field-selector-target", decoded[0].GetName(), "expected field-selector-target, got %v", decoded[0].GetName())
+		})
+		s.Run("excludes field-selector-excluded", func() {
+			for _, pod := range decoded {
+				s.NotEqualf("field-selector-excluded", pod.GetName(), "field-selector-excluded should have been filtered out")
+			}
+		})
+	})
+
+	s.Run("pods_list with combined labelSelector and fieldSelector returns only matching pod", func() {
+		// Create pods with specific labels for combined filtering
+		_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "combined-selector-target",
+				Labels: map[string]string{"env": "test-field-combined"},
+			},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+		}, metav1.CreateOptions{})
+		_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "combined-selector-same-label",
+				Labels: map[string]string{"env": "test-field-combined"},
+			},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+		}, metav1.CreateOptions{})
+
+		toolResult, err := s.CallTool("pods_list", map[string]interface{}{
+			"labelSelector": "env=test-field-combined",
+			"fieldSelector": "metadata.name=combined-selector-target",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decoded []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		s.Run("has yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+		})
+		s.Run("returns exactly 1 pod", func() {
+			s.Lenf(decoded, 1, "expected exactly 1 pod, got %v", len(decoded))
+		})
+		s.Run("returns combined-selector-target", func() {
+			s.Equalf("combined-selector-target", decoded[0].GetName(), "expected combined-selector-target, got %v", decoded[0].GetName())
+		})
+		s.Run("excludes combined-selector-same-label despite matching label", func() {
+			for _, pod := range decoded {
+				s.NotEqualf("combined-selector-same-label", pod.GetName(), "combined-selector-same-label should have been filtered out by fieldSelector")
+			}
+		})
+	})
+}
+
 func TestPods(t *testing.T) {
 	suite.Run(t, new(PodsSuite))
 }

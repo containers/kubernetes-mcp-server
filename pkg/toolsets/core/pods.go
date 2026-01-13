@@ -27,6 +27,11 @@ func initPods() []api.ServerTool {
 						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
 						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
 					},
+					"fieldSelector": {
+						Type:        "string",
+						Description: "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
+						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+					},
 				},
 			},
 			Annotations: api.ToolAnnotations{
@@ -49,6 +54,11 @@ func initPods() []api.ServerTool {
 					"labelSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+					},
+					"fieldSelector": {
+						Type:        "string",
+						Description: "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
 						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
 					},
 				},
@@ -251,11 +261,15 @@ func initPods() []api.ServerTool {
 
 func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	labelSelector := params.GetArguments()["labelSelector"]
+	fieldSelector := params.GetArguments()["fieldSelector"]
 	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 	if labelSelector != nil {
 		resourceListOptions.LabelSelector = labelSelector.(string)
+	}
+	if fieldSelector != nil {
+		resourceListOptions.FieldSelector = fieldSelector.(string)
 	}
 	ret, err := kubernetes.NewCore(params).PodsListInAllNamespaces(params, resourceListOptions)
 	if err != nil {
@@ -275,6 +289,10 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	labelSelector := params.GetArguments()["labelSelector"]
 	if labelSelector != nil {
 		resourceListOptions.LabelSelector = labelSelector.(string)
+	}
+	fieldSelector := params.GetArguments()["fieldSelector"]
+	if fieldSelector != nil {
+		resourceListOptions.FieldSelector = fieldSelector.(string)
 	}
 	ret, err := kubernetes.NewCore(params).PodsListInNamespace(params, ns.(string), resourceListOptions)
 	if err != nil {
