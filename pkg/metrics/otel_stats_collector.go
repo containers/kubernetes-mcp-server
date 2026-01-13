@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -60,6 +61,9 @@ type CollectorConfig struct {
 	MeterName      string
 	ServiceName    string
 	ServiceVersion string
+	// Telemetry is the optional telemetry configuration.
+	// If nil, env vars will be used for OTLP configuration.
+	Telemetry *config.TelemetryConfig
 }
 
 // createMetricsExporter creates an OTLP metrics exporter if OTEL_EXPORTER_OTLP_ENDPOINT is set.
@@ -91,6 +95,34 @@ func createMetricsExporter(ctx context.Context) (sdkmetric.Exporter, error) {
 	}
 }
 
+// createMetricsExporterWithConfig creates an OTLP metrics exporter using the provided config.
+// Returns nil if telemetry is not enabled (metrics will only be collected in-memory).
+func createMetricsExporterWithConfig(ctx context.Context, cfg *config.TelemetryConfig) (sdkmetric.Exporter, error) {
+	if cfg == nil || !cfg.IsEnabled() {
+		return nil, nil // No export configured
+	}
+
+	protocol := strings.ToLower(cfg.GetProtocol())
+
+	switch protocol {
+	case "http/protobuf", "http":
+		klog.V(2).Infof("Using HTTP/protobuf OTLP metrics exporter (protocol=%s)", protocol)
+		return otlpmetrichttp.New(ctx)
+
+	case "grpc", "":
+		if protocol == "" {
+			klog.V(2).Info("Using gRPC OTLP metrics exporter (default)")
+		} else {
+			klog.V(2).Info("Using gRPC OTLP metrics exporter")
+		}
+		return otlpmetricgrpc.New(ctx)
+
+	default:
+		klog.V(1).Infof("Unknown protocol '%s' for metrics, defaulting to gRPC", protocol)
+		return otlpmetricgrpc.New(ctx)
+	}
+}
+
 // NewOtelStatsCollector creates a new OtelStatsCollector with ManualReader.
 // If OTEL_EXPORTER_OTLP_ENDPOINT is set, metrics will also be exported to OTLP.
 func NewOtelStatsCollector(meterName string) (*OtelStatsCollector, error) {
@@ -113,7 +145,14 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 	}
 
 	// Optionally add OTLP exporter if endpoint is configured
-	exporter, err := createMetricsExporter(ctx)
+	// Use config-based exporter if Telemetry config is provided, otherwise fall back to env vars
+	var exporter sdkmetric.Exporter
+	var err error
+	if cfg.Telemetry != nil {
+		exporter, err = createMetricsExporterWithConfig(ctx, cfg.Telemetry)
+	} else {
+		exporter, err = createMetricsExporter(ctx)
+	}
 	if err != nil {
 		klog.V(1).Infof("Failed to create OTLP metrics exporter, OTLP export disabled: %v", err)
 	} else if exporter != nil {

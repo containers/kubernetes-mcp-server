@@ -100,20 +100,82 @@ Duration: 150ms
 
 ## Configuration
 
-All configuration is done via standard OpenTelemetry environment variables.
+OpenTelemetry can be configured via **TOML config file** or **environment variables**. Environment variables take precedence over TOML config values.
 
-### Required Variables
+### Configuration Reference
+
+| TOML Field | Environment Variable | Description |
+|------------|---------------------|-------------|
+| `enabled` | - | Explicit enable/disable (overrides all) |
+| `endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint URL |
+| `protocol` | `OTEL_EXPORTER_OTLP_PROTOCOL` | Protocol: `grpc` or `http/protobuf` |
+| `traces_sampler` | `OTEL_TRACES_SAMPLER` | Sampling strategy |
+| `traces_sampler_arg` | `OTEL_TRACES_SAMPLER_ARG` | Sampling ratio (0.0-1.0) |
+
+### TOML Configuration
+
+Add a `[telemetry]` section to your config file:
+
+```toml
+[telemetry]
+# Explicitly enable/disable telemetry (optional)
+# If not set, telemetry is auto-enabled when endpoint is configured
+enabled = true
+
+# OTLP endpoint (required to enable tracing)
+endpoint = "http://localhost:4317"
+
+# Protocol: "grpc" (default) or "http/protobuf"
+protocol = "grpc"
+
+# Trace sampling strategy
+# Options: "always_on", "always_off", "traceidratio", "parentbased_always_on", "parentbased_always_off", "parentbased_traceidratio"
+traces_sampler = "traceidratio"
+
+# Sampling ratio for ratio-based samplers (0.0 to 1.0)
+traces_sampler_arg = 0.1
+```
+
+#### TOML Examples
+
+**Enable with endpoint:**
+```toml
+[telemetry]
+endpoint = "http://localhost:4317"
+# Telemetry is auto-enabled when endpoint is set
+```
+
+**Production with sampling:**
+```toml
+[telemetry]
+endpoint = "http://tempo-distributor:4317"
+traces_sampler = "traceidratio"
+traces_sampler_arg = 0.05  # 5% sampling
+```
+
+**Explicit disable (overrides env vars):**
+```toml
+[telemetry]
+enabled = false
+# Telemetry is disabled even if OTEL_EXPORTER_OTLP_ENDPOINT env var is set
+```
+
+### Environment Variables
+
+Environment variables take precedence over TOML config. This allows you to override config file settings at runtime.
+
+#### Required Variables
 
 ```bash
 # OTLP endpoint (gRPC)
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```
 
-If this variable is not set, tracing is **disabled** and the server runs normally without tracing.
+If this variable is not set (and no TOML config), tracing is **disabled** and the server runs normally without tracing.
 
 **Note**: The server gracefully handles tracing failures. If the OTLP endpoint is unreachable or exporter creation fails, the server logs a warning and continues operating without tracing.
 
-### Optional Variables
+#### Optional Variables
 
 ```bash
 # Service name (defaults to "kubernetes-mcp-server")
@@ -126,7 +188,7 @@ export OTEL_SERVICE_VERSION=1.0.0
 export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production,team=platform"
 ```
 
-### Endpoint Protocols
+#### Endpoint Protocols
 
 The server supports both gRPC and HTTP/protobuf protocols:
 
@@ -145,7 +207,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-secure.example.com:4317
 export OTEL_EXPORTER_OTLP_CERTIFICATE=/path/to/ca.crt
 ```
 
-### Sampling Configuration
+#### Sampling Configuration
 
 By default, the server uses **`ParentBased(AlwaysSample)`** sampling:
 - **Root spans** (no parent): Always sampled (100%)
@@ -169,6 +231,7 @@ export OTEL_TRACES_SAMPLER_ARG=0.1
 - `always_off` - Disable tracing entirely
 - `traceidratio` - Sample a percentage (requires `OTEL_TRACES_SAMPLER_ARG` between 0.0 and 1.0)
 - `parentbased_always_on` - Respect parent span, default to always_on
+- `parentbased_always_off` - Respect parent span, default to always_off
 - `parentbased_traceidratio` - Respect parent span, default to ratio
 
 #### Sampling Examples

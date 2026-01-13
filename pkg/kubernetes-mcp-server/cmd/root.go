@@ -30,6 +30,7 @@ import (
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
@@ -278,6 +279,10 @@ func (m *MCPServerOptions) Validate() error {
 }
 
 func (m *MCPServerOptions) Run() error {
+	// Initialize OpenTelemetry tracing with config (env vars take precedence)
+	cleanup, _ := telemetry.InitTracerWithConfig(&m.StaticConfig.Telemetry, version.BinaryName, version.Version)
+	defer cleanup()
+
 	klog.V(1).Info("Starting kubernetes-mcp-server")
 	klog.V(1).Infof(" - Config: %s", m.ConfigPath)
 	klog.V(1).Infof(" - Toolsets: %s", strings.Join(m.StaticConfig.Toolsets, ", "))
@@ -285,6 +290,7 @@ func (m *MCPServerOptions) Run() error {
 	klog.V(1).Infof(" - Read-only mode: %t", m.StaticConfig.ReadOnly)
 	klog.V(1).Infof(" - Disable destructive tools: %t", m.StaticConfig.DisableDestructive)
 	klog.V(1).Infof(" - Stateless mode: %t", m.StaticConfig.Stateless)
+	klog.V(1).Infof(" - Telemetry enabled: %t", m.StaticConfig.Telemetry.IsEnabled())
 
 	strategy := m.StaticConfig.ClusterProviderStrategy
 	if strategy == "" {

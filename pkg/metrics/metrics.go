@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"k8s.io/klog/v2"
 )
 
@@ -13,6 +14,9 @@ type Config struct {
 	TracerName     string
 	ServiceName    string
 	ServiceVersion string
+	// Telemetry is the optional telemetry configuration.
+	// If nil, env vars will be used for OTLP configuration.
+	Telemetry *config.TelemetryConfig
 }
 
 // Metrics coordinates multiple metric collectors.
@@ -24,17 +28,18 @@ type Metrics struct {
 
 // New creates a new Metrics instance with configured collectors.
 // If OTEL_EXPORTER_OTLP_ENDPOINT is set, metrics will also be exported to OTLP.
-func New(config Config) (*Metrics, error) {
+func New(cfg Config) (*Metrics, error) {
 	m := &Metrics{
 		collectors: []Collector{},
 	}
 
 	// Stats collector - always enabled for /stats endpoint
-	// Also exports to OTLP if OTEL_EXPORTER_OTLP_ENDPOINT is set
+	// Also exports to OTLP if OTEL_EXPORTER_OTLP_ENDPOINT is set or Telemetry config is provided
 	stats, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
-		MeterName:      config.TracerName,
-		ServiceName:    config.ServiceName,
-		ServiceVersion: config.ServiceVersion,
+		MeterName:      cfg.TracerName,
+		ServiceName:    cfg.ServiceName,
+		ServiceVersion: cfg.ServiceVersion,
+		Telemetry:      cfg.Telemetry,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stats collector: %w", err)

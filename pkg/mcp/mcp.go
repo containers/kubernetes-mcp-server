@@ -100,6 +100,7 @@ func NewServer(configuration Configuration, oidcProvider *oidc.Provider, httpCli
 		TracerName:     version.BinaryName + "/mcp",
 		ServiceName:    version.BinaryName,
 		ServiceVersion: version.Version,
+		Telemetry:      &configuration.Telemetry,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize metrics: %w", err)
