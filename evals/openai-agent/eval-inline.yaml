@@ -16,7 +16,8 @@ config:
       apiKeyKey: JUDGE_API_KEY
       modelNameKey: JUDGE_MODEL_NAME
   taskSets:
-    - glob: ../tasks/*/*/*.yaml
+    # TODO: Re-enable kiali tasks once https://github.com/containers/kubernetes-mcp-server/issues/642 is resolved
+    - glob: ../tasks/kubernetes/*/*.yaml
       assertions:
         toolsUsed:
           - server: kubernetes
