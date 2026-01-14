@@ -74,8 +74,10 @@ func stsExchangeTokenInContext(
 		TokenType:   "Bearer",
 	})
 	if err != nil {
+		klog.Errorf("token exchange failed: %v", err)
 		return ctx
 	}
 
+	klog.V(4).Info("token exchanged successfully")
 	return context.WithValue(ctx, OAuthAuthorizationHeader, "Bearer "+exchangedToken.AccessToken)
 }
