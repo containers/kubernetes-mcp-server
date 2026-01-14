@@ -10,4 +10,4 @@ steps:
   cleanup:
     file: cleanup.sh
   prompt:
-    inline: "resize the storage volume to 15Gi for the storage-pod in `resize-pv` namespace"
+    inline: "resize the storage volume to 3Gi for the storage-pod in `resize-pv` namespace"
