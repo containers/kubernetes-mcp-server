@@ -345,3 +345,50 @@ func (s *TargetParameterToolMutatorSuite) TestNonClusterAwareTool() {
 func TestTargetParameterToolMutator(t *testing.T) {
 	suite.Run(t, new(TargetParameterToolMutatorSuite))
 }
+
+type TargetListToolMutatorSuite struct {
+	suite.Suite
+}
+
+func (s *TargetListToolMutatorSuite) TestMutatesTargetsListTool() {
+	tool := createTestTool(TargetsListToolName)
+	tm := WithTargetListTool("default-cluster", "cluster", []string{"cluster-1", "cluster-2", "cluster-3"})
+	result := tm(tool)
+
+	s.Run("renames tool based on target parameter", func() {
+		s.Equal("cluster_list", result.Tool.Name)
+	})
+	s.Run("updates description", func() {
+		s.Contains(result.Tool.Description, "cluster")
+		s.Contains(result.Tool.Description, "List all available")
+	})
+	s.Run("updates title annotation", func() {
+		s.Equal("Cluster List", result.Tool.Annotations.Title)
+	})
+	s.Run("sets handler", func() {
+		s.NotNil(result.Handler)
+	})
+}
+
+func (s *TargetListToolMutatorSuite) TestDoesNotMutateOtherTools() {
+	tool := createTestTool("some-other-tool")
+	tm := WithTargetListTool("default", "cluster", []string{"cluster-1", "cluster-2"})
+	result := tm(tool)
+
+	s.Equal("some-other-tool", result.Tool.Name, "tool name should remain unchanged")
+}
+
+func (s *TargetListToolMutatorSuite) TestHandlerWithEmptyTargets() {
+	tool := createTestTool(TargetsListToolName)
+	tm := WithTargetListTool("default", "cluster", []string{})
+	result := tm(tool)
+
+	s.Require().NotNil(result.Handler)
+	callResult, err := result.Handler(api.ToolHandlerParams{})
+	s.NoError(err)
+	s.Contains(callResult.Content, "No clusters available")
+}
+
+func TestTargetListToolMutator(t *testing.T) {
+	suite.Run(t, new(TargetListToolMutatorSuite))
+}
