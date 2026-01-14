@@ -42,6 +42,34 @@ rbac:
         external: true
 ```
 
+### Additional Containers (Sidecars)
+
+The chart supports adding additional containers to the deployment pod. These can be used for various purposes such as MCP proxying.
+
+To add extra containers, define them in the `extraContainers` value using standard Kubernetes container specifications:
+
+```yaml
+extraContainers:
+  - name: log-collector
+    image: fluent/fluent-bit:latest
+    volumeMounts:
+      - name: logs
+        mountPath: /var/log
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+  - name: metrics-exporter
+    image: prom/statsd-exporter:latest
+    ports:
+      - containerPort: 9102
+```
+
+Each container accepts any valid Kubernetes container field including `image`, `command`, `args`, `env`, `volumeMounts`, `resources`, `ports`, and more.
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -51,6 +79,7 @@ rbac:
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
 | defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
+| extraContainers | list | `[]` | Each container is defined as a complete container spec. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
