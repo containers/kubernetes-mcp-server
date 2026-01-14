@@ -47,7 +47,7 @@ func (p *kubeConfigClusterProvider) reset() error {
 	m, err := NewKubeconfigManager(p.config, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
-			return fmt.Errorf("kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %v", err)
+			return fmt.Errorf("kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %w", err)
 		}
 		return err
 	}

@@ -58,7 +58,7 @@ func (p *singleClusterProvider) reset() error {
 	}
 	if err != nil {
 		if errors.Is(err, ErrorInClusterNotInCluster) {
-			return fmt.Errorf("server must be deployed in cluster for the %s ClusterProviderStrategy: %v",
+			return fmt.Errorf("server must be deployed in cluster for the %s ClusterProviderStrategy: %w",
 				p.strategy, err)
 		}
 		return err

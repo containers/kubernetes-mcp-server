@@ -67,7 +67,7 @@ func NewKubernetes(config api.BaseConfig, clientCmdConfig clientcmd.ClientConfig
 	})
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(k.restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create discovery client: %v", err)
+		return nil, fmt.Errorf("failed to create discovery client: %w", err)
 	}
 	k.discoveryClient = memory.NewMemCacheClient(discoveryClient)
 	k.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(k.discoveryClient)

@@ -29,7 +29,7 @@ func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload str
 	// First, get workload details to find associated pods
 	workloadDetails, err := k.WorkloadDetails(ctx, namespace, workload)
 	if err != nil {
-		return "", fmt.Errorf("failed to get workload details: %v", err)
+		return "", fmt.Errorf("failed to get workload details: %w", err)
 	}
 
 	// Parse the workload details JSON to extract pod names and containers
@@ -43,7 +43,7 @@ func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload str
 	}
 
 	if err := json.Unmarshal([]byte(workloadDetails), &workloadData); err != nil {
-		return "", fmt.Errorf("failed to parse workload details: %v", err)
+		return "", fmt.Errorf("failed to parse workload details: %w", err)
 	}
 
 	if len(workloadData.Pods) == 0 {
@@ -113,7 +113,7 @@ func (k *Kiali) PodLogs(ctx context.Context, namespace string, podName string, c
 		// Get pod details to find containers
 		podDetails, err := k.executeRequest(ctx, http.MethodGet, fmt.Sprintf(PodDetailsEndpoint, url.PathEscape(namespace), url.PathEscape(podName)), "", nil)
 		if err != nil {
-			return "", fmt.Errorf("failed to get pod details: %v", err)
+			return "", fmt.Errorf("failed to get pod details: %w", err)
 		}
 
 		// Parse pod details to extract container names
@@ -124,7 +124,7 @@ func (k *Kiali) PodLogs(ctx context.Context, namespace string, podName string, c
 		}
 
 		if err := json.Unmarshal([]byte(podDetails), &podData); err != nil {
-			return "", fmt.Errorf("failed to parse pod details: %v", err)
+			return "", fmt.Errorf("failed to parse pod details: %w", err)
 		}
 
 		// Find the main application container (not istio-proxy or istio-init)

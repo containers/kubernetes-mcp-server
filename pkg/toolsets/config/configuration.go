@@ -89,7 +89,7 @@ func initConfiguration() []api.ServerTool {
 func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	contexts, err := kubernetes.NewCore(params).ConfigurationContextsList()
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list contexts: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list contexts: %w", err)), nil
 	}
 
 	if len(contexts) == 0 {
@@ -98,7 +98,7 @@ func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	defaultContext, err := kubernetes.NewCore(params).ConfigurationContextsDefault()
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get default context: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get default context: %w", err)), nil
 	}
 
 	result := fmt.Sprintf("Available Kubernetes contexts (%d total, default: %s):\n\n", len(contexts), defaultContext)
@@ -129,11 +129,11 @@ func configurationView(params api.ToolHandlerParams) (*api.ToolCallResult, error
 	}
 	ret, err := kubernetes.NewCore(params).ConfigurationView(minify)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get configuration: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get configuration: %w", err)), nil
 	}
 	configurationYaml, err := output.MarshalYaml(ret)
 	if err != nil {
-		err = fmt.Errorf("failed to get configuration: %v", err)
+		err = fmt.Errorf("failed to get configuration: %w", err)
 	}
 	return api.NewToolCallResult(configurationYaml, err), nil
 }

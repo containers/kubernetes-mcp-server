@@ -90,7 +90,7 @@ func (k *Kiali) IstioConfig(ctx context.Context, action string, namespace string
 		}
 		out, err := json.Marshal(resp)
 		if err != nil {
-			return "", fmt.Errorf("failed to marshal istio list response: %v", err)
+			return "", fmt.Errorf("failed to marshal istio list response: %w", err)
 		}
 		return string(out), nil
 	}

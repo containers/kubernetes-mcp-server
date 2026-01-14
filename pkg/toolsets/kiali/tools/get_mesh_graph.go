@@ -102,7 +102,7 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	content, err := kiali.GetMeshGraph(params.Context, namespaces, queryParams)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh graph: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh graph: %w", err)), nil
 	}
 	return api.NewToolCallResult(content, nil), nil
 }

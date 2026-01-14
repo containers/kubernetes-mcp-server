@@ -118,7 +118,7 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	ret, err := kubernetes.NewCore(params).NodesLog(params, name, query, tailInt)
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "node log access")
-		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %v", name, err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get node log for %s: %w", name, err)), nil
 	} else if ret == "" {
 		ret = fmt.Sprintf("The node %s has not logged any message yet or the log file is empty", name)
 	}
@@ -133,7 +133,7 @@ func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error
 	ret, err := kubernetes.NewCore(params).NodesStatsSummary(params, name)
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "node stats access")
-		return api.NewToolCallResult("", fmt.Errorf("failed to get node stats summary for %s: %v", name, err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get node stats summary for %s: %w", name, err)), nil
 	}
 	return api.NewToolCallResult(ret, nil), nil
 }
@@ -150,7 +150,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	nodeMetrics, err := kubernetes.NewCore(params).NodesTop(params, nodesTopOptions)
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "node metrics access")
-		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %w", err)), nil
 	}
 
 	// Get the list of nodes to extract their allocatable resources
@@ -159,7 +159,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	})
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "node listing")
-		return api.NewToolCallResult("", fmt.Errorf("failed to list nodes: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list nodes: %w", err)), nil
 	}
 
 	// Build availableResources map
@@ -179,7 +179,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	printer := metricsutil.NewTopCmdPrinter(buf, true)
 	err = printer.PrintNodeMetrics(nodeMetrics.Items, availableResources, false, "")
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to print node metrics: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to print node metrics: %w", err)), nil
 	}
 
 	return api.NewToolCallResult(buf.String(), nil), nil

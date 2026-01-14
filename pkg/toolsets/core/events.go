@@ -44,14 +44,14 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	eventMap, err := kubernetes.NewCore(params).EventsList(params, namespace.(string))
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "events listing")
-		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
 	}
 	if len(eventMap) == 0 {
 		return api.NewToolCallResult("# No events found", nil), nil
 	}
 	yamlEvents, err := output.MarshalYaml(eventMap)
 	if err != nil {
-		err = fmt.Errorf("failed to list events in all namespaces: %v", err)
+		err = fmt.Errorf("failed to list events in all namespaces: %w", err)
 	}
 	return api.NewToolCallResult(fmt.Sprintf("# The following events (YAML format) were found:\n%s", yamlEvents), err), nil
 }

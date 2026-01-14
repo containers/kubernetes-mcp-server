@@ -162,7 +162,7 @@ func (s *Server) reloadToolsets() error {
 	for _, tool := range applicableTools {
 		goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
 		if err != nil {
-			return fmt.Errorf("failed to convert tool %s: %v", tool.Tool.Name, err)
+			return fmt.Errorf("failed to convert tool %s: %w", tool.Tool.Name, err)
 		}
 		s.server.AddTool(goSdkTool, goSdkToolHandler)
 	}
@@ -201,7 +201,7 @@ func (s *Server) reloadToolsets() error {
 	for _, prompt := range applicablePrompts {
 		mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
 		if err != nil {
-			return fmt.Errorf("failed to convert prompt %s: %v", prompt.Prompt.Name, err)
+			return fmt.Errorf("failed to convert prompt %s: %w", prompt.Prompt.Name, err)
 		}
 		s.server.AddPrompt(mcpPrompt, promptHandler)
 	}

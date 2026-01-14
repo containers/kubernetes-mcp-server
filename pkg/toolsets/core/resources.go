@@ -221,7 +221,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	ret, err := kubernetes.NewCore(params).ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "resource listing")
-		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
 	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
 }
@@ -253,7 +253,7 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	ret, err := kubernetes.NewCore(params).ResourcesGet(params, gvk, ns, n)
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "resource access")
-		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
 	}
 	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
 }
@@ -272,11 +272,11 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r)
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "resource creation or update")
-		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
 	}
 	marshalledYaml, err := output.MarshalYaml(resources)
 	if err != nil {
-		err = fmt.Errorf("failed to create or update resources:: %v", err)
+		err = fmt.Errorf("failed to create or update resources: %w", err)
 	}
 	return api.NewToolCallResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
 }
@@ -308,7 +308,7 @@ func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 	err = kubernetes.NewCore(params).ResourcesDelete(params, gvk, ns, n)
 	if err != nil {
 		mcplog.HandleK8sError(params.Context, err, "resource deletion")
-		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %w", err)), nil
 	}
 	return api.NewToolCallResult("Resource deleted successfully", err), nil
 }

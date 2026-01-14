@@ -134,7 +134,7 @@ func (c *JWTClaims) ValidateOffline(audience string) error {
 		expected.AnyAudience = jwt.Audience{audience}
 	}
 	if err := c.Validate(expected); err != nil {
-		return fmt.Errorf("JWT token validation error: %v", err)
+		return fmt.Errorf("JWT token validation error: %w", err)
 	}
 	return nil
 }
@@ -147,7 +147,7 @@ func (c *JWTClaims) ValidateWithProvider(ctx context.Context, audience string, p
 		})
 		_, err := verifier.Verify(ctx, c.Token)
 		if err != nil {
-			return fmt.Errorf("OIDC token validation error: %v", err)
+			return fmt.Errorf("OIDC token validation error: %w", err)
 		}
 	}
 	return nil

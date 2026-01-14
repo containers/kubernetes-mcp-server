@@ -46,7 +46,7 @@ func NewKubeconfigManager(config api.BaseConfig, kubeconfigContext string) (*Man
 
 	restConfig, err := clientCmdConfig.ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %v", err)
+		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %w", err)
 	}
 
 	return NewManager(config, restConfig, clientCmdConfig)
@@ -54,7 +54,7 @@ func NewKubeconfigManager(config api.BaseConfig, kubeconfigContext string) (*Man
 
 func NewInClusterManager(config api.BaseConfig) (*Manager, error) {
 	if config.GetKubeConfigPath() != "" {
-		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %v", config.GetKubeConfigPath(), ErrorKubeconfigInClusterNotAllowed)
+		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %w", config.GetKubeConfigPath(), ErrorKubeconfigInClusterNotAllowed)
 	}
 
 	if !IsInCluster(config) {
@@ -63,7 +63,7 @@ func NewInClusterManager(config api.BaseConfig) (*Manager, error) {
 
 	restConfig, err := InClusterConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create in-cluster kubernetes rest config: %v", err)
+		return nil, fmt.Errorf("failed to create in-cluster kubernetes rest config: %w", err)
 	}
 
 	// Create a dummy kubeconfig clientcmdapi.Config for in-cluster config to be used in places where clientcmd.ClientConfig is required

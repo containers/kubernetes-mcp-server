@@ -45,7 +45,7 @@ func getStringArgOrDefault(params api.ToolHandlerParams, key, defaultVal string)
 func setQueryParam(params api.ToolHandlerParams, queryParams map[string]string, key, defaultVal string) error {
 	v, err := getStringArgOrDefault(params, key, defaultVal)
 	if err != nil {
-		return fmt.Errorf("invalid %s: %v", key, err)
+		return fmt.Errorf("invalid %s: %w", key, err)
 	}
 	queryParams[key] = v
 	return nil

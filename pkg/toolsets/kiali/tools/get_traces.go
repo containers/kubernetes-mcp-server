@@ -119,7 +119,7 @@ func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		traceId := strings.TrimSpace(traceIdVal)
 		content, err := kiali.TraceDetails(params.Context, traceId)
 		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to get trace details: %v", err)), nil
+			return api.NewToolCallResult("", fmt.Errorf("failed to get trace details: %w", err)), nil
 		}
 		return api.NewToolCallResult(content, nil), nil
 	}
@@ -170,7 +170,7 @@ func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		// Parse startMicros to calculate endMicros
 		startMicrosInt, err := strconv.ParseInt(startMicros, 10, 64)
 		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("invalid startMicros value: %v", err)), nil
+			return api.NewToolCallResult("", fmt.Errorf("invalid startMicros value: %w", err)), nil
 		}
 		startTime := time.UnixMicro(startMicrosInt)
 		endTime := startTime.Add(10 * time.Minute)
@@ -195,7 +195,7 @@ func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	content, err := ops.tracesFunc(params.Context, kiali, namespace, resourceName, queryParams)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get %s traces: %v", ops.singularName, err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get %s traces: %w", ops.singularName, err)), nil
 	}
 	return api.NewToolCallResult(content, nil), nil
 }

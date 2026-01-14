@@ -27,7 +27,7 @@ func ReadFile(path ...string) string {
 func RandomPortAddress() (*net.TCPAddr, error) {
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
-		return nil, fmt.Errorf("failed to find random port for HTTP server: %v", err)
+		return nil, fmt.Errorf("failed to find random port for HTTP server: %w", err)
 	}
 	defer func() { _ = ln.Close() }()
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
