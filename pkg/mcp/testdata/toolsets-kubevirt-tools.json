@@ -89,11 +89,12 @@
       "type": "object",
       "properties": {
         "action": {
-          "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+          "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), 'restart' (stops then starts the VM) or 'troubleshoot' (troubleshoot the VM)",
           "enum": [
             "start",
             "stop",
-            "restart"
+            "restart",
+            "troubleshoot"
           ],
           "type": "string"
         },
