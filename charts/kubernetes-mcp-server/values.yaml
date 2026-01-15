@@ -168,7 +168,7 @@ extraVolumeMounts: []
 # -- Each container is defined as a complete container spec.
 extraContainers: []
 # - name: sidecar-example
-#   image: busybox:latest
+#   image: quay.io/prometheus/busybox:latest
 #   command: ["sh", "-c", "while true; do echo 'Sidecar running'; sleep 30; done"]
 #   resources:
 #     requests:

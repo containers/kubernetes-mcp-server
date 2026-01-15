@@ -63,9 +63,9 @@ extraContainers:
         cpu: 50m
         memory: 64Mi
   - name: metrics-exporter
-    image: prom/statsd-exporter:latest
+    image: quay.io/prometheus/prometheus:latest
     ports:
-      - containerPort: 9102
+      - containerPort: 9090
 ```
 
 Each container accepts any valid Kubernetes container field including `image`, `command`, `args`, `env`, `volumeMounts`, `resources`, `ports`, and more.
