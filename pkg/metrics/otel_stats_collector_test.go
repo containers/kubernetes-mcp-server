@@ -2,10 +2,12 @@ package metrics
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 type OtelStatsCollectorSuite struct {
@@ -107,6 +109,93 @@ func (s *OtelStatsCollectorSuite) TestGetStats() {
 		s.NotNil(stats.HTTPRequestsByPath, "HTTPRequestsByPath should be initialized")
 		s.NotNil(stats.HTTPRequestsByStatus, "HTTPRequestsByStatus should be initialized")
 		s.NotNil(stats.HTTPRequestsByMethod, "HTTPRequestsByMethod should be initialized")
+	})
+}
+
+func (s *OtelStatsCollectorSuite) TestToolDurationHistogram() {
+	s.Run("records tool call duration", func() {
+		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+			MeterName:      "test-meter-duration",
+			ServiceName:    "test-service",
+			ServiceVersion: "1.0.0",
+		})
+		s.Require().NoError(err)
+
+		ctx := context.Background()
+		collector.RecordToolCall(ctx, "slow_tool", 500*time.Millisecond, nil)
+		collector.RecordToolCall(ctx, "fast_tool", 10*time.Millisecond, nil)
+
+		// Read metrics from the manual reader
+		var rm metricdata.ResourceMetrics
+		err = collector.reader.Collect(ctx, &rm)
+		s.Require().NoError(err)
+
+		// Find the duration histogram
+		var foundHistogram bool
+		for _, scopeMetrics := range rm.ScopeMetrics {
+			for _, m := range scopeMetrics.Metrics {
+				if m.Name == "mcp.tool.duration" {
+					foundHistogram = true
+					histogram, ok := m.Data.(metricdata.Histogram[float64])
+					s.True(ok, "mcp.tool.duration should be a float64 histogram")
+					s.Len(histogram.DataPoints, 2, "Should have 2 data points (one per tool)")
+
+					// Verify data points have recorded values
+					for _, dp := range histogram.DataPoints {
+						s.Greater(dp.Count, uint64(0), "Histogram should have recorded at least one value")
+						s.Greater(dp.Sum, float64(0), "Histogram sum should be greater than 0")
+					}
+				}
+			}
+		}
+		s.True(foundHistogram, "mcp.tool.duration histogram should exist")
+	})
+}
+
+func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
+	s.Run("records server info with version labels", func() {
+		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+			MeterName:      "test-meter-info",
+			ServiceName:    "test-service",
+			ServiceVersion: "1.2.3",
+		})
+		s.Require().NoError(err)
+
+		ctx := context.Background()
+
+		// Read metrics from the manual reader
+		var rm metricdata.ResourceMetrics
+		err = collector.reader.Collect(ctx, &rm)
+		s.Require().NoError(err)
+
+		// Find the server info gauge
+		var foundGauge bool
+		for _, scopeMetrics := range rm.ScopeMetrics {
+			for _, m := range scopeMetrics.Metrics {
+				if m.Name == "mcp.server.info" {
+					foundGauge = true
+					gauge, ok := m.Data.(metricdata.Gauge[int64])
+					s.True(ok, "mcp.server.info should be an int64 gauge")
+					s.Len(gauge.DataPoints, 1, "Should have 1 data point")
+
+					if len(gauge.DataPoints) > 0 {
+						dp := gauge.DataPoints[0]
+						s.Equal(int64(1), dp.Value, "Gauge value should be 1")
+
+						// Verify version attribute
+						version, ok := dp.Attributes.Value("version")
+						s.True(ok, "version attribute should exist")
+						s.Equal("1.2.3", version.AsString(), "version should match config")
+
+						// Verify go_version attribute
+						goVersion, ok := dp.Attributes.Value("go_version")
+						s.True(ok, "go_version attribute should exist")
+						s.Equal(runtime.Version(), goVersion.AsString(), "go_version should match runtime")
+					}
+				}
+			}
+		}
+		s.True(foundGauge, "mcp.server.info gauge should exist")
 	})
 }
 

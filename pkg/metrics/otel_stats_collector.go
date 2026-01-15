@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -44,7 +45,9 @@ type OtelStatsCollector struct {
 	// OTel metric instruments
 	toolCallCounter      metric.Int64Counter
 	toolCallErrorCounter metric.Int64Counter
+	toolDurationHistogram metric.Float64Histogram
 	httpRequestCounter   metric.Int64Counter
+	serverInfoGauge      metric.Int64Gauge
 
 	// Meter provider for shutdown
 	provider *sdkmetric.MeterProvider
@@ -197,6 +200,15 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 		return nil, fmt.Errorf("failed to create tool error counter: %w", err)
 	}
 
+	toolDurationHistogram, err := meter.Float64Histogram(
+		"mcp.tool.duration",
+		metric.WithDescription("Duration of MCP tool calls in seconds"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tool duration histogram: %w", err)
+	}
+
 	httpRequestCounter, err := meter.Int64Counter(
 		"http.server.requests",
 		metric.WithDescription("Total number of HTTP requests"),
@@ -205,14 +217,34 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 		return nil, fmt.Errorf("failed to create HTTP request counter: %w", err)
 	}
 
-	return &OtelStatsCollector{
-		toolCallCounter:      toolCallCounter,
-		toolCallErrorCounter: toolCallErrorCounter,
-		httpRequestCounter:   httpRequestCounter,
-		provider:             provider,
-		reader:               reader,
-		startTime:            time.Now(),
-	}, nil
+	serverInfoGauge, err := meter.Int64Gauge(
+		"mcp.server.info",
+		metric.WithDescription("MCP server version information"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create server info gauge: %w", err)
+	}
+
+	collector := &OtelStatsCollector{
+		toolCallCounter:       toolCallCounter,
+		toolCallErrorCounter:  toolCallErrorCounter,
+		toolDurationHistogram: toolDurationHistogram,
+		httpRequestCounter:    httpRequestCounter,
+		serverInfoGauge:       serverInfoGauge,
+		provider:              provider,
+		reader:                reader,
+		startTime:             time.Now(),
+	}
+
+	// Record server info gauge with version attributes
+	collector.serverInfoGauge.Record(context.Background(), 1,
+		metric.WithAttributes(
+			attribute.String("version", cfg.ServiceVersion),
+			attribute.String("go_version", runtime.Version()),
+		),
+	)
+
+	return collector, nil
 }
 
 // Shutdown gracefully shuts down the meter provider, flushing any pending metrics.
@@ -222,16 +254,17 @@ func (c *OtelStatsCollector) Shutdown(ctx context.Context) error {
 
 // RecordToolCall implements the Collector interface.
 func (c *OtelStatsCollector) RecordToolCall(ctx context.Context, name string, duration time.Duration, err error) {
+	toolNameAttr := metric.WithAttributes(attribute.String("tool.name", name))
+
 	// Record tool call with tool name as attribute
-	c.toolCallCounter.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("tool.name", name),
-	))
+	c.toolCallCounter.Add(ctx, 1, toolNameAttr)
+
+	// Record duration in seconds
+	c.toolDurationHistogram.Record(ctx, duration.Seconds(), toolNameAttr)
 
 	// Record errors
 	if err != nil {
-		c.toolCallErrorCounter.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("tool.name", name),
-		))
+		c.toolCallErrorCounter.Add(ctx, 1, toolNameAttr)
 	}
 }
 
