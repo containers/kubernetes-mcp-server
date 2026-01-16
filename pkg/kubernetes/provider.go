@@ -2,9 +2,11 @@ package kubernetes
 
 import (
 	"context"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
@@ -60,6 +62,9 @@ func resolveStrategy(cfg api.BaseConfig) string {
 	}
 
 	if cfg.GetKubeConfigPath() != "" {
+		if isKcpKubeconfig(cfg) {
+			return api.ClusterProviderKcp
+		}
 		return api.ClusterProviderKubeConfig
 	}
 
@@ -68,4 +73,31 @@ func resolveStrategy(cfg api.BaseConfig) string {
 	}
 
 	return api.ClusterProviderKubeConfig
+}
+
+// isKcpKubeconfig checks if the kubeconfig contains kcp-style cluster URLs
+// (URLs containing "/clusters/" path indicating kcp workspaces)
+func isKcpKubeconfig(cfg api.BaseConfig) bool {
+	pathOptions := clientcmd.NewDefaultPathOptions()
+	if cfg.GetKubeConfigPath() != "" {
+		pathOptions.LoadingRules.ExplicitPath = cfg.GetKubeConfigPath()
+	}
+
+	clientCmdConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		pathOptions.LoadingRules,
+		&clientcmd.ConfigOverrides{})
+
+	rawConfig, err := clientCmdConfig.RawConfig()
+	if err != nil {
+		return false
+	}
+
+	// Check if any cluster has /clusters/ in its server URL
+	for _, cluster := range rawConfig.Clusters {
+		if strings.Contains(cluster.Server, "/clusters/") {
+			return true
+		}
+	}
+
+	return false
 }
