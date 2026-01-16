@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -213,37 +212,23 @@ func (s *BaseMcpSuite) InitMcpClient(options ...transport.StreamableHTTPCOption)
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
 }
 
-// notificationDelay is the time to wait after receiving a notification before capturing it.
-// This accounts for multiple layers of async processing in tests:
-// - go-sdk debounce (10ms in mcp/server.go changeAndNotify)
-// - cluster state / kubeconfig debounce (CLUSTER_STATE_DEBOUNCE_WINDOW_MS, KUBECONFIG_DEBOUNCE_WINDOW_MS)
-// - async tool updates completing after notification is sent
-// We use 50ms to ensure all debouncing and async operations have settled.
-const notificationDelay = time.Millisecond * 50
+// StartCapturingNotifications begins capturing all MCP notifications.
+// Must be called BEFORE the operation that triggers the notification.
+func (s *BaseMcpSuite) StartCapturingNotifications() *test.NotificationCapture {
+	return s.McpClient.StartCapturingNotifications()
+}
 
-// WaitForNotification wait for a specific MCP notification method within the given timeout duration.
-func (s *BaseMcpSuite) WaitForNotification(timeout time.Duration, method string) *mcp.JSONRPCNotification {
-	withTimeout, cancel := context.WithTimeout(s.T().Context(), timeout)
-	defer cancel()
-	var notification *mcp.JSONRPCNotification
-	var timer *time.Timer
-	s.OnNotification(func(n mcp.JSONRPCNotification) {
-		if n.Method == method {
-			if timer != nil {
-				timer.Stop()
-			}
-			timer = time.AfterFunc(notificationDelay, func() {
-				notification = &n
-			})
-		}
+// StartCapturingLogNotifications begins capturing log notifications.
+// Must be called BEFORE the tool call that triggers the notification.
+// This method sets the logging level to debug to ensure all log messages are received.
+func (s *BaseMcpSuite) StartCapturingLogNotifications() *test.NotificationCapture {
+	// Set logging level to debug to receive all log messages
+	err := s.SetLevel(s.T().Context(), mcp.SetLevelRequest{
+		Params: mcp.SetLevelParams{
+			Level: mcp.LoggingLevelDebug,
+		},
 	})
-	for notification == nil {
-		select {
-		case <-withTimeout.Done():
-			s.FailNow("timeout waiting for MCP notification")
-		default:
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-	return notification
+	s.Require().NoError(err, "failed to set logging level")
+
+	return s.StartCapturingNotifications()
 }

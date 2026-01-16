@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -309,6 +310,20 @@ func (s *ResourcesSuite) TestResourcesGet() {
 		s.Equalf("failed to get resource, missing argument name", toolResult.Content[0].(mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
+	s.Run("resources_get with nonexistent resource", func() {
+		capture := s.StartCapturingLogNotifications()
+		toolResult, _ := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "name": "nonexistent-configmap"})
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Equalf(`failed to get resource: configmaps "nonexistent-configmap" not found`,
+				toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("info", logNotification.Level, "not found errors should log at info level")
+			s.Contains(logNotification.Data, "Resource not found", "log message should indicate resource not found")
+		})
+	})
 	s.Run("resources_get returns namespace", func() {
 		namespace, err := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "v1", "kind": "Namespace", "name": "default"})
 		s.Run("no error", func() {
@@ -577,11 +592,19 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 		s.Equalf("failed to delete resource, missing argument name", toolResult.Content[0].(mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
-	s.Run("resources_delete with nonexistent resource returns error", func() {
+	s.Run("resources_delete with nonexistent resource", func() {
+		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "name": "nonexistent-configmap"})
-		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf(`failed to delete resource: configmaps "nonexistent-configmap" not found`,
-			toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Equalf(`failed to delete resource: configmaps "nonexistent-configmap" not found`,
+				toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("info", logNotification.Level, "not found errors should log at info level")
+			s.Contains(logNotification.Data, "Resource not found", "log message should indicate resource not found")
+		})
 	})
 
 	s.Run("resources_delete with valid namespaced resource", func() {
@@ -747,16 +770,24 @@ func (s *ResourcesSuite) TestResourcesScale() {
 			s.Equalf(int32(5), *deployment.Spec.Replicas, "expected 5 replicas in deployment, got %d", *deployment.Spec.Replicas)
 		})
 	})
-	s.Run("resources_scale with nonexistent resource returns error", func() {
+	s.Run("resources_scale with nonexistent resource", func() {
+		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{
 			"apiVersion": "apps/v1",
 			"kind":       "Deployment",
 			"namespace":  "default",
 			"name":       "nonexistent-deployment",
 		})
-		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Containsf(toolResult.Content[0].(mcp.TextContent).Text, "not found",
-			"expected not found error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Containsf(toolResult.Content[0].(mcp.TextContent).Text, "not found",
+				"expected not found error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("info", logNotification.Level, "not found errors should log at info level")
+			s.Contains(logNotification.Data, "Resource not found", "log message should indicate resource not found")
+		})
 	})
 	s.Run("resources_scale with resource that does not support scale subresource returns error", func() {
 		configMapName := "configmap-without-scale"

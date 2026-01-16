@@ -13,6 +13,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// serverSettleDelay is the time to wait after receiving a notification for the server
+// to finish updating its internal state. The MCP server sends notifications before
+// completing async updates to tools/prompts, so tests that verify server state after
+// a notification need to wait for those updates to complete.
+const serverSettleDelay = 100 * time.Millisecond
+
 type WatchKubeConfigSuite struct {
 	BaseMcpSuite
 	mockServer *test.MockServer
@@ -56,23 +62,23 @@ func (s *WatchKubeConfigSuite) WriteKubeconfig() {
 func (s *WatchKubeConfigSuite) TestNotifiesToolsChange() {
 	// Given
 	s.InitMcpClient()
+	capture := s.StartCapturingNotifications()
 	// When
 	s.WriteKubeconfig()
-	notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
+	notification := capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
 	// Then
 	s.NotNil(notification, "WatchKubeConfig did not notify")
-	s.Equal("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change")
 }
 
 func (s *WatchKubeConfigSuite) TestNotifiesPromptsChange() {
 	// Given
 	s.InitMcpClient()
+	capture := s.StartCapturingNotifications()
 	// When
 	s.WriteKubeconfig()
-	notification := s.WaitForNotification(5*time.Second, "notifications/prompts/list_changed")
+	notification := capture.RequireNotification(s.T(), 5*time.Second, "notifications/prompts/list_changed")
 	// Then
 	s.NotNil(notification, "WatchKubeConfig did not notify")
-	s.Equal("notifications/prompts/list_changed", notification.Method, "WatchKubeConfig did not notify prompts change")
 }
 
 func (s *WatchKubeConfigSuite) TestNotifiesToolsChangeMultipleTimes() {
@@ -80,11 +86,11 @@ func (s *WatchKubeConfigSuite) TestNotifiesToolsChangeMultipleTimes() {
 	s.InitMcpClient()
 	// When
 	for i := 0; i < 3; i++ {
+		capture := s.StartCapturingNotifications()
 		s.WriteKubeconfig()
-		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
+		notification := capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
 		// Then
 		s.NotNil(notification, "WatchKubeConfig did not notify on iteration %d", i)
-		s.Equalf("notifications/tools/list_changed", notification.Method, "WatchKubeConfig did not notify tools change on iteration %d", i)
 	}
 }
 
@@ -93,11 +99,11 @@ func (s *WatchKubeConfigSuite) TestNotifiesPromptsChangeMultipleTimes() {
 	s.InitMcpClient()
 	// When
 	for i := 0; i < 3; i++ {
+		capture := s.StartCapturingNotifications()
 		s.WriteKubeconfig()
-		notification := s.WaitForNotification(5*time.Second, "notifications/prompts/list_changed")
+		notification := capture.RequireNotification(s.T(), 5*time.Second, "notifications/prompts/list_changed")
 		// Then
 		s.NotNil(notification, "WatchKubeConfig did not notify on iteration %d", i)
-		s.Equalf("notifications/prompts/list_changed", notification.Method, "WatchKubeConfig did not notify prompts change on iteration %d", i)
 	}
 }
 
@@ -120,10 +126,13 @@ func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
 	})
 
 	s.Run("OpenShift tool is removed after kubeconfig change", func() {
+		capture := s.StartCapturingNotifications()
+
 		// Reload Config without OpenShift
 		s.mockServer.ResetHandlers()
 		s.WriteKubeconfig()
-		s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
+		capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+		time.Sleep(serverSettleDelay)
 
 		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
 		s.Require().NoError(err, "call ListTools failed")
@@ -169,15 +178,15 @@ func (s *WatchClusterStateSuite) AddAPIGroup(groupVersion string) {
 func (s *WatchClusterStateSuite) TestNotifiesToolsChangeOnAPIGroupAddition() {
 	// Given - Initialize with basic API groups
 	s.InitMcpClient()
+	capture := s.StartCapturingNotifications()
 
 	// When - Add a new API group to simulate cluster state change
 	s.AddAPIGroup("custom.example.com/v1")
 
-	notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
+	notification := capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
 
 	// Then
 	s.NotNil(notification, "cluster state watcher did not notify")
-	s.Equal("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change")
 }
 
 func (s *WatchClusterStateSuite) TestNotifiesToolsChangeMultipleTimes() {
@@ -186,10 +195,10 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeMultipleTimes() {
 
 	// When - Add multiple API groups to simulate cluster state changes
 	for i := 0; i < 3; i++ {
+		capture := s.StartCapturingNotifications()
 		s.AddAPIGroup(fmt.Sprintf("custom-%d.example.com/v1", i))
-		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
+		notification := capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
 		s.NotNil(notification, "cluster state watcher did not notify on iteration %d", i)
-		s.Equalf("notifications/tools/list_changed", notification.Method, "cluster state watcher did not notify tools change on iteration %d", i)
 	}
 }
 
@@ -206,12 +215,14 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 	})
 
 	s.Run("OpenShift tool is added after cluster becomes OpenShift", func() {
+		capture := s.StartCapturingNotifications()
+
 		// Simulate cluster becoming OpenShift by adding OpenShift API groups
 		s.mockServer.ResetHandlers()
 		s.mockServer.Handle(test.NewInOpenShiftHandler())
 
-		notification := s.WaitForNotification(5*time.Second, "notifications/tools/list_changed")
-		s.NotNil(notification, "cluster state watcher did not notify")
+		capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+		time.Sleep(serverSettleDelay)
 
 		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
 		s.Require().NoError(err, "call ListTools failed")

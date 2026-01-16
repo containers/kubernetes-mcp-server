@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 )
 
@@ -61,6 +63,29 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 			expectedMessage := "failed to list namespaces:(.+:)? resource not allowed: /v1, Kind=Namespace"
 			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
+		})
+	})
+}
+
+func (s *NamespacesSuite) TestNamespacesListForbidden() {
+	s.InitMcpClient()
+	defer restoreAuth(s.T().Context())
+	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Remove all permissions - user will have forbidden access
+	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+
+	s.Run("namespaces_list (forbidden)", func() {
+		capture := s.StartCapturingLogNotifications()
+		toolResult, _ := s.CallTool("namespaces_list", map[string]interface{}{})
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+				"error message should indicate forbidden")
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
+			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
 		})
 	})
 }

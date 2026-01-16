@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/suite"
@@ -185,6 +186,29 @@ func (s *PodsSuite) TestPodsListDenied() {
 	})
 }
 
+func (s *PodsSuite) TestPodsListForbidden() {
+	s.InitMcpClient()
+	defer restoreAuth(s.T().Context())
+	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Remove all permissions - user will have forbidden access
+	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+
+	s.Run("pods_list (forbidden)", func() {
+		capture := s.StartCapturingLogNotifications()
+		toolResult, _ := s.CallTool("pods_list", map[string]interface{}{})
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+				"error message should indicate forbidden")
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
+			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
+		})
+	})
+}
+
 func (s *PodsSuite) TestPodsListAsTable() {
 	s.Cfg.ListOutput = "table"
 	s.InitMcpClient()
@@ -291,10 +315,18 @@ func (s *PodsSuite) TestPodsGet() {
 		s.Truef(toolResult.IsError, "call tool should fail")
 		s.Equalf("failed to get pod, missing argument name", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
-	s.Run("pods_get(name=not-found) with not found name returns error", func() {
+	s.Run("pods_get(name=not-found) with not found name", func() {
+		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("pods_get", map[string]interface{}{"name": "not-found"})
-		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Equalf("failed to get pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("info", logNotification.Level, "not found errors should log at info level")
+			s.Contains(logNotification.Data, "Resource not found", "log message should indicate resource not found")
+		})
 	})
 	s.Run("pods_get(name=a-pod-in-default, namespace=nil), uses configured namespace", func() {
 		podsGetNilNamespace, err := s.CallTool("pods_get", map[string]interface{}{
@@ -366,10 +398,18 @@ func (s *PodsSuite) TestPodsDelete() {
 		s.Truef(toolResult.IsError, "call tool should fail")
 		s.Equalf("failed to delete pod, missing argument name", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
-	s.Run("pods_delete(name=not-found) with not found name returns error", func() {
+	s.Run("pods_delete(name=not-found) with not found name", func() {
+		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("pods_delete", map[string]interface{}{"name": "not-found"})
-		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Equalf("failed to delete pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("info", logNotification.Level, "not found errors should log at info level")
+			s.Contains(logNotification.Data, "Resource not found", "log message should indicate resource not found")
+		})
 	})
 	s.Run("pods_delete(name=a-pod-to-delete, namespace=nil), uses configured namespace", func() {
 		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)

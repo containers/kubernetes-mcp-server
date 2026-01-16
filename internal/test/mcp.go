@@ -2,9 +2,12 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -58,4 +61,119 @@ func (m *McpClient) CallTool(name string, args map[string]interface{}) (*mcp.Cal
 	callToolRequest.Params.Name = name
 	callToolRequest.Params.Arguments = args
 	return m.Client.CallTool(m.ctx, callToolRequest)
+}
+
+// NotificationCapture captures MCP notifications for testing.
+// Use StartCapturingNotifications to begin capturing, then RequireNotification to retrieve.
+type NotificationCapture struct {
+	mu            sync.RWMutex
+	notifications []*mcp.JSONRPCNotification
+	signal        chan struct{} // signals when new notifications arrive
+}
+
+// StartCapturingNotifications begins capturing all MCP notifications.
+// Must be called BEFORE the operation that triggers the notification.
+func (m *McpClient) StartCapturingNotifications() *NotificationCapture {
+	capture := &NotificationCapture{
+		notifications: make([]*mcp.JSONRPCNotification, 0),
+		signal:        make(chan struct{}, 1),
+	}
+	m.OnNotification(func(n mcp.JSONRPCNotification) {
+		capture.mu.Lock()
+		capture.notifications = append(capture.notifications, &n)
+		capture.mu.Unlock()
+		// Signal that a new notification arrived (non-blocking)
+		select {
+		case capture.signal <- struct{}{}:
+		default:
+		}
+	})
+	return capture
+}
+
+// RequireNotification waits for a notification matching the specified method and fails the test if not received.
+// Iterates through all captured notifications looking for a match, waiting for new ones if needed.
+// The method parameter specifies which notification method to wait for (e.g., "notifications/tools/list_changed").
+func (c *NotificationCapture) RequireNotification(t *testing.T, timeout time.Duration, method string) *mcp.JSONRPCNotification {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	checked := 0
+	for {
+		// Check all notifications we haven't checked yet
+		c.mu.RLock()
+		for i := checked; i < len(c.notifications); i++ {
+			if c.notifications[i].Method == method {
+				n := c.notifications[i]
+				c.mu.RUnlock()
+				return n
+			}
+		}
+		checked = len(c.notifications)
+		c.mu.RUnlock()
+
+		// Wait for new notifications or timeout
+		select {
+		case <-c.signal:
+			// New notification arrived, loop and check it
+		case <-ctx.Done():
+			require.Fail(t, "timeout waiting for MCP notification", "method: %s", method)
+			return nil
+		}
+	}
+}
+
+// LogNotification represents a parsed MCP logging notification.
+// Used for asserting log messages sent to MCP clients during error handling.
+type LogNotification struct {
+	// Level is the log severity level (debug, info, notice, warning, error, critical, alert, emergency)
+	Level string
+	// Logger is the name of the logger that generated the message
+	Logger string
+	// Data contains the log message content
+	Data string
+}
+
+// parseLogNotification extracts log information from an MCP notification.
+// Returns nil if the notification is not a valid logging notification.
+func parseLogNotification(notification *mcp.JSONRPCNotification) *LogNotification {
+	if notification == nil {
+		return nil
+	}
+	// The Params field contains the LoggingMessageParams via AdditionalFields
+	paramsBytes, err := json.Marshal(notification.Params)
+	if err != nil {
+		return nil
+	}
+	var logParams struct {
+		Level  string `json:"level"`
+		Logger string `json:"logger"`
+		Data   any    `json:"data"`
+	}
+	if err := json.Unmarshal(paramsBytes, &logParams); err != nil {
+		return nil
+	}
+	// Convert Data to string
+	var dataStr string
+	switch v := logParams.Data.(type) {
+	case string:
+		dataStr = v
+	default:
+		dataBytes, _ := json.Marshal(v)
+		dataStr = string(dataBytes)
+	}
+	return &LogNotification{
+		Level:  logParams.Level,
+		Logger: logParams.Logger,
+		Data:   dataStr,
+	}
+}
+
+// RequireLogNotification waits for a logging notification and returns it parsed.
+// Filters for "notifications/message" method and fails the test if not received within timeout.
+func (c *NotificationCapture) RequireLogNotification(t *testing.T, timeout time.Duration) *LogNotification {
+	notification := c.RequireNotification(t, timeout, "notifications/message")
+	logNotification := parseLogNotification(notification)
+	require.NotNil(t, logNotification, "failed to parse log notification")
+	return logNotification
 }
