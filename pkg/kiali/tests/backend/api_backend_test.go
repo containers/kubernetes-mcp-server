@@ -1,5 +1,5 @@
-//go:build kiali-contract
-// +build kiali-contract
+//go:build kiali_contract
+// +build kiali_contract
 
 package backend
 
