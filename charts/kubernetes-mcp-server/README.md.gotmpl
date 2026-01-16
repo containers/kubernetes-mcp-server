@@ -50,11 +50,8 @@ To add extra containers, define them in the `extraContainers` value using standa
 
 ```yaml
 extraContainers:
-  - name: log-collector
-    image: fluent/fluent-bit:latest
-    volumeMounts:
-      - name: logs
-        mountPath: /var/log
+  - name: sidecar
+    image: quay.io/prometheus/busybox:latest
     resources:
       requests:
         cpu: 10m

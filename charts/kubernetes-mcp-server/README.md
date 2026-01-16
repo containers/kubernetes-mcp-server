@@ -1,6 +1,8 @@
 # kubernetes-mcp-server
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
+
+
+![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square) 
 
 Helm Chart for the Kubernetes MCP Server
 
@@ -13,11 +15,15 @@ Helm Chart for the Kubernetes MCP Server
 | Andrew Block | <ablock@redhat.com> |  |
 | Marc Nuri | <marc.nuri@redhat.com> |  |
 
+
+
+
+
 ## Installing the Chart
 
 The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified.
 
-Install the Chart using the following command from the root of this directory:
+Install the Chart using the following command from the root of this directory: 
 
 ```shell
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
@@ -50,11 +56,8 @@ To add extra containers, define them in the `extraContainers` value using standa
 
 ```yaml
 extraContainers:
-  - name: log-collector
-    image: fluent/fluent-bit:latest
-    volumeMounts:
-      - name: logs
-        mountPath: /var/log
+  - name: sidecar
+    image: quay.io/prometheus/busybox:latest
     resources:
       requests:
         cpu: 10m
@@ -117,7 +120,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 
 ## Updating the README
 
-The contents of the README.md file is generated using [helm-docs](https://github.com/norwoodj/helm-docs). Whenever changes are introduced to the Chart and its _Values_, the documentation should be regenerated.
+The contents of the README.md file is generated using [helm-docs](https://github.com/norwoodj/helm-docs). Whenever changes are introduced to the Chart and its _Values_, the documentation should be regenerated. 
 
 Execute the following command to regenerate the documentation from within the Helm Chart directory.
 
