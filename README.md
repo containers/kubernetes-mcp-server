@@ -138,6 +138,27 @@ extensions:
 
 ```
 
+### GitHub Copilot
+
+This configuration is for the IntelliJ GitHub Copilot plugin using a local Docker container. Add the following configuration to the `mcp.json` point Copilot to the local MCP server:
+
+```json
+{
+  "servers": {
+    "kubernetes-mcp": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp",
+      "requestInit": {
+        "method": "GET",
+        "headers": {
+          "Accept": "text/event-stream"
+        }
+      }
+    }
+  }
+}
+```
+
 ## 🎥 Demos <a id="demos"></a>
 
 ### Diagnosing and automatically fixing an OpenShift Deployment
