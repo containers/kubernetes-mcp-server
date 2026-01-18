@@ -85,7 +85,7 @@ func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, 
 
 	}
 	return "Pod deleted successfully",
-		c.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
+		c.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name, nil)
 }
 
 func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {

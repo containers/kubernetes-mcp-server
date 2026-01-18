@@ -70,7 +70,7 @@ func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]
 	return c.resourcesCreateOrUpdate(ctx, parsedResources)
 }
 
-func (c *Core) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string) error {
+func (c *Core) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string, gracePeriodSeconds *int64) error {
 	gvr, err := c.resourceFor(gvk)
 	if err != nil {
 		return err
@@ -80,7 +80,9 @@ func (c *Core) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind
 	if namespaced, nsErr := c.isNamespaced(gvk); nsErr == nil && namespaced {
 		namespace = c.NamespaceOrDefault(namespace)
 	}
-	return c.DynamicClient().Resource(*gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	return c.DynamicClient().Resource(*gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{
+		GracePeriodSeconds: gracePeriodSeconds,
+	})
 }
 
 func (c *Core) ResourcesScale(
