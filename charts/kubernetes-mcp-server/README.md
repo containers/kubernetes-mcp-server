@@ -1,6 +1,8 @@
 # kubernetes-mcp-server
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
+
+
+![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square) 
 
 Helm Chart for the Kubernetes MCP Server
 
@@ -13,11 +15,15 @@ Helm Chart for the Kubernetes MCP Server
 | Andrew Block | <ablock@redhat.com> |  |
 | Marc Nuri | <marc.nuri@redhat.com> |  |
 
+
+
+
+
 ## Installing the Chart
 
 The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified.
 
-Install the Chart using the following command from the root of this directory:
+Install the Chart using the following command from the root of this directory: 
 
 ```shell
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
@@ -42,6 +48,31 @@ rbac:
         external: true
 ```
 
+### Additional Containers (Sidecars)
+
+The chart supports adding additional containers to the deployment pod. These can be used for various purposes such as MCP proxying.
+
+To add extra containers, define them in the `extraContainers` value using standard Kubernetes container specifications:
+
+```yaml
+extraContainers:
+  - name: sidecar
+    image: quay.io/prometheus/busybox:latest
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+  - name: metrics-exporter
+    image: quay.io/prometheus/prometheus:latest
+    ports:
+      - containerPort: 9090
+```
+
+Each container accepts any valid Kubernetes container field including `image`, `command`, `args`, `env`, `volumeMounts`, `resources`, `ports`, and more.
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -51,6 +82,7 @@ rbac:
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
 | defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
+| extraContainers | list | `[]` | Each container is defined as a complete container spec. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
@@ -88,7 +120,7 @@ rbac:
 
 ## Updating the README
 
-The contents of the README.md file is generated using [helm-docs](https://github.com/norwoodj/helm-docs). Whenever changes are introduced to the Chart and its _Values_, the documentation should be regenerated.
+The contents of the README.md file is generated using [helm-docs](https://github.com/norwoodj/helm-docs). Whenever changes are introduced to the Chart and its _Values_, the documentation should be regenerated. 
 
 Execute the following command to regenerate the documentation from within the Helm Chart directory.
 

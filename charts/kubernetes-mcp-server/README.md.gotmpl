@@ -42,6 +42,31 @@ rbac:
         external: true
 ```
 
+### Additional Containers (Sidecars)
+
+The chart supports adding additional containers to the deployment pod. These can be used for various purposes such as MCP proxying.
+
+To add extra containers, define them in the `extraContainers` value using standard Kubernetes container specifications:
+
+```yaml
+extraContainers:
+  - name: sidecar
+    image: quay.io/prometheus/busybox:latest
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+  - name: metrics-exporter
+    image: quay.io/prometheus/prometheus:latest
+    ports:
+      - containerPort: 9090
+```
+
+Each container accepts any valid Kubernetes container field including `image`, `command`, `args`, `env`, `volumeMounts`, `resources`, `ports`, and more.
+
 {{ template "chart.valuesSection" . }}
 
 ## Updating the README

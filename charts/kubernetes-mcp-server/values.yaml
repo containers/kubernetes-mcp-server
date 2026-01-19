@@ -164,6 +164,20 @@ extraVolumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# -- Additional containers to add to the pod (sidecars).
+# -- Each container is defined as a complete container spec.
+extraContainers: []
+# - name: sidecar-example
+#   image: quay.io/prometheus/busybox:latest
+#   command: ["sh", "-c", "while true; do echo 'Sidecar running'; sleep 30; done"]
+#   resources:
+#     requests:
+#       cpu: 10m
+#       memory: 32Mi
+#     limits:
+#       cpu: 50m
+#       memory: 64Mi
+
 nodeSelector: {}
 
 tolerations: []
