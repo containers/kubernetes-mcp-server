@@ -401,6 +401,10 @@
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
           "type": "string"
         },
+        "gracePeriodSeconds": {
+          "description": "Optional duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used",
+          "type": "integer"
+        },
         "kind": {
           "description": "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
           "type": "string"
