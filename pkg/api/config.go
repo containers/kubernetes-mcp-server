@@ -4,6 +4,7 @@ const (
 	ClusterProviderKubeConfig = "kubeconfig"
 	ClusterProviderInCluster  = "in-cluster"
 	ClusterProviderDisabled   = "disabled"
+	ClusterProviderKcp        = "kcp"
 )
 
 type AuthProvider interface {
