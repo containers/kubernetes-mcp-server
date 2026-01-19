@@ -19,6 +19,10 @@ func (t *Toolset) GetDescription() string {
 	return "Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)"
 }
 
+func (t *Toolset) GetVersion() api.Version {
+	return api.VersionBeta
+}
+
 func (t *Toolset) GetTools(o api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		initEvents(),

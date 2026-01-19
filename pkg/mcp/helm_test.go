@@ -31,6 +31,9 @@ type HelmSuite struct {
 
 func (s *HelmSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
+	s.Require().NoError(toml.Unmarshal([]byte(`
+	toolsets = [ "helm:alpha" ]
+	`), s.Cfg), "Expected to parse toolsets config")
 	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(envTestRestConfig))
 
 	// Capture log output to verify denied resource messages

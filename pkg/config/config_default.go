@@ -4,12 +4,14 @@ import (
 	"bytes"
 
 	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
 func Default() *StaticConfig {
 	defaultConfig := StaticConfig{
-		ListOutput: "table",
-		Toolsets:   []string{"core", "config", "helm"},
+		ListOutput:            "table",
+		Toolsets:              []string{"core", "config"},
+		DefaultToolsetVersion: api.VersionBeta, // TODO: once the core toolset moves to GA, switch this to GA
 	}
 	overrides := defaultOverrides()
 	mergedConfig := mergeConfig(defaultConfig, overrides)

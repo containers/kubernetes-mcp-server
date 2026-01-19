@@ -21,6 +21,10 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
+func (t *Toolset) GetVersion() api.Version {
+	return api.VersionAlpha
+}
+
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		kialiTools.InitGetMeshGraph(),
