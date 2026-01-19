@@ -199,6 +199,29 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesListForbidden() {
+	s.InitMcpClient()
+	defer restoreAuth(s.T().Context())
+	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Remove all permissions - user will have forbidden access
+	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+
+	s.Run("resources_list (forbidden)", func() {
+		capture := s.StartCapturingLogNotifications()
+		toolResult, _ := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap"})
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+				"error message should indicate forbidden")
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
+			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
+		})
+	})
+}
+
 func (s *ResourcesSuite) TestResourcesListAsTable() {
 	s.Cfg.ListOutput = "table"
 	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
@@ -555,6 +578,30 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 		allowedResource, err := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": configMapYaml})
 		s.Falsef(allowedResource.IsError, "call tool should not fail")
 		s.Nilf(err, "call tool should not return error object")
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesCreateOrUpdateForbidden() {
+	s.InitMcpClient()
+	defer restoreAuth(s.T().Context())
+	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Remove all permissions - user will have forbidden access
+	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+
+	s.Run("resources_create_or_update (forbidden)", func() {
+		capture := s.StartCapturingLogNotifications()
+		configMapYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-forbidden-configmap\n  namespace: default\n"
+		toolResult, _ := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": configMapYaml})
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+				"error message should indicate forbidden")
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
+			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
+		})
 	})
 }
 
