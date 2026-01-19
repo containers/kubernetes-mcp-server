@@ -3,6 +3,7 @@ package mcp
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -138,6 +139,29 @@ func (s *EventsSuite) TestEventsListDenied() {
 			expectedMessage := "failed to list events in all namespaces:(.+:)? resource not allowed: /v1, Kind=Event"
 			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
+		})
+	})
+}
+
+func (s *EventsSuite) TestEventsListForbidden() {
+	s.InitMcpClient()
+	defer restoreAuth(s.T().Context())
+	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Remove all permissions - user will have forbidden access
+	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+
+	s.Run("events_list (forbidden)", func() {
+		capture := s.StartCapturingLogNotifications()
+		toolResult, _ := s.CallTool("events_list", map[string]interface{}{})
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+				"error message should indicate forbidden")
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
+			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
 		})
 	})
 }

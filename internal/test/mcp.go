@@ -94,6 +94,10 @@ func (m *McpClient) StartCapturingNotifications() *NotificationCapture {
 // RequireNotification waits for a notification matching the specified method and fails the test if not received.
 // Iterates through all captured notifications looking for a match, waiting for new ones if needed.
 // The method parameter specifies which notification method to wait for (e.g., "notifications/tools/list_changed").
+//
+// Timeout recommendations:
+//   - 2 seconds: For immediate notifications like log messages after tool calls
+//   - 5 seconds: For notifications involving file system or cluster state changes (kubeconfig, API groups)
 func (c *NotificationCapture) RequireNotification(t *testing.T, timeout time.Duration, method string) *mcp.JSONRPCNotification {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -171,6 +175,9 @@ func parseLogNotification(notification *mcp.JSONRPCNotification) *LogNotificatio
 
 // RequireLogNotification waits for a logging notification and returns it parsed.
 // Filters for "notifications/message" method and fails the test if not received within timeout.
+//
+// Timeout recommendations:
+//   - 2 seconds: Standard timeout for log notifications after tool calls (recommended default)
 func (c *NotificationCapture) RequireLogNotification(t *testing.T, timeout time.Duration) *LogNotification {
 	notification := c.RequireNotification(t, timeout, "notifications/message")
 	logNotification := parseLogNotification(notification)
