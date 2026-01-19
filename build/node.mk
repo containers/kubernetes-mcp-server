@@ -68,8 +68,8 @@ npm-publish: npm-copy-project-files ## Publish the npm packages
 		npm publish --tag latest; \
 		cd ../..; \
 	))
-	cp README.md LICENSE ./npm/kubernetes-mcp-server/
-	jq '.version = "$(GIT_TAG_VERSION)"' ./npm/kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/kubernetes-mcp-server/package.json; \
-	jq '.optionalDependencies |= with_entries(.value = "$(GIT_TAG_VERSION)")' ./npm/kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/kubernetes-mcp-server/package.json; \
-	cd npm/kubernetes-mcp-server && npm publish --tag latest
+	cp README.md LICENSE ./npm/$(NPM_PACKAGE)/
+	jq '.version = "$(GIT_TAG_VERSION)"' ./npm/$(NPM_PACKAGE)/package.json > tmp.json && mv tmp.json ./npm/$(NPM_PACKAGE)/package.json; \
+	jq '.optionalDependencies |= with_entries(.value = "$(GIT_TAG_VERSION)")' ./npm/$(NPM_PACKAGE)/package.json > tmp.json && mv tmp.json ./npm/$(NPM_PACKAGE)/package.json; \
+	cd npm/$(NPM_PACKAGE) && npm publish --tag latest
 
