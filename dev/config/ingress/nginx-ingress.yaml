@@ -28,6 +28,7 @@ metadata:
   namespace: ingress-nginx
 data:
   allow-snippet-annotations: "true"
+  worker-processes: "2"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -282,7 +283,8 @@ spec:
         app.kubernetes.io/instance: ingress-nginx
         app.kubernetes.io/component: controller
     spec:
-      dnsPolicy: ClusterFirst
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
       containers:
         - name: controller
           image: registry.k8s.io/ingress-nginx/controller:v1.11.1
@@ -345,15 +347,9 @@ spec:
             - name: http
               containerPort: 80
               protocol: TCP
-              hostPort: 80
             - name: https
               containerPort: 443
               protocol: TCP
-              hostPort: 443
-            - name: https-alt
-              containerPort: 443
-              protocol: TCP
-              hostPort: 8443
             - name: webhook
               containerPort: 8443
               protocol: TCP
