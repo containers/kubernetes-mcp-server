@@ -86,6 +86,10 @@ type StaticConfig struct {
 	// This can be used to provide specific instructions on how the client should use the server
 	ServerInstructions string `toml:"server_instructions,omitempty"`
 
+	// Telemetry contains OpenTelemetry configuration options.
+	// These can also be configured via OTEL_* environment variables.
+	Telemetry TelemetryConfig `toml:"telemetry,omitempty"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]api.ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML package)

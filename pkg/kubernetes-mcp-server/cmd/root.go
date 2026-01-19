@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/spf13/cobra"
@@ -29,6 +30,7 @@ import (
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
@@ -277,6 +279,10 @@ func (m *MCPServerOptions) Validate() error {
 }
 
 func (m *MCPServerOptions) Run() error {
+	// Initialize OpenTelemetry tracing with config (env vars take precedence)
+	cleanup, _ := telemetry.InitTracerWithConfig(&m.StaticConfig.Telemetry, version.BinaryName, version.Version)
+	defer cleanup()
+
 	klog.V(1).Info("Starting kubernetes-mcp-server")
 	klog.V(1).Infof(" - Config: %s", m.ConfigPath)
 	klog.V(1).Infof(" - Toolsets: %s", strings.Join(m.StaticConfig.Toolsets, ", "))
@@ -284,6 +290,7 @@ func (m *MCPServerOptions) Run() error {
 	klog.V(1).Infof(" - Read-only mode: %t", m.StaticConfig.ReadOnly)
 	klog.V(1).Infof(" - Disable destructive tools: %t", m.StaticConfig.DisableDestructive)
 	klog.V(1).Infof(" - Stateless mode: %t", m.StaticConfig.Stateless)
+	klog.V(1).Infof(" - Telemetry enabled: %t", m.StaticConfig.Telemetry.IsEnabled())
 
 	strategy := m.StaticConfig.ClusterProviderStrategy
 	if strategy == "" {
@@ -337,7 +344,13 @@ func (m *MCPServerOptions) Run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
-	defer mcpServer.Close()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := mcpServer.Shutdown(shutdownCtx); err != nil {
+			klog.Errorf("MCP server shutdown error: %v", err)
+		}
+	}()
 
 	// Set up SIGHUP handler for configuration reload
 	if m.ConfigPath != "" || m.ConfigDir != "" {
