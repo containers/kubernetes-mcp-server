@@ -651,6 +651,35 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 		})
 	})
 
+	s.Run("vm_lifecycle action=troubleshoot generates troubleshooting guide", func() {
+		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+			"name":      "test-vm-lifecycle",
+			"namespace": "default",
+			"action":    "troubleshoot",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		resultText := toolResult.Content[0].(mcp.TextContent).Text
+		s.Run("returns troubleshooting guide with correct VM details", func() {
+			s.Truef(strings.Contains(resultText, "# VirtualMachine Troubleshooting Guide"),
+				"Expected troubleshooting guide header, got %v", resultText)
+		})
+		s.Run("includes all troubleshooting steps", func() {
+			s.Truef(strings.Contains(resultText, "Step 1: Check VirtualMachine Status"),
+				"Expected step 1 header")
+			s.Truef(strings.Contains(resultText, "Step 2: Check VirtualMachineInstance Status"),
+				"Expected step 2 header")
+			s.Truef(strings.Contains(resultText, "Step 3: Check DataVolume Status"),
+				"Expected step 3 header")
+			s.Truef(strings.Contains(resultText, "Step 4: Check virt-launcher Pod"),
+				"Expected step 4 header")
+			s.Truef(strings.Contains(resultText, "Step 5: Check Events"),
+				"Expected step 5 header")
+		})
+	})
+
 	s.Run("vm_lifecycle on non-existent VM", func() {
 		for _, action := range []string{"start", "stop", "restart"} {
 			s.Run("action="+action, func() {

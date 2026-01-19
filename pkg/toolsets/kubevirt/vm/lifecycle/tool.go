@@ -1,7 +1,10 @@
 package lifecycle
 
 import (
+	_ "embed"
 	"fmt"
+	"html/template"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
@@ -11,13 +14,22 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+//go:embed troubleshoot-plan.tmpl
+var planTemplate string
+
+type TroubleshootParams struct {
+	Namespace string
+	Name      string
+}
+
 // Action represents the lifecycle action to perform on a VM
 type Action string
 
 const (
-	ActionStart   Action = "start"
-	ActionStop    Action = "stop"
-	ActionRestart Action = "restart"
+	ActionStart        Action = "start"
+	ActionStop         Action = "stop"
+	ActionRestart      Action = "restart"
+	ActionTroubleshoot Action = "troubleshoot"
 )
 
 func Tools() []api.ServerTool {
@@ -39,8 +51,8 @@ func Tools() []api.ServerTool {
 						},
 						"action": {
 							Type:        "string",
-							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart)},
-							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart), string(ActionTroubleshoot)},
+							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), 'restart' (stops then starts the VM) or 'troubleshoot' (troubleshoot the VM)",
 						},
 					},
 					Required: []string{"namespace", "name", "action"},
@@ -75,14 +87,13 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	dynamicClient := params.DynamicClient()
-
 	var vm *unstructured.Unstructured
 	var message string
 
 	switch Action(action) {
 	case ActionStart:
 		var wasStarted bool
+		dynamicClient := params.DynamicClient()
 		vm, wasStarted, err = kubevirt.StartVM(params.Context, dynamicClient, namespace, name)
 		if err != nil {
 			return api.NewToolCallResult("", err), nil
@@ -95,6 +106,7 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	case ActionStop:
 		var wasRunning bool
+		dynamicClient := params.DynamicClient()
 		vm, wasRunning, err = kubevirt.StopVM(params.Context, dynamicClient, namespace, name)
 		if err != nil {
 			return api.NewToolCallResult("", err), nil
@@ -106,14 +118,32 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 
 	case ActionRestart:
+		dynamicClient := params.DynamicClient()
 		vm, err = kubevirt.RestartVM(params.Context, dynamicClient, namespace, name)
 		if err != nil {
 			return api.NewToolCallResult("", err), nil
 		}
 		message = "# VirtualMachine restarted successfully\n"
 
+	case ActionTroubleshoot:
+		// Prepare template parameters
+		templateParams := TroubleshootParams{
+			Namespace: namespace,
+			Name:      name,
+		}
+		// Render template
+		tmpl, err := template.New("troubleshoot").Parse(planTemplate)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse template: %w", err)), nil
+		}
+
+		var result strings.Builder
+		if err := tmpl.Execute(&result, templateParams); err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to render template: %w", err)), nil
+		}
+		return api.NewToolCallResult(result.String(), nil), nil
 	default:
-		return api.NewToolCallResult("", fmt.Errorf("invalid action '%s': must be one of 'start', 'stop', 'restart'", action)), nil
+		return api.NewToolCallResult("", fmt.Errorf("invalid action '%s': must be one of 'start', 'stop', 'restart', 'troubleshoot'", action)), nil
 	}
 
 	// Format the output
