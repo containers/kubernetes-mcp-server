@@ -1,0 +1,49 @@
+kind: Task
+metadata:
+  name: "create-vm-with-performance"
+  difficulty: medium
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      source evals/tasks/kubevirt/helpers/verify-vm.sh
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      # Wait for VirtualMachine to be created
+      verify_vm_exists "test-vm-performance" "$NS" || exit 1
+
+      # Verify that it has an instancetype reference
+      verify_instancetype "test-vm-performance" "$NS" || exit 1
+
+      # Check if instancetype matches compute-optimized family (c1)
+      verify_instancetype_prefix "test-vm-performance" "$NS" "c1" "compute-optimized"
+
+      # Check if instancetype contains 'medium' (matching the requested size)
+      verify_instancetype_contains "test-vm-performance" "$NS" "medium" "requested size 'medium'"
+
+      # Verify runStrategy is set and deprecated 'running' field is not used
+      verify_run_strategy "test-vm-performance" "$NS" || exit 1
+      verify_no_deprecated_running_field "test-vm-performance" "$NS" || exit 1
+
+      # Verify no direct resource specification (should use instancetype)
+      verify_no_direct_resources "test-vm-performance" "$NS"
+
+      # Verify container disk is Fedora (default workload)
+      verify_container_disk "test-vm-performance" "$NS" "fedora"
+
+      echo "All validations passed"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine test-vm-performance -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: Create a Fedora virtual machine named test-vm-performance in the ${EVAL_NAMESPACE:-vm-test} namespace with performance family 'compute-optimized' and size 'medium'.
