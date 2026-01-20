@@ -9,6 +9,7 @@ type ServerPrompt struct {
 	Handler        PromptHandlerFunc
 	ClusterAware   *bool
 	ArgumentSchema map[string]PromptArgument
+	Version        *Version // Optional version - defaults to toolset version if not set
 }
 
 // IsClusterAware indicates whether the prompt can accept a "cluster" or "context" parameter

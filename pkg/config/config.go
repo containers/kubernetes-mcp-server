@@ -86,6 +86,9 @@ type StaticConfig struct {
 	// This can be used to provide specific instructions on how the client should use the server
 	ServerInstructions string `toml:"server_instructions,omitempty"`
 
+	// Which toolset version to enable (any tools/toolsets below this will be disabled)
+	DefaultToolsetVersion api.Version `toml:"default_toolset_version"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]api.ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML package)

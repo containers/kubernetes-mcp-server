@@ -25,7 +25,7 @@ func (s *KialiSuite) SetupTest() {
 	s.mockServer.Config().BearerToken = "token-xyz"
 	kubeConfig := s.Cfg.KubeConfig
 	s.Cfg = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
-		toolsets = ["kiali"]
+		toolsets = ["kiali:alpha"]
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.mockServer.Config().Host))))

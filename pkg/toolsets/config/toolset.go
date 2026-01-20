@@ -19,6 +19,10 @@ func (t *Toolset) GetDescription() string {
 	return "View and manage the current local Kubernetes configuration (kubeconfig)"
 }
 
+func (t *Toolset) GetVersion() api.Version {
+	return api.VersionBeta
+}
+
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		initConfiguration(),

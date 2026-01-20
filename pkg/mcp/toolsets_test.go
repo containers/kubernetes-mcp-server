@@ -38,6 +38,7 @@ func (s *ToolsetsSuite) SetupTest() {
 	s.originalToolsets = toolsets.Toolsets()
 	s.MockServer = test.NewMockServer()
 	s.Cfg = configuration.Default()
+	s.Cfg.DefaultToolsetVersion = api.VersionAlpha // include all toolsets so that we get better snapshot coverage
 	s.Cfg.KubeConfig = s.KubeconfigFile(s.T())
 	s.updateJson = os.Getenv(updateJsonEnvVar) != ""
 }

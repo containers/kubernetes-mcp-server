@@ -59,7 +59,7 @@ func (s *KubevirtSuite) TearDownSuite() {
 func (s *KubevirtSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.Require().NoError(toml.Unmarshal([]byte(`
-		toolsets = [ "kubevirt" ]
+	toolsets = [ "kubevirt:alpha" ]
 	`), s.Cfg), "Expected to parse toolsets config")
 	s.InitMcpClient()
 }

@@ -66,7 +66,7 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 		newConfig := config.Default()
 		newConfig.LogLevel = 5
 		newConfig.ListOutput = "yaml"
-		newConfig.Toolsets = []string{"core", "config", "helm"}
+		newConfig.Toolsets = []string{"core", "config", "helm:alpha"}
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 
 		err = server.ReloadConfiguration(newConfig)
@@ -74,14 +74,14 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 
 		s.Equal(5, server.configuration.LogLevel)
 		s.Equal("yaml", server.configuration.StaticConfig.ListOutput)
-		s.Equal([]string{"core", "config", "helm"}, server.configuration.StaticConfig.Toolsets)
+		s.Equal([]string{"core", "config", "helm:alpha"}, server.configuration.StaticConfig.Toolsets)
 	})
 
 	s.Run("reload with partial changes", func() {
 		newConfig := config.Default()
 		newConfig.LogLevel = 7
 		newConfig.ListOutput = "yaml"
-		newConfig.Toolsets = []string{"core", "config", "helm"}
+		newConfig.Toolsets = []string{"core", "config", "helm:alpha"}
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 
 		err = server.ReloadConfiguration(newConfig)
@@ -89,7 +89,7 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 
 		s.Equal(7, server.configuration.LogLevel)
 		s.Equal("yaml", server.configuration.StaticConfig.ListOutput)
-		s.Equal([]string{"core", "config", "helm"}, server.configuration.StaticConfig.Toolsets)
+		s.Equal([]string{"core", "config", "helm:alpha"}, server.configuration.StaticConfig.Toolsets)
 	})
 
 	s.Run("reload back to defaults", func() {
@@ -122,7 +122,7 @@ func (s *ConfigReloadSuite) TestConfigurationValues() {
 		newConfig := config.Default()
 		newConfig.LogLevel = 9
 		newConfig.ListOutput = "yaml"
-		newConfig.Toolsets = []string{"core", "config", "helm"}
+		newConfig.Toolsets = []string{"core", "config", "helm:alpha"}
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 
 		err = server.ReloadConfiguration(newConfig)
@@ -131,7 +131,7 @@ func (s *ConfigReloadSuite) TestConfigurationValues() {
 		// Verify configuration was updated
 		s.NotEqual(initialLogLevel, server.configuration.LogLevel)
 		s.Equal(9, server.configuration.LogLevel)
-		s.Equal([]string{"core", "config", "helm"}, server.configuration.StaticConfig.Toolsets)
+		s.Equal([]string{"core", "config", "helm:alpha"}, server.configuration.StaticConfig.Toolsets)
 		s.Equal("yaml", server.configuration.StaticConfig.ListOutput)
 	})
 }
@@ -166,7 +166,7 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 		cfg3 := config.Default()
 		cfg3.LogLevel = 9
 		cfg3.KubeConfig = s.Cfg.KubeConfig
-		cfg3.Toolsets = []string{"core", "config", "helm"}
+		cfg3.Toolsets = []string{"core", "config", "helm:alpha"}
 		err = server.ReloadConfiguration(cfg3)
 		s.Require().NoError(err)
 		s.Equal(9, server.configuration.LogLevel)
@@ -174,28 +174,29 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 }
 
 func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
-	server, err := NewServer(Configuration{
-		StaticConfig: s.Cfg,
-	}, nil, nil)
-	s.Require().NoError(err)
-	s.server = server
+	// Initialize MCP client which creates s.mcpServer
+	s.InitMcpClient()
 
 	// Get initial tools
-	s.InitMcpClient()
 	initialTools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
 	s.Require().NoError(err)
 	s.Require().Greater(len(initialTools.Tools), 0)
 
-	// Add helm toolset via reload
+	// Verify helm tools are NOT present initially
+	for _, tool := range initialTools.Tools {
+		s.NotEqual("helm_list", tool.Name, "helm tools should not be present initially")
+	}
+
+	// Add helm toolset via reload (helm is alpha, so we need to specify helm:alpha)
 	newConfig := config.Default()
-	newConfig.Toolsets = []string{"core", "config", "helm"}
+	newConfig.Toolsets = []string{"core", "config", "helm:alpha"}
 	newConfig.KubeConfig = s.Cfg.KubeConfig
 
-	// Reload configuration
-	err = server.ReloadConfiguration(newConfig)
+	// Reload configuration on the same server used by the MCP client
+	err = s.mcpServer.ReloadConfiguration(newConfig)
 	s.Require().NoError(err)
 
-	// Verify helm tools are available
+	// Verify helm tools are available after reload
 	reloadedTools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
 	s.Require().NoError(err)
 

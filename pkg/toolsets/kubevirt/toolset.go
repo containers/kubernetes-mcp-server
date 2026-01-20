@@ -21,6 +21,10 @@ func (t *Toolset) GetDescription() string {
 	return "KubeVirt virtual machine management tools"
 }
 
+func (t *Toolset) GetVersion() api.Version {
+	return api.VersionAlpha
+}
+
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		vm_create.Tools(),
