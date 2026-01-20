@@ -69,15 +69,30 @@ type CollectorConfig struct {
 	Telemetry *config.TelemetryConfig
 }
 
-// createMetricsExporter creates an OTLP metrics exporter if OTEL_EXPORTER_OTLP_ENDPOINT is set.
-// Returns nil if the endpoint is not configured (metrics will only be collected in-memory).
-func createMetricsExporter(ctx context.Context) (sdkmetric.Exporter, error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		return nil, nil // No export configured
+// createMetricsExporter creates an OTLP metrics exporter.
+// If cfg is provided and enabled, uses config values; otherwise falls back to env vars.
+// Returns nil if:
+//   - OTEL_METRICS_EXPORTER is set to "none" (env var always takes precedence)
+//   - No endpoint is configured (neither in config nor env vars)
+//
+// When nil is returned, metrics will only be collected in-memory for the /stats endpoint.
+func createMetricsExporter(ctx context.Context, cfg *config.TelemetryConfig) (sdkmetric.Exporter, error) {
+	if strings.ToLower(os.Getenv("OTEL_METRICS_EXPORTER")) == "none" {
+		klog.V(2).Info("OTLP metrics export disabled via OTEL_METRICS_EXPORTER=none")
+		return nil, nil
 	}
 
-	protocol := strings.ToLower(os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
+	// use config if provided and enabled, otherwise env vars
+	var protocol string
+	if cfg != nil && cfg.IsEnabled() {
+		protocol = strings.ToLower(cfg.GetProtocol())
+	} else {
+		endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+		if endpoint == "" {
+			return nil, nil // No export configured
+		}
+		protocol = strings.ToLower(os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
+	}
 
 	switch protocol {
 	case "http/protobuf", "http":
@@ -94,34 +109,6 @@ func createMetricsExporter(ctx context.Context) (sdkmetric.Exporter, error) {
 
 	default:
 		klog.V(1).Infof("Unknown OTEL_EXPORTER_OTLP_PROTOCOL '%s' for metrics, defaulting to gRPC", protocol)
-		return otlpmetricgrpc.New(ctx)
-	}
-}
-
-// createMetricsExporterWithConfig creates an OTLP metrics exporter using the provided config.
-// Returns nil if telemetry is not enabled (metrics will only be collected in-memory).
-func createMetricsExporterWithConfig(ctx context.Context, cfg *config.TelemetryConfig) (sdkmetric.Exporter, error) {
-	if cfg == nil || !cfg.IsEnabled() {
-		return nil, nil // No export configured
-	}
-
-	protocol := strings.ToLower(cfg.GetProtocol())
-
-	switch protocol {
-	case "http/protobuf", "http":
-		klog.V(2).Infof("Using HTTP/protobuf OTLP metrics exporter (protocol=%s)", protocol)
-		return otlpmetrichttp.New(ctx)
-
-	case "grpc", "":
-		if protocol == "" {
-			klog.V(2).Info("Using gRPC OTLP metrics exporter (default)")
-		} else {
-			klog.V(2).Info("Using gRPC OTLP metrics exporter")
-		}
-		return otlpmetricgrpc.New(ctx)
-
-	default:
-		klog.V(1).Infof("Unknown protocol '%s' for metrics, defaulting to gRPC", protocol)
 		return otlpmetricgrpc.New(ctx)
 	}
 }
@@ -148,14 +135,7 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 	}
 
 	// Optionally add OTLP exporter if endpoint is configured
-	// Use config-based exporter if Telemetry config is provided, otherwise fall back to env vars
-	var exporter sdkmetric.Exporter
-	var err error
-	if cfg.Telemetry != nil {
-		exporter, err = createMetricsExporterWithConfig(ctx, cfg.Telemetry)
-	} else {
-		exporter, err = createMetricsExporter(ctx)
-	}
+	exporter, err := createMetricsExporter(ctx, cfg.Telemetry)
 	if err != nil {
 		klog.V(1).Infof("Failed to create OTLP metrics exporter, OTLP export disabled: %v", err)
 	} else if exporter != nil {

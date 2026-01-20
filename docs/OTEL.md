@@ -30,11 +30,13 @@ The server collects and exposes metrics through two mechanisms:
    - HTTP request counts by method/path/status
    - Server uptime
 
-2. **OTLP Export** - When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, metrics are also exported to your OTLP backend every 30 seconds.
+2. **OTLP Export** - When an endpoint is configured, metrics are also exported to your OTLP backend every 30 seconds.
 
 ## Quick Start
 
-### 1. Run Jaeger Locally
+### 1. Run an OTLP Backend Locally
+
+**Option A: Jaeger (traces only)**
 
 ```bash
 docker run -d --name jaeger \
@@ -42,10 +44,26 @@ docker run -d --name jaeger \
   -p 16686:16686 \
   -p 4317:4317 \
   -p 4318:4318 \
-  jaegertracing/all-in-one:latest
+  docker.io/jaegertracing/all-in-one:latest
 ```
 
 Access the Jaeger UI at http://localhost:16686
+
+> **Note**: Jaeger only supports traces, not metrics. To disable metrics export and avoid warnings about `MetricsService` being unimplemented, set `OTEL_METRICS_EXPORTER=none`.
+
+**Option B: Grafana LGTM Stack (traces + metrics + logs)**
+
+For full observability with metrics support:
+
+```bash
+docker run -d --name lgtm \
+  -p 3000:3000 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  docker.io/grafana/otel-lgtm:latest
+```
+
+Access Grafana at http://localhost:3000 (default credentials: admin/admin)
 
 ### 2. Enable Tracing
 
@@ -102,6 +120,8 @@ Duration: 150ms
 
 OpenTelemetry can be configured via **TOML config file** or **environment variables**. Environment variables take precedence over TOML config values.
 
+**Note**: Telemetry is automatically enabled when an endpoint is configured. Use `enabled = false` in TOML to explicitly disable it.
+
 ### Configuration Reference
 
 | TOML Field | Environment Variable | Description |
@@ -118,11 +138,9 @@ Add a `[telemetry]` section to your config file:
 
 ```toml
 [telemetry]
-# Explicitly enable/disable telemetry (optional)
-# If not set, telemetry is auto-enabled when endpoint is configured
+# Optional: explicitly enable/disable (omit to auto-enable when endpoint is set)
 enabled = true
 
-# OTLP endpoint (required to enable tracing)
 endpoint = "http://localhost:4317"
 
 # Protocol: "grpc" (default) or "http/protobuf"
@@ -142,7 +160,6 @@ traces_sampler_arg = 0.1
 ```toml
 [telemetry]
 endpoint = "http://localhost:4317"
-# Telemetry is auto-enabled when endpoint is set
 ```
 
 **Production with sampling:**
@@ -153,27 +170,23 @@ traces_sampler = "traceidratio"
 traces_sampler_arg = 0.05  # 5% sampling
 ```
 
-**Explicit disable (overrides env vars):**
+**Explicitly disable:**
 ```toml
 [telemetry]
 enabled = false
-# Telemetry is disabled even if OTEL_EXPORTER_OTLP_ENDPOINT env var is set
 ```
 
 ### Environment Variables
 
 Environment variables take precedence over TOML config. This allows you to override config file settings at runtime.
 
-#### Required Variables
+#### Endpoint
 
 ```bash
-# OTLP endpoint (gRPC)
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```
 
-If this variable is not set (and no TOML config), tracing is **disabled** and the server runs normally without tracing.
-
-**Note**: The server gracefully handles tracing failures. If the OTLP endpoint is unreachable or exporter creation fails, the server logs a warning and continues operating without tracing.
+**Note**: The server gracefully handles failures. If the endpoint is unreachable, the server logs a warning and continues without tracing.
 
 #### Optional Variables
 
@@ -253,13 +266,9 @@ unset OTEL_EXPORTER_OTLP_ENDPOINT
 
 ## Deployment Examples
 
-### Claude Desktop (STDIO Mode)
+### Claude Code (STDIO Mode)
 
-Edit your Claude Desktop MCP configuration:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+Add the MCP server to your project's `.mcp.json` or global `~/.claude/settings.json`:
 
 ```json
 {
@@ -275,6 +284,8 @@ Edit your Claude Desktop MCP configuration:
   }
 }
 ```
+
+**For Jaeger (traces only)**: Add `"OTEL_METRICS_EXPORTER": "none"` to disable metrics export.
 
 **Note**: In STDIO mode, only MCP tool calls are traced (no HTTP request spans).
 
@@ -332,51 +343,6 @@ docker run \
   quay.io/containers/kubernetes_mcp_server:latest
 ```
 
-## OTLP Backends
-
-The server works with any OpenTelemetry-compatible backend:
-
-### Jaeger (Local Development)
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-```
-
-### Honeycomb
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
-export OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=YOUR_API_KEY"
-```
-
-### Grafana Tempo
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-distributor:4317
-```
-
-### Datadog
-
-```bash
-# Datadog uses HTTP/protobuf on port 4318
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-```
-
-### AWS X-Ray (via ADOT Collector)
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
-export OTEL_RESOURCE_ATTRIBUTES="service.name=kubernetes-mcp-server"
-```
-
-### Google Cloud Trace (via OpenTelemetry Collector)
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
-export OTEL_RESOURCE_ATTRIBUTES="service.name=kubernetes-mcp-server,gcp.project.id=my-project"
-```
-
 ## Trace Attributes
 
 ### MCP Tool Call Spans
@@ -413,7 +379,7 @@ HTTP requests create spans following [OpenTelemetry HTTP semantic conventions](h
 - `http.response.status_code` - Response status code **[Required]**
 - `error.type` - HTTP status code for 4xx/5xx responses **[Conditional]**
 
-**Note**: HTTP spans only appear when running in HTTP mode. STDIO mode (Claude Desktop) only creates MCP tool call spans. The `/healthz` endpoint is not traced to reduce noise.
+**Note**: HTTP spans only appear when running in HTTP mode. STDIO mode (Claude Code) only creates MCP tool call spans. The `/healthz` endpoint is not traced to reduce noise.
 
 ## Stats Endpoint
 
@@ -497,7 +463,7 @@ The stats endpoint is useful for:
 3. **Check backend configuration** - ensure your OTLP collector is forwarding to the right backend.
 
 4. **Verify protocol compatibility**:
-   - If using Datadog or other HTTP-based backends, ensure you set `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
+   - If using HTTP-based backends, ensure you set `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
    - Check if you need port 4317 (gRPC) or 4318 (HTTP)
 
 ### TLS/Certificate Issues
