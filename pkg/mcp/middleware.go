@@ -99,7 +99,18 @@ func traceContextPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler
 		// Extract trace context from request params metadata
 		if params := req.GetParams(); params != nil {
 			if callParams, ok := params.(interface{ GetMeta() map[string]any }); ok {
-				meta := callParams.GetMeta()
+				// GetMeta() can panic on some MCP message types when metadata is not set
+				// (e.g., InitializedParams with nil Meta field). Recover gracefully.
+				var meta map[string]any
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							klog.V(7).Infof("GetMeta() panicked (metadata not set): %v", r)
+						}
+					}()
+					meta = callParams.GetMeta()
+				}()
+
 				if len(meta) > 0 {
 					carrier := &metaCarrier{meta: meta}
 
