@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -53,6 +54,12 @@ kubernetes-mcp-server --port 8443 --sse-base-url https://example.com:8443
 
 # start a SSE server on port 8080 with multi-cluster tools disabled
 kubernetes-mcp-server --port 8080 --disable-multi-cluster
+
+# start with explicit cluster provider strategy (kubeconfig, in-cluster, kcp, or disabled)
+kubernetes-mcp-server --cluster-provider kubeconfig
+
+# start with kcp cluster provider for multi-workspace support
+kubernetes-mcp-server --cluster-provider kcp
 `))
 )
 
@@ -75,6 +82,7 @@ const (
 	flagServerUrl            = "server-url"
 	flagCertificateAuthority = "certificate-authority"
 	flagDisableMultiCluster  = "disable-multi-cluster"
+	flagClusterProvider      = "cluster-provider"
 )
 
 type MCPServerOptions struct {
@@ -94,6 +102,7 @@ type MCPServerOptions struct {
 	CertificateAuthority string
 	ServerURL            string
 	DisableMultiCluster  bool
+	ClusterProvider      string
 
 	ConfigPath   string
 	ConfigDir    string
@@ -154,6 +163,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.CertificateAuthority, flagCertificateAuthority, o.CertificateAuthority, "Certificate authority path to verify certificates. Optional. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden(flagCertificateAuthority)
 	cmd.Flags().BoolVar(&o.DisableMultiCluster, flagDisableMultiCluster, o.DisableMultiCluster, "Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.")
+	cmd.Flags().StringVar(&o.ClusterProvider, flagClusterProvider, o.ClusterProvider, "Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.")
 
 	return cmd
 }
@@ -222,6 +232,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	if cmd.Flag(flagCertificateAuthority).Changed {
 		m.StaticConfig.CertificateAuthority = m.CertificateAuthority
 	}
+	if cmd.Flag(flagClusterProvider).Changed {
+		m.StaticConfig.ClusterProviderStrategy = m.ClusterProvider
+	}
 	if cmd.Flag(flagDisableMultiCluster).Changed && m.DisableMultiCluster {
 		m.StaticConfig.ClusterProviderStrategy = api.ClusterProviderDisabled
 	}
@@ -251,6 +264,13 @@ func (m *MCPServerOptions) Validate() error {
 	}
 	if err := toolsets.Validate(m.StaticConfig.Toolsets); err != nil {
 		return err
+	}
+	// Validate cluster provider strategy
+	if m.StaticConfig.ClusterProviderStrategy != "" {
+		validStrategies := []string{api.ClusterProviderKubeConfig, api.ClusterProviderInCluster, api.ClusterProviderKcp, api.ClusterProviderDisabled}
+		if !slices.Contains(validStrategies, m.StaticConfig.ClusterProviderStrategy) {
+			return fmt.Errorf("invalid cluster-provider: %s, valid values are: %s", m.StaticConfig.ClusterProviderStrategy, strings.Join(validStrategies, ", "))
+		}
 	}
 	if !m.StaticConfig.RequireOAuth && (m.StaticConfig.OAuthAudience != "" || m.StaticConfig.AuthorizationURL != "" || m.StaticConfig.ServerURL != "" || m.StaticConfig.CertificateAuthority != "") {
 		return fmt.Errorf("oauth-audience, authorization-url, server-url and certificate-authority are only valid if require-oauth is enabled. Missing --port may implicitly set require-oauth to false")
