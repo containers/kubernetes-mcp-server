@@ -43,11 +43,11 @@ type Statistics struct {
 // It provides a simple in-memory stats collector for the /stats endpoint.
 type OtelStatsCollector struct {
 	// OTel metric instruments
-	toolCallCounter      metric.Int64Counter
-	toolCallErrorCounter metric.Int64Counter
+	toolCallCounter       metric.Int64Counter
+	toolCallErrorCounter  metric.Int64Counter
 	toolDurationHistogram metric.Float64Histogram
-	httpRequestCounter   metric.Int64Counter
-	serverInfoGauge      metric.Int64Gauge
+	httpRequestCounter    metric.Int64Counter
+	serverInfoGauge       metric.Int64Gauge
 
 	// Meter provider for shutdown
 	provider *sdkmetric.MeterProvider
