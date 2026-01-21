@@ -401,10 +401,10 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 |----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
 | config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
 | core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
+| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                     |         |
 | kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
 | kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
 | helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
-| kcp      | Tools for managing KCP workspaces and resources                                                                                                                      |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -529,6 +529,17 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <details>
 
+<summary>kcp</summary>
+
+- **kcp_workspaces_list** - List all available kcp workspaces in the current cluster
+
+- **kcp_workspace_describe** - Get detailed information about a specific kcp workspace
+  - `workspace` (`string`) **(required)** - Name or path of the workspace to describe
+
+</details>
+
+<details>
+
 <summary>kiali</summary>
 
 - **kiali_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
@@ -624,17 +635,6 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
   - `name` (`string`) **(required)** - Name of the Helm release to uninstall
   - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
-
-</details>
-
-<details>
-
-<summary>kcp</summary>
-
-- **kcp_workspaces_list** - List all available kcp workspaces in the current cluster
-
-- **kcp_workspace_describe** - Get detailed information about a specific kcp workspace
-  - `workspace` (`string`) **(required)** - Name or path of the workspace to describe
 
 </details>
 
