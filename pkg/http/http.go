@@ -21,6 +21,7 @@ import (
 const (
 	healthEndpoint     = "/healthz"
 	statsEndpoint      = "/stats"
+	metricsEndpoint    = "/metrics"
 	mcpEndpoint        = "/mcp"
 	sseEndpoint        = "/sse"
 	sseMessageEndpoint = "/message"
@@ -100,6 +101,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
+	mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
 	mux.Handle("/.well-known/", WellKnownHandler(staticConfig, httpClient))
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -110,7 +112,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 
 	serverErr := make(chan error, 1)
 	go func() {
-		klog.V(0).Infof("HTTP server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats)", staticConfig.Port)
+		klog.V(0).Infof("HTTP server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats, /metrics)", staticConfig.Port)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}

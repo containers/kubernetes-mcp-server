@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -76,4 +77,10 @@ func (m *Metrics) GetStats() *Statistics {
 // Shutdown gracefully shuts down the metrics system, flushing any pending metrics.
 func (m *Metrics) Shutdown(ctx context.Context) error {
 	return m.stats.Shutdown(ctx)
+}
+
+// PrometheusHandler returns the HTTP handler for the /metrics endpoint.
+// This handler serves metrics in Prometheus text format
+func (m *Metrics) PrometheusHandler() http.Handler {
+	return m.stats.PrometheusHandler()
 }

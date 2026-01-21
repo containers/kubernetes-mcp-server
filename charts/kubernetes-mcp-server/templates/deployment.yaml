@@ -43,6 +43,11 @@ spec:
           args:
             - "--config"
             - "{{ .Values.configFilePath }}"
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- tpl (toYaml .) . | nindent 12 }}

@@ -3,15 +3,19 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	promclient "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -40,7 +44,8 @@ type Statistics struct {
 }
 
 // OtelStatsCollector collects metrics using OpenTelemetry SDK with ManualReader.
-// It provides a simple in-memory stats collector for the /stats endpoint.
+// It provides a simple in-memory stats collector for the /stats endpoint
+// and a Prometheus exporter for the /metrics endpoint.
 type OtelStatsCollector struct {
 	// OTel metric instruments
 	toolCallCounter       metric.Int64Counter
@@ -54,6 +59,9 @@ type OtelStatsCollector struct {
 
 	// In-memory reader for querying metrics on-demand
 	reader *sdkmetric.ManualReader
+
+	// Prometheus HTTP handler for /metrics endpoint
+	prometheusHandler http.Handler
 
 	// Server start time for uptime calculation
 	startTime time.Time
@@ -130,20 +138,46 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 	// Create an in-memory manual reader for stats collection (/stats endpoint)
 	reader := sdkmetric.NewManualReader()
 
+	// Create a custom Prometheus registry for the /metrics endpoint
+	promRegistry := promclient.NewRegistry()
+
+	// Create Prometheus exporter with custom registry
+	prometheusExporter, err := prometheus.New(
+		prometheus.WithRegisterer(promRegistry),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create prometheus exporter: %w", err)
+	}
+
+	// Create HTTP handler for Prometheus metrics
+	prometheusHandler := promhttp.HandlerFor(promRegistry, promhttp.HandlerOpts{
+		EnableOpenMetrics: true,
+	})
+
 	opts := []sdkmetric.Option{
 		sdkmetric.WithReader(reader),
+		sdkmetric.WithReader(prometheusExporter),
 	}
 
 	// Optionally add OTLP exporter if endpoint is configured
 	exporter, err := createMetricsExporter(ctx, cfg.Telemetry)
 	if err != nil {
-		klog.V(1).Infof("Failed to create OTLP metrics exporter, OTLP export disabled: %v", err)
+		// Use Warning if telemetry was explicitly configured, V(1) otherwise
+		if cfg.Telemetry != nil && cfg.Telemetry.IsEnabled() {
+			klog.Warningf("Failed to create OTLP metrics exporter, OTLP export disabled: %v", err)
+		} else {
+			klog.V(1).Infof("Failed to create OTLP metrics exporter, OTLP export disabled: %v", err)
+		}
 	} else if exporter != nil {
+		attrs := []attribute.KeyValue{
+			semconv.ServiceName(cfg.ServiceName),
+			semconv.ServiceVersion(cfg.ServiceVersion),
+		}
+		if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+			attrs = append(attrs, semconv.K8SNamespaceName(ns))
+		}
 		res, err := resource.New(ctx,
-			resource.WithAttributes(
-				semconv.ServiceName(cfg.ServiceName),
-				semconv.ServiceVersion(cfg.ServiceVersion),
-			),
+			resource.WithAttributes(attrs...),
 		)
 		if err != nil {
 			klog.V(1).Infof("Failed to create resource for metrics, using default: %v", err)
@@ -213,6 +247,7 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 		serverInfoGauge:       serverInfoGauge,
 		provider:              provider,
 		reader:                reader,
+		prometheusHandler:     prometheusHandler,
 		startTime:             time.Now(),
 	}
 
@@ -230,6 +265,12 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 // Shutdown gracefully shuts down the meter provider, flushing any pending metrics.
 func (c *OtelStatsCollector) Shutdown(ctx context.Context) error {
 	return c.provider.Shutdown(ctx)
+}
+
+// PrometheusHandler returns the HTTP handler for the /metrics endpoint.
+// This handler serves metrics in Prometheus text format.
+func (c *OtelStatsCollector) PrometheusHandler() http.Handler {
+	return c.prometheusHandler
 }
 
 // RecordToolCall implements the Collector interface.
@@ -278,7 +319,7 @@ func (c *OtelStatsCollector) GetStats() *Statistics {
 	// Collect current metrics from the manual reader
 	var rm metricdata.ResourceMetrics
 	if err := c.reader.Collect(context.Background(), &rm); err != nil {
-		// Return empty stats on error
+		klog.V(1).Infof("Failed to collect metrics for stats endpoint: %v", err)
 		return &Statistics{
 			ToolCallsByName:      make(map[string]int64),
 			ToolErrorsByName:     make(map[string]int64),

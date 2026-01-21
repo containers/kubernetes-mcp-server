@@ -1,0 +1,67 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubernetes-mcp-server.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.metrics.prometheusRule.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  groups:
+    {{- if .Values.metrics.prometheusRule.defaultRules.enabled }}
+    # Default recording rules for MCP server metrics
+    # These aggregate high-cardinality metrics for efficient querying and Telemeter compatibility
+    - name: mcp-server.rules
+      rules:
+        # Cluster-level aggregations (for Telemeter - no namespace label)
+        # Aggregate tool calls across all tool names (removes tool.name label)
+        - record: cluster:mcp_tool_calls:sum
+          expr: sum(mcp_tool_calls_total)
+
+        # Aggregate tool errors across all tool names
+        - record: cluster:mcp_tool_errors:sum
+          expr: sum(mcp_tool_errors_total)
+
+        # Calculate error rate (errors / total calls)
+        - record: cluster:mcp_tool_error_rate:ratio
+          expr: |
+            sum(mcp_tool_errors_total) / clamp_min(sum(mcp_tool_calls_total), 1)
+
+        # Aggregate HTTP requests by status class only (removes path, method labels)
+        - record: cluster:mcp_http_requests_by_status:sum
+          expr: sum by (http_response_status_class) (http_server_requests_total)
+
+        # Total HTTP requests
+        - record: cluster:mcp_http_requests:sum
+          expr: sum(http_server_requests_total)
+
+        # Server info (already low cardinality, just ensures it's available)
+        - record: cluster:mcp_server_info:count
+          expr: count(mcp_server_info)
+
+        # Namespace-level aggregations (for multi-tenant RBAC - preserves k8s_namespace_name label)
+        # Note: OTel semantic convention k8s.namespace.name becomes k8s_namespace_name in Prometheus
+        - record: namespace:mcp_tool_calls:sum
+          expr: sum by (k8s_namespace_name) (mcp_tool_calls_total)
+
+        - record: namespace:mcp_tool_errors:sum
+          expr: sum by (k8s_namespace_name) (mcp_tool_errors_total)
+
+        - record: namespace:mcp_tool_error_rate:ratio
+          expr: |
+            sum by (k8s_namespace_name) (mcp_tool_errors_total) / clamp_min(sum by (k8s_namespace_name) (mcp_tool_calls_total), 1)
+
+        - record: namespace:mcp_http_requests:sum
+          expr: sum by (k8s_namespace_name) (http_server_requests_total)
+    {{- end }}
+    {{- with .Values.metrics.prometheusRule.additionalRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

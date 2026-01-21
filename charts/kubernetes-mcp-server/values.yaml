@@ -173,6 +173,67 @@ affinity: {}
 # Path to the configuration file inside the container
 configFilePath: /etc/kubernetes-mcp-server/config.toml
 
+# -- Metrics and monitoring configuration
+metrics:
+  # -- ServiceMonitor configuration for Prometheus Operator monitoring
+  serviceMonitor:
+    # -- Enable ServiceMonitor for Prometheus scraping
+    enabled: false
+    # -- Additional labels for the ServiceMonitor (useful for prometheus-operator serviceMonitorSelector)
+    labels: {}
+    # -- Annotations for the ServiceMonitor
+    annotations: {}
+    # -- Scrape interval (e.g., "30s", "1m")
+    interval: ""
+    # -- Scrape timeout (e.g., "10s")
+    scrapeTimeout: ""
+    # -- Scheme to use for scraping (http or https)
+    scheme: ""
+    # -- TLS configuration for scraping
+    tlsConfig: {}
+    # -- Relabeling rules for metrics
+    relabelings: []
+    # -- Metric relabeling rules
+    metricRelabelings: []
+
+  # -- PrometheusRule configuration for recording rules
+  # Recording rules aggregate high-cardinality metrics for efficient querying
+  # and Telemeter compatibility
+  prometheusRule:
+    # -- Enable PrometheusRule for recording rules
+    enabled: false
+    # -- Additional labels for the PrometheusRule
+    labels: {}
+    # -- Annotations for the PrometheusRule
+    annotations: {}
+    # -- Default recording rules configuration
+    defaultRules:
+      # -- Enable default recording rules that aggregate MCP metrics
+      # These rules create aggregates at two levels:
+      #
+      # Cluster-level (for Telemeter):
+      # - cluster:mcp_tool_calls:sum - Total tool calls across all tools
+      # - cluster:mcp_tool_errors:sum - Total tool errors across all tools
+      # - cluster:mcp_tool_error_rate:ratio - Error rate (errors/calls)
+      # - cluster:mcp_http_requests:sum - Total HTTP requests
+      # - cluster:mcp_http_requests_by_status:sum - HTTP requests by status class
+      # - cluster:mcp_server_info:count - Server instance count
+      #
+      # Namespace-level (for multi-tenant RBAC, grouped by k8s_namespace_name label):
+      # - namespace:mcp_tool_calls:sum - Tool calls by k8s_namespace_name
+      # - namespace:mcp_tool_errors:sum - Tool errors by k8s_namespace_name
+      # - namespace:mcp_tool_error_rate:ratio - Error rate by k8s_namespace_name
+      # - namespace:mcp_http_requests:sum - HTTP requests by k8s_namespace_name
+      enabled: true
+    # -- Additional custom recording rules (appended to default rules if enabled)
+    # Example:
+    # additionalRules:
+    #   - name: custom-mcp-rules
+    #     rules:
+    #       - record: my_custom_metric
+    #         expr: sum(some_metric)
+    additionalRules: []
+
 # MCP Server configuration options. See https://github.com/containers/kubernetes-mcp-server/blob/main/pkg/config/config.go for details.
 config:
   port: "{{ .Values.service.port }}"

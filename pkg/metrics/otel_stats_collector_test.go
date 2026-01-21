@@ -2,6 +2,8 @@ package metrics
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"testing"
 	"time"
@@ -19,6 +21,12 @@ func (s *OtelStatsCollectorSuite) SetupTest() {
 	collector, err := NewOtelStatsCollector("test-meter")
 	s.Require().NoError(err)
 	s.collector = collector
+}
+
+func (s *OtelStatsCollectorSuite) TearDownTest() {
+	if s.collector != nil {
+		_ = s.collector.Shutdown(context.Background())
+	}
 }
 
 func (s *OtelStatsCollectorSuite) TestRecordToolCall() {
@@ -196,6 +204,51 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 			}
 		}
 		s.True(foundGauge, "mcp.server.info gauge should exist")
+	})
+}
+
+func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
+	s.Run("returns valid Prometheus handler", func() {
+		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+			MeterName:      "test-meter-prom",
+			ServiceName:    "test-service",
+			ServiceVersion: "1.0.0",
+		})
+		s.Require().NoError(err)
+
+		handler := collector.PrometheusHandler()
+		s.NotNil(handler, "PrometheusHandler should not be nil")
+	})
+
+	s.Run("serves metrics in Prometheus format", func() {
+		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+			MeterName:      "test-meter-prom-serve",
+			ServiceName:    "test-service",
+			ServiceVersion: "1.0.0",
+		})
+		s.Require().NoError(err)
+
+		// Record some metrics
+		ctx := context.Background()
+		collector.RecordToolCall(ctx, "test_tool", 100*time.Millisecond, nil)
+		collector.RecordHTTPRequest(ctx, "GET", "/api/v1", 200, 50*time.Millisecond)
+
+		// Create a test request
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rec := httptest.NewRecorder()
+
+		// Serve the request
+		handler := collector.PrometheusHandler()
+		handler.ServeHTTP(rec, req)
+
+		// Verify response
+		s.Equal(http.StatusOK, rec.Code, "Should return 200 OK")
+
+		body := rec.Body.String()
+		s.Contains(body, "mcp_tool_calls", "Should contain mcp_tool_calls metric")
+		s.Contains(body, "mcp_tool_duration", "Should contain mcp_tool_duration metric")
+		s.Contains(body, "http_server_requests", "Should contain http_server_requests metric")
+		s.Contains(body, "mcp_server_info", "Should contain mcp_server_info metric")
 	})
 }
 
