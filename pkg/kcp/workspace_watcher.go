@@ -1,4 +1,4 @@
-package watcher
+package kcp
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 )
@@ -25,8 +25,8 @@ type workspaceState struct {
 	workspaces []string
 }
 
-// Workspace watches for changes in kcp workspaces by polling the tenancy API.
-type Workspace struct {
+// WorkspaceWatcher watches for changes in kcp workspaces by polling the tenancy API.
+type WorkspaceWatcher struct {
 	dynamicClient  dynamic.Interface
 	rootWorkspace  string
 	pollInterval   time.Duration
@@ -39,11 +39,11 @@ type Workspace struct {
 	started        bool
 }
 
-var _ Watcher = (*Workspace)(nil)
+var _ watcher.Watcher = (*WorkspaceWatcher)(nil)
 
-// NewWorkspace creates a new workspace watcher that polls the kcp tenancy API
+// NewWorkspaceWatcher creates a new workspace watcher that polls the kcp tenancy API
 // for workspace changes.
-func NewWorkspace(dynamicClient dynamic.Interface, rootWorkspace string) *Workspace {
+func NewWorkspaceWatcher(dynamicClient dynamic.Interface, rootWorkspace string) *WorkspaceWatcher {
 	pollInterval := DefaultWorkspacePollInterval
 	debounceWindow := DefaultWorkspaceDebounceWindow
 
@@ -61,7 +61,7 @@ func NewWorkspace(dynamicClient dynamic.Interface, rootWorkspace string) *Worksp
 		}
 	}
 
-	return &Workspace{
+	return &WorkspaceWatcher{
 		dynamicClient:  dynamicClient,
 		rootWorkspace:  rootWorkspace,
 		pollInterval:   pollInterval,
@@ -73,8 +73,8 @@ func NewWorkspace(dynamicClient dynamic.Interface, rootWorkspace string) *Worksp
 
 // Watch starts watching for workspace changes. The onChange callback is called
 // when workspace changes are detected after debouncing.
-// This can only be called once per Workspace instance.
-func (w *Workspace) Watch(onChange func() error) {
+// This can only be called once per WorkspaceWatcher instance.
+func (w *WorkspaceWatcher) Watch(onChange func() error) {
 	w.mu.Lock()
 	if w.started {
 		w.mu.Unlock()
@@ -136,7 +136,7 @@ func (w *Workspace) Watch(onChange func() error) {
 }
 
 // Close stops the workspace watcher and cleans up resources.
-func (w *Workspace) Close() {
+func (w *WorkspaceWatcher) Close() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -167,18 +167,10 @@ func (w *Workspace) Close() {
 }
 
 // captureState queries the current workspace list from the kcp tenancy API.
-func (w *Workspace) captureState() workspaceState {
+func (w *WorkspaceWatcher) captureState() workspaceState {
 	state := workspaceState{workspaces: []string{}}
 
-	// This is to avoid vendoring kcp client libraries; we can use dynamic client
-	// to query the tenancy API directly.
-	workspaceGVR := schema.GroupVersionResource{
-		Group:    "tenancy.kcp.io",
-		Version:  "v1alpha1",
-		Resource: "workspaces",
-	}
-
-	list, err := w.dynamicClient.Resource(workspaceGVR).
+	list, err := w.dynamicClient.Resource(WorkspaceGVR).
 		List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		klog.V(2).Infof("Unable to list workspaces from kcp API (this is expected if tenancy API is not available): %v", err)

@@ -1,4 +1,4 @@
-package kubernetes
+package kcp
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	kcppkg "github.com/containers/kubernetes-mcp-server/pkg/kcp"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -30,20 +30,20 @@ type kcpClusterProvider struct {
 	restConfig          *rest.Config
 	clientCmdConfig     clientcmd.ClientConfig
 	defaultWorkspace    string
-	managers            map[string]*Manager
-	workspaceWatcher    *watcher.Workspace
+	managers            map[string]*kubernetes.Manager
+	workspaceWatcher    *WorkspaceWatcher
 	clusterStateWatcher *watcher.ClusterState
 }
 
-var _ Provider = &kcpClusterProvider{}
+var _ kubernetes.Provider = &kcpClusterProvider{}
 
 func init() {
-	RegisterProvider(api.ClusterProviderKcp, newKcpClusterProvider)
+	kubernetes.RegisterProvider(api.ClusterProviderKcp, newKcpClusterProvider)
 }
 
 // newKcpClusterProvider creates a provider that manages multiple kcp workspaces.
 // Each workspace is treated as a separate cluster target.
-func newKcpClusterProvider(cfg api.BaseConfig) (Provider, error) {
+func newKcpClusterProvider(cfg api.BaseConfig) (kubernetes.Provider, error) {
 	ret := &kcpClusterProvider{config: cfg}
 	if err := ret.reset(); err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (p *kcpClusterProvider) reset() error {
 	}
 
 	// Parse kcp server URL to extract base URL and workspace
-	p.baseServerURL, p.defaultWorkspace = kcppkg.ParseServerURL(currentCluster.Server)
+	p.baseServerURL, p.defaultWorkspace = ParseServerURL(currentCluster.Server)
 	if p.defaultWorkspace == "" {
 		return errors.New("failed to parse workspace from kubeconfig cluster URL")
 	}
@@ -91,7 +91,7 @@ func (p *kcpClusterProvider) reset() error {
 	}
 
 	// Create base manager for workspace discovery
-	baseManager, err := NewKubeconfigManager(p.config, rawConfig.CurrentContext)
+	baseManager, err := kubernetes.NewKubeconfigManager(p.config, rawConfig.CurrentContext)
 	if err != nil {
 		return fmt.Errorf("failed to create base manager: %w", err)
 	}
@@ -107,7 +107,7 @@ func (p *kcpClusterProvider) reset() error {
 	}
 
 	// Initialize workspace managers (lazily, set to nil first)
-	p.managers = make(map[string]*Manager, len(workspaceList))
+	p.managers = make(map[string]*kubernetes.Manager, len(workspaceList))
 	for _, ws := range workspaceList {
 		p.managers[ws] = nil
 	}
@@ -116,16 +116,20 @@ func (p *kcpClusterProvider) reset() error {
 
 	// Setup watchers
 	p.Close()
-	p.workspaceWatcher = watcher.NewWorkspace(baseManager.kubernetes.DynamicClient(), p.defaultWorkspace)
-	p.clusterStateWatcher = watcher.NewClusterState(baseManager.kubernetes.DiscoveryClient())
+	k8s, err := baseManager.Derived(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
+	}
+	p.workspaceWatcher = NewWorkspaceWatcher(k8s.DynamicClient(), p.defaultWorkspace)
+	p.clusterStateWatcher = watcher.NewClusterState(k8s.DiscoveryClient())
 
 	return nil
 }
 
 // discoverWorkspaces queries the kcp tenancy API to discover available workspaces.
 // It recursively discovers nested workspaces in the workspace hierarchy.
-func (p *kcpClusterProvider) discoverWorkspaces(_ *Manager) ([]string, error) {
-	return kcppkg.DiscoverAllWorkspaces(context.TODO(), p.restConfig, p.defaultWorkspace)
+func (p *kcpClusterProvider) discoverWorkspaces(_ *kubernetes.Manager) ([]string, error) {
+	return DiscoverAllWorkspaces(context.TODO(), p.restConfig, p.defaultWorkspace)
 }
 
 // workspacesFromKubeconfig extracts workspace names from kubeconfig cluster URLs as a fallback.
@@ -137,7 +141,7 @@ func (p *kcpClusterProvider) workspacesFromKubeconfig() ([]string, error) {
 
 	workspaces := make(map[string]bool)
 	for _, cluster := range rawConfig.Clusters {
-		if ws := kcppkg.ExtractWorkspaceFromURL(cluster.Server); ws != "" {
+		if ws := ExtractWorkspaceFromURL(cluster.Server); ws != "" {
 			workspaces[ws] = true
 		}
 	}
@@ -152,7 +156,7 @@ func (p *kcpClusterProvider) workspacesFromKubeconfig() ([]string, error) {
 }
 
 // managerForWorkspace returns or creates a Manager for the specified workspace.
-func (p *kcpClusterProvider) managerForWorkspace(workspace string) (*Manager, error) {
+func (p *kcpClusterProvider) managerForWorkspace(workspace string) (*kubernetes.Manager, error) {
 	m, ok := p.managers[workspace]
 	if ok && m != nil {
 		return m, nil
@@ -164,7 +168,7 @@ func (p *kcpClusterProvider) managerForWorkspace(workspace string) (*Manager, er
 
 	// Create REST config for this workspace
 	workspaceRestConfig := rest.CopyConfig(p.restConfig)
-	workspaceRestConfig.Host = kcppkg.ConstructWorkspaceURL(p.baseServerURL, workspace)
+	workspaceRestConfig.Host = ConstructWorkspaceURL(p.baseServerURL, workspace)
 
 	// Get raw config for context creation
 	rawConfig, err := p.clientCmdConfig.RawConfig()
@@ -178,7 +182,7 @@ func (p *kcpClusterProvider) managerForWorkspace(workspace string) (*Manager, er
 	clientCmdConfig := clientcmd.NewDefaultClientConfig(rawConfig,
 		&clientcmd.ConfigOverrides{CurrentContext: contextName})
 
-	m, err = NewManager(p.config, workspaceRestConfig, clientCmdConfig)
+	m, err = kubernetes.NewManager(p.config, workspaceRestConfig, clientCmdConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager for workspace %s: %w", workspace, err)
 	}
@@ -195,7 +199,7 @@ func (p *kcpClusterProvider) findOrCreateWorkspaceContext(
 	// Look for existing context pointing to this workspace
 	for ctxName, ctx := range rawConfig.Contexts {
 		cluster := rawConfig.Clusters[ctx.Cluster]
-		if kcppkg.ExtractWorkspaceFromURL(cluster.Server) == workspace {
+		if ExtractWorkspaceFromURL(cluster.Server) == workspace {
 			return ctxName
 		}
 	}
@@ -209,7 +213,7 @@ func (p *kcpClusterProvider) findOrCreateWorkspaceContext(
 	currentCluster := rawConfig.Clusters[currentContext.Cluster]
 
 	rawConfig.Clusters[clusterName] = &clientcmdapi.Cluster{
-		Server:                   kcppkg.ConstructWorkspaceURL(p.baseServerURL, workspace),
+		Server:                   ConstructWorkspaceURL(p.baseServerURL, workspace),
 		CertificateAuthorityData: currentCluster.CertificateAuthorityData,
 		CertificateAuthority:     currentCluster.CertificateAuthority,
 		InsecureSkipTLSVerify:    currentCluster.InsecureSkipTLSVerify,
@@ -244,7 +248,7 @@ func (p *kcpClusterProvider) GetTargetParameterName() string {
 	return kcpTargetParameterName
 }
 
-func (p *kcpClusterProvider) GetDerivedKubernetes(ctx context.Context, workspace string) (*Kubernetes, error) {
+func (p *kcpClusterProvider) GetDerivedKubernetes(ctx context.Context, workspace string) (*kubernetes.Kubernetes, error) {
 	if workspace == "" {
 		workspace = p.defaultWorkspace
 	}
@@ -261,7 +265,7 @@ func (p *kcpClusterProvider) GetDefaultTarget() string {
 	return p.defaultWorkspace
 }
 
-func (p *kcpClusterProvider) WatchTargets(reload McpReload) {
+func (p *kcpClusterProvider) WatchTargets(reload kubernetes.McpReload) {
 	reloadWithReset := func() error {
 		if err := p.reset(); err != nil {
 			return err

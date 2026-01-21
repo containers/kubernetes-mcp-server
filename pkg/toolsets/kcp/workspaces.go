@@ -1,16 +1,13 @@
 package kcp
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kcppkg "github.com/containers/kubernetes-mcp-server/pkg/kcp"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -19,7 +16,7 @@ func initWorkspaceTools() []api.ServerTool {
 		{
 			Tool: api.Tool{
 				Name:        "kcp_workspaces_list",
-				Description: "List all available kcp workspaces in the current cluster ",
+				Description: "List all available kcp workspaces in the current cluster",
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 				},
@@ -63,20 +60,11 @@ func initWorkspaceTools() []api.ServerTool {
 }
 
 func workspacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	// Recursively discover all workspaces
-	core := kubernetes.NewCore(params)
-	restConfig := core.RESTConfig()
+	kcp := kcppkg.NewKcp(params)
 
-	// Determine current workspace from server URL
-	currentWorkspace := kcppkg.ExtractWorkspaceFromURL(restConfig.Host)
-	if currentWorkspace == "" {
-		currentWorkspace = "root"
-	}
-
-	// Discover all workspaces recursively
-	workspaces, err := kcppkg.DiscoverAllWorkspaces(params.Context, restConfig, currentWorkspace)
+	workspaces, err := kcp.ListWorkspaces(params.Context)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to discover workspaces: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to discover workspaces: %w", err)), nil
 	}
 
 	if len(workspaces) == 0 {
@@ -97,18 +85,17 @@ func workspaceDescribe(params api.ToolHandlerParams) (*api.ToolCallResult, error
 		return api.NewToolCallResult("", fmt.Errorf("workspace parameter is required")), nil
 	}
 
-	dynamicClient := kubernetes.NewCore(params).DynamicClient()
+	kcp := kcppkg.NewKcp(params)
 
-	workspace, err := dynamicClient.Resource(kcppkg.WorkspaceGVR).
-		Get(context.TODO(), workspaceName, metav1.GetOptions{})
+	workspaceObj, err := kcp.DescribeWorkspace(params.Context, workspaceName)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get workspace: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get workspace: %w", err)), nil
 	}
 
 	// Format workspace details as YAML
-	yamlData, err := output.MarshalYaml(workspace.Object)
+	yamlData, err := output.MarshalYaml(workspaceObj)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to marshal workspace: %v", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to marshal workspace: %w", err)), nil
 	}
 
 	return api.NewToolCallResult(yamlData, nil), nil
