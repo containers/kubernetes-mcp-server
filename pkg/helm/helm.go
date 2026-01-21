@@ -105,6 +105,30 @@ func (h *Helm) Uninstall(name string, namespace string) (string, error) {
 	return fmt.Sprintf("Uninstalled release %s %s", uninstalledRelease.Release.Name, uninstalledRelease.Info), nil
 }
 
+// History retrieves the revision history for a given Helm release
+func (h *Helm) History(name string, namespace string, max int) (string, error) {
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
+	if err != nil {
+		return "", err
+	}
+	history := action.NewHistory(cfg)
+	releases, err := history.Run(name)
+	if err != nil {
+		return "", err
+	}
+	if len(releases) == 0 {
+		return fmt.Sprintf("No history found for release %s", name), nil
+	}
+	if max > 0 && len(releases) > max {
+		releases = releases[len(releases)-max:]
+	}
+	ret, err := yaml.Marshal(simplifyHistory(releases...))
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
 func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configuration, error) {
 	cfg := new(action.Configuration)
 	applicableNamespace := ""
@@ -137,6 +161,23 @@ func simplify(release ...*release.Release) []map[string]interface{} {
 			if !r.Info.LastDeployed.IsZero() {
 				ret[i]["lastDeployed"] = r.Info.LastDeployed.Format(time.RFC1123Z)
 			}
+		}
+	}
+	return ret
+}
+
+func simplifyHistory(releases ...*release.Release) []map[string]interface{} {
+	ret := make([]map[string]interface{}, len(releases))
+	for i, r := range releases {
+		ret[i] = map[string]interface{}{
+			"revision":   r.Version,
+			"updated":    r.Info.LastDeployed.Format(time.RFC1123Z),
+			"status":     r.Info.Status.String(),
+			"chart":      fmt.Sprintf("%s-%s", r.Chart.Metadata.Name, r.Chart.Metadata.Version),
+			"appVersion": r.Chart.Metadata.AppVersion,
+		}
+		if r.Info.Description != "" {
+			ret[i]["description"] = r.Info.Description
 		}
 	}
 	return ret
