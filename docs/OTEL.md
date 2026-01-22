@@ -417,6 +417,49 @@ The stats endpoint is useful for:
 
 **Note**: The `/stats` endpoint is only available in HTTP mode. In STDIO mode, use OTLP export for metrics.
 
+## Metrics Endpoint
+
+When running in HTTP mode, the server exposes a `/metrics` endpoint for Prometheus scraping:
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+This endpoint returns metrics in OpenMetrics/Prometheus text format, suitable for scraping by Prometheus or compatible systems.
+
+### Available Metrics
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `mcp_tool_calls_total` | Counter | Total MCP tool calls (labeled by `tool_name`) |
+| `mcp_tool_errors_total` | Counter | Total MCP tool errors (labeled by `tool_name`) |
+| `mcp_tool_duration_seconds` | Histogram | Tool call duration in seconds |
+| `http_server_requests_total` | Counter | HTTP requests (labeled by `http_request_method`, `url_path`, `http_response_status_class`) |
+| `mcp_server_info` | Gauge | Server info (labeled by `version`, `go_version`) |
+
+### Prometheus Scrape Configuration
+
+```yaml
+scrape_configs:
+  - job_name: 'kubernetes-mcp-server'
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: /metrics
+```
+
+### Kubernetes ServiceMonitor
+
+When deployed in Kubernetes with the Helm chart, enable the ServiceMonitor:
+
+```yaml
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+```
+
+**Note**: The `/metrics` endpoint is only available in HTTP mode.
+
 ## Troubleshooting
 
 ### Tracing not working?
