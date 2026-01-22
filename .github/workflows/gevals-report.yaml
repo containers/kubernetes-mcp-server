@@ -1,0 +1,63 @@
+name: Gevals MCP Evaluation - Report
+
+on:
+  workflow_run:
+    workflows: ["Gevals MCP Evaluation"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  report:
+    name: Post Evaluation Results
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'issue_comment'
+    steps:
+      - name: Download evaluation context
+        uses: actions/download-artifact@v4
+        with:
+          name: eval-context
+          path: eval-context/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post results comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(jq -r '.pr_number' eval-context/context.json)
+          PR_SHA=$(jq -r '.pr_sha' eval-context/context.json)
+          TASKS_PASSED=$(jq -r '.tasks_passed' eval-context/context.json)
+          TASKS_TOTAL=$(jq -r '.tasks_total' eval-context/context.json)
+          TASK_PASS_RATE=$(jq -r '.task_pass_rate' eval-context/context.json)
+          ASSERTIONS_PASSED=$(jq -r '.assertions_passed' eval-context/context.json)
+          ASSERTIONS_TOTAL=$(jq -r '.assertions_total' eval-context/context.json)
+          PASSED=$(jq -r '.passed' eval-context/context.json)
+
+          PASS_RATE=$(awk "BEGIN {printf \"%.1f\", $TASK_PASS_RATE * 100}")
+
+          if [[ "${{ github.event.workflow_run.conclusion }}" != "success" ]]; then
+            OVERALL="⚠️ Workflow failed"
+          elif [[ "$PASSED" == "true" ]]; then
+            OVERALL="✅ Passed"
+          else
+            OVERALL="❌ Failed"
+          fi
+
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$(cat <<EOF
+          ## Gevals MCP Evaluation Results
+
+          **Commit:** \`${PR_SHA:0:7}\`
+          **Summary:** ${TASKS_PASSED}/${TASKS_TOTAL} tasks passed (${PASS_RATE}%)
+
+          | Metric | Result |
+          |--------|--------|
+          | Tasks Passed | ${TASKS_PASSED}/${TASKS_TOTAL} |
+          | Assertions Passed | ${ASSERTIONS_PASSED}/${ASSERTIONS_TOTAL} |
+          | Overall | ${OVERALL} |
+
+          [View full results](https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }})
+          EOF
+          )"

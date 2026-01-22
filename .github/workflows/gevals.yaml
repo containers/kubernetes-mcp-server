@@ -22,10 +22,11 @@ on:
         type: boolean
         default: false
 
+# Minimal permissions - no write access to PRs/issues
+# This workflow checks out and runs potentially untrusted PR code
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
+  actions: read
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.
@@ -56,34 +57,44 @@ jobs:
       should-run: ${{ steps.check.outputs.should-run }}
       kiali-run: ${{ steps.check.outputs.kiali-run }}
       pr-number: ${{ steps.check.outputs.pr-number }}
-      pr-ref: ${{ steps.check.outputs.pr-ref }}
+      pr-sha: ${{ steps.check.outputs.pr-sha }}
+      is-pr: ${{ steps.check.outputs.is-pr }}
     steps:
       - name: Check trigger conditions
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Check if commenter is a maintainer (has write access)
-            PERMISSION=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" \
-              | jq -r '.permission')
+            # Check if commenter has write access
+            PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" --jq '.permission')
 
             if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" ]]; then
               echo "should-run=true" >> $GITHUB_OUTPUT
-              echo "pr-number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-              echo "pr-ref=refs/pull/${{ github.event.issue.number }}/head" >> $GITHUB_OUTPUT
+              echo "is-pr=true" >> $GITHUB_OUTPUT
+              PR_NUMBER="${{ github.event.issue.number }}"
+              echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+              # Capture SHA at trigger time to prevent TOCTOU race condition
+              # This ensures we run the exact code the maintainer reviewed
+              PR_SHA=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefOid --jq '.headRefOid')
+              echo "pr-sha=$PR_SHA" >> $GITHUB_OUTPUT
+              echo "Pinned to SHA: $PR_SHA"
             else
               echo "should-run=false" >> $GITHUB_OUTPUT
               echo "User ${{ github.event.comment.user.login }} does not have permission to trigger evaluations"
             fi
           else
             echo "should-run=true" >> $GITHUB_OUTPUT
-            echo "pr-ref=${{ github.ref }}" >> $GITHUB_OUTPUT
+            echo "is-pr=false" >> $GITHUB_OUTPUT
+            echo "pr-sha=${{ github.sha }}" >> $GITHUB_OUTPUT
           fi
+
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
           if [[ "$TASK_FILTER" =~ kiali ]]; then
-            echo "kiali-run=true" >> $GITHUB_OUTPUT             
+            echo "kiali-run=true" >> $GITHUB_OUTPUT
           else
-            echo "kiali-run=false" >> $GITHUB_OUTPUT  
+            echo "kiali-run=false" >> $GITHUB_OUTPUT
           fi
 
   # Run gevals evaluation with Kind cluster
@@ -96,7 +107,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ needs.check-trigger.outputs.pr-ref }}
+          # Use pinned SHA to prevent TOCTOU attacks
+          # For PRs: the SHA captured when maintainer commented
+          # For other triggers: the current commit SHA
+          ref: ${{ needs.check-trigger.outputs.pr-sha }}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -117,7 +131,7 @@ jobs:
 
       - name: Run gevals evaluation
         id: gevals
-        uses: genmcp/gevals/.github/actions/gevals-action@main
+        uses: genmcp/gevals/.github/actions/gevals-action@v0.0.2
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           gevals-version: 'latest'
@@ -137,7 +151,7 @@ jobs:
           # LLM Judge configuration
           JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
-          JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }} # we still need this one, as only the agent model is specified in yaml
+          JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
 
       - name: Cleanup
         if: always()
@@ -145,24 +159,28 @@ jobs:
           make stop-server || true
           make kind-delete-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }} || true
 
-      - name: Post results comment on PR
-        if: github.event_name == 'issue_comment' && always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Save context and results for the reporting workflow
+      - name: Save evaluation context
+        if: always() && needs.check-trigger.outputs.is-pr == 'true'
         run: |
-          PASS_RATE=$(awk "BEGIN {printf \"%.1f\", ${{ steps.gevals.outputs.task-pass-rate }} * 100}")
-
-          gh pr comment ${{ needs.check-trigger.outputs.pr-number }} --body "$(cat <<EOF
-          ## Gevals MCP Evaluation Results
-
-          **Summary:** ${{ steps.gevals.outputs.tasks-passed }}/${{ steps.gevals.outputs.tasks-total }} tasks passed (${PASS_RATE}%)
-
-          | Metric | Result |
-          |--------|--------|
-          | Tasks Passed | ${{ steps.gevals.outputs.tasks-passed }}/${{ steps.gevals.outputs.tasks-total }} |
-          | Assertions Passed | ${{ steps.gevals.outputs.assertions-passed }}/${{ steps.gevals.outputs.assertions-total }} |
-          | Overall | ${{ steps.gevals.outputs.passed == 'true' && 'Passed' || 'Failed' }} |
-
-          [View full results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          mkdir -p eval-context
+          cat > eval-context/context.json << EOF
+          {
+            "pr_number": "${{ needs.check-trigger.outputs.pr-number }}",
+            "pr_sha": "${{ needs.check-trigger.outputs.pr-sha }}",
+            "tasks_passed": "${{ steps.gevals.outputs.tasks-passed }}",
+            "tasks_total": "${{ steps.gevals.outputs.tasks-total }}",
+            "task_pass_rate": "${{ steps.gevals.outputs.task-pass-rate }}",
+            "assertions_passed": "${{ steps.gevals.outputs.assertions-passed }}",
+            "assertions_total": "${{ steps.gevals.outputs.assertions-total }}",
+            "passed": "${{ steps.gevals.outputs.passed }}"
+          }
           EOF
-          )"
+
+      - name: Upload PR context
+        if: always() && needs.check-trigger.outputs.is-pr == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-context
+          path: eval-context/
+          retention-days: 1
