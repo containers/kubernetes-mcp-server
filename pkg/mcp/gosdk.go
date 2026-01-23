@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/utils/ptr"
 )
@@ -33,7 +32,6 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		}
 		// get the correct derived Kubernetes client for the target specified in the request
 		cluster := toolCallRequest.GetString(s.p.GetTargetParameterName(), s.p.GetDefaultTarget())
-		ctx = kubernetes.ExchangeTokenInContext(ctx, s.configuration.StaticConfig, s.oidcProvider, s.httpClient, s.p, cluster)
 		k, err := s.p.GetDerivedKubernetes(ctx, cluster)
 		if err != nil {
 			return nil, err

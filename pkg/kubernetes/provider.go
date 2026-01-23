@@ -2,9 +2,11 @@ package kubernetes
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"github.com/coreos/go-oidc/v3/oidc"
 )
 
 // McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
@@ -43,7 +45,32 @@ type TokenExchangeProvider interface {
 	GetTokenExchangeStrategy() string
 }
 
-func NewProvider(cfg api.BaseConfig) (Provider, error) {
+type ProviderOption func(*providerOptions)
+
+type providerOptions struct {
+	tokenExchangeConfig *providerTokenExchangeConfig
+}
+
+type providerTokenExchangeConfig struct {
+	oidcProvider *oidc.Provider
+	httpClient   *http.Client
+}
+
+func WithTokenExchange(oidcProvider *oidc.Provider, httpClient *http.Client) ProviderOption {
+	return func(opts *providerOptions) {
+		opts.tokenExchangeConfig = &providerTokenExchangeConfig{
+			oidcProvider: oidcProvider,
+			httpClient:   httpClient,
+		}
+	}
+}
+
+func NewProvider(cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
+	var providerOpts providerOptions
+	for _, opt := range opts {
+		opt(&providerOpts)
+	}
+
 	strategy := resolveStrategy(cfg)
 
 	factory, err := getProviderFactory(strategy)
@@ -51,7 +78,21 @@ func NewProvider(cfg api.BaseConfig) (Provider, error) {
 		return nil, err
 	}
 
-	return factory(cfg)
+	provider, err := factory(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if providerOpts.tokenExchangeConfig != nil {
+		provider = newTokenExchangingProvider(
+			provider,
+			cfg,
+			providerOpts.tokenExchangeConfig.oidcProvider,
+			providerOpts.tokenExchangeConfig.httpClient,
+		)
+	}
+
+	return provider, nil
 }
 
 func resolveStrategy(cfg api.BaseConfig) string {

@@ -325,3 +325,19 @@ func (c *StaticConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) 
 func (c *StaticConfig) IsRequireOAuth() bool {
 	return c.RequireOAuth
 }
+
+func (c *StaticConfig) GetStsClientId() string {
+	return c.StsClientId
+}
+
+func (c *StaticConfig) GetStsClientSecret() string {
+	return c.StsClientSecret
+}
+
+func (c *StaticConfig) GetStsAudience() string {
+	return c.StsAudience
+}
+
+func (c *StaticConfig) GetStsScopes() []string {
+	return c.StsScopes
+}

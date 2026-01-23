@@ -7,7 +7,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google/externalaccount"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
 type staticSubjectTokenSupplier struct {
@@ -28,13 +28,13 @@ type SecurityTokenService struct {
 	ExternalAccountScopes   []string
 }
 
-func NewFromConfig(config *config.StaticConfig, provider *oidc.Provider) *SecurityTokenService {
+func NewFromConfig(stsConfigProvider api.StsConfigProvider, provider *oidc.Provider) *SecurityTokenService {
 	return &SecurityTokenService{
 		Provider:                provider,
-		ClientId:                config.StsClientId,
-		ClientSecret:            config.StsClientSecret,
-		ExternalAccountAudience: config.StsAudience,
-		ExternalAccountScopes:   config.StsScopes,
+		ClientId:                stsConfigProvider.GetStsClientId(),
+		ClientSecret:            stsConfigProvider.GetStsClientSecret(),
+		ExternalAccountAudience: stsConfigProvider.GetStsAudience(),
+		ExternalAccountScopes:   stsConfigProvider.GetStsScopes(),
 	}
 }
 

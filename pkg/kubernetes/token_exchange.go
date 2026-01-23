@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -14,7 +14,7 @@ import (
 
 func ExchangeTokenInContext(
 	ctx context.Context,
-	cfg *config.StaticConfig,
+	stsConfigProvider api.StsConfigProvider,
 	oidcProvider *oidc.Provider,
 	httpClient *http.Client,
 	provider Provider,
@@ -28,18 +28,18 @@ func ExchangeTokenInContext(
 
 	tep, ok := provider.(TokenExchangeProvider)
 	if !ok {
-		return stsExchangeTokenInContext(ctx, cfg, oidcProvider, httpClient, subjectToken)
+		return stsExchangeTokenInContext(ctx, stsConfigProvider, oidcProvider, httpClient, subjectToken)
 	}
 
 	exCfg := tep.GetTokenExchangeConfig(target)
 	if exCfg == nil {
-		return stsExchangeTokenInContext(ctx, cfg, oidcProvider, httpClient, subjectToken)
+		return stsExchangeTokenInContext(ctx, stsConfigProvider, oidcProvider, httpClient, subjectToken)
 	}
 
 	exchanger, ok := tokenexchange.GetTokenExchanger(tep.GetTokenExchangeStrategy())
 	if !ok {
 		klog.Warningf("token exchange strategy %q not found in registry", tep.GetTokenExchangeStrategy())
-		return stsExchangeTokenInContext(ctx, cfg, oidcProvider, httpClient, subjectToken)
+		return stsExchangeTokenInContext(ctx, stsConfigProvider, oidcProvider, httpClient, subjectToken)
 	}
 
 	exchanged, err := exchanger.Exchange(ctx, exCfg, subjectToken)
@@ -55,12 +55,12 @@ func ExchangeTokenInContext(
 // TODO(Cali0707): remove this method and move to using the rfc8693 token exchanger for the global token exchange
 func stsExchangeTokenInContext(
 	ctx context.Context,
-	cfg *config.StaticConfig,
+	stsConfigProvider api.StsConfigProvider,
 	oidcProvider *oidc.Provider,
 	httpClient *http.Client,
 	token string,
 ) context.Context {
-	sts := NewFromConfig(cfg, oidcProvider)
+	sts := NewFromConfig(stsConfigProvider, oidcProvider)
 	if !sts.IsEnabled() {
 		return ctx
 	}

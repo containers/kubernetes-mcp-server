@@ -63,8 +63,6 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 
 type Server struct {
 	configuration  *Configuration
-	oidcProvider   *oidc.Provider
-	httpClient     *http.Client
 	server         *mcp.Server
 	enabledTools   []string
 	enabledPrompts []string
@@ -75,8 +73,6 @@ type Server struct {
 func NewServer(configuration Configuration, oidcProvider *oidc.Provider, httpClient *http.Client) (*Server, error) {
 	s := &Server{
 		configuration: &configuration,
-		oidcProvider:  oidcProvider,
-		httpClient:    httpClient,
 		server: mcp.NewServer(
 			&mcp.Implementation{
 				Name:       version.BinaryName,
@@ -116,7 +112,7 @@ func NewServer(configuration Configuration, oidcProvider *oidc.Provider, httpCli
 	if configuration.RequireOAuth && false { // TODO: Disabled scope auth validation for now
 		s.server.AddReceivingMiddleware(toolScopedAuthorizationMiddleware)
 	}
-	s.p, err = internalk8s.NewProvider(s.configuration.StaticConfig)
+	s.p, err = internalk8s.NewProvider(s.configuration.StaticConfig, internalk8s.WithTokenExchange(oidcProvider, httpClient))
 	if err != nil {
 		return nil, err
 	}

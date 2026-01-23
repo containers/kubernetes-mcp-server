@@ -46,9 +46,17 @@ type DeniedResourcesProvider interface {
 	GetDeniedResources() []GroupVersionKind
 }
 
+type StsConfigProvider interface {
+	GetStsClientId() string
+	GetStsClientSecret() string
+	GetStsAudience() string
+	GetStsScopes() []string
+}
+
 type BaseConfig interface {
 	AuthProvider
 	ClusterProvider
 	DeniedResourcesProvider
 	ExtendedConfigProvider
+	StsConfigProvider
 }
