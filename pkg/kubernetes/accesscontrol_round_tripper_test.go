@@ -9,6 +9,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/restmapper"
@@ -58,7 +59,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForNonAPIResources() {
 	rt := &AccessControlRoundTripper{
 		delegate:                mockDelegate,
 		deniedResourcesProvider: nil,
-		restMapper:              s.restMapper,
+		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
 	}
 
 	testCases := []string{"healthz", "readyz", "livez", "metrics", "version"}
@@ -74,6 +75,54 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForNonAPIResources() {
 	}
 }
 
+func (s *AccessControlRoundTripperTestSuite) TestRoundTripWithNilRestMapper() {
+	// This test covers the nil restMapper branch (issue #688 fix).
+	// When restMapperProvider returns nil, requests should pass through
+	// to the delegate without panicking.
+
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	rt := &AccessControlRoundTripper{
+		delegate:                mockDelegate,
+		deniedResourcesProvider: nil,
+		restMapperProvider:      func() meta.RESTMapper { return nil }, // nil restMapper
+	}
+
+	s.Run("resource API call passes through when restMapper is nil", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/api/v1/namespaces/default/pods", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err, "Expected no error when restMapper is nil")
+		s.NotNil(resp, "Expected response when restMapper is nil")
+		s.Equal(http.StatusOK, resp.StatusCode)
+		s.True(delegateCalled, "Expected delegate to be called when restMapper is nil")
+	})
+
+	s.Run("non-namespaced resource API call passes through when restMapper is nil", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/api/v1/nodes", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for non-namespaced resource")
+	})
+
+	s.Run("apps group resource API call passes through when restMapper is nil", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/apps/v1/namespaces/default/deployments", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for apps group resource")
+	})
+}
+
 func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDiscoveryRequests() {
 	delegateCalled := false
 	mockDelegate := &mockRoundTripper{
@@ -86,7 +135,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDiscoveryRequests()
 	rt := &AccessControlRoundTripper{
 		delegate:                mockDelegate,
 		deniedResourcesProvider: nil,
-		restMapper:              s.restMapper,
+		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
 	}
 
 	testCases := []string{"/api", "/apis", "/api/v1", "/api/v1/", "/apis/apps", "/apis/apps/v1", "/apis/batch/v1"}
@@ -114,7 +163,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources
 	rt := &AccessControlRoundTripper{
 		delegate:                mockDelegate,
 		deniedResourcesProvider: nil, // nil config allows all resources
-		restMapper:              s.restMapper,
+		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
 	}
 
 	s.Run("List all pods is allowed", func() {
@@ -184,7 +233,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	rt := &AccessControlRoundTripper{
 		delegate:                mockDelegate,
 		deniedResourcesProvider: config.Default(),
-		restMapper:              s.restMapper,
+		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
 	}
 
 	s.Run("Specific resource kind is denied", func() {
