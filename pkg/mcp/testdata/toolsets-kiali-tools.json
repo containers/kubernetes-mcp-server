@@ -172,17 +172,17 @@
   },
   {
     "annotations": {
-      "title": "Manage Istio Config: List, Get, Create, Patch, Delete",
+      "title": "Manage Istio Config: Create, Patch, Delete",
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true
     },
-    "description": "Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects",
+    "description": "Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)",
     "inputSchema": {
       "type": "object",
       "properties": {
         "action": {
-          "description": "Action to perform: list, get, create, patch, or delete",
+          "description": "Action to perform: create, patch, or delete",
           "type": "string"
         },
         "group": {
@@ -215,6 +215,49 @@
       ]
     },
     "name": "kiali_manage_istio_config"
+  },
+  {
+    "annotations": {
+      "title": "Manage Istio Config: List or Get",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "description": "Lists or gets Istio configuration objects (Gateways, VirtualServices, etc.)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "Action to perform: list or get",
+          "type": "string"
+        },
+        "group": {
+          "description": "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Istio object",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace containing the Istio object",
+          "type": "string"
+        },
+        "version": {
+          "description": "API version of the Istio object (e.g., 'v1', 'v1beta1')",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "name": "kiali_manage_istio_config_read"
   },
   {
     "annotations": {

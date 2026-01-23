@@ -17,13 +17,13 @@ func InitManageIstioConfig() []api.ServerTool {
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        name,
-			Description: "Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects",
+			Description: "Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
 					"action": {
 						Type:        "string",
-						Description: "Action to perform: list, get, create, patch, or delete",
+						Description: "Action to perform: create, patch, or delete",
 					},
 					"namespace": {
 						Type:        "string",
@@ -53,7 +53,7 @@ func InitManageIstioConfig() []api.ServerTool {
 				Required: []string{"action"},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Manage Istio Config: List, Get, Create, Patch, Delete",
+				Title:           "Manage Istio Config: Create, Patch, Delete",
 				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),
@@ -83,29 +83,26 @@ func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	return api.NewToolCallResult(content, nil), nil
 }
 
-// validateIstioConfigInput centralizes validation rules for manage istio config tool.
+// validateIstioConfigInput centralizes validation rules for the write tool.
 // Rules:
-// - If action is not "list": namespace, group, version, kind are required
-// - If action is "create": json_data are required
-// - If action is "patch": name and json_data is required
-// - If action is "get": name is required
-// - If action is "patch": name is required
+// - namespace, group, version, kind are required
+// - If action is "create": json_data is required
+// - If action is "patch": name and json_data are required
+// - If action is "delete": name is required
 func validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData string) error {
 	switch action {
-	case "list", "create", "patch", "get", "delete":
-		if action != "list" {
-			if namespace == "" {
-				return fmt.Errorf("namespace is required for action %q", action)
-			}
-			if group == "" {
-				return fmt.Errorf("group is required for action %q", action)
-			}
-			if version == "" {
-				return fmt.Errorf("version is required for action %q", action)
-			}
-			if kind == "" {
-				return fmt.Errorf("kind is required for action %q", action)
-			}
+	case "create", "patch", "delete":
+		if namespace == "" {
+			return fmt.Errorf("namespace is required for action %q", action)
+		}
+		if group == "" {
+			return fmt.Errorf("group is required for action %q", action)
+		}
+		if version == "" {
+			return fmt.Errorf("version is required for action %q", action)
+		}
+		if kind == "" {
+			return fmt.Errorf("kind is required for action %q", action)
 		}
 		if action == "create" {
 			if jsonData == "" {
@@ -131,7 +128,7 @@ func validateIstioConfigInput(action, namespace, group, version, kind, name, jso
 			}
 		}
 	default:
-		return fmt.Errorf("invalid action %q: must be one of list, create, patch, get, delete", action)
+		return fmt.Errorf("invalid action %q: must be one of create, patch, delete", action)
 	}
 	return nil
 }
