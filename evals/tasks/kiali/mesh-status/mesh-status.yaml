@@ -1,5 +1,8 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
+    requires: istio
   name: "mesh-status"
   difficulty: easy
 steps:

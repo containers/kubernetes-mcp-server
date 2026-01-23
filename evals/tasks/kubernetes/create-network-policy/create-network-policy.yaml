@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubernetes
   name: create-network-policy
   difficulty: medium
 steps:

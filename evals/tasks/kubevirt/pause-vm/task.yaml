@@ -1,5 +1,8 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
   name: "pause-vm"
   difficulty: medium
 steps:

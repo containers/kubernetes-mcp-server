@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubernetes
   name: deployment-traffic-switch
   difficulty: easy
 steps:
