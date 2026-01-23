@@ -15,7 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.event == 'issue_comment'
     steps:
+      - name: Check if evaluation ran
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          JOB_CONCLUSION=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs" \
+            --jq '.jobs[] | select(.name == "Run MCP Evaluation") | .conclusion')
+
+          if [[ -n "$JOB_CONCLUSION" && "$JOB_CONCLUSION" != "skipped" ]]; then
+            echo "should-report=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-report=false" >> $GITHUB_OUTPUT
+            echo "Evaluation job was skipped, no report needed"
+          fi
+
       - name: Download evaluation context
+        if: steps.check.outputs.should-report == 'true'
         uses: actions/download-artifact@v7
         with:
           name: eval-context
@@ -24,6 +40,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post results comment
+        if: steps.check.outputs.should-report == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
