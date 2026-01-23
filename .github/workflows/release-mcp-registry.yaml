@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  id-token: write  # Required for OIDC authentication
-  contents: read
+  id-token: write   # Required for OIDC authentication to MCP Registry
+  contents: read    # Required for checkout (read-only, no write access)
 
 jobs:
   publish:
@@ -30,6 +30,8 @@ jobs:
         with:
           # Use head_sha (not head_branch) to checkout the exact commit that Release validated
           ref: ${{ inputs.tag || github.event.workflow_run.head_sha }}
+          # Prevent token persistence to reduce attack surface (security best practice)
+          persist-credentials: false
 
       - name: Get version
         id: version
