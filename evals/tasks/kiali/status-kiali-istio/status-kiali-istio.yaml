@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "Status Kiali and Istio"
   category: "High-Level Observability & Health"
   difficulty: easy

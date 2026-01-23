@@ -1,5 +1,8 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
   name: "update-vm-resources"
   difficulty: hard
 steps:

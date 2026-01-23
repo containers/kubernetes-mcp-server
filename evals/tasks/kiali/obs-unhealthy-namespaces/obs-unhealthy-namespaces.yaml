@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "Unhealthy Namespaces"
   category: "High-Level Observability & Health"
   difficulty: easy

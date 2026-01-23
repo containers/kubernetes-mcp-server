@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubernetes
   name: fix-service-with-no-endpoints
   difficulty: medium
 steps:

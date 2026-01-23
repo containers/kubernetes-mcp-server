@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "Remove fault Injection"
   category: "Istio Configuration & Management"
   difficulty: medium
