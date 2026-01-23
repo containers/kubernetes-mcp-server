@@ -16,7 +16,7 @@ jobs:
     if: github.event.workflow_run.event == 'issue_comment'
     steps:
       - name: Download evaluation context
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: eval-context
           path: eval-context/
