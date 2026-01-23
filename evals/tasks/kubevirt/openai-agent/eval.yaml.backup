@@ -1,0 +1,16 @@
+kind: Eval
+metadata:
+  name: "kubevirt-basic-operations"
+config:
+  agent:
+    type: "builtin.openai-agent"
+    model: "gemini-2.0-flash"
+  mcpConfigFile: ../../../mcp-config.yaml
+  taskSets:
+    - glob: ../*/task.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20

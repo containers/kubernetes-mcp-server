@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "List workloads without sidecar"
   category: "Resource Inspection"
   difficulty: easy
