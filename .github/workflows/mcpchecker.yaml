@@ -134,7 +134,7 @@ jobs:
         uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.3
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
-          mcpchecker-version: 'v0.0.3'
+          mcpchecker-version: 'latest'
           task-filter: ${{ github.event.inputs.task-filter || '' }}
           output-format: 'json'
           verbose: ${{ github.event.inputs.verbose || 'false' }}
