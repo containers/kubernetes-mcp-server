@@ -26,6 +26,15 @@
           "description": "The namespace for the virtual machine",
           "type": "string"
         },
+        "networks": {
+          "description": "Optional secondary network interfaces to attach to the VM. Accepts a comma-separated list of Multus NetworkAttachmentDefinition names (e.g., 'vlan-network,storage-network') or a JSON array for advanced configuration (e.g., '[{\"name\":\"vlan100\",\"networkName\":\"vlan-network\"}]'). Each network creates a bridge interface on the VM.",
+          "examples": [
+            "vlan-network",
+            "vlan-network,storage-network",
+            "[{\"name\":\"vlan100\",\"networkName\":\"vlan-network\"}]"
+          ],
+          "type": "string"
+        },
         "performance": {
           "description": "Optional performance family hint for the VM instance type (e.g., 'u1' for general-purpose, 'o1' for overcommitted, 'c1' for compute-optimized, 'm1' for memory-optimized). Defaults to 'u1' (general-purpose) if not specified.",
           "examples": [

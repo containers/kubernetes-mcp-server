@@ -2,6 +2,7 @@ package create
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"text/template"
@@ -66,6 +67,11 @@ func Tools() []api.ServerTool {
 							Description: "Optional storage size for the VM's root disk when using DataSources (e.g., '30Gi', '50Gi', '100Gi'). Defaults to 30Gi. Ignored when using container disks.",
 							Examples:    []any{"30Gi", "50Gi", "100Gi"},
 						},
+						"networks": {
+							Type:        "string",
+							Description: "Optional secondary network interfaces to attach to the VM. Accepts a comma-separated list of Multus NetworkAttachmentDefinition names (e.g., 'vlan-network,storage-network') or a JSON array for advanced configuration (e.g., '[{\"name\":\"vlan100\",\"networkName\":\"vlan-network\"}]'). Each network creates a bridge interface on the VM.",
+							Examples:    []any{"vlan-network", "vlan-network,storage-network", `[{"name":"vlan100","networkName":"vlan-network"}]`},
+						},
 					},
 					Required: []string{"namespace", "name"},
 				},
@@ -82,6 +88,12 @@ func Tools() []api.ServerTool {
 	}
 }
 
+// NetworkConfig represents a secondary network interface configuration
+type NetworkConfig struct {
+	Name        string `json:"name"`        // Interface name in the VM
+	NetworkName string `json:"networkName"` // Multus NetworkAttachmentDefinition name
+}
+
 type vmParams struct {
 	Namespace           string
 	Name                string
@@ -95,6 +107,7 @@ type vmParams struct {
 	DataSourceNamespace string
 	Storage             string
 	RunStrategy         string
+	Networks            []NetworkConfig
 }
 
 func create(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -157,6 +170,7 @@ type createParameters struct {
 	Performance  string
 	Storage      string
 	Autostart    bool
+	Networks     []NetworkConfig
 }
 
 // parseCreateParameters parses and validates input parameters
@@ -171,6 +185,12 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 		return nil, err
 	}
 
+	networksInput := api.OptionalString(params, "networks", "")
+	networks, err := parseNetworks(networksInput)
+	if err != nil {
+		return nil, fmt.Errorf("invalid networks parameter: %w", err)
+	}
+
 	return &createParameters{
 		Namespace:    namespace,
 		Name:         name,
@@ -181,7 +201,53 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 		Performance:  normalizePerformance(api.OptionalString(params, "performance", "")),
 		Storage:      api.OptionalString(params, "storage", "30Gi"),
 		Autostart:    api.OptionalBool(params, "autostart", false),
+		Networks:     networks,
 	}, nil
+}
+
+// parseNetworks parses the networks input which can be:
+// - Empty string (no secondary networks)
+// - Comma-separated list of NetworkAttachmentDefinition names (e.g., "vlan-network,storage-network")
+// - JSON array for advanced configuration (e.g., '[{"name":"vlan100","networkName":"vlan-network"}]')
+func parseNetworks(input string) ([]NetworkConfig, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil, nil
+	}
+
+	// Check if it looks like JSON
+	if strings.HasPrefix(input, "[") {
+		var networks []NetworkConfig
+		if err := json.Unmarshal([]byte(input), &networks); err != nil {
+			return nil, fmt.Errorf("failed to parse networks JSON: %w", err)
+		}
+		// Validate each network config
+		for i := range networks {
+			if networks[i].NetworkName == "" {
+				return nil, fmt.Errorf("network at index %d missing required 'networkName' field", i)
+			}
+			// If name is not provided, use the networkName as the interface name
+			if networks[i].Name == "" {
+				networks[i].Name = networks[i].NetworkName
+			}
+		}
+		return networks, nil
+	}
+
+	// Parse as comma-separated list of network names
+	parts := strings.Split(input, ",")
+	networks := make([]NetworkConfig, 0, len(parts))
+	for _, part := range parts {
+		networkName := strings.TrimSpace(part)
+		if networkName == "" {
+			continue
+		}
+		networks = append(networks, NetworkConfig{
+			Name:        networkName,
+			NetworkName: networkName,
+		})
+	}
+	return networks, nil
 }
 
 // buildTemplateParams constructs the template parameters for VM creation
@@ -197,6 +263,7 @@ func buildTemplateParams(createParams *createParameters, matchedDataSource *kube
 		Name:        createParams.Name,
 		Storage:     createParams.Storage,
 		RunStrategy: runStrategy,
+		Networks:    createParams.Networks,
 	}
 
 	// Set instancetype and kind if available

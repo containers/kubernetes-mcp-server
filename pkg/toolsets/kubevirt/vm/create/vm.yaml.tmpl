@@ -35,9 +35,24 @@ spec:
         devices:
           disks:
           - name: {{.Name}}-rootdisk
+{{- if .Networks}}
+          interfaces:
+{{- range .Networks}}
+          - name: {{.Name}}
+            bridge: {}
+{{- end}}
+{{- end}}
 {{- if not .Instancetype}}
         memory:
           guest: 2Gi
+{{- end}}
+{{- if .Networks}}
+      networks:
+{{- range .Networks}}
+      - name: {{.Name}}
+        multus:
+          networkName: {{.NetworkName}}
+{{- end}}
 {{- end}}
       volumes:
       - name: {{.Name}}-rootdisk

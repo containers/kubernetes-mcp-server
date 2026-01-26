@@ -606,6 +606,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `instancetype` (`string`) - Optional instance type name for the VM (e.g., 'u1.small', 'u1.medium', 'u1.large')
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace for the virtual machine
+  - `networks` (`string`) - Optional secondary network interfaces to attach to the VM. Accepts a comma-separated list of Multus NetworkAttachmentDefinition names (e.g., 'vlan-network,storage-network') or a JSON array for advanced configuration (e.g., '[{"name":"vlan100","networkName":"vlan-network"}]'). Each network creates a bridge interface on the VM.
   - `performance` (`string`) - Optional performance family hint for the VM instance type (e.g., 'u1' for general-purpose, 'o1' for overcommitted, 'c1' for compute-optimized, 'm1' for memory-optimized). Defaults to 'u1' (general-purpose) if not specified.
   - `preference` (`string`) - Optional preference name for the VM
   - `size` (`string`) - Optional workload size hint for the VM (e.g., 'small', 'medium', 'large', 'xlarge'). Used to auto-select an appropriate instance type if not explicitly specified.
