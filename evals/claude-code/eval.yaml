@@ -1,6 +1,6 @@
 kind: Eval
 metadata:
-  name: "claude-code-mcp-test"
+  name: "kubernetes-basic-operations"
 config:
   agent:
     type: "file"
