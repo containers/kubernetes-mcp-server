@@ -1,8 +1,8 @@
-name: Gevals MCP Evaluation - Report
+name: mcpchecker MCP Evaluation - Report
 
 on:
   workflow_run:
-    workflows: ["Gevals MCP Evaluation"]
+    workflows: ["mcpchecker MCP Evaluation"]
     types: [completed]
 
 permissions:
@@ -64,7 +64,7 @@ jobs:
           fi
 
           gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$(cat <<EOF
-          ## Gevals MCP Evaluation Results
+          ## mcpchecker MCP Evaluation Results
 
           **Commit:** \`${PR_SHA:0:7}\`
           **Summary:** ${TASKS_PASSED}/${TASKS_TOTAL} tasks passed (${PASS_RATE}%)

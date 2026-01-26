@@ -1,4 +1,4 @@
-name: Gevals MCP Evaluation
+name: mcpchecker MCP Evaluation
 
 on:
   # Weekly schedule - runs every Monday at 9 AM UTC
@@ -129,17 +129,17 @@ jobs:
         env:
           TOOLSETS: ${{ needs.check-trigger.outputs.kiali-run == 'true' && 'kiali' || '' }}
 
-      - name: Run gevals evaluation
-        id: gevals
-        uses: genmcp/gevals/.github/actions/gevals-action@v0.0.2
+      - name: Run mcpchecker evaluation
+        id: mcpchecker
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.3
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
-          gevals-version: 'latest'
+          mcpchecker-version: 'v0.0.3'
           task-filter: ${{ github.event.inputs.task-filter || '' }}
           output-format: 'json'
           verbose: ${{ github.event.inputs.verbose || 'false' }}
           upload-artifacts: 'true'
-          artifact-name: 'gevals-results'
+          artifact-name: 'mcpchecker-results'
           fail-on-error: 'false'
           task-pass-threshold: '0.8'
           assertion-pass-threshold: '0.8'
@@ -168,12 +168,12 @@ jobs:
           {
             "pr_number": "${{ needs.check-trigger.outputs.pr-number }}",
             "pr_sha": "${{ needs.check-trigger.outputs.pr-sha }}",
-            "tasks_passed": "${{ steps.gevals.outputs.tasks-passed }}",
-            "tasks_total": "${{ steps.gevals.outputs.tasks-total }}",
-            "task_pass_rate": "${{ steps.gevals.outputs.task-pass-rate }}",
-            "assertions_passed": "${{ steps.gevals.outputs.assertions-passed }}",
-            "assertions_total": "${{ steps.gevals.outputs.assertions-total }}",
-            "passed": "${{ steps.gevals.outputs.passed }}"
+            "tasks_passed": "${{ steps.mcpchecker.outputs.tasks-passed }}",
+            "tasks_total": "${{ steps.mcpchecker.outputs.tasks-total }}",
+            "task_pass_rate": "${{ steps.mcpchecker.outputs.task-pass-rate }}",
+            "assertions_passed": "${{ steps.mcpchecker.outputs.assertions-passed }}",
+            "assertions_total": "${{ steps.mcpchecker.outputs.assertions-total }}",
+            "passed": "${{ steps.mcpchecker.outputs.passed }}"
           }
           EOF
 
