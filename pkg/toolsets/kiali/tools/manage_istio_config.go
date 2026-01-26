@@ -117,11 +117,6 @@ func validateIstioConfigInput(action, namespace, group, version, kind, name, jso
 				return fmt.Errorf("json_data is required for action %q", action)
 			}
 		}
-		if action == "get" {
-			if name == "" {
-				return fmt.Errorf("name is required for action %q", action)
-			}
-		}
 		if action == "delete" {
 			if name == "" {
 				return fmt.Errorf("name is required for action %q", action)
