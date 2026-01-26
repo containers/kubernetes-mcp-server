@@ -1,16 +1,11 @@
 kind: Eval
 metadata:
-  name: "kubernetes-basic-operations"
+  name: "claude-code-mcp-local"
 config:
   agent:
     type: "file"
     path: agent.yaml
   mcpConfigFile: ../mcp-config.yaml
-  llmJudge:
-    env:
-      baseUrlKey: JUDGE_BASE_URL
-      apiKeyKey: JUDGE_API_KEY
-      modelNameKey: JUDGE_MODEL_NAME
   taskSets:
     # Kubernetes tasks
     - glob: ../tasks/*/*/*.yaml

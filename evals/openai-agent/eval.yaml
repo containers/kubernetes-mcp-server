@@ -1,6 +1,6 @@
 kind: Eval
 metadata:
-  name: "openai-agent-mcp-test"
+  name: "openai-agent-kubernetes-test"
 config:
   agent:
     type: "file"
