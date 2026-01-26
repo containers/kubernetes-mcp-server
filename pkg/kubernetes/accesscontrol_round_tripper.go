@@ -28,9 +28,7 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	// was created before restMapper was set (fixes issue #688)
 	restMapper := rt.restMapperProvider()
 	if restMapper == nil {
-		// restMapper not yet initialized, pass through
-		// This can happen during discovery client initialization
-		return rt.delegate.RoundTrip(req)
+		return nil, fmt.Errorf("failed to make request: AccessControlRoundTripper restMapper not initialized")
 	}
 
 	gvk, err := restMapper.KindFor(gvr)

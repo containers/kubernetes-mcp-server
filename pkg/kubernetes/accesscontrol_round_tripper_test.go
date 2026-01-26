@@ -77,8 +77,8 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForNonAPIResources() {
 
 func (s *AccessControlRoundTripperTestSuite) TestRoundTripWithNilRestMapper() {
 	// This test covers the nil restMapper branch (issue #688 fix).
-	// When restMapperProvider returns nil, requests should pass through
-	// to the delegate without panicking.
+	// When restMapperProvider returns nil, requests should fail with an error
+	// to prevent bypassing access control.
 
 	delegateCalled := false
 	mockDelegate := &mockRoundTripper{
@@ -94,32 +94,32 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripWithNilRestMapper() {
 		restMapperProvider:      func() meta.RESTMapper { return nil }, // nil restMapper
 	}
 
-	s.Run("resource API call passes through when restMapper is nil", func() {
+	s.Run("resource API call fails when restMapper is nil", func() {
 		delegateCalled = false
 		req := httptest.NewRequest("GET", "/api/v1/namespaces/default/pods", nil)
 		resp, err := rt.RoundTrip(req)
-		s.NoError(err, "Expected no error when restMapper is nil")
-		s.NotNil(resp, "Expected response when restMapper is nil")
-		s.Equal(http.StatusOK, resp.StatusCode)
-		s.True(delegateCalled, "Expected delegate to be called when restMapper is nil")
+		s.Error(err, "Expected error when restMapper is nil")
+		s.Nil(resp, "Expected no response when restMapper is nil")
+		s.Contains(err.Error(), "restMapper not initialized")
+		s.False(delegateCalled, "Expected delegate not to be called when restMapper is nil")
 	})
 
-	s.Run("non-namespaced resource API call passes through when restMapper is nil", func() {
+	s.Run("non-namespaced resource API call fails when restMapper is nil", func() {
 		delegateCalled = false
 		req := httptest.NewRequest("GET", "/api/v1/nodes", nil)
 		resp, err := rt.RoundTrip(req)
-		s.NoError(err)
-		s.NotNil(resp)
-		s.True(delegateCalled, "Expected delegate to be called for non-namespaced resource")
+		s.Error(err)
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for non-namespaced resource")
 	})
 
-	s.Run("apps group resource API call passes through when restMapper is nil", func() {
+	s.Run("apps group resource API call fails when restMapper is nil", func() {
 		delegateCalled = false
 		req := httptest.NewRequest("GET", "/apis/apps/v1/namespaces/default/deployments", nil)
 		resp, err := rt.RoundTrip(req)
-		s.NoError(err)
-		s.NotNil(resp)
-		s.True(delegateCalled, "Expected delegate to be called for apps group resource")
+		s.Error(err)
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for apps group resource")
 	})
 }
 
