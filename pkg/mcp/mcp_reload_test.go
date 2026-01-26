@@ -5,6 +5,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 )
@@ -34,9 +35,11 @@ func (s *ConfigReloadSuite) TearDownTest() {
 
 func (s *ConfigReloadSuite) TestConfigurationReload() {
 	// Initialize server with initial config
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	}, nil, nil)
+	}, provider)
 	s.Require().NoError(err)
 	s.Require().NotNil(server)
 	s.server = server
@@ -109,9 +112,11 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 }
 
 func (s *ConfigReloadSuite) TestConfigurationValues() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	}, nil, nil)
+	}, provider)
 	s.Require().NoError(err)
 	s.server = server
 
@@ -137,9 +142,11 @@ func (s *ConfigReloadSuite) TestConfigurationValues() {
 }
 
 func (s *ConfigReloadSuite) TestMultipleReloads() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	}, nil, nil)
+	}, provider)
 	s.Require().NoError(err)
 	s.server = server
 
@@ -174,9 +181,11 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 }
 
 func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	}, nil, nil)
+	}, provider)
 	s.Require().NoError(err)
 	s.server = server
 
@@ -210,9 +219,11 @@ func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
 }
 
 func (s *ConfigReloadSuite) TestServerLifecycle() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
 	server, err := NewServer(Configuration{
 		StaticConfig: s.Cfg,
-	}, nil, nil)
+	}, provider)
 	s.Require().NoError(err)
 
 	s.Run("server closes without panic", func() {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/klog/v2"
@@ -57,9 +58,11 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
 	s.Require().NoError(err)
 	cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 
+	provider, err := kubernetes.NewProvider(cfg)
+	s.Require().NoError(err)
 	s.server, err = mcp.NewServer(mcp.Configuration{
 		StaticConfig: cfg,
-	}, nil, nil)
+	}, provider)
 	s.Require().NoError(err)
 	// Set up SIGHUP handler
 	opts := &MCPServerOptions{

@@ -11,6 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	configuration "github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
@@ -201,8 +202,9 @@ func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
 }
 
 func (s *ToolsetsSuite) InitMcpClient() {
-	var err error
-	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, nil, nil)
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err, "Expected no error creating kubernetes target provider")
+	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP())
 }

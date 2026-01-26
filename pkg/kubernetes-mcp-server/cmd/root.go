@@ -29,6 +29,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
@@ -358,9 +359,14 @@ func (m *MCPServerOptions) Run() error {
 		oidcProvider = provider
 	}
 
+	provider, err := kubernetes.NewProvider(m.StaticConfig, kubernetes.WithTokenExchange(oidcProvider, httpClient))
+	if err != nil {
+		return fmt.Errorf("unable to create kubernetes target provider: %w", err)
+	}
+
 	mcpServer, err := mcp.NewServer(mcp.Configuration{
 		StaticConfig: m.StaticConfig,
-	}, oidcProvider, httpClient)
+	}, provider)
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}

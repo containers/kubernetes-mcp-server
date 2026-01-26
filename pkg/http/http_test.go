@@ -19,6 +19,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 	"github.com/stretchr/testify/suite"
@@ -55,7 +56,9 @@ func (s *BaseHttpSuite) StartServer() {
 	s.Require().NoError(err, "Expected no error getting random port address")
 	s.StaticConfig.Port = strconv.Itoa(tcpAddr.Port)
 
-	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig}, s.OidcProvider, nil)
+	provider, err := kubernetes.NewProvider(s.StaticConfig, kubernetes.WithTokenExchange(s.OidcProvider, nil))
+	s.Require().NoError(err, "Expected no error creating kubernetes target provider")
+	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig}, provider)
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.Require().NotNil(s.mcpServer, "MCP server should not be nil")
 	var timeoutCtx, cancelCtx context.Context
@@ -115,7 +118,11 @@ func (c *httpContext) beforeEach(t *testing.T) {
 		t.Fatalf("Failed to close random port listener: %v", randomPortErr)
 	}
 	c.StaticConfig.Port = fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
-	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: c.StaticConfig}, c.OidcProvider, nil)
+	provider, err := kubernetes.NewProvider(c.StaticConfig, kubernetes.WithTokenExchange(c.OidcProvider, nil))
+	if err != nil {
+		t.Fatalf("Failed to create kubernetes target provider: %v", err)
+	}
+	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: c.StaticConfig}, provider)
 	if err != nil {
 		t.Fatalf("Failed to create MCP server: %v", err)
 	}
