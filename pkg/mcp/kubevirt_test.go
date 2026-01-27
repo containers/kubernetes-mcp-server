@@ -22,11 +22,14 @@ import (
 
 var kubevirtApis = []schema.GroupVersionResource{
 	{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"},
+	{Group: "kubevirt.io", Version: "v1", Resource: "kubevirts"},
 	{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "datasources"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterinstancetypes"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineinstancetypes"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterpreferences"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachinepreferences"},
+	{Group: "snapshot.kubevirt.io", Version: "v1beta1", Resource: "virtualmachinesnapshots"},
+	{Group: "snapshot.kubevirt.io", Version: "v1beta1", Resource: "virtualmachinerestores"},
 }
 
 type KubevirtSuite struct {
@@ -42,9 +45,15 @@ func (s *KubevirtSuite) SetupSuite() {
 	}
 	s.Require().NoError(tasks.Wait())
 
-	_, err := kubernetes.NewForConfigOrDie(envTestRestConfig).CoreV1().Namespaces().
+	k8sClient := kubernetes.NewForConfigOrDie(envTestRestConfig)
+
+	_, err := k8sClient.CoreV1().Namespaces().
 		Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "openshift-virtualization-os-images"}}, metav1.CreateOptions{})
 	s.Require().NoError(err, "failed to create test namespace openshift-virtualization-os-images")
+
+	_, err = k8sClient.CoreV1().Namespaces().
+		Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kubevirt"}}, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create test namespace kubevirt")
 }
 
 func (s *KubevirtSuite) TearDownSuite() {
@@ -665,6 +674,396 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 					"Expected error message about VM not found, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 			})
 		}
+	})
+}
+
+func (s *KubevirtSuite) TestVMSnapshot() {
+	// Create a test VM for snapshot tests
+	dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+	vm := &unstructured.Unstructured{}
+	vm.SetUnstructuredContent(map[string]interface{}{
+		"apiVersion": "kubevirt.io/v1",
+		"kind":       "VirtualMachine",
+		"metadata": map[string]interface{}{
+			"name":      "test-vm-snapshot",
+			"namespace": "default",
+		},
+		"spec": map[string]interface{}{
+			"runStrategy": "Halted",
+		},
+	})
+	_, err := dynamicClient.Resource(schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "virtualmachines",
+	}).Namespace("default").Create(s.T().Context(), vm, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create test VM")
+
+	s.Run("vm_snapshot_create missing required params", func() {
+		testCases := []string{"namespace", "vm_name", "snapshot_name"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"namespace":     "default",
+					"vm_name":       "test-vm-snapshot",
+					"snapshot_name": "test-snapshot",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_snapshot_create", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_snapshot_create with valid params", func() {
+		toolResult, err := s.CallTool("vm_snapshot_create", map[string]interface{}{
+			"namespace":     "default",
+			"vm_name":       "test-vm-snapshot",
+			"snapshot_name": "test-snapshot",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachineSnapshot 'test-snapshot' created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			snapshot := &decodedResult[0]
+			s.Equal("test-snapshot", snapshot.GetName(), "invalid snapshot name")
+			s.Equal("default", snapshot.GetNamespace(), "invalid snapshot namespace")
+			s.NotEmptyf(snapshot.GetUID(), "invalid uid, got %v", snapshot.GetUID())
+			s.Equal("test-vm-snapshot", test.FieldString(snapshot, "spec.source.name"), "invalid source VM name")
+			s.Equal("VirtualMachine", test.FieldString(snapshot, "spec.source.kind"), "invalid source kind")
+		})
+	})
+
+	s.Run("vm_snapshot_list missing required params", func() {
+		toolResult, err := s.CallTool("vm_snapshot_list", map[string]interface{}{})
+		s.Require().Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail due to missing namespace")
+		s.Equal(toolResult.Content[0].(mcp.TextContent).Text, "namespace parameter required")
+	})
+
+	s.Run("vm_snapshot_list with snapshots", func() {
+		toolResult, err := s.CallTool("vm_snapshot_list", map[string]interface{}{
+			"namespace": "default",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachineSnapshots in namespace 'default'"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			snapshot := &decodedResult[0]
+			s.Equal("test-snapshot", snapshot.GetName(), "invalid snapshot name")
+		})
+	})
+
+	s.Run("vm_snapshot_list empty namespace", func() {
+		toolResult, err := s.CallTool("vm_snapshot_list", map[string]interface{}{
+			"namespace": "empty-namespace",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("returns empty message", func() {
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# No VirtualMachineSnapshots found in namespace 'empty-namespace'"),
+				"Expected empty message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		})
+	})
+
+	s.Run("vm_snapshot_get missing required params", func() {
+		testCases := []string{"namespace", "snapshot_name"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"namespace":     "default",
+					"snapshot_name": "test-snapshot",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_snapshot_get", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_snapshot_get with valid snapshot", func() {
+		toolResult, err := s.CallTool("vm_snapshot_get", map[string]interface{}{
+			"namespace":     "default",
+			"snapshot_name": "test-snapshot",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachineSnapshot 'test-snapshot'"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			snapshot := &decodedResult[0]
+			s.Equal("test-snapshot", snapshot.GetName(), "invalid snapshot name")
+		})
+	})
+
+	s.Run("vm_snapshot_get non-existent snapshot", func() {
+		toolResult, err := s.CallTool("vm_snapshot_get", map[string]interface{}{
+			"namespace":     "default",
+			"snapshot_name": "non-existent-snapshot",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail for non-existent snapshot")
+		s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "failed to get VirtualMachineSnapshot"),
+			"Expected error message about snapshot not found, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
+
+	s.Run("vm_snapshot_restore missing required params", func() {
+		testCases := []string{"namespace", "vm_name", "snapshot_name"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"namespace":     "default",
+					"vm_name":       "test-vm-snapshot",
+					"snapshot_name": "test-snapshot",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_snapshot_restore", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_snapshot_restore with default restore name", func() {
+		toolResult, err := s.CallTool("vm_snapshot_restore", map[string]interface{}{
+			"namespace":     "default",
+			"vm_name":       "test-vm-snapshot",
+			"snapshot_name": "test-snapshot",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachineRestore 'test-snapshot-restore' created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			restore := &decodedResult[0]
+			s.Equal("test-snapshot-restore", restore.GetName(), "invalid restore name")
+			s.Equal("default", restore.GetNamespace(), "invalid restore namespace")
+			s.NotEmptyf(restore.GetUID(), "invalid uid, got %v", restore.GetUID())
+			s.Equal("test-vm-snapshot", test.FieldString(restore, "spec.target.name"), "invalid target VM name")
+			s.Equal("test-snapshot", test.FieldString(restore, "spec.virtualMachineSnapshotName"), "invalid snapshot name")
+		})
+	})
+
+	s.Run("vm_snapshot_restore with custom restore name", func() {
+		toolResult, err := s.CallTool("vm_snapshot_restore", map[string]interface{}{
+			"namespace":     "default",
+			"vm_name":       "test-vm-snapshot",
+			"snapshot_name": "test-snapshot",
+			"restore_name":  "custom-restore",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachineRestore 'custom-restore' created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			restore := &decodedResult[0]
+			s.Equal("custom-restore", restore.GetName(), "invalid restore name")
+		})
+	})
+}
+
+func (s *KubevirtSuite) TestVMSnapshotFeatureGate() {
+	// Create a test KubeVirt CR
+	dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+	kv := &unstructured.Unstructured{}
+	kv.SetUnstructuredContent(map[string]interface{}{
+		"apiVersion": "kubevirt.io/v1",
+		"kind":       "KubeVirt",
+		"metadata": map[string]interface{}{
+			"name":      "kubevirt",
+			"namespace": "kubevirt",
+		},
+		"spec": map[string]interface{}{
+			"configuration": map[string]interface{}{
+				"developerConfiguration": map[string]interface{}{
+					"featureGates": []string{},
+				},
+			},
+		},
+	})
+	_, err := dynamicClient.Resource(schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "kubevirts",
+	}).Namespace("kubevirt").Create(s.T().Context(), kv, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create test KubeVirt CR")
+
+	s.Run("vm_snapshot_feature_gate missing required params", func() {
+		testCases := []string{"namespace", "name", "action"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"namespace": "kubevirt",
+					"name":      "kubevirt",
+					"action":    "enable",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_snapshot_feature_gate", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_snapshot_feature_gate enable", func() {
+		toolResult, err := s.CallTool("vm_snapshot_feature_gate", map[string]interface{}{
+			"namespace": "kubevirt",
+			"name":      "kubevirt",
+			"action":    "enable",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# Snapshot feature gate enabled successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			kubevirt := &decodedResult[0]
+			s.Equal("kubevirt", kubevirt.GetName(), "invalid KubeVirt CR name")
+
+			// Check that Snapshot feature gate is in the list
+			gates, found, err := unstructured.NestedStringSlice(kubevirt.Object, "spec", "configuration", "developerConfiguration", "featureGates")
+			s.Require().NoError(err, "failed to get feature gates")
+			s.Require().True(found, "feature gates not found")
+
+			snapshotEnabled := false
+			for _, gate := range gates {
+				if gate == "Snapshot" {
+					snapshotEnabled = true
+					break
+				}
+			}
+			s.True(snapshotEnabled, "Snapshot feature gate should be enabled")
+		})
+	})
+
+	s.Run("vm_snapshot_feature_gate enable (idempotent)", func() {
+		toolResult, err := s.CallTool("vm_snapshot_feature_gate", map[string]interface{}{
+			"namespace": "kubevirt",
+			"name":      "kubevirt",
+			"action":    "enable",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("still enabled", func() {
+			var decodedResult []unstructured.Unstructured
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			s.Require().NoError(err, "invalid tool result content")
+			kubevirt := &decodedResult[0]
+
+			gates, _, _ := unstructured.NestedStringSlice(kubevirt.Object, "spec", "configuration", "developerConfiguration", "featureGates")
+			snapshotEnabled := false
+			for _, gate := range gates {
+				if gate == "Snapshot" {
+					snapshotEnabled = true
+					break
+				}
+			}
+			s.True(snapshotEnabled, "Snapshot feature gate should remain enabled")
+		})
+	})
+
+	s.Run("vm_snapshot_feature_gate disable", func() {
+		toolResult, err := s.CallTool("vm_snapshot_feature_gate", map[string]interface{}{
+			"namespace": "kubevirt",
+			"name":      "kubevirt",
+			"action":    "disable",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# Snapshot feature gate disabled successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			kubevirt := &decodedResult[0]
+
+			// Check that Snapshot feature gate is NOT in the list
+			gates, _, _ := unstructured.NestedStringSlice(kubevirt.Object, "spec", "configuration", "developerConfiguration", "featureGates")
+
+			snapshotEnabled := false
+			for _, gate := range gates {
+				if gate == "Snapshot" {
+					snapshotEnabled = true
+					break
+				}
+			}
+			s.False(snapshotEnabled, "Snapshot feature gate should be disabled")
+		})
+	})
+
+	s.Run("vm_snapshot_feature_gate invalid action", func() {
+		toolResult, err := s.CallTool("vm_snapshot_feature_gate", map[string]interface{}{
+			"namespace": "kubevirt",
+			"name":      "kubevirt",
+			"action":    "invalid",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail for invalid action")
+		s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "invalid action"),
+			"Expected invalid action message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
+
+	s.Run("vm_snapshot_feature_gate non-existent KubeVirt CR", func() {
+		toolResult, err := s.CallTool("vm_snapshot_feature_gate", map[string]interface{}{
+			"namespace": "kubevirt",
+			"name":      "non-existent",
+			"action":    "enable",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail for non-existent KubeVirt CR")
+		s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "failed to get KubeVirt CR"),
+			"Expected error message about KubeVirt CR not found, got %v", toolResult.Content[0].(mcp.TextContent).Text)
 	})
 }
 

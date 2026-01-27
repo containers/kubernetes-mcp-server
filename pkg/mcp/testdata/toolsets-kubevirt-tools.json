@@ -113,5 +113,159 @@
       ]
     },
     "name": "vm_lifecycle"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Create Snapshot",
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Create a snapshot of a VirtualMachine. The VM can be running or stopped when creating a snapshot.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        },
+        "snapshot_name": {
+          "description": "The name for the new snapshot",
+          "type": "string"
+        },
+        "vm_name": {
+          "description": "The name of the virtual machine to snapshot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "vm_name",
+        "snapshot_name"
+      ]
+    },
+    "name": "vm_snapshot_create"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Manage Snapshot Feature Gate",
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Enable or disable the Snapshot feature gate in the KubeVirt CR. The Snapshot feature must be enabled before creating snapshots.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "The action to perform: 'enable' to enable the Snapshot feature gate, 'disable' to disable it",
+          "enum": [
+            "enable",
+            "disable"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the KubeVirt CR (usually 'kubevirt')",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the KubeVirt CR",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name",
+        "action"
+      ]
+    },
+    "name": "vm_snapshot_feature_gate"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Get Snapshot",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Get details of a specific VirtualMachineSnapshot",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the snapshot",
+          "type": "string"
+        },
+        "snapshot_name": {
+          "description": "The name of the snapshot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "snapshot_name"
+      ]
+    },
+    "name": "vm_snapshot_get"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: List Snapshots",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List all VirtualMachineSnapshots in a namespace",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace to list snapshots from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace"
+      ]
+    },
+    "name": "vm_snapshot_list"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Restore from Snapshot",
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "description": "Restore a VirtualMachine from a snapshot. This creates a VirtualMachineRestore resource that restores the VM to the state captured in the snapshot.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        },
+        "restore_name": {
+          "description": "Optional name for the restore operation. If not provided, defaults to '\u003csnapshot_name\u003e-restore'",
+          "type": "string"
+        },
+        "snapshot_name": {
+          "description": "The name of the snapshot to restore from",
+          "type": "string"
+        },
+        "vm_name": {
+          "description": "The name of the virtual machine to restore",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "vm_name",
+        "snapshot_name"
+      ]
+    },
+    "name": "vm_snapshot_restore"
   }
 ]

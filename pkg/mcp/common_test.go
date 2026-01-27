@@ -73,11 +73,14 @@ func TestMain(m *testing.M) {
 			CRD("route.openshift.io", "v1", "routes", "Route", "route", true),
 			// Kubevirt
 			CRD("kubevirt.io", "v1", "virtualmachines", "VirtualMachine", "virtualmachine", true),
+			CRD("kubevirt.io", "v1", "kubevirts", "KubeVirt", "kubevirt", true),
 			CRD("cdi.kubevirt.io", "v1beta1", "datasources", "DataSource", "datasource", true),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterinstancetypes", "VirtualMachineClusterInstancetype", "virtualmachineclusterinstancetype", false),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterpreferences", "VirtualMachineClusterPreference", "virtualmachineclusterpreference", false),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachinepreferences", "VirtualMachinePreference", "virtualmachinepreference", true),
+			CRD("snapshot.kubevirt.io", "v1beta1", "virtualmachinesnapshots", "VirtualMachineSnapshot", "virtualmachinesnapshot", true),
+			CRD("snapshot.kubevirt.io", "v1beta1", "virtualmachinerestores", "VirtualMachineRestore", "virtualmachinerestore", true),
 		},
 	}
 	// Configure API server for faster CRD establishment and test performance
