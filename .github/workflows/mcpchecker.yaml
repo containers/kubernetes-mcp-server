@@ -233,7 +233,7 @@ jobs:
           # Create or reset the branch
           git checkout -B "$BRANCH"
           git add evals/results/*-latest.json
-          git commit -m "chore: update mcpchecker evaluation results"
+          git commit -m "chore(evals): update mcpchecker evaluation results"
           git push -f origin "$BRANCH"
 
           # Check if PR already exists
