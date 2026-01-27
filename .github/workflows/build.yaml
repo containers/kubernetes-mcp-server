@@ -27,6 +27,25 @@ defaults:
     shell: bash
 
 jobs:
+  check-readme:
+    name: Check README is up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Update README tools
+        run: make update-readme-tools
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --quiet README.md; then
+            echo "::error::README.md is out of date. Please run 'make update-readme-tools' and commit the changes."
+            git diff README.md
+            exit 1
+          fi
+
   build:
     name: Build on ${{ matrix.os }}
     strategy:
