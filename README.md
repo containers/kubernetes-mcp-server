@@ -549,8 +549,16 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
   - `rateInterval` (`string`) - Optional rate interval for fetching (e.g., '10m', '5m', '1h').
 
-- **kiali_manage_istio_config** - Manages Istio configuration objects (Gateways, VirtualServices, etc.). Can list (objects and validations), get, create, patch, or delete objects
-  - `action` (`string`) **(required)** - Action to perform: list, get, create, patch, or delete
+- **kiali_manage_istio_config_read** - Lists or gets Istio configuration objects (Gateways, VirtualServices, etc.)
+  - `action` (`string`) **(required)** - Action to perform: list or get
+  - `group` (`string`) - API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')
+  - `kind` (`string`) - Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')
+  - `name` (`string`) - Name of the Istio object
+  - `namespace` (`string`) - Namespace containing the Istio object
+  - `version` (`string`) - API version of the Istio object (e.g., 'v1', 'v1beta1')
+
+- **kiali_manage_istio_config** - Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)
+  - `action` (`string`) **(required)** - Action to perform: create, patch, or delete
   - `group` (`string`) - API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')
   - `json_data` (`string`) - JSON data to apply or create the object
   - `kind` (`string`) - Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')
@@ -641,6 +649,23 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-END -->
+
+### Prompts
+
+<!-- AVAILABLE-TOOLSETS-PROMPTS-START -->
+
+<details>
+
+<summary>core</summary>
+
+- **cluster-health-check** - Perform comprehensive health assessment of Kubernetes/OpenShift cluster
+  - `namespace` (`string`) - Optional namespace to limit health check scope (default: all namespaces)
+  - `check_events` (`string`) - Include recent warning/error events (true/false, default: true)
+
+</details>
+
+
+<!-- AVAILABLE-TOOLSETS-PROMPTS-END -->
 
 ## Helm Chart
 
