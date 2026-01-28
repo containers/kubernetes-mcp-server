@@ -43,7 +43,7 @@ steps:
   verify:
     inline: |-
       #!/usr/bin/env bash
-      source evals/tasks/kubevirt/helpers/verify-vm.sh
+      source ../helpers/verify-vm.sh
       NS="${EVAL_NAMESPACE:-vm-test}"
 
       # Wait for VirtualMachine to exist

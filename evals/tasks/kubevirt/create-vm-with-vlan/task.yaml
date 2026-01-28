@@ -9,11 +9,11 @@ steps:
       NS="${EVAL_NAMESPACE:-vm-test}"
       kubectl delete namespace "$NS" --ignore-not-found
       kubectl create namespace "$NS"
-      kubectl apply -f evals/tasks/kubevirt/create-vm-with-vlan/vlan.network -n "$NS"
+      kubectl apply -f vlan.network -n "$NS"
   verify:
     inline: |-
       #!/usr/bin/env bash
-      source evals/tasks/kubevirt/helpers/verify-vm.sh
+      source ../helpers/verify-vm.sh
       NS="${EVAL_NAMESPACE:-vm-test}"
 
       # Wait for VirtualMachine to be created
