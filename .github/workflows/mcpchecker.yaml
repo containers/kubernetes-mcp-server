@@ -202,7 +202,7 @@ jobs:
           ref: main
 
       - name: Download mcpchecker results
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: mcpchecker-results
           path: mcpchecker-results/
