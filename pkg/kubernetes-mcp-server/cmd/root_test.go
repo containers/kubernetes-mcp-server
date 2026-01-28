@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -291,7 +293,8 @@ func TestToolsets(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--help"})
 		o, err := captureOutput(rootCmd.Execute) // --help doesn't use logger/klog, cobra prints directly to stdout
-		if !strings.Contains(o, "Comma-separated list of MCP toolsets to use (available toolsets: config, core, helm, kcp, kiali, kubevirt).") {
+		expected := fmt.Sprintf("Comma-separated list of MCP toolsets to use (available toolsets: %s).", strings.Join(toolsets.ToolsetNames(), ", "))
+		if !strings.Contains(o, expected) {
 			t.Fatalf("Expected all available toolsets, got %s %v", o, err)
 		}
 	})
