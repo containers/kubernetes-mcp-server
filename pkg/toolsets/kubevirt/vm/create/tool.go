@@ -2,7 +2,6 @@ package create
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"text/template"
@@ -68,9 +67,36 @@ func Tools() []api.ServerTool {
 							Examples:    []any{"30Gi", "50Gi", "100Gi"},
 						},
 						"networks": {
-							Type:        "string",
-							Description: "Optional secondary network interfaces to attach to the VM. Accepts a comma-separated list of Multus NetworkAttachmentDefinition names (e.g., 'vlan-network,storage-network') or a JSON array for advanced configuration (e.g., '[{\"name\":\"vlan100\",\"networkName\":\"vlan-network\"}]'). Each network creates a bridge interface on the VM.",
-							Examples:    []any{"vlan-network", "vlan-network,storage-network", `[{"name":"vlan100","networkName":"vlan-network"}]`},
+							Type:        "array",
+							Description: "Optional secondary network interfaces to attach to the VM. Each item specifies a Multus NetworkAttachmentDefinition to attach. Accepts either simple strings (NetworkAttachmentDefinition names) or objects with 'name' (interface name in VM) and 'networkName' (NetworkAttachmentDefinition name) properties. Each network creates a bridge interface on the VM.",
+							Items: &jsonschema.Schema{
+								OneOf: []*jsonschema.Schema{
+									{
+										Type:        "string",
+										Description: "NetworkAttachmentDefinition name (used as both interface name and network name)",
+									},
+									{
+										Type:        "object",
+										Description: "Network configuration with custom interface name",
+										Properties: map[string]*jsonschema.Schema{
+											"name": {
+												Type:        "string",
+												Description: "Interface name in the VM (optional, defaults to networkName)",
+											},
+											"networkName": {
+												Type:        "string",
+												Description: "Multus NetworkAttachmentDefinition name (required)",
+											},
+										},
+										Required: []string{"networkName"},
+									},
+								},
+							},
+							Examples: []any{
+								[]string{"vlan-network"},
+								[]string{"vlan-network", "storage-network"},
+								[]map[string]string{{"name": "vlan100", "networkName": "vlan-network"}},
+							},
 						},
 					},
 					Required: []string{"namespace", "name"},
@@ -185,7 +211,7 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 		return nil, err
 	}
 
-	networksInput := api.OptionalString(params, "networks", "")
+	networksInput := optionalArray(params, "networks")
 	networks, err := parseNetworks(networksInput)
 	if err != nil {
 		return nil, fmt.Errorf("invalid networks parameter: %w", err)
@@ -205,47 +231,58 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 	}, nil
 }
 
-// parseNetworks parses the networks input which can be:
-// - Empty string (no secondary networks)
-// - Comma-separated list of NetworkAttachmentDefinition names (e.g., "vlan-network,storage-network")
-// - JSON array for advanced configuration (e.g., '[{"name":"vlan100","networkName":"vlan-network"}]')
-func parseNetworks(input string) ([]NetworkConfig, error) {
-	input = strings.TrimSpace(input)
-	if input == "" {
+// optionalArray extracts an optional array parameter from tool arguments.
+// Returns the array value if present and valid, or nil if missing or not an array.
+func optionalArray(params api.ToolHandlerParams, key string) []any {
+	args := params.GetArguments()
+	val, ok := args[key]
+	if !ok {
+		return nil
+	}
+	arr, ok := val.([]any)
+	if !ok {
+		return nil
+	}
+	return arr
+}
+
+// parseNetworks parses the networks input which is an array of either:
+// - Strings (NetworkAttachmentDefinition names)
+// - Objects with 'name' and 'networkName' properties
+func parseNetworks(input []any) ([]NetworkConfig, error) {
+	if len(input) == 0 {
 		return nil, nil
 	}
 
-	// Check if it looks like JSON
-	if strings.HasPrefix(input, "[") {
-		var networks []NetworkConfig
-		if err := json.Unmarshal([]byte(input), &networks); err != nil {
-			return nil, fmt.Errorf("failed to parse networks JSON: %w", err)
-		}
-		// Validate each network config
-		for i := range networks {
-			if networks[i].NetworkName == "" {
+	networks := make([]NetworkConfig, 0, len(input))
+	for i, item := range input {
+		switch v := item.(type) {
+		case string:
+			// Simple string: use as both name and networkName
+			if v == "" {
+				continue
+			}
+			networks = append(networks, NetworkConfig{
+				Name:        v,
+				NetworkName: v,
+			})
+		case map[string]any:
+			// Object with name and networkName properties
+			networkName, ok := v["networkName"].(string)
+			if !ok || networkName == "" {
 				return nil, fmt.Errorf("network at index %d missing required 'networkName' field", i)
 			}
-			// If name is not provided, use the networkName as the interface name
-			if networks[i].Name == "" {
-				networks[i].Name = networks[i].NetworkName
+			name, _ := v["name"].(string)
+			if name == "" {
+				name = networkName
 			}
+			networks = append(networks, NetworkConfig{
+				Name:        name,
+				NetworkName: networkName,
+			})
+		default:
+			return nil, fmt.Errorf("network at index %d has invalid type: expected string or object", i)
 		}
-		return networks, nil
-	}
-
-	// Parse as comma-separated list of network names
-	parts := strings.Split(input, ",")
-	networks := make([]NetworkConfig, 0, len(parts))
-	for _, part := range parts {
-		networkName := strings.TrimSpace(part)
-		if networkName == "" {
-			continue
-		}
-		networks = append(networks, NetworkConfig{
-			Name:        networkName,
-			NetworkName: networkName,
-		})
 	}
 	return networks, nil
 }
