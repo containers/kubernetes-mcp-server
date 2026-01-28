@@ -3,8 +3,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"slices"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
@@ -16,12 +14,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
-
-// tokenScopesContextKeyType is the type for the token scopes context key
-type tokenScopesContextKeyType string
-
-// TokenScopesContextKey is the context key for storing OAuth token scopes
-const TokenScopesContextKey tokenScopesContextKeyType = "tokenScopes"
 
 // sessionInjectionMiddleware injects the MCP session into the context for logging support.
 // This middleware should be added first so all subsequent middleware and handlers have access.
@@ -67,19 +59,6 @@ func toolCallLoggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 					klog.V(7).Infof("mcp tool call headers: %s", buffer)
 				}
 			}
-		}
-		return next(ctx, method, req)
-	}
-}
-
-func toolScopedAuthorizationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
-	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-		scopes, ok := ctx.Value(TokenScopesContextKey).([]string)
-		if !ok {
-			return NewTextResult("", fmt.Errorf("authorization failed: Access denied: Tool '%s' requires scope 'mcp:%s' but no scope is available", method, method)), nil
-		}
-		if !slices.Contains(scopes, "mcp:"+method) && !slices.Contains(scopes, method) {
-			return NewTextResult("", fmt.Errorf("authorization failed: Access denied: Tool '%s' requires scope 'mcp:%s' but only scopes %s are available", method, method, scopes)), nil
 		}
 		return next(ctx, method, req)
 	}
