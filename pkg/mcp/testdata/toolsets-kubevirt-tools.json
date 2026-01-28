@@ -27,13 +27,48 @@
           "type": "string"
         },
         "networks": {
-          "description": "Optional secondary network interfaces to attach to the VM. Accepts a comma-separated list of Multus NetworkAttachmentDefinition names (e.g., 'vlan-network,storage-network') or a JSON array for advanced configuration (e.g., '[{\"name\":\"vlan100\",\"networkName\":\"vlan-network\"}]'). Each network creates a bridge interface on the VM.",
+          "description": "Optional secondary network interfaces to attach to the VM. Each item specifies a Multus NetworkAttachmentDefinition to attach. Accepts either simple strings (NetworkAttachmentDefinition names) or objects with 'name' (interface name in VM) and 'networkName' (NetworkAttachmentDefinition name) properties. Each network creates a bridge interface on the VM.",
           "examples": [
-            "vlan-network",
-            "vlan-network,storage-network",
-            "[{\"name\":\"vlan100\",\"networkName\":\"vlan-network\"}]"
+            [
+              "vlan-network"
+            ],
+            [
+              "vlan-network",
+              "storage-network"
+            ],
+            [
+              {
+                "name": "vlan100",
+                "networkName": "vlan-network"
+              }
+            ]
           ],
-          "type": "string"
+          "items": {
+            "oneOf": [
+              {
+                "description": "NetworkAttachmentDefinition name (used as both interface name and network name)",
+                "type": "string"
+              },
+              {
+                "description": "Network configuration with custom interface name",
+                "properties": {
+                  "name": {
+                    "description": "Interface name in the VM (optional, defaults to networkName)",
+                    "type": "string"
+                  },
+                  "networkName": {
+                    "description": "Multus NetworkAttachmentDefinition name (required)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "networkName"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
         },
         "performance": {
           "description": "Optional performance family hint for the VM instance type (e.g., 'u1' for general-purpose, 'o1' for overcommitted, 'c1' for compute-optimized, 'm1' for memory-optimized). Defaults to 'u1' (general-purpose) if not specified.",
