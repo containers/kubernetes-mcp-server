@@ -386,6 +386,14 @@ func (m *mockToolsetWithPrompts) GetPrompts() []api.ServerPrompt {
 	return m.prompts
 }
 
+func (m *mockToolsetWithPrompts) GetResources() []api.ServerResource {
+	return nil
+}
+
+func (m *mockToolsetWithPrompts) GetResourceTemplates() []api.ServerResourceTemplate {
+	return nil
+}
+
 func TestMcpToolsetPromptsSuite(t *testing.T) {
 	suite.Run(t, new(McpToolsetPromptsSuite))
 }
