@@ -34,7 +34,7 @@ func (c *Core) ResourcesList(ctx context.Context, gvk *schema.GroupVersionKind, 
 
 	// Check if operation is allowed for all namespaces (applicable for namespaced resources)
 	isNamespaced, _ := c.isNamespaced(gvk)
-	if isNamespaced && !c.canIUse(ctx, gvr, namespace, "list") && namespace == "" {
+	if isNamespaced && !c.CanIUse(ctx, gvr, namespace, "list") && namespace == "" {
 		namespace = c.NamespaceOrDefault("")
 	}
 	if options.AsTable {
@@ -229,7 +229,9 @@ func (c *Core) supportsGroupVersion(groupVersion string) bool {
 	return true
 }
 
-func (c *Core) canIUse(ctx context.Context, gvr *schema.GroupVersionResource, namespace, verb string) bool {
+// CanIUse checks if the current user has permission to perform a specific verb on a resource.
+// It uses SelfSubjectAccessReview to determine if the operation is allowed.
+func (c *Core) CanIUse(ctx context.Context, gvr *schema.GroupVersionResource, namespace, verb string) bool {
 	accessReviews := c.AuthorizationV1().SelfSubjectAccessReviews()
 	response, err := accessReviews.Create(ctx, &authv1.SelfSubjectAccessReview{
 		Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authv1.ResourceAttributes{
