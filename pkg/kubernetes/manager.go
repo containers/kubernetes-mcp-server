@@ -127,8 +127,8 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		userAgent = ua
 	}
 	derivedCfg := &rest.Config{
-		Host:          m.kubernetes.RESTConfig().Host,
-		APIPath:       m.kubernetes.RESTConfig().APIPath,
+		Host:    m.kubernetes.RESTConfig().Host,
+		APIPath: m.kubernetes.RESTConfig().APIPath,
 		// Copy only server verification TLS settings (CA bundle and server name)
 		TLSClientConfig: rest.TLSClientConfig{
 			Insecure:   m.kubernetes.RESTConfig().Insecure,
