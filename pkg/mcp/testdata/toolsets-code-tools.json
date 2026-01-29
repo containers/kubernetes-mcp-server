@@ -1,0 +1,27 @@
+[
+  {
+    "annotations": {
+      "title": "Code: Evaluate Script",
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "description": "Execute a JavaScript script with access to Kubernetes clients. Use this tool for complex operations that require multiple API calls, data transformation, filtering, or aggregation that would be inefficient with individual tool calls. The script runs in a sandboxed environment with access only to Kubernetes clients - no file system or network access.\n\n\n## JavaScript SDK\n\n**Note:** Full ES5.1 syntax support, partial ES6. Synchronous execution only (no async/await or Promises).\n\n### Globals\n- **k8s** - Kubernetes client (case-insensitive: coreV1, CoreV1, COREV1 all work)\n- **ctx** - Request context for cancellation\n- **namespace** - Default namespace\n\n### k8s API Clients\n- k8s.coreV1() - pods, services, configMaps, secrets, namespaces, nodes, etc.\n- k8s.appsV1() - deployments, statefulSets, daemonSets, replicaSets\n- k8s.batchV1() - jobs, cronJobs\n- k8s.networkingV1() - ingresses, networkPolicies\n- k8s.rbacV1() - roles, roleBindings, clusterRoles, clusterRoleBindings\n- k8s.metricsV1beta1Client() - pod and node metrics (CPU/memory usage)\n- k8s.dynamicClient() - any resource by GVR\n- k8s.discoveryClient() - API discovery\n\n### Examples\n\n#### Combine multiple API calls with JavaScript\n```javascript\n// Get all deployments and their pod counts across namespaces\nconst deps = k8s.appsV1().deployments(\"\").list(ctx, {});\nconst result = deps.items.flatMap(d =\u003e {\n  const pods = k8s.coreV1().pods(d.metadata.namespace).list(ctx, {\n    labelSelector: Object.entries(d.spec.selector.matchLabels || {})\n      .map(([k,v]) =\u003e k+\"=\"+v).join(\",\")\n  });\n  return [{\n    deployment: d.metadata.name,\n    namespace: d.metadata.namespace,\n    replicas: d.status.readyReplicas + \"/\" + d.status.replicas,\n    pods: pods.items.map(p =\u003e p.metadata.name)\n  }];\n});\nJSON.stringify(result);\n```\n\n#### Filter and aggregate\n```javascript\nconst pods = k8s.coreV1().pods(\"\").list(ctx, {});\nconst unhealthy = pods.items.filter(p =\u003e\n  p.status.containerStatuses?.some(c =\u003e c.restartCount \u003e 5)\n).map(p =\u003e ({\n  name: p.metadata.name,\n  ns: p.metadata.namespace,\n  restarts: p.status.containerStatuses.reduce((s,c) =\u003e s + c.restartCount, 0)\n}));\nJSON.stringify(unhealthy);\n```\n\n#### Create resources (using standard Kubernetes YAML/JSON structure)\n```javascript\nconst pod = {\n  apiVersion: \"v1\", kind: \"Pod\",\n  metadata: { name: \"my-pod\", namespace: namespace },\n  spec: { containers: [{ name: \"nginx\", image: \"nginx:latest\" }] }\n};\nk8s.coreV1().pods(namespace).create(ctx, pod, {}).metadata.name;\n```\n\n#### API introspection\n```javascript\n// Discover available resources on coreV1\nconst resources = []; for (const k in k8s.coreV1()) if (typeof k8s.coreV1()[k]==='function') resources.push(k);\n// resources: [\"configMaps\",\"namespaces\",\"pods\",\"secrets\",\"services\",...]\n\n// Discover available operations on pods\nconst ops = []; for (const k in k8s.coreV1().pods(namespace)) if (typeof k8s.coreV1().pods(namespace)[k]==='function') ops.push(k);\n// ops: [\"create\",\"delete\",\"get\",\"list\",\"update\",\"watch\",...]\n```\n\n#### Get pod metrics with resource quantities\n```javascript\nconst metrics = k8s.metricsV1beta1Client();\nconst podMetrics = metrics.podMetricses(\"\").list(ctx, {});\nconst result = podMetrics.items.map(function(pm) {\n  return {\n    name: pm.metadata.name,\n    cpu: pm.containers[0].usage.cpu,    // \"100m\"\n    memory: pm.containers[0].usage.memory // \"128Mi\"\n  };\n});\nJSON.stringify(result);\n```\n\n#### Get pod logs\n```javascript\nconst logBytes = k8s.coreV1().pods(namespace).getLogs(\"my-pod\", {container: \"main\", tailLines: 100}).doRaw(ctx);\nvar logs = \"\"; for (var i = 0; i \u003c logBytes.length; i++) logs += String.fromCharCode(logBytes[i]);\nlogs;\n```\n\n### Return Value\nLast expression is returned. Use JSON.stringify() for objects.\n",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "script": {
+          "description": "JavaScript code to execute. The last expression is returned as the result.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Execution timeout in milliseconds (default: 30000, max: 300000)",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "script"
+      ]
+    },
+    "name": "evaluate_script"
+  }
+]
