@@ -1,0 +1,105 @@
+kind: Task
+metadata:
+  name: "troubleshoot-vm"
+  difficulty: medium
+  description: "Use the vm-troubleshoot prompt to diagnose VirtualMachine issues"
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a VM with a non-existent container disk image to simulate a failure
+      cat <<EOF | kubectl apply -f -
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: broken-vm
+        namespace: $NS
+        labels:
+          app: broken-vm
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            terminationGracePeriodSeconds: 0
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/nonexistent/broken-image:v99.99.99
+      EOF
+
+      # Wait for VM to be created (but it won't become Ready due to image pull failure)
+      kubectl wait --for=create vm/broken-vm -n "$NS" --timeout=10s
+      echo "VM created with broken container disk image - waiting for failure state"
+      
+      # Give some time for the virt-launcher pod to attempt image pull and fail
+      sleep 10
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      echo "=== Verification: Checking if agent used vm-troubleshoot prompt ==="
+      
+      # Verify that the VM still exists (agent shouldn't delete it during troubleshooting)
+      if ! kubectl get virtualmachine broken-vm -n "$NS" > /dev/null 2>&1; then
+          echo "✗ VirtualMachine broken-vm no longer exists"
+          exit 1
+      fi
+      echo "✓ VirtualMachine broken-vm exists"
+
+      # The agent should have gathered information about the VM's state
+      # Check that the VM is in a failed/not-ready state (confirming the issue exists)
+      VM_READY=$(kubectl get virtualmachine broken-vm -n "$NS" -o jsonpath='{.status.ready}')
+      if [[ "$VM_READY" == "true" ]]; then
+          echo "⚠ VM is unexpectedly ready - the test scenario may not have worked correctly"
+      else
+          echo "✓ VM is not ready (as expected for troubleshooting scenario)"
+      fi
+
+      # Check if virt-launcher pod shows ImagePullBackOff or ErrImagePull
+      LAUNCHER_POD=$(kubectl get pods -n "$NS" -l kubevirt.io=virt-launcher,vm.kubevirt.io/name=broken-vm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+      if [[ -n "$LAUNCHER_POD" ]]; then
+          POD_STATUS=$(kubectl get pod "$LAUNCHER_POD" -n "$NS" -o jsonpath='{.status.containerStatuses[*].state.waiting.reason}' 2>/dev/null || true)
+          if [[ "$POD_STATUS" =~ (ImagePullBackOff|ErrImagePull) ]]; then
+              echo "✓ virt-launcher pod has expected image pull error: $POD_STATUS"
+          else
+              echo "⚠ virt-launcher pod status: $POD_STATUS"
+          fi
+      else
+          echo "ℹ No virt-launcher pod found (VM may not have started yet)"
+      fi
+
+      echo ""
+      echo "=== Troubleshooting Eval Complete ==="
+      echo "The agent should have:"
+      echo "  1. Used the vm-troubleshoot prompt with namespace=$NS and name=broken-vm"
+      echo "  2. Followed the troubleshooting steps to gather information"
+      echo "  3. Identified the root cause (container image pull failure)"
+      echo ""
+      
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine broken-vm -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |-
+      There is a VirtualMachine named "broken-vm" in the ${EVAL_NAMESPACE:-vm-test} namespace that is not working correctly.
+      
+      Please use the vm-troubleshoot prompt to diagnose the issue with this VirtualMachine.
+      Follow the troubleshooting guide and report your findings, including the root cause and recommended action.

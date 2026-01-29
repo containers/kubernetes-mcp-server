@@ -665,6 +665,16 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 </details>
 
+<details>
+
+<summary>kubevirt</summary>
+
+- **vm-troubleshoot** - Generate a step-by-step troubleshooting guide for diagnosing VirtualMachine issues
+  - `namespace` (`string`) **(required)** - The namespace of the VirtualMachine to troubleshoot
+  - `name` (`string`) **(required)** - The name of the VirtualMachine to troubleshoot
+
+</details>
+
 
 <!-- AVAILABLE-TOOLSETS-PROMPTS-END -->
 
