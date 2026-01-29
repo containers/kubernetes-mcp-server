@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	vm_create "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/create"
 	vm_lifecycle "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/lifecycle"
+	vm_snapshot "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/snapshot"
 )
 
 type Toolset struct{}
@@ -25,6 +26,7 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		vm_create.Tools(),
 		vm_lifecycle.Tools(),
+		vm_snapshot.Tools(),
 	)
 }
 
