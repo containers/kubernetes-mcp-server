@@ -106,6 +106,33 @@ jobs:
           SUITE="${{ github.event.inputs.suite || 'kubernetes' }}"
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
 
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kiali | all
+            COMMENT_BODY="${{ github.event.comment.body }}"
+            COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
+            read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
+            case "${FIRST_WORD,,}" in
+              kiali|all)
+                SUITE_INPUT="${FIRST_WORD,,}"
+                ;;
+              kubernetes)
+                SUITE_INPUT="kubernetes"
+                ;;
+              *) ;; # default: keep SUITE_INPUT empty → kubernetes
+            esac
+          fi
+
+          # Backward compatible behavior:
+          # - If suite is explicitly provided, it wins.
+          # - Otherwise, if task-filter mentions "kiali", treat this as a kiali run.
+          # - Otherwise default to kubernetes-only.
+          SUITE="kubernetes"
+          if [[ -n "$SUITE_INPUT" ]]; then
+            SUITE="$SUITE_INPUT"
+          elif [[ "$TASK_FILTER" =~ kiali ]]; then
+            SUITE="kiali"
+          fi
+
           # Select label-selector and infrastructure based on suite
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
           case "$SUITE" in
