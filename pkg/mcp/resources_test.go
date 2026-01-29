@@ -653,6 +653,12 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 			s.Contains(logNotification.Data, "Resource not found", "log message should indicate resource not found")
 		})
 	})
+	s.Run("resources_delete with invalid gracePeriodSeconds returns error", func() {
+		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "name": "a-configmap", "gracePeriodSeconds": "-5"})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Equalf("failed to delete resource, invalid argument gracePeriodSeconds", toolResult.Content[0].(mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+	})
 
 	s.Run("resources_delete with valid namespaced resource", func() {
 		resourcesDeleteCm, err := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "name": "a-configmap-to-delete"})
@@ -680,6 +686,14 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 			ns, err := client.CoreV1().Namespaces().Get(s.T().Context(), "ns-to-delete", metav1.GetOptions{})
 			s.Truef(err != nil || (ns != nil && ns.DeletionTimestamp != nil), "Namespace not deleted")
 		})
+	})
+
+	s.Run("resources_delete with valid gracePeriodSeconds", func() {
+		_, _ = client.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "a-configmap-with-grace-period"},
+		}, metav1.CreateOptions{})
+		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "name": "a-configmap-with-grace-period", "gracePeriodSeconds": int64(5)})
+		s.Falsef(toolResult.IsError, "call tool should not fail")
 	})
 }
 
