@@ -1,5 +1,8 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
+    requires: istio
   name: "Get log productpage due 500"
   category: "Troubleshooting & Debugging"
   difficulty: easy

@@ -12,6 +12,15 @@ on:
   # Allow manual workflow dispatch for testing
   workflow_dispatch:
     inputs:
+      suite:
+        description: 'Which task suite to run (kubernetes, kiali, or all)'
+        required: false
+        default: 'kubernetes'
+        type: choice
+        options:
+          - kubernetes
+          - kiali
+          - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
         required: false
@@ -56,6 +65,7 @@ jobs:
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
       kiali-run: ${{ steps.check.outputs.kiali-run }}
+      label-selector: ${{ steps.check.outputs.label-selector }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
       is-pr: ${{ steps.check.outputs.is-pr }}
@@ -90,12 +100,36 @@ jobs:
             echo "pr-sha=${{ github.sha }}" >> $GITHUB_OUTPUT
           fi
 
+          SUITE_INPUT="${{ github.event.inputs.suite || '' }}"
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
-          if [[ "$TASK_FILTER" =~ kiali ]]; then
-            echo "kiali-run=true" >> $GITHUB_OUTPUT
-          else
-            echo "kiali-run=false" >> $GITHUB_OUTPUT
+
+          # Backward compatible behavior:
+          # - If suite is explicitly provided, it wins.
+          # - Otherwise, if task-filter mentions "kiali", treat this as a kiali run.
+          # - Otherwise default to kubernetes-only.
+          SUITE="kubernetes"
+          if [[ -n "$SUITE_INPUT" ]]; then
+            SUITE="$SUITE_INPUT"
+          elif [[ "$TASK_FILTER" =~ kiali ]]; then
+            SUITE="kiali"
           fi
+
+          # Select label-selector and infrastructure based on suite
+          # All suites use the same eval.yaml file; suite controls label-selector + infra.
+          case "$SUITE" in
+            kiali)
+              echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
+              echo "kiali-run=true" >> $GITHUB_OUTPUT
+              ;;
+            all)
+              echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
+              echo "kiali-run=true" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
+              echo "kiali-run=false" >> $GITHUB_OUTPUT
+              ;;
+          esac
 
   # Run gevals evaluation with Kind cluster
   run-evaluation:
@@ -131,10 +165,12 @@ jobs:
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
+        # TODO: Update to the next version to support label filtering
         uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.3
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
-          mcpchecker-version: 'latest'
+          gevals-version: 'latest'
+          label-selector: ${{ needs.check-trigger.outputs.label-selector }}
           task-filter: ${{ github.event.inputs.task-filter || '' }}
           output-format: 'json'
           verbose: ${{ github.event.inputs.verbose || 'false' }}

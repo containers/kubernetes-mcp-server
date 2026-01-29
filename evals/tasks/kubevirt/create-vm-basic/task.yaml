@@ -1,5 +1,8 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
   name: "create-basic-vm"
   difficulty: easy
 steps:
