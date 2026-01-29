@@ -129,96 +129,124 @@ func (s *Server) reloadToolsets() error {
 		return err
 	}
 
+	// Collect applicable items
+	applicableTools := s.collectApplicableTools(targets)
+	applicablePrompts := s.collectApplicablePrompts()
+
+	// Reload tools
+	s.enabledTools, err = reloadItems(
+		s.enabledTools,
+		applicableTools,
+		func(t api.ServerTool) string { return t.Tool.Name },
+		s.server.RemoveTools,
+		s.registerTool,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Reload prompts
+	s.enabledPrompts, err = reloadItems(
+		s.enabledPrompts,
+		applicablePrompts,
+		func(p api.ServerPrompt) string { return p.Prompt.Name },
+		s.server.RemovePrompts,
+		s.registerPrompt,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Start new watch
+	s.p.WatchTargets(s.reloadToolsets)
+	return nil
+}
+
+// reloadItems handles the common pattern of reloading MCP server items.
+// It removes items that are no longer applicable, registers new items,
+// and returns the updated list of enabled item names.
+func reloadItems[T any](
+	previous []string,
+	items []T,
+	getName func(T) string,
+	remove func(...string),
+	register func(T) error,
+) ([]string, error) {
+	// Build new enabled list
+	enabled := make([]string, 0, len(items))
+	for _, item := range items {
+		enabled = append(enabled, getName(item))
+	}
+
+	// Remove items that are no longer applicable
+	toRemove := make([]string, 0)
+	for _, old := range previous {
+		if !slices.Contains(enabled, old) {
+			toRemove = append(toRemove, old)
+		}
+	}
+	remove(toRemove...)
+
+	// Register all items
+	for _, item := range items {
+		if err := register(item); err != nil {
+			return nil, err
+		}
+	}
+
+	return enabled, nil
+}
+
+// collectApplicableTools returns tools after applying filtering and mutation
+func (s *Server) collectApplicableTools(targets []string) []api.ServerTool {
 	filter := CompositeFilter(
 		s.configuration.isToolApplicable,
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), targets),
 	)
-
 	mutator := ComposeMutators(
 		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), targets),
 		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), targets),
 	)
 
-	// TODO: No option to perform a full replacement of tools.
-	// s.server.SetTools(m3labsServerTools...)
-
-	// Track previously enabled tools
-	previousTools := s.enabledTools
-
-	// Build new list of applicable tools
-	applicableTools := make([]api.ServerTool, 0)
-	s.enabledTools = make([]string, 0)
+	tools := make([]api.ServerTool, 0)
 	for _, toolset := range s.configuration.Toolsets() {
 		for _, tool := range toolset.GetTools(s.p) {
-			tool := mutator(tool)
-			if !filter(tool) {
-				continue
+			tool = mutator(tool)
+			if filter(tool) {
+				tools = append(tools, tool)
 			}
-
-			applicableTools = append(applicableTools, tool)
-			s.enabledTools = append(s.enabledTools, tool.Tool.Name)
 		}
 	}
+	return tools
+}
 
-	// TODO: No option to perform a full replacement of tools.
-	// Remove tools that are no longer applicable
-	toolsToRemove := make([]string, 0)
-	for _, oldTool := range previousTools {
-		if !slices.Contains(s.enabledTools, oldTool) {
-			toolsToRemove = append(toolsToRemove, oldTool)
-		}
-	}
-	s.server.RemoveTools(toolsToRemove...)
-
-	for _, tool := range applicableTools {
-		goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
-		if err != nil {
-			return fmt.Errorf("failed to convert tool %s: %w", tool.Tool.Name, err)
-		}
-		s.server.AddTool(goSdkTool, goSdkToolHandler)
-	}
-
-	// Track previously enabled prompts
-	previousPrompts := s.enabledPrompts
-
-	// Build and register prompts from all toolsets
+// collectApplicablePrompts returns prompts after merging toolset and config prompts
+func (s *Server) collectApplicablePrompts() []api.ServerPrompt {
 	toolsetPrompts := make([]api.ServerPrompt, 0)
-	// Load embedded toolset prompts
 	for _, toolset := range s.configuration.Toolsets() {
 		toolsetPrompts = append(toolsetPrompts, toolset.GetPrompts()...)
 	}
-
 	configPrompts := prompts.ToServerPrompts(s.configuration.Prompts)
+	return prompts.MergePrompts(toolsetPrompts, configPrompts)
+}
 
-	// Merge: config prompts override embedded prompts with same name
-	applicablePrompts := prompts.MergePrompts(toolsetPrompts, configPrompts)
-
-	// Update enabled prompts list
-	s.enabledPrompts = make([]string, 0)
-	for _, prompt := range applicablePrompts {
-		s.enabledPrompts = append(s.enabledPrompts, prompt.Prompt.Name)
+// registerTool converts and registers a tool with the MCP server
+func (s *Server) registerTool(tool api.ServerTool) error {
+	goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
+	if err != nil {
+		return fmt.Errorf("failed to convert tool %s: %w", tool.Tool.Name, err)
 	}
+	s.server.AddTool(goSdkTool, goSdkToolHandler)
+	return nil
+}
 
-	// Remove prompts that are no longer applicable
-	promptsToRemove := make([]string, 0)
-	for _, oldPrompt := range previousPrompts {
-		if !slices.Contains(s.enabledPrompts, oldPrompt) {
-			promptsToRemove = append(promptsToRemove, oldPrompt)
-		}
+// registerPrompt converts and registers a prompt with the MCP server
+func (s *Server) registerPrompt(prompt api.ServerPrompt) error {
+	mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
+	if err != nil {
+		return fmt.Errorf("failed to convert prompt %s: %w", prompt.Prompt.Name, err)
 	}
-	s.server.RemovePrompts(promptsToRemove...)
-
-	// Register all applicable prompts
-	for _, prompt := range applicablePrompts {
-		mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
-		if err != nil {
-			return fmt.Errorf("failed to convert prompt %s: %w", prompt.Prompt.Name, err)
-		}
-		s.server.AddPrompt(mcpPrompt, promptHandler)
-	}
-
-	// start new watch
-	s.p.WatchTargets(s.reloadToolsets)
+	s.server.AddPrompt(mcpPrompt, promptHandler)
 	return nil
 }
 
