@@ -2,9 +2,10 @@ package output
 
 import (
 	"encoding/json"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"regexp"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func TestPlainTextUnstructuredList(t *testing.T) {
