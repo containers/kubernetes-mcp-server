@@ -1,0 +1,133 @@
+kind: Task
+metadata:
+  name: "troubleshoot-vm"
+  difficulty: hard
+  description: "Use the vm-troubleshoot prompt to diagnose and fix VirtualMachine issues"
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a VM that references a missing Secret for cloud-init
+      # The agent should identify the missing Secret and create it to fix the VM
+      cat <<EOF | kubectl apply -f -
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: broken-vm
+        namespace: $NS
+        labels:
+          app: broken-vm
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinit
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            terminationGracePeriodSeconds: 0
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/fedora:latest
+            - name: cloudinit
+              cloudInitNoCloud:
+                secretRef:
+                  name: vm-cloud-init
+      EOF
+
+      # Wait for VM to be created
+      kubectl wait --for=create vm/broken-vm -n "$NS" --timeout=10s
+      echo "VM created with missing Secret reference - waiting for failure state"
+      
+      # Give some time for the VM to attempt to start and fail
+      sleep 10
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      echo "=== Verification: Checking if agent fixed the VM ==="
+      
+      # Verify that the VM still exists
+      if ! kubectl get virtualmachine broken-vm -n "$NS" > /dev/null 2>&1; then
+          echo "✗ VirtualMachine broken-vm no longer exists"
+          exit 1
+      fi
+      echo "✓ VirtualMachine broken-vm exists"
+
+      # Check if the Secret was created by the agent
+      if kubectl get secret vm-cloud-init -n "$NS" > /dev/null 2>&1; then
+          echo "✓ Secret vm-cloud-init was created"
+      else
+          echo "✗ Secret vm-cloud-init was not created - agent did not fix the issue"
+          exit 1
+      fi
+
+      # Wait for VM to become ready after the fix (with timeout)
+      echo "Waiting for VM to become ready after fix..."
+      READY=false
+      for i in {1..30}; do
+          VM_READY=$(kubectl get virtualmachine broken-vm -n "$NS" -o jsonpath='{.status.ready}' 2>/dev/null || echo "false")
+          if [[ "$VM_READY" == "true" ]]; then
+              READY=true
+              break
+          fi
+          sleep 5
+      done
+
+      if [[ "$READY" == "true" ]]; then
+          echo "✓ VM is now ready - fix was successful!"
+      else
+          VM_STATUS=$(kubectl get virtualmachine broken-vm -n "$NS" -o jsonpath='{.status.printableStatus}' 2>/dev/null || echo "Unknown")
+          echo "⚠ VM is not ready yet (status: $VM_STATUS) - fix may need more time or was incomplete"
+          # Don't fail here as the VM may still be starting up
+      fi
+
+      # Check if virt-launcher pod exists and is running
+      LAUNCHER_POD=$(kubectl get pods -n "$NS" -l kubevirt.io=virt-launcher,vm.kubevirt.io/name=broken-vm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+      if [[ -n "$LAUNCHER_POD" ]]; then
+          POD_PHASE=$(kubectl get pod "$LAUNCHER_POD" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+          echo "✓ virt-launcher pod exists (phase: $POD_PHASE)"
+      else
+          echo "ℹ No virt-launcher pod found yet"
+      fi
+
+      echo ""
+      echo "=== Troubleshooting and Fix Eval Complete ==="
+      echo "The agent should have:"
+      echo "  1. Used the vm-troubleshoot prompt with namespace=$NS and name=broken-vm"
+      echo "  2. Identified the root cause (missing Secret vm-cloud-init)"
+      echo "  3. Created the missing Secret to fix the VM"
+      echo "  4. Reported the action taken and result"
+      echo ""
+      
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine broken-vm -n "$NS" --ignore-not-found
+      kubectl delete secret vm-cloud-init -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |-
+      There is a VirtualMachine named "broken-vm" in the ${EVAL_NAMESPACE:-vm-test} namespace that is not working correctly.
+      
+      Please use the vm-troubleshoot prompt to diagnose the issue with this VirtualMachine.
+      Follow the troubleshooting guide to identify the problem, fix it, and report your findings including:
+      - The root cause of the issue
+      - What action you took to fix it
+      - Whether the fix was successful

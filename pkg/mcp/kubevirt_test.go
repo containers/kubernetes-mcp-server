@@ -668,6 +668,64 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 	})
 }
 
+func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
+	s.Run("vm-troubleshoot prompt returns troubleshooting guide", func() {
+		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
+			Params: mcp.GetPromptParams{
+				Name: "vm-troubleshoot",
+				Arguments: map[string]string{
+					"namespace": "default",
+					"name":      "test-vm",
+				},
+			},
+		})
+
+		s.Run("no error", func() {
+			s.NoError(err, "GetPrompt failed")
+			s.NotNil(result)
+		})
+
+		s.Run("returns troubleshooting guide with correct VM details", func() {
+			s.Require().NotNil(result)
+			s.Require().Len(result.Messages, 2, "Expected 2 messages")
+
+			textContent, ok := result.Messages[0].Content.(mcp.TextContent)
+			s.Require().True(ok, "expected TextContent")
+			s.Contains(textContent.Text, "# VirtualMachine Troubleshooting Guide")
+			s.Contains(textContent.Text, "test-vm")
+			s.Contains(textContent.Text, "default")
+		})
+	})
+
+	s.Run("vm-troubleshoot prompt returns error for missing namespace", func() {
+		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
+			Params: mcp.GetPromptParams{
+				Name: "vm-troubleshoot",
+				Arguments: map[string]string{
+					"name": "test-vm",
+				},
+			},
+		})
+		s.Error(err, "expected error for missing namespace")
+		s.Nil(result)
+		s.Contains(err.Error(), "namespace")
+	})
+
+	s.Run("vm-troubleshoot prompt returns error for missing name", func() {
+		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
+			Params: mcp.GetPromptParams{
+				Name: "vm-troubleshoot",
+				Arguments: map[string]string{
+					"namespace": "default",
+				},
+			},
+		})
+		s.Error(err, "expected error for missing name")
+		s.Nil(result)
+		s.Contains(err.Error(), "name")
+	})
+}
+
 func TestKubevirt(t *testing.T) {
 	suite.Run(t, new(KubevirtSuite))
 }

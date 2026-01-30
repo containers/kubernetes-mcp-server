@@ -37,6 +37,12 @@ KubeVirt-focused MCP tasks live here. Each folder under this directory represent
 - **[hard] update-vm-resources** - Update VM CPU and memory resources
   - **Prompt:** *A VirtualMachine named test-vm-update exists in the vm-test namespace. It currently has 1 vCPU and 2Gi of memory. Please update the VirtualMachine to add an additional vCPU (making it 2 vCPUs total) and increase the memory to at least 3Gi.*
 
+### VM Troubleshooting
+
+- **[hard] troubleshoot-vm** - Use the vm-troubleshoot prompt to diagnose VirtualMachine issues
+  - **Prompt:** *There is a VirtualMachine named "broken-vm" in the vm-test namespace that is not working correctly. Please use the vm-troubleshoot prompt to diagnose the issue with this VirtualMachine. Follow the troubleshooting guide and report your findings, including the root cause and recommended action.*
+  - **Tests:** Agent's ability to use MCP prompts for guided troubleshooting workflows
+
 ## Helper Scripts
 
 Many tasks rely on helper scripts located in `evals/tasks/kubevirt/helpers/`:
