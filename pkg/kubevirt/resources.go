@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -63,12 +62,6 @@ func SearchDataSources(ctx context.Context, dynamicClient dynamic.Interface) map
 
 // collectDataSources collects DataSources from well-known namespaces and all namespaces
 func collectDataSources(ctx context.Context, dynamicClient dynamic.Interface) map[string]DataSourceInfo {
-	gvr := schema.GroupVersionResource{
-		Group:    "cdi.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "datasources",
-	}
-
 	// Try to list DataSources from well-known namespaces first
 	wellKnownNamespaces := []string{
 		"openshift-virtualization-os-images",
@@ -77,7 +70,7 @@ func collectDataSources(ctx context.Context, dynamicClient dynamic.Interface) ma
 
 	var items []unstructured.Unstructured
 	for _, ns := range wellKnownNamespaces {
-		list, err := dynamicClient.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+		list, err := dynamicClient.Resource(DataSourceGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			slog.Debug("failed to list DataSources in well-known namespace", "namespace", ns, "error", err)
 		} else {
@@ -86,7 +79,7 @@ func collectDataSources(ctx context.Context, dynamicClient dynamic.Interface) ma
 	}
 
 	// List DataSources from all namespaces
-	list, err := dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{})
+	list, err := dynamicClient.Resource(DataSourceGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		slog.Debug("failed to list DataSources cluster-wide", "error", err)
 	} else {
@@ -137,14 +130,8 @@ func collectDataSources(ctx context.Context, dynamicClient dynamic.Interface) ma
 // or if API calls fail.
 func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, namespace string) []PreferenceInfo {
 	// Search for cluster-wide VirtualMachineClusterPreferences
-	clusterPreferenceGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachineclusterpreferences",
-	}
-
 	var results []PreferenceInfo
-	clusterList, err := dynamicClient.Resource(clusterPreferenceGVR).List(ctx, metav1.ListOptions{})
+	clusterList, err := dynamicClient.Resource(VirtualMachineClusterPreferenceGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		slog.Debug("failed to list cluster-scoped VirtualMachineClusterPreferences", "error", err)
 	} else {
@@ -157,13 +144,7 @@ func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, nam
 	}
 
 	// Search for namespaced VirtualMachinePreferences
-	namespacedPreferenceGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachinepreferences",
-	}
-
-	namespacedList, err := dynamicClient.Resource(namespacedPreferenceGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	namespacedList, err := dynamicClient.Resource(VirtualMachinePreferenceGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		slog.Debug("failed to list namespaced VirtualMachinePreferences", "namespace", namespace, "error", err)
 	} else {
@@ -194,14 +175,8 @@ func SearchPreferences(ctx context.Context, dynamicClient dynamic.Interface, nam
 // or if API calls fail.
 func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, namespace string) []InstancetypeInfo {
 	// Search for cluster-wide VirtualMachineClusterInstancetypes
-	clusterInstancetypeGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachineclusterinstancetypes",
-	}
-
 	var results []InstancetypeInfo
-	clusterList, err := dynamicClient.Resource(clusterInstancetypeGVR).List(ctx, metav1.ListOptions{})
+	clusterList, err := dynamicClient.Resource(VirtualMachineClusterInstancetypeGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		slog.Debug("failed to list cluster-scoped VirtualMachineClusterInstancetypes", "error", err)
 	} else {
@@ -215,13 +190,7 @@ func SearchInstancetypes(ctx context.Context, dynamicClient dynamic.Interface, n
 	}
 
 	// Search for namespaced VirtualMachineInstancetypes
-	namespacedInstancetypeGVR := schema.GroupVersionResource{
-		Group:    "instancetype.kubevirt.io",
-		Version:  "v1beta1",
-		Resource: "virtualmachineinstancetypes",
-	}
-
-	namespacedList, err := dynamicClient.Resource(namespacedInstancetypeGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	namespacedList, err := dynamicClient.Resource(VirtualMachineInstancetypeGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		slog.Debug("failed to list namespaced VirtualMachineInstancetypes", "namespace", namespace, "error", err)
 	} else {

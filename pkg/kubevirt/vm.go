@@ -6,7 +6,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -16,22 +15,6 @@ type RunStrategy string
 const (
 	RunStrategyAlways RunStrategy = "Always"
 	RunStrategyHalted RunStrategy = "Halted"
-)
-
-var (
-	// VirtualMachineGVK is the GroupVersionKind for VirtualMachine resources
-	VirtualMachineGVK = schema.GroupVersionKind{
-		Group:   "kubevirt.io",
-		Version: "v1",
-		Kind:    "VirtualMachine",
-	}
-
-	// VirtualMachineGVR is the GroupVersionResource for VirtualMachine resources
-	VirtualMachineGVR = schema.GroupVersionResource{
-		Group:    "kubevirt.io",
-		Version:  "v1",
-		Resource: "virtualmachines",
-	}
 )
 
 // GetVirtualMachine retrieves a VirtualMachine by namespace and name
