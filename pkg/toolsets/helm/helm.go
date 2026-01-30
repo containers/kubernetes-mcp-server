@@ -15,7 +15,7 @@ func initHelm() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "helm_install",
-			Description: "Install a Helm chart in the current or provided namespace",
+			Description: "Install (deploy) a Helm chart to create a release in the current or provided namespace",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{

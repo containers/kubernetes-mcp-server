@@ -103,11 +103,21 @@ type ServerInstructionsSuite struct {
 	BaseMcpSuite
 }
 
-func (s *ServerInstructionsSuite) TestServerInstructionsEmpty() {
+func (s *ServerInstructionsSuite) TestServerInstructionsDefault() {
 	s.InitMcpClient()
-	s.Run("returns empty instructions when not configured", func() {
+	s.Run("returns default instructions when not explicitly configured", func() {
 		s.Require().NotNil(s.InitializeResult)
-		s.Empty(s.InitializeResult.Instructions, "instructions should be empty when not configured")
+		s.NotEmpty(s.InitializeResult.Instructions, "instructions should have default value")
+		s.Contains(s.InitializeResult.Instructions, "Kubernetes", "default instructions should mention Kubernetes")
+	})
+}
+
+func (s *ServerInstructionsSuite) TestServerInstructionsEmpty() {
+	s.Cfg.ServerInstructions = ""
+	s.InitMcpClient()
+	s.Run("returns empty instructions when explicitly cleared", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Empty(s.InitializeResult.Instructions, "instructions should be empty when explicitly cleared")
 	})
 }
 

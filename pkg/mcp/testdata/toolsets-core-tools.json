@@ -6,7 +6,7 @@
       "destructiveHint": false,
       "openWorldHint": true
     },
-    "description": "List all the Kubernetes events in the current cluster from all namespaces",
+    "description": "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -143,7 +143,7 @@
       "destructiveHint": true,
       "openWorldHint": true
     },
-    "description": "Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command",
+    "description": "Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command",
     "inputSchema": {
       "type": "object",
       "properties": {

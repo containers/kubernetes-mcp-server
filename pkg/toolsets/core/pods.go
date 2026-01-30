@@ -156,7 +156,7 @@ func initPods() []api.ServerTool {
 		}, Handler: podsTop},
 		{Tool: api.Tool{
 			Name:        "pods_exec",
-			Description: "Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command",
+			Description: "Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{

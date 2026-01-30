@@ -5,7 +5,7 @@
       "destructiveHint": false,
       "openWorldHint": true
     },
-    "description": "Install a Helm chart in the current or provided namespace",
+    "description": "Install (deploy) a Helm chart to create a release in the current or provided namespace",
     "inputSchema": {
       "type": "object",
       "properties": {

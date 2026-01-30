@@ -201,6 +201,39 @@ uvx kubernetes-mcp-server@latest --help
 | `--disable-multi-cluster` | If set, the MCP server will disable multi-cluster support and will only use the current context from the kubeconfig file. This is useful if you want to restrict the MCP server to a single cluster.                                                                                          |
 | `--cluster-provider`.     | Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.                                                                                                                                           |
 
+### Server Instructions (for MCP Tool Search) <a id="server-instructions"></a>
+
+The `server_instructions` configuration option allows you to provide hints to MCP clients about when to use this server's tools. This is particularly useful for clients that support **MCP Tool Search** (like Claude Code), which dynamically loads tools based on relevance to the user's query.
+
+**Default instructions are provided out of the box**, so Tool Search works without any configuration. The section below explains how to customize them if needed.
+
+**How it works:**
+- When an MCP client has many tools available, it may defer loading tool definitions to save context space
+- Server instructions help the client know when to search this server for relevant tools
+- The instructions are matched against user queries to determine tool relevance
+
+**Customizing via TOML file (optional):**
+
+```toml
+server_instructions = """
+Use this server for Kubernetes and OpenShift cluster management tasks including:
+- Pods: list, get details, logs, exec commands, delete
+- Resources: get, list, create, update, delete any Kubernetes resource (deployments, services, configmaps, secrets, etc.)
+- Namespaces and projects: list, create, switch context
+- Nodes: list, view logs, get resource usage statistics
+- Events: view cluster events for debugging
+- Helm: install, upgrade, uninstall, list charts and releases
+- KubeVirt: create and manage virtual machines
+- Cluster config: view and switch kubeconfig contexts
+"""
+```
+
+**Recommended keywords to include:**
+- Resource types: pods, deployments, services, configmaps, secrets, namespaces, nodes
+- Actions: list, get, create, update, delete, logs, exec, scale
+- Tools: Helm, KubeVirt, OpenShift
+- Use cases: debugging, troubleshooting, cluster management
+
 ### Drop-in Configuration <a id="drop-in-configuration"></a>
 
 The Kubernetes MCP server supports flexible configuration through both a main config file and drop-in files. **Both are optional** - you can use either, both, or neither (server will use built-in defaults).
