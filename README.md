@@ -465,7 +465,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>core</summary>
 
-- **events_list** - List all the Kubernetes events in the current cluster from all namespaces
+- **events_list** - List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces
   - `namespace` (`string`) - Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces
 
 - **namespaces_list** - List all the Kubernetes namespaces in the current cluster
@@ -507,7 +507,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) - Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)
   - `namespace` (`string`) - Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)
 
-- **pods_exec** - Execute a command in a Kubernetes Pod in the current or provided namespace with the provided name and command
+- **pods_exec** - Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command
   - `command` (`array`) **(required)** - Command to execute in the Pod container. The first item is the command to be run, and the rest are the arguments to that command. Example: ["ls", "-l", "/tmp"]
   - `container` (`string`) - Name of the Pod container where the command will be executed (Optional)
   - `name` (`string`) **(required)** - Name of the Pod where the command will be executed
@@ -665,7 +665,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>helm</summary>
 
-- **helm_install** - Install a Helm chart in the current or provided namespace
+- **helm_install** - Install (deploy) a Helm chart to create a release in the current or provided namespace
   - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
   - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
   - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
