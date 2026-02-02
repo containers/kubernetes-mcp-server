@@ -205,14 +205,12 @@ uvx kubernetes-mcp-server@latest --help
 
 The `server_instructions` configuration option allows you to provide hints to MCP clients about when to use this server's tools. This is particularly useful for clients that support **MCP Tool Search** (like Claude Code), which dynamically loads tools based on relevance to the user's query.
 
-**Default instructions are provided out of the box**, so Tool Search works without any configuration. The section below explains how to customize them if needed.
-
 **How it works:**
 - When an MCP client has many tools available, it may defer loading tool definitions to save context space
 - Server instructions help the client know when to search this server for relevant tools
 - The instructions are matched against user queries to determine tool relevance
 
-**Customizing via TOML file (optional):**
+**Example TOML configuration:**
 
 ```toml
 server_instructions = """
@@ -222,7 +220,7 @@ Use this server for Kubernetes and OpenShift cluster management tasks including:
 - Namespaces and projects: list, create, switch context
 - Nodes: list, view logs, get resource usage statistics
 - Events: view cluster events for debugging
-- Helm: install, upgrade, uninstall, list charts and releases
+- Helm: install (deploy), upgrade, uninstall, list charts and releases
 - KubeVirt: create and manage virtual machines
 - Cluster config: view and switch kubeconfig contexts
 """

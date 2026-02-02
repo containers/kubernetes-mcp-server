@@ -10,14 +10,6 @@ func Default() *StaticConfig {
 	defaultConfig := StaticConfig{
 		ListOutput: "table",
 		Toolsets:   []string{"core", "config", "helm"},
-		ServerInstructions: `Use this server for Kubernetes and OpenShift cluster management tasks including:
-- Pods: list, get details, logs, exec commands, delete
-- Resources: get, list, create, update, delete any Kubernetes resource (deployments, services, configmaps, secrets, etc.)
-- Namespaces and projects: list, create, switch context
-- Nodes: list, view logs, get resource usage statistics
-- Events: view cluster events for debugging and troubleshooting
-- Helm: install, upgrade, uninstall, list charts and releases
-- Cluster config: view and switch kubeconfig contexts`,
 	}
 	overrides := defaultOverrides()
 	mergedConfig := mergeConfig(defaultConfig, overrides)

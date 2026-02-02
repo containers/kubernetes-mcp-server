@@ -96,13 +96,9 @@ Common command-line flags you can add to the `args` array:
 
 ## MCP Tool Search
 
-Claude Code supports **MCP Tool Search**, a feature that dynamically loads tools based on relevance to your query. This helps when you have many MCP servers connected.
+Claude Code supports [**MCP Tool Search**](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool), a feature that dynamically loads tools based on relevance to your query. This helps when you have many MCP servers connected.
 
-**This server includes default server instructions, so Tool Search works out of the box with no additional configuration.**
-
-### Customizing Server Instructions (Optional)
-
-If you want to customize the server instructions for your specific use case, you can override the defaults via a TOML config file. See the [Server Instructions](../README.md#server-instructions) section in the main README for details.
+You can configure `server_instructions` to help Claude know when to use this server's tools. See the [Server Instructions](../README.md#server-instructions) section in the main README for details.
 
 ## Next Steps
 
