@@ -1,13 +1,28 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   name: "identify-context-for-task"
   difficulty: medium
-steps:
+spec:
+  requires:
+    - extension: kubernetes
+
   setup:
-    file: setup.sh
+    # No setup needed - working with existing kubeconfig
+
   verify:
-    file: verify.sh
+    - kubernetes.getCurrentContext:
+        # This operation returns the current context name
+        # Returns:
+        # - context: name of the current context
+    - kubernetes.listContexts:
+        # Also list all available contexts for comparison
+        # Returns:
+        # - current: name of current context
+        # - count: number of contexts found
+
   cleanup:
-    file: cleanup.sh
+    # No cleanup needed - read-only operation
+
   prompt:
     inline: What is the current Kubernetes context I'm using, and what other contexts are available?

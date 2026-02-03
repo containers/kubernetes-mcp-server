@@ -6,6 +6,9 @@ config:
     type: "file"
     path: agent.yaml
   mcpConfigFile: ../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.3
   llmJudge:
     env:
       baseUrlKey: JUDGE_BASE_URL

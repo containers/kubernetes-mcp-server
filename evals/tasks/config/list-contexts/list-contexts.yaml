@@ -1,13 +1,24 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   name: "list-contexts"
   difficulty: easy
-steps:
+spec:
+  requires:
+    - extension: kubernetes
+
   setup:
-    file: setup.sh
+    # No setup needed - working with existing kubeconfig
+
   verify:
-    file: verify.sh
+    - kubernetes.listContexts:
+        # This operation lists all contexts and returns:
+        # - current: name of current context
+        # - count: number of contexts found
+        # Will fail if no contexts exist
+
   cleanup:
-    file: cleanup.sh
+    # No cleanup needed - read-only operation
+
   prompt:
     inline: Show me all available Kubernetes contexts

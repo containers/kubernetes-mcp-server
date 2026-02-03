@@ -1,13 +1,25 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   name: "view-current-config"
   difficulty: easy
-steps:
-#  setup:
-#    file: setup.sh
+spec:
+  requires:
+    - extension: kubernetes
+
+  setup:
+    # No setup needed - working with existing kubeconfig
+
   verify:
-    file: verify.sh
-#  cleanup:
-#    file: cleanup.sh
+    - kubernetes.viewConfig:
+        minify: true
+        # This operation returns the kubeconfig as YAML
+        # With minify: true, only shows current context and its dependencies
+        # Returns:
+        # - config: the kubeconfig YAML content
+
+  cleanup:
+    # No cleanup needed - read-only operation
+
   prompt:
     inline: Show me my current Kubernetes configuration
