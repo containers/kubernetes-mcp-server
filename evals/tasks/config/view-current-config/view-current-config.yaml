@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: "view-current-config"
+  difficulty: easy
+steps:
+#  setup:
+#    file: setup.sh
+  verify:
+    file: verify.sh
+#  cleanup:
+#    file: cleanup.sh
+  prompt:
+    inline: Show me my current Kubernetes configuration

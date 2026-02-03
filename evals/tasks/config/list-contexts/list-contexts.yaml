@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: "list-contexts"
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: Show me all available Kubernetes contexts
