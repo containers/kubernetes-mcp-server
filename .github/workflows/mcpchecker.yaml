@@ -122,16 +122,7 @@ jobs:
             esac
           fi
 
-          # Backward compatible behavior:
-          # - If suite is explicitly provided, it wins.
-          # - Otherwise, if task-filter mentions "kiali", treat this as a kiali run.
-          # - Otherwise default to kubernetes-only.
-          SUITE="kubernetes"
-          if [[ -n "$SUITE_INPUT" ]]; then
-            SUITE="$SUITE_INPUT"
-          elif [[ "$TASK_FILTER" =~ kiali ]]; then
-            SUITE="kiali"
-          fi
+          SUITE="${SUITE_INPUT:-$SUITE}"
 
           # Select label-selector and infrastructure based on suite
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
