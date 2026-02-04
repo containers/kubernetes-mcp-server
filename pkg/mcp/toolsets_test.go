@@ -40,6 +40,9 @@ func (s *ToolsetsSuite) SetupTest() {
 	s.originalToolsets = toolsets.Toolsets()
 	s.MockServer = test.NewMockServer()
 	s.Cfg = configuration.Default()
+	// Reset to upstream defaults for testing (ignore downstream build-time overrides)
+	s.Cfg.ReadOnly = false
+	s.Cfg.Toolsets = []string{"core", "config", "helm"}
 	s.Cfg.KubeConfig = s.KubeconfigFile(s.T())
 	s.updateJson = os.Getenv(updateJsonEnvVar) != ""
 }
