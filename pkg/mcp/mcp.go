@@ -129,11 +129,14 @@ func (s *Server) reloadToolsets() error {
 		return err
 	}
 
+	// TODO: No option to perform a full replacement of tools.
+	// s.server.SetTools(tools...)
+
 	// Collect applicable items
 	applicableTools := s.collectApplicableTools(targets)
 	applicablePrompts := s.collectApplicablePrompts()
 
-	// Reload tools
+	// Reload tools, and track the newly enabled tools so that we can diff on reload to figure out which to remove (if any)
 	s.enabledTools, err = reloadItems(
 		s.enabledTools,
 		applicableTools,
@@ -145,7 +148,7 @@ func (s *Server) reloadToolsets() error {
 		return err
 	}
 
-	// Reload prompts
+	// Reload prompts, and track the newly enabled prompts so that we can diff on reload to figure out which to remove (if any)
 	s.enabledPrompts, err = reloadItems(
 		s.enabledPrompts,
 		applicablePrompts,
