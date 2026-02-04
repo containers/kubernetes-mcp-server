@@ -17,6 +17,11 @@ spec:
         # - count: number of contexts found
         # Will fail if no contexts exist
 
+    - llmJudge:
+        contains: "{steps.kubernetes.listContexts.count} context"
+        # Validates the agent mentioned the actual count from the extension
+        # Template expands to e.g., "1 context" or "3 contexts"
+
   cleanup:
     # No cleanup needed - read-only operation
 

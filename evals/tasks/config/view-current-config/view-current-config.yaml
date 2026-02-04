@@ -11,12 +11,19 @@ spec:
     # No setup needed - working with existing kubeconfig
 
   verify:
+    - kubernetes.getCurrentContext:
+        # Returns: context (current context name)
     - kubernetes.viewConfig:
         minify: true
         # This operation returns the kubeconfig as YAML
         # With minify: true, only shows current context and its dependencies
         # Returns:
         # - config: the kubeconfig YAML content
+
+    - llmJudge:
+        contains: "{steps.kubernetes.getCurrentContext.context}"
+        # Validates the agent mentioned the current context name from the config
+        # This proves they actually read/showed the configuration
 
   cleanup:
     # No cleanup needed - read-only operation

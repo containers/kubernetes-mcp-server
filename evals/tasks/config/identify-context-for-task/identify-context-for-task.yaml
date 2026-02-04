@@ -21,6 +21,11 @@ spec:
         # - current: name of current context
         # - count: number of contexts found
 
+    - llmJudge:
+        contains: "{steps.kubernetes.getCurrentContext.context}"
+        # Validates the agent mentioned the actual current context name
+        # Template expands to e.g., "kind-kind" or "minikube"
+
   cleanup:
     # No cleanup needed - read-only operation
 
