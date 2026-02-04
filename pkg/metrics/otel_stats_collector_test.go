@@ -142,10 +142,10 @@ func (s *OtelStatsCollectorSuite) TestToolDurationHistogram() {
 		var foundHistogram bool
 		for _, scopeMetrics := range rm.ScopeMetrics {
 			for _, m := range scopeMetrics.Metrics {
-				if m.Name == "mcp.tool.duration" {
+				if m.Name == "k8s_mcp.tool.duration" {
 					foundHistogram = true
 					histogram, ok := m.Data.(metricdata.Histogram[float64])
-					s.True(ok, "mcp.tool.duration should be a float64 histogram")
+					s.True(ok, "k8s_mcp.tool.duration should be a float64 histogram")
 					s.Len(histogram.DataPoints, 2, "Should have 2 data points (one per tool)")
 
 					// Verify data points have recorded values
@@ -156,7 +156,7 @@ func (s *OtelStatsCollectorSuite) TestToolDurationHistogram() {
 				}
 			}
 		}
-		s.True(foundHistogram, "mcp.tool.duration histogram should exist")
+		s.True(foundHistogram, "k8s_mcp.tool.duration histogram should exist")
 	})
 }
 
@@ -180,10 +180,10 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 		var foundGauge bool
 		for _, scopeMetrics := range rm.ScopeMetrics {
 			for _, m := range scopeMetrics.Metrics {
-				if m.Name == "mcp.server.info" {
+				if m.Name == "k8s_mcp.server.info" {
 					foundGauge = true
 					gauge, ok := m.Data.(metricdata.Gauge[int64])
-					s.True(ok, "mcp.server.info should be an int64 gauge")
+					s.True(ok, "k8s_mcp.server.info should be an int64 gauge")
 					s.Len(gauge.DataPoints, 1, "Should have 1 data point")
 
 					if len(gauge.DataPoints) > 0 {
@@ -203,7 +203,7 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 				}
 			}
 		}
-		s.True(foundGauge, "mcp.server.info gauge should exist")
+		s.True(foundGauge, "k8s_mcp.server.info gauge should exist")
 	})
 }
 
@@ -245,10 +245,10 @@ func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
 		s.Equal(http.StatusOK, rec.Code, "Should return 200 OK")
 
 		body := rec.Body.String()
-		s.Contains(body, "mcp_tool_calls", "Should contain mcp_tool_calls metric")
-		s.Contains(body, "mcp_tool_duration", "Should contain mcp_tool_duration metric")
-		s.Contains(body, "http_server_requests", "Should contain http_server_requests metric")
-		s.Contains(body, "mcp_server_info", "Should contain mcp_server_info metric")
+		s.Contains(body, "k8s_mcp_tool_calls", "Should contain k8s_mcp_tool_calls metric")
+		s.Contains(body, "k8s_mcp_tool_duration", "Should contain k8s_mcp_tool_duration metric")
+		s.Contains(body, "k8s_mcp_http_requests", "Should contain k8s_mcp_http_requests metric")
+		s.Contains(body, "k8s_mcp_server_info", "Should contain k8s_mcp_server_info metric")
 	})
 }
 

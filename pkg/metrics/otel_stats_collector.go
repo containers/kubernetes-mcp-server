@@ -197,9 +197,10 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 
 	meter := provider.Meter(cfg.MeterName)
 
-	// Create metric instruments following OTel semantic conventions
+	// Create metric instruments with k8s_mcp prefix for clear identification
+	// in multi-MCP-server environments.
 	toolCallCounter, err := meter.Int64Counter(
-		"mcp.tool.calls",
+		"k8s_mcp.tool.calls",
 		metric.WithDescription("Total number of MCP tool calls"),
 	)
 	if err != nil {
@@ -207,7 +208,7 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 	}
 
 	toolCallErrorCounter, err := meter.Int64Counter(
-		"mcp.tool.errors",
+		"k8s_mcp.tool.errors",
 		metric.WithDescription("Total number of MCP tool call errors"),
 	)
 	if err != nil {
@@ -215,7 +216,7 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 	}
 
 	toolDurationHistogram, err := meter.Float64Histogram(
-		"mcp.tool.duration",
+		"k8s_mcp.tool.duration",
 		metric.WithDescription("Duration of MCP tool calls in seconds"),
 		metric.WithUnit("s"),
 	)
@@ -224,16 +225,16 @@ func NewOtelStatsCollectorWithConfig(cfg CollectorConfig) (*OtelStatsCollector, 
 	}
 
 	httpRequestCounter, err := meter.Int64Counter(
-		"http.server.requests",
-		metric.WithDescription("Total number of HTTP requests"),
+		"k8s_mcp.http.requests",
+		metric.WithDescription("Total number of HTTP requests to the MCP server"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request counter: %w", err)
 	}
 
 	serverInfoGauge, err := meter.Int64Gauge(
-		"mcp.server.info",
-		metric.WithDescription("MCP server version information"),
+		"k8s_mcp.server.info",
+		metric.WithDescription("Kubernetes MCP server version information"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server info gauge: %w", err)
@@ -354,7 +355,7 @@ func (c *OtelStatsCollector) GetStats() *Statistics {
 // processMetric extracts data from a single metric and updates the statistics.
 func (c *OtelStatsCollector) processMetric(m metricdata.Metrics, stats *Statistics) {
 	switch m.Name {
-	case "mcp.tool.calls":
+	case "k8s_mcp.tool.calls":
 		if sum, ok := m.Data.(metricdata.Sum[int64]); ok {
 			for _, dp := range sum.DataPoints {
 				value := dp.Value
@@ -368,7 +369,7 @@ func (c *OtelStatsCollector) processMetric(m metricdata.Metrics, stats *Statisti
 			}
 		}
 
-	case "mcp.tool.errors":
+	case "k8s_mcp.tool.errors":
 		if sum, ok := m.Data.(metricdata.Sum[int64]); ok {
 			for _, dp := range sum.DataPoints {
 				value := dp.Value
@@ -382,7 +383,7 @@ func (c *OtelStatsCollector) processMetric(m metricdata.Metrics, stats *Statisti
 			}
 		}
 
-	case "http.server.requests":
+	case "k8s_mcp.http.requests":
 		if sum, ok := m.Data.(metricdata.Sum[int64]); ok {
 			for _, dp := range sum.DataPoints {
 				value := dp.Value
