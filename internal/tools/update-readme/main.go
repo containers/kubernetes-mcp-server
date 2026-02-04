@@ -106,6 +106,34 @@ func main() {
 		toolsetTools.String(),
 	)
 
+	// Available Toolset Prompts
+	toolsetPrompts := strings.Builder{}
+	for _, toolset := range toolsetsList {
+		prompts := toolset.GetPrompts()
+		if len(prompts) == 0 {
+			continue
+		}
+		toolsetPrompts.WriteString("<details>\n\n<summary>" + toolset.GetName() + "</summary>\n\n")
+		for _, prompt := range prompts {
+			toolsetPrompts.WriteString(fmt.Sprintf("- **%s** - %s\n", prompt.Prompt.Name, prompt.Prompt.Description))
+			for _, arg := range prompt.Prompt.Arguments {
+				toolsetPrompts.WriteString(fmt.Sprintf("  - `%s` (`string`)", arg.Name))
+				if arg.Required {
+					toolsetPrompts.WriteString(" **(required)**")
+				}
+				toolsetPrompts.WriteString(fmt.Sprintf(" - %s\n", arg.Description))
+			}
+			toolsetPrompts.WriteString("\n")
+		}
+		toolsetPrompts.WriteString("</details>\n\n")
+	}
+	updated = replaceBetweenMarkers(
+		updated,
+		"<!-- AVAILABLE-TOOLSETS-PROMPTS-START -->",
+		"<!-- AVAILABLE-TOOLSETS-PROMPTS-END -->",
+		toolsetPrompts.String(),
+	)
+
 	if err := os.WriteFile(localReadmePath, []byte(updated), 0o644); err != nil {
 		panic(err)
 	}

@@ -187,7 +187,7 @@ jobs:
         uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.5
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
-          gevals-version: 'latest'
+          mcpchecker-version: 'latest'
           label-selector: ${{ needs.check-trigger.outputs.label-selector }}
           task-filter: ${{ github.event.inputs.task-filter || '' }}
           output-format: 'json'

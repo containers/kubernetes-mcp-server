@@ -53,7 +53,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           jq --arg v "$VERSION" \
-            '.version = $v | .packages[].version = $v | .packages[] |= if .registryType == "oci" then .identifier = (.identifier | sub(":[^:]+$"; ":" + $v)) else . end' \
+            '.version = $v | .packages[] |= if .registryType == "oci" then .identifier = (.identifier | sub(":[^:]+$"; ":" + $v)) else .version = $v end' \
             server.json > server.json.tmp && mv server.json.tmp server.json
           echo "Updated server.json:"
           cat server.json
