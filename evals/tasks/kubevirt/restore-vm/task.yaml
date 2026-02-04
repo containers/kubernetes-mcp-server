@@ -1,0 +1,102 @@
+kind: Task
+metadata:
+  name: "restore-vm"
+  difficulty: medium
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      # Enable Snapshot feature gate in KubeVirt CR
+      echo "Enabling Snapshot feature gate in KubeVirt CR..."
+      KUBEVIRT_CR=$(kubectl get kubevirt -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+      KUBEVIRT_NS=$(kubectl get kubevirt -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
+      kubectl patch kubevirt "$KUBEVIRT_CR" -n "$KUBEVIRT_NS" --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"]}}}}'
+
+      # Clean up any previous test resources
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a minimal VM
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: restore-test-vm
+        namespace: $NS
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices: {}
+              memory:
+                guest: 512Mi
+              resources: {}
+            terminationGracePeriodSeconds: 180
+      EOF
+
+      # Wait for VM to be created
+      kubectl wait --for=create vm/restore-test-vm -n "${NS}" --timeout 30s
+
+      # Create a snapshot
+      kubectl apply -f - <<EOF
+      apiVersion: snapshot.kubevirt.io/v1beta1
+      kind: VirtualMachineSnapshot
+      metadata:
+        name: restore-snapshot
+        namespace: $NS
+      spec:
+        source:
+          apiGroup: kubevirt.io
+          kind: VirtualMachine
+          name: restore-test-vm
+      EOF
+
+      # Wait for snapshot to be created
+      kubectl wait --for=create virtualmachinesnapshot/restore-snapshot -n "${NS}" --timeout 30s
+
+      echo "VM and snapshot ready for restore test"
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      RESTORE_NAME="test-restore"
+
+      # Verify restore was created
+      if ! kubectl get virtualmachinerestore "$RESTORE_NAME" -n "$NS" &>/dev/null; then
+        echo "ERROR: VirtualMachineRestore '$RESTORE_NAME' not found"
+        exit 1
+      fi
+
+      # Verify restore target VM
+      TARGET_NAME=$(kubectl get virtualmachinerestore "$RESTORE_NAME" -n "$NS" -o jsonpath='{.spec.target.name}')
+      if [ "$TARGET_NAME" != "restored-vm" ]; then
+        echo "ERROR: Restore target is '$TARGET_NAME', expected 'restored-vm'"
+        exit 1
+      fi
+
+      # Verify restore used correct snapshot
+      SNAPSHOT_NAME=$(kubectl get virtualmachinerestore "$RESTORE_NAME" -n "$NS" -o jsonpath='{.spec.virtualMachineSnapshotName}')
+      if [ "$SNAPSHOT_NAME" != "restore-snapshot" ]; then
+        echo "ERROR: Restore snapshot is '$SNAPSHOT_NAME', expected 'restore-snapshot'"
+        exit 1
+      fi
+
+      echo "All restore validations passed"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachinerestore test-restore -n "$NS" --ignore-not-found
+      kubectl delete virtualmachinesnapshot restore-snapshot -n "$NS" --ignore-not-found
+      kubectl delete virtualmachine restore-test-vm -n "$NS" --ignore-not-found
+      kubectl delete virtualmachine restored-vm -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      Restore the snapshot named restore-snapshot in the ${EVAL_NAMESPACE:-vm-test} namespace to a new virtual machine named restored-vm. Use the restore name test-restore.

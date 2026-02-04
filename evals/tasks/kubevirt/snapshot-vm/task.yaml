@@ -1,0 +1,76 @@
+kind: Task
+metadata:
+  name: "snapshot-vm"
+  difficulty: medium
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      # Enable Snapshot feature gate in KubeVirt CR
+      echo "Enabling Snapshot feature gate in KubeVirt CR..."
+      KUBEVIRT_CR=$(kubectl get kubevirt -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+      KUBEVIRT_NS=$(kubectl get kubevirt -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
+      kubectl patch kubevirt "$KUBEVIRT_CR" -n "$KUBEVIRT_NS" --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"]}}}}'
+
+      # Clean up any previous test resources
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a minimal VM to snapshot
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: snapshot-test-vm
+        namespace: $NS
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices: {}
+              memory:
+                guest: 512Mi
+              resources: {}
+            terminationGracePeriodSeconds: 180
+      EOF
+
+      # Wait for VM to be created
+      kubectl wait --for=create vm/snapshot-test-vm -n "${NS}" --timeout 30s
+
+      echo "VM created and ready for snapshot"
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      SNAPSHOT_NAME="test-snapshot"
+
+      # Verify snapshot was created
+      if ! kubectl get virtualmachinesnapshot "$SNAPSHOT_NAME" -n "$NS" &>/dev/null; then
+        echo "ERROR: VirtualMachineSnapshot '$SNAPSHOT_NAME' not found"
+        exit 1
+      fi
+
+      # Verify snapshot is for the correct VM
+      SOURCE_NAME=$(kubectl get virtualmachinesnapshot "$SNAPSHOT_NAME" -n "$NS" -o jsonpath='{.spec.source.name}')
+      if [ "$SOURCE_NAME" != "snapshot-test-vm" ]; then
+        echo "ERROR: Snapshot source is '$SOURCE_NAME', expected 'snapshot-test-vm'"
+        exit 1
+      fi
+
+      echo "All snapshot validations passed"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachinesnapshot test-snapshot -n "$NS" --ignore-not-found
+      kubectl delete virtualmachine snapshot-test-vm -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      Create a snapshot named test-snapshot of the virtual machine snapshot-test-vm in the ${EVAL_NAMESPACE:-vm-test} namespace.
