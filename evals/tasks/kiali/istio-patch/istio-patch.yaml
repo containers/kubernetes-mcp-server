@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "Patch my traffic"
   category: "Istio Configuration & Management"
   difficulty: medium

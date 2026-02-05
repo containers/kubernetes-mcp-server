@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "Status of my mesh"
   category: "Resource Inspection"
   difficulty: easy

@@ -12,6 +12,15 @@ on:
   # Allow manual workflow dispatch for testing
   workflow_dispatch:
     inputs:
+      suite:
+        description: 'Which task suite to run (kubernetes, kiali, or all)'
+        required: false
+        default: 'kubernetes'
+        type: choice
+        options:
+          - kubernetes
+          - kiali
+          - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
         required: false
@@ -56,6 +65,7 @@ jobs:
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
       kiali-run: ${{ steps.check.outputs.kiali-run }}
+      label-selector: ${{ steps.check.outputs.label-selector }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
       is-pr: ${{ steps.check.outputs.is-pr }}
@@ -90,12 +100,46 @@ jobs:
             echo "pr-sha=${{ github.sha }}" >> $GITHUB_OUTPUT
           fi
 
+          # Suite selection:
+          # - For workflow_dispatch, use the provided input.
+          # - For other triggers (schedule/issue_comment), default to kubernetes.
+          SUITE="${{ github.event.inputs.suite || 'kubernetes' }}"
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
-          if [[ "$TASK_FILTER" =~ kiali ]]; then
-            echo "kiali-run=true" >> $GITHUB_OUTPUT
-          else
-            echo "kiali-run=false" >> $GITHUB_OUTPUT
+
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kiali | all
+            COMMENT_BODY="${{ github.event.comment.body }}"
+            COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
+            read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
+            case "${FIRST_WORD,,}" in
+              kiali|all)
+                SUITE_INPUT="${FIRST_WORD,,}"
+                ;;
+              kubernetes)
+                SUITE_INPUT="kubernetes"
+                ;;
+              *) ;; # default: keep SUITE_INPUT empty → kubernetes
+            esac
           fi
+
+          SUITE="${SUITE_INPUT:-$SUITE}"
+
+          # Select label-selector and infrastructure based on suite
+          # All suites use the same eval.yaml file; suite controls label-selector + infra.
+          case "$SUITE" in
+            kiali)
+              echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
+              echo "kiali-run=true" >> $GITHUB_OUTPUT
+              ;;
+            all)
+              echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
+              echo "kiali-run=true" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
+              echo "kiali-run=false" >> $GITHUB_OUTPUT
+              ;;
+          esac
 
   # Run gevals evaluation with Kind cluster
   run-evaluation:
@@ -135,6 +179,7 @@ jobs:
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           mcpchecker-version: 'latest'
+          label-selector: ${{ needs.check-trigger.outputs.label-selector }}
           task-filter: ${{ github.event.inputs.task-filter || '' }}
           output-format: 'json'
           verbose: ${{ github.event.inputs.verbose || 'false' }}

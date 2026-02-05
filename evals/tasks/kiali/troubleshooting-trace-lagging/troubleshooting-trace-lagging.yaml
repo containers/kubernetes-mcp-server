@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "Check traces for a service"
   category: "Troubleshooting & Debugging"
   difficulty: easy

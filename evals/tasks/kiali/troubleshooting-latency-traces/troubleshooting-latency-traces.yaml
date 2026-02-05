@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "Get latency workload"
   category: "Troubleshooting & Debugging"
   difficulty: easy
