@@ -63,6 +63,13 @@ func (m *McpClient) CallTool(name string, args map[string]interface{}) (*mcp.Cal
 	return m.Client.CallTool(m.ctx, callToolRequest)
 }
 
+// ReadResource helper function to read a resource by URI
+func (m *McpClient) ReadResource(uri string) (*mcp.ReadResourceResult, error) {
+	readResourceRequest := mcp.ReadResourceRequest{}
+	readResourceRequest.Params.URI = uri
+	return m.Client.ReadResource(m.ctx, readResourceRequest)
+}
+
 // NotificationCapture captures MCP notifications for testing.
 // Use StartCapturingNotifications to begin capturing, then RequireNotification to retrieve.
 type NotificationCapture struct {

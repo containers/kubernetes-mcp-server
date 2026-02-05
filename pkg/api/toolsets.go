@@ -46,6 +46,12 @@ type Toolset interface {
 	// GetPrompts returns the prompts provided by this toolset.
 	// Returns nil if the toolset doesn't provide any prompts.
 	GetPrompts() []ServerPrompt
+	// GetResources returns the resources provided by this toolset.
+	// Returns nil if the toolset doesn't provide any resources.
+	GetResources() []ServerResource
+	// GetResourceTemplates returns the resource templates provided by this toolset.
+	// Returns nil if the toolset doesn't provide any resources templates.
+	GetResourceTemplates() []ServerResourceTemplate
 }
 
 type ToolCallRequest interface {

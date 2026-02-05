@@ -35,6 +35,14 @@ func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	)
 }
 
+func (t *Toolset) GetResources() []api.ServerResource {
+	return nil
+}
+
+func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
+	return initResourceTemplates()
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }
