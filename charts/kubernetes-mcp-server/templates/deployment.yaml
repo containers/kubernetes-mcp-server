@@ -15,17 +15,17 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       {{- with .Values.podAnnotations }}
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       labels:
         {{- include "kubernetes-mcp-server.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
         {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "kubernetes-mcp-server.serviceAccountName" . }}
       securityContext:
@@ -50,41 +50,41 @@ spec:
                   fieldPath: metadata.namespace
           {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- tpl (toYaml .) . | nindent 12 }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
           {{- end }}
           {{- with .Values.readinessProbe }}
           readinessProbe:
-            {{- tpl (toYaml .) . | nindent 12 }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
           {{- end }}
           {{- with .Values.resources }}
           resources:
-            {{- tpl (toYaml .) . | nindent 12 }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: config
               mountPath: {{ .Values.configFilePath | dir }}
           {{- with .Values.extraVolumeMounts }}
-            {{- tpl (toYaml .) . | nindent 12 }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
           {{- end }}
       {{- with .Values.extraContainers }}
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       volumes:
         - name: config
           configMap:
             name: {{ include "kubernetes-mcp-server.fullname" . }}
       {{- with .Values.extraVolumes }}
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       {{- with .Values.affinity }}
       affinity:
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
-        {{- tpl (toYaml .) . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
