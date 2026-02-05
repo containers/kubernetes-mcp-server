@@ -36,7 +36,11 @@ kubeconform:
 
 .PHONY: helm-validate
 helm-validate: kubeconform ## Validate Helm chart manifests with kubeconform
-	helm template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas
+	@echo "Validating with default values..."
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@echo ""
+	@echo "Validating with tpl-exercising values..."
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tpl-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 
 .PHONY: helm-package
 helm-package: helm-lint helm-template ## Package the Helm chart (supports HELM_CHART_VERSION override)

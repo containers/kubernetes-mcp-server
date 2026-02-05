@@ -1,0 +1,60 @@
+# Test values that exercise tpl function paths in templates.
+# These values contain template expressions that require the correct context
+# to be passed to the tpl function.
+#
+# This file is used by helm-validate to catch bugs like:
+# https://github.com/containers/kubernetes-mcp-server/issues/743
+
+ingress:
+  host: localhost
+
+# Test tpl in imagePullSecrets (array inside with block)
+imagePullSecrets:
+  - name: "{{ .Release.Name }}-pull-secret"
+
+# Test tpl in podAnnotations (map inside with block)
+podAnnotations:
+  release-name: "{{ .Release.Name }}"
+  release-namespace: "{{ .Release.Namespace }}"
+
+# Test tpl in podLabels (map inside with block)
+podLabels:
+  custom-label: "{{ .Release.Name }}-label"
+
+# Test tpl in nodeSelector (map inside with block)
+nodeSelector:
+  kubernetes.io/os: linux
+
+# Test tpl in tolerations (array inside with block)
+tolerations:
+  - key: "{{ .Release.Name }}-toleration"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+# Test tpl in affinity (object inside with block)
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+            - key: "node-label"
+              operator: "In"
+              values:
+                - "{{ .Release.Name }}"
+
+# Test tpl in extraVolumes (array inside with block)
+extraVolumes:
+  - name: "{{ .Release.Name }}-extra-volume"
+    emptyDir: {}
+
+# Test tpl in extraVolumeMounts (array inside with block)
+extraVolumeMounts:
+  - name: "{{ .Release.Name }}-extra-volume"
+    mountPath: /extra
+
+# Test tpl in extraContainers (array inside with block)
+extraContainers:
+  - name: "{{ .Release.Name }}-sidecar"
+    image: busybox:latest
+    command: ["sh", "-c", "sleep infinity"]

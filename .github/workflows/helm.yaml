@@ -1,0 +1,38 @@
+name: Helm Chart Validation
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'charts/**'
+      - 'build/helm.mk'
+      - '.github/workflows/helm.yaml'
+  pull_request:
+    paths:
+      - 'charts/**'
+      - 'build/helm.mk'
+      - '.github/workflows/helm.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.19.2'
+
+      - name: Lint chart
+        run: make helm-lint
+
+      - name: Validate chart templates
+        run: make helm-validate
