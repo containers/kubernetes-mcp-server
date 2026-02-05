@@ -30,3 +30,10 @@ config:
             toolPattern: "configuration_.*"
         minToolCalls: 1
         maxToolCalls: 10
+    - glob: ../tasks/helm/*/*.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "helm_.*"
+        minToolCalls: 1
+        maxToolCalls: 10

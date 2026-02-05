@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: list-helm-releases
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: List all Helm releases across all namespaces in the cluster

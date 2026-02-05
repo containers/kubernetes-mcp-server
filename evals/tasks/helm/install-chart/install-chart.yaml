@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  name: install-helm-chart
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: Install the Helm chart oci://registry-1.docker.io/bitnamicharts/redis as a Helm release named 'my-redis' in the namespace 'helm-install-test'. Set replica to 1 using Helm values.
