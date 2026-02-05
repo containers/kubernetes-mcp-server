@@ -8,6 +8,11 @@
 ingress:
   host: localhost
 
+# Test tpl in serviceAccount.annotations (map inside with block)
+serviceAccount:
+  annotations:
+    release-name: "{{ .Release.Name }}"
+
 # Test tpl in imagePullSecrets (array inside with block)
 imagePullSecrets:
   - name: "{{ .Release.Name }}-pull-secret"
