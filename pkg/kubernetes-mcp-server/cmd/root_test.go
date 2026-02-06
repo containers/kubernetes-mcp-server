@@ -419,6 +419,7 @@ func TestStdioLogging(t *testing.T) {
 	t.Run("stdio disables klog", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
+		// Explicitly set port to empty to force stdio mode (overrides default port from config)
 		rootCmd.SetArgs([]string{"--version", "--log-level=1"})
 		err := rootCmd.Execute()
 		require.NoErrorf(t, err, "Expected no error executing command, got %v", err)
