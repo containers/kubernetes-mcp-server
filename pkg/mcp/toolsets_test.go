@@ -13,6 +13,7 @@ import (
 	configuration "github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/code"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
@@ -156,6 +157,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiClusterEnum() {
 
 func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	testCases := []api.Toolset{
+		&code.Toolset{},
 		&core.Toolset{},
 		&config.Toolset{},
 		&helm.Toolset{},
