@@ -47,20 +47,19 @@ spec:
         - record: cluster:k8s_mcp_server_info:count
           expr: count(k8s_mcp_server_info)
 
-        # Namespace-level aggregations (for multi-tenant RBAC - preserves k8s_namespace_name label)
-        # Note: OTel semantic convention k8s.namespace.name becomes k8s_namespace_name in Prometheus
+        # Namespace-level aggregations (for multi-tenant RBAC)
         - record: namespace:k8s_mcp_tool_calls:sum
-          expr: sum by (k8s_namespace_name) (k8s_mcp_tool_calls_total)
+          expr: sum by (namespace) (k8s_mcp_tool_calls_total)
 
         - record: namespace:k8s_mcp_tool_errors:sum
-          expr: sum by (k8s_namespace_name) (k8s_mcp_tool_errors_total)
+          expr: sum by (namespace) (k8s_mcp_tool_errors_total)
 
         - record: namespace:k8s_mcp_tool_error_rate:ratio
           expr: |
-            sum by (k8s_namespace_name) (k8s_mcp_tool_errors_total) / clamp_min(sum by (k8s_namespace_name) (k8s_mcp_tool_calls_total), 1)
+            sum by (namespace) (k8s_mcp_tool_errors_total) / clamp_min(sum by (namespace) (k8s_mcp_tool_calls_total), 1)
 
         - record: namespace:k8s_mcp_http_requests:sum
-          expr: sum by (k8s_namespace_name) (k8s_mcp_http_requests_total)
+          expr: sum by (namespace) (k8s_mcp_http_requests_total)
     {{- end }}
     {{- with .Values.metrics.prometheusRule.additionalRules }}
     {{- toYaml . | nindent 4 }}
