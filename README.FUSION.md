@@ -2,6 +2,10 @@
 
 **Canonical reference for managing the IBM Fusion fork of kubernetes-mcp-server**
 
+**Maintainer:** Sandeep Bazar
+**GitHub:** [@sandeepbazar](https://github.com/sandeepbazar)
+**Repository:** [ibm-fusion-mcp-server](https://github.com/sandeepbazar/ibm-fusion-mcp-server)
+
 ## What is This Repository?
 
 This is **ibm-fusion-mcp-server**, a fork of [containers/kubernetes-mcp-server](https://github.com/containers/kubernetes-mcp-server) that adds IBM Fusion-specific MCP tool extensions.
@@ -107,6 +111,208 @@ import (
 **Pattern:** Blank import to trigger package initialization
 
 **Guidance:** This is the only import needed. Do NOT scatter Fusion imports across multiple files.
+
+## One-Command Sync (Automated)
+
+For convenience, we provide an automated script that handles the entire upstream sync process, including applying Fusion integration hooks.
+
+### Prerequisites
+
+1. **Git remotes configured:**
+   ```bash
+   # Add upstream remote (one-time setup)
+   git remote add upstream https://github.com/containers/kubernetes-mcp-server.git
+   ```
+
+2. **Python 3 installed** (usually pre-installed on macOS and Linux)
+
+3. **Clean working tree** (or use `--force` flag)
+
+### Running the Sync Script
+
+```bash
+# From repository root
+./hack/fusion/sync.sh
+
+# Or run Python script directly
+python3 hack/fusion/sync_upstream_and_apply_fusion_patch.py
+
+# Force sync even with uncommitted changes
+./hack/fusion/sync.sh --force
+```
+
+### What the Script Does
+
+The automation script performs the following steps:
+
+1. ✅ **Verifies git working tree is clean** (or accepts `--force` flag)
+2. ✅ **Checks git remotes** (adds upstream if missing)
+3. ✅ **Fetches upstream** (`git fetch upstream`)
+4. ✅ **Checks out main branch** (`git checkout main`)
+5. ✅ **Merges upstream/main** (`git merge upstream/main`)
+6. ✅ **Applies Fusion patches** (idempotent):
+   - Ensures `pkg/toolsets/toolsets.go` contains Fusion registration hook
+   - Ensures `pkg/mcp/modules.go` contains Fusion import
+7. ✅ **Runs tests** (`go test ./...`)
+8. ✅ **Commits changes** (if any) with message: `chore(fusion): sync upstream and apply fusion integration hooks`
+9. ✅ **Pushes to origin main** (`git push origin main`)
+
+### Expected Output
+
+```
+======================================================================
+IBM FUSION MCP SERVER - UPSTREAM SYNC
+======================================================================
+
+Maintainer: Sandeep Bazar (GitHub: sandeepbazar)
+
+ℹ Working directory: /path/to/ibm-fusion-mcp-server
+ℹ Checking git working tree status...
+✓ Working tree is clean
+ℹ Checking git remotes...
+✓ Git remotes configured correctly
+
+======================================================================
+SYNCING WITH UPSTREAM
+======================================================================
+
+ℹ Fetching upstream...
+✓ Fetched upstream
+ℹ Checking out main branch...
+✓ On main branch
+ℹ Merging upstream/main...
+✓ Merged upstream/main successfully
+
+======================================================================
+APPLYING FUSION PATCHES
+======================================================================
+
+ℹ Applying patch to pkg/toolsets/toolsets.go...
+✓ Fusion hooks already present in toolsets.go
+ℹ Applying patch to pkg/mcp/modules.go...
+✓ Fusion import already present in modules.go
+✓ All patches applied successfully
+
+======================================================================
+RUNNING TESTS
+======================================================================
+
+ℹ Running: go test ./...
+✓ All tests passed
+
+======================================================================
+COMMITTING CHANGES
+======================================================================
+
+ℹ No changes to commit
+
+======================================================================
+SYNC COMPLETE
+======================================================================
+
+✓ Synced with upstream
+✓ Applied Fusion integration hooks
+✓ Tests passed
+✓ Changes committed and pushed
+
+All done! 🎉
+```
+
+### Patch Logic Details
+
+The script is **idempotent** and **safe**:
+
+#### For `pkg/toolsets/toolsets.go`:
+- **Detection:** Checks if `registerFusionTools` and `SetFusionRegistration` exist in file
+- **If present:** Skips patching (no duplicates)
+- **If missing:** Appends Fusion hook code at end of file
+- **Pattern:** Adds init() function, function variable, and SetFusionRegistration() function
+
+#### For `pkg/mcp/modules.go`:
+- **Detection:** Checks if `pkg/toolsets/fusion` import exists
+- **If present:** Skips patching (no duplicates)
+- **If missing:** Inserts import in alphabetical order (after `core`, before `helm`)
+- **Pattern:** Maintains import block structure and formatting
+
+### Troubleshooting
+
+#### Issue: "Working tree has uncommitted changes"
+
+**Solution:**
+```bash
+# Option 1: Commit your changes first
+git add .
+git commit -m "wip: before sync"
+
+# Option 2: Use --force flag (not recommended)
+./hack/fusion/sync.sh --force
+```
+
+#### Issue: "Merge conflicts detected"
+
+**Solution:**
+```bash
+# The script will stop and show error
+# Resolve conflicts manually:
+git status
+# Edit conflicting files
+git add <resolved-files>
+git commit
+
+# Then run script again
+./hack/fusion/sync.sh
+```
+
+#### Issue: "Tests failed"
+
+**Solution:**
+```bash
+# Script applies patches but stops before commit
+# Fix test failures manually
+go test ./...
+
+# Once tests pass, commit manually
+git add .
+git commit -m "chore(fusion): sync upstream and apply fusion integration hooks"
+git push origin main
+```
+
+#### Issue: "Push failed"
+
+**Solution:**
+```bash
+# Changes are committed locally
+# Pull first if needed
+git pull origin main --rebase
+
+# Then push
+git push origin main
+```
+
+#### Issue: "Upstream structure changed significantly"
+
+**Solution:**
+```bash
+# Script will fail with error message
+# Manual intervention required:
+# 1. Review upstream changes
+# 2. Update Fusion integration hooks manually
+# 3. Update the sync script if needed
+# 4. Submit PR to update automation
+```
+
+### Cross-Platform Compatibility
+
+The script is designed to work on:
+- ✅ **macOS** (tested)
+- ✅ **Linux** (all distributions)
+- ✅ **Windows** (via WSL or Git Bash with Python 3)
+
+**Requirements:**
+- Python 3.6 or higher
+- Git 2.0 or higher
+- Standard POSIX shell (for wrapper script)
+
 
 ## Upstream Sync SOP
 
