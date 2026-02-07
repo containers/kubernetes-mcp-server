@@ -245,6 +245,70 @@ func (r *Result) FailureCount() int {
 
 // TotalCount returns the total number of cluster operations
 func (r *Result) TotalCount() int {
+}
+
+// TargetSchema returns the JSON schema for the target input parameter
+func TargetSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type: jsonschema.Type{jsonschema.TypeObject},
+		Properties: map[string]*jsonschema.Schema{
+			"type": {
+				Type: jsonschema.Type{jsonschema.TypeString},
+				Enum: []interface{}{"single", "multi", "fleet", "selector", "all"},
+				Description: "Targeting strategy: single (one cluster), multi (specific clusters), fleet (all in fleet), selector (label-based), all (all registered)",
+			},
+			"cluster": {
+				Type: jsonschema.Type{jsonschema.TypeString},
+				Description: "Single cluster name (for type=single)",
+			},
+			"clusters": {
+				Type: jsonschema.Type{jsonschema.TypeArray},
+				Items: &jsonschema.Schema{
+					Type: jsonschema.Type{jsonschema.TypeString},
+				},
+				Description: "List of cluster names (for type=multi)",
+			},
+			"fleet": {
+				Type: jsonschema.Type{jsonschema.TypeString},
+				Description: "Fleet name (for type=fleet)",
+			},
+			"selector": {
+				Type: jsonschema.Type{jsonschema.TypeString},
+				Description: "Label selector (for type=selector), format: key1=value1,key2=value2",
+			},
+			"timeout": {
+				Type: jsonschema.Type{jsonschema.TypeInteger},
+				Description: "Operation timeout in seconds (default: 30)",
+			},
+		},
+	}
+}
+
+// ResolveClusterNames resolves the target to actual cluster names using the registry
+func (t *Target) ResolveClusterNames(registry interface{}) ([]string, error) {
+	// This is a placeholder - actual implementation would query the registry
+	// For now, return based on target type
+	if err := t.Validate(); err != nil {
+		return nil, err
+	}
+
+	switch t.Type {
+	case TargetSingle:
+		if t.Cluster == "" {
+			return []string{"default"}, nil
+		}
+		return []string{t.Cluster}, nil
+	case TargetMulti:
+		return t.Clusters, nil
+	case TargetAll, TargetFleet:
+		// Would query registry for all clusters
+		return []string{"default"}, nil
+	default:
+		return []string{"default"}, nil
+	}
+}
+
+// Made with Bob
 	return len(r.ClusterResults)
 }
 

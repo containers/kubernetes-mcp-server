@@ -275,4 +275,33 @@ type ClusterResult struct {
 	Error       error
 }
 
+
+// Global registry instance (singleton pattern for simplicity)
+var (
+	globalRegistry     *Registry
+	globalRegistryOnce sync.Once
+	globalRegistryMu   sync.Mutex
+)
+
+// GetOrCreateRegistry returns the global registry, creating it if needed
+// It initializes with the provided Kubernetes client if this is the first call
+func GetOrCreateRegistry(k8sClient interface{}) *Registry {
+	globalRegistryOnce.Do(func() {
+		globalRegistry = NewRegistry()
+		// Try to register from default kubeconfig
+		// This is best-effort and won't fail if kubeconfig is not available
+		_ = globalRegistry.RegisterFromKubeconfig(clientcmd.RecommendedHomeFile)
+	})
+	return globalRegistry
+}
+
+// ResetGlobalRegistry resets the global registry (useful for testing)
+func ResetGlobalRegistry() {
+	globalRegistryMu.Lock()
+	defer globalRegistryMu.Unlock()
+	globalRegistry = nil
+	globalRegistryOnce = sync.Once{}
+}
+
+// Made with Bob
 // Made with Bob

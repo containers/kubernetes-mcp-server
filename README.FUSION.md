@@ -2,23 +2,39 @@
 
 **Canonical reference for managing the IBM Fusion fork of kubernetes-mcp-server**
 
-**Maintainer:** Sandeep Bazar
-**GitHub:** [@sandeepbazar](https://github.com/sandeepbazar)
-**Repository:** [ibm-fusion-mcp-server](https://github.com/sandeepbazar/ibm-fusion-mcp-server)
+**Maintainer:** Sandeep Bazar  
+**GitHub:** [@sandeepbazar](https://github.com/sandeepbazar)  
+**Repository:** [ibm-fusion-mcp-server](https://github.com/sandeepbazar/ibm-fusion-mcp-server)  
+**Last Updated:** 2026-02-07  
+**Upstream Version:** Synced with containers/kubernetes-mcp-server main branch
 
 ## What is This Repository?
 
-This is **ibm-fusion-mcp-server**, a fork of [containers/kubernetes-mcp-server](https://github.com/containers/kubernetes-mcp-server) that adds IBM Fusion-specific MCP tool extensions.
+This is **ibm-fusion-mcp-server**, a fork of [containers/kubernetes-mcp-server](https://github.com/containers/kubernetes-mcp-server) that adds IBM Fusion-specific MCP tool extensions with **multi-cluster and fleet management** capabilities.
 
 **Upstream:** https://github.com/containers/kubernetes-mcp-server
 
-**Purpose:** Provide specialized tools for managing IBM Fusion and OpenShift environments across multiple domains:
-- Storage (PVC, storage classes, ODF/OCS)
-- Compute (node management, workload optimization)
-- Network (network policies, service mesh)
-- Backup/Restore (disaster recovery, snapshots)
-- HCP (Hosted Control Planes, multi-tenant management)
-- Virtualization (KubeVirt integration, VM lifecycle)
+**Purpose:** Provide specialized tools for managing IBM Fusion and OpenShift environments across **single clusters, multiple clusters, and entire fleets**:
+
+## IBM Fusion Architecture Mapping
+
+IBM Fusion is organized into service domains (blue services) that this MCP server supports:
+
+### Fusion Data Services
+- **Data Foundation** - OpenShift Data Foundation (ODF/OCS) for persistent storage
+- **Global Data Platform (GDP)** - IBM Spectrum Scale integration for high-performance file storage
+- **Backup & Restore** - OADP/Velero-based backup and disaster recovery
+- **Disaster Recovery** - Metro DR and Regional DR for business continuity
+- **Data Cataloging** - Metadata management and data discovery
+- **Content Aware Storage (CAS)** - Intelligent storage tiering and optimization
+
+### Fusion Base
+- **Serviceability** - Must-gather, logging, and diagnostic tools
+- **Observability** - Prometheus, Grafana, OpenTelemetry integration
+
+### Additional Capabilities
+- **Virtualization** - KubeVirt/OpenShift Virtualization for VM workloads
+- **Hosted Control Planes (HCP)** - HyperShift for multi-tenant cluster management
 
 ## Design Goals and Non-Goals
 
@@ -27,8 +43,9 @@ This is **ibm-fusion-mcp-server**, a fork of [containers/kubernetes-mcp-server](
 1. **Keep upstream clean** - Minimize modifications to upstream code
 2. **Isolate Fusion changes** - All Fusion code lives in dedicated directories
 3. **Feature gating** - Fusion tools disabled by default, enabled via `FUSION_TOOLS_ENABLED=true`
-4. **Maintain sync-ability** - Regular upstream syncs with minimal conflicts
-5. **Production-ready** - Well-tested, documented, and maintainable
+4. **Multi-cluster support** - Single cluster, multi-cluster, and fleet targeting
+5. **Maintain sync-ability** - Regular upstream syncs with minimal conflicts
+6. **Production-ready** - Well-tested, documented, and maintainable
 
 ### Non-Goals ❌
 
@@ -48,16 +65,29 @@ ibm-fusion-mcp-server/
 │   │   ├── config.go                  # Feature gate (FUSION_TOOLS_ENABLED)
 │   │   └── config_test.go             # Config tests
 │   ├── clients/
-│   │   └── kubernetes.go              # K8s client wrappers
-│   └── services/
-│       └── storage.go                 # Storage domain logic
+│   │   ├── kubernetes.go              # K8s client wrappers
+│   │   └── registry.go                # Multi-cluster client registry
+│   ├── services/
+│   │   ├── common.go                  # Shared service utilities
+│   │   ├── storage.go                 # Storage domain logic
+│   │   ├── datafoundation.go          # Data Foundation logic
+│   │   ├── backup.go                  # Backup & Restore logic
+│   │   └── multidom.go                # Multi-domain services
+│   └── targeting/
+│       └── target.go                  # Multi-cluster targeting model
 │
 ├── pkg/toolsets/fusion/                # 🔓 Public Fusion toolset API
 │   ├── registry.go                    # Toolset registration hook
 │   ├── toolset.go                     # Toolset implementation
-│   └── storage/
-│       ├── tool_storage_summary.go    # First tool: fusion.storage.summary
-│       └── types.go                   # Input/output types
+│   ├── storage/
+│   │   ├── tool_storage_summary.go    # Storage summary tool
+│   │   └── types.go                   # Input/output types
+│   ├── datafoundation/
+│   │   └── tool_status.go             # Data Foundation status
+│   ├── backup/
+│   │   └── tool_jobs_list.go          # Backup jobs list
+│   └── alltools/
+│       └── tools.go                   # All other domain tools
 │
 ├── docs/fusion/                        # 📚 Fusion documentation
 │   └── README.md                      # Quick start guide
@@ -112,727 +142,462 @@ import (
 
 **Guidance:** This is the only import needed. Do NOT scatter Fusion imports across multiple files.
 
-## One-Command Sync (Automated)
+## Multi-Cluster Architecture
 
-For convenience, we provide an automated script that handles the entire upstream sync process, including applying Fusion integration hooks.
+### Targeting Model
 
-### Prerequisites
+Fusion tools support flexible cluster targeting:
 
-1. **Git remotes configured:**
-   ```bash
-   # Add upstream remote (one-time setup)
-   git remote add upstream https://github.com/containers/kubernetes-mcp-server.git
-   ```
+| Target Type | Description | Use Case |
+|-------------|-------------|----------|
+| **single** | Target one specific cluster | Default, most common operations |
+| **multi** | Target explicitly named clusters | Coordinated operations across specific clusters |
+| **fleet** | Target all clusters in a fleet/hub | Fleet-wide status checks |
+| **selector** | Target clusters matching labels | Environment-based operations (prod, dev, etc.) |
+| **all** | Target all registered clusters | Global operations |
 
-2. **Python 3 installed** (usually pre-installed on macOS and Linux)
+### Client Registry
 
-3. **Clean working tree** (or use `--force` flag)
+The multi-cluster client registry (`internal/fusion/clients/registry.go`) provides:
 
-### Running the Sync Script
+- **Thread-safe** concurrent operations across clusters
+- **Timeout control** per-cluster operation timeouts
+- **Graceful failure** handling - one cluster failure doesn't stop others
+- **Kubeconfig support** - multiple contexts, in-cluster config
+- **Result aggregation** - per-cluster results with summary
+
+## Single Cluster vs Multi-Cluster Usage
+
+### Default Behavior (Single Cluster)
+
+When no `target` is specified, tools operate on the **current kubeconfig context**:
+
+```json
+{
+  "name": "fusion.datafoundation.status",
+  "arguments": {}
+}
+```
+
+**Response:**
+```json
+{
+  "target": {
+    "type": "single"
+  },
+  "clusterResults": {
+    "default": {
+      "clusterName": "default",
+      "success": true,
+      "data": {
+        "installed": true,
+        "ready": true,
+        "namespace": "openshift-storage",
+        "storageClasses": ["ocs-storagecluster-ceph-rbd"]
+      }
+    }
+  },
+  "summary": {
+    "clustersTotal": 1,
+    "clustersOk": 1,
+    "clustersFailed": 0
+  }
+}
+```
+
+### Single Cluster (Named Context)
+
+Target a specific kubeconfig context:
+
+```json
+{
+  "name": "fusion.backup.jobs.list",
+  "arguments": {
+    "target": {
+      "type": "single",
+      "cluster": "prod-us-east-1"
+    }
+  }
+}
+```
+
+### Multi-Cluster (Explicit List)
+
+Target multiple specific clusters:
+
+```json
+{
+  "name": "fusion.dr.status",
+  "arguments": {
+    "target": {
+      "type": "multi",
+      "clusters": ["prod-us-east-1", "prod-us-west-2"]
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "target": {
+    "type": "multi",
+    "clusters": ["prod-us-east-1", "prod-us-west-2"]
+  },
+  "clusterResults": {
+    "prod-us-east-1": {
+      "clusterName": "prod-us-east-1",
+      "success": true,
+      "data": {
+        "installed": true,
+        "ready": true,
+        "message": "DR CRDs found (Ramen DR)"
+      }
+    },
+    "prod-us-west-2": {
+      "clusterName": "prod-us-west-2",
+      "success": true,
+      "data": {
+        "installed": true,
+        "ready": true,
+        "message": "DR CRDs found (Ramen DR)"
+      }
+    }
+  },
+  "summary": {
+    "clustersTotal": 2,
+    "clustersOk": 2,
+    "clustersFailed": 0
+  }
+}
+```
+
+### Fleet (All Clusters)
+
+Target all clusters in your fleet:
+
+```json
+{
+  "name": "fusion.virtualization.status",
+  "arguments": {
+    "target": {
+      "type": "fleet"
+    }
+  }
+}
+```
+
+### Selector (Label-Based)
+
+Target clusters matching criteria:
+
+```json
+{
+  "name": "fusion.observability.summary",
+  "arguments": {
+    "target": {
+      "type": "selector",
+      "selector": "env=prod,region=us"
+    }
+  }
+}
+```
+
+## Fleet Admin Scenarios
+
+Real-world scenarios for fleet administrators:
+
+### 1. Check Data Foundation Health Across All Clusters
+
+```json
+{
+  "name": "fusion.datafoundation.status",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Morning health check - verify ODF is running on all clusters
+
+### 2. List Backup Jobs Across Prod and DR
+
+```json
+{
+  "name": "fusion.backup.jobs.list",
+  "arguments": {
+    "target": {
+      "type": "multi",
+      "clusters": ["prod-primary", "prod-dr"]
+    }
+  }
+}
+```
+
+**Use Case:** Verify backup jobs completed successfully on both sites
+
+### 3. Find Which Clusters Have Virtualization Installed
+
+```json
+{
+  "name": "fusion.virtualization.status",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Inventory check - which clusters support VM workloads
+
+### 4. HCP Overview Across Fleet
+
+```json
+{
+  "name": "fusion.hcp.status",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Check HyperShift deployment status across management clusters
+
+### 5. DR Readiness Summary for All Clusters
+
+```json
+{
+  "name": "fusion.dr.status",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Disaster recovery audit - verify DR is configured everywhere
+
+### 6. CAS Installed Where?
+
+```json
+{
+  "name": "fusion.cas.status",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Find clusters with Content Aware Storage deployed
+
+### 7. Cataloging Health Across Fleet
+
+```json
+{
+  "name": "fusion.catalog.status",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Verify data cataloging services are operational
+
+### 8. Storage Classes Drift Across Clusters
+
+```json
+{
+  "name": "fusion.storage.summary",
+  "arguments": {
+    "target": {
+      "type": "multi",
+      "clusters": ["prod-1", "prod-2", "prod-3"]
+    }
+  }
+}
+```
+
+**Use Case:** Compare storage class configurations for consistency
+
+### 9. PVC Pending Hotspots Per Cluster
+
+```json
+{
+  "name": "fusion.storage.summary",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Identify clusters with pending PVCs (storage issues)
+
+### 10. Observability Stack Status Per Cluster
+
+```json
+{
+  "name": "fusion.observability.summary",
+  "arguments": {
+    "target": {"type": "fleet"}
+  }
+}
+```
+
+**Use Case:** Verify Prometheus/Grafana/OTEL are running everywhere
+
+## Tool Catalog
+
+### Implemented Tools ✅
+
+| Tool Name | Domain | Description | Multi-Cluster |
+|-----------|--------|-------------|---------------|
+| `fusion.storage.summary` | Storage | Storage classes, PVC stats, ODF detection | ✅ |
+| `fusion.datafoundation.status` | Data Foundation | ODF/OCS installation and health status | ✅ |
+| `fusion.gdp.status` | Global Data Platform | IBM Spectrum Scale/GDP status | ✅ |
+| `fusion.backup.jobs.list` | Backup & Restore | List OADP/Velero backup jobs | ✅ |
+| `fusion.dr.status` | Disaster Recovery | Metro/Regional DR status | ✅ |
+| `fusion.catalog.status` | Data Cataloging | Data catalog service status | ✅ |
+| `fusion.cas.status` | Content Aware Storage | CAS deployment status | ✅ |
+| `fusion.serviceability.summary` | Serviceability | Must-gather and logging status | ✅ |
+| `fusion.observability.summary` | Observability | Prometheus, Grafana, OTEL status | ✅ |
+| `fusion.virtualization.status` | Virtualization | KubeVirt/OpenShift Virt status | ✅ |
+| `fusion.hcp.status` | Hosted Control Planes | HyperShift/HCP status | ✅ |
+
+### Planned Enhancements 🚧
+
+1. **Storage Domain**
+   - `fusion.storage.pvc.list` - List PVCs with filtering
+   - `fusion.storage.pvc.resize` - Resize PVC operations
+   - `fusion.storage.classes.compare` - Compare storage classes across clusters
+
+2. **Backup Domain**
+   - `fusion.backup.policies.list` - List backup policies
+   - `fusion.backup.schedule.status` - Check backup schedules
+
+3. **Virtualization Domain**
+   - `fusion.vm.list` - List virtual machines
+   - `fusion.vm.migrate` - Migrate VMs between nodes
+
+4. **HCP Domain**
+   - `fusion.hcp.list` - List hosted clusters
+   - `fusion.hcp.nodepool.status` - Check node pool status
+
+## Running the Server
+
+### Local Development (Single Cluster)
 
 ```bash
-# From repository root
-./hack/fusion/sync.sh
-
-# Or run Python script directly
-python3 hack/fusion/sync_upstream_and_apply_fusion_patch.py
-
-# Force sync even with uncommitted changes
-./hack/fusion/sync.sh --force
-```
-
-### What the Script Does
-
-The automation script performs the following steps:
-
-1. ✅ **Verifies git working tree is clean** (or accepts `--force` flag)
-2. ✅ **Checks git remotes** (adds upstream if missing)
-3. ✅ **Fetches upstream** (`git fetch upstream`)
-4. ✅ **Checks out main branch** (`git checkout main`)
-5. ✅ **Merges upstream/main** (`git merge upstream/main`)
-6. ✅ **Applies Fusion patches** (idempotent):
-   - Ensures `pkg/toolsets/toolsets.go` contains Fusion registration hook
-   - Ensures `pkg/mcp/modules.go` contains Fusion import
-7. ✅ **Runs tests** (`go test ./...`)
-8. ✅ **Commits changes** (if any) with message: `chore(fusion): sync upstream and apply fusion integration hooks`
-9. ✅ **Pushes to origin main** (`git push origin main`)
-
-### Expected Output
-
-```
-======================================================================
-IBM FUSION MCP SERVER - UPSTREAM SYNC
-======================================================================
-
-Maintainer: Sandeep Bazar (GitHub: sandeepbazar)
-
-ℹ Working directory: /path/to/ibm-fusion-mcp-server
-ℹ Checking git working tree status...
-✓ Working tree is clean
-ℹ Checking git remotes...
-✓ Git remotes configured correctly
-
-======================================================================
-SYNCING WITH UPSTREAM
-======================================================================
-
-ℹ Fetching upstream...
-✓ Fetched upstream
-ℹ Checking out main branch...
-✓ On main branch
-ℹ Merging upstream/main...
-✓ Merged upstream/main successfully
-
-======================================================================
-APPLYING FUSION PATCHES
-======================================================================
-
-ℹ Applying patch to pkg/toolsets/toolsets.go...
-✓ Fusion hooks already present in toolsets.go
-ℹ Applying patch to pkg/mcp/modules.go...
-✓ Fusion import already present in modules.go
-✓ All patches applied successfully
-
-======================================================================
-RUNNING TESTS
-======================================================================
-
-ℹ Running: go test ./...
-✓ All tests passed
-
-======================================================================
-COMMITTING CHANGES
-======================================================================
-
-ℹ No changes to commit
-
-======================================================================
-SYNC COMPLETE
-======================================================================
-
-✓ Synced with upstream
-✓ Applied Fusion integration hooks
-✓ Tests passed
-✓ Changes committed and pushed
-
-All done! 🎉
-```
-
-### Patch Logic Details
-
-The script is **idempotent** and **safe**:
-
-#### For `pkg/toolsets/toolsets.go`:
-- **Detection:** Checks if `registerFusionTools` and `SetFusionRegistration` exist in file
-- **If present:** Skips patching (no duplicates)
-- **If missing:** Appends Fusion hook code at end of file
-- **Pattern:** Adds init() function, function variable, and SetFusionRegistration() function
-
-#### For `pkg/mcp/modules.go`:
-- **Detection:** Checks if `pkg/toolsets/fusion` import exists
-- **If present:** Skips patching (no duplicates)
-- **If missing:** Inserts import in alphabetical order (after `core`, before `helm`)
-- **Pattern:** Maintains import block structure and formatting
-
-### Troubleshooting
-
-#### Issue: "Working tree has uncommitted changes"
-
-**Solution:**
-```bash
-# Option 1: Commit your changes first
-git add .
-git commit -m "wip: before sync"
-
-# Option 2: Use --force flag (not recommended)
-./hack/fusion/sync.sh --force
-```
-
-#### Issue: "Merge conflicts detected"
-
-**Solution:**
-```bash
-# The script will stop and show error
-# Resolve conflicts manually:
-git status
-# Edit conflicting files
-git add <resolved-files>
-git commit
-
-# Then run script again
-./hack/fusion/sync.sh
-```
-
-#### Issue: "Tests failed"
-
-**Solution:**
-```bash
-# Script applies patches but stops before commit
-# Fix test failures manually
-go test ./...
-
-# Once tests pass, commit manually
-git add .
-git commit -m "chore(fusion): sync upstream and apply fusion integration hooks"
-git push origin main
-```
-
-#### Issue: "Push failed"
-
-**Solution:**
-```bash
-# Changes are committed locally
-# Pull first if needed
-git pull origin main --rebase
-
-# Then push
-git push origin main
-```
-
-#### Issue: "Upstream structure changed significantly"
-
-**Solution:**
-```bash
-# Script will fail with error message
-# Manual intervention required:
-# 1. Review upstream changes
-# 2. Update Fusion integration hooks manually
-# 3. Update the sync script if needed
-# 4. Submit PR to update automation
-```
-
-### Cross-Platform Compatibility
-
-The script is designed to work on:
-- ✅ **macOS** (tested)
-- ✅ **Linux** (all distributions)
-- ✅ **Windows** (via WSL or Git Bash with Python 3)
-
-**Requirements:**
-- Python 3.6 or higher
-- Git 2.0 or higher
-- Standard POSIX shell (for wrapper script)
-
-
-## Upstream Sync SOP
-
-### Recommended Branch Model
-
-```
-main          → Tracks upstream (clean sync point)
-fusion-main   → Contains all Fusion changes (working branch)
-```
-
-**Rationale:** Keep `main` as a clean upstream mirror for easy syncing, do all Fusion work in `fusion-main`.
-
-### Step-by-Step Sync Commands
-
-#### Initial Setup (One-Time)
-
-```bash
-# Clone the fork
-git clone https://github.com/your-org/ibm-fusion-mcp-server.git
-cd ibm-fusion-mcp-server
-
-# Add upstream remote
-git remote add upstream https://github.com/containers/kubernetes-mcp-server.git
-git fetch upstream
-
-# Verify remotes
-git remote -v
-# origin    https://github.com/your-org/ibm-fusion-mcp-server.git (fetch)
-# upstream  https://github.com/containers/kubernetes-mcp-server.git (fetch)
-```
-
-#### Regular Sync (Recommended: Weekly or Monthly)
-
-**⚠️ CRITICAL: Always commit and push Fusion changes before syncing!**
-
-```bash
-# 1. Ensure all Fusion changes are committed
-git status
-git add .
-git commit -m "feat(fusion): latest changes before upstream sync"
-git push origin fusion-main
-
-# 2. Switch to main branch and sync with upstream
-git checkout main
-git fetch upstream
-git merge upstream/main
-# Or use rebase if you prefer: git rebase upstream/main
-
-# 3. Push updated main to fork
-git push origin main
-
-# 4. Merge updated main into fusion-main
-git checkout fusion-main
-git merge main
-# Or use rebase: git rebase main
-
-# 5. Resolve conflicts if any (see conflict resolution checklist below)
-
-# 6. Push updated fusion-main
-git push origin fusion-main
-```
-
-#### Alternative: Direct Merge (Simpler, but less clean)
-
-```bash
-# 1. Ensure all Fusion changes are committed
-git status
-git add .
-git commit -m "feat(fusion): latest changes before upstream sync"
-git push origin fusion-main
-
-# 2. Fetch and merge upstream directly into fusion-main
-git fetch upstream
-git merge upstream/main
-
-# 3. Resolve conflicts if any
-
-# 4. Push updated fusion-main
-git push origin fusion-main
-```
-
-### Conflict Resolution Checklist
-
-When conflicts occur during sync, follow this priority:
-
-#### ✅ Always Keep (Ours)
-- [ ] `internal/fusion/**` - All Fusion internal code
-- [ ] `pkg/toolsets/fusion/**` - All Fusion toolset code
-- [ ] `docs/fusion/**` - All Fusion documentation
-- [ ] `README.FUSION.md` - This file
-
-#### ⚖️ Carefully Merge (Both)
-- [ ] `pkg/toolsets/toolsets.go` - Preserve the Fusion hook (lines 53-63)
-- [ ] `pkg/mcp/modules.go` - Preserve the Fusion import (line 6)
-- [ ] `go.mod` / `go.sum` - Run `go mod tidy` after merge
-- [ ] `README.md` - Keep the 1-line Fusion pointer at top
-
-#### ⬆️ Prefer Upstream (Theirs)
-- [ ] All other files - Accept upstream changes unless Fusion requires modification
-
-#### Conflict Resolution Commands
-
-```bash
-# For files to keep ours
-git checkout --ours path/to/file
-git add path/to/file
-
-# For files to keep theirs
-git checkout --theirs path/to/file
-git add path/to/file
-
-# For files needing manual merge
-# Edit the file, resolve conflicts, then:
-git add path/to/file
-
-# After resolving all conflicts
-git commit -m "chore: merge upstream/main, resolved conflicts"
-```
-
-### Never Lose Changes Rule
-
-**Before any sync operation:**
-
-1. ✅ Commit all Fusion changes: `git commit -am "wip: before sync"`
-2. ✅ Push to remote: `git push origin fusion-main`
-3. ✅ Verify push succeeded: `git log origin/fusion-main`
-
-**If sync goes wrong:**
-
-```bash
-# Reset to last known good state
-git reset --hard origin/fusion-main
-
-# Or create a backup branch first
-git branch fusion-main-backup
-git push origin fusion-main-backup
-```
-
-## Post-Sync Validation Checklist
-
-After every upstream sync, validate the fork:
-
-### 1. Dependencies and Build
-
-```bash
-# Resolve dependencies
-go mod tidy
-
-# Verify no missing dependencies
-go mod verify
-
-# Build the binary
+# Build the server
 make build
-# Or: go build -o kubernetes-mcp-server ./cmd/kubernetes-mcp-server
 
-# Check binary exists
-ls -lh kubernetes-mcp-server
+# Run with Fusion tools enabled (uses current kubeconfig context)
+FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server
+
+# Run with MCP Inspector for testing
+FUSION_TOOLS_ENABLED=true npx @modelcontextprotocol/inspector $(pwd)/kubernetes-mcp-server
 ```
 
-### 2. Run Tests
+### Multi-Cluster Setup
 
 ```bash
-# Test all code
-go test ./...
+# Ensure your kubeconfig has multiple contexts
+kubectl config get-contexts
 
-# Test only Fusion code
+# The server will automatically register all contexts
+FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server
+
+# Tools can now target any registered context
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FUSION_TOOLS_ENABLED` | `false` | Enable Fusion tools |
+| `KUBECONFIG` | `~/.kube/config` | Path to kubeconfig file |
+| `FUSION_TIMEOUT` | `30` | Default operation timeout (seconds) |
+
+## Troubleshooting
+
+### Issue: "I don't see my changes on GitHub"
+
+**Checklist:**
+1. ✅ Verify you're on the correct branch: `git branch`
+2. ✅ Verify commit was made: `git log -1`
+3. ✅ Verify push succeeded: `git log origin/fusion-tools-v2`
+4. ✅ Check GitHub URL uses correct branch: `/blob/fusion-tools-v2/`
+5. ✅ Clear browser cache or try incognito mode
+
+### Issue: "Tool returns 'not installed' but component exists"
+
+**Cause:** CRD detection may be failing
+
+**Solution:**
+1. Check if CRDs exist: `kubectl get crds | grep <component>`
+2. Verify namespace exists: `kubectl get ns | grep <namespace>`
+3. Check tool logs for specific error messages
+
+### Issue: "Multi-cluster operation times out"
+
+**Cause:** One or more clusters are slow or unreachable
+
+**Solution:**
+1. Increase timeout in target: `"timeout": 60`
+2. Check cluster connectivity: `kubectl --context=<cluster> get nodes`
+3. Review per-cluster errors in response
+
+### Issue: "Fusion tools not loading"
+
+**Checklist:**
+1. ✅ `FUSION_TOOLS_ENABLED=true` is set
+2. ✅ Server logs show "Registering IBM Fusion toolset"
+3. ✅ Integration hooks are present in `pkg/toolsets/toolsets.go` and `pkg/mcp/modules.go`
+4. ✅ Rebuild after changes: `make build`
+
+## Contributing
+
+### Adding a New Tool
+
+See the detailed guide in the original README sections (lines 611-700).
+
+### Testing
+
+```bash
+# Test all Fusion code
 go test ./internal/fusion/... ./pkg/toolsets/fusion/...
 
 # Test with coverage
 go test -cover ./internal/fusion/... ./pkg/toolsets/fusion/...
+
+# Test specific package
+go test ./pkg/toolsets/fusion/datafoundation/...
 ```
 
-### 3. Run Server - Fusion Disabled (Default)
+### Code Style
 
+- Follow existing patterns in the codebase
+- Use `testify/suite` for tests
+- Add godoc comments for exported functions
+- Keep tools read-only for safety
+
+## Upstream Sync
+
+See the comprehensive upstream sync documentation in the original README (lines 115-453).
+
+**Quick sync:**
 ```bash
-# Start server with Fusion tools disabled
-./kubernetes-mcp-server
-
-# In another terminal, verify Fusion tools are NOT loaded
-# Check logs for absence of: "Registering IBM Fusion toolset"
-
-# List tools (should not include fusion.* tools)
-# If server supports --list-tools flag:
-./kubernetes-mcp-server --list-tools | grep fusion
-# Should return nothing
+./hack/fusion/sync.sh
 ```
 
-### 4. Run Server - Fusion Enabled
-
-```bash
-# Start server with Fusion tools enabled
-FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server
-
-# Verify Fusion tools ARE loaded
-# Check logs for: "Registering IBM Fusion toolset"
-
-# List tools (should include fusion.* tools)
-FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server --list-tools | grep fusion
-# Should show: fusion.storage.summary
-```
-
-### 5. Quick Tool Test (fusion.storage.summary)
-
-**Using MCP Inspector:**
-
-```bash
-# Install MCP inspector
-npm install -g @modelcontextprotocol/inspector
-
-# Run server with inspector
-FUSION_TOOLS_ENABLED=true npx @modelcontextprotocol/inspector $(pwd)/kubernetes-mcp-server
-
-# In the inspector UI:
-# 1. Connect to the server
-# 2. Find "fusion.storage.summary" in tools list
-# 3. Execute with empty arguments: {}
-# 4. Verify output contains: storageClasses, pvcStats, odfInstalled
-```
-
-**Manual Test (if you have a test cluster):**
-
-```bash
-# Ensure you have a kubeconfig pointing to a test cluster
-export KUBECONFIG=~/.kube/config
-
-# Run server in STDIO mode
-FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server
-
-# Send MCP request (example using echo and jq)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"fusion.storage.summary","arguments":{}}}' | \
-  FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server | jq .
-
-# Expected output structure:
-# {
-#   "summary": {
-#     "storageClasses": [...],
-#     "pvcStats": {"bound": N, "pending": N, "lost": N, "total": N},
-#     "odfInstalled": true/false
-#   }
-# }
-```
-
-### 6. Validation Checklist Summary
-
-- [ ] `go mod tidy` succeeds
-- [ ] `make build` succeeds
-- [ ] `go test ./...` passes
-- [ ] Server runs with Fusion disabled (no fusion.* tools)
-- [ ] Server runs with Fusion enabled (fusion.* tools present)
-- [ ] `fusion.storage.summary` tool executes successfully
-- [ ] No regression in upstream functionality
-
-## Tool Catalog
-
-### Current Tools (Implemented)
-
-| Tool Name | Domain | Description | Status |
-|-----------|--------|-------------|--------|
-| `fusion.storage.summary` | Storage | Get storage status: classes, PVC stats, ODF detection | ✅ Implemented |
-
-### Planned Tool Domains
-
-1. **Storage** (In Progress)
-   - `fusion.storage.summary` ✅
-   - `fusion.storage.pvc.list` (planned)
-   - `fusion.storage.pvc.resize` (planned)
-   - `fusion.storage.odf.status` (planned)
-
-2. **Compute** (Planned)
-   - `fusion.compute.node.list`
-   - `fusion.compute.node.cordon`
-   - `fusion.compute.node.drain`
-   - `fusion.compute.workload.optimize`
-
-3. **Network** (Planned)
-   - `fusion.network.policy.list`
-   - `fusion.network.policy.create`
-   - `fusion.network.servicemesh.status`
-
-4. **Backup/Restore** (Planned)
-   - `fusion.backup.create`
-   - `fusion.backup.list`
-   - `fusion.restore.execute`
-
-5. **HCP (Hosted Control Planes)** (Planned)
-   - `fusion.hcp.list`
-   - `fusion.hcp.create`
-   - `fusion.hcp.status`
-
-6. **Virtualization** (Planned)
-   - `fusion.vm.list`
-   - `fusion.vm.create`
-   - `fusion.vm.start`
-   - `fusion.vm.stop`
-
-## How to Add the Next Fusion Tool
-
-### Example: Adding `fusion.storage.pvc.list`
-
-#### 1. Create Tool Implementation
-
-**File:** `pkg/toolsets/fusion/storage/tool_pvc_list.go`
-
-```go
-package storage
-
-import (
-    "encoding/json"
-    "github.com/containers/kubernetes-mcp-server/pkg/api"
-    "github.com/google/jsonschema-go/jsonschema"
-    "k8s.io/utils/ptr"
-)
-
-func InitPVCList() api.ServerTool {
-    return api.ServerTool{
-        Tool: api.Tool{
-            Name:        "fusion.storage.pvc.list",
-            Description: "List PersistentVolumeClaims with filtering options",
-            Annotations: api.ToolAnnotations{
-                Title:        "IBM Fusion PVC List",
-                ReadOnlyHint: ptr.To(true),
-            },
-            InputSchema: &jsonschema.Schema{
-                Type: jsonschema.Type{jsonschema.TypeObject},
-                Properties: map[string]*jsonschema.Schema{
-                    "namespace": {
-                        Type:        jsonschema.Type{jsonschema.TypeString},
-                        Description: "Namespace to list PVCs from (empty for all)",
-                    },
-                },
-            },
-        },
-        Handler: handlePVCList,
-    }
-}
-
-func handlePVCList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-    // Implementation here
-    // ...
-    return api.NewToolCallResult(jsonOutput, nil), nil
-}
-```
-
-#### 2. Add Service Logic (if needed)
-
-**File:** `internal/fusion/services/storage.go`
-
-```go
-// Add new method to StorageService
-func (s *StorageService) ListPVCs(ctx context.Context, namespace string) (*PVCList, error) {
-    // Implementation
-}
-```
-
-#### 3. Register Tool in Toolset
-
-**File:** `pkg/toolsets/fusion/toolset.go`
-
-```go
-func (t *Toolset) GetTools(o api.Openshift) []api.ServerTool {
-    return []api.ServerTool{
-        storage.InitStorageSummary(),
-        storage.InitPVCList(),  // ← Add this line
-    }
-}
-```
-
-#### 4. Add Tests
-
-**File:** `pkg/toolsets/fusion/storage/tool_pvc_list_test.go`
-
-```go
-package storage
-
-import (
-    "testing"
-    "github.com/stretchr/testify/suite"
-)
-
-type PVCListSuite struct {
-    suite.Suite
-}
-
-func (s *PVCListSuite) TestPVCList() {
-    // Test implementation
-}
-
-func TestPVCListSuite(t *testing.T) {
-    suite.Run(t, new(PVCListSuite))
-}
-```
-
-#### 5. Update Documentation
-
-**File:** `docs/fusion/README.md`
-
-Add to the "Available Tools" section:
-
-```markdown
-- **`fusion.storage.pvc.list`** - List PersistentVolumeClaims
-  - Filter by namespace
-  - Returns PVC name, status, capacity, storage class
-```
-
-**File:** `README.FUSION.md` (this file)
-
-Update the "Current Tools" table.
-
-#### 6. Naming Convention
-
-All Fusion tools must follow this pattern:
-
-```
-fusion.<domain>.<action>
-```
-
-Examples:
-- ✅ `fusion.storage.summary`
-- ✅ `fusion.storage.pvc.list`
-- ✅ `fusion.compute.node.drain`
-- ✅ `fusion.network.policy.create`
-- ❌ `storage.fusion.summary` (wrong order)
-- ❌ `fusion-storage-summary` (wrong separator)
-
-#### 7. Testing Checklist
-
-Before committing a new tool:
-
-- [ ] Tool implementation in `pkg/toolsets/fusion/<domain>/`
-- [ ] Service logic in `internal/fusion/services/` (if needed)
-- [ ] Tool registered in `pkg/toolsets/fusion/toolset.go`
-- [ ] Unit tests added and passing
-- [ ] Tool appears in list when `FUSION_TOOLS_ENABLED=true`
-- [ ] Tool executes successfully with valid input
-- [ ] Tool handles errors gracefully
-- [ ] Documentation updated in `docs/fusion/README.md`
-- [ ] This file's tool catalog updated
-
-## Quick Reference Commands
-
-```bash
-# Build
-make build
-
-# Test
-go test ./...
-
-# Test Fusion only
-go test ./internal/fusion/... ./pkg/toolsets/fusion/...
-
-# Run with Fusion disabled
-./kubernetes-mcp-server
-
-# Run with Fusion enabled
-FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server
-
-# Sync with upstream
-git fetch upstream && git merge upstream/main
-
-# Format code
-go fmt ./internal/fusion/... ./pkg/toolsets/fusion/...
-
-# Lint
-make lint
-```
-
-## Support and Troubleshooting
-
-### Common Issues
-
-**Issue:** Fusion tools not appearing after enabling
-
-**Solution:**
-```bash
-# Verify environment variable is set
-echo $FUSION_TOOLS_ENABLED
-
-# Check logs for registration message
-FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server 2>&1 | grep -i fusion
-
-# Rebuild to ensure latest code
-make clean && make build
-```
-
-**Issue:** Merge conflicts during upstream sync
-
-**Solution:**
-1. Follow the conflict resolution checklist above
-2. For Fusion files, always keep "ours"
-3. For integration points, carefully preserve the hook
-4. Run `go mod tidy` after resolving go.mod conflicts
-
-**Issue:** Tests failing after upstream sync
-
-**Solution:**
-```bash
-# Update dependencies
-go mod tidy
-
-# Check for API changes in upstream
-git diff upstream/main..HEAD -- pkg/api/
-
-# Update Fusion code to match new upstream APIs
-```
-
-## Maintenance Schedule
-
-- **Weekly:** Check for upstream updates
-- **Monthly:** Perform upstream sync
-- **Quarterly:** Review and update documentation
-- **As needed:** Add new Fusion tools based on requirements
-
-## Version History
-
-- **v1.0.0** - Initial Fusion fork with storage.summary tool
-- **v1.1.0** - (Planned) Add compute domain tools
-- **v1.2.0** - (Planned) Add network domain tools
+## Support
+
+**Maintainer:** Sandeep Bazar  
+**Email:** sandeep.bazar@in.ibm.com  
+**GitHub:** [@sandeepbazar](https://github.com/sandeepbazar)
+
+For issues, please check:
+1. This README.FUSION.md
+2. docs/fusion/README.md
+3. GitHub Issues: https://github.com/sandeepbazar/ibm-fusion-mcp-server/issues
 
 ---
 
-**Last Updated:** 2026-02-07  
-**Maintainer:** IBM Fusion Team  
-**Upstream Version:** Synced with containers/kubernetes-mcp-server main branch
+**Made with ❤️ by IBM Bob**

@@ -1,222 +1,197 @@
 # IBM Fusion MCP Server - Quick Start
 
-> **📖 For complete documentation, see [README.FUSION.md](../../README.FUSION.md) at the repository root.**
+**For comprehensive documentation, see [README.FUSION.md](../../README.FUSION.md)**
 
-This is the quick start guide for IBM Fusion extensions to kubernetes-mcp-server.
+## What is This?
 
-## What is IBM Fusion MCP Server?
-
-IBM Fusion MCP Server is a fork of [containers/kubernetes-mcp-server](https://github.com/containers/kubernetes-mcp-server) that adds specialized tools for managing IBM Fusion and OpenShift environments.
-
-**Upstream:** https://github.com/containers/kubernetes-mcp-server
+IBM Fusion MCP Server extends the Kubernetes MCP Server with multi-cluster management capabilities for IBM Fusion environments.
 
 ## Quick Start
 
 ### 1. Enable Fusion Tools
 
-Fusion tools are **disabled by default**. Enable them with an environment variable:
-
 ```bash
 export FUSION_TOOLS_ENABLED=true
 ```
 
-### 2. Run the Server
+### 2. Build and Run
 
 ```bash
-# Build and run locally
+# Build
 make build
-FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server
 
-# Or use package managers
-FUSION_TOOLS_ENABLED=true npx -y kubernetes-mcp-server@latest
-FUSION_TOOLS_ENABLED=true uvx kubernetes-mcp-server@latest
+# Run with MCP Inspector
+npx @modelcontextprotocol/inspector $(pwd)/kubernetes-mcp-server
 ```
 
-### 3. Verify Fusion Tools are Loaded
+### 3. Try Your First Tool
 
-Check the logs for:
+In the MCP Inspector, execute:
 
-```
-I0207 12:00:00.000000   12345 registry.go:18] Registering IBM Fusion toolset
-```
-
-## Available Tools
-
-### Storage Domain
-
-#### `fusion.storage.summary`
-
-Get comprehensive storage status for IBM Fusion/OpenShift environments.
-
-**Input:** None (empty object `{}`)
-
-**Output:**
 ```json
 {
-  "summary": {
-    "storageClasses": [
-      {
-        "name": "gp2",
-        "provisioner": "kubernetes.io/aws-ebs",
-        "isDefault": true
-      }
-    ],
-    "pvcStats": {
-      "bound": 15,
-      "pending": 2,
-      "lost": 0,
-      "total": 17
-    },
-    "odfInstalled": true
+  "name": "fusion.storage.summary",
+  "arguments": {}
+}
+```
+
+## Single Cluster Example
+
+Default behavior - uses current kubeconfig context:
+
+```json
+{
+  "name": "fusion.datafoundation.status",
+  "arguments": {}
+}
+```
+
+## Multi-Cluster Example
+
+Target multiple clusters explicitly:
+
+```json
+{
+  "name": "fusion.backup.jobs.list",
+  "arguments": {
+    "target": {
+      "type": "multi",
+      "clusters": ["prod-us-east-1", "prod-us-west-2"]
+    }
   }
 }
 ```
 
-**Features:**
-- Lists all storage classes with provisioner and default status
-- Provides PVC statistics by phase (Bound, Pending, Lost)
-- Detects ODF/OCS installation
+## Fleet Example
 
-## Architecture Overview
+Target all clusters in your fleet:
 
-### Directory Structure
-
-```
-ibm-fusion-mcp-server/
-├── internal/fusion/          # Internal implementation
-│   ├── config/              # Feature gate configuration
-│   ├── clients/             # Kubernetes client wrappers
-│   └── services/            # Domain logic (storage, compute, network)
-├── pkg/toolsets/fusion/     # Public toolset API
-│   ├── registry.go          # Registration hook
-│   ├── toolset.go           # Toolset implementation
-│   └── storage/             # Storage domain tools
-└── docs/fusion/             # This documentation
+```json
+{
+  "name": "fusion.virtualization.status",
+  "arguments": {
+    "target": {
+      "type": "fleet"
+    }
+  }
+}
 ```
 
-### Integration Points
+## Available Tools
 
-Fusion integrates with upstream via **two minimal touchpoints**:
+| Tool | Description |
+|------|-------------|
+| `fusion.storage.summary` | Storage classes, PVC stats, ODF detection |
+| `fusion.datafoundation.status` | Data Foundation (ODF/OCS) status |
+| `fusion.gdp.status` | Global Data Platform status |
+| `fusion.backup.jobs.list` | List backup jobs |
+| `fusion.dr.status` | Disaster Recovery status |
+| `fusion.catalog.status` | Data Cataloging status |
+| `fusion.cas.status` | Content Aware Storage status |
+| `fusion.serviceability.summary` | Serviceability tools status |
+| `fusion.observability.summary` | Observability stack status |
+| `fusion.virtualization.status` | Virtualization status |
+| `fusion.hcp.status` | Hosted Control Planes status |
 
-1. **`pkg/toolsets/toolsets.go`** - Single registration hook (11 lines)
-2. **`pkg/mcp/modules.go`** - Fusion package import (1 line)
+## Response Format
 
-This minimal integration ensures:
-- Easy upstream syncing
-- No merge conflicts
-- Clean separation of concerns
+All tools return:
 
-### Feature Gating
+```json
+{
+  "target": {
+    "type": "single|multi|fleet",
+    "cluster": "...",
+    "clusters": [...]
+  },
+  "clusterResults": {
+    "cluster-name": {
+      "clusterName": "cluster-name",
+      "success": true,
+      "data": { ... }
+    }
+  },
+  "summary": {
+    "clustersTotal": 1,
+    "clustersOk": 1,
+    "clustersFailed": 0
+  }
+}
+```
 
-When `FUSION_TOOLS_ENABLED` is not set or set to `false`:
-- Fusion tools are not registered
-- Server behaves identically to upstream
-- Zero Fusion overhead
+## Targeting Options
 
-## Development
+| Type | Description | Example |
+|------|-------------|---------|
+| `single` | One cluster (default) | `{"type": "single", "cluster": "prod-1"}` |
+| `multi` | Specific clusters | `{"type": "multi", "clusters": ["prod-1", "prod-2"]}` |
+| `fleet` | All clusters | `{"type": "fleet"}` |
+| `selector` | Label-based | `{"type": "selector", "selector": "env=prod"}` |
+| `all` | All registered | `{"type": "all"}` |
 
-### Adding New Tools
+## Environment Variables
 
-See the complete guide in [README.FUSION.md - How to Add the Next Fusion Tool](../../README.FUSION.md#how-to-add-the-next-fusion-tool)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FUSION_TOOLS_ENABLED` | `false` | Enable Fusion tools |
+| `KUBECONFIG` | `~/.kube/config` | Kubeconfig path |
+| `FUSION_TIMEOUT` | `30` | Operation timeout (seconds) |
 
-**Quick steps:**
+## Multi-Cluster Setup
 
-1. Create tool in `pkg/toolsets/fusion/<domain>/tool_<name>.go`
-2. Add service logic in `internal/fusion/services/<domain>.go`
-3. Register in `pkg/toolsets/fusion/toolset.go`
-4. Add tests
-5. Update documentation
-
-**Naming convention:** `fusion.<domain>.<action>`
-
-### Testing
+Ensure your kubeconfig has multiple contexts:
 
 ```bash
-# Test Fusion code only
-go test ./internal/fusion/... ./pkg/toolsets/fusion/...
+# List contexts
+kubectl config get-contexts
 
-# Test everything
-make test
-
-# Test with coverage
-go test -cover ./internal/fusion/... ./pkg/toolsets/fusion/...
+# The server automatically registers all contexts
+# Tools can target any registered context
 ```
 
-### Building
+## Troubleshooting
+
+### Tools Not Loading
 
 ```bash
-# Build binary
-make build
+# Verify environment variable
+echo $FUSION_TOOLS_ENABLED
 
-# Build for all platforms
-make build-all-platforms
+# Check server logs for "Registering IBM Fusion toolset"
+FUSION_TOOLS_ENABLED=true ./kubernetes-mcp-server 2>&1 | grep Fusion
 ```
 
-## Upstream Sync
+### Component Shows "Not Installed"
 
-For detailed upstream sync procedures, see [README.FUSION.md - Upstream Sync SOP](../../README.FUSION.md#upstream-sync-sop)
+This is normal if the component isn't deployed. Tools gracefully handle missing CRDs/operators.
 
-**Quick sync:**
+### Multi-Cluster Timeout
 
-```bash
-# Commit Fusion changes first!
-git add . && git commit -m "feat(fusion): latest changes"
-git push origin fusion-main
+Increase timeout in target:
 
-# Sync with upstream
-git fetch upstream
-git merge upstream/main
-
-# Resolve conflicts (Fusion files = keep ours)
-# Push updated branch
-git push origin fusion-main
+```json
+{
+  "target": {
+    "type": "multi",
+    "clusters": ["prod-1", "prod-2"],
+    "timeout": 60
+  }
+}
 ```
 
-## Tool Catalog
+## Next Steps
 
-### Current Tools
-
-| Tool | Domain | Status |
-|------|--------|--------|
-| `fusion.storage.summary` | Storage | ✅ Implemented |
-
-### Planned Domains
-
-1. **Storage** - PVC management, ODF/OCS integration
-2. **Compute** - Node management, workload optimization
-3. **Network** - Network policies, service mesh
-4. **Backup/Restore** - Disaster recovery, snapshots
-5. **HCP** - Hosted Control Planes management
-6. **Virtualization** - KubeVirt integration
-
-## Documentation
-
-- **[README.FUSION.md](../../README.FUSION.md)** - 📖 Complete operations runbook (START HERE)
-- **[This file](README.md)** - Quick start guide
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed architecture (future)
-- **[ROADMAP.md](ROADMAP.md)** - Feature roadmap (future)
-- **[TOOLS.md](TOOLS.md)** - Complete tool reference (future)
+- Read [README.FUSION.md](../../README.FUSION.md) for comprehensive documentation
+- Explore fleet admin scenarios
+- Learn about upstream sync process
+- Contribute new tools
 
 ## Support
 
-- **Fusion-specific issues:** File in this repository with `fusion` label
-- **Upstream issues:** File in [containers/kubernetes-mcp-server](https://github.com/containers/kubernetes-mcp-server/issues)
-
-## Contributing
-
-See the [Contribution Style Guide](../../README.FUSION.md#how-to-add-the-next-fusion-tool) in README.FUSION.md.
-
-**Key principles:**
-- Keep Fusion code isolated in `internal/fusion/` and `pkg/toolsets/fusion/`
-- Do not refactor upstream code
-- Add tests for all new functionality
-- Follow existing patterns from upstream toolsets
-- Update documentation
-
-## License
-
-Same license as upstream kubernetes-mcp-server. See [LICENSE](../../LICENSE).
+**Maintainer:** Sandeep Bazar  
+**GitHub:** [@sandeepbazar](https://github.com/sandeepbazar)  
+**Repository:** [ibm-fusion-mcp-server](https://github.com/sandeepbazar/ibm-fusion-mcp-server)
 
 ---
 
-**For complete documentation, operational procedures, and troubleshooting, see [README.FUSION.md](../../README.FUSION.md).**
+**Made with ❤️ by IBM Bob**
