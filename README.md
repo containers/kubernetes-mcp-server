@@ -1,5 +1,7 @@
 # Kubernetes MCP Server
 
+> **Note:** This is the IBM Fusion fork. For IBM Fusion-specific features and documentation, see [README.FUSION.md](README.FUSION.md).
+
 [![GitHub License](https://img.shields.io/github/license/containers/kubernetes-mcp-server)](https://github.com/containers/kubernetes-mcp-server/blob/main/LICENSE)
 [![npm](https://img.shields.io/npm/v/kubernetes-mcp-server)](https://www.npmjs.com/package/kubernetes-mcp-server)
 [![PyPI - Version](https://img.shields.io/pypi/v/kubernetes-mcp-server)](https://pypi.org/project/kubernetes-mcp-server/)

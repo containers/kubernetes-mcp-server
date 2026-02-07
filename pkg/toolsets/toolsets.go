@@ -48,4 +48,21 @@ func Validate(toolsets []string) error {
 		}
 	}
 	return nil
+
+func init() {
+	// IBM Fusion extension integration point
+	// This is the single hook for registering IBM Fusion tools
+	// Tools are only registered if FUSION_TOOLS_ENABLED=true
+	registerFusionTools()
+}
+
+// registerFusionTools is a placeholder that will be implemented by the fusion package
+// This allows the fusion package to register itself without modifying upstream code
+var registerFusionTools = func() {}
+
+// SetFusionRegistration allows the fusion package to hook into the registration process
+// This is the single integration point for IBM Fusion tools
+func SetFusionRegistration(fn func()) {
+	registerFusionTools = fn
+}
 }
