@@ -657,6 +657,24 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
 
+- **vm_snapshot_create** - Create a snapshot of a VirtualMachine for backup or cloning purposes
+  - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+  - `snapshot_name` (`string`) - Optional name for the snapshot. If not provided, a name will be generated
+  - `vm_name` (`string`) **(required)** - The name of the virtual machine to snapshot
+
+- **vm_snapshot_delete** - Delete a VirtualMachine snapshot
+  - `namespace` (`string`) **(required)** - The namespace of the snapshot
+  - `snapshot_name` (`string`) **(required)** - The name of the snapshot to delete
+
+- **vm_snapshot_list** - List VirtualMachine snapshots for a specific VM or all snapshots in a namespace
+  - `namespace` (`string`) **(required)** - The namespace to list snapshots from
+  - `vm_name` (`string`) - Optional name of the virtual machine to filter snapshots. If not provided, lists all snapshots in the namespace
+
+- **vm_snapshot_restore** - Restore a VirtualMachine to a previous snapshot state
+  - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+  - `snapshot_name` (`string`) **(required)** - The name of the snapshot to restore from
+  - `vm_name` (`string`) **(required)** - The name of the virtual machine to restore
+
 </details>
 
 <details>

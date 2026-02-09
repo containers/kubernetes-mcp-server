@@ -79,6 +79,30 @@ var (
 	}
 )
 
+// Snapshot resources
+var (
+	// VirtualMachineSnapshotGVR is the GroupVersionResource for VirtualMachineSnapshot resources
+	VirtualMachineSnapshotGVR = schema.GroupVersionResource{
+		Group:    "snapshot.kubevirt.io",
+		Version:  "v1beta1",
+		Resource: "virtualmachinesnapshots",
+	}
+
+	// VirtualMachineSnapshotContentGVR is the GroupVersionResource for VirtualMachineSnapshotContent resources
+	VirtualMachineSnapshotContentGVR = schema.GroupVersionResource{
+		Group:    "snapshot.kubevirt.io",
+		Version:  "v1beta1",
+		Resource: "virtualmachinesnapshotcontents",
+	}
+
+	// VirtualMachineRestoreGVR is the GroupVersionResource for VirtualMachineRestore resources
+	VirtualMachineRestoreGVR = schema.GroupVersionResource{
+		Group:    "snapshot.kubevirt.io",
+		Version:  "v1beta1",
+		Resource: "virtualmachinerestores",
+	}
+)
+
 // Kubernetes core resources
 var (
 	// PersistentVolumeClaimGVR is the GroupVersionResource for PersistentVolumeClaim resources
@@ -93,5 +117,19 @@ var (
 		Group:    "",
 		Version:  "v1",
 		Resource: "pods",
+	}
+
+	// StorageClassGVR is the GroupVersionResource for StorageClass resources
+	StorageClassGVR = schema.GroupVersionResource{
+		Group:    "storage.k8s.io",
+		Version:  "v1",
+		Resource: "storageclasses",
+	}
+
+	// VolumeSnapshotClassGVR is the GroupVersionResource for VolumeSnapshotClass resources
+	VolumeSnapshotClassGVR = schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshotclasses",
 	}
 )

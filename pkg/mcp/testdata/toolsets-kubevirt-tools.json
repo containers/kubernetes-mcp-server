@@ -157,5 +157,121 @@
       ]
     },
     "name": "vm_lifecycle"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Create Snapshot",
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Create a snapshot of a VirtualMachine for backup or cloning purposes",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        },
+        "snapshot_name": {
+          "description": "Optional name for the snapshot. If not provided, a name will be generated",
+          "type": "string"
+        },
+        "vm_name": {
+          "description": "The name of the virtual machine to snapshot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "vm_name"
+      ]
+    },
+    "name": "vm_snapshot_create"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Delete Snapshot",
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Delete a VirtualMachine snapshot",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the snapshot",
+          "type": "string"
+        },
+        "snapshot_name": {
+          "description": "The name of the snapshot to delete",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "snapshot_name"
+      ]
+    },
+    "name": "vm_snapshot_delete"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: List Snapshots",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List VirtualMachine snapshots for a specific VM or all snapshots in a namespace",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace to list snapshots from",
+          "type": "string"
+        },
+        "vm_name": {
+          "description": "Optional name of the virtual machine to filter snapshots. If not provided, lists all snapshots in the namespace",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace"
+      ]
+    },
+    "name": "vm_snapshot_list"
+  },
+  {
+    "annotations": {
+      "title": "Virtual Machine: Restore Snapshot",
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "description": "Restore a VirtualMachine to a previous snapshot state",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        },
+        "snapshot_name": {
+          "description": "The name of the snapshot to restore from",
+          "type": "string"
+        },
+        "vm_name": {
+          "description": "The name of the virtual machine to restore",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "vm_name",
+        "snapshot_name"
+      ]
+    },
+    "name": "vm_snapshot_restore"
   }
 ]
