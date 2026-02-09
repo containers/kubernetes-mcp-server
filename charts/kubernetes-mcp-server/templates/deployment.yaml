@@ -43,6 +43,9 @@ spec:
           args:
             - "--config"
             - "{{ .Values.configFilePath }}"
+          {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: POD_NAMESPACE
               valueFrom:
