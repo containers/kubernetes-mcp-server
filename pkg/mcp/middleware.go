@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
@@ -52,7 +53,14 @@ func userAgentPropagationMiddleware(serverName, serverVersion string) func(mcp.M
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (result mcp.Result, err error) {
 			userAgentHeader := getMcpReqUserAgent(req)
-			userAgentHeader = fmt.Sprintf("%s/%s %s", serverName, serverVersion, userAgentHeader)
+			userAgentHeader = fmt.Sprintf(
+				"%s/%s (%s/%s) %s",
+				serverName,
+				serverVersion,
+				runtime.GOOS,
+				runtime.GOARCH,
+				userAgentHeader,
+			)
 			return next(context.WithValue(ctx, internalk8s.UserAgentHeader, userAgentHeader), method, req)
 		}
 	}

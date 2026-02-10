@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"fmt"
 	"net/http"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -166,7 +168,7 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
 	s.InitMcpClient(transport.WithHTTPHeaders(map[string]string{
 		"User-Agent": "custom-mcp-client/2.0",
 	}))
-	_, _ = s.CallTool("pods_list", map[string]interface{}{})
+	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
 	podsHeaders := s.pathHeaders["/api/v1/namespaces/default/pods"]
@@ -174,7 +176,10 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
 
 	s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
 	s.Run("DynamicClient propagates User-Agent with server prefix to Kube API", func() {
-		s.Equal("kubernetes-mcp-server/0.0.0 custom-mcp-client/2.0", podsHeaders.Get("User-Agent"))
+		s.Equal(
+			fmt.Sprintf("kubernetes-mcp-server/0.0.0 (%s/%s) custom-mcp-client/2.0", runtime.GOOS, runtime.GOARCH),
+			podsHeaders.Get("User-Agent"),
+		)
 	})
 }
 
@@ -183,7 +188,7 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentWithOAuthToKu
 		"Authorization": "Bearer a-token-from-mcp-client",
 		"User-Agent":    "custom-mcp-client/2.0",
 	}))
-	_, _ = s.CallTool("pods_list", map[string]interface{}{})
+	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
 	podsHeaders := s.pathHeaders["/api/v1/namespaces/default/pods"]
@@ -191,7 +196,10 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentWithOAuthToKu
 
 	s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
 	s.Run("Derived client propagates User-Agent with server prefix to Kube API", func() {
-		s.Equal("kubernetes-mcp-server/0.0.0 custom-mcp-client/2.0", podsHeaders.Get("User-Agent"))
+		s.Equal(
+			fmt.Sprintf("kubernetes-mcp-server/0.0.0 (%s/%s) custom-mcp-client/2.0", runtime.GOOS, runtime.GOARCH),
+			podsHeaders.Get("User-Agent"),
+		)
 	})
 }
 
@@ -209,7 +217,7 @@ func (s *UserAgentPropagationSuite) TestFallsBackToMCPClientInfoForUserAgent() {
 	})
 	s.McpClient = test.NewMcpClient(s.T(), strippedHandler)
 
-	_, _ = s.CallTool("pods_list", map[string]interface{}{})
+	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
 	podsHeaders := s.pathHeaders["/api/v1/namespaces/default/pods"]
@@ -218,7 +226,10 @@ func (s *UserAgentPropagationSuite) TestFallsBackToMCPClientInfoForUserAgent() {
 	s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
 	s.Run("User-Agent falls back to MCP client name and version", func() {
 		// McpInitRequest sets ClientInfo: {Name: "test", Version: "1.33.7"}
-		s.Equal("kubernetes-mcp-server/0.0.0 test/1.33.7", podsHeaders.Get("User-Agent"))
+		s.Equal(
+			fmt.Sprintf("kubernetes-mcp-server/0.0.0 (%s/%s) test/1.33.7", runtime.GOOS, runtime.GOARCH),
+			podsHeaders.Get("User-Agent"),
+		)
 	})
 }
 
