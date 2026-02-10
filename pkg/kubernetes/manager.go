@@ -122,6 +122,10 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return m.kubernetes, nil
 	}
 	klog.V(5).Infof("%s header found (Bearer), using provided bearer token", OAuthAuthorizationHeader)
+	userAgent := CustomUserAgent
+	if ua, ok := ctx.Value(UserAgentHeader).(string); ok && ua != "" {
+		userAgent = ua
+	}
 	derivedCfg := &rest.Config{
 		Host:          m.kubernetes.RESTConfig().Host,
 		APIPath:       m.kubernetes.RESTConfig().APIPath,
@@ -135,7 +139,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		},
 		BearerToken: strings.TrimPrefix(authorization, "Bearer "),
 		// pass custom UserAgent to identify the client
-		UserAgent:   CustomUserAgent,
+		UserAgent:   userAgent,
 		QPS:         m.kubernetes.RESTConfig().QPS,
 		Burst:       m.kubernetes.RESTConfig().Burst,
 		Timeout:     m.kubernetes.RESTConfig().Timeout,
