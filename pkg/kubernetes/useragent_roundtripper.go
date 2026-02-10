@@ -20,6 +20,8 @@ func (u *UserAgentRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		return u.delegate.RoundTrip(req)
 	}
 
+	req = req.Clone(req.Context())
+
 	req.Header.Set(string(UserAgentHeader), userAgentHeader)
 	return u.delegate.RoundTrip(req)
 }
