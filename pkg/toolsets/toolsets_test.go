@@ -36,6 +36,8 @@ func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
 
 func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
+func (t *TestToolset) GetToolsetInstructions() string { return "" }
+
 var _ api.Toolset = (*TestToolset)(nil)
 
 func (s *ToolsetsSuite) TestToolsetNames() {

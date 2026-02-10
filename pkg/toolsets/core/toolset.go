@@ -35,6 +35,10 @@ func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	)
 }
 
+func (t *Toolset) GetToolsetInstructions() string {
+	return ""
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

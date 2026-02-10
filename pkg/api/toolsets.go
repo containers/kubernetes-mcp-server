@@ -46,6 +46,11 @@ type Toolset interface {
 	// GetPrompts returns the prompts provided by this toolset.
 	// Returns nil if the toolset doesn't provide any prompts.
 	GetPrompts() []ServerPrompt
+	// GetToolsetInstructions returns instructions for using the tools in this toolset.
+	// These instructions will be included in the MCP server's initialize response
+	// to help LLMs understand how to effectively use the toolset.
+	// Returns an empty string if no specific instructions are needed.
+	GetToolsetInstructions() string
 }
 
 type ToolCallRequest interface {

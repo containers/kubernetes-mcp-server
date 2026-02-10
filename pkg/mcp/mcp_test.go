@@ -266,3 +266,92 @@ func (s *UserAgentPropagationSuite) TestFallsBackToServerPrefixWhenNoClientInfo(
 func TestUserAgentPropagation(t *testing.T) {
 	suite.Run(t, new(UserAgentPropagationSuite))
 }
+
+type ToolsetInstructionsSuite struct {
+	BaseMcpSuite
+}
+
+func (s *ToolsetInstructionsSuite) TestToolsetInstructionsAreIncluded() {
+	mockToolset := &test.MockToolset{
+		Name:         "mock",
+		Description:  "Mock toolset for testing",
+		Instructions: "These are mock toolset instructions.\nAlways use caution with mock tools.",
+	}
+
+	s.Cfg.Toolsets = []string{"mock", "core"}
+
+	test.RegisterMockToolset(mockToolset)
+	defer test.UnregisterMockToolset("mock")
+
+	s.InitMcpClient()
+	s.Run("includes toolset instructions in initialize response", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Contains(s.InitializeResult.Instructions, "These are mock toolset instructions.\nAlways use caution with mock tools.",
+			"instructions should include toolset instructions")
+	})
+}
+
+func (s *ToolsetInstructionsSuite) TestToolsetInstructionsCombinedWithServerInstructions() {
+	mockToolset := &test.MockToolset{
+		Name:         "mock",
+		Description:  "Mock toolset for testing",
+		Instructions: "Toolset-specific instructions.",
+	}
+
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		server_instructions = "Server-level instructions."
+		toolsets = ["mock"]
+	`), s.Cfg), "Expected to parse config")
+
+	test.RegisterMockToolset(mockToolset)
+	defer test.UnregisterMockToolset("mock")
+
+	s.InitMcpClient()
+	s.Run("combines server and toolset instructions", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Contains(s.InitializeResult.Instructions, "Server-level instructions.",
+			"instructions should include server instructions")
+		s.Contains(s.InitializeResult.Instructions, "Toolset-specific instructions.",
+			"instructions should include toolset instructions")
+	})
+}
+
+func (s *ToolsetInstructionsSuite) TestEmptyToolsetInstructionsNotIncluded() {
+	s.Cfg.Toolsets = []string{"core"}
+	s.InitMcpClient()
+	s.Run("does not include empty toolset instructions", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Empty(s.InitializeResult.Instructions,
+			"instructions should be empty when toolset instructions are empty")
+	})
+}
+
+func (s *ToolsetInstructionsSuite) TestDisableToolsetInstructions() {
+	mockToolset := &test.MockToolset{
+		Name:         "mock",
+		Description:  "Mock toolset for testing",
+		Instructions: "These instructions should be ignored.",
+	}
+
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		server_instructions = "Server-level instructions only."
+		toolsets = ["mock"]
+		disable_toolset_instructions = true
+	`), s.Cfg), "Expected to parse config")
+
+	test.RegisterMockToolset(mockToolset)
+	defer test.UnregisterMockToolset("mock")
+
+	s.InitMcpClient()
+	s.Run("excludes toolset instructions when disabled", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Equal("Server-level instructions only.", s.InitializeResult.Instructions,
+			"instructions should only contain server instructions when toolset instructions are disabled")
+		s.NotContains(s.InitializeResult.Instructions, "These instructions should be ignored.",
+			"instructions should not include toolset instructions when disabled")
+	})
+}
+
+func TestToolsetInstructions(t *testing.T) {
+	suite.Run(t, new(ToolsetInstructionsSuite))
+}
