@@ -31,7 +31,7 @@ func initPods() []api.ServerTool {
 					"fieldSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-						Pattern:     REGEX_LABELSELECTOR_VALID_CHARS,
+						Pattern:     REGEX_FIELDSELECTOR,
 					},
 				},
 			},
