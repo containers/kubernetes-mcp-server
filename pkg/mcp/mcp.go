@@ -71,9 +71,9 @@ type Server struct {
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
-	instructions := buildServerInstructions(configuration.ServerInstructions, configuration.Toolsets())
-	if configuration.DisableToolsetInstructions {
-		instructions = configuration.ServerInstructions
+	instructions := configuration.ServerInstructions
+	if !configuration.DisableToolsetInstructions {
+		instructions = buildServerInstructions(configuration.ServerInstructions, configuration.Toolsets())
 	}
 
 	s := &Server{
