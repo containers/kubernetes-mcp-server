@@ -7,6 +7,12 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
+// Details: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+const REGEX_LABELSELECTOR_VALID_CHARS = "^([/_.\\-A-Za-z0-9=, ()!])+$"
+
+// Details: https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
+const REGEX_FIELDSELECTOR = "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$"
+
 type Toolset struct{}
 
 var _ api.Toolset = (*Toolset)(nil)

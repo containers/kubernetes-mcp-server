@@ -82,7 +82,7 @@ func initNodes() []api.ServerTool {
 					"label_selector": {
 						Type:        "string",
 						Description: "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
-						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+						Pattern:     REGEX_LABELSELECTOR_VALID_CHARS,
 					},
 				},
 			},

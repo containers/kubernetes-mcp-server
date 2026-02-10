@@ -100,7 +100,7 @@
       "properties": {
         "label_selector": {
           "description": "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         },
         "name": {
@@ -213,12 +213,12 @@
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         },
         "labelSelector": {
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         }
       }
@@ -238,12 +238,12 @@
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
           "type": "string"
         },
         "labelSelector": {
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         },
         "namespace": {
@@ -349,7 +349,7 @@
         },
         "label_selector": {
           "description": "Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         },
         "name": {
@@ -479,7 +479,7 @@
         },
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
           "type": "string"
         },
         "kind": {
@@ -488,7 +488,7 @@
         },
         "labelSelector": {
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the resources by label",
-          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+          "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         },
         "namespace": {

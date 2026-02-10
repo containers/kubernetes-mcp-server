@@ -43,12 +43,12 @@ func initResources(o api.Openshift) []api.ServerTool {
 					"labelSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the resources by label",
-						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+						Pattern:     REGEX_LABELSELECTOR_VALID_CHARS,
 					},
 					"fieldSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-						Pattern:     "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]",
+						Pattern:     REGEX_FIELDSELECTOR,
 					},
 				},
 				Required: []string{"apiVersion", "kind"},
