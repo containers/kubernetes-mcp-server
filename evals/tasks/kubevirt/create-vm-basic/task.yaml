@@ -4,38 +4,48 @@ metadata:
   name: "create-basic-vm"
   difficulty: easy
 spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
   setup:
-    - script:
-        inline: |-
-          #!/usr/bin/env bash
-          NS="${EVAL_NAMESPACE:-vm-test}"
-          kubectl delete namespace "$NS" --ignore-not-found
-          kubectl create namespace "$NS"
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
   verify:
     - script:
         inline: |-
           #!/usr/bin/env bash
           source ../helpers/verify-vm.sh
-          NS="${EVAL_NAMESPACE:-vm-test}"
+          NS="vm-test"
 
-          # Wait for VirtualMachine to be created
           verify_vm_exists "test-vm" "$NS" || exit 1
-
-          # Verify container disk is Fedora
           verify_container_disk "test-vm" "$NS" "fedora" || exit 1
-
-          # Verify runStrategy is set and deprecated 'running' field is not used
           verify_run_strategy "test-vm" "$NS" || exit 1
           verify_no_deprecated_running_field "test-vm" "$NS" || exit 1
 
           echo "All validations passed"
           exit 0
   cleanup:
-    - script:
-        inline: |-
-          #!/usr/bin/env bash
-          NS="${EVAL_NAMESPACE:-vm-test}"
-          kubectl delete virtualmachine test-vm -n "$NS" --ignore-not-found
-          kubectl delete namespace "$NS" --ignore-not-found
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
   prompt:
-    inline: Create a Fedora virtual machine named test-vm in the ${EVAL_NAMESPACE:-vm-test} namespace.
+    inline: Create a Fedora virtual machine named test-vm in the vm-test namespace.
