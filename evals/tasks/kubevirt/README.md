@@ -6,14 +6,15 @@ KubeVirt-focused MCP tasks live here. Each folder under this directory represent
 
 1. Create a new subdirectory (e.g., `create-vm-foo/`) and place the scenario YAML plus any helper scripts or artifacts inside it.
 2. Make sure the YAML's `metadata` block includes `name` and `difficulty` so it shows up correctly in the catalog below.
-3. Keep prompts concise and action-oriented; verification commands should rely on KubeVirt resources and helper functions whenever possible.
+3. Declare the kubernetes extension in `spec.requires` and use `k8s.create`/`k8s.delete`/`k8s.wait` for resource management where possible.
+4. Keep prompts concise and action-oriented; verification commands should rely on KubeVirt resources and helper functions whenever possible.
 
 ## Tasks Defined
 
 ### VM Creation
 
 - **[easy] create-vm-basic** - Create a basic Fedora virtual machine
-  - **Prompt:** *Please create a Fedora virtual machine named test-vm in the vm-test namespace.*
+  - **Prompt:** *Create a Fedora virtual machine named test-vm in the vm-test namespace.*
 
 - **[easy] create-vm-ubuntu** - Create an Ubuntu virtual machine
   - **Prompt:** *Create an Ubuntu virtual machine named ubuntu-vm in the vm-test namespace.*
@@ -35,6 +36,14 @@ KubeVirt-focused MCP tasks live here. Each folder under this directory represent
 - **[medium] delete-vm** - Delete a virtual machine
   - **Prompt:** *Please delete the virtual machine named deleted-vm in the vm-test namespace.*
 
+### VM Snapshots
+
+- **[medium] snapshot-vm** - Create a snapshot of a virtual machine
+  - **Prompt:** *Create a snapshot named test-snapshot of the virtual machine snapshot-test-vm in the vm-test namespace.*
+
+- **[medium] restore-vm** - Restore a virtual machine from a snapshot
+  - **Prompt:** *Restore the snapshot named restore-snapshot to a new virtual machine named restored-vm.*
+
 ### VM Modification
 
 - **[hard] update-vm-resources** - Update VM CPU and memory resources
@@ -48,7 +57,7 @@ KubeVirt-focused MCP tasks live here. Each folder under this directory represent
 
 ## Helper Scripts
 
-Many tasks rely on helper scripts located in `evals/tasks/kubevirt/helpers/`:
+Some verification steps rely on helper scripts located in `helpers/`:
 
 - `verify-vm.sh` - Common VM verification functions used across multiple test scenarios
 
@@ -63,7 +72,7 @@ These tasks are designed to be used with the [mcpchecker](https://github.com/mcp
 
 Example workflow:
 
-1. Setup steps create the initial state
+1. Setup steps create the initial state (using `k8s.create` and optional script steps)
 2. Agent receives the prompt and executes actions using MCP tools
-3. Verify steps check if the agent accomplished the goal
-4. Cleanup steps remove test resources
+3. Verify steps check if the agent accomplished the goal (using `k8s.wait` or script steps)
+4. Cleanup steps remove test resources (using `k8s.delete`)
