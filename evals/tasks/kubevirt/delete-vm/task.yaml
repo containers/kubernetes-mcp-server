@@ -1,53 +1,57 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   name: "delete-vm"
   difficulty: medium
-steps:
+spec:
   setup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete namespace "$NS" --ignore-not-found
-      kubectl create namespace "$NS"
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="${EVAL_NAMESPACE:-vm-test}"
+          kubectl delete namespace "$NS" --ignore-not-found
+          kubectl create namespace "$NS"
 
-      # Create a running VM
-      kubectl apply -f - <<EOF
-      apiVersion: kubevirt.io/v1
-      kind: VirtualMachine
-      metadata:
-        name: deleted-vm
-        namespace: $NS
-      spec:
-        runStrategy: Always
-        template:
+          # Create a running VM
+          kubectl apply -f - <<EOF
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          metadata:
+            name: deleted-vm
+            namespace: $NS
           spec:
-            domain:
-              devices:
-                disks:
+            runStrategy: Always
+            template:
+              spec:
+                domain:
+                  devices:
+                    disks:
+                      - name: containerdisk
+                        disk:
+                          bus: virtio
+                  resources:
+                    requests:
+                      memory: 2Gi
+                terminationGracePeriodSeconds: 0
+                volumes:
                   - name: containerdisk
-                    disk:
-                      bus: virtio
-              resources:
-                requests:
-                  memory: 2Gi
-            terminationGracePeriodSeconds: 0
-            volumes:
-              - name: containerdisk
-                containerDisk:
-                  image: quay.io/containerdisks/opensuse-leap:15.6
-      EOF
-      kubectl wait --for=create vm/deleted-vm -n "${NS}" --timeout 10s
-      kubectl wait --for=condition=Ready vm/deleted-vm -n "${NS}" --timeout 20s
+                    containerDisk:
+                      image: quay.io/containerdisks/opensuse-leap:15.6
+          EOF
+          kubectl wait --for=create vm/deleted-vm -n "${NS}" --timeout 10s
+          kubectl wait --for=condition=Ready vm/deleted-vm -n "${NS}" --timeout 20s
   verify:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl wait --for=delete vm/deleted-vm -n "${NS}" --timeout 30s || exit 1
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="${EVAL_NAMESPACE:-vm-test}"
+          kubectl wait --for=delete vm/deleted-vm -n "${NS}" --timeout 30s || exit 1
   cleanup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete namespace "$NS" --ignore-not-found
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="${EVAL_NAMESPACE:-vm-test}"
+          kubectl delete namespace "$NS" --ignore-not-found
   prompt:
     inline: |
       Please delete the virtual machine named deleted-vm in the ${EVAL_NAMESPACE:-vm-test} namespace.

@@ -1,42 +1,46 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   name: "create-vm-with-vlan"
   difficulty: hard
-steps:
+spec:
   setup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete namespace "$NS" --ignore-not-found
-      kubectl create namespace "$NS"
-      kubectl apply -f vlan.network -n "$NS"
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="${EVAL_NAMESPACE:-vm-test}"
+          kubectl delete namespace "$NS" --ignore-not-found
+          kubectl create namespace "$NS"
+          kubectl apply -f vlan.network -n "$NS"
   verify:
-    inline: |-
-      #!/usr/bin/env bash
-      source ../helpers/verify-vm.sh
-      NS="${EVAL_NAMESPACE:-vm-test}"
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="${EVAL_NAMESPACE:-vm-test}"
 
-      # Wait for VirtualMachine to be created
-      verify_vm_exists "test-vm" "$NS" || exit 1
+          # Wait for VirtualMachine to be created
+          verify_vm_exists "test-vm" "$NS" || exit 1
 
-      # Verify container disk is Fedora
-      verify_container_disk "test-vm" "$NS" "fedora" || exit 1
+          # Verify container disk is Fedora
+          verify_container_disk "test-vm" "$NS" "fedora" || exit 1
 
-      # Verify runStrategy is set and deprecated 'running' field is not used
-      verify_run_strategy "test-vm" "$NS" || exit 1
-      verify_no_deprecated_running_field "test-vm" "$NS" || exit 1
+          # Verify runStrategy is set and deprecated 'running' field is not used
+          verify_run_strategy "test-vm" "$NS" || exit 1
+          verify_no_deprecated_running_field "test-vm" "$NS" || exit 1
 
-      # Verify the secondary network interface is configured with Multus
-      verify_multus_secondary_network "test-vm" "$NS" "vlan-network" || exit 1
+          # Verify the secondary network interface is configured with Multus
+          verify_multus_secondary_network "test-vm" "$NS" "vlan-network" || exit 1
 
-      echo "All validations passed"
-      exit 0
+          echo "All validations passed"
+          exit 0
   cleanup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete virtualmachine test-vm -n "$NS" --ignore-not-found
-      kubectl delete network-attachment-definitions/vlan-network -n "$NS" --ignore-not-found
-      kubectl delete namespace "$NS" --ignore-not-found
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="${EVAL_NAMESPACE:-vm-test}"
+          kubectl delete virtualmachine test-vm -n "$NS" --ignore-not-found
+          kubectl delete network-attachment-definitions/vlan-network -n "$NS" --ignore-not-found
+          kubectl delete namespace "$NS" --ignore-not-found
   prompt:
     inline: Please create a Fedora virtual machine named test-vm in the vm-test namespace with a secondary network interface connected to the vlan-network multus network.

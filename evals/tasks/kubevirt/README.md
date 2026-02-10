@@ -54,16 +54,16 @@ Many tasks rely on helper scripts located in `evals/tasks/kubevirt/helpers/`:
 
 ## Running Tasks
 
-These tasks are designed to be used with the gevals evaluation framework. Each task includes:
+These tasks are designed to be used with the [mcpchecker](https://github.com/mcpchecker/mcpchecker) evaluation framework. Each task includes:
 
-- **setup** - Prepares the test environment (creates namespace, sets up initial VM state)
-- **verify** - Validates the expected outcome after the agent completes the task
-- **cleanup** - Removes resources created during the test
+- **setup** - Array of steps that prepare the test environment (creates namespace, sets up initial VM state)
+- **verify** - Array of steps that validate the expected outcome after the agent completes the task
+- **cleanup** - Array of steps that remove resources created during the test
 - **prompt** - The instruction given to the AI agent
 
 Example workflow:
 
-1. Setup creates the initial state
+1. Setup steps create the initial state
 2. Agent receives the prompt and executes actions using MCP tools
-3. Verify checks if the agent accomplished the goal
-4. Cleanup removes test resources
+3. Verify steps check if the agent accomplished the goal
+4. Cleanup steps remove test resources
