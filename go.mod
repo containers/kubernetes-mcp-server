@@ -37,7 +37,7 @@ require (
 	k8s.io/client-go v0.35.1
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubectl v0.35.0
-	k8s.io/metrics v0.35.0
+	k8s.io/metrics v0.35.1
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20250211091558-894df3a7e664
