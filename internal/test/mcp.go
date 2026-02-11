@@ -15,6 +15,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// McpClientOption configures McpClient creation
+type McpClientOption interface {
+	apply(*mcpClientConfig)
+}
+
+type mcpClientConfig struct {
+	transportOptions []transport.StreamableHTTPCOption
+	clientInfo       *mcp.Implementation
+}
+
+// transportOptionWrapper wraps transport.StreamableHTTPCOption
+type transportOptionWrapper struct {
+	opt transport.StreamableHTTPCOption
+}
+
+func (t transportOptionWrapper) apply(c *mcpClientConfig) {
+	c.transportOptions = append(c.transportOptions, t.opt)
+}
+
+// WithTransport wraps a transport.StreamableHTTPCOption for use with NewMcpClient
+func WithTransport(opt transport.StreamableHTTPCOption) McpClientOption {
+	return transportOptionWrapper{opt}
+}
+
+// clientInfoOption sets custom client info
+type clientInfoOption struct {
+	info mcp.Implementation
+}
+
+func (o clientInfoOption) apply(c *mcpClientConfig) {
+	c.clientInfo = &o.info
+}
+
+// WithClientInfo sets custom MCP client info for initialization
+func WithClientInfo(name, version string) McpClientOption {
+	return clientInfoOption{info: mcp.Implementation{Name: name, Version: version}}
+}
+
+// WithEmptyClientInfo sets empty MCP client info for initialization
+func WithEmptyClientInfo() McpClientOption {
+	return clientInfoOption{info: mcp.Implementation{}}
+}
+
+// McpInitRequest returns a default MCP initialization request for backward compatibility
 func McpInitRequest() mcp.InitializeRequest {
 	initRequest := mcp.InitializeRequest{
 		Request: mcp.Request{Method: "initialize"},
@@ -31,17 +75,32 @@ type McpClient struct {
 	InitializeResult *mcp.InitializeResult
 }
 
-func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...transport.StreamableHTTPCOption) *McpClient {
+func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...McpClientOption) *McpClient {
 	require.NotNil(t, mcpHttpServer, "McpHttpServer must be provided")
+
+	cfg := &mcpClientConfig{
+		clientInfo: &mcp.Implementation{Name: "test", Version: "1.33.7"},
+	}
+	for _, opt := range options {
+		opt.apply(cfg)
+	}
+
 	var err error
 	ret := &McpClient{ctx: t.Context()}
 	ret.testServer = httptest.NewServer(mcpHttpServer)
-	options = append(options, transport.WithContinuousListening())
-	ret.Client, err = client.NewStreamableHttpClient(ret.testServer.URL+"/mcp", options...)
+	transportOpts := append(cfg.transportOptions, transport.WithContinuousListening())
+	ret.Client, err = client.NewStreamableHttpClient(ret.testServer.URL+"/mcp", transportOpts...)
 	require.NoError(t, err, "Expected no error creating MCP client")
 	err = ret.Start(t.Context())
 	require.NoError(t, err, "Expected no error starting MCP client")
-	ret.InitializeResult, err = ret.Initialize(t.Context(), McpInitRequest())
+
+	initRequest := mcp.InitializeRequest{
+		Request: mcp.Request{Method: "initialize"},
+	}
+	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initRequest.Params.ClientInfo = *cfg.clientInfo
+
+	ret.InitializeResult, err = ret.Initialize(t.Context(), initRequest)
 	require.NoError(t, err, "Expected no error initializing MCP client")
 	return ret
 }
@@ -56,7 +115,7 @@ func (m *McpClient) Close() {
 }
 
 // CallTool helper function to call a tool by name with arguments
-func (m *McpClient) CallTool(name string, args map[string]interface{}) (*mcp.CallToolResult, error) {
+func (m *McpClient) CallTool(name string, args map[string]any) (*mcp.CallToolResult, error) {
 	callToolRequest := mcp.CallToolRequest{}
 	callToolRequest.Params.Name = name
 	callToolRequest.Params.Arguments = args

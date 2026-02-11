@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
@@ -206,7 +205,7 @@ func (s *BaseMcpSuite) TearDownTest() {
 	}
 }
 
-func (s *BaseMcpSuite) InitMcpClient(options ...transport.StreamableHTTPCOption) {
+func (s *BaseMcpSuite) InitMcpClient(options ...test.McpClientOption) {
 	provider, err := internalk8s.NewProvider(s.Cfg)
 	s.Require().NoError(err, "Expected no error creating k8s provider")
 	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
