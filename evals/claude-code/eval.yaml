@@ -15,8 +15,10 @@ config:
       apiKeyKey: JUDGE_API_KEY
       modelNameKey: JUDGE_MODEL_NAME
   taskSets:
-    # TODO: Re-enable kiali tasks once https://github.com/containers/kubernetes-mcp-server/issues/642 is resolved
-    - glob: ../tasks/kubernetes/*/*.yaml
+    # Kubernetes tasks
+    - glob: ../tasks/*/*/*.yaml
+      labelSelector:
+        suite: kubernetes
       assertions:
         toolsUsed:
           - server: kubernetes
@@ -24,6 +26,8 @@ config:
         minToolCalls: 1
         maxToolCalls: 20
     - glob: ../tasks/config/*/*.yaml
+      labelSelector:
+        suite: kubernetes
       assertions:
         toolsUsed:
           - server: kubernetes
@@ -31,9 +35,21 @@ config:
         minToolCalls: 1
         maxToolCalls: 10
     - glob: ../tasks/helm/*/*.yaml
+      labelSelector:
+        suite: helm
       assertions:
         toolsUsed:
           - server: kubernetes
             toolPattern: "helm_.*"
         minToolCalls: 1
         maxToolCalls: 10
+    # Kiali tasks
+    - glob: ../tasks/*/*/*.yaml
+      labelSelector:
+        suite: kiali
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 40

@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kiali
   name: "mesh-status"
   difficulty: easy
 steps:

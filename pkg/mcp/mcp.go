@@ -100,6 +100,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	mcpServer.AddReceivingMiddleware(traceContextPropagationMiddleware)
 	mcpServer.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	mcpServer.AddReceivingMiddleware(authHeaderPropagationMiddleware)
+	mcpServer.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
 	mcpServer.AddReceivingMiddleware(toolCallLoggingMiddleware)
 	mcpServer.AddReceivingMiddleware(metricsMiddleware(metricsInstance))
 

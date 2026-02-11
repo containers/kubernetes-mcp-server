@@ -3,6 +3,8 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"runtime"
 	"time"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
@@ -46,6 +48,23 @@ func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			}
 		}
 		return next(ctx, method, req)
+	}
+}
+
+func userAgentPropagationMiddleware(serverName, serverVersion string) func(mcp.MethodHandler) mcp.MethodHandler {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (result mcp.Result, err error) {
+			userAgentHeader := getMcpReqUserAgent(req)
+			userAgentHeader = fmt.Sprintf(
+				"%s/%s (%s/%s) %s",
+				serverName,
+				serverVersion,
+				runtime.GOOS,
+				runtime.GOARCH,
+				userAgentHeader,
+			)
+			return next(context.WithValue(ctx, internalk8s.UserAgentHeader, userAgentHeader), method, req)
+		}
 	}
 }
 
@@ -171,6 +190,27 @@ func tracingMiddleware(tracerName string) func(mcp.MethodHandler) mcp.MethodHand
 			return result, err
 		}
 	}
+}
+
+func getMcpReqUserAgent(req mcp.Request) string {
+	if req.GetExtra() != nil && req.GetExtra().Header != nil {
+		userAgentHeader := req.GetExtra().Header.Get(string(internalk8s.UserAgentHeader))
+		if userAgentHeader != "" {
+			return userAgentHeader
+		}
+	}
+
+	// fallback to constructing user agent from mcp client info
+	session, ok := req.GetSession().(*mcp.ServerSession)
+	if !ok {
+		return ""
+	}
+	initParams := session.InitializeParams()
+	if initParams == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%s/%s", initParams.ClientInfo.Name, initParams.ClientInfo.Version)
 }
 
 // metricsMiddleware returns a metrics middleware with access to the server's metrics system

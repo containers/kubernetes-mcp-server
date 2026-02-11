@@ -99,6 +99,47 @@ builtin:
 
 Uses the built-in OpenAI agent with model configuration.
 
+## Filtering Tasks by Suite
+
+Tasks are organized into suites using labels. You can filter which tasks to run using the `--label-selector` flag:
+
+### Run only Kubernetes tasks (default)
+
+```bash
+# Using OpenAI agent
+./gevals eval evals/openai-agent/eval.yaml --label-selector suite=kubernetes
+
+# Using Claude Code agent
+./gevals eval evals/claude-code/eval.yaml --label-selector suite=kubernetes
+```
+
+**Requirements:**
+- Kubernetes cluster (kind, minikube, etc.)
+- MCP server running with default toolsets
+
+### Run only Kiali tasks
+
+```bash
+# Using OpenAI agent
+../gevals/gevals eval evals/openai-agent/eval.yaml --label-selector suite=kiali
+
+# Using Claude Code agent
+../gevals/gevals eval evals/claude-code/eval.yaml --label-selector suite=kiali
+```
+
+**Requirements:**
+- Kubernetes cluster with Istio and Kiali installed
+- MCP server running with kiali toolset enabled (`TOOLSETS=kiali`)
+
+To set up Kiali infrastructure:
+```bash
+make setup-kiali
+```
+
+### Run all tasks
+
+If you omit the `--label-selector` flag, the eval configuration's `labelSelector` settings in the YAML file determine which tasks run. See the taskSets section in the eval.yaml files.
+
 ## Expected Results
 
 Both examples should produce:

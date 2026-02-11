@@ -1,5 +1,7 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubernetes
   name: scale-down-deployment
   difficulty: medium
 steps:
