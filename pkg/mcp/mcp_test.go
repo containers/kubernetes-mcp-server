@@ -57,7 +57,7 @@ func (s *McpHeadersSuite) TearDownTest() {
 func (s *McpHeadersSuite) TestAuthorizationHeaderPropagation() {
 	cases := []string{"kubernetes-authorization", "Authorization"}
 	for _, header := range cases {
-		s.InitMcpClient(transport.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"}))
+		s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"})))
 		_, _ = s.CallTool("pods_list", map[string]interface{}{})
 		s.pathHeadersMux.Lock()
 		pathHeadersLen := len(s.pathHeaders)
@@ -165,9 +165,9 @@ func (s *UserAgentPropagationSuite) TearDownTest() {
 }
 
 func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
-	s.InitMcpClient(transport.WithHTTPHeaders(map[string]string{
+	s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{
 		"User-Agent": "custom-mcp-client/2.0",
-	}))
+	})))
 	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
@@ -184,10 +184,10 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
 }
 
 func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentWithOAuthToKubeAPI() {
-	s.InitMcpClient(transport.WithHTTPHeaders(map[string]string{
+	s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{
 		"Authorization": "Bearer a-token-from-mcp-client",
 		"User-Agent":    "custom-mcp-client/2.0",
-	}))
+	})))
 	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
@@ -228,6 +228,36 @@ func (s *UserAgentPropagationSuite) TestFallsBackToMCPClientInfoForUserAgent() {
 		// McpInitRequest sets ClientInfo: {Name: "test", Version: "1.33.7"}
 		s.Equal(
 			fmt.Sprintf("kubernetes-mcp-server/0.0.0 (%s/%s) test/1.33.7", runtime.GOOS, runtime.GOARCH),
+			podsHeaders.Get("User-Agent"),
+		)
+	})
+}
+
+func (s *UserAgentPropagationSuite) TestFallsBackToServerPrefixWhenNoClientInfo() {
+	// Create MCP client through a handler that strips the User-Agent header
+	// and initialize with empty client info.
+	provider, err := internalk8s.NewProvider(s.Cfg)
+	s.Require().NoError(err)
+	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
+	s.Require().NoError(err)
+	handler := s.mcpServer.ServeHTTP()
+	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("User-Agent")
+		handler.ServeHTTP(w, r)
+	})
+	s.McpClient = test.NewMcpClient(s.T(), strippedHandler, test.WithEmptyClientInfo())
+
+	_, _ = s.CallTool("pods_list", map[string]any{})
+
+	s.pathHeadersMux.Lock()
+	podsHeaders := s.pathHeaders["/api/v1/namespaces/default/pods"]
+	s.pathHeadersMux.Unlock()
+
+	s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
+	s.Run("User-Agent uses server prefix only without trailing space", func() {
+		// When no HTTP User-Agent and empty MCP ClientInfo, should use server prefix only
+		s.Equal(
+			fmt.Sprintf("kubernetes-mcp-server/0.0.0 (%s/%s)", runtime.GOOS, runtime.GOARCH),
 			podsHeaders.Get("User-Agent"),
 		)
 	})

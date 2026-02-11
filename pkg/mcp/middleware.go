@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
@@ -52,15 +53,14 @@ func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 func userAgentPropagationMiddleware(serverName, serverVersion string) func(mcp.MethodHandler) mcp.MethodHandler {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (result mcp.Result, err error) {
-			userAgentHeader := getMcpReqUserAgent(req)
-			userAgentHeader = fmt.Sprintf(
+			userAgentHeader := strings.TrimSpace(fmt.Sprintf(
 				"%s/%s (%s/%s) %s",
 				serverName,
 				serverVersion,
 				runtime.GOOS,
 				runtime.GOARCH,
-				userAgentHeader,
-			)
+				getMcpReqUserAgent(req),
+			))
 			return next(context.WithValue(ctx, internalk8s.UserAgentHeader, userAgentHeader), method, req)
 		}
 	}
@@ -204,10 +204,9 @@ func getMcpReqUserAgent(req mcp.Request) string {
 		return ""
 	}
 	initParams := session.InitializeParams()
-	if initParams == nil {
+	if initParams == nil || (initParams.ClientInfo.Name == "" && initParams.ClientInfo.Version == "") {
 		return ""
 	}
-
 	return fmt.Sprintf("%s/%s", initParams.ClientInfo.Name, initParams.ClientInfo.Version)
 }
 
