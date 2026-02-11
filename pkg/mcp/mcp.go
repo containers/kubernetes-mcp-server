@@ -135,7 +135,9 @@ func buildServerInstructions(serverInstructions string, toolsets []api.Toolset) 
 
 	for _, toolset := range toolsets {
 		if toolsetInstructions := toolset.GetToolsetInstructions(); toolsetInstructions != "" {
-			instructions = append(instructions, toolsetInstructions)
+			// Add markdown h2 header with toolset name
+			header := fmt.Sprintf("## %s", toolset.GetName())
+			instructions = append(instructions, header, toolsetInstructions)
 		}
 	}
 
