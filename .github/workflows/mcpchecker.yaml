@@ -175,7 +175,7 @@ jobs:
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.7
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.8
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           mcpchecker-version: 'latest'
