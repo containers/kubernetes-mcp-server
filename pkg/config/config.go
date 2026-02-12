@@ -25,6 +25,7 @@ type StaticConfig struct {
 
 	LogLevel   int    `toml:"log_level,omitzero"`
 	Port       string `toml:"port,omitempty"`
+	BasePath   string `toml:"base_path,omitempty"`
 	SSEBaseURL string `toml:"sse_base_url,omitempty"`
 	KubeConfig string `toml:"kubeconfig,omitempty"`
 	ListOutput string `toml:"list_output,omitempty"`

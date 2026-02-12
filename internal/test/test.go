@@ -51,9 +51,14 @@ func WaitForServer(tcpAddr *net.TCPAddr) error {
 	return err
 }
 
-// WaitForHealthz waits for the /healthz endpoint to return a non-404 response
-func WaitForHealthz(tcpAddr *net.TCPAddr) error {
-	url := fmt.Sprintf("http://%s/healthz", tcpAddr.String())
+// WaitForHealthz waits for the /healthz endpoint to return a non-404 response.
+// An optional basePath can be provided to prefix the healthz URL.
+func WaitForHealthz(tcpAddr *net.TCPAddr, basePath ...string) error {
+	bp := ""
+	if len(basePath) > 0 {
+		bp = basePath[0]
+	}
+	url := fmt.Sprintf("http://%s%s/healthz", tcpAddr.String(), bp)
 	var resp *http.Response
 	var err error
 	for i := 0; i < 100; i++ {

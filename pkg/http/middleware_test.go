@@ -48,7 +48,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(handler)
+		middleware := RequestMiddleware("", handler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -75,7 +75,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(handler)
+		middleware := RequestMiddleware("", handler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		rr := httptest.NewRecorder()
@@ -92,7 +92,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(handler)
+		middleware := RequestMiddleware("", handler)
 
 		req := httptest.NewRequest("GET", "/healthz", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -119,7 +119,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			innerHandler.ServeHTTP(w, r)
 		})
 
-		middleware := RequestMiddleware(intermediateHandler)
+		middleware := RequestMiddleware("", intermediateHandler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")

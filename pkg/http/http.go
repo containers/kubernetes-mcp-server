@@ -80,7 +80,7 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, httpClient *http.Client) error {
 	mux := http.NewServeMux()
 
-	wrappedMux := RequestMiddleware(
+	wrappedMux := RequestMiddleware(staticConfig.BasePath,
 		AuthorizationMiddleware(staticConfig, oidcProvider)(mux),
 	)
 
@@ -92,17 +92,18 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 		Handler: instrumentedHandler,
 	}
 
+	bp := staticConfig.BasePath
 	sseServer := mcpServer.ServeSse()
 	streamableHttpServer := mcpServer.ServeHTTP()
-	mux.Handle(sseEndpoint, sseServer)
-	mux.Handle(sseMessageEndpoint, sseServer)
-	mux.Handle(mcpEndpoint, streamableHttpServer)
-	mux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle(bp+sseEndpoint, sseServer)
+	mux.Handle(bp+sseMessageEndpoint, sseServer)
+	mux.Handle(bp+mcpEndpoint, streamableHttpServer)
+	mux.HandleFunc(bp+healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
-	mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
-	mux.Handle("/.well-known/", WellKnownHandler(staticConfig, httpClient))
+	mux.HandleFunc(bp+statsEndpoint, statsHandler(mcpServer))
+	mux.Handle(bp+metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
+	mux.Handle(bp+"/.well-known/", WellKnownHandler(staticConfig, httpClient))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -112,7 +113,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 
 	serverErr := make(chan error, 1)
 	go func() {
-		klog.V(0).Infof("HTTP server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats, /metrics)", staticConfig.Port)
+		klog.V(0).Infof("HTTP server starting on port %s (endpoints: %s/mcp, %s/sse, %s/message, %s/healthz, %s/stats, %s/metrics)", staticConfig.Port, bp, bp, bp, bp, bp, bp)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}

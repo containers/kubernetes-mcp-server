@@ -84,6 +84,7 @@ const (
 	flagAuthorizationURL     = "authorization-url"
 	flagServerUrl            = "server-url"
 	flagCertificateAuthority = "certificate-authority"
+	flagBasePath             = "base-path"
 	flagDisableMultiCluster  = "disable-multi-cluster"
 	flagClusterProvider      = "cluster-provider"
 )
@@ -104,6 +105,7 @@ type MCPServerOptions struct {
 	AuthorizationURL     string
 	CertificateAuthority string
 	ServerURL            string
+	BasePath             string
 	DisableMultiCluster  bool
 	ClusterProvider      string
 
@@ -148,6 +150,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
 	cmd.Flags().StringVar(&o.ConfigDir, flagConfigDir, o.ConfigDir, "Path to drop-in configuration directory (files loaded in lexical order). Defaults to "+config.DefaultDropInConfigDir+" relative to the config file if --config is set.")
 	cmd.Flags().StringVar(&o.Port, flagPort, o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
+	cmd.Flags().StringVar(&o.BasePath, flagBasePath, o.BasePath, "Base path prefix for all HTTP endpoints (e.g. /kubernetes-mcp)")
 	cmd.Flags().StringVar(&o.SSEBaseUrl, flagSSEBaseUrl, o.SSEBaseUrl, "SSE public base URL to use when sending the endpoint message (e.g. https://example.com)")
 	cmd.Flags().StringVar(&o.Kubeconfig, flagKubeconfig, o.Kubeconfig, "Path to the kubeconfig file to use for authentication")
 	cmd.Flags().StringSliceVar(&o.Toolsets, flagToolsets, o.Toolsets, "Comma-separated list of MCP toolsets to use (available toolsets: "+strings.Join(toolsets.ToolsetNames(), ", ")+"). Defaults to "+strings.Join(o.StaticConfig.Toolsets, ", ")+".")
@@ -198,6 +201,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagPort).Changed {
 		m.StaticConfig.Port = m.Port
+	}
+	if cmd.Flag(flagBasePath).Changed {
+		m.StaticConfig.BasePath = m.BasePath
 	}
 	if cmd.Flag(flagSSEBaseUrl).Changed {
 		m.StaticConfig.SSEBaseURL = m.SSEBaseUrl
@@ -262,6 +268,14 @@ func (m *MCPServerOptions) initializeLogging() {
 }
 
 func (m *MCPServerOptions) Validate() error {
+	if bp := m.StaticConfig.BasePath; bp != "" {
+		if !strings.HasPrefix(bp, "/") {
+			return fmt.Errorf("base-path must start with '/' (got %q)", bp)
+		}
+		if strings.HasSuffix(bp, "/") {
+			return fmt.Errorf("base-path must not end with '/' (got %q)", bp)
+		}
+	}
 	if output.FromString(m.StaticConfig.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", m.StaticConfig.ListOutput, strings.Join(output.Names, ", "))
 	}

@@ -10,7 +10,6 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"k8s.io/klog/v2"
-	"k8s.io/utils/strings/slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
@@ -19,6 +18,17 @@ import (
 func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message string) {
 	w.Header().Set("WWW-Authenticate", wwwAuthenticateHeader+fmt.Sprintf(`, error="%s"`, errorType))
 	http.Error(w, message, http.StatusUnauthorized)
+}
+
+// isWellKnownEndpoint checks if the given path matches one of the well-known
+// endpoints, optionally prefixed by basePath.
+func isWellKnownEndpoint(basePath, path string) bool {
+	for _, ep := range WellKnownEndpoints {
+		if path == basePath+ep {
+			return true
+		}
+	}
+	return false
 }
 
 // AuthorizationMiddleware validates the OAuth flow for protected resources.
@@ -49,9 +59,10 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //
 //	         see TestAuthorizationOidcToken
 func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider) func(http.Handler) http.Handler {
+	bp := staticConfig.BasePath
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == healthEndpoint || slices.Contains(WellKnownEndpoints, r.URL.EscapedPath()) {
+			if r.URL.Path == bp+healthEndpoint || isWellKnownEndpoint(bp, r.URL.EscapedPath()) {
 				next.ServeHTTP(w, r)
 				return
 			}

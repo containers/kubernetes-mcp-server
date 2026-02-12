@@ -47,24 +47,26 @@ func getClientIP(r *http.Request) string {
 
 // getHTTPRoute returns a normalized route for the request path.
 // This helps reduce cardinality in traces by grouping similar paths.
-func getHTTPRoute(path string) string {
+// The basePath prefix is stripped before matching known routes.
+func getHTTPRoute(basePath, path string) string {
+	stripped := strings.TrimPrefix(path, basePath)
 	// Known routes for this server
-	switch path {
+	switch stripped {
 	case "/healthz", "/mcp", "/sse", "/message", "/stats":
-		return path
+		return stripped
 	}
 	// Check for well-known prefix
-	if strings.HasPrefix(path, "/.well-known/") {
+	if strings.HasPrefix(stripped, "/.well-known/") {
 		return "/.well-known/*"
 	}
-	return path
+	return stripped
 }
 
 // RequestMiddleware creates OpenTelemetry spans for HTTP requests.
-func RequestMiddleware(next http.Handler) http.Handler {
+func RequestMiddleware(basePath string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip tracing for health checks
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == basePath+healthEndpoint {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -86,7 +88,7 @@ func RequestMiddleware(next http.Handler) http.Handler {
 		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 
 		// Determine HTTP route for span naming
-		route := getHTTPRoute(r.URL.Path)
+		route := getHTTPRoute(basePath, r.URL.Path)
 		spanName := fmt.Sprintf("%s %s", r.Method, route)
 
 		// Build attributes following OpenTelemetry HTTP semantic conventions

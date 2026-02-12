@@ -22,6 +22,7 @@ var WellKnownEndpoints = []string{
 }
 
 type WellKnown struct {
+	basePath                         string
 	authorizationUrl                 string
 	scopesSupported                  []string
 	disableDynamicClientRegistration bool
@@ -39,6 +40,7 @@ func WellKnownHandler(staticConfig *config.StaticConfig, httpClient *http.Client
 		httpClient = http.DefaultClient
 	}
 	return &WellKnown{
+		basePath:                         staticConfig.BasePath,
 		authorizationUrl:                 authorizationUrl,
 		disableDynamicClientRegistration: staticConfig.DisableDynamicClientRegistration,
 		scopesSupported:                  staticConfig.OAuthScopes,
@@ -51,7 +53,8 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		http.Error(writer, "Authorization URL is not configured", http.StatusNotFound)
 		return
 	}
-	req, err := http.NewRequest(request.Method, w.authorizationUrl+request.URL.EscapedPath(), nil)
+	upstreamPath := strings.TrimPrefix(request.URL.EscapedPath(), w.basePath)
+	req, err := http.NewRequest(request.Method, w.authorizationUrl+upstreamPath, nil)
 	if err != nil {
 		http.Error(writer, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return

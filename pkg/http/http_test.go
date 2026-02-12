@@ -68,7 +68,7 @@ func (s *BaseHttpSuite) StartServer() {
 	group.Go(func() error { return Serve(cancelCtx, s.mcpServer, s.StaticConfig, s.OidcProvider, nil) })
 	s.WaitForShutdown = group.Wait
 	s.Require().NoError(test.WaitForServer(tcpAddr), "HTTP server did not start in time")
-	s.Require().NoError(test.WaitForHealthz(tcpAddr), "HTTP server /healthz endpoint did not respond with non-404 in time")
+	s.Require().NoError(test.WaitForHealthz(tcpAddr, s.StaticConfig.BasePath), "HTTP server /healthz endpoint did not respond with non-404 in time")
 }
 
 func (s *BaseHttpSuite) TearDownTest() {
@@ -281,6 +281,82 @@ func TestMiddlewareLogging(t *testing.T) {
 			}
 			if duration < 0 {
 				t.Errorf("Expected duration to be non-negative, got %v", duration)
+			}
+		})
+	})
+}
+
+func TestBasePath(t *testing.T) {
+	t.Run("healthz is accessible at base path prefix", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BasePath: "/kubernetes-mcp", ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+			resp, err := http.Get(fmt.Sprintf("http://%s/kubernetes-mcp/healthz", ctx.HttpAddress))
+			if err != nil {
+				t.Fatalf("Failed to get health check endpoint: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("Expected HTTP 200 OK at /kubernetes-mcp/healthz, got %d", resp.StatusCode)
+			}
+		})
+	})
+	t.Run("healthz at root returns 404 when base path is set", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BasePath: "/kubernetes-mcp", ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+			resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
+			if err != nil {
+				t.Fatalf("Failed to get health check endpoint: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != http.StatusNotFound {
+				t.Errorf("Expected HTTP 404 Not Found at /healthz, got %d", resp.StatusCode)
+			}
+		})
+	})
+	t.Run("mcp endpoint is accessible at base path prefix", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BasePath: "/kubernetes-mcp", ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+			resp, err := http.Get(fmt.Sprintf("http://%s/kubernetes-mcp/mcp", ctx.HttpAddress))
+			if err != nil {
+				t.Fatalf("Failed to get mcp endpoint: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			// MCP endpoint should respond (405 for GET is acceptable - it expects POST)
+			if resp.StatusCode == http.StatusNotFound {
+				t.Errorf("Expected non-404 response at /kubernetes-mcp/mcp, got %d", resp.StatusCode)
+			}
+		})
+	})
+	t.Run("stats endpoint is accessible at base path prefix", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BasePath: "/kubernetes-mcp", ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+			resp, err := http.Get(fmt.Sprintf("http://%s/kubernetes-mcp/stats", ctx.HttpAddress))
+			if err != nil {
+				t.Fatalf("Failed to get stats endpoint: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("Expected HTTP 200 OK at /kubernetes-mcp/stats, got %d", resp.StatusCode)
+			}
+		})
+	})
+	t.Run("metrics endpoint is accessible at base path prefix", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BasePath: "/kubernetes-mcp", ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+			resp, err := http.Get(fmt.Sprintf("http://%s/kubernetes-mcp/metrics", ctx.HttpAddress))
+			if err != nil {
+				t.Fatalf("Failed to get metrics endpoint: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("Expected HTTP 200 OK at /kubernetes-mcp/metrics, got %d", resp.StatusCode)
+			}
+		})
+	})
+	t.Run("empty base path works as before", func(t *testing.T) {
+		testCase(t, func(ctx *httpContext) {
+			resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
+			if err != nil {
+				t.Fatalf("Failed to get health check endpoint: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("Expected HTTP 200 OK at /healthz, got %d", resp.StatusCode)
 			}
 		})
 	})
