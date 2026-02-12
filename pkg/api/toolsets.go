@@ -55,6 +55,10 @@ type ToolCallRequest interface {
 type ToolCallResult struct {
 	// Raw content returned by the tool.
 	Content string
+	// StructuredContent is an optional JSON-serializable value for MCP Apps UI rendering.
+	// When set, it is passed as structuredContent in the MCP CallToolResult alongside Content.
+	// Must be completely omitted (nil) when not used.
+	StructuredContent any
 	// Error (non-protocol) to send back to the LLM.
 	Error error
 }
@@ -63,6 +67,14 @@ func NewToolCallResult(content string, err error) *ToolCallResult {
 	return &ToolCallResult{
 		Content: content,
 		Error:   err,
+	}
+}
+
+func NewToolCallResultWithStructuredContent(content string, structured any, err error) *ToolCallResult {
+	return &ToolCallResult{
+		Content:           content,
+		StructuredContent: structured,
+		Error:             err,
 	}
 }
 

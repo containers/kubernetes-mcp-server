@@ -54,7 +54,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		if err != nil {
 			return nil, err
 		}
-		return NewTextResult(result.Content, result.Error), nil
+		return NewTextResultWithStructuredContent(result.Content, result.StructuredContent, result.Error), nil
 	}
 	return goSdkTool, goSdkHandler, nil
 }
