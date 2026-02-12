@@ -1,0 +1,2 @@
+kind: template
+load: build_push_image.yaml
