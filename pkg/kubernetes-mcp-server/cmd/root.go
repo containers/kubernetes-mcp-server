@@ -86,6 +86,8 @@ const (
 	flagCertificateAuthority = "certificate-authority"
 	flagDisableMultiCluster  = "disable-multi-cluster"
 	flagClusterProvider      = "cluster-provider"
+	flagTLSCert              = "tls-cert"
+	flagTLSKey               = "tls-key"
 )
 
 type MCPServerOptions struct {
@@ -106,6 +108,8 @@ type MCPServerOptions struct {
 	ServerURL            string
 	DisableMultiCluster  bool
 	ClusterProvider      string
+	TLSCert              string
+	TLSKey               string
 
 	ConfigPath   string
 	ConfigDir    string
@@ -167,6 +171,8 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	_ = cmd.Flags().MarkHidden(flagCertificateAuthority)
 	cmd.Flags().BoolVar(&o.DisableMultiCluster, flagDisableMultiCluster, o.DisableMultiCluster, "Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.")
 	cmd.Flags().StringVar(&o.ClusterProvider, flagClusterProvider, o.ClusterProvider, "Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.")
+	cmd.Flags().StringVar(&o.TLSCert, flagTLSCert, o.TLSCert, "Path to TLS certificate file for HTTPS. Must be used together with --tls-key.")
+	cmd.Flags().StringVar(&o.TLSKey, flagTLSKey, o.TLSKey, "Path to TLS private key file for HTTPS. Must be used together with --tls-cert.")
 
 	return cmd
 }
@@ -241,6 +247,12 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	if cmd.Flag(flagDisableMultiCluster).Changed && m.DisableMultiCluster {
 		m.StaticConfig.ClusterProviderStrategy = api.ClusterProviderDisabled
 	}
+	if cmd.Flag(flagTLSCert).Changed {
+		m.StaticConfig.TLSCert = m.TLSCert
+	}
+	if cmd.Flag(flagTLSKey).Changed {
+		m.StaticConfig.TLSKey = m.TLSKey
+	}
 }
 
 func (m *MCPServerOptions) initializeLogging() {
@@ -294,6 +306,22 @@ func (m *MCPServerOptions) Validate() error {
 	if caValue := strings.TrimSpace(m.StaticConfig.CertificateAuthority); caValue != "" {
 		if _, err := os.Stat(caValue); err != nil {
 			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
+		}
+	}
+	// Validate TLS configuration
+	tlsCert := strings.TrimSpace(m.StaticConfig.TLSCert)
+	tlsKey := strings.TrimSpace(m.StaticConfig.TLSKey)
+	if (tlsCert != "" && tlsKey == "") || (tlsCert == "" && tlsKey != "") {
+		return fmt.Errorf("both --tls-cert and --tls-key must be provided together")
+	}
+	if tlsCert != "" {
+		if _, err := os.Stat(tlsCert); err != nil {
+			return fmt.Errorf("tls-cert must be a valid file path: %w", err)
+		}
+	}
+	if tlsKey != "" {
+		if _, err := os.Stat(tlsKey); err != nil {
+			return fmt.Errorf("tls-key must be a valid file path: %w", err)
 		}
 	}
 	return nil
