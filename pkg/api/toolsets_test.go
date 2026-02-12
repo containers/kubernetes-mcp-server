@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -83,6 +84,37 @@ func (s *ToolsetsSuite) TestNewToolCallResultWithStructuredContent() {
 		s.Equal("output", result.Content)
 		s.Equal(err, result.Error)
 		s.Equal(structured, result.StructuredContent)
+	})
+}
+
+func (s *ToolsetsSuite) TestToolMeta() {
+	s.Run("Meta is omitted from JSON when nil", func() {
+		tool := Tool{Name: "test_tool"}
+		b, err := json.Marshal(tool)
+		s.Require().NoError(err)
+		s.NotContains(string(b), "_meta")
+	})
+	s.Run("Meta is included in JSON when set", func() {
+		tool := Tool{
+			Name: "test_tool",
+			Meta: map[string]any{
+				"ui": map[string]any{
+					"resourceUri": "ui://server/app.html",
+				},
+			},
+		}
+		b, err := json.Marshal(tool)
+		s.Require().NoError(err)
+		s.Contains(string(b), `"_meta"`)
+		s.Contains(string(b), `"resourceUri"`)
+
+		var parsed map[string]any
+		s.Require().NoError(json.Unmarshal(b, &parsed))
+		meta, ok := parsed["_meta"].(map[string]any)
+		s.Require().True(ok, "expected _meta to be a map")
+		ui, ok := meta["ui"].(map[string]any)
+		s.Require().True(ok, "expected ui to be a map")
+		s.Equal("ui://server/app.html", ui["resourceUri"])
 	})
 }
 

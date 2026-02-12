@@ -100,6 +100,9 @@ type Tool struct {
 	Description string `json:"description,omitempty"`
 	// Additional tool information.
 	Annotations ToolAnnotations `json:"annotations"`
+	// Meta contains additional metadata for the tool (e.g., MCP Apps UI resource URI).
+	// Example: map[string]any{"ui": map[string]any{"resourceUri": "ui://server/app.html"}}
+	Meta map[string]any `json:"_meta,omitempty"`
 	// A JSON Schema object defining the expected parameters for the tool.
 	InputSchema *jsonschema.Schema
 }
