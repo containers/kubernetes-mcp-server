@@ -9,6 +9,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/stretchr/testify/suite"
@@ -265,4 +266,201 @@ func (s *UserAgentPropagationSuite) TestFallsBackToServerPrefixWhenNoClientInfo(
 
 func TestUserAgentPropagation(t *testing.T) {
 	suite.Run(t, new(UserAgentPropagationSuite))
+}
+
+type ToolsetInstructionsSuite struct {
+	BaseMcpSuite
+}
+
+func (s *ToolsetInstructionsSuite) TestToolsetInstructionsAreIncluded() {
+	mockToolset := &test.MockToolset{
+		Name:         "mock",
+		Description:  "Mock toolset for testing",
+		Instructions: "These are mock toolset instructions.\nAlways use caution with mock tools.",
+	}
+
+	s.Cfg.Toolsets = []string{"mock", "core"}
+
+	test.RegisterMockToolset(mockToolset)
+	defer test.UnregisterMockToolset("mock")
+
+	s.InitMcpClient()
+	s.Run("includes toolset instructions in initialize response", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Contains(s.InitializeResult.Instructions, "These are mock toolset instructions.\nAlways use caution with mock tools.",
+			"instructions should include toolset instructions")
+	})
+	s.Run("adds markdown header with toolset name", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Contains(s.InitializeResult.Instructions, "## mock",
+			"instructions should include markdown header with toolset name")
+	})
+}
+
+func (s *ToolsetInstructionsSuite) TestToolsetInstructionsCombinedWithServerInstructions() {
+	mockToolset := &test.MockToolset{
+		Name:         "mock",
+		Description:  "Mock toolset for testing",
+		Instructions: "Toolset-specific instructions.",
+	}
+
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		server_instructions = "Server-level instructions."
+		toolsets = ["mock"]
+	`), s.Cfg), "Expected to parse config")
+
+	test.RegisterMockToolset(mockToolset)
+	defer test.UnregisterMockToolset("mock")
+
+	s.InitMcpClient()
+	s.Run("combines server and toolset instructions", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Contains(s.InitializeResult.Instructions, "Server-level instructions.",
+			"instructions should include server instructions")
+		s.Contains(s.InitializeResult.Instructions, "Toolset-specific instructions.",
+			"instructions should include toolset instructions")
+	})
+}
+
+func (s *ToolsetInstructionsSuite) TestEmptyToolsetInstructionsNotIncluded() {
+	s.Cfg.Toolsets = []string{"core"}
+	s.InitMcpClient()
+	s.Run("does not include empty toolset instructions", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Empty(s.InitializeResult.Instructions,
+			"instructions should be empty when toolset instructions are empty")
+	})
+}
+
+func (s *ToolsetInstructionsSuite) TestDisableToolsetInstructions() {
+	mockToolset := &test.MockToolset{
+		Name:         "mock",
+		Description:  "Mock toolset for testing",
+		Instructions: "These instructions should be ignored.",
+	}
+
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		server_instructions = "Server-level instructions only."
+		toolsets = ["mock"]
+		disable_toolset_instructions = true
+	`), s.Cfg), "Expected to parse config")
+
+	test.RegisterMockToolset(mockToolset)
+	defer test.UnregisterMockToolset("mock")
+
+	s.InitMcpClient()
+	s.Run("excludes toolset instructions when disabled", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Equal("Server-level instructions only.", s.InitializeResult.Instructions,
+			"instructions should only contain server instructions when toolset instructions are disabled")
+		s.NotContains(s.InitializeResult.Instructions, "These instructions should be ignored.",
+			"instructions should not include toolset instructions when disabled")
+	})
+}
+
+func (s *ToolsetInstructionsSuite) TestToolsetInstructionsWithExistingHeaders() {
+	mockToolset := &test.MockToolset{
+		Name:         "mock",
+		Description:  "Mock toolset for testing",
+		Instructions: "### Subheader\nActual instructions here.",
+	}
+
+	s.Cfg.Toolsets = []string{"mock"}
+
+	test.RegisterMockToolset(mockToolset)
+	defer test.UnregisterMockToolset("mock")
+
+	s.InitMcpClient()
+	s.Run("preserves existing headers and adds toolset header", func() {
+		s.Require().NotNil(s.InitializeResult)
+		s.Contains(s.InitializeResult.Instructions, "## mock",
+			"instructions should include markdown header with toolset name")
+		s.Contains(s.InitializeResult.Instructions, "### Subheader",
+			"instructions should preserve subheader")
+		s.Contains(s.InitializeResult.Instructions, "Actual instructions here.",
+			"instructions should include the actual content")
+	})
+}
+
+func TestToolsetInstructions(t *testing.T) {
+	suite.Run(t, new(ToolsetInstructionsSuite))
+}
+
+type BuildServerInstructionsSuite struct {
+	suite.Suite
+}
+
+func (s *BuildServerInstructionsSuite) TestBuildServerInstructions() {
+	s.Run("returns empty string with no instructions", func() {
+		result := buildServerInstructions("", []api.Toolset{})
+		s.Empty(result)
+	})
+
+	s.Run("returns only server instructions when no toolsets", func() {
+		serverInstructions := "Server instructions here"
+		result := buildServerInstructions(serverInstructions, []api.Toolset{})
+		s.Equal(serverInstructions, result)
+	})
+
+	s.Run("adds toolset header for single toolset", func() {
+		mockToolset := &test.MockToolset{
+			Name:         "test-toolset",
+			Instructions: "Toolset instructions",
+		}
+		result := buildServerInstructions("", []api.Toolset{mockToolset})
+		expected := "## test-toolset\n\nToolset instructions"
+		s.Equal(expected, result)
+	})
+
+	s.Run("combines server instructions with multiple toolsets", func() {
+		mockToolset1 := &test.MockToolset{
+			Name:         "toolset1",
+			Instructions: "Instructions for toolset 1",
+		}
+		mockToolset2 := &test.MockToolset{
+			Name:         "toolset2",
+			Instructions: "### Header\nInstructions for toolset 2",
+		}
+		result := buildServerInstructions("Server instructions", []api.Toolset{mockToolset1, mockToolset2})
+		expected := "Server instructions\n\n## toolset1\n\nInstructions for toolset 1\n\n## toolset2\n\n### Header\nInstructions for toolset 2"
+		s.Equal(expected, result)
+	})
+
+	s.Run("skips toolsets with empty instructions", func() {
+		mockToolset1 := &test.MockToolset{
+			Name:         "toolset1",
+			Instructions: "Instructions for toolset 1",
+		}
+		mockToolset2 := &test.MockToolset{
+			Name:         "toolset2",
+			Instructions: "",
+		}
+		result := buildServerInstructions("", []api.Toolset{mockToolset1, mockToolset2})
+		expected := "## toolset1\n\nInstructions for toolset 1"
+		s.Equal(expected, result)
+	})
+
+	s.Run("handles multiline instructions", func() {
+		mockToolset := &test.MockToolset{
+			Name:         "test-toolset",
+			Instructions: "Line 1\nLine 2\nLine 3",
+		}
+		result := buildServerInstructions("", []api.Toolset{mockToolset})
+		expected := "## test-toolset\n\nLine 1\nLine 2\nLine 3"
+		s.Equal(expected, result)
+	})
+
+	s.Run("handles instructions with markdown content", func() {
+		mockToolset := &test.MockToolset{
+			Name:         "test-toolset",
+			Instructions: "**Bold text**\n- List item 1\n- List item 2",
+		}
+		result := buildServerInstructions("", []api.Toolset{mockToolset})
+		expected := "## test-toolset\n\n**Bold text**\n- List item 1\n- List item 2"
+		s.Equal(expected, result)
+	})
+}
+
+func TestBuildServerInstructions(t *testing.T) {
+	suite.Run(t, new(BuildServerInstructionsSuite))
 }

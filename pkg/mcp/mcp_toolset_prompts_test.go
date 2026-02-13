@@ -386,6 +386,10 @@ func (m *mockToolsetWithPrompts) GetPrompts() []api.ServerPrompt {
 	return m.prompts
 }
 
+func (m *mockToolsetWithPrompts) GetToolsetInstructions() string {
+	return ""
+}
+
 func TestMcpToolsetPromptsSuite(t *testing.T) {
 	suite.Run(t, new(McpToolsetPromptsSuite))
 }

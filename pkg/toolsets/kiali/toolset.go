@@ -38,6 +38,10 @@ func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	return nil
 }
 
+func (t *Toolset) GetToolsetInstructions() string {
+	return ""
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

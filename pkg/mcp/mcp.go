@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -70,6 +71,11 @@ type Server struct {
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
+	instructions := configuration.ServerInstructions
+	if !configuration.DisableToolsetInstructions {
+		instructions = buildServerInstructions(configuration.ServerInstructions, configuration.Toolsets())
+	}
+
 	s := &Server{
 		configuration: &configuration,
 		server: mcp.NewServer(
@@ -86,7 +92,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
 					Logging:   &mcp.LoggingCapabilities{},
 				},
-				Instructions: configuration.ServerInstructions,
+				Instructions: instructions,
 			}),
 		p: targetProvider,
 	}
@@ -117,6 +123,28 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.p.WatchTargets(s.reloadToolsets)
 
 	return s, nil
+}
+
+// buildServerInstructions combines server instructions with toolset-specific instructions
+func buildServerInstructions(serverInstructions string, toolsets []api.Toolset) string {
+	var instructions []string
+
+	if serverInstructions != "" {
+		instructions = append(instructions, serverInstructions)
+	}
+
+	for _, toolset := range toolsets {
+		if toolsetInstructions := toolset.GetToolsetInstructions(); toolsetInstructions != "" {
+			// Add markdown h2 header with toolset name
+			header := fmt.Sprintf("## %s", toolset.GetName())
+			instructions = append(instructions, header, toolsetInstructions)
+		}
+	}
+
+	if len(instructions) == 0 {
+		return ""
+	}
+	return strings.Join(instructions, "\n\n")
 }
 
 func (s *Server) reloadToolsets() error {

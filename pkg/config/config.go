@@ -86,6 +86,10 @@ type StaticConfig struct {
 	// This can be used to provide specific instructions on how the client should use the server
 	ServerInstructions string `toml:"server_instructions,omitempty"`
 
+	// DisableToolsetInstructions indicates whether toolset instructions are to be excluded
+	// from being provided by the MCP server to the MCP client in the initialize response.
+	DisableToolsetInstructions bool `toml:"disable_toolset_instructions,omitempty"`
+
 	// Telemetry contains OpenTelemetry configuration options.
 	// These can also be configured via OTEL_* environment variables.
 	Telemetry TelemetryConfig `toml:"telemetry,omitempty"`
