@@ -90,6 +90,10 @@ type StaticConfig struct {
 	// These can also be configured via OTEL_* environment variables.
 	Telemetry TelemetryConfig `toml:"telemetry,omitempty"`
 
+	// Validation contains pre-execution validation configuration.
+	// When enabled, validates tool calls before execution to catch errors early.
+	Validation ValidationConfig `toml:"validation,omitempty"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]api.ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML package)
@@ -340,4 +344,8 @@ func (c *StaticConfig) GetStsAudience() string {
 
 func (c *StaticConfig) GetStsScopes() []string {
 	return c.StsScopes
+}
+
+func (c *StaticConfig) GetValidationConfig() api.ValidationConfig {
+	return &c.Validation
 }

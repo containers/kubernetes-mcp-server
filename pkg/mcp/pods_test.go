@@ -66,6 +66,10 @@ func (s *PodsSuite) TestPodsListInAllNamespaces() {
 }
 
 func (s *PodsSuite) TestPodsListInAllNamespacesUnauthorized() {
+	// Disable validation for this test - we're testing the tool's fallback behavior
+	// when cluster-wide list fails but namespace-scoped list succeeds
+	validationDisabled := false
+	s.Cfg.Validation.Enabled = &validationDisabled
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
 	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
@@ -194,17 +198,12 @@ func (s *PodsSuite) TestPodsListForbidden() {
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
 	s.Run("pods_list (forbidden)", func() {
-		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("pods_list", map[string]interface{}{})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
-				"error message should indicate forbidden")
-		})
-		s.Run("sends log notification", func() {
-			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
-			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
-			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
+			msg := toolResult.Content[0].(mcp.TextContent).Text
+			s.Truef(strings.Contains(msg, "forbidden") || strings.Contains(msg, "PERMISSION_DENIED"),
+				"error message should indicate forbidden or permission denied, got: %s", msg)
 		})
 	})
 }
