@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/klog/v2"
@@ -70,26 +69,23 @@ type Server struct {
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
-	s := &Server{
-		configuration: &configuration,
-		server: mcp.NewServer(
-			&mcp.Implementation{
-				Name:       version.BinaryName,
-				Title:      version.BinaryName,
-				Version:    version.Version,
-				WebsiteURL: version.WebsiteURL,
+	// Initialize MCP server
+	mcpServer := mcp.NewServer(
+		&mcp.Implementation{
+			Name:       version.BinaryName,
+			Title:      version.BinaryName,
+			Version:    version.Version,
+			WebsiteURL: version.WebsiteURL,
+		},
+		&mcp.ServerOptions{
+			Capabilities: &mcp.ServerCapabilities{
+				Resources: nil,
+				Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
+				Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
+				Logging:   &mcp.LoggingCapabilities{},
 			},
-			&mcp.ServerOptions{
-				Capabilities: &mcp.ServerCapabilities{
-					Resources: nil,
-					Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
-					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
-					Logging:   &mcp.LoggingCapabilities{},
-				},
-				Instructions: configuration.ServerInstructions,
-			}),
-		p: targetProvider,
-	}
+			Instructions: configuration.ServerInstructions,
+		})
 
 	// Initialize metrics system
 	metricsInstance, err := metrics.New(metrics.Config{
@@ -98,19 +94,36 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 		ServiceVersion: version.Version,
 		Telemetry:      &configuration.Telemetry,
 	})
+
+	// Add receiving middleware to the MCP server
+	mcpServer.AddReceivingMiddleware(sessionInjectionMiddleware)
+	mcpServer.AddReceivingMiddleware(traceContextPropagationMiddleware)
+	mcpServer.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
+	mcpServer.AddReceivingMiddleware(authHeaderPropagationMiddleware)
+	mcpServer.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
+	mcpServer.AddReceivingMiddleware(toolCallLoggingMiddleware)
+	mcpServer.AddReceivingMiddleware(metricsMiddleware(metricsInstance))
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize metrics: %w", err)
 	}
-	s.metrics = metricsInstance
 
-	s.server.AddReceivingMiddleware(sessionInjectionMiddleware)
-	s.server.AddReceivingMiddleware(traceContextPropagationMiddleware)
-	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
-	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
-	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
-	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
-	s.server.AddReceivingMiddleware(s.metricsMiddleware())
-	err = s.reloadToolsets()
+	return NewServerFrom(configuration, mcpServer, targetProvider, metricsInstance)
+}
+
+// NewServerFrom creates a new MCP server from pre-configured components.
+// Use this when you need full control over the MCP server, metrics, or middleware.
+// For standard usage with defaults, prefer NewServer.
+func NewServerFrom(configuration Configuration, mcpServer *mcp.Server, targetProvider internalk8s.Provider, metrics *metrics.Metrics) (*Server, error) {
+	s := &Server{
+		configuration: &configuration,
+		server:        mcpServer,
+		p:             targetProvider,
+		metrics:       metrics,
+	}
+
+	// reload toolsets
+	err := s.reloadToolsets()
 	if err != nil {
 		return nil, err
 	}
@@ -249,31 +262,6 @@ func (s *Server) registerPrompt(prompt api.ServerPrompt) error {
 	}
 	s.server.AddPrompt(mcpPrompt, promptHandler)
 	return nil
-}
-
-// metricsMiddleware returns a metrics middleware with access to the server's metrics system
-func (s *Server) metricsMiddleware() func(mcp.MethodHandler) mcp.MethodHandler {
-	return func(next mcp.MethodHandler) mcp.MethodHandler {
-		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-			start := time.Now()
-			result, err := next(ctx, method, req)
-			duration := time.Since(start)
-
-			toolName := method
-			if method == "tools/call" {
-				if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
-					if toolReq, _ := GoSdkToolCallParamsToToolCallRequest(params); toolReq != nil {
-						toolName = toolReq.Name
-					}
-				}
-			}
-
-			// Record to all collectors
-			s.metrics.RecordToolCall(ctx, toolName, duration, err)
-
-			return result, err
-		}
-	}
 }
 
 // GetMetrics returns the metrics system for use by the HTTP server.
