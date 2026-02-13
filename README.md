@@ -35,6 +35,7 @@ A powerful and flexible Kubernetes [Model Context Protocol (MCP)](https://blog.m
   - **List** Helm releases in all namespaces or in a specific namespace.
   - **Uninstall** a Helm release in the current or provided namespace.
 - **🔭 Observability**: Optional OpenTelemetry distributed tracing and metrics with custom sampling rates. Includes `/stats` endpoint for real-time statistics. See [OTEL.md](docs/OTEL.md).
+- **💻 Code Evaluation** _(opt-in with `--toolsets code`)_: Execute JavaScript scripts with direct access to Kubernetes clients for complex operations, data transformation, and aggregation in a single tool call.
 
 Unlike other Kubernetes MCP server implementations, this **IS NOT** just a wrapper around `kubectl` or `helm` command-line tools.
 It is a **Go-based native implementation** that interacts directly with the Kubernetes API server.
@@ -431,6 +432,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 | Toolset  | Description                                                                                                                                                          | Default |
 |----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| code     | Execute JavaScript code with access to Kubernetes clients for advanced operations and data transformation (opt-in, security-sensitive)                               |         |
 | config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
 | core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
 | kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                     |         |
@@ -445,6 +447,116 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 In case multi-cluster support is enabled (default) and you have access to multiple clusters, all applicable tools will include an additional `context` argument to specify the Kubernetes context (cluster) to use for that operation.
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-START -->
+
+<details>
+
+<summary>code</summary>
+
+- **evaluate_script** - Execute a JavaScript script with access to Kubernetes clients. Use this tool for complex operations that require multiple API calls, data transformation, filtering, or aggregation that would be inefficient with individual tool calls. The script runs in a sandboxed environment with access only to Kubernetes clients - no file system or network access.
+
+
+## JavaScript SDK
+
+**Note:** Full ES5.1 syntax support, partial ES6. Synchronous execution only (no async/await or Promises).
+
+### Globals
+- **k8s** - Kubernetes client (case-insensitive: coreV1, CoreV1, COREV1 all work)
+- **ctx** - Request context for cancellation
+- **namespace** - Default namespace
+
+### k8s API Clients
+- k8s.coreV1() - pods, services, configMaps, secrets, namespaces, nodes, etc.
+- k8s.appsV1() - deployments, statefulSets, daemonSets, replicaSets
+- k8s.batchV1() - jobs, cronJobs
+- k8s.networkingV1() - ingresses, networkPolicies
+- k8s.rbacV1() - roles, roleBindings, clusterRoles, clusterRoleBindings
+- k8s.metricsV1beta1Client() - pod and node metrics (CPU/memory usage)
+- k8s.dynamicClient() - any resource by GVR
+- k8s.discoveryClient() - API discovery
+
+### Examples
+
+#### Combine multiple API calls with JavaScript
+```javascript
+// Get all deployments and their pod counts across namespaces
+const deps = k8s.appsV1().deployments("").list(ctx, {});
+const result = deps.items.flatMap(d => {
+  const pods = k8s.coreV1().pods(d.metadata.namespace).list(ctx, {
+    labelSelector: Object.entries(d.spec.selector.matchLabels || {})
+      .map(([k,v]) => k+"="+v).join(",")
+  });
+  return [{
+    deployment: d.metadata.name,
+    namespace: d.metadata.namespace,
+    replicas: d.status.readyReplicas + "/" + d.status.replicas,
+    pods: pods.items.map(p => p.metadata.name)
+  }];
+});
+JSON.stringify(result);
+```
+
+#### Filter and aggregate
+```javascript
+const pods = k8s.coreV1().pods("").list(ctx, {});
+const unhealthy = pods.items.filter(p =>
+  p.status.containerStatuses?.some(c => c.restartCount > 5)
+).map(p => ({
+  name: p.metadata.name,
+  ns: p.metadata.namespace,
+  restarts: p.status.containerStatuses.reduce((s,c) => s + c.restartCount, 0)
+}));
+JSON.stringify(unhealthy);
+```
+
+#### Create resources (using standard Kubernetes YAML/JSON structure)
+```javascript
+const pod = {
+  apiVersion: "v1", kind: "Pod",
+  metadata: { name: "my-pod", namespace: namespace },
+  spec: { containers: [{ name: "nginx", image: "nginx:latest" }] }
+};
+k8s.coreV1().pods(namespace).create(ctx, pod, {}).metadata.name;
+```
+
+#### API introspection
+```javascript
+// Discover available resources on coreV1
+const resources = []; for (const k in k8s.coreV1()) if (typeof k8s.coreV1()[k]==='function') resources.push(k);
+// resources: ["configMaps","namespaces","pods","secrets","services",...]
+
+// Discover available operations on pods
+const ops = []; for (const k in k8s.coreV1().pods(namespace)) if (typeof k8s.coreV1().pods(namespace)[k]==='function') ops.push(k);
+// ops: ["create","delete","get","list","update","watch",...]
+```
+
+#### Get pod metrics with resource quantities
+```javascript
+const metrics = k8s.metricsV1beta1Client();
+const podMetrics = metrics.podMetricses("").list(ctx, {});
+const result = podMetrics.items.map(function(pm) {
+  return {
+    name: pm.metadata.name,
+    cpu: pm.containers[0].usage.cpu,    // "100m"
+    memory: pm.containers[0].usage.memory // "128Mi"
+  };
+});
+JSON.stringify(result);
+```
+
+#### Get pod logs
+```javascript
+const logBytes = k8s.coreV1().pods(namespace).getLogs("my-pod", {container: "main", tailLines: 100}).doRaw(ctx);
+var logs = ""; for (var i = 0; i < logBytes.length; i++) logs += String.fromCharCode(logBytes[i]);
+logs;
+```
+
+### Return Value
+Last expression is returned. Use JSON.stringify() for objects.
+
+  - `script` (`string`) **(required)** - JavaScript code to execute. The last expression is returned as the result.
+  - `timeout` (`integer`) - Execution timeout in milliseconds (default: 30000, max: 300000)
+
+</details>
 
 <details>
 
