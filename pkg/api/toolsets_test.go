@@ -63,26 +63,42 @@ func (s *ToolsetsSuite) TestNewToolCallResult() {
 	})
 }
 
-func (s *ToolsetsSuite) TestNewToolCallResultWithStructuredContent() {
-	s.Run("sets content and structured content", func() {
-		structured := map[string]any{"pods": []string{"pod-1"}}
-		result := NewToolCallResultWithStructuredContent("text output", structured, nil)
-		s.Equal("text output", result.Content)
-		s.Nil(result.Error)
-		s.Equal(structured, result.StructuredContent)
-	})
-	s.Run("allows nil structured content", func() {
-		result := NewToolCallResultWithStructuredContent("text output", nil, nil)
-		s.Equal("text output", result.Content)
+func (s *ToolsetsSuite) TestNewToolCallResultStructured() {
+	s.Run("sets empty content when structured is nil", func() {
+		result := NewToolCallResultStructured(nil, nil)
+		s.Equal("", result.Content)
 		s.Nil(result.StructuredContent)
 	})
-	s.Run("sets error alongside structured content", func() {
+	s.Run("sets error and structured content", func() {
 		err := errors.New("partial failure")
 		structured := map[string]any{"key": "value"}
-		result := NewToolCallResultWithStructuredContent("output", structured, err)
-		s.Equal("output", result.Content)
+		result := NewToolCallResultStructured(structured, err)
+		s.Equal(`{"key":"value"}`, result.Content)
 		s.Equal(err, result.Error)
 		s.Equal(structured, result.StructuredContent)
+	})
+	s.Run("handles complex nested structures", func() {
+		structured := map[string]any{
+			"metadata": map[string]any{"name": "test-pod"},
+			"items":    []int{1, 2, 3},
+		}
+		result := NewToolCallResultStructured(structured, nil)
+		s.Contains(result.Content, `"metadata"`)
+		s.Contains(result.Content, `"name":"test-pod"`)
+		s.Equal(structured, result.StructuredContent)
+	})
+	// Per MCP spec: "For backwards compatibility, a tool that returns structured content
+	// SHOULD also return the serialized JSON in a TextContent block."
+	// https://modelcontextprotocol.io/specification/2025-11-25/server/tools#structured-content
+	s.Run("Content field contains JSON serialization of StructuredContent for MCP backward compatibility", func() {
+		structured := map[string]any{"pods": []string{"pod-1", "pod-2"}, "count": 2}
+		result := NewToolCallResultStructured(structured, nil)
+
+		// Content should be valid JSON that represents the same data as StructuredContent
+		s.JSONEq(`{"pods":["pod-1","pod-2"],"count":2}`, result.Content)
+		// StructuredContent should be the original value
+		s.Equal(structured, result.StructuredContent)
+		s.Nil(result.Error)
 	})
 }
 

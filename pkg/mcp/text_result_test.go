@@ -37,19 +37,19 @@ func (s *TextResultSuite) TestNewTextResult() {
 	})
 }
 
-func (s *TextResultSuite) TestNewTextResultWithStructuredContent() {
+func (s *TextResultSuite) TestNewStructuredResult() {
 	s.Run("returns text and structured content for successful result", func() {
 		structured := map[string]any{"pods": []string{"pod-1", "pod-2"}}
-		result := NewTextResultWithStructuredContent("text output", structured, nil)
+		result := NewStructuredResult(`{"pods":["pod-1","pod-2"]}`, structured, nil)
 		s.False(result.IsError)
 		s.Require().Len(result.Content, 1)
 		tc, ok := result.Content[0].(*mcp.TextContent)
 		s.Require().True(ok, "expected TextContent")
-		s.Equal("text output", tc.Text)
+		s.Equal(`{"pods":["pod-1","pod-2"]}`, tc.Text)
 		s.Equal(structured, result.StructuredContent)
 	})
 	s.Run("omits structured content when nil", func() {
-		result := NewTextResultWithStructuredContent("text output", nil, nil)
+		result := NewStructuredResult("text output", nil, nil)
 		s.False(result.IsError)
 		s.Require().Len(result.Content, 1)
 		tc, ok := result.Content[0].(*mcp.TextContent)
@@ -60,7 +60,7 @@ func (s *TextResultSuite) TestNewTextResultWithStructuredContent() {
 	s.Run("returns error result and ignores structured content", func() {
 		err := errors.New("metrics unavailable")
 		structured := map[string]any{"should": "be ignored"}
-		result := NewTextResultWithStructuredContent("", structured, err)
+		result := NewStructuredResult("", structured, err)
 		s.True(result.IsError)
 		s.Require().Len(result.Content, 1)
 		tc, ok := result.Content[0].(*mcp.TextContent)

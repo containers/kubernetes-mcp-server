@@ -63,6 +63,8 @@ type ToolCallResult struct {
 	Error error
 }
 
+// NewToolCallResult creates a ToolCallResult with text content only.
+// Use this for tools that return human-readable text output.
 func NewToolCallResult(content string, err error) *ToolCallResult {
 	return &ToolCallResult{
 		Content: content,
@@ -70,7 +72,24 @@ func NewToolCallResult(content string, err error) *ToolCallResult {
 	}
 }
 
-func NewToolCallResultWithStructuredContent(content string, structured any, err error) *ToolCallResult {
+// NewToolCallResultStructured creates a ToolCallResult with structured content.
+// The structured value is automatically JSON-serialized into the Content field
+// for backward compatibility with MCP clients that don't support structuredContent.
+//
+// Per the MCP specification:
+// "For backwards compatibility, a tool that returns structured content SHOULD
+// also return the serialized JSON in a TextContent block."
+// https://modelcontextprotocol.io/specification/2025-11-25/server/tools#structured-content
+//
+// Use this for tools that return typed/structured data (maps, slices, structs)
+// that MCP clients can parse programmatically.
+func NewToolCallResultStructured(structured any, err error) *ToolCallResult {
+	content := ""
+	if structured != nil {
+		if b, jsonErr := json.Marshal(structured); jsonErr == nil {
+			content = string(b)
+		}
+	}
 	return &ToolCallResult{
 		Content:           content,
 		StructuredContent: structured,

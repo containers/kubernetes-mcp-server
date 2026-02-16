@@ -361,11 +361,40 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// NewTextResult creates an MCP CallToolResult with text content only.
+// Use this for tools that return human-readable text output.
 func NewTextResult(content string, err error) *mcp.CallToolResult {
-	return NewTextResultWithStructuredContent(content, nil, err)
+	if err != nil {
+		return &mcp.CallToolResult{
+			IsError: true,
+			Content: []mcp.Content{
+				&mcp.TextContent{
+					Text: err.Error(),
+				},
+			},
+		}
+	}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{
+				Text: content,
+			},
+		},
+	}
 }
 
-func NewTextResultWithStructuredContent(content string, structuredContent any, err error) *mcp.CallToolResult {
+// NewStructuredResult creates an MCP CallToolResult with structured content.
+// The Content field contains the JSON-serialized form of structuredContent
+// for backward compatibility with MCP clients that don't support structuredContent.
+//
+// Per the MCP specification:
+// "For backwards compatibility, a tool that returns structured content SHOULD
+// also return the serialized JSON in a TextContent block."
+// https://modelcontextprotocol.io/specification/2025-11-25/server/tools#structured-content
+//
+// Use this for tools that return typed/structured data that MCP clients can
+// parse programmatically.
+func NewStructuredResult(content string, structuredContent any, err error) *mcp.CallToolResult {
 	if err != nil {
 		return &mcp.CallToolResult{
 			IsError: true,
