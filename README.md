@@ -190,8 +190,8 @@ uvx kubernetes-mcp-server@latest --help
 |---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--port`                  | Starts the MCP server in Streamable HTTP mode (path /mcp) and Server-Sent Event (SSE) (path /sse) mode and listens on the specified port .                                                                                                                                                    |
 | `--log-level`             | Sets the logging level (values [from 0-9](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md)). Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
-| `--config`                | (Optional) Path to the main TOML configuration file. See [Drop-in Configuration](#drop-in-configuration) section below for details.                                                                                                                                                           |
-| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Drop-in Configuration](#drop-in-configuration) section below for details.                        |
+| `--config`                | (Optional) Path to the main TOML configuration file. See [Configuration Reference](docs/configuration.md) for details.                                                                                                                                                                        |
+| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Configuration Reference](docs/configuration.md) for details.                                    |
 | `--kubeconfig`            | Path to the Kubernetes configuration file. If not provided, it will try to resolve the configuration (in-cluster, default location, etc.).                                                                                                                                                    |
 | `--list-output`           | Output format for resource list operations (one of: yaml, table) (default "table")                                                                                                                                                                                                            |
 | `--read-only`             | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
@@ -201,153 +201,33 @@ uvx kubernetes-mcp-server@latest --help
 | `--disable-multi-cluster` | If set, the MCP server will disable multi-cluster support and will only use the current context from the kubeconfig file. This is useful if you want to restrict the MCP server to a single cluster.                                                                                          |
 | `--cluster-provider`.     | Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.                                                                                                                                           |
 
-### Server Instructions (for MCP Tool Search) <a id="server-instructions"></a>
+### TOML Configuration Files
 
-The `server_instructions` configuration option allows you to provide hints to MCP clients about when to use this server's tools. This is particularly useful for clients that support **MCP Tool Search** (like Claude Code), which dynamically loads tools based on relevance to the user's query.
+For complex or persistent configurations, use TOML configuration files instead of CLI arguments:
 
-**How it works:**
-- When an MCP client has many tools available, it may defer loading tool definitions to save context space
-- Server instructions help the client know when to search this server for relevant tools
-- The instructions are matched against user queries to determine tool relevance
-
-**Example TOML configuration:**
-
-```toml
-server_instructions = """
-Use this server for Kubernetes and OpenShift cluster management tasks including:
-- Pods: list, get details, logs, exec commands, delete
-- Resources: get, list, create, update, delete any Kubernetes resource (deployments, services, configmaps, secrets, etc.)
-- Namespaces and projects: list, create, switch context
-- Nodes: list, view logs, get resource usage statistics
-- Events: view cluster events for debugging
-- Helm: install (deploy), upgrade, uninstall, list charts and releases
-- KubeVirt: create and manage virtual machines
-- Cluster config: view and switch kubeconfig contexts
-"""
-```
-
-**Recommended keywords to include:**
-- Resource types: pods, deployments, services, configmaps, secrets, namespaces, nodes
-- Actions: list, get, create, update, delete, logs, exec, scale
-- Tools: Helm, KubeVirt, OpenShift
-- Use cases: debugging, troubleshooting, cluster management
-
-### Drop-in Configuration <a id="drop-in-configuration"></a>
-
-The Kubernetes MCP server supports flexible configuration through both a main config file and drop-in files. **Both are optional** - you can use either, both, or neither (server will use built-in defaults).
-
-#### Configuration Loading Order
-
-Configuration values are loaded and merged in the following order (later sources override earlier ones):
-
-1. **Internal Defaults** - Always loaded (hardcoded default values)
-2. **Main Configuration File** - Optional, loaded via `--config` flag
-3. **Drop-in Files** - Optional, loaded from `--config-dir` in **lexical (alphabetical) order**
-
-#### How Drop-in Files Work
-
-- **Default Directory**: If `--config-dir` is not specified, the server looks for drop-in files in `conf.d/` relative to the main config file's directory (when `--config` is provided)
-- **File Naming**: Use numeric prefixes to control loading order (e.g., `00-base.toml`, `10-cluster.toml`, `99-override.toml`)
-- **File Extension**: Only `.toml` files are processed; dotfiles (starting with `.`) are ignored
-- **Partial Configuration**: Drop-in files can contain only a subset of configuration options
-- **Merge Behavior**: Values present in a drop-in file override previous values; missing values are preserved
-
-#### Dynamic Configuration Reload
-
-To reload configuration after modifying config files, send a `SIGHUP` signal to the running server process.
-
-**Prerequisite**: SIGHUP reload requires the server to be started with either the `--config` flag or `--config-dir` flag (or both). If neither is specified, SIGHUP signals will be ignored.
-
-**How to reload:**
-
-```shell
-# Find the process ID
-ps aux | grep kubernetes-mcp-server
-
-# Send SIGHUP to reload configuration
-kill -HUP <pid>
-
-# Or use pkill
-pkill -HUP kubernetes-mcp-server
-```
-
-The server will:
-- Reload the main config file and all drop-in files
-- Update configuration values (log level, output format, etc.)
-- Rebuild the toolset registry with new tool configurations
-- Log the reload status
-
-**Note**: Changing `kubeconfig` or cluster-related settings requires a server restart. Only tool configurations, log levels, and output formats can be reloaded dynamically.
-
-**Note**: SIGHUP reload is not available on Windows. On Windows, restart the server to reload configuration.
-
-#### Example: Using Both Config Methods
-
-**Command (using default `conf.d` directory):**
 ```shell
 kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml
 ```
 
-**Directory structure:**
-```
-/etc/kubernetes-mcp-server/
-├── config.toml              # Main configuration
-└── conf.d/                  # Default drop-in directory (automatically loaded)
-    ├── 00-base.toml         # Base overrides
-    ├── 10-toolsets.toml     # Toolset-specific config
-    └── 99-local.toml        # Local overrides
-```
+**Example configuration:**
 
-**Command (with explicit `--config-dir`):**
-```shell
-kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
-                      --config-dir /etc/kubernetes-mcp-server/config.d/
-```
-
-**Example drop-in file** (`10-toolsets.toml`):
 ```toml
-# Override only the toolsets - all other config preserved
-toolsets = ["core", "config", "helm", "logs"]
-```
-
-**Example drop-in file** (`99-local.toml`):
-```toml
-# Local development overrides
-log_level = 9
+log_level = 2
 read_only = true
+toolsets = ["core", "config", "helm", "kubevirt"]
+
+[telemetry]
+endpoint = "http://localhost:4317"
 ```
 
-**To apply changes:**
-```shell
-# Edit config files
-vim /etc/kubernetes-mcp-server/conf.d/99-local.toml
+For comprehensive TOML configuration documentation, including:
+- All configuration options and their defaults
+- Drop-in configuration files for modular settings
+- Dynamic configuration reload via SIGHUP
+- Server instructions for MCP Tool Search
+- Custom MCP prompts
 
-# Reload without restarting
-pkill -HUP kubernetes-mcp-server
-```
-
-### MCP Prompts
-
-1. The server supports MCP prompts for workflow templates. Define custom prompts in `config.toml`:
-
-```toml
-[[prompts]]
-name = "my-workflow"
-title = "my workflow"
-description = "Custom workflow"
-
-[[prompts.arguments]]
-name = "resource_name"
-required = true
-
-[[prompts.messages]]
-role = "user"
-content = "Help me with {{resource_name}}"
-```
-
-2. Toolset prompts implemented by toolset developers
-
-See docs/PROMPTS.md for detailed documentation.
+See the **[Configuration Reference](docs/configuration.md)**.
 
 ## 📊 MCP Logging <a id="mcp-logging"></a>
 

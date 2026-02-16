@@ -85,8 +85,9 @@ lint: golangci-lint ## Lint the code
 	$(GOLANGCI_LINT) run --verbose --print-resources-usage
 
 .PHONY: update-readme-tools
-update-readme-tools: ## Update the README.md file with the latest toolsets
+update-readme-tools: ## Update the README.md and docs/configuration.md files with the latest toolsets
 	go run ./internal/tools/update-readme/main.go README.md
+	go run ./internal/tools/update-readme/main.go docs/configuration.md
 
 ##@ Local Development
 

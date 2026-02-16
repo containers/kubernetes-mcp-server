@@ -21,7 +21,7 @@ This MCP server enables AI assistants (like Claude, Gemini, Cursor, and others) 
     - `toolsets/` - Toolset registration and management for MCP tools.
     - `version/` - Version information management.
 - `.github/` – GitHub-related configuration (Actions workflows, issue templates...).
-- `docs/` – documentation files.
+- `docs/` – documentation files (see [Documentation](#documentation) section below).
 - `npm/` – Node packages that wraps the compiled binaries for distribution through npmjs.com.
 - `python/` – Python package providing a script that downloads the correct platform binary from the GitHub releases page and runs it for distribution through pypi.org.
 - `Dockerfile` - container image description file to distribute the server as a container image.
@@ -281,7 +281,7 @@ make npm-publish
 # Publish the Python packages
 make python-publish
 
-# Update README.md with the latest toolsets
+# Update README.md and docs/configuration.md with the latest toolsets
 make update-readme-tools
 ```
 
@@ -296,6 +296,25 @@ When introducing new modules run `make tidy` so that `go.mod` and `go.sum` remai
 - Go modules target Go **1.25** (see `go.mod`).
 - Tests are written with the standard library `testing` package.
 - Build, test and lint steps are defined in the Makefile—keep them working.
+
+## Documentation
+
+The `docs/` directory contains user-facing documentation:
+
+- `docs/README.md` – Documentation index and navigation
+- `docs/configuration.md` – **Complete TOML configuration reference** (all `StaticConfig` options, drop-in configuration, dynamic reload)
+- `docs/prompts.md` – MCP Prompts configuration guide
+- `docs/OTEL.md` – OpenTelemetry observability setup
+- `docs/KIALI.md` – Kiali toolset configuration
+- `docs/GETTING_STARTED_KUBERNETES.md` – Kubernetes ServiceAccount setup
+- `docs/GETTING_STARTED_CLAUDE_CODE.md` – Claude Code CLI integration
+- `docs/KEYCLOAK_OIDC_SETUP.md` – OAuth/OIDC developer setup
+
+### Documentation conventions
+
+- Use **lowercase filenames** for new documentation files (e.g., `configuration.md`, `prompts.md`)
+- The toolsets table in `README.md` and `docs/configuration.md` is **auto-generated** - use `make update-readme-tools` to update it
+- Both files use markers (`<!-- AVAILABLE-TOOLSETS-START -->` / `<!-- AVAILABLE-TOOLSETS-END -->`) for the generated content
 
 ## Distribution Methods
 

@@ -40,9 +40,9 @@ jobs:
         run: make update-readme-tools
       - name: Check for uncommitted changes
         run: |
-          if ! git diff --quiet README.md; then
-            echo "::error::README.md is out of date. Please run 'make update-readme-tools' and commit the changes."
-            git diff README.md
+          if ! git diff --quiet README.md docs/configuration.md; then
+            echo "::error::README.md or docs/configuration.md is out of date. Please run 'make update-readme-tools' and commit the changes."
+            git diff README.md docs/configuration.md
             exit 1
           fi
 
