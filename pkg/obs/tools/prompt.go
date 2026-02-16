@@ -15,6 +15,7 @@ If the user mentions a specific alert by name, use get_alerts with a filter to r
 - This is NON-NEGOTIABLE for EVERY question
 - NEVER skip this step, even if you think you know the metric name
 - NEVER guess metric names - they vary between environments
+- Always pass in a name_regex param to it with a best guess of what the metric would be named like.
 - Search the returned list to find the exact metric name that exists
 
 **STEP 2: Call get_label_names for the metric you found**
@@ -48,6 +49,8 @@ This tool MUST be called first for EVERY observability question to:
 1. Discover what metrics actually exist in this environment
 2. Find the EXACT metric name to use in queries
 3. Avoid querying non-existent metrics
+4. The 'name_regex' parameter should always be provided, and be a best guess of what the metric would be named like.
+5. Do not use a blanket regex like .* or .+ in the 'name_regex' parameter. Use specific ones like kube.*, node.*, etc.
 
 NEVER skip this step. NEVER guess metric names. Metric names vary between environments.
 

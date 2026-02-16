@@ -35,6 +35,12 @@ func GetBoolPtr(params map[string]any, key string) *bool {
 	return nil
 }
 
+func BuildListMetricsInput(args map[string]any) ListMetricsInput {
+	return ListMetricsInput{
+		NameRegex: GetString(args, "name_regex", ""),
+	}
+}
+
 func BuildInstantQueryInput(args map[string]any) InstantQueryInput {
 	return InstantQueryInput{
 		Query: GetString(args, "query", ""),
@@ -95,10 +101,16 @@ func BuildSilencesInput(args map[string]any) SilencesInput {
 }
 
 // ListMetricsHandler handles the listing of available Prometheus metrics.
-func ListMetricsHandler(ctx context.Context, promClient prometheus.Loader) *resultutil.Result {
+func ListMetricsHandler(ctx context.Context, promClient prometheus.Loader, input ListMetricsInput) *resultutil.Result {
 	slog.Info("ListMetricsHandler called")
+	slog.Debug("ListMetricsHandler params", "input", input)
 
-	metrics, err := promClient.ListMetrics(ctx)
+	// Validate required parameters
+	if input.NameRegex == "" {
+		return resultutil.NewErrorResult(fmt.Errorf("name_regex parameter is required and must be a string"))
+	}
+
+	metrics, err := promClient.ListMetrics(ctx, input.NameRegex)
 	if err != nil {
 		slog.Error("failed to list metrics", "error", err)
 		return resultutil.NewErrorResult(fmt.Errorf("failed to list metrics: %w", err))

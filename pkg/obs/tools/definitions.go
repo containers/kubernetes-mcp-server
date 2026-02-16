@@ -6,7 +6,14 @@ var (
 		Name:        "list_metrics",
 		Description: ListMetricsPrompt,
 		Title:       "List Available Metrics",
-		Params:      []ParamDef{}, // no parameters
+		Params: []ParamDef{
+			{
+				Name:        "name_regex",
+				Type:        ParamTypeString,
+				Description: "Regex pattern to filter metric names (e.g., 'http_.*', 'node_.*', 'kube.*'). This parameter is required. Don't pass in blanket regex.",
+				Required:    true,
+			},
+		},
 		ReadOnly:    true,
 		Destructive: false,
 		Idempotent:  true,

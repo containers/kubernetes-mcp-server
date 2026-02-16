@@ -99,6 +99,11 @@ type Matcher struct {
 
 // Input structs for handler parameters
 
+// ListMetricsInput defines the input parameters for ListMetricsHandler.
+type ListMetricsInput struct {
+	NameRegex string `json:"name_regex"`
+}
+
 // RangeQueryInput defines the input parameters for ExecuteRangeQueryHandler.
 type RangeQueryInput struct {
 	Query    string `json:"query"`
