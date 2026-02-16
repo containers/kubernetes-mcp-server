@@ -13,7 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -61,7 +61,7 @@ func (s *HelmSuite) TestHelmInstall() {
 		})
 		s.Run("returns installed chart", func() {
 			var decoded []map[string]interface{}
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 			s.Run("has yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
 			})
@@ -107,7 +107,7 @@ func (s *HelmSuite) TestHelmInstallDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			s.Truef(strings.HasPrefix(msg, "failed to install helm chart"), "expected descriptive error, got %v", msg)
 			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
@@ -128,7 +128,7 @@ func (s *HelmSuite) TestHelmListNoReleases() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Run("returns not found", func() {
-			s.Equalf("No Helm releases found", toolResult.Content[0].(mcp.TextContent).Text, "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf("No Helm releases found", toolResult.Content[0].(*mcp.TextContent).Text, "unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 }
@@ -157,7 +157,7 @@ func (s *HelmSuite) TestHelmList() {
 		})
 		s.Run("returns release", func() {
 			var decoded []map[string]interface{}
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 			s.Run("has yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
 			})
@@ -179,7 +179,7 @@ func (s *HelmSuite) TestHelmList() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Run("returns not found", func() {
-			s.Equalf("No Helm releases found", toolResult.Content[0].(mcp.TextContent).Text, "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf("No Helm releases found", toolResult.Content[0].(*mcp.TextContent).Text, "unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("helm_list(namespace=ns-1, all_namespaces=true) with deployed release in all namespaces", func() {
@@ -190,7 +190,7 @@ func (s *HelmSuite) TestHelmList() {
 		})
 		s.Run("returns release", func() {
 			var decoded []map[string]interface{}
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 			s.Run("has yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
 			})
@@ -233,7 +233,7 @@ func (s *HelmSuite) TestHelmListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			s.Truef(strings.HasPrefix(msg, "failed to list helm releases"), "expected descriptive error, got %v", msg)
 			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
@@ -253,7 +253,7 @@ func (s *HelmSuite) TestHelmUninstallNoReleases() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Run("returns not found", func() {
-			s.Equalf("Release release-to-uninstall not found", toolResult.Content[0].(mcp.TextContent).Text, "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf("Release release-to-uninstall not found", toolResult.Content[0].(*mcp.TextContent).Text, "unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 }
@@ -283,7 +283,7 @@ func (s *HelmSuite) TestHelmUninstall() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Run("returns uninstalled", func() {
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "Uninstalled release existent-release-to-uninstall"), "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "Uninstalled release existent-release-to-uninstall"), "unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			_, err = kc.CoreV1().Secrets("default").Get(s.T().Context(), "sh.helm.release.v1.existent-release-to-uninstall.v0", metav1.GetOptions{})
 			s.Truef(errors.IsNotFound(err), "expected release to be deleted, but it still exists")
 		})
@@ -320,7 +320,7 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes failure to uninstall", func() {
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text,
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text,
 				"failed to uninstall helm chart 'existent-release-to-uninstall': failed to delete release: existent-release-to-uninstall")
 		})
 		s.Run("describes denial (in log)", func() {
@@ -344,7 +344,7 @@ func (s *HelmSuite) TestHelmListForbidden() {
 		toolResult, _ := s.CallTool("helm_list", map[string]interface{}{})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "forbidden",
 				"error message should indicate forbidden")
 		})
 		s.Run("sends log notification", func() {

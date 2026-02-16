@@ -1,51 +1,52 @@
 [
   {
     "annotations": {
-      "title": "Configuration: View",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Configuration: View"
     },
     "description": "Get the current Kubernetes configuration content as a kubeconfig YAML",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "minified": {
           "description": "Return a minified version of the configuration. If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. (Optional, default true)",
           "type": "boolean"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "configuration_view"
+    "name": "configuration_view",
+    "title": "Configuration: View"
   },
   {
     "annotations": {
-      "title": "Events: List",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Events: List"
     },
     "description": "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "namespace": {
           "description": "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "events_list"
+    "name": "events_list",
+    "title": "Events: List"
   },
   {
     "annotations": {
-      "title": "Helm: Install",
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Helm: Install"
     },
     "description": "Install (deploy) a Helm chart to create a release in the current or provided namespace",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "chart": {
           "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
@@ -67,20 +68,21 @@
       },
       "required": [
         "chart"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "helm_install"
+    "name": "helm_install",
+    "title": "Helm: Install"
   },
   {
     "annotations": {
-      "title": "Helm: List",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Helm: List"
     },
     "description": "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "all_namespaces": {
           "description": "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
@@ -90,20 +92,21 @@
           "description": "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "helm_list"
+    "name": "helm_list",
+    "title": "Helm: List"
   },
   {
     "annotations": {
-      "title": "Helm: Uninstall",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Helm: Uninstall"
     },
     "description": "Uninstall a Helm release in the current or provided namespace",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "name": {
           "description": "Name of the Helm release to uninstall",
@@ -116,33 +119,36 @@
       },
       "required": [
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "helm_uninstall"
+    "name": "helm_uninstall",
+    "title": "Helm: Uninstall"
   },
   {
     "annotations": {
-      "title": "Namespaces: List",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Namespaces: List"
     },
     "description": "List all the Kubernetes namespaces in the current cluster",
     "inputSchema": {
+      "properties": {},
       "type": "object"
     },
-    "name": "namespaces_list"
+    "name": "namespaces_list",
+    "title": "Namespaces: List"
   },
   {
     "annotations": {
-      "title": "Node: Log",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Node: Log"
     },
     "description": "Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "name": {
           "description": "Name of the node to get logs from",
@@ -162,20 +168,21 @@
       "required": [
         "name",
         "query"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "nodes_log"
+    "name": "nodes_log",
+    "title": "Node: Log"
   },
   {
     "annotations": {
-      "title": "Node: Stats Summary",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Node: Stats Summary"
     },
     "description": "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "name": {
           "description": "Name of the node to get stats from",
@@ -184,21 +191,22 @@
       },
       "required": [
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "nodes_stats_summary"
+    "name": "nodes_stats_summary",
+    "title": "Node: Stats Summary"
   },
   {
     "annotations": {
-      "title": "Nodes: Top",
-      "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Nodes: Top"
     },
     "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "label_selector": {
           "description": "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
@@ -209,20 +217,21 @@
           "description": "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "nodes_top"
+    "name": "nodes_top",
+    "title": "Nodes: Top"
   },
   {
     "annotations": {
-      "title": "Pods: Delete",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Pods: Delete"
     },
     "description": "Delete a Kubernetes Pod in the current or provided namespace with the provided name",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "name": {
           "description": "Name of the Pod to delete",
@@ -235,19 +244,20 @@
       },
       "required": [
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "pods_delete"
+    "name": "pods_delete",
+    "title": "Pods: Delete"
   },
   {
     "annotations": {
-      "title": "Pods: Exec",
       "destructiveHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Pods: Exec"
     },
     "description": "Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "command": {
           "description": "Command to execute in the Pod container. The first item is the command to be run, and the rest are the arguments to that command. Example: [\"ls\", \"-l\", \"/tmp\"]",
@@ -272,20 +282,21 @@
       "required": [
         "name",
         "command"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "pods_exec"
+    "name": "pods_exec",
+    "title": "Pods: Exec"
   },
   {
     "annotations": {
-      "title": "Pods: Get",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Pods: Get"
     },
     "description": "Get a Kubernetes Pod in the current or provided namespace with the provided name",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "name": {
           "description": "Name of the Pod",
@@ -298,20 +309,21 @@
       },
       "required": [
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "pods_get"
+    "name": "pods_get",
+    "title": "Pods: Get"
   },
   {
     "annotations": {
-      "title": "Pods: List",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Pods: List"
     },
     "description": "List all the Kubernetes pods in the current cluster from all namespaces",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
@@ -323,20 +335,21 @@
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "pods_list"
+    "name": "pods_list",
+    "title": "Pods: List"
   },
   {
     "annotations": {
-      "title": "Pods: List in Namespace",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Pods: List in Namespace"
     },
     "description": "List all the Kubernetes pods in the specified namespace in the current cluster",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
@@ -355,20 +368,21 @@
       },
       "required": [
         "namespace"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "pods_list_in_namespace"
+    "name": "pods_list_in_namespace",
+    "title": "Pods: List in Namespace"
   },
   {
     "annotations": {
-      "title": "Pods: Log",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Pods: Log"
     },
     "description": "Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "container": {
           "description": "Name of the Pod container to get the logs from (Optional)",
@@ -395,19 +409,20 @@
       },
       "required": [
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "pods_log"
+    "name": "pods_log",
+    "title": "Pods: Log"
   },
   {
     "annotations": {
-      "title": "Pods: Run",
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Pods: Run"
     },
     "description": "Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "image": {
           "description": "Container Image to run in the Pod",
@@ -428,21 +443,22 @@
       },
       "required": [
         "image"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "pods_run"
+    "name": "pods_run",
+    "title": "Pods: Run"
   },
   {
     "annotations": {
-      "title": "Pods: Top",
-      "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Pods: Top"
     },
     "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "all_namespaces": {
           "default": true,
@@ -462,33 +478,36 @@
           "description": "Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "pods_top"
+    "name": "pods_top",
+    "title": "Pods: Top"
   },
   {
     "annotations": {
-      "title": "Projects: List",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Projects: List"
     },
     "description": "List all the OpenShift projects in the current cluster",
     "inputSchema": {
+      "properties": {},
       "type": "object"
     },
-    "name": "projects_list"
+    "name": "projects_list",
+    "title": "Projects: List"
   },
   {
     "annotations": {
-      "title": "Resources: Create or Update",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Resources: Create or Update"
     },
     "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "resource": {
           "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
@@ -497,20 +516,21 @@
       },
       "required": [
         "resource"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "resources_create_or_update"
+    "name": "resources_create_or_update",
+    "title": "Resources: Create or Update"
   },
   {
     "annotations": {
-      "title": "Resources: Delete",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Resources: Delete"
     },
     "description": "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -537,20 +557,21 @@
         "apiVersion",
         "kind",
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "resources_delete"
+    "name": "resources_delete",
+    "title": "Resources: Delete"
   },
   {
     "annotations": {
-      "title": "Resources: Get",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Resources: Get"
     },
     "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -573,20 +594,21 @@
         "apiVersion",
         "kind",
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "resources_get"
+    "name": "resources_get",
+    "title": "Resources: Get"
   },
   {
     "annotations": {
-      "title": "Resources: List",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Resources: List"
     },
     "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -614,20 +636,21 @@
       "required": [
         "apiVersion",
         "kind"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "resources_list"
+    "name": "resources_list",
+    "title": "Resources: List"
   },
   {
     "annotations": {
-      "title": "Resources: Scale",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Resources: Scale"
     },
     "description": "Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are apps/v1)",
@@ -654,8 +677,10 @@
         "apiVersion",
         "kind",
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "resources_scale"
+    "name": "resources_scale",
+    "title": "Resources: Scale"
   }
 ]

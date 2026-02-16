@@ -6,7 +6,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -191,7 +190,7 @@ func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
 
 	// Get initial tools
 	s.InitMcpClient()
-	initialTools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	initialTools, err := s.ListTools()
 	s.Require().NoError(err)
 	s.Require().Greater(len(initialTools.Tools), 0)
 
@@ -205,7 +204,7 @@ func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
 	s.Require().NoError(err)
 
 	// Verify helm tools are available
-	reloadedTools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	reloadedTools, err := s.ListTools()
 	s.Require().NoError(err)
 
 	helmToolFound := false

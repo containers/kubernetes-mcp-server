@@ -10,7 +10,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -57,7 +56,7 @@ func (s *McpHeadersSuite) TearDownTest() {
 func (s *McpHeadersSuite) TestAuthorizationHeaderPropagation() {
 	cases := []string{"kubernetes-authorization", "Authorization"}
 	for _, header := range cases {
-		s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"})))
+		s.InitMcpClient(test.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"}))
 		_, _ = s.CallTool("pods_list", map[string]interface{}{})
 		s.pathHeadersMux.Lock()
 		pathHeadersLen := len(s.pathHeaders)
@@ -165,9 +164,9 @@ func (s *UserAgentPropagationSuite) TearDownTest() {
 }
 
 func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
-	s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{
+	s.InitMcpClient(test.WithHTTPHeaders(map[string]string{
 		"User-Agent": "custom-mcp-client/2.0",
-	})))
+	}))
 	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
@@ -184,10 +183,10 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
 }
 
 func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentWithOAuthToKubeAPI() {
-	s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{
+	s.InitMcpClient(test.WithHTTPHeaders(map[string]string{
 		"Authorization": "Bearer a-token-from-mcp-client",
 		"User-Agent":    "custom-mcp-client/2.0",
-	})))
+	}))
 	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()

@@ -1,14 +1,13 @@
 [
   {
     "annotations": {
-      "title": "Virtual Machine: Clone",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": false
+      "openWorldHint": false,
+      "title": "Virtual Machine: Clone"
     },
     "description": "Clone a KubeVirt VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "name": {
           "description": "The name of the source virtual machine to clone",
@@ -27,20 +26,21 @@
         "namespace",
         "name",
         "targetName"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "vm_clone"
+    "name": "vm_clone",
+    "title": "Virtual Machine: Clone"
   },
   {
     "annotations": {
-      "title": "Virtual Machine: Create",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": false
+      "openWorldHint": false,
+      "title": "Virtual Machine: Create"
     },
     "description": "Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "autostart": {
           "description": "Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.",
@@ -150,19 +150,20 @@
       "required": [
         "namespace",
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "vm_create"
+    "name": "vm_create",
+    "title": "Virtual Machine: Create"
   },
   {
     "annotations": {
-      "title": "Virtual Machine: Lifecycle",
       "destructiveHint": true,
-      "openWorldHint": false
+      "openWorldHint": false,
+      "title": "Virtual Machine: Lifecycle"
     },
     "description": "Manage VirtualMachine lifecycle: start, stop, or restart a VM",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "action": {
           "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
@@ -186,8 +187,10 @@
         "namespace",
         "name",
         "action"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "vm_lifecycle"
+    "name": "vm_lifecycle",
+    "title": "Virtual Machine: Lifecycle"
   }
 ]

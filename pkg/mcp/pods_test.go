@@ -9,7 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +33,7 @@ func (s *PodsSuite) TestPodsListInAllNamespaces() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -92,7 +92,7 @@ func (s *PodsSuite) TestPodsListInAllNamespacesUnauthorized() {
 			s.Falsef(toolResult.IsError, "call tool failed %v", toolResult.Content)
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -122,8 +122,8 @@ func (s *PodsSuite) TestPodsListInNamespace() {
 	s.Run("pods_list_in_namespace with nil namespace returns error", func() {
 		toolResult, _ := s.CallTool("pods_list_in_namespace", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to list pods in namespace, missing argument namespace", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to list pods in namespace, missing argument namespace", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_list_in_namespace(namespace=ns-1) returns pods list", func() {
 		toolResult, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{
@@ -134,7 +134,7 @@ func (s *PodsSuite) TestPodsListInNamespace() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -164,7 +164,7 @@ func (s *PodsSuite) TestPodsListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := podsList.Content[0].(mcp.TextContent).Text
+			msg := podsList.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list pods in all namespaces:(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
@@ -182,7 +182,7 @@ func (s *PodsSuite) TestPodsListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := podsListInNamespace.Content[0].(mcp.TextContent).Text
+			msg := podsListInNamespace.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list pods in namespace ns-1:(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
@@ -206,7 +206,7 @@ func (s *PodsSuite) TestPodsListForbidden() {
 		toolResult, _ := s.CallTool("pods_list", map[string]interface{}{})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "forbidden",
 				"error message should indicate forbidden")
 		})
 		s.Run("sends log notification", func() {
@@ -227,7 +227,7 @@ func (s *PodsSuite) TestPodsListAsTable() {
 			s.Falsef(podsList.IsError, "call tool failed")
 		})
 		s.Require().NotNil(podsList, "Expected tool result from call")
-		outPodsList := podsList.Content[0].(mcp.TextContent).Text
+		outPodsList := podsList.Content[0].(*mcp.TextContent).Text
 		s.Run("returns table with header and rows", func() {
 			lines := strings.Count(outPodsList, "\n")
 			s.GreaterOrEqualf(lines, 3, "invalid line count, expected at least 3 (1 header, 2+ rows), got %v", lines)
@@ -284,7 +284,7 @@ func (s *PodsSuite) TestPodsListAsTable() {
 			s.Falsef(podsListInNamespace.IsError, "call tool failed")
 		})
 		s.Require().NotNil(podsListInNamespace, "Expected tool result from call")
-		outPodsListInNamespace := podsListInNamespace.Content[0].(mcp.TextContent).Text
+		outPodsListInNamespace := podsListInNamespace.Content[0].(*mcp.TextContent).Text
 		s.Run("returns table with header and row", func() {
 			lines := strings.Count(outPodsListInNamespace, "\n")
 			s.GreaterOrEqualf(lines, 1, "invalid line count, expected at least 1 (1 header, 1+ rows), got %v", lines)
@@ -321,14 +321,14 @@ func (s *PodsSuite) TestPodsGet() {
 	s.Run("pods_get with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_get", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod, missing argument name", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get pod, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_get(name=not-found) with not found name", func() {
 		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("pods_get", map[string]interface{}{"name": "not-found"})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Equalf("failed to get pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf("failed to get pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("sends log notification", func() {
 			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
@@ -345,7 +345,7 @@ func (s *PodsSuite) TestPodsGet() {
 			s.Falsef(podsGetNilNamespace.IsError, "call tool failed")
 		})
 		var decodedNilNamespace unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(podsGetNilNamespace.Content[0].(mcp.TextContent).Text), &decodedNilNamespace)
+		err = yaml.Unmarshal([]byte(podsGetNilNamespace.Content[0].(*mcp.TextContent).Text), &decodedNilNamespace)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -367,7 +367,7 @@ func (s *PodsSuite) TestPodsGet() {
 			s.Falsef(podsGetInNamespace.IsError, "call tool failed")
 		})
 		var decodedInNamespace unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(podsGetInNamespace.Content[0].(mcp.TextContent).Text), &decodedInNamespace)
+		err = yaml.Unmarshal([]byte(podsGetInNamespace.Content[0].(*mcp.TextContent).Text), &decodedInNamespace)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -390,7 +390,7 @@ func (s *PodsSuite) TestPodsGetDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := podsGet.Content[0].(mcp.TextContent).Text
+			msg := podsGet.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get pod a-pod-in-default in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
@@ -404,14 +404,14 @@ func (s *PodsSuite) TestPodsDelete() {
 	s.Run("pods_delete with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_delete", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete pod, missing argument name", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to delete pod, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_delete(name=not-found) with not found name", func() {
 		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("pods_delete", map[string]interface{}{"name": "not-found"})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Equalf("failed to delete pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf("failed to delete pod not-found in namespace : pods \"not-found\" not found", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("sends log notification", func() {
 			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
@@ -431,7 +431,7 @@ func (s *PodsSuite) TestPodsDelete() {
 		s.Run("returns success", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(podsDeleteNilNamespace.IsError, "call tool failed")
-			s.Equalf("Pod deleted successfully", podsDeleteNilNamespace.Content[0].(mcp.TextContent).Text, "invalid tool result content, got %v", podsDeleteNilNamespace.Content[0].(mcp.TextContent).Text)
+			s.Equalf("Pod deleted successfully", podsDeleteNilNamespace.Content[0].(*mcp.TextContent).Text, "invalid tool result content, got %v", podsDeleteNilNamespace.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("deletes Pod", func() {
 			p, pErr := kc.CoreV1().Pods("default").Get(s.T().Context(), "a-pod-to-delete", metav1.GetOptions{})
@@ -451,7 +451,7 @@ func (s *PodsSuite) TestPodsDelete() {
 		s.Run("returns success", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(podsDeleteInNamespace.IsError, "call tool failed")
-			s.Equalf("Pod deleted successfully", podsDeleteInNamespace.Content[0].(mcp.TextContent).Text, "invalid tool result content, got %v", podsDeleteInNamespace.Content[0].(mcp.TextContent).Text)
+			s.Equalf("Pod deleted successfully", podsDeleteInNamespace.Content[0].(*mcp.TextContent).Text, "invalid tool result content, got %v", podsDeleteInNamespace.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("deletes Pod", func() {
 			p, pErr := kc.CoreV1().Pods("ns-1").Get(s.T().Context(), "a-pod-to-delete-in-ns-1", metav1.GetOptions{})
@@ -478,7 +478,7 @@ func (s *PodsSuite) TestPodsDelete() {
 		s.Run("returns success", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(podsDeleteManaged.IsError, "call tool failed")
-			s.Equalf("Pod deleted successfully", podsDeleteManaged.Content[0].(mcp.TextContent).Text, "invalid tool result content, got %v", podsDeleteManaged.Content[0].(mcp.TextContent).Text)
+			s.Equalf("Pod deleted successfully", podsDeleteManaged.Content[0].(*mcp.TextContent).Text, "invalid tool result content, got %v", podsDeleteManaged.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("deletes Pod and Service", func() {
 			p, pErr := kc.CoreV1().Pods("default").Get(s.T().Context(), "a-managed-pod-to-delete", metav1.GetOptions{})
@@ -501,7 +501,7 @@ func (s *PodsSuite) TestPodsDeleteDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := podsDelete.Content[0].(mcp.TextContent).Text
+			msg := podsDelete.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to delete pod a-pod-in-default in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
@@ -543,8 +543,8 @@ func (s *PodsSuite) TestPodsDeleteInOpenShift() {
 		s.Run("returns success", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(podsDeleteManagedOpenShift.IsError, "call tool failed")
-			s.Equalf("Pod deleted successfully", podsDeleteManagedOpenShift.Content[0].(mcp.TextContent).Text,
-				"invalid tool result content, got %v", podsDeleteManagedOpenShift.Content[0].(mcp.TextContent).Text)
+			s.Equalf("Pod deleted successfully", podsDeleteManagedOpenShift.Content[0].(*mcp.TextContent).Text,
+				"invalid tool result content, got %v", podsDeleteManagedOpenShift.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("deletes Pod and Route", func() {
 			p, pErr := kc.CoreV1().Pods("default").Get(s.T().Context(), "a-managed-pod-to-delete-in-openshift", metav1.GetOptions{})
@@ -562,12 +562,12 @@ func (s *PodsSuite) TestPodsLog() {
 	s.Run("pods_log with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_log", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod log, missing argument name", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get pod log, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_log with not found name returns error", func() {
 		toolResult, _ := s.CallTool("pods_log", map[string]interface{}{"name": "not-found"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod not-found log in namespace : pods \"not-found\" not found", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get pod not-found log in namespace : pods \"not-found\" not found", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_log(name=a-pod-in-default, namespace=nil), uses configured namespace", func() {
 		podsLogNilNamespace, err := s.CallTool("pods_log", map[string]interface{}{
@@ -601,7 +601,7 @@ func (s *PodsSuite) TestPodsLog() {
 		})
 		s.Nilf(err, "call tool should not return error object")
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod a-pod-in-ns-1 log in namespace ns-1: container a-not-existing-container is not valid for pod a-pod-in-ns-1", toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get pod a-pod-in-ns-1 log in namespace ns-1: container a-not-existing-container is not valid for pod a-pod-in-ns-1", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_log(previous=true) returns previous pod log", func() {
 		podsPreviousLogInNamespace, err := s.CallTool("pods_log", map[string]interface{}{
@@ -638,7 +638,7 @@ func (s *PodsSuite) TestPodsLog() {
 		})
 		s.Truef(podsInvalidTailLines.IsError, "call tool should fail")
 		expectedErrorMsg := "failed to parse tail parameter: expected integer"
-		errMsg := podsInvalidTailLines.Content[0].(mcp.TextContent).Text
+		errMsg := podsInvalidTailLines.Content[0].(*mcp.TextContent).Text
 		s.Containsf(errMsg, expectedErrorMsg, "unexpected error message, expected to contain '%s', got '%s'", expectedErrorMsg, errMsg)
 	})
 }
@@ -655,7 +655,7 @@ func (s *PodsSuite) TestPodsLogDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := podsLog.Content[0].(mcp.TextContent).Text
+			msg := podsLog.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get pod a-pod-in-default log in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
@@ -692,7 +692,7 @@ func (s *PodsSuite) TestPodsListWithLabelSelector() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -711,7 +711,7 @@ func (s *PodsSuite) TestPodsListWithLabelSelector() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -732,7 +732,7 @@ func (s *PodsSuite) TestPodsListWithLabelSelector() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -771,7 +771,7 @@ func (s *PodsSuite) TestPodsListWithFieldSelector() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -798,7 +798,7 @@ func (s *PodsSuite) TestPodsListWithFieldSelector() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -841,7 +841,7 @@ func (s *PodsSuite) TestPodsListWithFieldSelector() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})

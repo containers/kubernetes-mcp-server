@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,26 +31,26 @@ func (s *ResourcesSuite) TestResourcesList() {
 	s.Run("resources_list with missing apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_list", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to list resources, missing argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to list resources, missing argument apiVersion", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_list with missing kind returns error", func() {
 		toolResult, _ := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to list resources, missing argument kind", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to list resources, missing argument kind", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_list with invalid apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "invalid/api/version", "kind": "Pod"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to list resources, invalid argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to list resources, invalid argument apiVersion", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_list with nonexistent apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "custom.non.existent.example.com/v1", "kind": "Custom"})
 		s.Truef(toolResult.IsError, "call tool should fail")
 		s.Equalf(`failed to list resources: no matches for kind "Custom" in version "custom.non.existent.example.com/v1"`,
-			toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_list(apiVersion=v1, kind=Namespace) returns namespaces", func() {
 		namespaces, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "Namespace"})
@@ -59,7 +59,7 @@ func (s *ResourcesSuite) TestResourcesList() {
 			s.Falsef(namespaces.IsError, "call tool failed")
 		})
 		var decodedNamespaces []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(namespaces.Content[0].(mcp.TextContent).Text), &decodedNamespaces)
+		err = yaml.Unmarshal([]byte(namespaces.Content[0].(*mcp.TextContent).Text), &decodedNamespaces)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -79,7 +79,7 @@ func (s *ResourcesSuite) TestResourcesList() {
 			s.Falsef(result.IsError, "call tool failed")
 
 			var decodedPods []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &decodedPods)
+			err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedPods)
 			s.Nilf(err, "invalid tool result content %v", err)
 
 			s.Lenf(decodedPods, 1, "expected 1 pod, got %d", len(decodedPods))
@@ -96,7 +96,7 @@ func (s *ResourcesSuite) TestResourcesList() {
 			s.Falsef(result.IsError, "call tool failed")
 
 			var decodedPods []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &decodedPods)
+			err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedPods)
 			s.Nilf(err, "invalid tool result content %v", err)
 
 			s.Lenf(decodedPods, 0, "expected 0 pods, got %d", len(decodedPods))
@@ -124,7 +124,7 @@ func (s *ResourcesSuite) TestResourcesList() {
 			s.Falsef(result.IsError, "call tool failed")
 
 			var decodedPods []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &decodedPods)
+			err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedPods)
 			s.Nilf(err, "invalid tool result content %v", err)
 
 			s.Lenf(decodedPods, 1, "expected exactly 1 pod, got %d", len(decodedPods))
@@ -145,7 +145,7 @@ func (s *ResourcesSuite) TestResourcesList() {
 			s.Falsef(result.IsError, "call tool failed")
 
 			var decodedPods []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &decodedPods)
+			err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedPods)
 			s.Nilf(err, "invalid tool result content %v", err)
 
 			s.Lenf(decodedPods, 1, "expected exactly 1 pod, got %d", len(decodedPods))
@@ -172,7 +172,7 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			msg := deniedByKind.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list resources:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
@@ -186,7 +186,7 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			msg := deniedByGroup.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list resources:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
@@ -211,7 +211,7 @@ func (s *ResourcesSuite) TestResourcesListForbidden() {
 		toolResult, _ := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap"})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "forbidden",
 				"error message should indicate forbidden")
 		})
 		s.Run("sends log notification", func() {
@@ -242,7 +242,7 @@ func (s *ResourcesSuite) TestResourcesListAsTable() {
 			s.Falsef(configMapList.IsError, "call tool failed")
 		})
 		s.Require().NotNil(configMapList, "Expected tool result from call")
-		outConfigMapList := configMapList.Content[0].(mcp.TextContent).Text
+		outConfigMapList := configMapList.Content[0].(*mcp.TextContent).Text
 		s.Run("returns column headers for ConfigMap list", func() {
 			expectedHeaders := "NAMESPACE\\s+APIVERSION\\s+KIND\\s+NAME\\s+DATA\\s+AGE\\s+LABELS"
 			m, e := regexp.MatchString(expectedHeaders, outConfigMapList)
@@ -280,7 +280,7 @@ func (s *ResourcesSuite) TestResourcesListAsTable() {
 			s.Falsef(routeList.IsError, "call tool failed")
 		})
 		s.Require().NotNil(routeList, "Expected tool result from call")
-		outRouteList := routeList.Content[0].(mcp.TextContent).Text
+		outRouteList := routeList.Content[0].(*mcp.TextContent).Text
 		s.Run("returns column headers for Route list", func() {
 			expectedHeaders := "NAMESPACE\\s+APIVERSION\\s+KIND\\s+NAME\\s+AGE\\s+LABELS"
 			m, e := regexp.MatchString(expectedHeaders, outRouteList)
@@ -306,32 +306,32 @@ func (s *ResourcesSuite) TestResourcesGet() {
 	s.Run("resources_get with missing apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_get", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get resource, missing argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get resource, missing argument apiVersion", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_get with missing kind returns error", func() {
 		toolResult, _ := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "v1"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get resource, missing argument kind", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get resource, missing argument kind", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_get with invalid apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "invalid/api/version", "kind": "Pod", "name": "a-pod"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get resource, invalid argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get resource, invalid argument apiVersion", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_get with nonexistent apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "custom.non.existent.example.com/v1", "kind": "Custom", "name": "a-custom"})
 		s.Truef(toolResult.IsError, "call tool should fail")
 		s.Equalf(`failed to get resource: no matches for kind "Custom" in version "custom.non.existent.example.com/v1"`,
-			toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_get with missing name returns error", func() {
 		toolResult, _ := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "v1", "kind": "Namespace"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get resource, missing argument name", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get resource, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_get with nonexistent resource", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -339,7 +339,7 @@ func (s *ResourcesSuite) TestResourcesGet() {
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
 			s.Equalf(`failed to get resource: configmaps "nonexistent-configmap" not found`,
-				toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("sends log notification", func() {
 			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
@@ -354,7 +354,7 @@ func (s *ResourcesSuite) TestResourcesGet() {
 			s.Falsef(namespace.IsError, "call tool failed")
 		})
 		var decodedNamespace unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(namespace.Content[0].(mcp.TextContent).Text), &decodedNamespace)
+		err = yaml.Unmarshal([]byte(namespace.Content[0].(*mcp.TextContent).Text), &decodedNamespace)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -386,7 +386,7 @@ func (s *ResourcesSuite) TestResourcesGetDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			msg := deniedByKind.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get resource:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
@@ -400,7 +400,7 @@ func (s *ResourcesSuite) TestResourcesGetDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			msg := deniedByGroup.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get resource:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
@@ -421,14 +421,14 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 	s.Run("resources_create_or_update with nil resource returns error", func() {
 		toolResult, _ := s.CallTool("resources_create_or_update", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to create or update resources, missing argument resource", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to create or update resources, missing argument resource", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_create_or_update with empty resource returns error", func() {
 		toolResult, _ := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": ""})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to create or update resources, missing argument resource", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to create or update resources, missing argument resource", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 
 	s.Run("resources_create_or_update with valid namespaced yaml resource", func() {
@@ -439,11 +439,11 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 			s.Falsef(resourcesCreateOrUpdateCm1.IsError, "call tool failed")
 		})
 		var decodedCreateOrUpdateCm1 []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(resourcesCreateOrUpdateCm1.Content[0].(mcp.TextContent).Text), &decodedCreateOrUpdateCm1)
+		err = yaml.Unmarshal([]byte(resourcesCreateOrUpdateCm1.Content[0].(*mcp.TextContent).Text), &decodedCreateOrUpdateCm1)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(resourcesCreateOrUpdateCm1.Content[0].(mcp.TextContent).Text, "# The following resources (YAML) have been created or updated successfully"),
-				"Expected success message, got %v", resourcesCreateOrUpdateCm1.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(resourcesCreateOrUpdateCm1.Content[0].(*mcp.TextContent).Text, "# The following resources (YAML) have been created or updated successfully"),
+				"Expected success message, got %v", resourcesCreateOrUpdateCm1.Content[0].(*mcp.TextContent).Text)
 			s.Lenf(decodedCreateOrUpdateCm1, 1, "invalid resource count, expected 1, got %v", len(decodedCreateOrUpdateCm1))
 			s.Equalf("a-cm-created-or-updated", decodedCreateOrUpdateCm1[0].GetName(),
 				"invalid resource name, expected a-cm-created-or-updated, got %v", decodedCreateOrUpdateCm1[0].GetName())
@@ -543,7 +543,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 		})
 		s.Run("created resource does not contain status", func() {
 			var decodedResources []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &decodedResources)
+			err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedResources)
 			s.Nilf(err, "invalid tool result content %v", err)
 			s.Require().Lenf(decodedResources, 1, "expected 1 resource, got %d", len(decodedResources))
 			_, hasStatus := decodedResources[0].Object["status"]
@@ -624,7 +624,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			msg := deniedByKind.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to create or update resources:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
@@ -639,7 +639,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			msg := deniedByGroup.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to create or update resources:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
@@ -667,7 +667,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateForbidden() {
 		toolResult, _ := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": configMapYaml})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "forbidden",
 				"error message should indicate forbidden")
 		})
 		s.Run("sends log notification", func() {
@@ -685,32 +685,32 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 	s.Run("resources_delete with missing apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete resource, missing argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to delete resource, missing argument apiVersion", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_delete with missing kind returns error", func() {
 		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete resource, missing argument kind", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to delete resource, missing argument kind", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_delete with invalid apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "invalid/api/version", "kind": "Pod", "name": "a-pod"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete resource, invalid argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to delete resource, invalid argument apiVersion", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_delete with nonexistent apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "custom.non.existent.example.com/v1", "kind": "Custom", "name": "a-custom"})
 		s.Truef(toolResult.IsError, "call tool should fail")
 		s.Equalf(`failed to delete resource: no matches for kind "Custom" in version "custom.non.existent.example.com/v1"`,
-			toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_delete with missing name returns error", func() {
 		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "Namespace"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete resource, missing argument name", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to delete resource, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_delete with nonexistent resource", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -718,7 +718,7 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
 			s.Equalf(`failed to delete resource: configmaps "nonexistent-configmap" not found`,
-				toolResult.Content[0].(mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("sends log notification", func() {
 			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
@@ -729,8 +729,8 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 	s.Run("resources_delete with invalid gracePeriodSeconds returns error", func() {
 		toolResult, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "name": "a-configmap", "gracePeriodSeconds": "-5"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete resource, invalid argument gracePeriodSeconds", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to delete resource, invalid argument gracePeriodSeconds", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 
 	s.Run("resources_delete with valid namespaced resource", func() {
@@ -738,8 +738,8 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 		s.Run("returns success", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(resourcesDeleteCm.IsError, "call tool failed")
-			s.Equalf("Resource deleted successfully", resourcesDeleteCm.Content[0].(mcp.TextContent).Text,
-				"invalid tool result content got: %v", resourcesDeleteCm.Content[0].(mcp.TextContent).Text)
+			s.Equalf("Resource deleted successfully", resourcesDeleteCm.Content[0].(*mcp.TextContent).Text,
+				"invalid tool result content got: %v", resourcesDeleteCm.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("deletes ConfigMap", func() {
 			_, err := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-configmap-to-delete", metav1.GetOptions{})
@@ -752,8 +752,8 @@ func (s *ResourcesSuite) TestResourcesDelete() {
 		s.Run("returns success", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(resourcesDeleteNamespace.IsError, "call tool failed")
-			s.Equalf("Resource deleted successfully", resourcesDeleteNamespace.Content[0].(mcp.TextContent).Text,
-				"invalid tool result content got: %v", resourcesDeleteNamespace.Content[0].(mcp.TextContent).Text)
+			s.Equalf("Resource deleted successfully", resourcesDeleteNamespace.Content[0].(*mcp.TextContent).Text,
+				"invalid tool result content got: %v", resourcesDeleteNamespace.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run(" deletes Namespace", func() {
 			ns, err := client.CoreV1().Namespaces().Get(s.T().Context(), "ns-to-delete", metav1.GetOptions{})
@@ -789,7 +789,7 @@ func (s *ResourcesSuite) TestResourcesDeleteDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			msg := deniedByKind.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to delete resource:(.+:)? resource not allowed: /v1, Kind=Secret"
 			s.Regexpf(expectedMessage, msg,
@@ -803,7 +803,7 @@ func (s *ResourcesSuite) TestResourcesDeleteDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			msg := deniedByGroup.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to delete resource:(.+:)? resource not allowed: rbac.authorization.k8s.io/v1, Kind=Role"
 			s.Regexpf(expectedMessage, msg,
@@ -840,20 +840,20 @@ func (s *ResourcesSuite) TestResourcesScale() {
 	s.Run("resources_scale with missing apiVersion returns error", func() {
 		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get/update resource scale, missing argument apiVersion", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get/update resource scale, missing argument apiVersion", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_scale with missing kind returns error", func() {
 		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{"apiVersion": "apps/v1"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get/update resource scale, missing argument kind", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get/update resource scale, missing argument kind", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_scale with missing name returns error", func() {
 		toolResult, _ := s.CallTool("resources_scale", map[string]interface{}{"apiVersion": "apps/v1", "kind": "Deployment"})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get/update resource scale, missing argument name", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get/update resource scale, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("resources_scale get returns current scale", func() {
 		result, err := s.CallTool("resources_scale", map[string]interface{}{
@@ -867,7 +867,7 @@ func (s *ResourcesSuite) TestResourcesScale() {
 			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
 		})
 		s.Run("returns scale yaml", func() {
-			content := result.Content[0].(mcp.TextContent).Text
+			content := result.Content[0].(*mcp.TextContent).Text
 			s.Truef(strings.HasPrefix(content, "# Current resource scale (YAML) is below"),
 				"Expected success message, got %v", content)
 			var decodedScale unstructured.Unstructured
@@ -891,7 +891,7 @@ func (s *ResourcesSuite) TestResourcesScale() {
 			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
 		})
 		s.Run("returns updated scale yaml", func() {
-			content := result.Content[0].(mcp.TextContent).Text
+			content := result.Content[0].(*mcp.TextContent).Text
 			var decodedScale unstructured.Unstructured
 			err = yaml.Unmarshal([]byte(strings.TrimPrefix(content, "# Current resource scale (YAML) is below\n")), &decodedScale)
 			s.Nilf(err, "invalid tool result content %v", err)
@@ -914,8 +914,8 @@ func (s *ResourcesSuite) TestResourcesScale() {
 		})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Containsf(toolResult.Content[0].(mcp.TextContent).Text, "not found",
-				"expected not found error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "not found",
+				"expected not found error, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("sends log notification", func() {
 			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
@@ -936,8 +936,8 @@ func (s *ResourcesSuite) TestResourcesScale() {
 			"name":       configMapName,
 		})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Containsf(toolResult.Content[0].(mcp.TextContent).Text, "the server could not find the requested resource",
-			"expected scale subresource not found error, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "the server could not find the requested resource",
+			"expected scale subresource not found error, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 }
 
@@ -961,7 +961,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			msg := deniedByKind.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: /v1, Kind=ReplicationController"
 			s.Regexpf(expectedMessage, msg,
@@ -981,7 +981,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByKind.Content[0].(mcp.TextContent).Text
+			msg := deniedByKind.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: /v1, Kind=ReplicationController"
 			s.Regexpf(expectedMessage, msg,
@@ -1000,7 +1000,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			msg := deniedByGroup.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: apps/v1, Kind=StatefulSet"
 			s.Regexpf(expectedMessage, msg,
@@ -1020,7 +1020,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := deniedByGroup.Content[0].(mcp.TextContent).Text
+			msg := deniedByGroup.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get/update resource scale:(.+:)? resource not allowed: apps/v1, Kind=StatefulSet"
 			s.Regexpf(expectedMessage, msg,

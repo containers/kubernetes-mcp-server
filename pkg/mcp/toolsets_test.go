@@ -19,7 +19,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -66,7 +66,7 @@ func (s *ToolsetsSuite) TestNoToolsets() {
 		toolsets.Clear()
 		s.Cfg.Toolsets = []string{}
 		s.InitMcpClient()
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Run("ListTools returns no tools", func() {
 			s.NotNil(tools, "Expected tools from ListTools")
 			s.NoError(err, "Expected no error from ListTools")
@@ -81,7 +81,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsTools() {
 	}
 	s.Run("Default configuration toolsets", func() {
 		s.InitMcpClient()
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {
 			s.NotNil(tools, "Expected tools from ListTools")
 			s.NoError(err, "Expected no error from ListTools")
@@ -99,7 +99,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 	s.Run("Default configuration toolsets in OpenShift", func() {
 		s.Handle(test.NewInOpenShiftHandler())
 		s.InitMcpClient()
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {
 			s.NotNil(tools, "Expected tools from ListTools")
 			s.NoError(err, "Expected no error from ListTools")
@@ -122,7 +122,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 		}
 		s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
 		s.InitMcpClient()
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {
 			s.NotNil(tools, "Expected tools from ListTools")
 			s.NoError(err, "Expected no error from ListTools")
@@ -143,7 +143,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiClusterEnum() {
 		kubeconfig.Contexts["extra-cluster"] = clientcmdapi.NewContext()
 		s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
 		s.InitMcpClient()
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {
 			s.NotNil(tools, "Expected tools from ListTools")
 			s.NoError(err, "Expected no error from ListTools")
@@ -168,7 +168,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 			toolsets.Register(testCase)
 			s.Cfg.Toolsets = []string{testCase.GetName()}
 			s.InitMcpClient()
-			tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+			tools, err := s.ListTools()
 			s.Run("ListTools returns tools", func() {
 				s.NotNil(tools, "Expected tools from ListTools")
 				s.NoError(err, "Expected no error from ListTools")
@@ -184,21 +184,25 @@ func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
 	//https://github.com/containers/kubernetes-mcp-server/issues/340
 	s.Run("InputSchema for no-arg tool is object with empty properties", func() {
 		s.InitMcpClient()
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {
 			s.NotNil(tools, "Expected tools from ListTools")
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		var namespacesList *mcp.Tool
-		for _, tool := range tools.Tools {
-			if tool.Name == "namespaces_list" {
-				namespacesList = &tool
+		for _, t := range tools.Tools {
+			if t.Name == "namespaces_list" {
+				namespacesList = t
 				break
 			}
 		}
 		s.Require().NotNil(namespacesList, "Expected namespaces_list from ListTools")
-		s.NotNil(namespacesList.InputSchema.Properties, "Expected namespaces_list.InputSchema.Properties not to be nil")
-		s.Empty(namespacesList.InputSchema.Properties, "Expected namespaces_list.InputSchema.Properties to be empty")
+		schema, ok := namespacesList.InputSchema.(map[string]any)
+		s.Require().True(ok, "Expected InputSchema to be map[string]any")
+		s.NotNil(schema["properties"], "Expected namespaces_list.InputSchema.properties not to be nil")
+		properties, ok := schema["properties"].(map[string]any)
+		s.Require().True(ok, "Expected properties to be map[string]any")
+		s.Empty(properties, "Expected namespaces_list.InputSchema.properties to be empty")
 	})
 	// https://github.com/containers/kubernetes-mcp-server/issues/717
 	// Verifies ALL tools have Properties initialized (not just cluster-aware ones)
@@ -216,15 +220,17 @@ func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
 		kubeconfig.Contexts["extra-cluster"] = clientcmdapi.NewContext()
 		s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
 		s.InitMcpClient()
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Require().NoError(err, "Expected no error from ListTools")
 		s.Require().NotNil(tools, "Expected tools from ListTools")
 		s.Require().NotEmpty(tools.Tools, "Expected at least one tool")
-		// Check each tool has InputSchema.Properties initialized
+		// Check each tool has InputSchema.properties initialized
 		for _, tool := range tools.Tools {
 			s.Run(tool.Name, func() {
-				s.Require().NotNil(tool.InputSchema.Properties,
-					"Expected InputSchema.Properties not to be nil for tool %s (required by OpenAI API)",
+				schema, ok := tool.InputSchema.(map[string]any)
+				s.Require().True(ok, "Expected InputSchema to be map[string]any for tool %s", tool.Name)
+				s.Require().NotNil(schema["properties"],
+					"Expected InputSchema.properties not to be nil for tool %s (required by OpenAI API)",
 					tool.Name)
 			})
 		}

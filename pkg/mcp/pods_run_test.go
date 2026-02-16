@@ -6,7 +6,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
@@ -21,8 +21,8 @@ func (s *PodsRunSuite) TestPodsRun() {
 	s.Run("pods_run with nil image returns error", func() {
 		toolResult, _ := s.CallTool("pods_run", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to run pod, missing argument image", toolResult.Content[0].(mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to run pod, missing argument image", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_run(image=nginx, namespace=nil), uses configured namespace", func() {
 		podsRunNilNamespace, err := s.CallTool("pods_run", map[string]interface{}{"image": "nginx"})
@@ -31,7 +31,7 @@ func (s *PodsRunSuite) TestPodsRun() {
 			s.Falsef(podsRunNilNamespace.IsError, "call tool failed")
 		})
 		var decodedNilNamespace []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(podsRunNilNamespace.Content[0].(mcp.TextContent).Text), &decodedNilNamespace)
+		err = yaml.Unmarshal([]byte(podsRunNilNamespace.Content[0].(*mcp.TextContent).Text), &decodedNilNamespace)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -64,7 +64,7 @@ func (s *PodsRunSuite) TestPodsRun() {
 			s.Falsef(podsRunNamespaceAndPort.IsError, "call tool failed")
 		})
 		var decodedNamespaceAndPort []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(podsRunNamespaceAndPort.Content[0].(mcp.TextContent).Text), &decodedNamespaceAndPort)
+		err = yaml.Unmarshal([]byte(podsRunNamespaceAndPort.Content[0].(*mcp.TextContent).Text), &decodedNamespaceAndPort)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -101,7 +101,7 @@ func (s *PodsRunSuite) TestPodsRunDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := podsRun.Content[0].(mcp.TextContent).Text
+			msg := podsRun.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to run pod  in namespace :(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
@@ -124,7 +124,7 @@ func (s *PodsRunSuite) TestPodsRunInOpenShift() {
 			s.Falsef(podsRunInOpenShift.IsError, "call tool failed")
 		})
 		var decodedPodServiceRoute []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(podsRunInOpenShift.Content[0].(mcp.TextContent).Text), &decodedPodServiceRoute)
+		err = yaml.Unmarshal([]byte(podsRunInOpenShift.Content[0].(*mcp.TextContent).Text), &decodedPodServiceRoute)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})

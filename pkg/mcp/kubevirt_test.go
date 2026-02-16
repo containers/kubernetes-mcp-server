@@ -8,7 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	kubevirttesting "github.com/containers/kubernetes-mcp-server/pkg/kubevirt/testing"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
@@ -78,7 +78,7 @@ func (s *KubevirtSuite) TestCreate() {
 				toolResult, err := s.CallTool("vm_create", params)
 				s.Require().Nilf(err, "call tool failed %v", err)
 				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
-				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+				s.Equal(toolResult.Content[0].(*mcp.TextContent).Text, param+" parameter required")
 			})
 		}
 	})
@@ -92,11 +92,11 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			vm := &decodedResult[0]
 			s.Equal("test-vm", vm.GetName(), "invalid resource name")
@@ -118,11 +118,11 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			vm := &decodedResult[0]
 			s.Equal("test-vm-2", vm.GetName(), "invalid resource name")
@@ -146,11 +146,11 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			vm := &decodedResult[0]
 			s.Equal("test-vm-3", vm.GetName(), "invalid resource name")
@@ -173,11 +173,11 @@ func (s *KubevirtSuite) TestCreate() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			vm := &decodedResult[0]
 			s.Equal("test-vm-4", vm.GetName(), "invalid resource name")
@@ -220,11 +220,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-5", vm.GetName(), "invalid resource name")
@@ -246,11 +246,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-6", vm.GetName(), "invalid resource name")
@@ -271,11 +271,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-7", vm.GetName(), "invalid resource name")
@@ -307,11 +307,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-8", vm.GetName(), "invalid resource name")
@@ -344,11 +344,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-9", vm.GetName(), "invalid resource name")
@@ -373,11 +373,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-10", vm.GetName(), "invalid resource name")
@@ -412,11 +412,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-11", vm.GetName(), "invalid resource name")
@@ -438,11 +438,11 @@ func (s *KubevirtSuite) TestCreate() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			var decodedResult []unstructured.Unstructured
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 			s.Run("returns yaml content", func() {
 				s.Nilf(err, "invalid tool result content %v", err)
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine created successfully"),
-					"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine created successfully"),
+					"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 				s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 				vm := &decodedResult[0]
 				s.Equal("test-vm-12", vm.GetName(), "invalid resource name")
@@ -489,7 +489,7 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 				toolResult, err := s.CallTool("vm_lifecycle", params)
 				s.Require().Nilf(err, "call tool failed %v", err)
 				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
-				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+				s.Equal(toolResult.Content[0].(*mcp.TextContent).Text, param+" parameter required")
 			})
 		}
 	})
@@ -502,8 +502,8 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 		})
 		s.Require().Nilf(err, "call tool failed %v", err)
 		s.Truef(toolResult.IsError, "expected call tool to fail due to invalid action")
-		s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "invalid action"),
-			"Expected invalid action message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+		s.Truef(strings.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "invalid action"),
+			"Expected invalid action message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 
 	s.Run("vm_lifecycle action=start on halted VM", func() {
@@ -517,11 +517,11 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine started successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine started successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			s.Equal("test-vm-lifecycle", decodedResult[0].GetName(), "invalid resource name")
 			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
@@ -542,12 +542,12 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content showing VM was already running", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 			expectedPrefix := fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already running", "test-vm-lifecycle", "default")
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, expectedPrefix),
-				"Expected already running message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, expectedPrefix),
+				"Expected already running message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			s.Equal("Always",
 				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
@@ -566,11 +566,11 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine stopped successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine stopped successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			s.Equal("test-vm-lifecycle", decodedResult[0].GetName(), "invalid resource name")
 			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
@@ -591,12 +591,12 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content showing VM was already stopped", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 			expectedPrefix := fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already stopped", "test-vm-lifecycle", "default")
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, expectedPrefix),
-				"Expected already stopped message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, expectedPrefix),
+				"Expected already stopped message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			s.Equal("Halted",
 				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
@@ -615,11 +615,11 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content showing VM restarted from stopped state", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine restarted successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine restarted successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			s.Equal("Always",
 				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
@@ -638,11 +638,11 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachine restarted successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachine restarted successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			s.Equal("test-vm-lifecycle", decodedResult[0].GetName(), "invalid resource name")
 			s.Equal("default", decodedResult[0].GetNamespace(), "invalid resource namespace")
@@ -662,8 +662,8 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 				})
 				s.Nilf(err, "call tool failed %v", err)
 				s.Truef(toolResult.IsError, "expected call tool to fail for non-existent VM")
-				s.Truef(strings.Contains(toolResult.Content[0].(mcp.TextContent).Text, "failed to get VirtualMachine"),
-					"Expected error message about VM not found, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "failed to get VirtualMachine"),
+					"Expected error message about VM not found, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 		}
 	})
@@ -683,7 +683,7 @@ func (s *KubevirtSuite) TestVMClone() {
 				toolResult, err := s.CallTool("vm_clone", params)
 				s.Require().Nilf(err, "call tool failed %v", err)
 				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
-				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+				s.Equal(toolResult.Content[0].(*mcp.TextContent).Text, param+" parameter required")
 			})
 		}
 	})
@@ -720,11 +720,11 @@ func (s *KubevirtSuite) TestVMClone() {
 			s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
 		})
 		var decodedResult []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
 		s.Run("returns yaml content with correct source and target", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachineClone created successfully"),
-				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# VirtualMachineClone created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			clone := &decodedResult[0]
 			s.Equal("default", clone.GetNamespace(), "invalid resource namespace")
@@ -740,14 +740,9 @@ func (s *KubevirtSuite) TestVMClone() {
 
 func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 	s.Run("vm-troubleshoot prompt returns troubleshooting guide", func() {
-		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
-			Params: mcp.GetPromptParams{
-				Name: "vm-troubleshoot",
-				Arguments: map[string]string{
-					"namespace": "default",
-					"name":      "test-vm",
-				},
-			},
+		result, err := s.GetPrompt("vm-troubleshoot", map[string]string{
+			"namespace": "default",
+			"name":      "test-vm",
 		})
 
 		s.Run("no error", func() {
@@ -759,7 +754,7 @@ func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 			s.Require().NotNil(result)
 			s.Require().Len(result.Messages, 2, "Expected 2 messages")
 
-			textContent, ok := result.Messages[0].Content.(mcp.TextContent)
+			textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
 			s.Require().True(ok, "expected TextContent")
 			s.Contains(textContent.Text, "# VirtualMachine Troubleshooting Guide")
 			s.Contains(textContent.Text, "test-vm")
@@ -768,13 +763,8 @@ func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 	})
 
 	s.Run("vm-troubleshoot prompt returns error for missing namespace", func() {
-		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
-			Params: mcp.GetPromptParams{
-				Name: "vm-troubleshoot",
-				Arguments: map[string]string{
-					"name": "test-vm",
-				},
-			},
+		result, err := s.GetPrompt("vm-troubleshoot", map[string]string{
+			"name": "test-vm",
 		})
 		s.Error(err, "expected error for missing namespace")
 		s.Nil(result)
@@ -782,13 +772,8 @@ func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 	})
 
 	s.Run("vm-troubleshoot prompt returns error for missing name", func() {
-		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
-			Params: mcp.GetPromptParams{
-				Name: "vm-troubleshoot",
-				Arguments: map[string]string{
-					"namespace": "default",
-				},
-			},
+		result, err := s.GetPrompt("vm-troubleshoot", map[string]string{
+			"namespace": "default",
 		})
 		s.Error(err, "expected error for missing name")
 		s.Nil(result)

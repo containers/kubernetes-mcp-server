@@ -1,15 +1,14 @@
 [
   {
     "annotations": {
-      "title": "Get Metrics for a Resource",
-      "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Metrics for a Resource"
     },
     "description": "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "byLabels": {
           "description": "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
@@ -70,21 +69,22 @@
         "resource_type",
         "namespace",
         "resource_name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "kiali_get_metrics"
+    "name": "kiali_get_metrics",
+    "title": "Get Metrics for a Resource"
   },
   {
     "annotations": {
-      "title": "List or Resource Details",
-      "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List or Resource Details"
     },
     "description": "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "namespaces": {
           "description": "Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces",
@@ -102,21 +102,22 @@
           ],
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "kiali_get_resource_details"
+    "name": "kiali_get_resource_details",
+    "title": "List or Resource Details"
   },
   {
     "annotations": {
-      "title": "Get Traces for a Resource or Trace Details",
-      "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Traces for a Resource or Trace Details"
     },
     "description": "Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "clusterName": {
           "description": "Cluster name for multi-cluster environments (optional, only used when traceId is not provided)",
@@ -166,20 +167,21 @@
           "description": "Unique identifier of the trace to retrieve detailed information for. If provided, this will return detailed trace information and other parameters (resource_type, namespace, resource_name) are not required.",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "kiali_get_traces"
+    "name": "kiali_get_traces",
+    "title": "Get Traces for a Resource or Trace Details"
   },
   {
     "annotations": {
-      "title": "Manage Istio Config: Create, Patch, Delete",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Manage Istio Config: Create, Patch, Delete"
     },
     "description": "Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "action": {
           "description": "Action to perform: create, patch, or delete",
@@ -212,21 +214,22 @@
       },
       "required": [
         "action"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "kiali_manage_istio_config"
+    "name": "kiali_manage_istio_config",
+    "title": "Manage Istio Config: Create, Patch, Delete"
   },
   {
     "annotations": {
-      "title": "Manage Istio Config: List or Get",
-      "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Manage Istio Config: List or Get"
     },
     "description": "Lists or gets Istio configuration objects (Gateways, VirtualServices, etc.)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "action": {
           "description": "Action to perform: list or get",
@@ -255,20 +258,21 @@
       },
       "required": [
         "action"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "kiali_manage_istio_config_read"
+    "name": "kiali_manage_istio_config_read",
+    "title": "Manage Istio Config: List or Get"
   },
   {
     "annotations": {
-      "title": "Topology: Mesh, Graph, Health, and Status",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Topology: Mesh, Graph, Health, and Status"
     },
     "description": "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "graphType": {
           "default": "versionedApp",
@@ -288,20 +292,21 @@
           "description": "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "kiali_mesh_graph"
+    "name": "kiali_mesh_graph",
+    "title": "Topology: Mesh, Graph, Health, and Status"
   },
   {
     "annotations": {
-      "title": "Workload: Logs",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Workload: Logs"
     },
     "description": "Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "container": {
           "description": "Optional container name to filter logs. If not provided, automatically detects and uses the main application container (excludes istio-proxy and istio-init)",
@@ -328,8 +333,10 @@
       "required": [
         "namespace",
         "workload"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "kiali_workload_logs"
+    "name": "kiali_workload_logs",
+    "title": "Workload: Logs"
   }
 ]

@@ -1,21 +1,22 @@
 [
   {
     "annotations": {
-      "title": "Configuration: View",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Configuration: View"
     },
     "description": "Get the current Kubernetes configuration content as a kubeconfig YAML",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "minified": {
           "description": "Return a minified version of the configuration. If set to true, keeps only the current-context and the relevant pieces of the configuration for that context. If set to false, all contexts, clusters, auth-infos, and users are returned in the configuration. (Optional, default true)",
           "type": "boolean"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "configuration_view"
+    "name": "configuration_view",
+    "title": "Configuration: View"
   }
 ]

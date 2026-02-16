@@ -9,20 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 )
 
 type AuthorizationSuite struct {
 	BaseHttpSuite
-	mcpClient *client.Client
+	mcpClient *test.McpClient
 	klogState klog.State
 	logBuffer test.SyncBuffer
 }
@@ -53,16 +52,21 @@ func (s *AuthorizationSuite) TearDownTest() {
 	s.klogState.Restore()
 
 	if s.mcpClient != nil {
-		_ = s.mcpClient.Close()
+		s.mcpClient.Close()
+		s.mcpClient = nil
 	}
 }
 
-func (s *AuthorizationSuite) StartClient(options ...transport.StreamableHTTPCOption) {
-	var err error
-	s.mcpClient, err = client.NewStreamableHttpClient(fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port), options...)
-	s.Require().NoError(err, "Expected no error creating Streamable HTTP MCP client")
-	err = s.mcpClient.Start(s.T().Context())
-	s.Require().NoError(err, "Expected no error starting Streamable HTTP MCP client")
+func (s *AuthorizationSuite) StartClient(headers ...map[string]string) {
+	endpoint := fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port)
+	options := []test.McpClientOption{
+		test.WithEndpoint(endpoint),
+		test.WithAllowConnectionError(),
+	}
+	if len(headers) > 0 && len(headers[0]) > 0 {
+		options = append(options, test.WithHTTPHeaders(headers[0]))
+	}
+	s.mcpClient = test.NewMcpClient(s.T(), nil, options...)
 }
 
 func (s *AuthorizationSuite) HttpGet(authHeader string) *http.Response {
@@ -82,9 +86,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedMissingHeader() {
 	s.StartClient()
 
 	s.Run("Initialize returns error for MISSING Authorization header", func() {
-		_, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().Error(err, "Expected error creating initial request")
-		s.ErrorContains(err, "transport error: request failed with status 401: Unauthorized: Bearer token required")
+		s.Nil(s.mcpClient.Session, "Expected nil session for failed authentication")
 	})
 
 	s.Run("Protected resource with MISSING Authorization header", func() {
@@ -108,14 +110,12 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedMissingHeader() {
 func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderIncompatible() {
 	// Authorization header without Bearer prefix
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Basic YWxhZGRpbjpvcGVuc2VzYW1l",
-	}))
+	})
 
 	s.Run("Initialize returns error for INCOMPATIBLE Authorization header", func() {
-		_, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().Error(err, "Expected error creating initial request")
-		s.ErrorContains(err, "transport error: request failed with status 401: Unauthorized: Bearer token required")
+		s.Nil(s.mcpClient.Session, "Expected nil session for failed authentication")
 	})
 
 	s.Run("Protected resource with INCOMPATIBLE Authorization header", func() {
@@ -139,14 +139,12 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderIncompatible() {
 func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalid() {
 	// Invalid Authorization header
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + strings.ReplaceAll(tokenBasicNotExpired, ".", ".invalid"),
-	}))
+	})
 
 	s.Run("Initialize returns error for INVALID Authorization header", func() {
-		_, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().Error(err, "Expected error creating initial request")
-		s.ErrorContains(err, "transport error: request failed with status 401: Unauthorized: Invalid token")
+		s.Nil(s.mcpClient.Session, "Expected nil session for failed authentication")
 	})
 
 	s.Run("Protected resource with INVALID Authorization header", func() {
@@ -171,14 +169,12 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalid() {
 func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderExpired() {
 	// Expired Authorization Bearer token
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + tokenBasicExpired,
-	}))
+	})
 
 	s.Run("Initialize returns error for EXPIRED Authorization header", func() {
-		_, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().Error(err, "Expected error creating initial request")
-		s.ErrorContains(err, "transport error: request failed with status 401: Unauthorized: Invalid token")
+		s.Nil(s.mcpClient.Session, "Expected nil session for failed authentication")
 	})
 
 	s.Run("Protected resource with EXPIRED Authorization header", func() {
@@ -204,14 +200,12 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalidAudience(
 	// Invalid audience claim Bearer token
 	s.StaticConfig.OAuthAudience = "expected-audience"
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + tokenBasicNotExpired,
-	}))
+	})
 
 	s.Run("Initialize returns error for INVALID AUDIENCE Authorization header", func() {
-		_, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().Error(err, "Expected error creating initial request")
-		s.ErrorContains(err, "transport error: request failed with status 401: Unauthorized: Invalid token")
+		s.Nil(s.mcpClient.Session, "Expected nil session for failed authentication")
 	})
 
 	s.Run("Protected resource with INVALID AUDIENCE Authorization header", func() {
@@ -240,14 +234,12 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedOidcValidation() {
 	s.T().Cleanup(oidcTestServer.Close)
 	s.OidcProvider = oidcTestServer.Provider
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + tokenBasicNotExpired,
-	}))
+	})
 
 	s.Run("Initialize returns error for INVALID OIDC Authorization header", func() {
-		_, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().Error(err, "Expected error creating initial request")
-		s.ErrorContains(err, "transport error: request failed with status 401: Unauthorized: Invalid token")
+		s.Nil(s.mcpClient.Session, "Expected nil session for failed authentication")
 	})
 
 	s.Run("Protected resource with INVALID OIDC Authorization header", func() {
@@ -293,27 +285,26 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedTokenExchangeFailure()
 	s.StaticConfig.StsScopes = []string{"backend-scope"}
 	s.logBuffer.Reset()
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + validOidcClientToken,
-	}))
+	})
 
 	s.Run("Protected resource", func() {
 		s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {
-			result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-			s.Require().NoError(err, "Expected no error creating initial request")
-			s.Require().NotNil(result, "Expected initial request to not be nil")
+			s.Require().NotNil(s.mcpClient.Session, "Expected session for valid authentication")
+			s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
 		})
 		s.Run("Call tool exchanges token VALID OIDC EXCHANGE Authorization header", func() {
-			callToolRequest := mcp.CallToolRequest{}
-			callToolRequest.Params.Name = "events_list"
-			callToolRequest.Params.Arguments = map[string]interface{}{}
-			toolResult, err := s.mcpClient.CallTool(s.T().Context(), callToolRequest)
+			toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+				Name:      "events_list",
+				Arguments: map[string]any{},
+			})
 			s.Require().NoError(err, "Expected no error calling tool")           // TODO: Should error
 			s.Require().NotNil(toolResult, "Expected tool result to not be nil") // Should be nil
 			s.Regexp("token exchange failed:[^:]+: status code 401", s.logBuffer.String())
 		})
 	})
-	_ = s.mcpClient.Close()
+	s.mcpClient.Close()
 	s.mcpClient = nil
 	s.StopServer()
 	s.Require().NoError(s.WaitForShutdown())
@@ -325,10 +316,13 @@ func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 	s.StartClient()
 
 	s.Run("Initialize returns OK for MISSING Authorization header", func() {
-		result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-		s.Require().NoError(err, "Expected no error creating initial request")
-		s.Require().NotNil(result, "Expected initial request to not be nil")
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
 	})
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
 }
 
 func (s *AuthorizationSuite) TestAuthorizationRawToken() {
@@ -339,19 +333,18 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 		s.StaticConfig.OAuthAudience = audience
 		s.logBuffer.Reset()
 		s.StartServer()
-		s.StartClient(transport.WithHTTPHeaders(map[string]string{
+		s.StartClient(map[string]string{
 			"Authorization": "Bearer " + tokenBasicNotExpired,
-		}))
+		})
 
 		s.Run(fmt.Sprintf("Protected resource with audience = '%s'", audience), func() {
 			s.Run("Initialize returns OK for VALID Authorization header", func() {
-				result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-				s.Require().NoError(err, "Expected no error creating initial request")
-				s.Require().NotNil(result, "Expected initial request to not be nil")
+				s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
+				s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
 			})
 		})
-		_ = s.mcpClient.Close()
-		s.mcpClient = nil
+		_ = s.mcpClient.Session.Close()
+		s.mcpClient.Session = nil
 		s.StopServer()
 		s.Require().NoError(s.WaitForShutdown())
 	}
@@ -372,18 +365,17 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	s.OidcProvider = oidcTestServer.Provider
 	s.StaticConfig.OAuthAudience = "mcp-server"
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + validOidcToken,
-	}))
+	})
 
 	s.Run("Protected resource", func() {
 		s.Run("Initialize returns OK for VALID OIDC Authorization header", func() {
-			result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-			s.Require().NoError(err, "Expected no error creating initial request")
-			s.Require().NotNil(result, "Expected initial request to not be nil")
+			s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
+			s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
 		})
 	})
-	_ = s.mcpClient.Close()
+	s.mcpClient.Close()
 	s.mcpClient = nil
 	s.StopServer()
 	s.Require().NoError(s.WaitForShutdown())
@@ -416,27 +408,26 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	s.StaticConfig.StsScopes = []string{"backend-scope"}
 	s.logBuffer.Reset()
 	s.StartServer()
-	s.StartClient(transport.WithHTTPHeaders(map[string]string{
+	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + validOidcClientToken,
-	}))
+	})
 
 	s.Run("Protected resource", func() {
 		s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {
-			result, err := s.mcpClient.Initialize(s.T().Context(), test.McpInitRequest())
-			s.Require().NoError(err, "Expected no error creating initial request")
-			s.Require().NotNil(result, "Expected initial request to not be nil")
+			s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
+			s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
 		})
 		s.Run("Call tool exchanges token VALID OIDC EXCHANGE Authorization header", func() {
-			callToolRequest := mcp.CallToolRequest{}
-			callToolRequest.Params.Name = "events_list"
-			callToolRequest.Params.Arguments = map[string]interface{}{}
-			toolResult, err := s.mcpClient.CallTool(s.T().Context(), callToolRequest)
+			toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+				Name:      "events_list",
+				Arguments: map[string]any{},
+			})
 			s.Require().NoError(err, "Expected no error calling tool")
 			s.Require().NotNil(toolResult, "Expected tool result to not be nil")
 			s.Contains(s.logBuffer.String(), "token exchanged successfully")
 		})
 	})
-	_ = s.mcpClient.Close()
+	s.mcpClient.Close()
 	s.mcpClient = nil
 	s.StopServer()
 	s.Require().NoError(s.WaitForShutdown())

@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -67,7 +67,7 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningPrompts() {
 
 	s.InitMcpClient()
 
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
+	prompts, err := s.ListPrompts()
 
 	s.Run("ListPrompts returns toolset prompts", func() {
 		s.NoError(err)
@@ -91,13 +91,8 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningPrompts() {
 	})
 
 	s.Run("toolset prompt handler executes correctly", func() {
-		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
-			Params: mcp.GetPromptParams{
-				Name: "toolset-prompt",
-				Arguments: map[string]string{
-					"arg1": "test-value",
-				},
-			},
+		result, err := s.GetPrompt("toolset-prompt", map[string]string{
+			"arg1": "test-value",
 		})
 
 		s.NoError(err)
@@ -106,7 +101,7 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningPrompts() {
 		s.Require().Len(result.Messages, 1)
 		s.Equal("user", string(result.Messages[0].Role))
 
-		textContent, ok := result.Messages[0].Content.(mcp.TextContent)
+		textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
 		s.Require().True(ok, "expected TextContent")
 		s.Equal("Toolset prompt with test-value", textContent.Text)
 	})
@@ -125,7 +120,7 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningNilPrompts() {
 
 	s.InitMcpClient()
 
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
+	prompts, err := s.ListPrompts()
 
 	s.Run("ListPrompts succeeds with nil toolset prompts", func() {
 		s.NoError(err)
@@ -151,7 +146,7 @@ func (s *McpToolsetPromptsSuite) TestToolsetReturningEmptyPrompts() {
 
 	s.InitMcpClient()
 
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
+	prompts, err := s.ListPrompts()
 
 	s.Run("ListPrompts succeeds with empty toolset prompts", func() {
 		s.NoError(err)
@@ -204,7 +199,7 @@ func (s *McpToolsetPromptsSuite) TestMultipleToolsetsPromptCollection() {
 
 	s.InitMcpClient()
 
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
+	prompts, err := s.ListPrompts()
 
 	s.Run("ListPrompts collects from multiple toolsets", func() {
 		s.NoError(err)
@@ -270,7 +265,7 @@ content = "From config"
 
 	s.InitMcpClient()
 
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
+	prompts, err := s.ListPrompts()
 
 	s.Run("ListPrompts returns prompts", func() {
 		s.NoError(err)
@@ -285,17 +280,13 @@ content = "From config"
 	})
 
 	s.Run("config prompt handler is used", func() {
-		result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
-			Params: mcp.GetPromptParams{
-				Name: "shared-prompt",
-			},
-		})
+		result, err := s.GetPrompt("shared-prompt", nil)
 
 		s.NoError(err)
 		s.Require().NotNil(result)
 		s.Require().Len(result.Messages, 1)
 
-		textContent, ok := result.Messages[0].Content.(mcp.TextContent)
+		textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
 		s.Require().True(ok)
 		s.Equal("From config", textContent.Text)
 	})
@@ -342,7 +333,7 @@ func (s *McpToolsetPromptsSuite) TestPromptsNotExposedWhenToolsetDisabled() {
 
 	s.InitMcpClient()
 
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
+	prompts, err := s.ListPrompts()
 
 	s.Run("ListPrompts returns prompts", func() {
 		s.NoError(err)

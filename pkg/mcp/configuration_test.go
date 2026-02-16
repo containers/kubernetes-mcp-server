@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -48,11 +48,11 @@ func (s *ConfigurationSuite) TestContextsList() {
 		s.Require().NotNil(toolResult, "Expected tool result from call")
 		s.Lenf(toolResult.Content, 1, "invalid tool result content length %v", len(toolResult.Content))
 		s.Run("contains context count", func() {
-			s.Regexpf(`^Available Kubernetes contexts \(11 total`, toolResult.Content[0].(mcp.TextContent).Text, "invalid tool count result content %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Regexpf(`^Available Kubernetes contexts \(11 total`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool count result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("contains default context name", func() {
-			s.Regexpf(`^Available Kubernetes contexts \(\d+ total, default: fake-context\)`, toolResult.Content[0].(mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(mcp.TextContent).Text)
-			s.Regexpf(`(?m)^\*fake-context -> http:\/\/127\.0\.0\.1:\d*$`, toolResult.Content[0].(mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Regexpf(`^Available Kubernetes contexts \(\d+ total, default: fake-context\)`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
+			s.Regexpf(`(?m)^\*fake-context -> http:\/\/127\.0\.0\.1:\d*$`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 }
@@ -66,7 +66,7 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 		})
 		s.Require().NotNil(toolResult, "Expected tool result from call")
 		var decoded *v1.Config
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -97,7 +97,7 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 			s.Nilf(err, "call tool failed %v", err)
 		})
 		var decoded *v1.Config
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -140,7 +140,7 @@ func (s *ConfigurationSuite) TestConfigurationViewInCluster() {
 		})
 		s.Require().NotNil(toolResult, "Expected tool result from call")
 		var decoded *v1.Config
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
