@@ -7,7 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -79,8 +79,8 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 		s.Run("describes missing name", func() {
 			expectedMessage := "failed to get node log, missing argument name"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("nodes_log(name=existing-node, query=nil)", func() {
@@ -94,8 +94,8 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 		s.Run("describes missing name", func() {
 			expectedMessage := "failed to get node log, missing argument query"
-			s.Regexpf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Regexpf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("nodes_log(name=inexistent-node, query=/kubelet.log)", func() {
@@ -110,8 +110,8 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 		s.Run("describes missing node", func() {
 			expectedMessage := "failed to get node log for inexistent-node: failed to get node inexistent-node: the server could not find the requested resource (get nodes inexistent-node)"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("nodes_log(name=existing-node, query=/missing.log)", func() {
@@ -126,8 +126,8 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 		s.Run("describes missing log file", func() {
 			expectedMessage := "failed to get node log for existing-node: failed to get node logs: the server could not find the requested resource"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("nodes_log(name=existing-node, query=/empty.log)", func() {
@@ -142,8 +142,8 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 		s.Run("describes empty log", func() {
 			expectedMessage := "The node existing-node has not logged any message yet or the log file is empty"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive message '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected descriptive message '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("nodes_log(name=existing-node, query=/kubelet.log)", func() {
@@ -158,8 +158,8 @@ func (s *NodesSuite) TestNodesLog() {
 		})
 		s.Run("returns full log", func() {
 			expectedMessage := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	for _, tailCase := range []interface{}{2, int64(2), float64(2)} {
@@ -176,8 +176,8 @@ func (s *NodesSuite) TestNodesLog() {
 			})
 			s.Run("returns tail log", func() {
 				expectedMessage := "Line 4\nLine 5\n"
-				s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+				s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 		})
 		s.Run("nodes_log(name=existing-node, query=/kubelet.log, tailLines=-1)", func() {
@@ -193,8 +193,8 @@ func (s *NodesSuite) TestNodesLog() {
 			})
 			s.Run("returns full log", func() {
 				expectedMessage := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
-				s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+				s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 		})
 	}
@@ -216,7 +216,7 @@ func (s *NodesSuite) TestNodesLogDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get node log for does-not-matter:(.+:)? resource not allowed: /v1, Kind=Node"
 			s.Regexpf(expectedMessage, msg,
@@ -275,8 +275,8 @@ func (s *NodesSuite) TestNodesStatsSummary() {
 		})
 		s.Run("describes missing name", func() {
 			expectedMessage := "failed to get node stats summary, missing argument name"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("nodes_stats_summary(name=inexistent-node)", func() {
@@ -290,8 +290,8 @@ func (s *NodesSuite) TestNodesStatsSummary() {
 		})
 		s.Run("describes missing node", func() {
 			expectedMessage := "failed to get node stats summary for inexistent-node: failed to get node inexistent-node: the server could not find the requested resource (get nodes inexistent-node)"
-			s.Equalf(expectedMessage, toolResult.Content[0].(mcp.TextContent).Text,
-				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+				"expected descriptive error '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("nodes_stats_summary(name=existing-node)", func() {
@@ -304,7 +304,7 @@ func (s *NodesSuite) TestNodesStatsSummary() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("returns stats summary", func() {
-			content := toolResult.Content[0].(mcp.TextContent).Text
+			content := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Containsf(content, "existing-node", "expected stats to contain node name, got %v", content)
 			s.Containsf(content, "usageNanoCores", "expected stats to contain CPU metrics, got %v", content)
 			s.Containsf(content, "usageBytes", "expected stats to contain memory metrics, got %v", content)
@@ -327,7 +327,7 @@ func (s *NodesSuite) TestNodesStatsSummaryDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get node stats summary for does-not-matter:(.+:)? resource not allowed: /v1, Kind=Node"
 			s.Regexpf(expectedMessage, msg,

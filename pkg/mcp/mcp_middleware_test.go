@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel"
@@ -61,12 +60,12 @@ func (s *McpLoggingSuite) TestLogsToolCall() {
 
 func (s *McpLoggingSuite) TestLogsToolCallHeaders() {
 	s.SetLogLevel(7)
-	s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{
+	s.InitMcpClient(test.WithHTTPHeaders(map[string]string{
 		"Accept-Encoding":   "gzip",
 		"Authorization":     "Bearer should-not-be-logged",
 		"authorization":     "Bearer should-not-be-logged",
 		"a-loggable-header": "should-be-logged",
-	})))
+	}))
 	_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
 	s.Require().NoError(err, "call to tool configuration_view failed")
 

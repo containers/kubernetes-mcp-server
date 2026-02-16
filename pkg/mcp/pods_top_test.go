@@ -7,7 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -42,8 +42,8 @@ func (s *PodsTopSuite) TestPodsTopMetricsUnavailable() {
 		s.NoError(err, "call tool failed %v", err)
 		s.Require().NoError(err)
 		s.True(result.IsError, "call tool should have returned an error")
-		s.Equalf("failed to get pods top: metrics API is not available", result.Content[0].(mcp.TextContent).Text,
-			"call tool returned unexpected content: %s", result.Content[0].(mcp.TextContent).Text)
+		s.Equalf("failed to get pods top: metrics API is not available", result.Content[0].(*mcp.TextContent).Text,
+			"call tool returned unexpected content: %s", result.Content[0].(*mcp.TextContent).Text)
 	})
 }
 
@@ -99,7 +99,7 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		result, err := s.CallTool("pods_top", map[string]interface{}{})
 		s.Require().NotNil(result)
 		s.NoErrorf(err, "call tool failed %v", err)
-		textContent := result.Content[0].(mcp.TextContent).Text
+		textContent := result.Content[0].(*mcp.TextContent).Text
 		s.Falsef(result.IsError, "call tool failed %v", textContent)
 
 		expectedHeaders := regexp.MustCompile(`(?m)^\s*NAMESPACE\s+POD\s+NAME\s+CPU\(cores\)\s+MEMORY\(bytes\)\s+SWAP\(bytes\)\s*$`)
@@ -124,7 +124,7 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		})
 		s.Require().NotNil(result)
 		s.NoErrorf(err, "call tool failed %v", err)
-		textContent := result.Content[0].(mcp.TextContent).Text
+		textContent := result.Content[0].(*mcp.TextContent).Text
 		s.Falsef(result.IsError, "call tool failed %v", textContent)
 
 		expectedRows := []string{
@@ -145,7 +145,7 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		})
 		s.Require().NotNil(result)
 		s.NoErrorf(err, "call tool failed %v", err)
-		textContent := result.Content[0].(mcp.TextContent).Text
+		textContent := result.Content[0].(*mcp.TextContent).Text
 		s.Falsef(result.IsError, "call tool failed %v", textContent)
 
 		expectedRow := regexp.MustCompile(`ns-5\s+pod-ns-5-1\s+container-1\s+10m\s+20Mi\s+42Mi`)
@@ -162,7 +162,7 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		})
 		s.Require().NotNil(result)
 		s.NoErrorf(err, "call tool failed %v", err)
-		textContent := result.Content[0].(mcp.TextContent).Text
+		textContent := result.Content[0].(*mcp.TextContent).Text
 		s.Falsef(result.IsError, "call tool failed %v", textContent)
 
 		expectedRow := regexp.MustCompile(`ns-5\s+pod-ns-5-5\s+container-1\s+13m\s+37Mi\s+42Mi`)
@@ -178,7 +178,7 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		})
 		s.Require().NotNil(result)
 		s.NoErrorf(err, "call tool failed %v", err)
-		textContent := result.Content[0].(mcp.TextContent).Text
+		textContent := result.Content[0].(*mcp.TextContent).Text
 		s.Falsef(result.IsError, "call tool failed %v", textContent)
 
 		expectedRow := regexp.MustCompile(`ns-5\s+pod-ns-5-42\s+container-1\s+42m\s+42Mi`)
@@ -209,7 +209,7 @@ func (s *PodsTopSuite) TestPodsTopDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := result.Content[0].(mcp.TextContent).Text
+			msg := result.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get pods top:(.+:)? resource not allowed: metrics.k8s.io/v1beta1, Kind=PodMetrics"
 			s.Regexpf(expectedMessage, msg,

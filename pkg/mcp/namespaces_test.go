@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,7 +31,7 @@ func (s *NamespacesSuite) TestNamespacesList() {
 		})
 		s.Require().NotNil(toolResult, "Expected tool result from call")
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -58,7 +58,7 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list namespaces:(.+:)? resource not allowed: /v1, Kind=Namespace"
 			s.Regexpf(expectedMessage, msg,
@@ -79,7 +79,7 @@ func (s *NamespacesSuite) TestNamespacesListForbidden() {
 		toolResult, _ := s.CallTool("namespaces_list", map[string]interface{}{})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "forbidden",
 				"error message should indicate forbidden")
 		})
 		s.Run("sends log notification", func() {
@@ -100,7 +100,7 @@ func (s *NamespacesSuite) TestNamespacesListAsTable() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Require().NotNil(toolResult, "Expected tool result from call")
-		out := toolResult.Content[0].(mcp.TextContent).Text
+		out := toolResult.Content[0].(*mcp.TextContent).Text
 		s.Run("returns column headers", func() {
 			expectedHeaders := "APIVERSION\\s+KIND\\s+NAME\\s+STATUS\\s+AGE\\s+LABELS"
 			m, e := regexp.MatchString(expectedHeaders, out)
@@ -155,7 +155,7 @@ func (s *NamespacesSuite) TestProjectsListInOpenShift() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 		s.Run("has yaml content", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
@@ -186,7 +186,7 @@ func (s *NamespacesSuite) TestProjectsListInOpenShiftDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := projectsList.Content[0].(mcp.TextContent).Text
+			msg := projectsList.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list projects:(.+:)? resource not allowed: project.openshift.io/v1, Kind=Project"
 			s.Regexpf(expectedMessage, msg,

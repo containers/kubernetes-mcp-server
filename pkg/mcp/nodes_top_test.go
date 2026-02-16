@@ -6,7 +6,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -154,7 +154,7 @@ func (s *NodesTopSuite) TestNodesTop() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("returns metrics for all nodes", func() {
-			content := toolResult.Content[0].(mcp.TextContent).Text
+			content := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(content, "node-1", "expected metrics to contain node-1")
 			s.Contains(content, "node-2", "expected metrics to contain node-2")
 			s.Contains(content, "CPU(cores)", "expected header with CPU column")
@@ -172,7 +172,7 @@ func (s *NodesTopSuite) TestNodesTop() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("returns metrics for specific node", func() {
-			content := toolResult.Content[0].(mcp.TextContent).Text
+			content := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(content, "node-1", "expected metrics to contain node-1")
 			s.Contains(content, "500m", "expected CPU usage of 500m")
 			s.Contains(content, "2048Mi", "expected memory usage of 2048Mi")
@@ -189,7 +189,7 @@ func (s *NodesTopSuite) TestNodesTop() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("returns metrics for filtered nodes", func() {
-			content := toolResult.Content[0].(mcp.TextContent).Text
+			content := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(content, "node-1", "expected metrics to contain node-1")
 			s.Contains(content, "node-2", "expected metrics to contain node-2")
 		})
@@ -207,7 +207,7 @@ func (s *NodesTopSuite) TestNodesTopMetricsUnavailable() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes metrics unavailable", func() {
-			content := toolResult.Content[0].(mcp.TextContent).Text
+			content := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(content, "failed to get nodes top", "expected error message about failing to get nodes top")
 		})
 	})
@@ -227,7 +227,7 @@ func (s *NodesTopSuite) TestNodesTopDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to get nodes top:(.+:)? resource not allowed: metrics.k8s.io/v1beta1, Kind=NodeMetrics"
 			s.Regexpf(expectedMessage, msg,

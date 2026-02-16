@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -32,7 +32,7 @@ func (s *McpPromptsSuite) TestListPrompts() {
 
 	s.InitMcpClient()
 
-	prompts, err := s.ListPrompts(s.T().Context(), mcp.ListPromptsRequest{})
+	prompts, err := s.ListPrompts()
 
 	s.Run("ListPrompts returns prompts", func() {
 		s.NoError(err, "call ListPrompts failed")
@@ -42,9 +42,9 @@ func (s *McpPromptsSuite) TestListPrompts() {
 	s.Run("config prompt is available with all metadata", func() {
 		s.Require().NotNil(prompts)
 		var testPrompt *mcp.Prompt
-		for _, prompt := range prompts.Prompts {
-			if prompt.Name == "test-prompt" {
-				testPrompt = &prompt
+		for _, p := range prompts.Prompts {
+			if p.Name == "test-prompt" {
+				testPrompt = p
 				break
 			}
 		}
@@ -78,13 +78,8 @@ func (s *McpPromptsSuite) TestGetPrompt() {
 
 	s.InitMcpClient()
 
-	result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
-		Params: mcp.GetPromptParams{
-			Name: "substitution-prompt",
-			Arguments: map[string]string{
-				"name": "World",
-			},
-		},
+	result, err := s.GetPrompt("substitution-prompt", map[string]string{
+		"name": "World",
 	})
 
 	s.Run("GetPrompt succeeds", func() {
@@ -97,9 +92,8 @@ func (s *McpPromptsSuite) TestGetPrompt() {
 		s.Equal("Test argument substitution", result.Description)
 		s.Require().Len(result.Messages, 1)
 		s.Equal("user", string(result.Messages[0].Role))
-		textContent, ok := result.Messages[0].Content.(mcp.TextContent)
+		textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
 		s.Require().True(ok, "expected TextContent")
-		s.Equal("text", textContent.Type)
 		s.Equal("Hello World!", textContent.Text)
 	})
 }
@@ -122,12 +116,7 @@ func (s *McpPromptsSuite) TestGetPromptMissingRequiredArgument() {
 
 	s.InitMcpClient()
 
-	result, err := s.GetPrompt(s.T().Context(), mcp.GetPromptRequest{
-		Params: mcp.GetPromptParams{
-			Name:      "required-arg-prompt",
-			Arguments: map[string]string{},
-		},
-	})
+	result, err := s.GetPrompt("required-arg-prompt", map[string]string{})
 
 	s.Run("missing required argument returns error", func() {
 		s.Error(err, "expected error for missing required argument")

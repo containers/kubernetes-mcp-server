@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,7 +77,7 @@ func (s *PodsExecSuite) TestPodsExec() {
 		s.Run("returns command output", func() {
 			s.NoError(err, "call tool failed %v", err)
 			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
-			s.Contains(result.Content[0].(mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(mcp.TextContent).Text)
+			s.Contains(result.Content[0].(*mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("pods_exec(name=pod-to-exec, namespace=default, command=[ls -l])", func() {
@@ -90,7 +90,7 @@ func (s *PodsExecSuite) TestPodsExec() {
 		s.Run("returns command output", func() {
 			s.NoError(err, "call tool failed %v", err)
 			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
-			s.Contains(result.Content[0].(mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(mcp.TextContent).Text)
+			s.Contains(result.Content[0].(*mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("pods_exec(name=pod-to-exec, namespace=default, command=[ls -l], container=a-specific-container)", func() {
@@ -104,7 +104,7 @@ func (s *PodsExecSuite) TestPodsExec() {
 		s.Run("returns command output", func() {
 			s.NoError(err, "call tool failed %v", err)
 			s.Falsef(result.IsError, "call tool failed: %v", result.Content)
-			s.Contains(result.Content[0].(mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(mcp.TextContent).Text)
+			s.Contains(result.Content[0].(*mcp.TextContent).Text, "command:ls -l\n", "unexpected result %v", result.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 }
@@ -127,7 +127,7 @@ func (s *PodsExecSuite) TestPodsExecDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to exec in pod pod-to-exec in namespace default:(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,

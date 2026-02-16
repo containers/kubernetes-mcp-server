@@ -4,9 +4,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/utils/ptr"
 )
 
 // McpToolProcessingSuite tests MCP tool processing (isToolApplicable)
@@ -17,7 +15,7 @@ type McpToolProcessingSuite struct {
 func (s *McpToolProcessingSuite) TestUnrestricted() {
 	s.InitMcpClient()
 
-	tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	tools, err := s.ListTools()
 	s.Require().NotNil(tools)
 
 	s.Run("ListTools returns tools", func() {
@@ -27,8 +25,8 @@ func (s *McpToolProcessingSuite) TestUnrestricted() {
 
 	s.Run("Destructive tools ARE NOT read only", func() {
 		for _, tool := range tools.Tools {
-			readOnly := ptr.Deref(tool.Annotations.ReadOnlyHint, false)
-			destructive := ptr.Deref(tool.Annotations.DestructiveHint, false)
+			readOnly := tool.Annotations.ReadOnlyHint
+			destructive := tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint
 			s.Falsef(readOnly && destructive, "Tool %s is read-only and destructive, which is not allowed", tool.Name)
 		}
 	})
@@ -40,7 +38,7 @@ func (s *McpToolProcessingSuite) TestReadOnly() {
 	`), s.Cfg), "Expected to parse read only server config")
 	s.InitMcpClient()
 
-	tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	tools, err := s.ListTools()
 	s.Require().NotNil(tools)
 
 	s.Run("ListTools returns tools", func() {
@@ -50,7 +48,7 @@ func (s *McpToolProcessingSuite) TestReadOnly() {
 
 	s.Run("ListTools returns only read-only tools", func() {
 		for _, tool := range tools.Tools {
-			s.Falsef(tool.Annotations.ReadOnlyHint == nil || !*tool.Annotations.ReadOnlyHint,
+			s.Truef(tool.Annotations.ReadOnlyHint,
 				"Tool %s is not read-only but should be", tool.Name)
 			s.Falsef(tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint,
 				"Tool %s is destructive but should not be in read-only mode", tool.Name)
@@ -64,7 +62,7 @@ func (s *McpToolProcessingSuite) TestDisableDestructive() {
 	`), s.Cfg), "Expected to parse disable destructive server config")
 	s.InitMcpClient()
 
-	tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	tools, err := s.ListTools()
 	s.Require().NotNil(tools)
 
 	s.Run("ListTools returns tools", func() {
@@ -86,7 +84,7 @@ func (s *McpToolProcessingSuite) TestEnabledTools() {
 	`), s.Cfg), "Expected to parse enabled tools server config")
 	s.InitMcpClient()
 
-	tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	tools, err := s.ListTools()
 	s.Require().NotNil(tools)
 
 	s.Run("ListTools returns tools", func() {
@@ -109,7 +107,7 @@ func (s *McpToolProcessingSuite) TestDisabledTools() {
 	`), s.Cfg), "Expected to parse disabled tools server config")
 	s.InitMcpClient()
 
-	tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	tools, err := s.ListTools()
 	s.Require().NotNil(tools)
 
 	s.Run("ListTools returns tools", func() {
