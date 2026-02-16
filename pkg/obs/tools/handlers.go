@@ -8,11 +8,18 @@ import (
 	"strings"
 	"time"
 
+	ammodels "github.com/prometheus/alertmanager/api/v2/models"
 	"github.com/prometheus/common/model"
+	"k8s.io/utils/ptr"
 
 	"github.com/rhobs/obs-mcp/pkg/alertmanager"
 	"github.com/rhobs/obs-mcp/pkg/prometheus"
 	"github.com/rhobs/obs-mcp/pkg/resultutil"
+)
+
+const (
+	// millisecondsPerSecond converts Prometheus millisecond timestamps to seconds.
+	millisecondsPerSecond = 1000
 )
 
 // GetString is a helper to extract a string parameter with a default value
@@ -33,6 +40,136 @@ func GetBoolPtr(params map[string]any, key string) *bool {
 		}
 	}
 	return nil
+}
+
+// parseDefaultTimeRange parses optional start/end time strings,
+// defaulting to the last hour if both are empty.
+func parseDefaultTimeRange(start, end string) (startTime, endTime time.Time, err error) {
+	if start == "" && end == "" {
+		endTime = time.Now()
+		startTime = endTime.Add(-prometheus.ListMetricsTimeRange)
+		return startTime, endTime, nil
+	}
+
+	if start != "" {
+		startTime, err = prometheus.ParseTimestamp(start)
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid start time format: %w", err)
+		}
+	}
+	if end != "" {
+		endTime, err = prometheus.ParseTimestamp(end)
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid end time format: %w", err)
+		}
+	}
+	return startTime, endTime, nil
+}
+
+// parseFilterString splits a comma-separated filter string into trimmed parts.
+func parseFilterString(filter string) []string {
+	if filter == "" {
+		return nil
+	}
+	parts := strings.Split(filter, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+// convertAlert converts an Alertmanager GettableAlert to the Alert output type.
+func convertAlert(a *ammodels.GettableAlert) Alert {
+	labels := make(map[string]string)
+	maps.Copy(labels, a.Labels)
+
+	annotations := make(map[string]string)
+	maps.Copy(annotations, a.Annotations)
+
+	var silencedBy, inhibitedBy []string
+	var state string
+	if a.Status != nil {
+		if a.Status.SilencedBy != nil {
+			silencedBy = a.Status.SilencedBy
+		}
+		if a.Status.InhibitedBy != nil {
+			inhibitedBy = a.Status.InhibitedBy
+		}
+		state = ptr.Deref(a.Status.State, "")
+	}
+	if silencedBy == nil {
+		silencedBy = []string{}
+	}
+	if inhibitedBy == nil {
+		inhibitedBy = []string{}
+	}
+
+	var startsAt, endsAt string
+	if a.StartsAt != nil {
+		startsAt = a.StartsAt.String()
+	}
+	if a.EndsAt != nil {
+		endsAt = a.EndsAt.String()
+	}
+
+	return Alert{
+		Labels:      labels,
+		Annotations: annotations,
+		StartsAt:    startsAt,
+		EndsAt:      endsAt,
+		Status: AlertStatus{
+			State:       state,
+			SilencedBy:  silencedBy,
+			InhibitedBy: inhibitedBy,
+		},
+	}
+}
+
+// convertMatcher converts an Alertmanager Matcher to the Matcher output type.
+func convertMatcher(m *ammodels.Matcher) Matcher {
+	isEqual := true
+	if m.IsEqual != nil {
+		isEqual = *m.IsEqual
+	}
+	return Matcher{
+		Name:    ptr.Deref(m.Name, ""),
+		Value:   ptr.Deref(m.Value, ""),
+		IsRegex: m.IsRegex != nil && *m.IsRegex,
+		IsEqual: isEqual,
+	}
+}
+
+// convertSilence converts an Alertmanager GettableSilence to the Silence output type.
+func convertSilence(s *ammodels.GettableSilence) Silence {
+	matchers := make([]Matcher, len(s.Matchers))
+	for i, m := range s.Matchers {
+		matchers[i] = convertMatcher(m)
+	}
+
+	var state string
+	if s.Status != nil {
+		state = ptr.Deref(s.Status.State, "")
+	}
+
+	var startsAt, endsAt string
+	if s.StartsAt != nil {
+		startsAt = s.StartsAt.String()
+	}
+	if s.EndsAt != nil {
+		endsAt = s.EndsAt.String()
+	}
+
+	return Silence{
+		ID: ptr.Deref(s.ID, ""),
+		Status: SilenceStatus{
+			State: state,
+		},
+		Matchers:  matchers,
+		StartsAt:  startsAt,
+		EndsAt:    endsAt,
+		CreatedBy: ptr.Deref(s.CreatedBy, ""),
+		Comment:   ptr.Deref(s.Comment, ""),
+	}
 }
 
 func BuildListMetricsInput(args map[string]any) ListMetricsInput {
@@ -204,7 +341,7 @@ func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader,
 			}
 			values := make([][]any, len(series.Values))
 			for j, sample := range series.Values {
-				values[j] = []any{float64(sample.Timestamp) / 1000, sample.Value.String()}
+				values[j] = []any{float64(sample.Timestamp) / millisecondsPerSecond, sample.Value.String()}
 			}
 			output.Result[i] = SeriesResult{
 				Metric: labels,
@@ -267,7 +404,7 @@ func ExecuteInstantQueryHandler(ctx context.Context, promClient prometheus.Loade
 			}
 			output.Result[i] = InstantResult{
 				Metric: labels,
-				Value:  []any{float64(sample.Timestamp) / 1000, sample.Value.String()},
+				Value:  []any{float64(sample.Timestamp) / millisecondsPerSecond, sample.Value.String()},
 			}
 		}
 	} else {
@@ -286,25 +423,9 @@ func GetLabelNamesHandler(ctx context.Context, promClient prometheus.Loader, inp
 	slog.Info("GetLabelNamesHandler called")
 	slog.Debug("GetLabelNamesHandler params", "input", input)
 
-	// Default to last hour if not specified
-	var startTime, endTime time.Time
-	var err error
-	if input.Start == "" && input.End == "" {
-		endTime = time.Now()
-		startTime = endTime.Add(-prometheus.ListMetricsTimeRange)
-	} else {
-		if input.Start != "" {
-			startTime, err = prometheus.ParseTimestamp(input.Start)
-			if err != nil {
-				return resultutil.NewErrorResult(fmt.Errorf("invalid start time format: %w", err))
-			}
-		}
-		if input.End != "" {
-			endTime, err = prometheus.ParseTimestamp(input.End)
-			if err != nil {
-				return resultutil.NewErrorResult(fmt.Errorf("invalid end time format: %w", err))
-			}
-		}
+	startTime, endTime, err := parseDefaultTimeRange(input.Start, input.End)
+	if err != nil {
+		return resultutil.NewErrorResult(err)
 	}
 
 	// Get label names
@@ -330,25 +451,9 @@ func GetLabelValuesHandler(ctx context.Context, promClient prometheus.Loader, in
 		return resultutil.NewErrorResult(fmt.Errorf("label parameter is required and must be a string"))
 	}
 
-	// Default to last hour if not specified
-	var startTime, endTime time.Time
-	var err error
-	if input.Start == "" && input.End == "" {
-		endTime = time.Now()
-		startTime = endTime.Add(-prometheus.ListMetricsTimeRange)
-	} else {
-		if input.Start != "" {
-			startTime, err = prometheus.ParseTimestamp(input.Start)
-			if err != nil {
-				return resultutil.NewErrorResult(fmt.Errorf("invalid start time format: %w", err))
-			}
-		}
-		if input.End != "" {
-			endTime, err = prometheus.ParseTimestamp(input.End)
-			if err != nil {
-				return resultutil.NewErrorResult(fmt.Errorf("invalid end time format: %w", err))
-			}
-		}
+	startTime, endTime, err := parseDefaultTimeRange(input.Start, input.End)
+	if err != nil {
+		return resultutil.NewErrorResult(err)
 	}
 
 	// Get label values
@@ -380,25 +485,9 @@ func GetSeriesHandler(ctx context.Context, promClient prometheus.Loader, input S
 	// For simplicity, treat the entire string as one match for now
 	// Users can make multiple calls if needed
 
-	// Default to last hour if not specified
-	var startTime, endTime time.Time
-	var err error
-	if input.Start == "" && input.End == "" {
-		endTime = time.Now()
-		startTime = endTime.Add(-prometheus.ListMetricsTimeRange)
-	} else {
-		if input.Start != "" {
-			startTime, err = prometheus.ParseTimestamp(input.Start)
-			if err != nil {
-				return resultutil.NewErrorResult(fmt.Errorf("invalid start time format: %w", err))
-			}
-		}
-		if input.End != "" {
-			endTime, err = prometheus.ParseTimestamp(input.End)
-			if err != nil {
-				return resultutil.NewErrorResult(fmt.Errorf("invalid end time format: %w", err))
-			}
-		}
+	startTime, endTime, err := parseDefaultTimeRange(input.Start, input.End)
+	if err != nil {
+		return resultutil.NewErrorResult(err)
 	}
 
 	// Get series
@@ -422,71 +511,16 @@ func GetAlertsHandler(ctx context.Context, amClient alertmanager.Loader, input A
 	slog.Info("GetAlertsHandler called")
 	slog.Debug("GetAlertsHandler params", "input", input)
 
-	var filter []string
-	if input.Filter != "" {
-		// Split by comma if multiple filters are provided
-		filter = strings.Split(input.Filter, ",")
-		for i := range filter {
-			filter[i] = strings.TrimSpace(filter[i])
-		}
-	}
-
-	alerts, err := amClient.GetAlerts(ctx, input.Active, input.Silenced, input.Inhibited, input.Unprocessed, filter, input.Receiver)
+	alerts, err := amClient.GetAlerts(ctx, input.Active, input.Silenced, input.Inhibited, input.Unprocessed, parseFilterString(input.Filter), input.Receiver)
 	if err != nil {
 		return resultutil.NewErrorResult(fmt.Errorf("failed to get alerts: %w", err))
 	}
 
-	// Convert to output format
 	output := AlertsOutput{
 		Alerts: make([]Alert, len(alerts)),
 	}
-
 	for i, alert := range alerts {
-		labels := make(map[string]string)
-		maps.Copy(labels, alert.Labels)
-
-		annotations := make(map[string]string)
-		maps.Copy(annotations, alert.Annotations)
-
-		var silencedBy, inhibitedBy []string
-		var state string
-		if alert.Status != nil {
-			if alert.Status.SilencedBy != nil {
-				silencedBy = alert.Status.SilencedBy
-			}
-			if alert.Status.InhibitedBy != nil {
-				inhibitedBy = alert.Status.InhibitedBy
-			}
-			if alert.Status.State != nil {
-				state = *alert.Status.State
-			}
-		}
-		if silencedBy == nil {
-			silencedBy = []string{}
-		}
-		if inhibitedBy == nil {
-			inhibitedBy = []string{}
-		}
-
-		var startsAt, endsAt string
-		if alert.StartsAt != nil {
-			startsAt = alert.StartsAt.String()
-		}
-		if alert.EndsAt != nil {
-			endsAt = alert.EndsAt.String()
-		}
-
-		output.Alerts[i] = Alert{
-			Labels:      labels,
-			Annotations: annotations,
-			StartsAt:    startsAt,
-			EndsAt:      endsAt,
-			Status: AlertStatus{
-				State:       state,
-				SilencedBy:  silencedBy,
-				InhibitedBy: inhibitedBy,
-			},
-		}
+		output.Alerts[i] = convertAlert(alert)
 	}
 
 	slog.Info("GetAlertsHandler executed successfully", "alertCount", len(alerts))
@@ -500,16 +534,7 @@ func GetSilencesHandler(ctx context.Context, amClient alertmanager.Loader, input
 	slog.Info("GetSilencesHandler called")
 	slog.Debug("GetSilencesHandler params", "input", input)
 
-	var filter []string
-	if input.Filter != "" {
-		// Split by comma if multiple filters are provided
-		filter = strings.Split(input.Filter, ",")
-		for i := range filter {
-			filter[i] = strings.TrimSpace(filter[i])
-		}
-	}
-
-	silences, err := amClient.GetSilences(ctx, filter)
+	silences, err := amClient.GetSilences(ctx, parseFilterString(input.Filter))
 	if err != nil {
 		return resultutil.NewErrorResult(fmt.Errorf("failed to get silences: %w", err))
 	}
@@ -517,64 +542,8 @@ func GetSilencesHandler(ctx context.Context, amClient alertmanager.Loader, input
 	output := SilencesOutput{
 		Silences: make([]Silence, len(silences)),
 	}
-
 	for i, silence := range silences {
-		matchers := make([]Matcher, len(silence.Matchers))
-		for j, m := range silence.Matchers {
-			isEqual := true
-			if m.IsEqual != nil {
-				isEqual = *m.IsEqual
-			}
-			var name, value string
-			var isRegex bool
-			if m.Name != nil {
-				name = *m.Name
-			}
-			if m.Value != nil {
-				value = *m.Value
-			}
-			if m.IsRegex != nil {
-				isRegex = *m.IsRegex
-			}
-			matchers[j] = Matcher{
-				Name:    name,
-				Value:   value,
-				IsRegex: isRegex,
-				IsEqual: isEqual,
-			}
-		}
-
-		var id, state, createdBy, comment, startsAt, endsAt string
-		if silence.ID != nil {
-			id = *silence.ID
-		}
-		if silence.Status != nil && silence.Status.State != nil {
-			state = *silence.Status.State
-		}
-		if silence.StartsAt != nil {
-			startsAt = silence.StartsAt.String()
-		}
-		if silence.EndsAt != nil {
-			endsAt = silence.EndsAt.String()
-		}
-		if silence.CreatedBy != nil {
-			createdBy = *silence.CreatedBy
-		}
-		if silence.Comment != nil {
-			comment = *silence.Comment
-		}
-
-		output.Silences[i] = Silence{
-			ID: id,
-			Status: SilenceStatus{
-				State: state,
-			},
-			Matchers:  matchers,
-			StartsAt:  startsAt,
-			EndsAt:    endsAt,
-			CreatedBy: createdBy,
-			Comment:   comment,
-		}
+		output.Silences[i] = convertSilence(silence)
 	}
 
 	slog.Info("GetSilencesHandler executed successfully", "silenceCount", len(silences))
