@@ -205,8 +205,8 @@ Fine-grained control over individual tools within enabled toolsets.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled_tools` | string[] | `[]` | Whitelist of specific tools to enable. When set, only these tools are available. |
-| `disabled_tools` | string[] | `[]` | Blacklist of specific tools to disable. Applied after `enabled_tools`. |
+| `enabled_tools` | string[] | `[]` | Allowlist of specific tools to enable. When set, only these tools are available. |
+| `disabled_tools` | string[] | `[]` | Denylist of specific tools to disable. Applied after `enabled_tools`. |
 
 **Example:**
 ```toml
@@ -237,6 +237,27 @@ kind = "Secret"
 group = ""
 version = "v1"
 kind = "ConfigMap"
+
+# Deny access to RBAC resources for additional security
+[[denied_resources]]
+group = "rbac.authorization.k8s.io"
+version = "v1"
+kind = "Role"
+
+[[denied_resources]]
+group = "rbac.authorization.k8s.io"
+version = "v1"
+kind = "RoleBinding"
+
+[[denied_resources]]
+group = "rbac.authorization.k8s.io"
+version = "v1"
+kind = "ClusterRole"
+
+[[denied_resources]]
+group = "rbac.authorization.k8s.io"
+version = "v1"
+kind = "ClusterRoleBinding"
 ```
 
 ### Server Instructions
