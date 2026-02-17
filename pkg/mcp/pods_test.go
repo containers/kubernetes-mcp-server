@@ -66,10 +66,6 @@ func (s *PodsSuite) TestPodsListInAllNamespaces() {
 }
 
 func (s *PodsSuite) TestPodsListInAllNamespacesUnauthorized() {
-	// Disable validation for this test - we're testing the tool's fallback behavior
-	// when cluster-wide list fails but namespace-scoped list succeeds
-	validationDisabled := false
-	s.Cfg.Validation.Enabled = &validationDisabled
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
 	client := kubernetes.NewForConfigOrDie(envTestRestConfig)

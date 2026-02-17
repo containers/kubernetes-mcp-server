@@ -26,30 +26,16 @@ The validation layer catches three types of issues:
 
 Validation is **disabled by default**. All validators (resource, schema, RBAC) run together when enabled.
 
-### Environment Variables
-
-```bash
-# Enable all validation
-MCP_VALIDATION_ENABLED=true
-```
-
-### TOML Configuration
-
-Add a `[validation]` section to your config file:
-
 ```toml
-[validation]
 # Enable all validation (default: false)
-enabled = true
+validation_enabled = true
 ```
 
 ### Configuration Reference
 
-| TOML Field | Environment Variable | Default | Description |
-|------------|---------------------|---------|-------------|
-| `enabled` | `MCP_VALIDATION_ENABLED` | `false` | Enable/disable all validators |
-
-Environment variables take precedence over TOML config.
+| TOML Field | Default | Description |
+|------------|---------|-------------|
+| `validation_enabled` | `false` | Enable/disable all validators |
 
 **Note:** The schema validator caches the OpenAPI schema for 15 minutes internally.
 

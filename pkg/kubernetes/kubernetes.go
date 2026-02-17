@@ -61,20 +61,19 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 		k.restConfig.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
 
-	// Extract validation config if available
-	var validationConfig api.ValidationConfig
-	if vcp, ok := baseConfig.(api.ValidationConfigProvider); ok {
-		validationConfig = vcp.GetValidationConfig()
+	var validationEnabled bool
+	if vep, ok := baseConfig.(api.ValidationEnabledProvider); ok {
+		validationEnabled = vep.IsValidationEnabled()
 	}
 
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
-		return NewValidationRoundTripper(ValidationRoundTripperConfig{
+		return NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
 			Delegate:                original,
 			DeniedResourcesProvider: baseConfig,
 			RestMapperProvider:      func() meta.RESTMapper { return k.restMapper },
 			DiscoveryProvider:       func() discovery.DiscoveryInterface { return k.discoveryClient },
 			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
-			ValidatorConfig:         validationConfig,
+			ValidationEnabled:       validationEnabled,
 		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {

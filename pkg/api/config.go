@@ -53,15 +53,9 @@ type StsConfigProvider interface {
 	GetStsScopes() []string
 }
 
-// ValidationConfigProvider provides access to validation configuration.
-// Implementations can return nil to use default validation settings.
-type ValidationConfigProvider interface {
-	GetValidationConfig() ValidationConfig
-}
-
-// ValidationConfig interface for validation settings.
-type ValidationConfig interface {
-	IsEnabled() bool
+// ValidationEnabledProvider provides access to validation enabled setting.
+type ValidationEnabledProvider interface {
+	IsValidationEnabled() bool
 }
 
 type BaseConfig interface {
