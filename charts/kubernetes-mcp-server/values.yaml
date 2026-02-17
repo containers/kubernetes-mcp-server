@@ -230,15 +230,11 @@ metrics:
       # Cluster-level (for Telemeter):
       # - cluster:k8s_mcp_tool_calls:sum - Total tool calls across all tools
       # - cluster:k8s_mcp_tool_errors:sum - Total tool errors across all tools
-      # - cluster:k8s_mcp_tool_error_rate:ratio - Error rate (errors/calls)
       # - cluster:k8s_mcp_http_requests:sum - Total HTTP requests
-      # - cluster:k8s_mcp_http_requests_by_status:sum - HTTP requests by status class
-      # - cluster:k8s_mcp_server_info:count - Server instance count
       #
       # Namespace-level (for multi-tenant RBAC, grouped by namespace label):
       # - namespace:k8s_mcp_tool_calls:sum - Tool calls by namespace
       # - namespace:k8s_mcp_tool_errors:sum - Tool errors by namespace
-      # - namespace:k8s_mcp_tool_error_rate:ratio - Error rate by namespace
       # - namespace:k8s_mcp_http_requests:sum - HTTP requests by namespace
       enabled: true
     # -- Additional custom recording rules (appended to default rules if enabled)
