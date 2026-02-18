@@ -31,7 +31,7 @@ spec:
       securityContext:
         {{- tpl (toYaml (default .Values.defaultPodSecurityContext .Values.podSecurityContext)) . | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ include "kubernetes-mcp-server.name" . }}
           securityContext:
             {{- tpl (toYaml (default .Values.defaultSecurityContext .Values.securityContext)) . | nindent 12 }}
           image: "{{ template "kubernetes-mcp-server.image" .Values.image }}"
