@@ -2,14 +2,12 @@ package kubernetes
 
 import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
 	authv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 )
 
 // ValidatorProviders holds the providers needed to create validators.
 type ValidatorProviders struct {
-	RestMapper func() meta.RESTMapper
 	Discovery  func() discovery.DiscoveryInterface
 	AuthClient func() authv1client.AuthorizationV1Interface
 }
@@ -34,9 +32,6 @@ func CreateValidators(providers ValidatorProviders) []api.HTTPValidator {
 }
 
 func init() {
-	RegisterValidator(func(p ValidatorProviders) api.HTTPValidator {
-		return NewResourceValidator(p.RestMapper)
-	})
 	RegisterValidator(func(p ValidatorProviders) api.HTTPValidator {
 		return NewSchemaValidator(p.Discovery)
 	})

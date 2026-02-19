@@ -194,12 +194,17 @@ func (s *PodsSuite) TestPodsListForbidden() {
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
 	s.Run("pods_list (forbidden)", func() {
+		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("pods_list", map[string]interface{}{})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			msg := toolResult.Content[0].(mcp.TextContent).Text
-			s.Truef(strings.Contains(msg, "forbidden") || strings.Contains(msg, "PERMISSION_DENIED"),
-				"error message should indicate forbidden or permission denied, got: %s", msg)
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+				"error message should indicate forbidden")
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
+			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
 		})
 	})
 }

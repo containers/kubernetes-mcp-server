@@ -287,7 +287,8 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 		s.Error(err)
 		s.Nil(resp)
 		s.False(delegateCalled, "Expected delegate not to be called when RESTMapper fails")
-		s.Contains(err.Error(), "failed to make request")
+		s.Contains(err.Error(), "RESOURCE_NOT_FOUND")
+		s.Contains(err.Error(), "does not exist in the cluster")
 	})
 }
 

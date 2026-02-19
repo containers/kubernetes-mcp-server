@@ -64,4 +64,5 @@ type BaseConfig interface {
 	DeniedResourcesProvider
 	ExtendedConfigProvider
 	StsConfigProvider
+	ValidationEnabledProvider
 }

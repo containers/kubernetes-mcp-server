@@ -46,7 +46,6 @@ func NewAccessControlRoundTripper(cfg AccessControlRoundTripperConfig) *AccessCo
 
 	if cfg.ValidationEnabled {
 		rt.validators = CreateValidators(ValidatorProviders{
-			RestMapper: cfg.RestMapperProvider,
 			Discovery:  cfg.DiscoveryProvider,
 			AuthClient: cfg.AuthClientProvider,
 		})
@@ -67,12 +66,18 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	// was created before restMapper was set (fixes issue #688)
 	restMapper := rt.restMapperProvider()
 	if restMapper == nil {
-		return nil, fmt.Errorf("failed to make request: restMapper not initialized")
+		return nil, fmt.Errorf("failed to make request: AccessControlRoundTripper restMapper not initialized")
 	}
 
 	gvk, err := restMapper.KindFor(gvr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: failed to get kind for gvr %v: %w", gvr, err)
+		if meta.IsNoMatchError(err) {
+			return nil, &api.ValidationError{
+				Code:    api.ErrorCodeResourceNotFound,
+				Message: fmt.Sprintf("Resource %s does not exist in the cluster", api.FormatResourceName(&gvr)),
+			}
+		}
+		return nil, fmt.Errorf("failed to make request: AccessControlRoundTripper failed to get kind for gvr %v: %w", gvr, err)
 	}
 	if !rt.isAllowed(gvk) {
 		return nil, fmt.Errorf("resource not allowed: %s", gvk.String())

@@ -16,15 +16,15 @@ With validation enabled, you get clearer feedback:
 Resource apps/v1/Deploymnt does not exist in the cluster
 ```
 
-The validation layer catches three types of issues:
+The validation layer catches these types of issues:
 
-1. **Resource Validation** - Catches typos like "Deploymnt" instead of "Deployment"
+1. **Resource Existence** - Catches typos like "Deploymnt" instead of "Deployment" (checked in access control)
 2. **Schema Validation** - Catches invalid fields like "spec.replcias" instead of "spec.replicas"
 3. **RBAC Validation** - Pre-checks permissions before attempting operations
 
 ## Configuration
 
-Validation is **disabled by default**. All validators (resource, schema, RBAC) run together when enabled.
+Validation is **disabled by default**. Schema and RBAC validators run together when enabled. Resource existence is always checked as part of access control.
 
 ```toml
 # Enable all validation (default: false)
@@ -48,15 +48,14 @@ Validation happens at the HTTP RoundTripper level, intercepting all Kubernetes A
 ```
 MCP Tool Call → Kubernetes Client → HTTP RoundTripper → Kubernetes API
                                           ↓
-                                   Access Control (deny list)
+                                   Access Control
+                                   - Check deny list
+                                   - Check resource exists
                                           ↓
-                                   Resource Validator
-                                   "Does this GVK exist?"
-                                          ↓
-                                   Schema Validator
+                                   Schema Validator (if enabled)
                                    "Are the fields valid?"
                                           ↓
-                                   RBAC Validator
+                                   RBAC Validator (if enabled)
                                    "Does the user have permission?"
                                           ↓
                                    Forward to K8s API
@@ -66,9 +65,9 @@ This HTTP-layer approach ensures **all** Kubernetes API calls are validated, inc
 
 If any validator fails, the request is rejected with a clear error message before reaching the Kubernetes API.
 
-### 1. Resource Validation
+### 1. Resource Existence (Access Control)
 
-Validates that the requested resource type (Group/Version/Kind) exists in the cluster.
+The access control layer validates that the requested resource type exists in the cluster. This check runs regardless of whether validation is enabled.
 
 **What it catches:**
 - Typos in Kind names: "Deploymnt" → should be "Deployment"
@@ -77,7 +76,7 @@ Validates that the requested resource type (Group/Version/Kind) exists in the cl
 
 **Example error:**
 ```
-RESOURCE_NOT_FOUND: Resource apps/v1/Deploymnt does not exist in the cluster
+RESOURCE_NOT_FOUND: Resource deployments.apps does not exist in the cluster
 ```
 
 ### 2. Schema Validation
@@ -118,5 +117,4 @@ PERMISSION_DENIED: Cannot create deployments.apps in namespace "production"
 |------|-------------|
 | `RESOURCE_NOT_FOUND` | The requested resource type doesn't exist in the cluster |
 | `INVALID_FIELD` | A field in the manifest doesn't exist or has the wrong type |
-| `INVALID_MANIFEST` | The manifest is malformed (invalid YAML/JSON) |
 | `PERMISSION_DENIED` | RBAC denies the requested operation |

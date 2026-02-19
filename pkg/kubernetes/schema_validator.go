@@ -39,8 +39,8 @@ func (v *SchemaValidator) Validate(ctx context.Context, req *api.HTTPValidationR
 		return nil
 	}
 
-	// Only validate for create/update operations
-	if req.Verb != "create" && req.Verb != "update" && req.Verb != "patch" {
+	// Only validate for create/update operations (exclude patch as partial bodies cause false positives)
+	if req.Verb != "create" && req.Verb != "update" {
 		return nil
 	}
 
