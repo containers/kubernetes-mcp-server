@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
+	"github.com/containers/kubernetes-mcp-server/pkg/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/otel"
@@ -208,6 +210,31 @@ func getMcpReqUserAgent(req mcp.Request) string {
 		return ""
 	}
 	return fmt.Sprintf("%s/%s", initParams.ClientInfo.Name, initParams.ClientInfo.Version)
+}
+
+// metricsMiddleware returns a metrics middleware with access to the server's metrics system
+func metricsMiddleware(metrics *metrics.Metrics) func(mcp.MethodHandler) mcp.MethodHandler {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			start := time.Now()
+			result, err := next(ctx, method, req)
+			duration := time.Since(start)
+
+			toolName := method
+			if method == "tools/call" {
+				if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+					if toolReq, _ := GoSdkToolCallParamsToToolCallRequest(params); toolReq != nil {
+						toolName = toolReq.Name
+					}
+				}
+			}
+
+			// Record to all collectors
+			metrics.RecordToolCall(ctx, toolName, duration, err)
+
+			return result, err
+		}
+	}
 }
 
 // metaCarrier adapts an MCP Meta map to the OpenTelemetry TextMapCarrier interface
