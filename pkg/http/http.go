@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +20,21 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 )
+
+// tlsErrorFilterWriter filters out noisy TLS handshake errors from health checks
+type tlsErrorFilterWriter struct {
+	underlying io.Writer
+}
+
+func (w *tlsErrorFilterWriter) Write(p []byte) (n int, err error) {
+	msg := string(p)
+	// Filter out TLS handshake EOF errors - these are typically from
+	// load balancer health checks that just do TCP connects
+	if strings.Contains(msg, "TLS handshake error") && strings.Contains(msg, "EOF") {
+		return len(p), nil // Silently discard
+	}
+	return w.underlying.Write(p)
+}
 
 const (
 	healthEndpoint     = "/healthz"
@@ -87,9 +105,14 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	// Wrap with metrics middleware
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
 
+	// Use a custom error logger to filter out noisy TLS handshake errors
+	// from load balancer health checks
+	errorLog := log.New(&tlsErrorFilterWriter{underlying: os.Stderr}, "", 0)
+
 	httpServer := &http.Server{
-		Addr:    ":" + staticConfig.Port,
-		Handler: instrumentedHandler,
+		Addr:     ":" + staticConfig.Port,
+		Handler:  instrumentedHandler,
+		ErrorLog: errorLog,
 	}
 
 	sseServer := mcpServer.ServeSse()
@@ -112,8 +135,15 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 
 	serverErr := make(chan error, 1)
 	go func() {
-		klog.V(0).Infof("HTTP server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats, /metrics)", staticConfig.Port)
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		var err error
+		if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
+			klog.V(0).Infof("HTTPS server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats, /metrics)", staticConfig.Port)
+			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert, staticConfig.TLSKey)
+		} else {
+			klog.V(0).Infof("HTTP server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats, /metrics)", staticConfig.Port)
+			err = httpServer.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
 	}()

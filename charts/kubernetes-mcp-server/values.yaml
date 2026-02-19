@@ -118,8 +118,11 @@ service:
   type: ClusterIP
   # -- This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 8080
-  # -- Target port for the service. Useful when deploying with an proxy sidecar. Set this to the sidecar's port to route traffic through the proxy before reaching the main container.
+  # -- This sets the target port on the pod. Defaults to "http" (the container port name).
+  # -- Use this to remap the service port to a different container port.
   targetPort: http
+  # -- Annotations to add to the service
+  annotations: {}
 
 # -- This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -165,6 +168,12 @@ extraVolumeMounts: []
 # - name: foo
 #   mountPath: "/etc/foo"
 #   readOnly: true
+
+# -- Extra arguments to pass to the kubernetes-mcp-server command line.
+# -- Useful for passing TLS keys or other configuration options.
+extraArgs: []
+# - "--tls-cert=/etc/tls/tls.crt"
+# - "--tls-key=/etc/tls/tls.key"
 
 # -- Additional containers to add to the pod (sidecars).
 # -- Each container is defined as a complete container spec.
