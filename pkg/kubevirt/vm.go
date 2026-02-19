@@ -111,6 +111,39 @@ func StopVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, nam
 	return updatedVM, true, nil
 }
 
+// CloneVM creates a VirtualMachineClone CR to clone a source VM to a target VM
+func CloneVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, sourceName, targetName string) (*unstructured.Unstructured, error) {
+	clone := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "clone.kubevirt.io/v1beta1",
+			"kind":       "VirtualMachineClone",
+			"metadata": map[string]any{
+				"namespace":    namespace,
+				"generateName": sourceName + "-clone-",
+			},
+			"spec": map[string]any{
+				"source": map[string]any{
+					"apiGroup": "kubevirt.io",
+					"kind":     "VirtualMachine",
+					"name":     sourceName,
+				},
+				"target": map[string]any{
+					"apiGroup": "kubevirt.io",
+					"kind":     "VirtualMachine",
+					"name":     targetName,
+				},
+			},
+		},
+	}
+
+	result, err := dynamicClient.Resource(VirtualMachineCloneGVR).Namespace(namespace).Create(ctx, clone, metav1.CreateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create VirtualMachineClone: %w", err)
+	}
+
+	return result, nil
+}
+
 // RestartVM restarts a VirtualMachine by temporarily setting runStrategy to Halted then back to Always
 func RestartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (*unstructured.Unstructured, error) {
 	// Get the current VirtualMachine
