@@ -55,6 +55,14 @@ spec:
             apiGroup: kubevirt.io
             kind: VirtualMachine
             name: restore-test-vm
+    - k8s.wait:
+        apiVersion: snapshot.kubevirt.io/v1beta1
+        kind: VirtualMachineSnapshot
+        metadata:
+          name: restore-snapshot
+          namespace: vm-test
+        condition: Ready
+        timeout: 30s
   verify:
     - script:
         inline: |-
