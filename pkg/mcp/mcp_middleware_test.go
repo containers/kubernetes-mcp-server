@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"regexp"
@@ -22,7 +21,7 @@ import (
 type McpLoggingSuite struct {
 	BaseMcpSuite
 	klogState klog.State
-	logBuffer bytes.Buffer
+	logBuffer test.SyncBuffer
 }
 
 func (s *McpLoggingSuite) SetupTest() {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -61,6 +62,7 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
+	mu             sync.RWMutex
 	configuration  *Configuration
 	server         *mcp.Server
 	enabledTools   []string
@@ -134,9 +136,15 @@ func (s *Server) reloadToolsets() error {
 	applicableTools := s.collectApplicableTools(targets)
 	applicablePrompts := s.collectApplicablePrompts()
 
-	// Reload tools, and track the newly enabled tools so that we can diff on reload to figure out which to remove (if any)
-	s.enabledTools, err = reloadItems(
-		s.enabledTools,
+	// Read the previous state with read lock - don't hold lock while calling external code
+	s.mu.RLock()
+	previousTools := s.enabledTools
+	previousPrompts := s.enabledPrompts
+	s.mu.RUnlock()
+
+	// Reload tools (calls s.server.AddTool/RemoveTools - external code, no lock held)
+	newTools, err := reloadItems(
+		previousTools,
 		applicableTools,
 		func(t api.ServerTool) string { return t.Tool.Name },
 		s.server.RemoveTools,
@@ -146,9 +154,9 @@ func (s *Server) reloadToolsets() error {
 		return err
 	}
 
-	// Reload prompts, and track the newly enabled prompts so that we can diff on reload to figure out which to remove (if any)
-	s.enabledPrompts, err = reloadItems(
-		s.enabledPrompts,
+	// Reload prompts (calls s.server.AddPrompt/RemovePrompts - external code, no lock held)
+	newPrompts, err := reloadItems(
+		previousPrompts,
 		applicablePrompts,
 		func(p api.ServerPrompt) string { return p.Prompt.Name },
 		s.server.RemovePrompts,
@@ -157,6 +165,12 @@ func (s *Server) reloadToolsets() error {
 	if err != nil {
 		return err
 	}
+
+	// Only hold write lock for the final assignment
+	s.mu.Lock()
+	s.enabledTools = newTools
+	s.enabledPrompts = newPrompts
+	s.mu.Unlock()
 
 	// Start new watch
 	s.p.WatchTargets(s.reloadToolsets)
@@ -315,11 +329,15 @@ func (s *Server) GetTargetParameterName() string {
 }
 
 func (s *Server) GetEnabledTools() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.enabledTools
 }
 
 // GetEnabledPrompts returns the names of the currently enabled prompts
 func (s *Server) GetEnabledPrompts() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.enabledPrompts
 }
 

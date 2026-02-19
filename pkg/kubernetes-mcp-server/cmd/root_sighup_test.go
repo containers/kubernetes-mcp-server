@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,7 +27,9 @@ type SIGHUPSuite struct {
 	server          *mcp.Server
 	tempDir         string
 	dropInConfigDir string
-	logBuffer       *bytes.Buffer
+	logBuffer       *test.SyncBuffer
+	klogState       klog.State
+	stopSIGHUP      func()
 }
 
 func (s *SIGHUPSuite) SetupTest() {
@@ -38,19 +39,27 @@ func (s *SIGHUPSuite) SetupTest() {
 	s.dropInConfigDir = filepath.Join(s.tempDir, "conf.d")
 	s.Require().NoError(os.Mkdir(s.dropInConfigDir, 0755))
 
+	// Capture klog state so we can restore it after the test
+	s.klogState = klog.CaptureState()
+
 	// Set up klog to write to our buffer so we can verify log messages
-	s.logBuffer = &bytes.Buffer{}
+	s.logBuffer = &test.SyncBuffer{}
 	logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(2), textlogger.Output(s.logBuffer)))
 	klog.SetLoggerWithOptions(logger)
 }
 
 func (s *SIGHUPSuite) TearDownTest() {
+	// Stop the SIGHUP handler goroutine before restoring klog
+	if s.stopSIGHUP != nil {
+		s.stopSIGHUP()
+	}
 	if s.server != nil {
 		s.server.Close()
 	}
 	if s.mockServer != nil {
 		s.mockServer.Close()
 	}
+	s.klogState.Restore()
 }
 
 func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
@@ -69,7 +78,7 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
 		ConfigPath: configPath,
 		ConfigDir:  configDir,
 	}
-	opts.setupSIGHUPHandler(s.server)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server)
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {

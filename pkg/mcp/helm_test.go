@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"flag"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
@@ -27,7 +27,7 @@ import (
 type HelmSuite struct {
 	BaseMcpSuite
 	klogState klog.State
-	logBuffer bytes.Buffer
+	logBuffer test.SyncBuffer
 }
 
 func (s *HelmSuite) SetupTest() {

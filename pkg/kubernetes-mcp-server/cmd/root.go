@@ -380,7 +380,7 @@ func (m *MCPServerOptions) Run() error {
 
 	// Set up SIGHUP handler for configuration reload
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		m.setupSIGHUPHandler(mcpServer)
+		_ = m.setupSIGHUPHandler(mcpServer)
 	}
 
 	if m.StaticConfig.Port != "" {
@@ -397,12 +397,15 @@ func (m *MCPServerOptions) Run() error {
 }
 
 // setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP.
-// This is a blocking call that runs in a separate goroutine.
-func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) {
+// Returns a stop function that should be called to clean up the handler.
+// The stop function waits for the handler goroutine to finish.
+func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) (stop func()) {
 	sigHupCh := make(chan os.Signal, 1)
+	done := make(chan struct{})
 	signal.Notify(sigHupCh, syscall.SIGHUP)
 
 	go func() {
+		defer close(done)
 		for range sigHupCh {
 			klog.V(1).Info("Received SIGHUP signal, reloading configuration...")
 
@@ -424,4 +427,10 @@ func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) {
 	}()
 
 	klog.V(2).Info("SIGHUP handler registered for configuration reload")
+
+	return func() {
+		signal.Stop(sigHupCh)
+		close(sigHupCh)
+		<-done // Wait for goroutine to finish
+	}
 }

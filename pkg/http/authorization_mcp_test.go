@@ -1,7 +1,6 @@
 package http
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"net/http"
@@ -25,7 +24,7 @@ type AuthorizationSuite struct {
 	BaseHttpSuite
 	mcpClient *client.Client
 	klogState klog.State
-	logBuffer bytes.Buffer
+	logBuffer test.SyncBuffer
 }
 
 func (s *AuthorizationSuite) SetupTest() {
