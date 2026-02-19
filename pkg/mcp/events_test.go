@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,7 +27,7 @@ func (s *EventsSuite) TestEventsList() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Run("returns no events message", func() {
-			s.Equal("# No events found", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Equal("# No events found", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
 	s.Run("events_list (with events)", func() {
@@ -55,10 +55,10 @@ func (s *EventsSuite) TestEventsList() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			s.Run("has yaml comment indicating output format", func() {
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# The following events (YAML format) were found:\n"), "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# The following events (YAML format) were found:\n"), "unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 			var decoded []v1.Event
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 			s.Run("has yaml content", func() {
 				s.Nilf(err, "unmarshal failed %v", err)
 			})
@@ -82,8 +82,8 @@ func (s *EventsSuite) TestEventsList() {
 					"  Reason: \"\"\n"+
 					"  Timestamp: 0001-01-01 00:00:00 +0000 UTC\n"+
 					"  Type: Normal\n",
-					toolResult.Content[0].(mcp.TextContent).Text,
-					"unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+					toolResult.Content[0].(*mcp.TextContent).Text,
+					"unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 
 			})
 		})
@@ -96,10 +96,10 @@ func (s *EventsSuite) TestEventsList() {
 				s.Falsef(toolResult.IsError, "call tool failed")
 			})
 			s.Run("has yaml comment indicating output format", func() {
-				s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# The following events (YAML format) were found:\n"), "unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+				s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, "# The following events (YAML format) were found:\n"), "unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 			var decoded []v1.Event
-			err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decoded)
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
 			s.Run("has yaml content", func() {
 				s.Nilf(err, "unmarshal failed %v", err)
 			})
@@ -114,8 +114,8 @@ func (s *EventsSuite) TestEventsList() {
 					"  Reason: \"\"\n"+
 					"  Timestamp: 0001-01-01 00:00:00 +0000 UTC\n"+
 					"  Type: Normal\n",
-					toolResult.Content[0].(mcp.TextContent).Text,
-					"unexpected result %v", toolResult.Content[0].(mcp.TextContent).Text)
+					toolResult.Content[0].(*mcp.TextContent).Text,
+					"unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 		})
 	})
@@ -134,7 +134,7 @@ func (s *EventsSuite) TestEventsListDenied() {
 			s.Nilf(err, "call tool should not return error object")
 		})
 		s.Run("describes denial", func() {
-			msg := toolResult.Content[0].(mcp.TextContent).Text
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
 			s.Contains(msg, "resource not allowed:")
 			expectedMessage := "failed to list events in all namespaces:(.+:)? resource not allowed: /v1, Kind=Event"
 			s.Regexpf(expectedMessage, msg,
@@ -155,7 +155,7 @@ func (s *EventsSuite) TestEventsListForbidden() {
 		toolResult, _ := s.CallTool("events_list", map[string]interface{}{})
 		s.Run("returns error", func() {
 			s.Truef(toolResult.IsError, "call tool should fail")
-			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "forbidden",
 				"error message should indicate forbidden")
 		})
 		s.Run("sends log notification", func() {

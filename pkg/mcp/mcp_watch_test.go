@@ -8,7 +8,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -112,7 +111,7 @@ func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
 	s.InitMcpClient()
 
 	s.Run("OpenShift tool is available", func() {
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Require().NoError(err, "call ListTools failed")
 		s.Require().NotNil(tools, "list tools failed")
 		var found bool
@@ -134,7 +133,7 @@ func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
 		capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
 		time.Sleep(serverSettleDelay)
 
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Require().NoError(err, "call ListTools failed")
 		s.Require().NotNil(tools, "list tools failed")
 		for _, tool := range tools.Tools {
@@ -206,7 +205,7 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 	s.InitMcpClient()
 
 	s.Run("OpenShift tool is not available initially", func() {
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Require().NoError(err, "call ListTools failed")
 		s.Require().NotNil(tools, "list tools failed")
 		for _, tool := range tools.Tools {
@@ -224,7 +223,7 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 		capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
 		time.Sleep(serverSettleDelay)
 
-		tools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+		tools, err := s.ListTools()
 		s.Require().NoError(err, "call ListTools failed")
 		s.Require().NotNil(tools, "list tools failed")
 
