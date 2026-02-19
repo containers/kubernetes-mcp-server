@@ -79,6 +79,16 @@ var (
 	}
 )
 
+// Clone resources
+var (
+	// VirtualMachineCloneGVR is the GroupVersionResource for VirtualMachineClone resources
+	VirtualMachineCloneGVR = schema.GroupVersionResource{
+		Group:    "clone.kubevirt.io",
+		Version:  "v1beta1",
+		Resource: "virtualmachineclones",
+	}
+)
+
 // Kubernetes core resources
 var (
 	// PersistentVolumeClaimGVR is the GroupVersionResource for PersistentVolumeClaim resources

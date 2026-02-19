@@ -22,6 +22,7 @@ import (
 
 var kubevirtApis = []schema.GroupVersionResource{
 	{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"},
+	{Group: "clone.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclones"},
 	{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "datasources"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterinstancetypes"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineinstancetypes"},
@@ -666,6 +667,75 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 			})
 		}
 	})
+}
+
+func (s *KubevirtSuite) TestVMClone() {
+	s.Run("vm_clone missing required params", func() {
+		testCases := []string{"namespace", "name", "targetName"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"namespace":  "default",
+					"name":       "source-vm",
+					"targetName": "target-vm",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_clone", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Equal(toolResult.Content[0].(mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_clone creates VirtualMachineClone CR", func() {
+		// Create a source VM first
+		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		vm := &unstructured.Unstructured{}
+		vm.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachine",
+			"metadata": map[string]interface{}{
+				"name":      "clone-source-vm",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"runStrategy": "Halted",
+			},
+		})
+		_, err := dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachines",
+		}).Namespace("default").Create(s.T().Context(), vm, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create source VM")
+
+		toolResult, err := s.CallTool("vm_clone", map[string]interface{}{
+			"namespace":  "default",
+			"name":       "clone-source-vm",
+			"targetName": "clone-target-vm",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+		})
+		var decodedResult []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(mcp.TextContent).Text), &decodedResult)
+		s.Run("returns yaml content with correct source and target", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Truef(strings.HasPrefix(toolResult.Content[0].(mcp.TextContent).Text, "# VirtualMachineClone created successfully"),
+				"Expected success message, got %v", toolResult.Content[0].(mcp.TextContent).Text)
+			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
+			clone := &decodedResult[0]
+			s.Equal("default", clone.GetNamespace(), "invalid resource namespace")
+			s.NotEmptyf(clone.GetUID(), "invalid uid, got %v", clone.GetUID())
+			s.Equal("VirtualMachine", test.FieldString(clone, "spec.source.kind"), "invalid source kind")
+			s.Equal("clone-source-vm", test.FieldString(clone, "spec.source.name"), "invalid source name")
+			s.Equal("VirtualMachine", test.FieldString(clone, "spec.target.kind"), "invalid target kind")
+			s.Equal("clone-target-vm", test.FieldString(clone, "spec.target.name"), "invalid target name")
+		})
+	})
+
 }
 
 func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
