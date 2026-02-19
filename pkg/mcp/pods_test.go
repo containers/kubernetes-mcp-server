@@ -157,6 +157,7 @@ func (s *PodsSuite) TestPodsListDenied() {
 	`), s.Cfg), "Expected to parse denied resources config")
 	s.InitMcpClient()
 	s.Run("pods_list (denied)", func() {
+		capture := s.StartCapturingLogNotifications()
 		podsList, err := s.CallTool("pods_list", map[string]interface{}{})
 		s.Run("has error", func() {
 			s.Truef(podsList.IsError, "call tool should fail")
@@ -169,8 +170,12 @@ func (s *PodsSuite) TestPodsListDenied() {
 			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
+		s.Run("does not send log notification for non-K8s error", func() {
+			capture.RequireNoLogNotification(s.T(), 500*time.Millisecond)
+		})
 	})
 	s.Run("pods_list_in_namespace (denied)", func() {
+		capture := s.StartCapturingLogNotifications()
 		podsListInNamespace, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{"namespace": "ns-1"})
 		s.Run("has error", func() {
 			s.Truef(podsListInNamespace.IsError, "call tool should fail")
@@ -182,6 +187,9 @@ func (s *PodsSuite) TestPodsListDenied() {
 			expectedMessage := "failed to list pods in namespace ns-1:(.+:)? resource not allowed: /v1, Kind=Pod"
 			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
+		})
+		s.Run("does not send log notification for non-K8s error", func() {
+			capture.RequireNoLogNotification(s.T(), 500*time.Millisecond)
 		})
 	})
 }

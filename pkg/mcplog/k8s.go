@@ -2,6 +2,7 @@ package mcplog
 
 import (
 	"context"
+	"errors"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -36,6 +37,9 @@ func HandleK8sError(ctx context.Context, err error, operation string) {
 	} else if apierrors.IsTooManyRequests(err) {
 		SendMCPLog(ctx, LevelWarning, "Rate limited - too many requests to the cluster")
 	} else {
-		SendMCPLog(ctx, LevelError, "Operation failed - cluster may be unreachable or experiencing issues")
+		var apiStatus apierrors.APIStatus
+		if errors.As(err, &apiStatus) {
+			SendMCPLog(ctx, LevelError, "Operation failed - cluster may be unreachable or experiencing issues")
+		}
 	}
 }

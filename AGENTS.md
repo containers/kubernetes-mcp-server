@@ -304,6 +304,7 @@ The `docs/` directory contains user-facing documentation:
 - `docs/README.md` – Documentation index and navigation
 - `docs/configuration.md` – **Complete TOML configuration reference** (all `StaticConfig` options, drop-in configuration, dynamic reload)
 - `docs/prompts.md` – MCP Prompts configuration guide
+- `docs/logging.md` – MCP Logging guide (automatic K8s error logging, secret redaction)
 - `docs/OTEL.md` – OpenTelemetry observability setup
 - `docs/KIALI.md` – Kiali toolset configuration
 - `docs/GETTING_STARTED_KUBERNETES.md` – Kubernetes ServiceAccount setup

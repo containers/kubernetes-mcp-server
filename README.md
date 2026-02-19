@@ -232,70 +232,10 @@ See the **[Configuration Reference](docs/configuration.md)**.
 ## 📊 MCP Logging <a id="mcp-logging"></a>
 
 The server supports the MCP logging capability, allowing clients to receive debugging information via structured log messages.
+Kubernetes API errors are automatically categorized and logged to clients with appropriate severity levels.
+Sensitive data (tokens, keys, passwords, cloud credentials) is automatically redacted before being sent to clients.
 
-### For Clients
-
-Clients can control log verbosity by sending a `logging/setLevel` request:
-
-```json
-{
-  "method": "logging/setLevel",
-  "params": { "level": "info" }
-}
-```
-
-**Available log levels** (in order of increasing severity):
-- `debug` - Detailed debugging information
-- `info` - General informational messages (default)
-- `notice` - Normal but significant events
-- `warning` - Warning messages
-- `error` - Error conditions
-- `critical` - Critical conditions
-- `alert` - Action must be taken immediately
-- `emergency` - System is unusable
-
-### For Developers
-
-Toolsets can optionally send debug information to clients using helper functions from the `mcplog` package:
-
-**Recommended approach for Kubernetes errors** (automatically categorizes errors and sends appropriate messages):
-
-```go
-import "github.com/containers/kubernetes-mcp-server/pkg/mcplog"
-
-// In your tool handler:
-ret, err := client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-if err != nil {
-    mcplog.HandleK8sError(ctx, err, "pod access")
-    return api.NewToolCallResult("", fmt.Errorf("failed to get pod: %v", err)), nil
-}
-```
-
-**Manual logging** (for custom messages):
-
-```go
-import "github.com/containers/kubernetes-mcp-server/pkg/mcplog"
-
-// In your tool handler:
-if err != nil {
-    mcplog.SendMCPLog(ctx, "error", "Operation failed - check permissions")
-    return api.NewToolCallResult("", err)
-}
-```
-
-**Key Points:**
-- Logging is **optional** - toolsets work fine without sending MCP logs
-- Uses a dedicated named logger (`logger="mcp"`) for complete separation from server logs
-- Server logs (klog) remain detailed and unaffected
-- Client logs are high-level, helpful hints for debugging
-- Authentication failures send generic messages to clients (no security info leaked)
-- Sensitive data is automatically redacted with 28 pattern types:
-  - Generic fields (password, token, secret, api_key, etc.)
-  - Authorization headers (Bearer, Basic)
-  - Cloud credentials (AWS, GCP, Azure)
-  - API tokens (GitHub, GitLab, OpenAI, Anthropic)
-  - Cryptographic keys (JWT, SSH, PGP, RSA)
-  - Database connection strings (PostgreSQL, MySQL, MongoDB)
+See the **[MCP Logging Guide](docs/logging.md)**.
 
 ## 🛠️ Tools and Functionalities <a id="tools-and-functionalities"></a>
 

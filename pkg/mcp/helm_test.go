@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -95,6 +96,7 @@ func (s *HelmSuite) TestHelmInstallDenied() {
 	`), s.Cfg), "Expected to parse denied resources config")
 	s.InitMcpClient()
 	s.Run("helm_install(chart=helm-chart-secret, denied)", func() {
+		capture := s.StartCapturingLogNotifications()
 		_, file, _, _ := runtime.Caller(0)
 		chartPath := filepath.Join(filepath.Dir(file), "testdata", "helm-chart-secret")
 		toolResult, err := s.CallTool("helm_install", map[string]interface{}{
@@ -110,6 +112,9 @@ func (s *HelmSuite) TestHelmInstallDenied() {
 			s.Truef(strings.HasPrefix(msg, "failed to install helm chart"), "expected descriptive error, got %v", msg)
 			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
 			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, msg)
+		})
+		s.Run("does not send log notification for non-K8s error", func() {
+			capture.RequireNoLogNotification(s.T(), 500*time.Millisecond)
 		})
 	})
 }
@@ -324,6 +329,28 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 			expectedMessage := "uninstall: Failed to delete release:(.+:)? resource not allowed: /v1, Kind=ConfigMap"
 			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
+		})
+	})
+}
+
+func (s *HelmSuite) TestHelmListForbidden() {
+	s.InitMcpClient()
+	defer restoreAuth(s.T().Context())
+	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+
+	s.Run("helm_list (forbidden)", func() {
+		capture := s.StartCapturingLogNotifications()
+		toolResult, _ := s.CallTool("helm_list", map[string]interface{}{})
+		s.Run("returns error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Contains(toolResult.Content[0].(mcp.TextContent).Text, "forbidden",
+				"error message should indicate forbidden")
+		})
+		s.Run("sends log notification", func() {
+			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
+			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
 		})
 	})
 }

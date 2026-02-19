@@ -26,6 +26,7 @@ Choose the guide that matches your needs:
 
 ## Advanced Topics
 
+- **[MCP Logging](logging.md)** - Structured logging to MCP clients with automatic K8s error categorization and secret redaction
 - **[OpenTelemetry Observability](OTEL.md)** - Distributed tracing and metrics configuration
 - **[MCP Prompts](prompts.md)** - Custom workflow templates for AI assistants
 - **[Keycloak OIDC Setup](KEYCLOAK_OIDC_SETUP.md)** - Developer guide for local Keycloak environment and testing with MCP Inspector

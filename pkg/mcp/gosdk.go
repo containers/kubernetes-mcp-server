@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/utils/ptr"
@@ -54,6 +55,9 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		})
 		if err != nil {
 			return nil, err
+		}
+		if result.Error != nil {
+			mcplog.HandleK8sError(ctx, result.Error, tool.Tool.Name)
 		}
 		return NewStructuredResult(result.Content, result.StructuredContent, result.Error), nil
 	}

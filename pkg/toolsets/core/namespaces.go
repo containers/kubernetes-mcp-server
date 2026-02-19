@@ -9,7 +9,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 )
 
 func initNamespaces(o api.Openshift) []api.ServerTool {
@@ -52,7 +51,6 @@ func initNamespaces(o api.Openshift) []api.ServerTool {
 func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	ret, err := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{AsTable: params.ListOutput.AsTable()})
 	if err != nil {
-		mcplog.HandleK8sError(params.Context, err, "namespace listing")
 		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
 	}
 	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
@@ -61,7 +59,6 @@ func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	ret, err := kubernetes.NewCore(params).ProjectsList(params, api.ListOptions{AsTable: params.ListOutput.AsTable()})
 	if err != nil {
-		mcplog.HandleK8sError(params.Context, err, "project listing")
 		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
 	}
 	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil

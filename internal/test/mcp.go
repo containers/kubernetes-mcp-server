@@ -243,3 +243,30 @@ func (c *NotificationCapture) RequireLogNotification(t *testing.T, timeout time.
 	require.NotNil(t, logNotification, "failed to parse log notification")
 	return logNotification
 }
+
+// RequireNoLogNotification asserts that no logging notification is received within the given timeout.
+// Use this to verify that non-Kubernetes errors do not produce MCP log notifications.
+func (c *NotificationCapture) RequireNoLogNotification(t *testing.T, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for {
+		c.mu.RLock()
+		for _, n := range c.notifications {
+			if n.Method == "notifications/message" {
+				c.mu.RUnlock()
+				require.Fail(t, "unexpected log notification received", "notification: %v", n)
+				return
+			}
+		}
+		c.mu.RUnlock()
+
+		select {
+		case <-c.signal:
+			// New notification arrived, check it
+		case <-ctx.Done():
+			// Timeout with no log notification — success
+			return
+		}
+	}
+}

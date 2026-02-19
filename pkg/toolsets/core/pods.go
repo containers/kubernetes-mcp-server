@@ -11,7 +11,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -274,7 +273,6 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 	}
 	ret, err := kubernetes.NewCore(params).PodsListInAllNamespaces(params, resourceListOptions)
 	if err != nil {
-		mcplog.HandleK8sError(params.Context, err, "pod listing")
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
 	}
 	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
@@ -298,7 +296,6 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	}
 	ret, err := kubernetes.NewCore(params).PodsListInNamespace(params, ns.(string), resourceListOptions)
 	if err != nil {
-		mcplog.HandleK8sError(params.Context, err, "pod listing")
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
 	}
 	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
@@ -315,7 +312,6 @@ func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	ret, err := kubernetes.NewCore(params).PodsGet(params, ns.(string), name.(string))
 	if err != nil {
-		mcplog.HandleK8sError(params.Context, err, "pod access")
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s in namespace %s: %w", name, ns, err)), nil
 	}
 	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
@@ -332,7 +328,6 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	ret, err := kubernetes.NewCore(params).PodsDelete(params, ns.(string), name.(string))
 	if err != nil {
-		mcplog.HandleK8sError(params.Context, err, "pod deletion")
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete pod %s in namespace %s: %w", name, ns, err)), nil
 	}
 	return api.NewToolCallResult(ret, err), nil
