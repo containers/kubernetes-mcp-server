@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	authv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
@@ -50,21 +51,25 @@ type Kubernetes struct {
 
 var _ api.KubernetesClient = (*Kubernetes)(nil)
 
-func NewKubernetes(config api.BaseConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*Kubernetes, error) {
+func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*Kubernetes, error) {
 	k := &Kubernetes{
-		config:          config,
+		config:          baseConfig,
 		clientCmdConfig: clientCmdConfig,
 		restConfig:      rest.CopyConfig(restConfig),
 	}
 	if k.restConfig.UserAgent == "" {
 		k.restConfig.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
+
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
-		return &AccessControlRoundTripper{
-			delegate:                original,
-			deniedResourcesProvider: config,
-			restMapperProvider:      func() meta.RESTMapper { return k.restMapper },
-		}
+		return NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
+			Delegate:                original,
+			DeniedResourcesProvider: baseConfig,
+			RestMapperProvider:      func() meta.RESTMapper { return k.restMapper },
+			DiscoveryProvider:       func() discovery.DiscoveryInterface { return k.discoveryClient },
+			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
+			ValidationEnabled:       baseConfig.IsValidationEnabled(),
+		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return &UserAgentRoundTripper{delegate: original}

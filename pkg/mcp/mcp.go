@@ -112,6 +112,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
 	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
+
 	err = s.reloadToolsets()
 	if err != nil {
 		return nil, err

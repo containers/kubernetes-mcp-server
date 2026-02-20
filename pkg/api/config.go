@@ -53,10 +53,16 @@ type StsConfigProvider interface {
 	GetStsScopes() []string
 }
 
+// ValidationEnabledProvider provides access to validation enabled setting.
+type ValidationEnabledProvider interface {
+	IsValidationEnabled() bool
+}
+
 type BaseConfig interface {
 	AuthProvider
 	ClusterProvider
 	DeniedResourcesProvider
 	ExtendedConfigProvider
 	StsConfigProvider
+	ValidationEnabledProvider
 }
