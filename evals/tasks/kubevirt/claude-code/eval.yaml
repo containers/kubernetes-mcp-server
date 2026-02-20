@@ -5,6 +5,9 @@ config:
   agent:
     type: "builtin.claude-code"
   mcpConfigFile: ../../../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.3
   taskSets:
     - glob: ../*/task.yaml
       assertions:

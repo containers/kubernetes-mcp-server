@@ -1,46 +1,56 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
     requires: kubevirt
   name: "create-vm-with-size"
   difficulty: easy
-steps:
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
   setup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete namespace "$NS" --ignore-not-found
-      kubectl create namespace "$NS"
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
   verify:
-    inline: |-
-      #!/usr/bin/env bash
-      source ../helpers/verify-vm.sh
-      NS="${EVAL_NAMESPACE:-vm-test}"
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="vm-test"
 
-      # Wait for VirtualMachine to be created
-      verify_vm_exists "test-vm-size" "$NS" || exit 1
+          verify_vm_exists "test-vm-size" "$NS" || exit 1
+          verify_has_resources_or_instancetype "test-vm-size" "$NS" || exit 1
+          verify_instancetype_contains "test-vm-size" "$NS" "large" "requested size 'large'"
+          verify_run_strategy "test-vm-size" "$NS" || exit 1
+          verify_no_deprecated_running_field "test-vm-size" "$NS" || exit 1
+          verify_container_disk "test-vm-size" "$NS" "fedora"
 
-      # Verify that it has an instancetype or direct resources
-      verify_has_resources_or_instancetype "test-vm-size" "$NS" || exit 1
-
-      # Check if instancetype contains 'large' (matching the requested size)
-      verify_instancetype_contains "test-vm-size" "$NS" "large" "requested size 'large'"
-
-      # Verify runStrategy is set and deprecated 'running' field is not used
-      verify_run_strategy "test-vm-size" "$NS" || exit 1
-      verify_no_deprecated_running_field "test-vm-size" "$NS" || exit 1
-
-      # Verify container disk is Fedora (default workload)
-      verify_container_disk "test-vm-size" "$NS" "fedora"
-
-      echo "All validations passed"
-      exit 0
+          echo "All validations passed"
+          exit 0
   cleanup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete virtualmachine test-vm-size -n "$NS" --ignore-not-found
-      kubectl delete namespace "$NS" --ignore-not-found
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm-size
+          namespace: vm-test
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
   prompt:
-    inline: Create a Fedora virtual machine named test-vm-size in the ${EVAL_NAMESPACE:-vm-test} namespace with size 'large'
+    inline: Create a Fedora virtual machine named test-vm-size in the vm-test namespace with size 'large'
