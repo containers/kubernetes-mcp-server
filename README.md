@@ -461,6 +461,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kubevirt</summary>
 
+- **vm_clone** - Clone a KubeVirt VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API
+  - `name` (`string`) **(required)** - The name of the source virtual machine to clone
+  - `namespace` (`string`) **(required)** - The namespace of the source virtual machine
+  - `targetName` (`string`) **(required)** - The name for the new cloned virtual machine
+
 - **vm_create** - Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.
   - `autostart` (`boolean`) - Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.
   - `instancetype` (`string`) - Optional instance type name for the VM (e.g., 'u1.small', 'u1.medium', 'u1.large')

@@ -1,6 +1,38 @@
 [
   {
     "annotations": {
+      "title": "Virtual Machine: Clone",
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Clone a KubeVirt VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name of the source virtual machine to clone",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the source virtual machine",
+          "type": "string"
+        },
+        "targetName": {
+          "description": "The name for the new cloned virtual machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name",
+        "targetName"
+      ]
+    },
+    "name": "vm_clone"
+  },
+  {
+    "annotations": {
       "title": "Virtual Machine: Create",
       "destructiveHint": true,
       "idempotentHint": true,

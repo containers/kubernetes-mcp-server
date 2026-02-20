@@ -1,0 +1,113 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "clone-vm"
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          # Enable Snapshot feature gate in KubeVirt CR
+          kubectl patch kubevirt kubevirt -n kubevirt --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"]}}}}'
+          echo "Snapshot feature gate enabled in KubeVirt CR"
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: source-vm
+          namespace: vm-test
+          labels:
+            app: source
+        spec:
+          runStrategy: Halted
+          template:
+            metadata:
+              labels:
+                app: source
+            spec:
+              domain:
+                devices: {}
+                memory:
+                  guest: 512Mi
+                resources: {}
+              terminationGracePeriodSeconds: 180
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          NS="vm-test"
+          SOURCE_VM="source-vm"
+          TARGET_VM="cloned-vm"
+
+          # Verify the clone resource was created
+          CLONE_COUNT=$(kubectl get virtualmachineclone -n "$NS" --no-headers 2>/dev/null | wc -l)
+          if [ "$CLONE_COUNT" -eq 0 ]; then
+            echo "ERROR: No VirtualMachineClone resource found in namespace $NS"
+            exit 1
+          fi
+          echo "VirtualMachineClone resource found"
+
+          # Verify clone source is the correct VM
+          CLONE_NAME=$(kubectl get virtualmachineclone -n "$NS" --no-headers -o custom-columns=":metadata.name" | head -1)
+          CLONE_SOURCE=$(kubectl get virtualmachineclone "$CLONE_NAME" -n "$NS" -o jsonpath='{.spec.source.name}')
+          if [ "$CLONE_SOURCE" != "$SOURCE_VM" ]; then
+            echo "ERROR: Clone source is '$CLONE_SOURCE', expected '$SOURCE_VM'"
+            exit 1
+          fi
+          echo "Clone source is correct: $CLONE_SOURCE"
+
+          # Verify clone target is the expected VM name
+          CLONE_TARGET=$(kubectl get virtualmachineclone "$CLONE_NAME" -n "$NS" -o jsonpath='{.spec.target.name}')
+          if [ "$CLONE_TARGET" != "$TARGET_VM" ]; then
+            echo "ERROR: Clone target is '$CLONE_TARGET', expected '$TARGET_VM'"
+            exit 1
+          fi
+          echo "Clone target is correct: $CLONE_TARGET"
+
+          echo "All clone validations passed"
+          exit 0
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete virtualmachineclone --all -n vm-test --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: cloned-vm
+          namespace: vm-test
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: source-vm
+          namespace: vm-test
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
+  prompt:
+    inline: |
+      Clone the virtual machine named source-vm in the vm-test namespace to a new virtual machine named cloned-vm.

@@ -73,6 +73,7 @@ func TestMain(m *testing.M) {
 			CRD("route.openshift.io", "v1", "routes", "Route", "route", true),
 			// Kubevirt
 			CRD("kubevirt.io", "v1", "virtualmachines", "VirtualMachine", "virtualmachine", true),
+			CRD("clone.kubevirt.io", "v1beta1", "virtualmachineclones", "VirtualMachineClone", "virtualmachineclone", true),
 			CRD("cdi.kubevirt.io", "v1beta1", "datasources", "DataSource", "datasource", true),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterinstancetypes", "VirtualMachineClusterInstancetype", "virtualmachineclusterinstancetype", false),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
