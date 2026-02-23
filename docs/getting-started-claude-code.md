@@ -2,7 +2,7 @@
 
 This guide shows you how to configure the Kubernetes MCP Server with Claude Code CLI.
 
-> **Prerequisites:** Complete the [Getting Started with Kubernetes](GETTING_STARTED_KUBERNETES.md) guide first to create a ServiceAccount and kubeconfig file.
+> **Prerequisites:** Complete the [Getting Started with Kubernetes](getting-started-kubernetes.md) guide first to create a ServiceAccount and kubeconfig file.
 
 ## Quick Setup
 
@@ -102,5 +102,5 @@ You can configure `server_instructions` to help Claude know when to use this ser
 
 ## Next Steps
 
-- Review the [Getting Started with Kubernetes](GETTING_STARTED_KUBERNETES.md) guide for more details on ServiceAccount setup
+- Review the [Getting Started with Kubernetes](getting-started-kubernetes.md) guide for more details on ServiceAccount setup
 - Explore the [main README](../README.md) for more MCP server capabilities

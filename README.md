@@ -58,9 +58,9 @@ If you're using the native binaries you don't need to have Node or Python instal
 <details>
 <summary><b>Claude Code</b></summary>
 
-Follow the [dedicated Claude Code getting started guide](docs/GETTING_STARTED_CLAUDE_CODE.md) in our [user documentation](docs/).
+Follow the [dedicated Claude Code getting started guide](docs/getting-started-claude-code.md) in our [user documentation](docs/).
 
-For a secure production setup with dedicated ServiceAccount and read-only access, also review the [Kubernetes setup guide](docs/GETTING_STARTED_KUBERNETES.md).
+For a secure production setup with dedicated ServiceAccount and read-only access, also review the [Kubernetes setup guide](docs/getting-started-kubernetes.md).
 
 </details>
 

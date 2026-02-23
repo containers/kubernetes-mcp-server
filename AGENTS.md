@@ -307,8 +307,8 @@ The `docs/` directory contains user-facing documentation:
 - `docs/logging.md` – MCP Logging guide (automatic K8s error logging, secret redaction)
 - `docs/OTEL.md` – OpenTelemetry observability setup
 - `docs/KIALI.md` – Kiali toolset configuration
-- `docs/GETTING_STARTED_KUBERNETES.md` – Kubernetes ServiceAccount setup
-- `docs/GETTING_STARTED_CLAUDE_CODE.md` – Claude Code CLI integration
+- `docs/getting-started-kubernetes.md` – Kubernetes ServiceAccount setup
+- `docs/getting-started-claude-code.md` – Claude Code CLI integration
 - `docs/KEYCLOAK_OIDC_SETUP.md` – OAuth/OIDC developer setup
 
 ### Documentation conventions

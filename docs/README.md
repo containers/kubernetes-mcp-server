@@ -8,13 +8,13 @@ Choose the guide that matches your needs:
 
 | Guide | Description | Best For |
 |-------|-------------|----------|
-| **[Getting Started with Kubernetes](GETTING_STARTED_KUBERNETES.md)** | Base setup: Create ServiceAccount, token, and kubeconfig | Everyone - **start here first** |
-| **[Using with Claude Code CLI](GETTING_STARTED_CLAUDE_CODE.md)** | Configure MCP server with Claude Code CLI | Claude Code CLI users |
+| **[Getting Started with Kubernetes](getting-started-kubernetes.md)** | Base setup: Create ServiceAccount, token, and kubeconfig | Everyone - **start here first** |
+| **[Using with Claude Code CLI](getting-started-claude-code.md)** | Configure MCP server with Claude Code CLI | Claude Code CLI users |
 
 ## Recommended Workflow
 
-1. **Complete the base setup**: Start with [Getting Started with Kubernetes](GETTING_STARTED_KUBERNETES.md) to create a ServiceAccount and kubeconfig file
-2. **Configure Claude Code**: Then follow the [Claude Code CLI guide](GETTING_STARTED_CLAUDE_CODE.md)
+1. **Complete the base setup**: Start with [Getting Started with Kubernetes](getting-started-kubernetes.md) to create a ServiceAccount and kubeconfig file
+2. **Configure Claude Code**: Then follow the [Claude Code CLI guide](getting-started-claude-code.md)
 
 ## Configuration
 
