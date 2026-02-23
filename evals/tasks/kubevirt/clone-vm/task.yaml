@@ -8,13 +8,6 @@ spec:
     - extension: kubernetes
       as: k8s
   setup:
-    - script:
-        inline: |-
-          #!/usr/bin/env bash
-          set -e
-          # Enable Snapshot feature gate in KubeVirt CR
-          kubectl patch kubevirt kubevirt -n kubevirt --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"]}}}}'
-          echo "Snapshot feature gate enabled in KubeVirt CR"
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
