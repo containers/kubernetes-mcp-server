@@ -9,16 +9,24 @@ on:
   issue_comment:
     types: [created]
 
+  # Automatically run kubevirt evals when kubevirt-related files change
+  pull_request:
+    paths:
+      - 'pkg/toolsets/kubevirt/**'
+      - 'evals/tasks/kubevirt/**'
+      - 'build/kubevirt.mk'
+
   # Allow manual workflow dispatch for testing
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (kubernetes, kiali, or all)'
+        description: 'Which task suite to run (kubernetes, kubevirt, kiali, or all)'
         required: false
         default: 'kubernetes'
         type: choice
         options:
           - kubernetes
+          - kubevirt
           - kiali
           - all
       task-filter:
@@ -59,12 +67,14 @@ jobs:
     if: |
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
        contains(github.event.comment.body, '/run-mcpchecker'))
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
       kiali-run: ${{ steps.check.outputs.kiali-run }}
+      kubevirt-run: ${{ steps.check.outputs.kubevirt-run }}
       label-selector: ${{ steps.check.outputs.label-selector }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
@@ -94,6 +104,11 @@ jobs:
               echo "should-run=false" >> $GITHUB_OUTPUT
               echo "User ${{ github.event.comment.user.login }} does not have permission to trigger evaluations"
             fi
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "is-pr=true" >> $GITHUB_OUTPUT
+            echo "pr-number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "pr-sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
           else
             echo "should-run=true" >> $GITHUB_OUTPUT
             echo "is-pr=false" >> $GITHUB_OUTPUT
@@ -101,18 +116,21 @@ jobs:
           fi
 
           # Suite selection:
+          # - For pull_request, always run kubevirt (triggered by kubevirt path changes).
           # - For workflow_dispatch, use the provided input.
           # - For other triggers (schedule/issue_comment), default to kubernetes.
           SUITE="${{ github.event.inputs.suite || 'kubernetes' }}"
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
 
-          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kiali | all
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            SUITE_INPUT="kubevirt"
+          elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kubevirt | kiali | all
             COMMENT_BODY="${{ github.event.comment.body }}"
             COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
             read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
             case "${FIRST_WORD,,}" in
-              kiali|all)
+              kubevirt|kiali|all)
                 SUITE_INPUT="${FIRST_WORD,,}"
                 ;;
               kubernetes)
@@ -127,17 +145,25 @@ jobs:
           # Select label-selector and infrastructure based on suite
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
           case "$SUITE" in
+            kubevirt)
+              echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
+              echo "kiali-run=false" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=true" >> $GITHUB_OUTPUT
+              ;;
             kiali)
               echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
               echo "kiali-run=true" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=false" >> $GITHUB_OUTPUT
               ;;
             all)
               echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
               echo "kiali-run=true" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=true" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
               echo "kiali-run=false" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=false" >> $GITHUB_OUTPUT
               ;;
           esac
 
@@ -168,10 +194,20 @@ jobs:
         if: needs.check-trigger.outputs.kiali-run == 'true'
         run: make setup-kiali
 
+      - name: Install KubeVirt
+        if: needs.check-trigger.outputs.kubevirt-run == 'true'
+        run: make kubevirt-install
+
       - name: Start MCP server
         run: make run-server
         env:
-          TOOLSETS: ${{ needs.check-trigger.outputs.kiali-run == 'true' && 'kiali' || '' }}
+          TOOLSETS: >-
+            ${{
+              (needs.check-trigger.outputs.kiali-run == 'true' && needs.check-trigger.outputs.kubevirt-run == 'true' && 'kiali,kubevirt') ||
+              (needs.check-trigger.outputs.kiali-run == 'true' && 'kiali') ||
+              (needs.check-trigger.outputs.kubevirt-run == 'true' && 'kubevirt') ||
+              ''
+            }}
 
       - name: Run mcpchecker evaluation
         id: mcpchecker

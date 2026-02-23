@@ -43,6 +43,16 @@ config:
             toolPattern: "helm_.*"
         minToolCalls: 1
         maxToolCalls: 10
+    # KubeVirt tasks
+    - glob: ../tasks/kubevirt/*/*.yaml
+      labelSelector:
+        suite: kubevirt
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
     # Kiali tasks
     - glob: ../tasks/*/*/*.yaml
       labelSelector:
