@@ -36,3 +36,21 @@ jobs:
 
       - name: Validate chart templates
         run: make helm-validate
+
+  check-helm-docs:
+    name: Check Helm Docs are up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Generate Helm docs
+        run: make helm-docs
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --quiet charts/kubernetes-mcp-server/README.md; then
+            echo "::error::Helm chart README.md is out of date. Please run 'make helm-docs' and commit the changes."
+            git diff charts/kubernetes-mcp-server/README.md
+            exit 1
+          fi
