@@ -184,12 +184,12 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 
 | Toolset  | Description                                                                                                                                                          | Default |
 |----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
 | config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
 | core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
-| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                     |         |
-| kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
 | helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
+| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                     |         |
+| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
+| kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 

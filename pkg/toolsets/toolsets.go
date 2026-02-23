@@ -20,6 +20,9 @@ func Register(toolset api.Toolset) {
 }
 
 func Toolsets() []api.Toolset {
+	slices.SortFunc(toolsets, func(a, b api.Toolset) int {
+		return strings.Compare(a.GetName(), b.GetName())
+	})
 	return toolsets
 }
 
