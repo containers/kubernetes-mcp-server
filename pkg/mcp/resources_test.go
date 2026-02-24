@@ -535,6 +535,48 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesCreateOrUpdateForcesSSA() {
+	s.InitMcpClient()
+	dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+	cmResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+
+	s.Run("succeeds when another field manager owns the fields", func() {
+		// Create a ConfigMap using SSA with a different field manager that owns the data fields
+		cm := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "cm-force-ssa-test",
+					"namespace": "default",
+				},
+				"data": map[string]interface{}{
+					"key": "original-value",
+				},
+			},
+		}
+		_, err := dynamicClient.Resource(cmResource).Namespace("default").Apply(
+			s.T().Context(), "cm-force-ssa-test", cm, metav1.ApplyOptions{FieldManager: "other-manager"},
+		)
+		s.Require().NoError(err, "failed to create ConfigMap with other-manager")
+
+		// Use resources_create_or_update to update the same field owned by "other-manager"
+		// Without Force: true, this would fail with a conflict error
+		updatedCmYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-force-ssa-test\n  namespace: default\ndata:\n  key: updated-value\n"
+		toolResult, err := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": updatedCmYaml})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should not fail, got: %v", toolResult.Content)
+
+		// Verify the field was actually updated
+		result, err := dynamicClient.Resource(cmResource).Namespace("default").Get(
+			s.T().Context(), "cm-force-ssa-test", metav1.GetOptions{},
+		)
+		s.Require().NoError(err, "failed to get ConfigMap")
+		data, _, _ := unstructured.NestedString(result.Object, "data", "key")
+		s.Equal("updated-value", data, "ConfigMap data should be updated despite different field manager ownership")
+	})
+}
+
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [
