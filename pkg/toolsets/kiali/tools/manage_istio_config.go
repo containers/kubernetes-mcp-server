@@ -12,59 +12,110 @@ import (
 )
 
 func InitManageIstioConfig() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_manage_istio_config"
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        name,
-			Description: "Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"action": {
-						Type:        "string",
-						Description: "Action to perform: create, patch, or delete",
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        name,
+				Description: "Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"action": {
+							Type:        "string",
+							Description: "Action to perform: create, patch, or delete",
+						},
+						"namespace": {
+							Type:        "string",
+							Description: "Namespace containing the Istio object",
+						},
+						"group": {
+							Type:        "string",
+							Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
+						},
+						"version": {
+							Type:        "string",
+							Description: "API version of the Istio object (e.g., 'v1', 'v1beta1')",
+						},
+						"kind": {
+							Type:        "string",
+							Description: "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
+						},
+						"name": {
+							Type:        "string",
+							Description: "Name of the Istio object",
+						},
+						"json_data": {
+							Type:        "string",
+							Description: "JSON data to apply or create the object",
+						},
 					},
-					"namespace": {
-						Type:        "string",
-						Description: "Namespace containing the Istio object",
-					},
-					"group": {
-						Type:        "string",
-						Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
-					},
-					"version": {
-						Type:        "string",
-						Description: "API version of the Istio object (e.g., 'v1', 'v1beta1')",
-					},
-					"kind": {
-						Type:        "string",
-						Description: "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
-					},
-					"name": {
-						Type:        "string",
-						Description: "Name of the Istio object",
-					},
-					"json_data": {
-						Type:        "string",
-						Description: "JSON data to apply or create the object",
-					},
+					Required: []string{"action"},
 				},
-				Required: []string{"action"},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Manage Istio Config: Create, Patch, Delete",
-				ReadOnlyHint:    ptr.To(false),
-				DestructiveHint: ptr.To(true),
-				IdempotentHint:  ptr.To(true),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: istioConfigHandler,
-	})
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "Manage Istio Config: Create, Patch, Delete",
+					ReadOnlyHint:    ptr.To(false),
+					DestructiveHint: ptr.To(true),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: istioConfigHandler,
+		},
+		{
+			Tool: api.Tool{
+				Name:        name + "_read",
+				Description: "Lists or gets Istio configuration objects (Gateways, VirtualServices, etc.)",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"action": {
+							Type:        "string",
+							Description: "Action to perform: list or get",
+						},
+						"namespace": {
+							Type:        "string",
+							Description: "Namespace containing the Istio object",
+						},
+						"group": {
+							Type:        "string",
+							Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
+						},
+						"version": {
+							Type:        "string",
+							Description: "API version of the Istio object (e.g., 'v1', 'v1beta1')",
+						},
+						"kind": {
+							Type:        "string",
+							Description: "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
+						},
+						"name": {
+							Type:        "string",
+							Description: "Name of the Istio object",
+						},
+					},
+					Required: []string{"action"},
+				},
+				Annotations: api.ToolAnnotations{
+					Title:           "Manage Istio Config: List or Get",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: istioConfigHandlerRead,
+		},
+	}
+}
+
+func istioConfigHandlerRead(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	return handleIstioConfig(params, true)
 }
 
 func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	return handleIstioConfig(params, false)
+}
+
+func handleIstioConfig(params api.ToolHandlerParams, readOnly bool) (*api.ToolCallResult, error) {
 	action, _ := params.GetArguments()["action"].(string)
 	namespace, _ := params.GetArguments()["namespace"].(string)
 	group, _ := params.GetArguments()["group"].(string)
@@ -72,7 +123,7 @@ func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	kind, _ := params.GetArguments()["kind"].(string)
 	name, _ := params.GetArguments()["name"].(string)
 	jsonData, _ := params.GetArguments()["json_data"].(string)
-	if err := validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData); err != nil {
+	if err := validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData, readOnly); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
@@ -89,7 +140,32 @@ func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 // - If action is "create": json_data is required
 // - If action is "patch": name and json_data are required
 // - If action is "delete": name is required
-func validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData string) error {
+func validateIstioConfigInput(action, namespace, group, version, kind, name, jsonData string, readOnly bool) error {
+	if readOnly {
+		switch action {
+		case "list", "get":
+			if action == "get" {
+				if name == "" {
+					return fmt.Errorf("name is required for action %q", action)
+				}
+				if namespace == "" {
+					return fmt.Errorf("namespace is required for action %q", action)
+				}
+				if group == "" {
+					return fmt.Errorf("group is required for action %q", action)
+				}
+				if version == "" {
+					return fmt.Errorf("version is required for action %q", action)
+				}
+				if kind == "" {
+					return fmt.Errorf("kind is required for action %q", action)
+				}
+			}
+		default:
+			return fmt.Errorf("invalid action %q: must be one of list, get", action)
+		}
+		return nil
+	}
 	switch action {
 	case "create", "patch", "delete":
 		if namespace == "" {

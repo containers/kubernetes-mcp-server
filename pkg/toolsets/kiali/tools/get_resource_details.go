@@ -41,9 +41,8 @@ var listDetailsOpsMap = map[string]listDetailsOperations{
 }
 
 func InitGetResourceDetails() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_resource_details"
-	ret = append(ret, api.ServerTool{
+	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name:        name,
 			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
@@ -73,9 +72,7 @@ func InitGetResourceDetails() []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: resourceDetailsHandler,
-	})
-
-	return ret
+	}}
 }
 
 func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
