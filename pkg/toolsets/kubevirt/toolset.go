@@ -19,7 +19,7 @@ func (t *Toolset) GetName() string {
 }
 
 func (t *Toolset) GetDescription() string {
-	return "KubeVirt virtual machine management tools"
+	return "KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details."
 }
 
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
