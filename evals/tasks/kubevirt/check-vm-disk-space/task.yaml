@@ -1,0 +1,107 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "check-vm-disk-space"
+  difficulty: medium
+  description: "Use vm_guest_info to monitor disk space usage inside a VM to prevent out-of-disk issues"
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a VM with guest agent for disk monitoring
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: database-server
+        namespace: $NS
+        annotations:
+          description: "Database server - monitor disk usage"
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/fedora:latest
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  packages:
+                    - qemu-guest-agent
+                  runcmd:
+                    - systemctl enable qemu-guest-agent
+                    - systemctl start qemu-guest-agent
+      EOF
+
+      kubectl wait --for=create vm/database-server -n "${NS}" --timeout=30s
+      echo "Database VM created. Guest agent will provide filesystem information."
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      echo "=== Verification: Disk Space Check ==="
+
+      if ! kubectl get vm database-server -n "$NS" &>/dev/null; then
+        echo "✗ VirtualMachine 'database-server' not found"
+        exit 1
+      fi
+      echo "✓ VM exists"
+
+      echo ""
+      echo "=== Expected Agent Actions ==="
+      echo "The agent should have:"
+      echo "  1. Used: vm_guest_info namespace=$NS name=database-server info_type=filesystem"
+      echo "  2. Retrieved filesystem information showing:"
+      echo "     - Mount points (/, /var, /boot, etc.)"
+      echo "     - Total disk size for each filesystem"
+      echo "     - Used disk space"
+      echo "     - Available disk space"
+      echo "  3. Calculated disk usage percentages"
+      echo "  4. Reported if any filesystem is above 80% usage (warning threshold)"
+      echo "  5. Recommended actions if disk is filling up"
+      echo ""
+      echo "Example output the agent should interpret:"
+      echo "  / (ext4): 8.5GB used of 10GB (85% full) ⚠ Warning!"
+      echo "  /boot (ext4): 150MB used of 1GB (15% full) ✓ OK"
+      echo ""
+      echo "✓ Disk space monitoring eval complete"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine database-server -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      The database application running in VirtualMachine "database-server" in the ${EVAL_NAMESPACE:-vm-test} namespace is experiencing performance issues.
+
+      This could be due to low disk space. Please check the filesystem usage inside the VM and report:
+      1. All mounted filesystems and their usage
+      2. Which filesystems are getting full (>80% usage)
+      3. Recommendations for what to do if disk is running low
+
+      Note: Get this information from inside the running VM without SSH access.

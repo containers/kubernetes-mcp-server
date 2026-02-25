@@ -1,0 +1,197 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "inventory-vms"
+  difficulty: hard
+  description: "Use vm_guest_info to collect OS information across multiple VMs for inventory and compliance tracking"
+steps:
+  setup:
+    inline: |-
+      #!/usr:bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create multiple VMs with different OS versions for inventory
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: vm-web-01
+        namespace: $NS
+        labels:
+          app: web
+          tier: frontend
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/fedora:latest
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  hostname: web-01
+                  packages:
+                    - qemu-guest-agent
+                  runcmd:
+                    - systemctl enable qemu-guest-agent
+                    - systemctl start qemu-guest-agent
+      ---
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: vm-db-01
+        namespace: $NS
+        labels:
+          app: database
+          tier: backend
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 4Gi
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/ubuntu:24.04
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  hostname: db-01
+                  packages:
+                    - qemu-guest-agent
+                  runcmd:
+                    - systemctl enable qemu-guest-agent
+                    - systemctl start qemu-guest-agent
+      ---
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: vm-cache-01
+        namespace: $NS
+        labels:
+          app: redis
+          tier: middleware
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/fedora:latest
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  hostname: cache-01
+                  packages:
+                    - qemu-guest-agent
+                  runcmd:
+                    - systemctl enable qemu-guest-agent
+                    - systemctl start qemu-guest-agent
+      EOF
+
+      kubectl wait --for=create vm/vm-web-01 vm/vm-db-01 vm/vm-cache-01 -n "${NS}" --timeout=30s
+      echo "Three VMs created for inventory collection."
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      echo "=== Verification: VM Inventory ==="
+
+      VM_COUNT=$(kubectl get vm -n "$NS" --no-headers 2>/dev/null | wc -l)
+      echo "✓ Found $VM_COUNT VMs in namespace"
+
+      if [ "$VM_COUNT" -lt 3 ]; then
+        echo "✗ Expected 3 VMs, found $VM_COUNT"
+        exit 1
+      fi
+
+      echo ""
+      echo "=== Expected Agent Actions ==="
+      echo "The agent should have:"
+      echo "  1. Listed all VMs in the namespace: vm-web-01, vm-db-01, vm-cache-01"
+      echo "  2. For EACH VM, used: vm_guest_info info_type=os"
+      echo "  3. Collected OS information for each:"
+      echo "     - Hostname"
+      echo "     - OS name and version (Fedora Linux, Ubuntu, etc.)"
+      echo "     - Kernel version"
+      echo "     - Timezone"
+      echo "  4. Created an inventory report with all VMs and their OS details"
+      echo "  5. Identified any VMs with outdated OS versions"
+      echo "  6. Grouped VMs by OS type for compliance tracking"
+      echo ""
+      echo "Example inventory report:"
+      echo "┌─────────────┬──────────┬────────────────┬─────────────────────┐"
+      echo "│ VM Name     │ Tier     │ OS             │ Kernel              │"
+      echo "├─────────────┼──────────┼────────────────┼─────────────────────┤"
+      echo "│ vm-web-01   │ frontend │ Fedora 39      │ 6.5.6-300.fc39      │"
+      echo "│ vm-db-01    │ backend  │ Ubuntu 24.04   │ 6.8.0-47-generic    │"
+      echo "│ vm-cache-01 │ middleware│ Fedora 39     │ 6.5.6-300.fc39      │"
+      echo "└─────────────┴──────────┴────────────────┴─────────────────────┘"
+      echo ""
+      echo "✓ VM inventory eval complete"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine vm-web-01 vm-db-01 vm-cache-01 -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      You need to create an inventory of all VirtualMachines in the ${EVAL_NAMESPACE:-vm-test} namespace for compliance and asset tracking.
+
+      For each VM in the namespace:
+      1. Get the OS information (hostname, OS name/version, kernel version)
+      2. Collect this into an organized inventory report
+      3. Identify any patterns (which OS versions are most common?)
+      4. Flag any VMs running potentially outdated OS versions
+      5. Present the findings in a clear, tabular format
+
+      Note: Get this information from inside each running VM without requiring SSH credentials.

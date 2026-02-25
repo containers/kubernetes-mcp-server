@@ -22,6 +22,7 @@ import (
 
 var kubevirtApis = []schema.GroupVersionResource{
 	{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"},
+	{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachineinstances"},
 	{Group: "clone.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclones"},
 	{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "datasources"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterinstancetypes"},
@@ -778,6 +779,263 @@ func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 		s.Error(err, "expected error for missing name")
 		s.Nil(result)
 		s.Contains(err.Error(), "name")
+	})
+}
+
+func (s *KubevirtSuite) TestVMGuestInfo() {
+	s.Run("vm_guest_info missing required params", func() {
+		testCases := []string{"namespace", "name"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"namespace": "default",
+					"name":      "test-vm",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_guest_info", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Equal(toolResult.Content[0].(*mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_guest_info with non-existent VM", func() {
+		toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+			"namespace": "default",
+			"name":      "non-existent-vm",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail for non-existent VM")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "VirtualMachineInstance not found")
+	})
+
+	s.Run("vm_guest_info with stopped VM", func() {
+		// Create a VM (not VMI, since it's not running)
+		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		vm := &unstructured.Unstructured{}
+		vm.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachine",
+			"metadata": map[string]interface{}{
+				"name":      "stopped-vm",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"runStrategy": "Halted",
+			},
+		})
+		_, err := dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachines",
+		}).Namespace("default").Create(s.T().Context(), vm, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create stopped VM")
+
+		toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+			"namespace": "default",
+			"name":      "stopped-vm",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail for stopped VM")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "VirtualMachineInstance not found")
+
+		// Cleanup
+		_ = dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachines",
+		}).Namespace("default").Delete(s.T().Context(), "stopped-vm", metav1.DeleteOptions{})
+	})
+
+	s.Run("vm_guest_info with running VM (no guest agent)", func() {
+		// Create a running VMI
+		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		vmi := &unstructured.Unstructured{}
+		vmi.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachineInstance",
+			"metadata": map[string]interface{}{
+				"name":      "running-vm",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"domain": map[string]interface{}{
+					"devices": map[string]interface{}{},
+				},
+			},
+			"status": map[string]interface{}{
+				"phase": "Running",
+			},
+		})
+		_, err := dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachineinstances",
+		}).Namespace("default").Create(s.T().Context(), vmi, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create running VMI")
+
+		s.Run("info_type=all returns error when guest agent unavailable", func() {
+			toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+				"namespace": "default",
+				"name":      "running-vm",
+				"info_type": "all",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			// In envtest without real KubeVirt, the subresource API calls will fail
+			// The tool should handle this gracefully and return an error
+			s.Truef(toolResult.IsError, "expected error when guest agent data is unavailable")
+		})
+
+		s.Run("info_type=os returns error when guest agent unavailable", func() {
+			toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+				"namespace": "default",
+				"name":      "running-vm",
+				"info_type": "os",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Truef(toolResult.IsError, "expected error when guest agent data is unavailable")
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "guest agent")
+		})
+
+		s.Run("info_type=filesystem returns error when guest agent unavailable", func() {
+			toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+				"namespace": "default",
+				"name":      "running-vm",
+				"info_type": "filesystem",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Truef(toolResult.IsError, "expected error when guest agent data is unavailable")
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "guest agent")
+		})
+
+		s.Run("info_type=users returns error when guest agent unavailable", func() {
+			toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+				"namespace": "default",
+				"name":      "running-vm",
+				"info_type": "users",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Truef(toolResult.IsError, "expected error when guest agent data is unavailable")
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "guest agent")
+		})
+
+		s.Run("info_type=network returns error when guest agent unavailable", func() {
+			toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+				"namespace": "default",
+				"name":      "running-vm",
+				"info_type": "network",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Truef(toolResult.IsError, "expected error when guest agent data is unavailable")
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "guest agent")
+		})
+
+		s.Run("invalid info_type returns error", func() {
+			toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+				"namespace": "default",
+				"name":      "running-vm",
+				"info_type": "invalid_type",
+			})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Truef(toolResult.IsError, "expected error for invalid info_type")
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "invalid info_type")
+		})
+
+		// Cleanup
+		_ = dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachineinstances",
+		}).Namespace("default").Delete(s.T().Context(), "running-vm", metav1.DeleteOptions{})
+	})
+
+	s.Run("vm_guest_info with VMI not in Running phase", func() {
+		// Create a VMI in a non-running state
+		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		vmi := &unstructured.Unstructured{}
+		vmi.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachineInstance",
+			"metadata": map[string]interface{}{
+				"name":      "pending-vm",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"domain": map[string]interface{}{
+					"devices": map[string]interface{}{},
+				},
+			},
+			"status": map[string]interface{}{
+				"phase": "Pending",
+			},
+		})
+		_, err := dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachineinstances",
+		}).Namespace("default").Create(s.T().Context(), vmi, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create pending VMI")
+
+		toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+			"namespace": "default",
+			"name":      "pending-vm",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected error for non-running VM")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "not running")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "Pending")
+
+		// Cleanup
+		_ = dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachineinstances",
+		}).Namespace("default").Delete(s.T().Context(), "pending-vm", metav1.DeleteOptions{})
+	})
+
+	s.Run("vm_guest_info with default info_type", func() {
+		// Create a running VMI
+		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		vmi := &unstructured.Unstructured{}
+		vmi.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachineInstance",
+			"metadata": map[string]interface{}{
+				"name":      "default-info-vm",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"domain": map[string]interface{}{
+					"devices": map[string]interface{}{},
+				},
+			},
+			"status": map[string]interface{}{
+				"phase": "Running",
+			},
+		})
+		_, err := dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachineinstances",
+		}).Namespace("default").Create(s.T().Context(), vmi, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create running VMI")
+
+		// Call without info_type to test default behavior
+		toolResult, err := s.CallTool("vm_guest_info", map[string]interface{}{
+			"namespace": "default",
+			"name":      "default-info-vm",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		// Should default to "all" and fail gracefully in envtest
+		s.Truef(toolResult.IsError, "expected error when guest agent data is unavailable")
+
+		// Cleanup
+		_ = dynamicClient.Resource(schema.GroupVersionResource{
+			Group:    "kubevirt.io",
+			Version:  "v1",
+			Resource: "virtualmachineinstances",
+		}).Namespace("default").Delete(s.T().Context(), "default-info-vm", metav1.DeleteOptions{})
 	})
 }
 
