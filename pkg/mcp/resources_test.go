@@ -301,6 +301,50 @@ func (s *ResourcesSuite) TestResourcesListAsTable() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesListOutputParameter() {
+	// Server default is yaml (set in BaseMcpSuite.SetupTest)
+	s.InitMcpClient()
+	s.Run("output=table overrides server yaml config", func() {
+		result, err := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"output":     "table",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed")
+		})
+		s.Require().NotNil(result, "Expected tool result from call")
+		content := result.Content[0].(*mcp.TextContent).Text
+		s.Run("returns table column headers", func() {
+			expectedHeaders := "APIVERSION\\s+KIND\\s+NAME"
+			m, e := regexp.MatchString(expectedHeaders, content)
+			s.NoErrorf(e, "Error matching headers regex: %v", e)
+			s.Truef(m, "Expected table headers not found in output:\n%s", content)
+		})
+	})
+	s.Run("output=yaml returns full resource manifests", func() {
+		result, err := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"output":     "yaml",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed")
+		})
+		s.Require().NotNil(result, "Expected tool result from call")
+		var decoded []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decoded)
+		s.Run("has yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+		})
+		s.Run("returns items", func() {
+			s.Truef(len(decoded) >= 1, "Expected at least 1 namespace in YAML output")
+		})
+	})
+}
+
 func (s *ResourcesSuite) TestResourcesGet() {
 	s.InitMcpClient()
 	s.Run("resources_get with missing apiVersion returns error", func() {
