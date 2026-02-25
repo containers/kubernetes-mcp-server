@@ -49,6 +49,12 @@ func initResources(o api.Openshift) []api.ServerTool {
 						Description: "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
 						Pattern:     REGEX_FIELDSELECTOR,
 					},
+					"output": {
+						Type:        "string",
+						Enum:        []any{"yaml", "table"},
+						Description: "Output format: 'table' returns a compact summary similar to kubectl (default), 'yaml' returns the full resource manifest",
+						Default:     api.ToRawMessage("table"),
+					},
 				},
 				Required: []string{"apiVersion", "kind"},
 			},
@@ -186,14 +192,29 @@ func initResources(o api.Openshift) []api.ServerTool {
 	}
 }
 
+// resolveListOutput determines the output format for a resources_list call.
+// If the request includes an "output" parameter, it overrides the server-wide default.
+func resolveListOutput(params api.ToolHandlerParams) output.Output {
+	formatParam := api.OptionalString(params, "output", "")
+	if formatParam != "" {
+		if o := output.FromString(formatParam); o != nil {
+			return o
+		}
+	}
+	return params.ListOutput
+}
+
 func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	namespace := params.GetArguments()["namespace"]
 	if namespace == nil {
 		namespace = ""
 	}
+
+	listOutput := resolveListOutput(params)
+
 	labelSelector := params.GetArguments()["labelSelector"]
 	resourceListOptions := api.ListOptions{
-		AsTable: params.ListOutput.AsTable(),
+		AsTable: listOutput.AsTable(),
 	}
 
 	if labelSelector != nil {
@@ -225,7 +246,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	return api.NewToolCallResult(listOutput.PrintObj(ret)), nil
 }
 
 func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
