@@ -32,6 +32,7 @@ type HelmSuite struct {
 
 func (s *HelmSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
+	s.Cfg.Toolsets = append(s.Cfg.Toolsets, "helm")
 	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(envTestRestConfig))
 
 	// Capture log output to verify denied resource messages

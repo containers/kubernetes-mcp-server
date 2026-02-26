@@ -41,8 +41,8 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("ListOutput is table", func() {
 		s.Equal("table", base.ListOutput)
 	})
-	s.Run("Toolsets are core, config, helm", func() {
-		s.Equal([]string{"core", "config", "helm"}, base.Toolsets)
+	s.Run("Toolsets are core, config", func() {
+		s.Equal([]string{"core", "config"}, base.Toolsets)
 	})
 	s.Run("ReadOnly is false", func() {
 		s.False(base.ReadOnly)
