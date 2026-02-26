@@ -53,6 +53,9 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("Stateless is false", func() {
 		s.False(base.Stateless)
 	})
+	s.Run("LogLevel is 0", func() {
+		s.Equal(0, base.LogLevel)
+	})
 }
 
 func (s *ConfigSuite) TestReadConfigMissingFile() {
@@ -262,7 +265,7 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 		s.Equalf(0, config.LogLevel, "Expected LogLevel to be 0, got %d", config.LogLevel)
 	})
 	s.Run("port parsed correctly", func() {
-		s.Equalf("1337", config.Port, "Expected Port to be 9999, got %s", config.Port)
+		s.Equalf("1337", config.Port, "Expected Port to be 1337, got %s", config.Port)
 	})
 	s.Run("list_output defaulted correctly", func() {
 		s.Equalf(s.defaults.ListOutput, config.ListOutput, "Expected ListOutput to be %s, got %s", s.defaults.ListOutput, config.ListOutput)

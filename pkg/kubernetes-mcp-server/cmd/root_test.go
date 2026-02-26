@@ -299,7 +299,7 @@ func TestToolsets(t *testing.T) {
 			t.Fatalf("Expected all available toolsets, got %s %v", o, err)
 		}
 	})
-	t.Run("default", func(t *testing.T) {
+	t.Run("matches default config", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
@@ -330,7 +330,7 @@ func TestListOutput(t *testing.T) {
 			t.Fatalf("Expected all available outputs, got %s %v", o, err)
 		}
 	})
-	t.Run("defaults to table", func(t *testing.T) {
+	t.Run("matches default config", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
@@ -353,7 +353,7 @@ func TestListOutput(t *testing.T) {
 }
 
 func TestReadOnly(t *testing.T) {
-	t.Run("defaults to false", func(t *testing.T) {
+	t.Run("matches default config", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
@@ -375,7 +375,7 @@ func TestReadOnly(t *testing.T) {
 }
 
 func TestDisableDestructive(t *testing.T) {
-	t.Run("defaults to false", func(t *testing.T) {
+	t.Run("matches default config", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
@@ -463,7 +463,7 @@ func TestDisableMultiCluster(t *testing.T) {
 }
 
 func TestStateless(t *testing.T) {
-	t.Run("defaults to false", func(t *testing.T) {
+	t.Run("matches default config", func(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
