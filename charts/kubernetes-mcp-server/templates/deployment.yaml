@@ -30,6 +30,10 @@ spec:
       serviceAccountName: {{ include "kubernetes-mcp-server.serviceAccountName" . }}
       securityContext:
         {{- tpl (toYaml (default .Values.defaultPodSecurityContext .Values.podSecurityContext)) . | nindent 8 }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ include "kubernetes-mcp-server.name" . }}
           securityContext:

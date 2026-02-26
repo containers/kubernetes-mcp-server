@@ -166,6 +166,17 @@ extraVolumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# -- Init containers to run before the main container starts.
+# -- Each container is defined as a complete container spec.
+# -- Supports tpl for templating.
+initContainers: []
+# - name: init-config
+#   image: busybox:latest
+#   command: ["sh", "-c", "echo 'Preparing config...' && cp /defaults/* /config/"]
+#   volumeMounts:
+#     - name: config-volume
+#       mountPath: /config
+
 # -- Additional containers to add to the pod (sidecars).
 # -- Each container is defined as a complete container spec.
 extraContainers: []
