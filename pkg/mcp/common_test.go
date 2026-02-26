@@ -191,7 +191,7 @@ type BaseMcpSuite struct {
 }
 
 func (s *BaseMcpSuite) SetupTest() {
-	s.Cfg = config.Default()
+	s.Cfg = config.BaseDefault()
 	s.Cfg.ListOutput = "yaml"
 	s.Cfg.KubeConfig = filepath.Join(s.T().TempDir(), "config")
 	s.Require().NoError(os.WriteFile(s.Cfg.KubeConfig, envTest.KubeConfig, 0600), "Expected to write kubeconfig")

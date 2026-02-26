@@ -6,26 +6,24 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-func Default() *StaticConfig {
-	defaultConfig := StaticConfig{
+// BaseDefault returns the upstream base defaults before any
+// build-time overrides are applied. This is useful for understanding
+// the raw upstream configuration independent of downstream customization.
+func BaseDefault() *StaticConfig {
+	return &StaticConfig{
 		ListOutput: "table",
 		Toolsets:   []string{"core", "config", "helm"},
 	}
-	overrides := defaultOverrides()
-	mergedConfig := mergeConfig(defaultConfig, overrides)
-	return &mergedConfig
 }
 
-// HasDefaultOverrides indicates whether the internal defaultOverrides function
-// provides any overrides or an empty StaticConfig.
-func HasDefaultOverrides() bool {
+// Default returns the effective default configuration, with any
+// downstream build-time overrides (from defaultOverrides) merged
+// on top of the base defaults.
+func Default() *StaticConfig {
+	base := BaseDefault()
 	overrides := defaultOverrides()
-	var buf bytes.Buffer
-	if err := toml.NewEncoder(&buf).Encode(overrides); err != nil {
-		// If marshaling fails, assume no overrides
-		return false
-	}
-	return len(bytes.TrimSpace(buf.Bytes())) > 0
+	merged := mergeConfig(*base, overrides)
+	return &merged
 }
 
 // mergeConfig applies non-zero values from override to base using TOML serialization

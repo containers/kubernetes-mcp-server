@@ -218,7 +218,7 @@ func (s *CmdSuite) TestConfigDir() {
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", "/nonexistent/path/to/config-dir"})
 		err := rootCmd.Execute()
 		s.Require().NoError(err, "Nonexistent directories should be gracefully skipped")
-		s.Contains(out.String(), "ListOutput: table", "Default values should be used")
+		s.Contains(out.String(), fmt.Sprintf("ListOutput: %s", config.Default().ListOutput), "Default values should be used")
 	})
 	s.Run("--config with --config-dir merges configs", func() {
 		tempDir := s.T().TempDir()
@@ -300,14 +300,12 @@ func TestToolsets(t *testing.T) {
 		}
 	})
 	t.Run("default", func(t *testing.T) {
-		if config.HasDefaultOverrides() {
-			t.Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-		}
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- Toolsets: core, config, helm") {
-			t.Fatalf("Expected toolsets 'full', got %s %v", out, err)
+		expected := "- Toolsets: " + strings.Join(config.Default().Toolsets, ", ")
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
+			t.Fatalf("Expected toolsets '%s', got %s %v", expected, out, err)
 		}
 	})
 	t.Run("set with --toolsets", func(t *testing.T) {
@@ -336,8 +334,10 @@ func TestListOutput(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), "- ListOutput: table") {
-			t.Fatalf("Expected list-output 'table', got %s %v", out, err)
+		defaults := config.Default()
+		expected := fmt.Sprintf("- ListOutput: %s", defaults.ListOutput)
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
+			t.Fatalf("Expected list-output '%s', got %s %v", defaults.ListOutput, out, err)
 		}
 	})
 	t.Run("set with --list-output", func(t *testing.T) {
@@ -354,14 +354,12 @@ func TestListOutput(t *testing.T) {
 
 func TestReadOnly(t *testing.T) {
 	t.Run("defaults to false", func(t *testing.T) {
-		if config.HasDefaultOverrides() {
-			t.Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-		}
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - Read-only mode: false") {
-			t.Fatalf("Expected read-only mode false, got %s %v", out, err)
+		expected := fmt.Sprintf(" - Read-only mode: %v", config.Default().ReadOnly)
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
+			t.Fatalf("Expected read-only mode %v, got %s %v", config.Default().ReadOnly, out, err)
 		}
 	})
 	t.Run("set with --read-only", func(t *testing.T) {
@@ -381,8 +379,10 @@ func TestDisableDestructive(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - Disable destructive tools: false") {
-			t.Fatalf("Expected disable destructive false, got %s %v", out, err)
+		defaults := config.Default()
+		expected := fmt.Sprintf(" - Disable destructive tools: %t", defaults.DisableDestructive)
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
+			t.Fatalf("Expected disable destructive %t, got %s %v", defaults.DisableDestructive, out, err)
 		}
 	})
 	t.Run("set with --disable-destructive", func(t *testing.T) {
@@ -467,8 +467,10 @@ func TestStateless(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - Stateless mode: false") {
-			t.Fatalf("Expected stateless mode false, got %s %v", out, err)
+		defaults := config.Default()
+		expected := fmt.Sprintf(" - Stateless mode: %t", defaults.Stateless)
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
+			t.Fatalf("Expected stateless mode %t, got %s %v", defaults.Stateless, out, err)
 		}
 	})
 	t.Run("set with --stateless", func(t *testing.T) {

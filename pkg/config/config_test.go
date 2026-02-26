@@ -29,6 +29,30 @@ func (s *BaseConfigSuite) writeConfig(content string) string {
 
 type ConfigSuite struct {
 	BaseConfigSuite
+	defaults *StaticConfig
+}
+
+func (s *ConfigSuite) SetupTest() {
+	s.defaults = Default()
+}
+
+func (s *ConfigSuite) TestBaseDefaultValues() {
+	base := BaseDefault()
+	s.Run("ListOutput is table", func() {
+		s.Equal("table", base.ListOutput)
+	})
+	s.Run("Toolsets are core, config, helm", func() {
+		s.Equal([]string{"core", "config", "helm"}, base.Toolsets)
+	})
+	s.Run("ReadOnly is false", func() {
+		s.False(base.ReadOnly)
+	})
+	s.Run("DisableDestructive is false", func() {
+		s.False(base.DisableDestructive)
+	})
+	s.Run("Stateless is false", func() {
+		s.False(base.Stateless)
+	})
 }
 
 func (s *ConfigSuite) TestReadConfigMissingFile() {
@@ -224,9 +248,6 @@ func (s *ConfigSuite) TestReadConfigStatelessExplicitFalse() {
 }
 
 func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
-	if HasDefaultOverrides() {
-		s.T().Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-	}
 	validConfigPath := s.writeConfig(`
 		port = "1337"
 	`)
@@ -244,13 +265,10 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 		s.Equalf("1337", config.Port, "Expected Port to be 9999, got %s", config.Port)
 	})
 	s.Run("list_output defaulted correctly", func() {
-		s.Equalf("table", config.ListOutput, "Expected ListOutput to be table, got %s", config.ListOutput)
+		s.Equalf(s.defaults.ListOutput, config.ListOutput, "Expected ListOutput to be %s, got %s", s.defaults.ListOutput, config.ListOutput)
 	})
 	s.Run("toolsets defaulted correctly", func() {
-		s.Require().Lenf(config.Toolsets, 3, "Expected 3 toolsets, got %d", len(config.Toolsets))
-		for _, toolset := range []string{"core", "config", "helm"} {
-			s.Containsf(config.Toolsets, toolset, "Expected toolsets to contain %s", toolset)
-		}
+		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should match defaults")
 	})
 }
 
@@ -550,9 +568,6 @@ func (s *ConfigSuite) TestStandaloneConfigDir() {
 
 func (s *ConfigSuite) TestStandaloneConfigDirPreservesDefaults() {
 	// Test that defaults are preserved when using standalone --config-dir
-	if HasDefaultOverrides() {
-		s.T().Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-	}
 	tempDir := s.T().TempDir()
 
 	// Create a drop-in file with only partial config
@@ -567,16 +582,13 @@ func (s *ConfigSuite) TestStandaloneConfigDirPreservesDefaults() {
 
 	s.Run("preserves default values", func() {
 		s.Equal("9999", config.Port, "port should be from drop-in")
-		s.Equal("table", config.ListOutput, "list_output should be default")
-		s.Equal([]string{"core", "config", "helm"}, config.Toolsets, "toolsets should be default")
+		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
+		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should be default")
 	})
 }
 
 func (s *ConfigSuite) TestStandaloneConfigDirEmpty() {
 	// Test standalone --config-dir with empty directory
-	if HasDefaultOverrides() {
-		s.T().Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-	}
 	tempDir := s.T().TempDir()
 
 	config, err := Read("", tempDir)
@@ -584,22 +596,19 @@ func (s *ConfigSuite) TestStandaloneConfigDirEmpty() {
 	s.Require().NotNil(config)
 
 	s.Run("returns defaults for empty directory", func() {
-		s.Equal("table", config.ListOutput, "list_output should be default")
-		s.Equal([]string{"core", "config", "helm"}, config.Toolsets, "toolsets should be default")
+		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
+		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should be default")
 	})
 }
 
 func (s *ConfigSuite) TestStandaloneConfigDirNonExistent() {
 	// Test standalone --config-dir with non-existent directory
-	if HasDefaultOverrides() {
-		s.T().Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-	}
 	config, err := Read("", "/non/existent/directory")
 	s.Require().NoError(err, "Should not error for non-existent directory")
 	s.Require().NotNil(config)
 
 	s.Run("returns defaults for non-existent directory", func() {
-		s.Equal("table", config.ListOutput, "list_output should be default")
+		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
 	})
 }
 
@@ -904,18 +913,14 @@ func (s *ConfigSuite) TestRelativeConfigDirPath() {
 
 func (s *ConfigSuite) TestBothConfigAndConfigDirEmpty() {
 	// Edge case: Read("", "") should return defaults
-	if HasDefaultOverrides() {
-		s.T().Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-	}
-
 	config, err := Read("", "")
 	s.Require().NoError(err, "Should not error when both config and config-dir are empty")
 	s.Require().NotNil(config)
 
 	s.Run("returns default configuration", func() {
-		s.Equal("table", config.ListOutput)
-		s.Equal([]string{"core", "config", "helm"}, config.Toolsets)
-		s.Equal(0, config.LogLevel)
+		s.Equal(s.defaults.ListOutput, config.ListOutput)
+		s.Equal(s.defaults.Toolsets, config.Toolsets)
+		s.Equal(s.defaults.LogLevel, config.LogLevel)
 	})
 }
 
@@ -1007,10 +1012,6 @@ func (s *ConfigSuite) TestDropInWithNestedConfig() {
 
 func (s *ConfigSuite) TestEmptyConfigFile() {
 	// Test that an empty main config file works correctly
-	if HasDefaultOverrides() {
-		s.T().Skip("Skipping test because default configuration overrides are present (this is a downstream fork)")
-	}
-
 	tempDir := s.T().TempDir()
 
 	// Create empty main config
@@ -1033,8 +1034,8 @@ func (s *ConfigSuite) TestEmptyConfigFile() {
 		s.Equal(5, config.LogLevel, "log_level should be from drop-in")
 		s.Equal("9999", config.Port, "port should be from drop-in")
 		// Defaults should still be applied for unset values
-		s.Equal("table", config.ListOutput, "list_output should be default")
-		s.Equal([]string{"core", "config", "helm"}, config.Toolsets, "toolsets should be default")
+		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
+		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should be default")
 	})
 }
 
