@@ -208,6 +208,7 @@ jobs:
               (needs.check-trigger.outputs.kubevirt-run == 'true' && 'kubevirt') ||
               ''
             }}
+          MCP_CONFIG_DIR: 'dev/config/mcp-configs'
 
       - name: Run mcpchecker evaluation
         id: mcpchecker

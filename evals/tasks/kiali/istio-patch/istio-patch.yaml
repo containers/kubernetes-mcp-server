@@ -107,6 +107,6 @@ steps:
       kubectl delete virtualservice -n "$NS" -l "$LABEL" --ignore-not-found
       kubectl delete destinationrule -n "$NS" -l "$LABEL" --ignore-not-found
   prompt:
-    inline: I need to shift 50% of traffic to v2 of the reviews service. Apply a patch to the existing VirtualService.
+    inline: I need to shift 50% of traffic to v2 of the reviews service. Apply a patch to the VirtualService with name reviews. Not confirm the patch, just apply it.
 
    

@@ -2,7 +2,7 @@ kind: Task
 metadata:
   labels:
     suite: kiali
-  name: "Get service detail"
+  name: "List services in namespace"
   category: "Resource Inspection"
   difficulty: easy
 steps:
@@ -10,9 +10,9 @@ steps:
     inline: |-
       #!/usr/bin/env bash
   verify:
-    contains: "health status"
+    contains: "reviews"
   cleanup:
     inline: |-
-      #!/usr/bin/env bash          
+      #!/usr/bin/env bash
   prompt:
-    inline: Get the full details for the service reviews in the namespace bookinfo.
+    inline: List all services in the bookinfo namespace.

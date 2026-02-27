@@ -17,7 +17,7 @@ steps:
         name: productpage-forced-failure
         namespace: bookinfo
         labels:
-          gevals.kiali.io/test: delete-fault-injection
+          gevals.kiali.io/test: gevals-testing
       spec:
         hosts:
         - "productpage"

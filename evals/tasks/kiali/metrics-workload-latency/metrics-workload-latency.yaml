@@ -1,0 +1,18 @@
+kind: Task
+metadata:
+  labels:
+    suite: kiali
+  name: "Metrics for workload (latency)"
+  category: "Resource Inspection"
+  difficulty: easy
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+  verify:
+    contains: "reviews"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+  prompt:
+    inline: What are the latency metrics (p50, p95, p99) for the reviews workload in the bookinfo namespace? Use a 5-minute rate interval.

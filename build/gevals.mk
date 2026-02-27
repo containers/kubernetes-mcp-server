@@ -3,6 +3,7 @@
 MCP_PORT ?= 8080
 MCP_HEALTH_TIMEOUT ?= 60
 MCP_HEALTH_INTERVAL ?= 2
+MCP_CONFIG_DIR ?= dev/config/mcp-configs
 
 ##@ Gevals
 
@@ -10,7 +11,7 @@ MCP_HEALTH_INTERVAL ?= 2
 run-server: build ## Start MCP server in background and wait for health check
 	@echo "Starting MCP server on port $(MCP_PORT)..."
 	@if [ -n "$(TOOLSETS)" ]; then \
-		./$(BINARY_NAME) --port $(MCP_PORT) --toolsets $(TOOLSETS) & echo $$! > .mcp-server.pid; \
+		./$(BINARY_NAME) --port $(MCP_PORT) --toolsets $(TOOLSETS) --config-dir $(MCP_CONFIG_DIR) & echo $$! > .mcp-server.pid; \
 	else \
 		./$(BINARY_NAME) --port $(MCP_PORT) & echo $$! > .mcp-server.pid; \
 	fi

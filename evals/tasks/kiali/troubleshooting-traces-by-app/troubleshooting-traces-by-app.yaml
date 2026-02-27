@@ -1,0 +1,18 @@
+kind: Task
+metadata:
+  labels:
+    suite: kiali
+  name: "Get traces for an app"
+  category: "Troubleshooting & Debugging"
+  difficulty: easy
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+  verify:
+    contains: "productpage"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+  prompt:
+    inline: Get the latest traces for the productpage app in the bookinfo namespace.
