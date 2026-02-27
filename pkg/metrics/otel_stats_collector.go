@@ -92,10 +92,12 @@ func createMetricsExporter(ctx context.Context, cfg *config.TelemetryConfig) (sd
 
 	// use config if provided and enabled, otherwise env vars
 	var protocol string
+	var endpoint string
 	if cfg != nil && cfg.IsEnabled() {
 		protocol = strings.ToLower(cfg.GetProtocol())
+		endpoint = cfg.GetEndpoint()
 	} else {
-		endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 		if endpoint == "" {
 			return nil, nil // No export configured
 		}
@@ -105,7 +107,7 @@ func createMetricsExporter(ctx context.Context, cfg *config.TelemetryConfig) (sd
 	switch protocol {
 	case "http/protobuf", "http":
 		klog.V(2).Infof("Using HTTP/protobuf OTLP metrics exporter (protocol=%s)", protocol)
-		return otlpmetrichttp.New(ctx)
+		return otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(endpoint))
 
 	case "grpc", "":
 		if protocol == "" {
@@ -113,11 +115,11 @@ func createMetricsExporter(ctx context.Context, cfg *config.TelemetryConfig) (sd
 		} else {
 			klog.V(2).Info("Using gRPC OTLP metrics exporter")
 		}
-		return otlpmetricgrpc.New(ctx)
+		return otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpointURL(endpoint))
 
 	default:
 		klog.V(1).Infof("Unknown OTEL_EXPORTER_OTLP_PROTOCOL '%s' for metrics, defaulting to gRPC", protocol)
-		return otlpmetricgrpc.New(ctx)
+		return otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpointURL(endpoint))
 	}
 }
 

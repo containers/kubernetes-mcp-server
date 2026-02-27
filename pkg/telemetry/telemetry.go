@@ -327,11 +327,12 @@ func getSamplerFromConfig(cfg *config.TelemetryConfig) trace.Sampler {
 // Environment variables take precedence over config values.
 func createExporterWithConfig(ctx context.Context, cfg *config.TelemetryConfig) (*otlptrace.Exporter, error) {
 	protocol := strings.ToLower(cfg.GetProtocol())
+	endpoint := cfg.GetEndpoint()
 
 	switch protocol {
 	case "http/protobuf", "http":
 		klog.V(2).Infof("Using HTTP/protobuf OTLP exporter (protocol=%s)", protocol)
-		return otlptracehttp.New(ctx)
+		return otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
 
 	case "grpc", "":
 		if protocol == "" {
@@ -339,10 +340,10 @@ func createExporterWithConfig(ctx context.Context, cfg *config.TelemetryConfig) 
 		} else {
 			klog.V(2).Info("Using gRPC OTLP exporter")
 		}
-		return otlptracegrpc.New(ctx)
+		return otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(endpoint))
 
 	default:
 		klog.V(1).Infof("Unknown protocol '%s', defaulting to gRPC", protocol)
-		return otlptracegrpc.New(ctx)
+		return otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(endpoint))
 	}
 }
