@@ -18,7 +18,8 @@ func initConfiguration() []api.ServerTool {
 				Name:        "configuration_contexts_list",
 				Description: "List all available context names and associated server urls from the kubeconfig file",
 				InputSchema: &jsonschema.Schema{
-					Type: "object",
+					Type:       "object",
+					Properties: make(map[string]*jsonschema.Schema),
 				},
 				Annotations: api.ToolAnnotations{
 					Title:           "Configuration: Contexts List",
@@ -42,7 +43,8 @@ func initConfiguration() []api.ServerTool {
 				Name:        "targets_list",
 				Description: "List all available targets",
 				InputSchema: &jsonschema.Schema{
-					Type: "object",
+					Type:       "object",
+					Properties: make(map[string]*jsonschema.Schema),
 				},
 				Annotations: api.ToolAnnotations{
 					Title:           "Targets List",
