@@ -32,7 +32,7 @@ jobs:
 
       - name: Download evaluation context
         if: steps.check.outputs.should-report == 'true'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: eval-context
           path: eval-context/
