@@ -560,7 +560,7 @@ For configuration options including OAuth, telemetry, and resource limits, see t
 
 Join the conversation and connect with other users and contributors:
 
-- [Slack](https://cloud-native.slack.com/archives/C0AHQJVR725) - Ask questions, share feedback, and discuss the Kubernetes MCP server
+- [Slack](https://cloud-native.slack.com/archives/C0AHQJVR725) - Ask questions, share feedback, and discuss the Kubernetes MCP server in the `#kubernetes-mcp-server` channel on the CNCF Slack workspace. If you're not already a member, you can [request an invitation](https://slack.cncf.io).
 
 ## 🧑‍💻 Development <a id="development"></a>
 
