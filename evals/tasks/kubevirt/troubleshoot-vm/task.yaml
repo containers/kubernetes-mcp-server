@@ -1,5 +1,8 @@
 kind: Task
 metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
   name: "troubleshoot-vm"
   difficulty: hard
   description: "Use the vm-troubleshoot prompt to diagnose and fix VirtualMachine issues"
