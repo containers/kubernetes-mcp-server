@@ -166,9 +166,7 @@ extraVolumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
-# -- Init containers to run before the main container starts.
-# -- Each container is defined as a complete container spec.
-# -- Supports tpl for templating.
+# -- Init containers to run before the main container starts. Each container is defined as a complete container spec. Supports tpl for templating.
 initContainers: []
 # - name: init-config
 #   image: busybox:latest
