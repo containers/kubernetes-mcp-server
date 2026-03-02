@@ -110,10 +110,26 @@ type ToolHandlerFunc func(params ToolHandlerParams) (*ToolCallResult, error)
 
 // Elicitor provides a mechanism for tools and prompts to request additional information
 // from the user during execution via the MCP elicitation protocol.
-// The elicitation request is forwarded to the MCP client, which presents a form to the user.
+// It supports two modes:
+//   - Form mode: presents a schema-based form to the user (set Message and RequestedSchema in ElicitParams).
+//   - URL mode: directs the user to a URL (set Message, URL, and optionally ElicitationID in ElicitParams).
+//
 // See MCP specification: https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation
 type Elicitor interface {
-	Elicit(ctx context.Context, message string, requestedSchema *jsonschema.Schema) (*ElicitResult, error)
+	Elicit(ctx context.Context, params *ElicitParams) (*ElicitResult, error)
+}
+
+// ElicitParams contains the parameters for an elicitation request.
+// The elicitation mode is inferred from the fields: if URL is set, URL mode is used; otherwise form mode.
+type ElicitParams struct {
+	// Message is the message to present to the user.
+	Message string
+	// RequestedSchema is a JSON Schema defining the expected form fields. Used in form mode only.
+	RequestedSchema *jsonschema.Schema
+	// URL is the URL to present to the user. Used in URL mode only.
+	URL string
+	// ElicitationID is a tracking identifier for out-of-band URL elicitation completion. Used in URL mode only.
+	ElicitationID string
 }
 
 // ElicitAction constants define the possible user responses to an elicitation request.
@@ -129,7 +145,7 @@ const (
 
 // ElicitResult represents the user's response to an elicitation request.
 type ElicitResult struct {
-	// Action is one of ElicitActionAccept, ElicitActionDecline, or ElicitActionCancel.
+	// Action is one of the ElicitAction constants.
 	Action string
 	// Content contains the submitted form data. Only populated when Action is ElicitActionAccept.
 	Content map[string]any

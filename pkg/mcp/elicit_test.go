@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -59,7 +60,7 @@ func (s *ElicitationSuite) registerElicitingToolset(handler api.ToolHandlerFunc)
 
 func (s *ElicitationSuite) TestElicitationAccepted() {
 	s.registerElicitingToolset(func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-		result, err := params.Elicit(params.Context, "Please confirm", nil)
+		result, err := params.Elicit(params.Context, &api.ElicitParams{Message: "Please confirm"})
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +91,7 @@ func (s *ElicitationSuite) TestElicitationAccepted() {
 
 func (s *ElicitationSuite) TestElicitationDeclined() {
 	s.registerElicitingToolset(func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-		result, err := params.Elicit(params.Context, "Please confirm", nil)
+		result, err := params.Elicit(params.Context, &api.ElicitParams{Message: "Please confirm"})
 		if err != nil {
 			return nil, err
 		}
@@ -118,7 +119,7 @@ func (s *ElicitationSuite) TestElicitationDeclined() {
 
 func (s *ElicitationSuite) TestElicitationWithUnsupportedClient() {
 	s.registerElicitingToolset(func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-		_, err := params.Elicit(params.Context, "Please confirm", nil)
+		_, err := params.Elicit(params.Context, &api.ElicitParams{Message: "Please confirm"})
 		if err != nil {
 			if errors.Is(err, ErrElicitationNotSupported) {
 				return api.NewToolCallResult("fallback-result", nil), nil
@@ -141,6 +142,121 @@ func (s *ElicitationSuite) TestElicitationWithUnsupportedClient() {
 		textContent, ok := toolResult.Content[0].(*mcp.TextContent)
 		s.Require().True(ok)
 		s.Equal("fallback-result", textContent.Text)
+	})
+}
+
+func (s *ElicitationSuite) TestElicitationURLAccepted() {
+	s.registerElicitingToolset(func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+		result, err := params.Elicit(params.Context, &api.ElicitParams{
+			Message: "Please complete the form",
+			URL:     "https://example.com/form",
+		})
+		if err != nil {
+			return nil, err
+		}
+		return api.NewToolCallResult("action="+result.Action, nil), nil
+	})
+
+	s.InitMcpClient(
+		test.WithElicitationHandler(
+			func(_ context.Context, _ *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+				return &mcp.ElicitResult{Action: "accept"}, nil
+			},
+		),
+		test.WithClientCapabilities(&mcp.ClientCapabilities{
+			Elicitation: &mcp.ElicitationCapabilities{
+				URL: &mcp.URLElicitationCapabilities{},
+			},
+		}),
+	)
+
+	toolResult, err := s.CallTool("elicit_test_tool", map[string]any{})
+
+	s.Run("returns accepted action for URL elicitation", func() {
+		s.NoError(err)
+		s.Require().NotNil(toolResult)
+		s.False(toolResult.IsError)
+		s.Require().Len(toolResult.Content, 1)
+		textContent, ok := toolResult.Content[0].(*mcp.TextContent)
+		s.Require().True(ok)
+		s.Equal("action=accept", textContent.Text)
+	})
+}
+
+func (s *ElicitationSuite) TestElicitationURLWithElicitationID() {
+	s.registerElicitingToolset(func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+		result, err := params.Elicit(params.Context, &api.ElicitParams{
+			Message:       "Please complete the form",
+			URL:           "https://example.com/form",
+			ElicitationID: "elicit-123",
+		})
+		if err != nil {
+			return nil, err
+		}
+		return api.NewToolCallResult("action="+result.Action, nil), nil
+	})
+
+	s.InitMcpClient(
+		test.WithElicitationHandler(
+			func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+				if req.Params.ElicitationID != "elicit-123" {
+					return nil, fmt.Errorf("expected elicitationID 'elicit-123', got '%s'", req.Params.ElicitationID)
+				}
+				return &mcp.ElicitResult{Action: "accept"}, nil
+			},
+		),
+		test.WithClientCapabilities(&mcp.ClientCapabilities{
+			Elicitation: &mcp.ElicitationCapabilities{
+				URL: &mcp.URLElicitationCapabilities{},
+			},
+		}),
+	)
+
+	toolResult, err := s.CallTool("elicit_test_tool", map[string]any{})
+
+	s.Run("forwards elicitationID to the client", func() {
+		s.NoError(err)
+		s.Require().NotNil(toolResult)
+		s.False(toolResult.IsError)
+		s.Require().Len(toolResult.Content, 1)
+		textContent, ok := toolResult.Content[0].(*mcp.TextContent)
+		s.Require().True(ok)
+		s.Equal("action=accept", textContent.Text)
+	})
+}
+
+func (s *ElicitationSuite) TestElicitationURLWithUnsupportedClient() {
+	s.registerElicitingToolset(func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+		_, err := params.Elicit(params.Context, &api.ElicitParams{
+			Message: "Please complete the form",
+			URL:     "https://example.com/form",
+		})
+		if err != nil {
+			if errors.Is(err, ErrElicitationNotSupported) {
+				return api.NewToolCallResult("url-fallback-result", nil), nil
+			}
+			return nil, err
+		}
+		return api.NewToolCallResult("should-not-reach", nil), nil
+	})
+
+	// Client supports elicitation but not URL mode (default capabilities = form only)
+	s.InitMcpClient(test.WithElicitationHandler(
+		func(_ context.Context, _ *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+			return &mcp.ElicitResult{Action: "accept"}, nil
+		},
+	))
+
+	toolResult, err := s.CallTool("elicit_test_tool", map[string]any{})
+
+	s.Run("tool handles unsupported URL elicitation gracefully", func() {
+		s.NoError(err)
+		s.Require().NotNil(toolResult)
+		s.False(toolResult.IsError)
+		s.Require().Len(toolResult.Content, 1)
+		textContent, ok := toolResult.Content[0].(*mcp.TextContent)
+		s.Require().True(ok)
+		s.Equal("url-fallback-result", textContent.Text)
 	})
 }
 
