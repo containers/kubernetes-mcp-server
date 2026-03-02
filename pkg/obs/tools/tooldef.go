@@ -36,14 +36,15 @@ const (
 // ToolDef defines a tool that can be converted to different formats (MCP, Toolset, etc.)
 // T is the output schema type for this tool
 type ToolDef[T any] struct {
-	Name        string
-	Description string
-	Title       string
-	Params      []ParamDef
-	ReadOnly    bool
-	Destructive bool
-	Idempotent  bool
-	OpenWorld   bool
+	Name             string
+	Description      string
+	Title            string
+	Params           []ParamDef
+	ReadOnly         bool
+	Destructive      bool
+	Idempotent       bool
+	OpenWorld        bool
+	AdditionalFields map[string]any
 }
 
 // ToMCPTool converts a ToolDef to an mcp.Tool
@@ -104,6 +105,10 @@ func (d ToolDef[T]) ToMCPTool() *mcp.Tool {
 
 	if d.Title != "" {
 		tool.Title = d.Title
+	}
+
+	if d.AdditionalFields != nil {
+		tool.Meta = mcp.Meta(d.AdditionalFields)
 	}
 
 	return tool

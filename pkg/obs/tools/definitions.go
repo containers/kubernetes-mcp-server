@@ -86,6 +86,11 @@ var (
 				Pattern:     `^\d+[smhdwy]$`,
 			},
 		},
+		AdditionalFields: map[string]any{
+			"olsUi": map[string]any{
+				"id": "mcp-obs/execute-range-query",
+			},
+		},
 	}
 
 	GetLabelNames = ToolDef[LabelNamesOutput]{
