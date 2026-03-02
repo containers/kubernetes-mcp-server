@@ -81,8 +81,10 @@ func GoSdkToolCallRequestToToolCallRequest(request *mcp.CallToolRequest) (*ToolC
 
 func GoSdkToolCallParamsToToolCallRequest(toolCallParams *mcp.CallToolParamsRaw) (*ToolCallRequest, error) {
 	var arguments map[string]any
-	if err := json.Unmarshal(toolCallParams.Arguments, &arguments); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+	if len(toolCallParams.Arguments) > 0 {
+		if err := json.Unmarshal(toolCallParams.Arguments, &arguments); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+		}
 	}
 	return &ToolCallRequest{
 		Name:      toolCallParams.Name,

@@ -3,8 +3,10 @@ package test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -248,6 +250,36 @@ func (m *McpClient) CallTool(name string, args map[string]any) (*mcp.CallToolRes
 		Name:      name,
 		Arguments: args,
 	})
+}
+
+// CallToolRaw sends a raw JSON-RPC tools/call request bypassing the go-sdk client.
+// This allows sending requests exactly as a non-go-sdk MCP client would, without
+// the go-sdk's automatic normalization (e.g., the go-sdk always adds "arguments": {}
+// even when nil).
+// The jsonParams is the raw JSON for the "params" field of the JSON-RPC request.
+func (m *McpClient) CallToolRaw(t *testing.T, jsonParams string) *http.Response {
+	t.Helper()
+	body := fmt.Sprintf(`{"jsonrpc":"2.0","id":99,"method":"tools/call","params":%s}`, jsonParams)
+	return McpRawPost(t, m.testServer.URL+"/mcp", m.Session.ID(), body)
+}
+
+// McpRawPost sends a raw JSON-RPC request to an MCP HTTP endpoint.
+// This is useful for testing MCP protocol edge cases that can't be reproduced through
+// the go-sdk client due to its automatic normalization (e.g., always adding "arguments": {},
+// always setting clientInfo).
+// The jsonBody should be a complete JSON-RPC message.
+func McpRawPost(t *testing.T, endpoint, sessionID, jsonBody string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(jsonBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	return resp
 }
 
 // ListTools helper function to list available tools

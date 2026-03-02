@@ -46,6 +46,24 @@ func (s *NamespacesSuite) TestNamespacesList() {
 	})
 }
 
+// TestNamespacesListWithoutArguments verifies that namespaces_list can be called when the
+// MCP client omits the "arguments" field from the tools/call JSON-RPC request.
+// The MCP spec defines arguments as optional (arguments?: { [key: string]: unknown }),
+// so spec-compliant clients may omit it entirely for tools with no required parameters.
+// This is an edge case because most mainstream MCP clients (Claude Desktop, Cursor, etc.)
+// always send "arguments": {}, but custom or minimal clients may not.
+// https://github.com/containers/kubernetes-mcp-server/issues/849
+func (s *NamespacesSuite) TestNamespacesListWithoutArguments() {
+	s.InitMcpClient()
+	s.Run("namespaces_list without arguments does not panic", func() {
+		// Send a raw JSON-RPC request without the "arguments" field, bypassing
+		// the go-sdk client which always normalizes nil arguments to {}.
+		resp := s.CallToolRaw(s.T(), `{"name":"namespaces_list"}`)
+		defer func() { _ = resp.Body.Close() }()
+		s.Equal(200, resp.StatusCode)
+	})
+}
+
 func (s *NamespacesSuite) TestNamespacesListDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "Namespace" } ]

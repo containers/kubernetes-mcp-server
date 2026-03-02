@@ -70,8 +70,10 @@ func toolCallLoggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		switch params := req.GetParams().(type) {
 		case *mcp.CallToolParamsRaw:
-			toolCallRequest, _ := GoSdkToolCallParamsToToolCallRequest(params)
-			klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, toolCallRequest.GetArguments())
+			toolCallRequest, err := GoSdkToolCallParamsToToolCallRequest(params)
+			if err == nil {
+				klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, toolCallRequest.GetArguments())
+			}
 			if req.GetExtra() != nil && req.GetExtra().Header != nil {
 				buffer := bytes.NewBuffer(make([]byte, 0))
 				if err := req.GetExtra().Header.WriteSubset(buffer, map[string]bool{"Authorization": true, "authorization": true}); err == nil {
