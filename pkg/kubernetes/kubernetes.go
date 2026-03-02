@@ -43,10 +43,12 @@ type Kubernetes struct {
 	config          api.BaseConfig
 	clientCmdConfig clientcmd.ClientConfig
 	restConfig      *rest.Config
+	httpClient      *http.Client
 	restMapper      meta.ResettableRESTMapper
 	discoveryClient discovery.CachedDiscoveryInterface
 	dynamicClient   dynamic.Interface
 	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
+	isDerived       bool
 }
 
 var _ api.KubernetesClient = (*Kubernetes)(nil)
@@ -74,25 +76,40 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return &UserAgentRoundTripper{delegate: original}
 	})
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(k.restConfig)
+	var err error
+	k.httpClient, err = rest.HTTPClientFor(k.restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+	discoveryClient, err := discovery.NewDiscoveryClientForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discovery client: %w", err)
 	}
 	k.discoveryClient = memory.NewMemCacheClient(discoveryClient)
 	k.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(k.discoveryClient)
-	k.Interface, err = kubernetes.NewForConfig(k.restConfig)
+	k.Interface, err = kubernetes.NewForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, err
 	}
-	k.dynamicClient, err = dynamic.NewForConfig(k.restConfig)
+	k.dynamicClient, err = dynamic.NewForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, err
 	}
-	k.metricsV1beta1, err = metricsv1beta1.NewForConfig(k.restConfig)
+	k.metricsV1beta1, err = metricsv1beta1.NewForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, err
 	}
 	return k, nil
+}
+
+// Close releases HTTP transport resources held by this client.
+// Only acts on derived (per-request) clients to avoid disrupting the base client.
+// Safe to call on any Kubernetes instance including nil.
+func (k *Kubernetes) Close() {
+	if k == nil || !k.isDerived || k.httpClient == nil {
+		return
+	}
+	k.httpClient.CloseIdleConnections()
 }
 
 func (k *Kubernetes) RESTConfig() *rest.Config {

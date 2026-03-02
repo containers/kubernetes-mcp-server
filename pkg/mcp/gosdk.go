@@ -45,6 +45,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		if err != nil {
 			return nil, err
 		}
+		defer k.Close()
 
 		result, err := tool.Handler(api.ToolHandlerParams{
 			Context:                ctx,
