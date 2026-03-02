@@ -150,19 +150,27 @@ func (d ToolDef[T]) ToServerTool(handler func(api.ToolHandlerParams) (*api.ToolC
 		inputSchema.Required = required
 	}
 
-	return api.ServerTool{
-		Tool: api.Tool{
-			Name:        d.Name,
-			Description: d.Description,
-			InputSchema: inputSchema,
-			Annotations: api.ToolAnnotations{
-				Title:           d.Title,
-				ReadOnlyHint:    ptr.To(d.ReadOnly),
-				DestructiveHint: ptr.To(d.Destructive),
-				IdempotentHint:  ptr.To(d.Idempotent),
-				OpenWorldHint:   ptr.To(d.OpenWorld),
-			},
+	tool := api.Tool{
+		Name:        d.Name,
+		Description: d.Description,
+		InputSchema: inputSchema,
+		Annotations: api.ToolAnnotations{
+			Title:           d.Title,
+			ReadOnlyHint:    ptr.To(d.ReadOnly),
+			DestructiveHint: ptr.To(d.Destructive),
+			IdempotentHint:  ptr.To(d.Idempotent),
+			OpenWorldHint:   ptr.To(d.OpenWorld),
 		},
+	}
+
+	if d.AdditionalFields != nil {
+		tool.Meta = map[string]any{
+			"AdditionalFields": d.AdditionalFields,
+		}
+	}
+
+	return api.ServerTool{
+		Tool:    tool,
 		Handler: handler,
 		// TODO(saswatamcode): Modify this selectively on ACM setups.
 		ClusterAware: ptr.To(false),
