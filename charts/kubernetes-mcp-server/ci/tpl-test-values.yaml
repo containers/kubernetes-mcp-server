@@ -58,6 +58,12 @@ extraVolumeMounts:
   - name: "{{ .Release.Name }}-extra-volume"
     mountPath: /extra
 
+# Test tpl in initContainers (array inside with block)
+initContainers:
+  - name: "{{ .Release.Name }}-init"
+    image: busybox:latest
+    command: ["sh", "-c", "echo init"]
+
 # Test tpl in extraContainers (array inside with block)
 extraContainers:
   - name: "{{ .Release.Name }}-sidecar"
