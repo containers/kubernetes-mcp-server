@@ -31,7 +31,7 @@ No additional toolset-specific configuration is required. The server uses your e
 
 Create a VirtualMachine in the cluster. The tool automatically resolves instance types, preferences, and container disk images based on the provided parameters.
 
-- **Workload resolution** - Accepts OS names such as `fedora`, `ubuntu`, `centos`, `centos-stream`, `debian`, `rhel`, `opensuse`, `opensuse-tumbleweed`, and `opensuse-leap`. These are resolved to container disk images from `quay.io/containerdisks`. Full container disk image URLs are also accepted. If DataSources are available in the cluster, the tool will match against those first.
+- **Workload resolution** - Accepts OS names such as `fedora`, `ubuntu`, `centos`, `centos-stream`, `debian`, `rhel8`, `rhel9`, `rhel10`, `opensuse`, `opensuse-tumbleweed`, and `opensuse-leap`. These are resolved to container disk images from `quay.io/containerdisks`. Full container disk image URLs are also accepted. If DataSources are available in the cluster, the tool will match against those first.
 - **Instance type resolution** - Automatically selects an appropriate instance type based on the `size` (e.g., `small`, `medium`, `large`) and `performance` (e.g., `general-purpose`, `overcommitted`, `compute-optimized`, `memory-optimized`) hints. Instance types can also be specified explicitly.
 - **Preference resolution** - Resolves VM preferences from cluster resources or DataSource defaults.
 - **Networking** - Supports attaching secondary network interfaces via Multus NetworkAttachmentDefinitions.

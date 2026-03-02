@@ -22,8 +22,8 @@ Choose the guide that matches your needs:
 
 ## Toolset Guides
 
-- **[KubeVirt](kubevirt.md)** - KubeVirt virtual machine management tools
 - **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
+- **[KubeVirt](kubevirt.md)** - KubeVirt virtual machine management tools
 
 ## Advanced Topics
 
