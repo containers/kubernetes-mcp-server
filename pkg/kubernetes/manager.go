@@ -129,7 +129,6 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	derivedCfg := &rest.Config{
 		Host:          m.kubernetes.RESTConfig().Host,
 		APIPath:       m.kubernetes.RESTConfig().APIPath,
-		WrapTransport: m.kubernetes.RESTConfig().WrapTransport,
 		// Copy only server verification TLS settings (CA bundle and server name)
 		TLSClientConfig: rest.TLSClientConfig{
 			Insecure:   m.kubernetes.RESTConfig().Insecure,
