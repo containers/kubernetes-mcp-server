@@ -20,12 +20,12 @@ func CompositeFilter(filters ...ToolFilter) ToolFilter {
 	}
 }
 
-func ShouldIncludeTargetListTool(targetName string, targets []string) ToolFilter {
+func ShouldIncludeTargetListTool(targetName string, isMultiCluster bool) ToolFilter {
 	return func(tool api.ServerTool) bool {
 		if !tool.IsTargetListProvider() {
 			return true
 		}
-		if len(targets) <= 1 {
+		if !isMultiCluster {
 			// there is no need to provide a tool to list the single available target
 			return false
 		}

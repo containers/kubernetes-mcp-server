@@ -47,10 +47,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "namespace": {
@@ -78,10 +74,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -122,10 +114,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "namespace": {
@@ -150,10 +138,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -185,10 +169,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         }
       },
@@ -209,10 +189,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -251,10 +227,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -283,10 +255,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "label_selector": {
@@ -316,10 +284,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -361,10 +325,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -397,10 +357,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -432,10 +388,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "fieldSelector": {
@@ -466,10 +418,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "fieldSelector": {
@@ -511,10 +459,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "name": {
@@ -555,10 +499,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "image": {
@@ -604,10 +544,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "label_selector": {
@@ -641,10 +577,6 @@
       "properties": {
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "resource": {
@@ -676,10 +608,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "gracePeriodSeconds": {
@@ -725,10 +653,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "kind": {
@@ -770,10 +694,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "fieldSelector": {
@@ -820,10 +740,6 @@
         },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
-          "enum": [
-            "extra-cluster",
-            "fake-context"
-          ],
           "type": "string"
         },
         "kind": {

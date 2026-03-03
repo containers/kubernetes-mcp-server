@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -21,15 +22,13 @@ func ComposeMutators(mutators ...ToolMutator) ToolMutator {
 	}
 }
 
-const maxTargetsInEnum = 5 // TODO: test and validate that this is a reasonable cutoff
-
 // TargetsListToolName is the base name for the generic targets list tool before mutation
 const TargetsListToolName = "targets_list"
 
 // WithTargetParameter adds a target selection parameter to the tool's input schema if the tool is cluster-aware
-func WithTargetParameter(defaultCluster, targetParameterName string, targets []string) ToolMutator {
+func WithTargetParameter(defaultCluster, targetParameterName string, isMultiCluster bool) ToolMutator {
 	return func(tool api.ServerTool) api.ServerTool {
-		if !tool.IsClusterAware() {
+		if !tool.IsClusterAware() || !isMultiCluster {
 			return tool
 		}
 
@@ -41,19 +40,16 @@ func WithTargetParameter(defaultCluster, targetParameterName string, targets []s
 			tool.Tool.InputSchema.Properties = make(map[string]*jsonschema.Schema)
 		}
 
-		if len(targets) > 1 {
-			tool.Tool.InputSchema.Properties[targetParameterName] = createTargetProperty(
-				defaultCluster,
-				targetParameterName,
-				targets,
-			)
-		}
+		tool.Tool.InputSchema.Properties[targetParameterName] = createTargetProperty(
+			defaultCluster,
+			targetParameterName,
+		)
 
 		return tool
 	}
 }
 
-func createTargetProperty(defaultCluster, targetName string, targets []string) *jsonschema.Schema {
+func createTargetProperty(defaultCluster, targetName string) *jsonschema.Schema {
 	baseSchema := &jsonschema.Schema{
 		Type: "string",
 		Description: fmt.Sprintf(
@@ -63,24 +59,13 @@ func createTargetProperty(defaultCluster, targetName string, targets []string) *
 		),
 	}
 
-	if len(targets) <= maxTargetsInEnum {
-		// Sort clusters to ensure consistent enum ordering
-		sort.Strings(targets)
-
-		enumValues := make([]any, 0, len(targets))
-		for _, c := range targets {
-			enumValues = append(enumValues, c)
-		}
-		baseSchema.Enum = enumValues
-	}
-
 	return baseSchema
 }
 
 // WithTargetListTool mutates the generic "targets_list" tool to have the correct name,
 // description, and handler based on the provider's target parameter name.
 // For example, with ACM provider (targetParameterName="cluster"), it becomes "cluster_list".
-func WithTargetListTool(defaultTarget, targetParameterName string, targets []string) ToolMutator {
+func WithTargetListTool(defaultTarget, targetParameterName string, p internalk8s.Provider) ToolMutator {
 	return func(tool api.ServerTool) api.ServerTool {
 		if tool.Tool.Name != TargetsListToolName {
 			return tool
@@ -92,14 +77,19 @@ func WithTargetListTool(defaultTarget, targetParameterName string, targets []str
 		tool.Tool.Annotations.Title = fmt.Sprintf("%s List", capitalizeFirst(targetParameterName))
 
 		// Set the handler with captured targets
-		tool.Handler = createTargetListHandler(targets, targetParameterName, defaultTarget)
+		tool.Handler = createTargetListHandler(p, targetParameterName, defaultTarget)
 
 		return tool
 	}
 }
 
-func createTargetListHandler(targets []string, targetParameterName, defaultTarget string) api.ToolHandlerFunc {
-	return func(_ api.ToolHandlerParams) (*api.ToolCallResult, error) {
+func createTargetListHandler(p internalk8s.Provider, targetParameterName, defaultTarget string) api.ToolHandlerFunc {
+	return func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+		targets, err := p.GetTargets(params.Context)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to find any targets: %w", err)), nil
+		}
+
 		if len(targets) == 0 {
 			return api.NewToolCallResult(fmt.Sprintf("No %ss available", targetParameterName), nil), nil
 		}

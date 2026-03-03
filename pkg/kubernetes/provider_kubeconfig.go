@@ -105,6 +105,10 @@ func (p *kubeConfigClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.managers[p.defaultContext].IsOpenShift(ctx)
 }
 
+func (p *kubeConfigClusterProvider) IsMultiCluster() bool {
+	return len(p.managers) > 1
+}
+
 func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	contextNames := make([]string, 0, len(p.managers))
 	for contextName := range p.managers {
