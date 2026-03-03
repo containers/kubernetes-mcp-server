@@ -92,7 +92,7 @@ func InitGetMetrics() []api.ServerTool {
 				Required: []string{"resource_type", "namespace", "resource_name"},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Get Metrics for a Resource",
+				Title:           "Get Metrics for a Resource (" + defaults.ToolsetName() + ")",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(true),

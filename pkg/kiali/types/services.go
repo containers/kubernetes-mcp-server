@@ -17,6 +17,7 @@ type ServiceListItem struct {
 	IstioRefs    []IstioRef        `json:"istioReferences"`
 	AppLabel     bool              `json:"appLabel"`
 	VersionLabel bool              `json:"versionLabel"`
+	IstioSidecar bool              `json:"istioSidecar"`
 }
 
 // ServiceListHealth holds health status from the services list API (health.status.status).

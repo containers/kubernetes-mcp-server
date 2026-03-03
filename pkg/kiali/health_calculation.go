@@ -410,6 +410,24 @@ func calculateErrorRate(req kialitypes.RequestHealth) float64 {
 	return errorRequests / totalRequests
 }
 
+// calculateInboundErrorRate computes error percentage from inbound requests only.
+func calculateInboundErrorRate(req kialitypes.RequestHealth) float64 {
+	totalRequests := 0.0
+	errorRequests := 0.0
+	for protocol, codes := range req.Inbound {
+		for code, count := range codes {
+			totalRequests += count
+			if isErrorCode(protocol, code) {
+				errorRequests += count
+			}
+		}
+	}
+	if totalRequests == 0 {
+		return 0.0
+	}
+	return errorRequests / totalRequests
+}
+
 // isErrorCode checks if a status code represents an error
 // Based on Kiali's default tolerance configuration
 func isErrorCode(protocol, code string) bool {

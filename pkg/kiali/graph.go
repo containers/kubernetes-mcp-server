@@ -26,17 +26,8 @@ func (k *Kiali) Graph(ctx context.Context, namespaces []string, queryParams map[
 	q.Set("rateGrpc", DefaultRateGrpc)
 	q.Set("rateHttp", DefaultRateHttp)
 	q.Set("rateTcp", DefaultRateTcp)
-	// Optional namespaces param
-	cleaned := make([]string, 0, len(namespaces))
-	for _, ns := range namespaces {
-		ns = strings.TrimSpace(ns)
-		if ns != "" {
-			cleaned = append(cleaned, ns)
-		}
-	}
-	if len(cleaned) > 0 {
-		q.Set("namespaces", strings.Join(cleaned, ","))
-	}
+	q.Set("namespaces", strings.Join(namespaces, ","))
+
 	u.RawQuery = q.Encode()
 	endpoint := u.String()
 

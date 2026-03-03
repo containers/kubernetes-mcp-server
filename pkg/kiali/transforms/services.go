@@ -71,7 +71,7 @@ func toServiceSummary(svc kialitypes.ServiceListItem, val kialitypes.ServicesVal
 		}
 	}
 
-	details := joinDetailParts(formatDetails(svc.IstioRefs), formatMissingLabelDetails(svc.AppLabel, svc.VersionLabel))
+	details := joinDetailParts(formatDetails(svc.IstioRefs), formatMissingLabelDetails(svc.AppLabel, svc.VersionLabel), formatMissingSidecarDetail(svc.IstioSidecar))
 	labels := formatLabels(svc.Labels)
 
 	return kialitypes.ServiceSummary{
@@ -118,6 +118,15 @@ func formatMissingLabelDetails(appLabel, versionLabel bool) string {
 		return "Missing App label (This workload won't be linked with an application.)"
 	}
 	return "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)"
+}
+
+// formatMissingSidecarDetail returns a detail string when the Istio sidecar is not present in the pod(s).
+// Used in both services and workloads details.
+func formatMissingSidecarDetail(istioSidecar bool) string {
+	if istioSidecar {
+		return ""
+	}
+	return "Istio sidecar container not found in Pod(s). Check if the istio-injection label/annotation is correctly set on the namespace/workload"
 }
 
 // joinDetailParts joins non-empty detail parts with ", ".

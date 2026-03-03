@@ -47,7 +47,7 @@ func InitLogs() []api.ServerTool {
 				Required: []string{"namespace", "workload"},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Workload: Logs",
+				Title:           "Workload: Logs (" + defaults.ToolsetName() + ")",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(false),

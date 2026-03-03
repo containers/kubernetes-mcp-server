@@ -19,6 +19,7 @@ type WorkloadListItem struct {
 	IstioRefs    []IstioRef         `json:"istioReferences"`
 	AppLabel     bool               `json:"appLabel"`
 	VersionLabel bool               `json:"versionLabel"`
+	IstioSidecar bool               `json:"istioSidecar"`
 }
 
 // WorkloadGVK holds Group, Version, Kind for the workload.

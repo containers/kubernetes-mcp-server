@@ -3,7 +3,11 @@
 ISTIOCTL = $(shell pwd)/_output/tools/bin/istioctl
 ISTIO_ADDONS_DIR = $(shell pwd)/_output/istio-addons
 ISTIO_VERSION = 1.28.0
-KIALI_VERSION = v2.22.0
+KIALI_VERSION ?= latest
+# KIALI_VERSION_CLEAN: strip leading "v" (e.g. v2.22.0 -> 2.22.0); unused when KIALI_VERSION=latest
+KIALI_VERSION_CLEAN = $(patsubst v%,%,$(KIALI_VERSION))
+# Path to local Kiali manifest (used when KIALI_VERSION != latest)
+KIALI_YAML = $(CURDIR)/dev/config/kiali/kiali.yaml
 # Release version without patch (e.g. 1.28.0 -> 1.28)
 
 # Download and install istioctl (also copies samples/addons for install-istio)
@@ -26,11 +30,19 @@ istioctl:
 	}
 
 # Install Istio (demo profile) and enable sidecar injection in default namespace
+# If KIALI_VERSION=latest, apply Kiali from Istio addons URL (line below).
+# If KIALI_VERSION is set (e.g. v2.22.0), clean to 2.22.0 and apply dev/config/kiali/kiali.yaml with ${KIALI_VERSION} replaced.
 .PHONY: install-istio
 install-istio: istioctl
 	$(ISTIOCTL) install --set profile=demo -y
 	kubectl apply -f $(ISTIO_ADDONS_DIR)/prometheus.yaml -n istio-system
-	kubectl apply -f $(ISTIO_ADDONS_DIR)/kiali.yaml -n istio-system
+	@if [ "$(KIALI_VERSION)" = "latest" ]; then \
+		echo "Applying Kiali from Istio addons (latest)..."; \
+		kubectl apply -f https://raw.githubusercontent.com/istio/istio/refs/heads/master/samples/addons/kiali.yaml -n istio-system; \
+	else \
+		echo "Applying Kiali from $(KIALI_YAML) with version $(KIALI_VERSION_CLEAN)..."; \
+		sed 's/$${KIALI_VERSION}/$(KIALI_VERSION_CLEAN)/g' $(KIALI_YAML) | kubectl apply -f - -n istio-system; \
+	fi
 	kubectl apply -f $(ISTIO_ADDONS_DIR)/jaeger.yaml -n istio-system
 	kubectl wait --namespace istio-system --for=condition=available deployment/kiali --timeout=300s
 	kubectl wait --namespace istio-system --for=condition=available deployment/prometheus --timeout=300s
@@ -49,14 +61,6 @@ install-bookinfo-demo:
 	kubectl apply -f https://raw.githubusercontent.com/openshift-service-mesh/istio/refs/heads/master/samples/bookinfo/networking/bookinfo-gateway.yaml -n bookinfo
 	kubectl wait --for=condition=Ready pod --all -n bookinfo --timeout=300s
 
-# Update Kiali version
-.PHONY: update-kiali-version
-update-kiali-version:
-	@echo "Updating Kiali version to $(KIALI_VERSION)..."
-	@kubectl patch deployment kiali -n istio-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"kiali","image":"quay.io/kiali/kiali:$(KIALI_VERSION)"}]}}}}'
-	@kubectl delete pod -l app=kiali -n istio-system
-	@kubectl wait --for=condition=available deployment/kiali -n istio-system --timeout=300s
-
 # Expose Bookinfo demo
 .PHONY: expose-bookinfo-demo
 expose-bookinfo-demo:
@@ -74,4 +78,4 @@ expose-kiali:
 	echo "Kiali is being exposed on http://localhost:20001"
 
 .PHONY: setup-kiali
-setup-kiali: install-istio update-kiali-version install-bookinfo-demo expose-kiali expose-bookinfo-demo ## Setup Kiali
+setup-kiali: install-istio install-bookinfo-demo expose-kiali expose-bookinfo-demo ## Setup Kiali

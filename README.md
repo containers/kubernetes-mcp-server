@@ -426,10 +426,14 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kiali</summary>
 
-- **kiali_mesh_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
+- **kiali_mesh_status** - Returns the status of the mesh. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
+  - `namespaces` (`string`) - Optional comma-separated list of namespaces. If empty, will return the mesh status for all namespaces.
+  - `rateInterval` (`string`) - Optional rate interval for fetching (e.g., '10m', '5m', '1h').
+  - `type` (`string`) - Optional type health focused in : 'app', 'service', 'workload'
+
+- **kiali_topology_graph** - Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews
   - `graphType` (`string`) - Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'
-  - `namespace` (`string`) - Optional single namespace to include in the graph (alternative to namespaces)
-  - `namespaces` (`string`) - Optional comma-separated list of namespaces to include in the graph
+  - `namespaces` (`string`) **(required)** - Comma-separated list of namespaces to include in the graph
   - `rateInterval` (`string`) - Optional rate interval for fetching (e.g., '10m', '5m', '1h').
 
 - **kiali_manage_istio_config** - Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)
@@ -450,7 +454,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `version` (`string`) - API version of the Istio object (e.g., 'v1', 'v1beta1')
 
 - **kiali_get_resource_details** - Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh
-  - `namespaces` (`string`) - Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces
+  - `namespaces` (`string`) - Required to get details for a resource. Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces
   - `resource_name` (`string`) - Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).
   - `resource_type` (`string`) - Type of resource to get details for (service, workload)
 

@@ -34,17 +34,20 @@ func (k *Kiali) Health(ctx context.Context, namespaces string, queryParams map[s
 		}
 	}
 
-	// Ensure health "type" aligns with graphType (versionedApp -> app, mesh -> app)
-	// The Kiali health API only accepts "app", "service", or "workload" as valid types
+	// Health API type: "app", "service", or "workload". Prefer explicit "type", then "graphType".
 	healthType := "app"
-	if gt, ok := queryParams["graphType"]; ok && strings.TrimSpace(gt) != "" {
+	if t, ok := queryParams["type"]; ok && strings.TrimSpace(t) != "" {
+		v := strings.TrimSpace(t)
+		if v == "service" || v == "workload" || v == "app" {
+			healthType = v
+		}
+	} else if gt, ok := queryParams["graphType"]; ok && strings.TrimSpace(gt) != "" {
 		v := strings.TrimSpace(gt)
 		if strings.EqualFold(v, "versionedApp") {
 			healthType = "app"
 		} else if v == "workload" || v == "service" {
 			healthType = v
 		} else {
-			// For "mesh" or any other graphType, default to "app"
 			healthType = "app"
 		}
 	}

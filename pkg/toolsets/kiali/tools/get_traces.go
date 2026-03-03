@@ -98,7 +98,7 @@ func InitGetTraces() []api.ServerTool {
 				Required: []string{},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Get Traces for a Resource or Trace Details",
+				Title:           "Get Traces for a Resource or Trace Details (" + defaults.ToolsetName() + ")",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(true),

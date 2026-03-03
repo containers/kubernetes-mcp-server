@@ -77,31 +77,14 @@ func (s *KialiSuite) TestMeshGraph() {
 	}))
 	s.InitMcpClient()
 
-	s.Run("mesh_graph() with defaults", func() {
-		toolResult, err := s.CallTool("kiali_mesh_graph", map[string]interface{}{})
+	s.Run("mesh_status() with defaults", func() {
+		toolResult, err := s.CallTool("kiali_mesh_status", map[string]interface{}{})
 		s.Run("no error", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
-		s.Run("performs 4 simultaneous requests", func() {
-			s.Equal(4, len(capturedUrls), "expected 4 requests to Kiali")
-		})
-		s.Run("retrieves graph data", func() {
-			i := slices.IndexFunc(capturedUrls, func(capturedUrl url.URL) bool {
-				return capturedUrl.Path == "/api/namespaces/graph"
-			})
-			s.Require().NotEqual(-1, i, "expected request to /api/namespaces/graph")
-			s.Run("requested with correct query parameters", func() {
-				s.Equal("", capturedUrls[i].Query().Get("namespaces"), "Unexpected namespaces query parameter")
-				s.Equal("false", capturedUrls[i].Query().Get("includeIdleEdges"), "Unexpected includeIdleEdges query parameter")
-				s.Equal("true", capturedUrls[i].Query().Get("injectServiceNodes"), "Unexpected injectServiceNodes query parameter")
-				s.Equal("cluster,namespace,app", capturedUrls[i].Query().Get("boxBy"), "Unexpected boxBy query parameter")
-				s.Equal("none", capturedUrls[i].Query().Get("ambientTraffic"), "Unexpected ambientTraffic query parameter")
-				s.Equal("deadNode,istio,serviceEntry,meshCheck,workloadEntry,health", capturedUrls[i].Query().Get("appenders"), "Unexpected appenders query parameter")
-				s.Equal("requests", capturedUrls[i].Query().Get("rateGrpc"), "Unexpected rateGrpc query parameter")
-				s.Equal("requests", capturedUrls[i].Query().Get("rateHttp"), "Unexpected rateHttp query parameter")
-				s.Equal("sent", capturedUrls[i].Query().Get("rateTcp"), "Unexpected rateTcp query parameter")
-			})
+		s.Run("performs 3 simultaneous requests", func() {
+			s.Equal(3, len(capturedUrls), "expected 3 requests to Kiali (namespaces, mesh/graph, clusters/health)")
 		})
 		s.Run("retrieves mesh status", func() {
 			i := slices.IndexFunc(capturedUrls, func(capturedUrl url.URL) bool {

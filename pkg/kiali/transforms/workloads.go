@@ -37,7 +37,7 @@ func toWorkloadSummary(w kialitypes.WorkloadListItem) kialitypes.WorkloadSummary
 		health = w.Health.Status.Status
 	}
 
-	details := joinDetailParts(formatDetails(w.IstioRefs), formatMissingLabelDetails(w.AppLabel, w.VersionLabel))
+	details := joinDetailParts(formatDetails(w.IstioRefs), formatMissingLabelDetails(w.AppLabel, w.VersionLabel), formatMissingSidecarDetail(w.IstioSidecar))
 	labels := formatLabels(w.Labels)
 
 	return kialitypes.WorkloadSummary{

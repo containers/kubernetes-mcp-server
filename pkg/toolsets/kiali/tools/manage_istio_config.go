@@ -24,6 +24,7 @@ func InitManageIstioConfig() []api.ServerTool {
 						"action": {
 							Type:        "string",
 							Description: "Action to perform: create, patch, or delete",
+							Enum:        []any{"create", "patch", "delete"},
 						},
 						"namespace": {
 							Type:        "string",
@@ -53,7 +54,7 @@ func InitManageIstioConfig() []api.ServerTool {
 					Required: []string{"action"},
 				},
 				Annotations: api.ToolAnnotations{
-					Title:           "Manage Istio Config: Create, Patch, Delete",
+					Title:           "Manage Istio Config: Create, Patch, Delete (" + defaults.ToolsetName() + ")",
 					ReadOnlyHint:    ptr.To(false),
 					DestructiveHint: ptr.To(true),
 					IdempotentHint:  ptr.To(true),
@@ -71,6 +72,7 @@ func InitManageIstioConfig() []api.ServerTool {
 						"action": {
 							Type:        "string",
 							Description: "Action to perform: list or get",
+							Enum:        []any{"list", "get"},
 						},
 						"namespace": {
 							Type:        "string",
@@ -96,7 +98,7 @@ func InitManageIstioConfig() []api.ServerTool {
 					Required: []string{"action"},
 				},
 				Annotations: api.ToolAnnotations{
-					Title:           "Manage Istio Config: List or Get",
+					Title:           "Manage Istio Config: List or Get (" + defaults.ToolsetName() + ")",
 					ReadOnlyHint:    ptr.To(true),
 					DestructiveHint: ptr.To(false),
 					IdempotentHint:  ptr.To(true),
