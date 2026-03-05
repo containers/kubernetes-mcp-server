@@ -49,7 +49,7 @@ func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
 }
 
 func (t *Toolset) GetAllowedAPIGroups() []string {
-	return nil
+	return []string{"subresources.kubevirt.io"}
 }
 
 func init() {
