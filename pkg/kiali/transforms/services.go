@@ -242,9 +242,6 @@ func TransformServiceDetailsResponse(jsonPayload string) (*kialitypes.ServiceDet
 	for _, ep := range raw.Endpoints {
 		for _, addr := range ep.Addresses {
 			podName := addr.Name
-			if addr.Kind != "Pod" {
-				podName = addr.Name
-			}
 			if addr.IP != "" || podName != "" {
 				endpoints = append(endpoints, kialitypes.ServiceDetailsEndpointFormatted{
 					PodName: podName,
