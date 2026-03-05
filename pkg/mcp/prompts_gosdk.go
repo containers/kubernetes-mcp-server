@@ -54,7 +54,6 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 		if err != nil {
 			return nil, fmt.Errorf("failed to get kubernetes client: %w", err)
 		}
-		defer k8s.Close()
 
 		params := api.PromptHandlerParams{
 			Context:                ctx,

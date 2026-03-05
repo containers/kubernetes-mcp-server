@@ -48,7 +48,6 @@ type Kubernetes struct {
 	discoveryClient discovery.CachedDiscoveryInterface
 	dynamicClient   dynamic.Interface
 	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
-	isDerived       bool
 }
 
 var _ api.KubernetesClient = (*Kubernetes)(nil)
@@ -102,11 +101,12 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 	return k, nil
 }
 
-// Close releases HTTP transport resources held by this client.
-// Only acts on derived (per-request) clients to avoid disrupting the base client.
-// Safe to call on any Kubernetes instance including nil.
-func (k *Kubernetes) Close() {
-	if k == nil || !k.isDerived || k.httpClient == nil {
+// close releases HTTP transport resources (TCP sockets, TLS sessions, buffers,
+// goroutines) held by this client. Intended to be registered via
+// context.AfterFunc so that derived per-request clients are cleaned up
+// automatically when the request context finishes.
+func (k *Kubernetes) close() {
+	if k == nil || k.httpClient == nil {
 		return
 	}
 	k.httpClient.CloseIdleConnections()

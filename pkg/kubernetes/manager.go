@@ -161,7 +161,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		}
 		return m.kubernetes, nil
 	}
-	derived.isDerived = true
+	context.AfterFunc(ctx, derived.close)
 	return derived, nil
 }
 
