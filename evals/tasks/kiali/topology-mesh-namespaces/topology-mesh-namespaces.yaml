@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "Show topology for multiple namespaces"
   category: "High-Level Observability & Health"
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   verify:
-    contains: "topology"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash
+    - llmJudge:
+        contains: "topology"
   prompt:
     inline: Show me the topology for the bookinfo and default namespaces together.

@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "List services in namespace"
   category: "Resource Inspection"
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   verify:
-    contains: "reviews"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash
+    - llmJudge:
+        contains: "reviews"
   prompt:
     inline: List all services in the bookinfo namespace.

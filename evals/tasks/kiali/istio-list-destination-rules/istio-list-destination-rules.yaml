@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "List DestinationRules in namespace"
   category: "Istio Configuration & Management"
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   verify:
-    contains: "DestinationRule"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash
+    - llmJudge:
+        contains: "DestinationRule"
   prompt:
     inline: List all DestinationRules in the bookinfo namespace and report any validation errors.

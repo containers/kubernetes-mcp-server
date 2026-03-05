@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "Get mesh namespaces"
   category: "Resource Inspection"
   difficulty: easy
-steps:
-  setup:
-      inline: |-
-        #!/usr/bin/env bash
+spec:
   verify:
-    contains: "namespaces in your mesh"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash          
+    - llmJudge:
+        contains: "namespaces in your mesh"
   prompt:
     inline: Check namespaces in my mesh.

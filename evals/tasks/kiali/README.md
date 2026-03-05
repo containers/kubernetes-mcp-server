@@ -70,13 +70,6 @@ The `update_tasks` target runs `scripts/update_tasks.sh`, which parses every sce
         **Prompt:** *Get the latest traces for the productpage app in the bookinfo namespace.*
   - [easy] troubleshooting-workload-logs (Get workload logs)
         **Prompt:** *Show me the last 20 log lines for the productpage-v1 workload in the bookinfo namespace.*
-- Uncategorized
-  - [easy] get-namespaces (get-namespaces)
-        **Prompt:** *Check namespaces in my mesh.*
-  - [easy] get-service-detail (get-service-detail)
-        **Prompt:** *Give me information about my service details in the namespace bookinfo.*
-  - [easy] mesh-status (mesh-status)
-        **Prompt:** *Check my mesh.*
 <!-- TASKS-END -->
 
 
