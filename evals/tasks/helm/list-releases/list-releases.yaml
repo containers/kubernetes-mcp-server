@@ -1,13 +1,40 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
-  name: list-helm-releases
+  name: "list-helm-releases"
   difficulty: easy
-steps:
+  labels:
+    suite: helm
+spec:
+  requires:
+    - extension: kubernetes
+
   setup:
-    file: setup.sh
+    - kubernetes.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: helm-list-test
+    - kubernetes.helmInstall:
+        chart: oci://registry-1.docker.io/bitnamicharts/nginx
+        name: test-nginx
+        namespace: helm-list-test
+
   verify:
-    file: verify.sh
+    - kubernetes.helmList:
+        namespace: helm-list-test
+        # Verifies that test-nginx release exists in the namespace
+
   cleanup:
-    file: cleanup.sh
+    - kubernetes.helmUninstall:
+        name: test-nginx
+        namespace: helm-list-test
+    - kubernetes.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: helm-list-test
+        ignoreNotFound: true
+
   prompt:
     inline: List all Helm releases across all namespaces in the cluster
