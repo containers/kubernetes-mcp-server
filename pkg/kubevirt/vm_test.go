@@ -2,6 +2,8 @@ package kubevirt
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -325,5 +327,189 @@ func TestRestartVMNotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to get VirtualMachine") {
 		t.Errorf("Error = %v, want to contain 'failed to get VirtualMachine'", err)
+	}
+}
+
+func TestPauseVM(t *testing.T) {
+	tests := []struct {
+		name          string
+		serverStatus  int
+		serverBody    string
+		initialVM     *unstructured.Unstructured
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name:         "Pause running VM",
+			serverStatus: http.StatusOK,
+			initialVM:    createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:    false,
+		},
+		{
+			name:          "VMI not found",
+			serverStatus:  http.StatusNotFound,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","message":"virtualmachineinstances.subresources.kubevirt.io \"test-vm\" not found","code":404}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+		{
+			name:          "VM already paused",
+			serverStatus:  http.StatusConflict,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Conflict","message":"VM is already paused","code":409}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+		{
+			name:          "Migration in progress",
+			serverStatus:  http.StatusConflict,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Conflict","message":"cannot pause VMI with a live migration in progress","code":409}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+		{
+			name:          "Pause fails when subresource returns error",
+			serverStatus:  http.StatusInternalServerError,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("expected PUT, got %s", r.Method)
+				}
+				if !strings.HasSuffix(r.URL.Path, "/pause") {
+					t.Errorf("unexpected path: %s", r.URL.Path)
+				}
+				if tt.serverBody != "" {
+					w.Header().Set("Content-Type", "application/json")
+				}
+				w.WriteHeader(tt.serverStatus)
+				if tt.serverBody != "" {
+					_, _ = w.Write([]byte(tt.serverBody))
+				}
+			}))
+			defer server.Close()
+
+			restConfig := createTestRESTConfig(server)
+			scheme := runtime.NewScheme()
+			dynamicClient := fake.NewSimpleDynamicClient(scheme, tt.initialVM)
+			ctx := context.Background()
+
+			vm, err := PauseVM(ctx, dynamicClient, restConfig, tt.initialVM.GetNamespace(), tt.initialVM.GetName())
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Error = %v, want to contain %q", err, tt.errorContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if vm == nil {
+				t.Errorf("Expected non-nil VM, got nil")
+			}
+		})
+	}
+}
+
+func TestUnpauseVM(t *testing.T) {
+	tests := []struct {
+		name          string
+		serverStatus  int
+		serverBody    string
+		initialVM     *unstructured.Unstructured
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name:         "Unpause paused VM",
+			serverStatus: http.StatusOK,
+			initialVM:    createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:    false,
+		},
+		{
+			name:          "VMI not found",
+			serverStatus:  http.StatusNotFound,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","message":"virtualmachineinstances.subresources.kubevirt.io \"test-vm\" not found","code":404}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to unpause VirtualMachineInstance",
+		},
+		{
+			name:          "VM not paused",
+			serverStatus:  http.StatusConflict,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Conflict","message":"VMI is not paused","code":409}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to unpause VirtualMachineInstance",
+		},
+		{
+			name:          "Unpause fails when subresource returns error",
+			serverStatus:  http.StatusInternalServerError,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to unpause VirtualMachineInstance",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("expected PUT, got %s", r.Method)
+				}
+				if !strings.HasSuffix(r.URL.Path, "/unpause") {
+					t.Errorf("unexpected path: %s", r.URL.Path)
+				}
+				if tt.serverBody != "" {
+					w.Header().Set("Content-Type", "application/json")
+				}
+				w.WriteHeader(tt.serverStatus)
+				if tt.serverBody != "" {
+					_, _ = w.Write([]byte(tt.serverBody))
+				}
+			}))
+			defer server.Close()
+
+			restConfig := createTestRESTConfig(server)
+			scheme := runtime.NewScheme()
+			dynamicClient := fake.NewSimpleDynamicClient(scheme, tt.initialVM)
+			ctx := context.Background()
+
+			vm, err := UnpauseVM(ctx, dynamicClient, restConfig, tt.initialVM.GetNamespace(), tt.initialVM.GetName())
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Error = %v, want to contain %q", err, tt.errorContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if vm == nil {
+				t.Errorf("Expected non-nil VM, got nil")
+			}
+		})
 	}
 }
