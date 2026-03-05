@@ -1,0 +1,49 @@
+{
+    "service": {
+      "name": "details",
+      "namespace": "bookinfo",
+      "type": "ClusterIP",
+      "ip": "10.96.126.9",
+      "ports": [
+        {
+          "name": "http",
+          "port": 9080,
+          "protocol": "TCP"
+        }
+      ],
+      "selectors": {
+        "app": "details"
+      }
+    },
+    "istio_config": {
+      "is_ambient": false,
+      "has_sidecar": true,
+      "mtls_mode": "AUTO_ENABLED",
+      "virtual_services": [],
+      "destination_rules": [],
+      "validations": [
+        "bookinfo",
+        "bookinfo-gateway"
+      ]
+    },
+    "workloads": [
+      {
+        "name": "details-v1",
+        "kind": "Deployment",
+        "labels": {
+          "app": "details",
+          "version": "v1"
+        },
+        "service_account": "bookinfo-details",
+        "pod_count": 1
+      }
+    ],
+    "health_status": "Healthy",
+    "inbound_success_rate_2xx": "100%",
+    "endpoints": [
+      {
+        "pod_name": "details-v1-75f7fdb7d-jtvf9",
+        "ip": "10.244.0.47"
+      }
+    ]
+  }

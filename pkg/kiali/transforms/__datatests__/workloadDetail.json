@@ -1,0 +1,230 @@
+{
+    "name": "details-v1",
+    "namespace": "bookinfo",
+    "cluster": "Kubernetes",
+    "gvk": {
+      "Group": "apps",
+      "Version": "v1",
+      "Kind": "Deployment"
+    },
+    "createdAt": "2026-03-05T10:47:25Z",
+    "resourceVersion": "15178",
+    "istioSidecar": true,
+    "isAmbient": false,
+    "isGateway": false,
+    "isWaypoint": false,
+    "isZtunnel": false,
+    "additionalDetailSample": null,
+    "labels": {
+      "app": "details",
+      "version": "v1"
+    },
+    "appLabel": true,
+    "versionLabel": true,
+    "podCount": 0,
+    "annotations": {
+      "deployment.kubernetes.io/revision": "7",
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"details\",\"version\":\"v1\"},\"name\":\"details-v1\",\"namespace\":\"bookinfo\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"details\",\"version\":\"v1\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"details\",\"version\":\"v1\"}},\"spec\":{\"containers\":[{\"image\":\"quay.io/sail-dev/examples-bookinfo-details-v1:1.20.3\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"details\",\"ports\":[{\"containerPort\":9080}]}],\"serviceAccountName\":\"bookinfo-details\"}}}}\n"
+    },
+    "healthAnnotations": {},
+    "istioReferences": null,
+    "dashboardAnnotations": {},
+    "serviceAccountNames": [
+      "bookinfo-details"
+    ],
+    "templateAnnotations": {
+      "sidecar.istio.io/inject": "true"
+    },
+    "templateLabels": {
+      "app": "details",
+      "version": "v1"
+    },
+    "ValidationKey": "",
+    "ValidationVersion": "",
+    "desiredReplicas": 1,
+    "currentReplicas": 1,
+    "availableReplicas": 1,
+    "pods": [
+      {
+        "name": "details-v1-75f7fdb7d-jtvf9",
+        "labels": {
+          "app": "details",
+          "pod-template-hash": "75f7fdb7d",
+          "security.istio.io/tlsMode": "istio",
+          "service.istio.io/canonical-name": "details",
+          "service.istio.io/canonical-revision": "v1",
+          "version": "v1"
+        },
+        "createdAt": "0001-01-01T00:00:00Z",
+        "createdBy": [
+          {
+            "name": "details-v1-75f7fdb7d",
+            "kind": "ReplicaSet"
+          }
+        ],
+        "containers": [
+          {
+            "name": "details",
+            "image": "quay.io/sail-dev/examples-bookinfo-details-v1:1.20.3",
+            "isProxy": false,
+            "isReady": true,
+            "isAmbient": false
+          }
+        ],
+        "istioContainers": null,
+        "istioInitContainers": [
+          {
+            "name": "istio-init",
+            "image": "docker.io/istio/proxyv2:1.28.0",
+            "isProxy": true,
+            "isReady": true,
+            "isAmbient": false
+          },
+          {
+            "name": "istio-proxy",
+            "image": "docker.io/istio/proxyv2:1.28.0",
+            "isProxy": true,
+            "isReady": true,
+            "isAmbient": false
+          }
+        ],
+        "status": "Running",
+        "statusMessage": "",
+        "statusReason": "",
+        "appLabel": true,
+        "versionLabel": true,
+        "annotations": {
+          "istio.io/rev": "default",
+          "kubectl.kubernetes.io/default-container": "details",
+          "kubectl.kubernetes.io/default-logs-container": "details",
+          "prometheus.io/path": "/stats/prometheus",
+          "prometheus.io/port": "15020",
+          "prometheus.io/scrape": "true",
+          "sidecar.istio.io/inject": "true",
+          "sidecar.istio.io/status": "{\"initContainers\":[\"istio-init\",\"istio-proxy\"],\"containers\":null,\"volumes\":[\"workload-socket\",\"credential-socket\",\"workload-certs\",\"istio-envoy\",\"istio-data\",\"istio-podinfo\",\"istio-token\",\"istiod-ca-cert\",\"istio-ca-crl\"],\"imagePullSecrets\":null,\"revision\":\"default\"}"
+        },
+        "protocol": "",
+        "proxyStatus": {
+          "CDS": "Synced",
+          "EDS": "Synced",
+          "LDS": "Synced",
+          "RDS": "Synced"
+        },
+        "serviceAccountName": "bookinfo-details"
+      }
+    ],
+    "services": [
+      {
+        "name": "details",
+        "namespace": "bookinfo",
+        "istioSidecar": true,
+        "cluster": "Kubernetes",
+        "isAmbient": false,
+        "appLabel": true,
+        "additionalDetailSample": null,
+        "annotations": null,
+        "healthAnnotations": {},
+        "ports": null,
+        "labels": {
+          "app": "details",
+          "service": "details"
+        },
+        "selector": {
+          "app": "details"
+        },
+        "istioReferences": [],
+        "kialiWizard": "",
+        "serviceRegistry": "Kubernetes",
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          }
+        }
+      }
+    ],
+    "runtimes": [
+      {
+        "name": "",
+        "dashboardRefs": [
+          {
+            "template": "envoy",
+            "title": "Envoy Metrics"
+          }
+        ]
+      }
+    ],
+    "additionalDetails": [],
+    "validations": {
+      "networking.istio.io/v1, Kind=Gateway": {
+        "bookinfo-gateway.bookinfo": {
+          "name": "bookinfo-gateway",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "networking.istio.io",
+            "Version": "v1",
+            "Kind": "Gateway"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        }
+      },
+      "networking.istio.io/v1, Kind=VirtualService": {
+        "bookinfo.bookinfo": {
+          "name": "bookinfo",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "networking.istio.io",
+            "Version": "v1",
+            "Kind": "VirtualService"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        }
+      },
+      "workload": {
+        "details-v1.bookinfo": {
+          "name": "details-v1",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        }
+      }
+    },
+    "waypointServices": null,
+    "waypointWorkloads": null,
+    "workloadEntries": null,
+    "health": {
+      "requests": {
+        "healthAnnotations": {},
+        "inbound": {
+          "http": {
+            "200": 1.962393162393162
+          }
+        },
+        "outbound": {}
+      },
+      "status": {
+        "status": "Healthy"
+      },
+      "workloadStatus": {
+        "availableReplicas": 1,
+        "currentReplicas": 1,
+        "desiredReplicas": 1,
+        "name": "details-v1",
+        "syncedProxies": 1
+      }
+    }
+  }

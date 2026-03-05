@@ -1,0 +1,116 @@
+{
+    "Kubernetes": [
+      {
+        "name": "details-v1",
+        "namespace": "bookinfo",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=details, version=v1",
+        "details": ""
+      },
+      {
+        "name": "istio-ingressgateway",
+        "namespace": "bookinfo",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "istio=ingressgateway, sidecar.istio.io/inject=true",
+        "details": "bookinfo-gateway(GW), Missing App and Version label (This workload won't be linked with an application. The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)"
+      },
+      {
+        "name": "productpage-v1",
+        "namespace": "bookinfo",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=productpage, version=v1",
+        "details": ""
+      },
+      {
+        "name": "ratings-v1",
+        "namespace": "bookinfo",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=ratings, version=v1",
+        "details": ""
+      },
+      {
+        "name": "reviews-v1",
+        "namespace": "bookinfo",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=reviews, version=v1",
+        "details": ""
+      },
+      {
+        "name": "reviews-v2",
+        "namespace": "bookinfo",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=reviews, version=v2",
+        "details": ""
+      },
+      {
+        "name": "reviews-v3",
+        "namespace": "bookinfo",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=reviews, version=v3",
+        "details": ""
+      },
+      {
+        "name": "istio-egressgateway",
+        "namespace": "istio-system",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=istio-egressgateway, app.kubernetes.io/instance=istio, app.kubernetes.io/managed-by=Helm, app.kubernetes.io/name=istio-egressgateway, app.kubernetes.io/part-of=istio, app.kubernetes.io/version=1.28.0, chart=gateways, helm.sh/chart=istio-egress-1.28.0, heritage=Tiller, install.operator.istio.io/owning-resource=unknown, istio=egressgateway, istio.io/dataplane-mode=none, istio.io/rev=default, operator.istio.io/component=EgressGateways, release=istio, service.istio.io/canonical-name=istio-egressgateway, service.istio.io/canonical-revision=latest, sidecar.istio.io/inject=false",
+        "details": ""
+      },
+      {
+        "name": "istio-ingressgateway",
+        "namespace": "istio-system",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=istio-ingressgateway, app.kubernetes.io/instance=istio, app.kubernetes.io/managed-by=Helm, app.kubernetes.io/name=istio-ingressgateway, app.kubernetes.io/part-of=istio, app.kubernetes.io/version=1.28.0, chart=gateways, helm.sh/chart=istio-ingress-1.28.0, heritage=Tiller, install.operator.istio.io/owning-resource=unknown, istio=ingressgateway, istio.io/dataplane-mode=none, istio.io/rev=default, operator.istio.io/component=IngressGateways, release=istio, service.istio.io/canonical-name=istio-ingressgateway, service.istio.io/canonical-revision=latest, sidecar.istio.io/inject=false",
+        "details": ""
+      },
+      {
+        "name": "istiod",
+        "namespace": "istio-system",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=istiod, app.kubernetes.io/instance=istio, app.kubernetes.io/managed-by=Helm, app.kubernetes.io/name=istiod, app.kubernetes.io/part-of=istio, app.kubernetes.io/version=1.28.0, helm.sh/chart=istiod-1.28.0, install.operator.istio.io/owning-resource=unknown, istio=pilot, istio.io/dataplane-mode=none, istio.io/rev=default, operator.istio.io/component=Pilot, sidecar.istio.io/inject=false",
+        "details": ""
+      },
+      {
+        "name": "jaeger",
+        "namespace": "istio-system",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=jaeger, sidecar.istio.io/inject=false",
+        "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)"
+      },
+      {
+        "name": "kiali",
+        "namespace": "istio-system",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=kiali, app.kubernetes.io/instance=kiali, app.kubernetes.io/name=kiali, app.kubernetes.io/part-of=kiali, app.kubernetes.io/version=v2.22.0, helm.sh/chart=kiali-server-2.22.0, sidecar.istio.io/inject=false, version=v2.22.0",
+        "details": ""
+      },
+      {
+        "name": "prometheus",
+        "namespace": "istio-system",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app.kubernetes.io/component=server, app.kubernetes.io/instance=prometheus, app.kubernetes.io/name=prometheus, app.kubernetes.io/part-of=prometheus, app.kubernetes.io/version=v3.5.0, helm.sh/chart=prometheus-27.37.0, sidecar.istio.io/inject=false",
+        "details": ""
+      },
+      {
+        "name": "local-path-provisioner",
+        "namespace": "local-path-storage",
+        "health": "Healthy",
+        "type": "Deployment",
+        "labels": "app=local-path-provisioner",
+        "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)"
+      }
+    ]
+  }
