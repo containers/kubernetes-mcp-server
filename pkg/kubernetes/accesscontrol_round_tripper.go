@@ -72,10 +72,11 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	gvk, err := restMapper.KindFor(gvr)
 	if err != nil {
 		if meta.IsNoMatchError(err) {
-			return nil, &api.ValidationError{
-				Code:    api.ErrorCodeResourceNotFound,
-				Message: fmt.Sprintf("Resource %s does not exist in the cluster", api.FormatResourceName(&gvr)),
-			}
+			// Some API groups (e.g. subresources.kubevirt.io) serve valid
+			// endpoints that are not discoverable via the REST mapper.
+			// Let the API server decide whether the resource exists.
+			klog.V(4).Infof("Resource %s not found in REST mapper, passing through to API server", api.FormatResourceName(&gvr))
+			return rt.delegate.RoundTrip(req)
 		}
 		return nil, fmt.Errorf("failed to make request: AccessControlRoundTripper failed to get kind for gvr %v: %w", gvr, err)
 	}
