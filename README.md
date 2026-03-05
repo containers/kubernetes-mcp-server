@@ -730,5 +730,3 @@ npx @modelcontextprotocol/inspector@latest $(pwd)/kubernetes-mcp-server
 ---
 
 mcp-name: io.github.containers/kubernetes-mcp-server
-
-<p align="center"><img alt="Bundesministerium für Wirtschaft und Energie (BMWE)-EU funding logo" src="https://apeirora.eu/assets/img/BMWK-EU.png" width="400"/></p>
