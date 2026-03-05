@@ -6,7 +6,11 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 // RunStrategy represents the run strategy for a VirtualMachine
@@ -142,6 +146,55 @@ func CloneVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, so
 	}
 
 	return result, nil
+}
+
+// newSubresourceClient creates a REST client for the KubeVirt subresources API group
+func newSubresourceClient(restConfig *rest.Config) (rest.Interface, error) {
+	cfg := rest.CopyConfig(restConfig)
+	cfg.GroupVersion = &schema.GroupVersion{Group: "subresources.kubevirt.io", Version: "v1"}
+	cfg.APIPath = "/apis"
+	cfg.NegotiatedSerializer = serializer.NewCodecFactory(runtime.NewScheme())
+	return rest.RESTClientFor(cfg)
+}
+
+// PauseVM pauses a running VirtualMachineInstance via the KubeVirt subresource API
+// and returns the parent VirtualMachine
+func PauseVM(ctx context.Context, dynamicClient dynamic.Interface, restConfig *rest.Config, namespace, name string) (*unstructured.Unstructured, error) {
+	client, err := newSubresourceClient(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subresource client: %w", err)
+	}
+	result := client.Put().
+		Namespace(namespace).
+		Resource("virtualmachineinstances").
+		Name(name).
+		SubResource("pause").
+		Body([]byte("{}")).
+		Do(ctx)
+	if err := result.Error(); err != nil {
+		return nil, fmt.Errorf("failed to pause VirtualMachineInstance: %w", err)
+	}
+	return GetVirtualMachine(ctx, dynamicClient, namespace, name)
+}
+
+// UnpauseVM unpauses a paused VirtualMachineInstance via the KubeVirt subresource API
+// and returns the parent VirtualMachine
+func UnpauseVM(ctx context.Context, dynamicClient dynamic.Interface, restConfig *rest.Config, namespace, name string) (*unstructured.Unstructured, error) {
+	client, err := newSubresourceClient(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subresource client: %w", err)
+	}
+	result := client.Put().
+		Namespace(namespace).
+		Resource("virtualmachineinstances").
+		Name(name).
+		SubResource("unpause").
+		Body([]byte("{}")).
+		Do(ctx)
+	if err := result.Error(); err != nil {
+		return nil, fmt.Errorf("failed to unpause VirtualMachineInstance: %w", err)
+	}
+	return GetVirtualMachine(ctx, dynamicClient, namespace, name)
 }
 
 // RestartVM restarts a VirtualMachine by temporarily setting runStrategy to Halted then back to Always
