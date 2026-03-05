@@ -19,7 +19,9 @@ spec:
   verify:
     - kubernetes.helmList:
         namespace: helm-install-test
-        # Verifies that the helm release my-redis exists in the namespace
+    - llmJudge:
+        contains: "my-redis"
+        # Validates the agent's response mentions the installed release name
 
   cleanup:
     - kubernetes.helmUninstall:

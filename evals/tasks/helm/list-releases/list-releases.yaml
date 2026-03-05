@@ -23,7 +23,9 @@ spec:
   verify:
     - kubernetes.helmList:
         namespace: helm-list-test
-        # Verifies that test-nginx release exists in the namespace
+    - llmJudge:
+        contains: "test-nginx"
+        # Validates the agent's response mentions the test release
 
   cleanup:
     - kubernetes.helmUninstall:

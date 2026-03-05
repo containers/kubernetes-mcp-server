@@ -23,8 +23,9 @@ spec:
   verify:
     - kubernetes.helmList:
         namespace: helm-uninstall-test
-        # Verifies that cleanup-test release has been uninstalled
-        # The list should be empty after the agent uninstalls the release
+    - llmJudge:
+        contains: "cleanup-test"
+        # Validates the agent's response mentions the uninstalled release name
 
   cleanup:
     - kubernetes.helmUninstall:
