@@ -38,6 +38,14 @@ func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
 var _ api.Toolset = (*TestToolset)(nil)
 
+func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
+	s.T().Skip("Will be enabled after refactoring toolset registry to wrapped struct pattern")
+	Register(&TestToolset{name: "duplicate"})
+	s.Panics(func() {
+		Register(&TestToolset{name: "duplicate"})
+	}, "Expected panic on duplicate toolset registration")
+}
+
 func (s *ToolsetsSuite) TestToolsetNames() {
 	s.Run("Returns empty list if no toolsets registered", func() {
 		s.Empty(ToolsetNames(), "Expected empty list of toolset names")
