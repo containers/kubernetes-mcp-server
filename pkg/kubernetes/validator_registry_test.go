@@ -46,10 +46,9 @@ func (s *ValidatorRegistryTestSuite) TestCreateValidatorsWithNilProviders() {
 }
 
 func (s *ValidatorRegistryTestSuite) TestRegisterValidatorPanicsOnDuplicate() {
-	s.T().Skip("Will be enabled after refactoring validator registry to wrapped struct pattern")
 	s.Panics(func() {
-		RegisterValidator(func(p ValidatorProviders) api.HTTPValidator {
-			return NewSchemaValidator(p.Discovery)
+		RegisterValidator("schema", func(p ValidatorProviders) api.HTTPValidator {
+			return nil
 		})
 	}, "Expected panic on duplicate validator registration")
 }

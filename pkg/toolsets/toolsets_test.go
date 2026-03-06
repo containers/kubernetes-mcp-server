@@ -18,6 +18,7 @@ func (s *ToolsetsSuite) SetupTest() {
 }
 
 func (s *ToolsetsSuite) TearDownTest() {
+	Clear()
 	for _, toolset := range s.originalToolsets {
 		Register(toolset)
 	}
@@ -39,7 +40,6 @@ func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 var _ api.Toolset = (*TestToolset)(nil)
 
 func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
-	s.T().Skip("Will be enabled after refactoring toolset registry to wrapped struct pattern")
 	Register(&TestToolset{name: "duplicate"})
 	s.Panics(func() {
 		Register(&TestToolset{name: "duplicate"})
