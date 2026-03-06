@@ -19,7 +19,7 @@ func (t *Toolset) GetDescription() string {
 	return "Manage kcp workspaces and multi-tenancy features"
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.ToolsetEnv) []api.ServerTool {
 	return slices.Concat(
 		initWorkspaceTools(),
 	)

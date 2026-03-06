@@ -74,6 +74,10 @@ func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.manager.IsOpenShift(ctx)
 }
 
+func (p *singleClusterProvider) GetClusterProviderStrategy() string {
+	return p.strategy
+}
+
 func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	return []string{""}, nil
 }

@@ -36,6 +36,10 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 	return p.provider.GetDerivedKubernetes(ctx, target)
 }
 
+func (p *tokenExchangingProvider) GetClusterProviderStrategy() string {
+	return p.provider.GetClusterProviderStrategy()
+}
+
 func (p *tokenExchangingProvider) IsOpenShift(ctx context.Context) bool {
 	return p.provider.IsOpenShift(ctx)
 }

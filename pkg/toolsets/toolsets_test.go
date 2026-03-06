@@ -32,7 +32,7 @@ func (t *TestToolset) GetName() string { return t.name }
 
 func (t *TestToolset) GetDescription() string { return t.description }
 
-func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
+func (t *TestToolset) GetTools(_ api.ToolsetEnv) []api.ServerTool { return nil }
 
 func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 

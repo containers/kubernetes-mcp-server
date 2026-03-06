@@ -235,6 +235,10 @@ func (p *kcpClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return false
 }
 
+func (p *kcpClusterProvider) GetClusterProviderStrategy() string {
+	return api.ClusterProviderKcp
+}
+
 func (p *kcpClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	workspaces := make([]string, 0, len(p.managers))
 	for ws := range p.managers {

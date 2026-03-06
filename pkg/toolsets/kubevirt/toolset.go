@@ -22,7 +22,7 @@ func (t *Toolset) GetDescription() string {
 	return "KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details."
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.ToolsetEnv) []api.ServerTool {
 	return slices.Concat(
 		vm_clone.Tools(),
 		vm_create.Tools(),
