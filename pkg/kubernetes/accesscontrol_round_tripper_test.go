@@ -279,16 +279,14 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 
 	})
 
-	s.Run("RESTMapper error for unknown resource", func() {
+	s.Run("RESTMapper passes through for unknown resource", func() {
 		rt.deniedResourcesProvider = nil
 		delegateCalled = false
 		req := httptest.NewRequest("GET", "/api/v1/unknownresources", nil)
 		resp, err := rt.RoundTrip(req)
-		s.Error(err)
-		s.Nil(resp)
-		s.False(delegateCalled, "Expected delegate not to be called when RESTMapper fails")
-		s.Contains(err.Error(), "RESOURCE_NOT_FOUND")
-		s.Contains(err.Error(), "does not exist in the cluster")
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for unknown resources")
 	})
 }
 

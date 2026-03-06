@@ -666,6 +666,19 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 					"Expected error message about VM not found, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 		}
+		for _, action := range []string{"pause", "unpause"} {
+			s.Run("action="+action, func() {
+				toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+					"name":      "non-existent-vm",
+					"namespace": "default",
+					"action":    action,
+				})
+				s.Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail for non-existent VM")
+				s.Truef(strings.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "failed to"),
+					"Expected error message for non-existent VM, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+			})
+		}
 	})
 }
 
