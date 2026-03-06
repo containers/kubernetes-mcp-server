@@ -9,6 +9,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
 func initNamespaces(o api.Openshift) []api.ServerTool {
@@ -53,7 +54,17 @@ func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	content, err := params.ListOutput.PrintObj(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
+	}
+	structured := ret.UnstructuredContent()
+	if params.ListOutput.AsTable() {
+		if structuredRet, sErr := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{}); sErr == nil {
+			structured = structuredRet.UnstructuredContent()
+		}
+	}
+	return &api.ToolCallResult{Content: content, StructuredContent: output.PruneForStructuredOutput(structured)}, nil
 }
 
 func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -61,5 +72,15 @@ func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	content, err := params.ListOutput.PrintObj(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
+	}
+	structured := ret.UnstructuredContent()
+	if params.ListOutput.AsTable() {
+		if structuredRet, sErr := kubernetes.NewCore(params).ProjectsList(params, api.ListOptions{}); sErr == nil {
+			structured = structuredRet.UnstructuredContent()
+		}
+	}
+	return &api.ToolCallResult{Content: content, StructuredContent: output.PruneForStructuredOutput(structured)}, nil
 }

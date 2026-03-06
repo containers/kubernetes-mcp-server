@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -120,7 +121,14 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	} else if ret == "" {
 		ret = fmt.Sprintf("The node %s has not logged any message yet or the log file is empty", name)
 	}
-	return api.NewToolCallResult(ret, nil), nil
+	return &api.ToolCallResult{
+		Content: ret,
+		StructuredContent: map[string]any{
+			"log":   ret,
+			"node":  name,
+			"query": query,
+		},
+	}, nil
 }
 
 func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -132,7 +140,11 @@ func nodesStatsSummary(params api.ToolHandlerParams) (*api.ToolCallResult, error
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get node stats summary for %s: %w", name, err)), nil
 	}
-	return api.NewToolCallResult(ret, nil), nil
+	var structured any
+	if jsonErr := json.Unmarshal([]byte(ret), &structured); jsonErr != nil {
+		structured = map[string]any{"summary": ret, "node": name}
+	}
+	return &api.ToolCallResult{Content: ret, StructuredContent: structured}, nil
 }
 
 func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -177,5 +189,11 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to print node metrics: %w", err)), nil
 	}
 
-	return api.NewToolCallResult(buf.String(), nil), nil
+	return &api.ToolCallResult{
+		Content: buf.String(),
+		StructuredContent: map[string]any{
+			"metrics":     nodeMetrics,
+			"allocatable": availableResources,
+		},
+	}, nil
 }
