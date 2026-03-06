@@ -7,6 +7,7 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 - [Kubernetes tasks](kubernetes/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
 - [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing).
 - [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
+- [Tekton tasks](tekton/) – CI/CD pipeline workflows that exercise the Tekton MCP toolset (Pipeline and PipelineRun management, Task and TaskRun lifecycle).
 
 ## Anatomy of a Task
 

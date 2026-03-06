@@ -53,6 +53,16 @@ config:
             toolPattern: ".*"
         minToolCalls: 1
         maxToolCalls: 20
+    # Tekton tasks
+    - glob: ../tasks/tekton/*/*.yaml
+      labelSelector:
+        suite: tekton
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
     # Kiali tasks
     - glob: ../tasks/*/*/*.yaml
       labelSelector:
