@@ -5,7 +5,9 @@ const (
 	// DefaultRateInterval is the default rate interval for fetching error rates and metrics.
 	// This value is used when rateInterval is not explicitly provided in API calls.
 	DefaultRateInterval    = "10m"
+	DefaultHealthType      = "app"
 	DefaultGraphType       = "versionedApp"
+	DefaultResourceType    = "service"
 	DefaultDuration        = "30m"
 	DefaultStep            = "15"
 	DefaultDirection       = "outbound"

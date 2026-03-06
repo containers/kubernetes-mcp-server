@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	kialitypes "github.com/containers/kubernetes-mcp-server/pkg/kiali/types"
 )
 
 // WorkloadLogs returns logs for a specific workload's pods in a namespace.
@@ -33,14 +35,7 @@ func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload str
 	}
 
 	// Parse the workload details JSON to extract pod names and containers
-	var workloadData struct {
-		Pods []struct {
-			Name       string `json:"name"`
-			Containers []struct {
-				Name string `json:"name"`
-			} `json:"containers"`
-		} `json:"pods"`
-	}
+	var workloadData kialitypes.WorkloadDetailsFormatted
 
 	if err := json.Unmarshal([]byte(workloadDetails), &workloadData); err != nil {
 		return "", fmt.Errorf("failed to parse workload details: %w", err)
@@ -58,14 +53,14 @@ func (k *Kiali) WorkloadLogs(ctx context.Context, namespace string, workload str
 		if podContainer == "" {
 			// Find the main application container (not istio-proxy or istio-init)
 			for _, c := range pod.Containers {
-				if c.Name != "istio-proxy" && c.Name != "istio-init" {
-					podContainer = c.Name
+				if c != "istio-proxy" && c != "istio-init" {
+					podContainer = c
 					break
 				}
 			}
 			// If no app container found, use the first container
 			if podContainer == "" && len(pod.Containers) > 0 {
-				podContainer = pod.Containers[0].Name
+				podContainer = pod.Containers[0]
 			}
 		}
 

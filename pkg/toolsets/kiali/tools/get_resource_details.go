@@ -41,9 +41,8 @@ var listDetailsOpsMap = map[string]listDetailsOperations{
 }
 
 func InitGetResourceDetails() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_resource_details"
-	ret = append(ret, api.ServerTool{
+	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name:        name,
 			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
@@ -53,11 +52,12 @@ func InitGetResourceDetails() []api.ServerTool {
 					"resource_type": {
 						Type:        "string",
 						Description: "Type of resource to get details for (service, workload)",
+						Default:     api.ToRawMessage(kialiclient.DefaultResourceType),
 						Enum:        []any{"service", "workload"},
 					},
 					"namespaces": {
 						Type:        "string",
-						Description: "Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces",
+						Description: "Required to get details for a resource. Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces",
 					},
 					"resource_name": {
 						Type:        "string",
@@ -66,16 +66,14 @@ func InitGetResourceDetails() []api.ServerTool {
 				},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "List or Resource Details",
+				Title:           "List or Resource Details (" + defaults.ToolsetName() + ")",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: resourceDetailsHandler,
-	})
-
-	return ret
+	}}
 }
 
 func resourceDetailsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

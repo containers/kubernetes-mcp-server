@@ -42,9 +42,8 @@ var tracesOpsMap = map[string]tracesOperations{
 }
 
 func InitGetTraces() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_traces"
-	ret = append(ret, api.ServerTool{
+	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name:        name,
 			Description: "Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.",
@@ -99,16 +98,14 @@ func InitGetTraces() []api.ServerTool {
 				Required: []string{},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Get Traces for a Resource or Trace Details",
+				Title:           "Get Traces for a Resource or Trace Details (" + defaults.ToolsetName() + ")",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: TracesHandler,
-	})
-
-	return ret
+	}}
 }
 
 func TracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

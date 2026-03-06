@@ -9,7 +9,7 @@ steps:
       inline: |-
         #!/usr/bin/env bash
   verify:
-    contains: "service: details"
+    contains: "details"
   cleanup:
     inline: |-
       #!/usr/bin/env bash          

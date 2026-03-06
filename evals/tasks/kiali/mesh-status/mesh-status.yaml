@@ -12,15 +12,16 @@ steps:
       kubectl config set-context --current --namespace=bookinfo
       kubectl set image deployment/ratings-v1 ratings=examples/ratings-v1:broken-tag
       kubectl scale deployment/ratings-v1 --replicas=5
-      sleep 10
+      #It takes a while for the mesh status to be updated
+      sleep 40
   verify:
-    contains: "degraded"
+    contains: "DEGRADED"
   cleanup: 
     inline: |-
       #!/usr/bin/env bash
       set -euo pipefail
       NS="bookinfo"
       kubectl rollout undo deployment/ratings-v1 -n "$NS"
-      sleep 10         
+      sleep 40         
   prompt:
     inline: Check my mesh.
