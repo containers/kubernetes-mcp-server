@@ -19,6 +19,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -149,6 +150,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&helm.Toolset{},
 		&kiali.Toolset{},
 		&kubevirt.Toolset{},
+		&tekton.Toolset{},
 	}
 	for _, testCase := range testCases {
 		s.Run("Toolset "+testCase.GetName(), func() {
