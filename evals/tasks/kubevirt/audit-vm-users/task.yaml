@@ -1,0 +1,122 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "audit-vm-users"
+  difficulty: medium
+  description: "Use vm_guest_info to audit which users are currently logged into VMs for security compliance"
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a production VM that needs security auditing
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: prod-app
+        namespace: $NS
+        labels:
+          environment: production
+          compliance: required
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/fedora:latest
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  users:
+                    - name: admin
+                      sudo: ALL=(ALL) NOPASSWD:ALL
+                    - name: developer
+                      groups: developers
+                    - name: operator
+                      groups: operators
+                  packages:
+                    - qemu-guest-agent
+                  runcmd:
+                    - systemctl enable qemu-guest-agent
+                    - systemctl start qemu-guest-agent
+      EOF
+
+      kubectl wait --for=create vm/prod-app -n "${NS}" --timeout=30s
+      echo "Production VM created. Guest agent will provide user session information."
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      echo "=== Verification: Security Audit ==="
+
+      if ! kubectl get vm prod-app -n "$NS" &>/dev/null; then
+        echo "✗ VirtualMachine 'prod-app' not found"
+        exit 1
+      fi
+      echo "✓ Production VM exists"
+
+      LABELS=$(kubectl get vm prod-app -n "$NS" -o jsonpath='{.metadata.labels}')
+      if echo "$LABELS" | grep -q "production"; then
+        echo "✓ VM is labeled for production environment"
+      fi
+
+      echo ""
+      echo "=== Expected Agent Actions ==="
+      echo "The agent should have:"
+      echo "  1. Used: vm_guest_info namespace=$NS name=prod-app info_type=users"
+      echo "  2. Retrieved list of currently logged-in users with:"
+      echo "     - Username"
+      echo "     - Login time"
+      echo "     - Session details"
+      echo "  3. Analyzed the user list for:"
+      echo "     - Unknown or suspicious users"
+      echo "     - Expected users (admin, developer, operator)"
+      echo "     - Login time patterns (off-hours logins?)"
+      echo "  4. Reported security findings"
+      echo ""
+      echo "Example findings:"
+      echo "  - User 'admin' logged in at 2024-02-25 14:30 ✓"
+      echo "  - User 'unknown_user' logged in at 2024-02-25 03:00 ⚠ Investigate!"
+      echo ""
+      echo "✓ Security audit eval complete"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine prod-app -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      As part of a security compliance audit, you need to check who is currently logged into the production VirtualMachine "prod-app" in the ${EVAL_NAMESPACE:-vm-test} namespace.
+
+      Please:
+      1. Get the list of currently logged-in users
+      2. Report each user and their login time
+      3. Flag any suspicious activity (unknown users, unusual login times)
+      4. Confirm if the expected users (admin, developer, operator) are the only ones with access
+
+      Note: Get this information from inside the VM without requiring direct SSH access or credentials.

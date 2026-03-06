@@ -1,0 +1,106 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "vm-guest-info"
+  difficulty: medium
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a VM with guest agent enabled
+      # Using Fedora which has qemu-guest-agent pre-installed
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: test-vm-with-agent
+        namespace: $NS
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/fedora:latest
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  password: fedora
+                  chpasswd: { expire: False }
+                  packages:
+                    - qemu-guest-agent
+                  runcmd:
+                    - systemctl enable qemu-guest-agent
+                    - systemctl start qemu-guest-agent
+      EOF
+
+      # Wait for VM to be created and running
+      echo "Waiting for VM to be created..."
+      kubectl wait --for=create vm/test-vm-with-agent -n "${NS}" --timeout=30s
+
+      echo "Waiting for VM to be ready (this may take a few minutes as cloud-init runs)..."
+      kubectl wait --for=condition=Ready vm/test-vm-with-agent -n "${NS}" --timeout=300s || true
+
+      # Wait a bit more for guest agent to start
+      sleep 30
+
+      echo "VM created with guest agent. Guest agent may take additional time to become available."
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      # Check that vm_guest_info was called successfully
+      # We check the MCP server logs or simply verify the VMI exists
+      # The actual verification happens through the prompt response
+
+      # Verify VMI exists and is running
+      if ! kubectl get vmi test-vm-with-agent -n "$NS" &>/dev/null; then
+        echo "ERROR: VirtualMachineInstance 'test-vm-with-agent' not found"
+        exit 1
+      fi
+
+      PHASE=$(kubectl get vmi test-vm-with-agent -n "$NS" -o jsonpath='{.status.phase}')
+      if [ "$PHASE" != "Running" ]; then
+        echo "ERROR: VMI is not running (phase: $PHASE)"
+        exit 1
+      fi
+
+      echo "Verification passed: VM is running"
+      echo "NOTE: Guest agent info availability depends on whether qemu-guest-agent started successfully in the VM"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine test-vm-with-agent -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      A VirtualMachine named test-vm-with-agent is running in the ${EVAL_NAMESPACE:-vm-test} namespace with QEMU guest agent installed.
+
+      Please retrieve guest agent information from this VM. Get all available information (OS, filesystems, network interfaces, and users).
+
+      Note: If the guest agent is not yet available, it may indicate that cloud-init is still running or the guest agent service hasn't started. In that case, provide information about what guest agent data would typically include.
