@@ -1,0 +1,124 @@
+{
+  "Kubernetes": [
+    {
+      "name": "productpage",
+      "namespace": "bookinfo",
+      "health": "Healthy",
+      "configuration": "True",
+      "details": "bookinfo(VS), bookinfo-gateway(GW), Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=productpage, service=productpage"
+    },
+    {
+      "name": "istio-ingressgateway",
+      "namespace": "bookinfo",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing App and Version label (This workload won't be linked with an application. The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "None"
+    },
+    {
+      "name": "details",
+      "namespace": "bookinfo",
+      "health": "Healthy",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=details, service=details"
+    },
+    {
+      "name": "ratings",
+      "namespace": "bookinfo",
+      "health": "Healthy",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=ratings, service=ratings"
+    },
+    {
+      "name": "reviews",
+      "namespace": "bookinfo",
+      "health": "Healthy",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=reviews, service=reviews"
+    },
+    {
+      "name": "kubernetes",
+      "namespace": "default",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing App and Version label (This workload won't be linked with an application. The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "component=apiserver, provider=kubernetes"
+    },
+    {
+      "name": "istio-egressgateway",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=istio-egressgateway, app.kubernetes.io/instance=istio, app.kubernetes.io/managed-by=Helm, app.kubernetes.io/name=istio-egressgateway, app.kubernetes.io/part-of=istio, app.kubernetes.io/version=1.28.0, helm.sh/chart=istio-egress-1.28.0, install.operator.istio.io/owning-resource=unknown, install.operator.istio.io/owning-resource-namespace=istio-system, istio=egressgateway, istio.io/rev=default, operator.istio.io/component=EgressGateways, operator.istio.io/managed=Reconcile, operator.istio.io/version=1.28.0, release=istio"
+    },
+    {
+      "name": "istio-ingressgateway",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=istio-ingressgateway, app.kubernetes.io/instance=istio, app.kubernetes.io/managed-by=Helm, app.kubernetes.io/name=istio-ingressgateway, app.kubernetes.io/part-of=istio, app.kubernetes.io/version=1.28.0, helm.sh/chart=istio-ingress-1.28.0, install.operator.istio.io/owning-resource=unknown, install.operator.istio.io/owning-resource-namespace=istio-system, istio=ingressgateway, istio.io/rev=default, operator.istio.io/component=IngressGateways, operator.istio.io/managed=Reconcile, operator.istio.io/version=1.28.0, release=istio"
+    },
+    {
+      "name": "istiod-revision-tag-default",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=istiod, app.kubernetes.io/instance=istio, app.kubernetes.io/managed-by=Helm, app.kubernetes.io/name=istiod, app.kubernetes.io/part-of=istio, app.kubernetes.io/version=1.28.0, helm.sh/chart=istiod-1.28.0, install.operator.istio.io/owning-resource=unknown, install.operator.istio.io/owning-resource-namespace=istio-system, install.operator.istio.io/owning-resource-not-pruned=true, istio=pilot, istio.io/rev=default, istio.io/tag=default, operator.istio.io/component=Pilot, operator.istio.io/managed=Reconcile, operator.istio.io/version=1.28.0, release=istio"
+    },
+    {
+      "name": "jaeger-collector",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=jaeger"
+    },
+    {
+      "name": "prometheus",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app.kubernetes.io/component=server, app.kubernetes.io/instance=prometheus, app.kubernetes.io/name=prometheus, app.kubernetes.io/part-of=prometheus, app.kubernetes.io/version=v3.5.0, helm.sh/chart=prometheus-27.37.0"
+    },
+    {
+      "name": "zipkin",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "name=zipkin"
+    },
+    {
+      "name": "istiod",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=istiod, app.kubernetes.io/instance=istio, app.kubernetes.io/managed-by=Helm, app.kubernetes.io/name=istiod, app.kubernetes.io/part-of=istio, app.kubernetes.io/version=1.28.0, helm.sh/chart=istiod-1.28.0, install.operator.istio.io/owning-resource=unknown, install.operator.istio.io/owning-resource-namespace=istio-system, istio=pilot, istio.io/rev=default, operator.istio.io/component=Pilot, operator.istio.io/managed=Reconcile, operator.istio.io/version=1.28.0, release=istio"
+    },
+    {
+      "name": "kiali",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=kiali, app.kubernetes.io/instance=kiali, app.kubernetes.io/name=kiali, app.kubernetes.io/part-of=kiali, app.kubernetes.io/version=v2.22.0, helm.sh/chart=kiali-server-2.22.0, version=v2.22.0"
+    },
+    {
+      "name": "tracing",
+      "namespace": "istio-system",
+      "health": "NA",
+      "configuration": "True",
+      "details": "Missing Version label (The label is recommended as it affects telemetry. Missing labels may impact telemetry reported by the Istio proxy.)",
+      "labels": "app=jaeger"
+    }
+  ]
+}

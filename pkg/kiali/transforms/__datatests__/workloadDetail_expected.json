@@ -1,0 +1,53 @@
+{
+    "workload": {
+      "name": "details-v1",
+      "namespace": "bookinfo",
+      "kind": "Deployment",
+      "labels": {
+        "app": "details",
+        "version": "v1"
+      },
+      "service_account": "bookinfo-details",
+      "created_at": "2026-03-05T10:47:25Z"
+    },
+    "status": {
+      "overall": "Healthy",
+      "replicas": {
+        "desired": 1,
+        "current": 1,
+        "available": 1
+      },
+      "traffic_success_rate": {
+        "inbound": "100%",
+        "outbound": ""
+      }
+    },
+    "istio": {
+      "mode": "Sidecar",
+      "proxy_version": "1.28.0",
+      "sync_status": {
+        "CDS": "Synced",
+        "EDS": "Synced",
+        "LDS": "Synced",
+        "RDS": "Synced"
+      },
+      "validations": [
+        "bookinfo",
+        "bookinfo-gateway"
+      ]
+    },
+    "pods": [
+      {
+        "name": "details-v1-75f7fdb7d-jtvf9",
+        "status": "Running",
+        "containers": [
+          "details"
+        ],
+        "istio_init": "Ready",
+        "istio_proxy": "Ready"
+      }
+    ],
+    "associated_services": [
+      "details"
+    ]
+  }

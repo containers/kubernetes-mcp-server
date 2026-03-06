@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+
+	kialitypes "github.com/containers/kubernetes-mcp-server/pkg/kiali/types"
 )
 
 // GetMeshGraphResponse contains the combined response from multiple Kiali API endpoints.
@@ -12,11 +14,11 @@ import (
 // MeshHealthSummary, but the raw health data is not included in the response to reduce payload size.
 // MeshHealthSummary contains all the key aggregated metrics needed for mesh health overview.
 type GetMeshGraphResponse struct {
-	Graph             json.RawMessage    `json:"graph,omitempty"`
-	MeshStatus        json.RawMessage    `json:"mesh_status,omitempty"`
-	Namespaces        json.RawMessage    `json:"namespaces,omitempty"`
-	MeshHealthSummary *MeshHealthSummary `json:"mesh_health_summary,omitempty"` // Aggregated summary computed from health data
-	Errors            map[string]string  `json:"errors,omitempty"`
+	Graph             json.RawMessage               `json:"graph,omitempty"`
+	MeshStatus        json.RawMessage               `json:"mesh_status,omitempty"`
+	Namespaces        json.RawMessage               `json:"namespaces,omitempty"`
+	MeshHealthSummary *kialitypes.MeshHealthSummary `json:"mesh_health_summary,omitempty"` // Aggregated summary computed from health data
+	Errors            map[string]string             `json:"errors,omitempty"`
 }
 
 // GetMeshGraph fetches multiple Kiali endpoints in parallel and returns a combined response.

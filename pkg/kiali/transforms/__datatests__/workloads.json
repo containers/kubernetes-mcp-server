@@ -1,0 +1,1069 @@
+{
+    "cluster": "Kubernetes",
+    "workloads": [
+      {
+        "name": "details-v1",
+        "namespace": "bookinfo",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:47:25Z",
+        "resourceVersion": "15178",
+        "istioSidecar": true,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "details",
+          "version": "v1"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "7",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"details\",\"version\":\"v1\"},\"name\":\"details-v1\",\"namespace\":\"bookinfo\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"details\",\"version\":\"v1\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"details\",\"version\":\"v1\"}},\"spec\":{\"containers\":[{\"image\":\"quay.io/sail-dev/examples-bookinfo-details-v1:1.20.3\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"details\",\"ports\":[{\"containerPort\":9080}]}],\"serviceAccountName\":\"bookinfo-details\"}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "bookinfo-details"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {
+              "http": {
+                "200": 1.9578947368421051
+              }
+            },
+            "outbound": {}
+          },
+          "status": {
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "details-v1",
+            "syncedProxies": 1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "istio-ingressgateway",
+        "namespace": "bookinfo",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:47:25Z",
+        "resourceVersion": "1103",
+        "istioSidecar": true,
+        "isAmbient": false,
+        "isGateway": true,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "istio": "ingressgateway",
+          "sidecar.istio.io/inject": "true"
+        },
+        "appLabel": false,
+        "versionLabel": false,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"name\":\"istio-ingressgateway\",\"namespace\":\"bookinfo\"},\"spec\":{\"selector\":{\"matchLabels\":{\"istio\":\"ingressgateway\"}},\"template\":{\"metadata\":{\"annotations\":{\"inject.istio.io/templates\":\"gateway\"},\"labels\":{\"istio\":\"ingressgateway\",\"sidecar.istio.io/inject\":\"true\"}},\"spec\":{\"containers\":[{\"image\":\"auto\",\"name\":\"istio-proxy\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [
+          {
+            "objectGVK": {
+              "Group": "networking.istio.io",
+              "Version": "v1",
+              "Kind": "Gateway"
+            },
+            "name": "bookinfo-gateway",
+            "namespace": "bookinfo",
+            "cluster": ""
+          }
+        ],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "default"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {
+              "http": {
+                "200": 1.9578947368421051
+              }
+            }
+          },
+          "status": {
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "istio-ingressgateway",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "productpage-v1",
+        "namespace": "bookinfo",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:47:25Z",
+        "resourceVersion": "1210",
+        "istioSidecar": true,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "productpage",
+          "version": "v1"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"productpage\",\"version\":\"v1\"},\"name\":\"productpage-v1\",\"namespace\":\"bookinfo\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"productpage\",\"version\":\"v1\"}},\"template\":{\"metadata\":{\"annotations\":{\"prometheus.io/path\":\"/metrics\",\"prometheus.io/port\":\"9080\",\"prometheus.io/scrape\":\"true\"},\"labels\":{\"app\":\"productpage\",\"version\":\"v1\"}},\"spec\":{\"containers\":[{\"image\":\"quay.io/sail-dev/examples-bookinfo-productpage-v1:1.20.3\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"productpage\",\"ports\":[{\"containerPort\":9080}],\"volumeMounts\":[{\"mountPath\":\"/tmp\",\"name\":\"tmp\"}]}],\"serviceAccountName\":\"bookinfo-productpage\",\"volumes\":[{\"emptyDir\":{},\"name\":\"tmp\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "bookinfo-productpage"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {
+              "http": {
+                "200": 1.9578947368421051
+              }
+            },
+            "outbound": {
+              "http": {
+                "200": 3.9157894736842103
+              }
+            }
+          },
+          "status": {
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "productpage-v1",
+            "syncedProxies": 1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "ratings-v1",
+        "namespace": "bookinfo",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:47:25Z",
+        "resourceVersion": "14788",
+        "istioSidecar": true,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "ratings",
+          "version": "v1"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "12",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"ratings\",\"version\":\"v1\"},\"name\":\"ratings-v1\",\"namespace\":\"bookinfo\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"ratings\",\"version\":\"v1\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"ratings\",\"version\":\"v1\"}},\"spec\":{\"containers\":[{\"image\":\"quay.io/sail-dev/examples-bookinfo-ratings-v1:1.20.3\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"ratings\",\"ports\":[{\"containerPort\":9080}]}],\"serviceAccountName\":\"bookinfo-ratings\"}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "bookinfo-ratings"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {
+              "http": {
+                "200": 1.3122807017543858
+              }
+            },
+            "outbound": {}
+          },
+          "status": {
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "ratings-v1",
+            "syncedProxies": 1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "reviews-v1",
+        "namespace": "bookinfo",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:47:25Z",
+        "resourceVersion": "1185",
+        "istioSidecar": true,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "reviews",
+          "version": "v1"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"reviews\",\"version\":\"v1\"},\"name\":\"reviews-v1\",\"namespace\":\"bookinfo\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"reviews\",\"version\":\"v1\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"reviews\",\"version\":\"v1\"}},\"spec\":{\"containers\":[{\"env\":[{\"name\":\"LOG_DIR\",\"value\":\"/tmp/logs\"}],\"image\":\"quay.io/sail-dev/examples-bookinfo-reviews-v1:1.20.3\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"reviews\",\"ports\":[{\"containerPort\":9080}],\"volumeMounts\":[{\"mountPath\":\"/tmp\",\"name\":\"tmp\"},{\"mountPath\":\"/opt/ibm/wlp/output\",\"name\":\"wlp-output\"}]}],\"serviceAccountName\":\"bookinfo-reviews\",\"volumes\":[{\"emptyDir\":{},\"name\":\"wlp-output\"},{\"emptyDir\":{},\"name\":\"tmp\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "bookinfo-reviews"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {
+              "http": {
+                "200": 0.6561403508771929
+              }
+            },
+            "outbound": {}
+          },
+          "status": {
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "reviews-v1",
+            "syncedProxies": 1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "reviews-v2",
+        "namespace": "bookinfo",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:47:25Z",
+        "resourceVersion": "1228",
+        "istioSidecar": true,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "reviews",
+          "version": "v2"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"reviews\",\"version\":\"v2\"},\"name\":\"reviews-v2\",\"namespace\":\"bookinfo\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"reviews\",\"version\":\"v2\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"reviews\",\"version\":\"v2\"}},\"spec\":{\"containers\":[{\"env\":[{\"name\":\"LOG_DIR\",\"value\":\"/tmp/logs\"}],\"image\":\"quay.io/sail-dev/examples-bookinfo-reviews-v2:1.20.3\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"reviews\",\"ports\":[{\"containerPort\":9080}],\"volumeMounts\":[{\"mountPath\":\"/tmp\",\"name\":\"tmp\"},{\"mountPath\":\"/opt/ibm/wlp/output\",\"name\":\"wlp-output\"}]}],\"serviceAccountName\":\"bookinfo-reviews\",\"volumes\":[{\"emptyDir\":{},\"name\":\"wlp-output\"},{\"emptyDir\":{},\"name\":\"tmp\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "bookinfo-reviews"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {
+              "http": {
+                "200": 0.6245614035087719
+              }
+            },
+            "outbound": {
+              "http": {
+                "200": 0.6245614035087719
+              }
+            }
+          },
+          "status": {
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "reviews-v2",
+            "syncedProxies": 1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "reviews-v3",
+        "namespace": "bookinfo",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:47:25Z",
+        "resourceVersion": "1220",
+        "istioSidecar": true,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "reviews",
+          "version": "v3"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"reviews\",\"version\":\"v3\"},\"name\":\"reviews-v3\",\"namespace\":\"bookinfo\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"reviews\",\"version\":\"v3\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"reviews\",\"version\":\"v3\"}},\"spec\":{\"containers\":[{\"env\":[{\"name\":\"LOG_DIR\",\"value\":\"/tmp/logs\"}],\"image\":\"quay.io/sail-dev/examples-bookinfo-reviews-v3:1.20.3\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"reviews\",\"ports\":[{\"containerPort\":9080}],\"volumeMounts\":[{\"mountPath\":\"/tmp\",\"name\":\"tmp\"},{\"mountPath\":\"/opt/ibm/wlp/output\",\"name\":\"wlp-output\"}]}],\"serviceAccountName\":\"bookinfo-reviews\",\"volumes\":[{\"emptyDir\":{},\"name\":\"wlp-output\"},{\"emptyDir\":{},\"name\":\"tmp\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "bookinfo-reviews"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {
+              "http": {
+                "200": 0.687719298245614
+              }
+            },
+            "outbound": {
+              "http": {
+                "200": 0.687719298245614
+              }
+            }
+          },
+          "status": {
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "reviews-v3",
+            "syncedProxies": 1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "istio-egressgateway",
+        "namespace": "istio-system",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:46:33Z",
+        "resourceVersion": "679",
+        "istioSidecar": false,
+        "isAmbient": false,
+        "isGateway": true,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "istio-egressgateway",
+          "app.kubernetes.io/instance": "istio",
+          "app.kubernetes.io/managed-by": "Helm",
+          "app.kubernetes.io/name": "istio-egressgateway",
+          "app.kubernetes.io/part-of": "istio",
+          "app.kubernetes.io/version": "1.28.0",
+          "chart": "gateways",
+          "helm.sh/chart": "istio-egress-1.28.0",
+          "heritage": "Tiller",
+          "install.operator.istio.io/owning-resource": "unknown",
+          "istio": "egressgateway",
+          "istio.io/dataplane-mode": "none",
+          "istio.io/rev": "default",
+          "operator.istio.io/component": "EgressGateways",
+          "release": "istio",
+          "service.istio.io/canonical-name": "istio-egressgateway",
+          "service.istio.io/canonical-revision": "latest",
+          "sidecar.istio.io/inject": "false"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "istio-egressgateway-service-account"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          },
+          "status": {
+            "errorRatio": -1,
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "istio-egressgateway",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "istio-ingressgateway",
+        "namespace": "istio-system",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:46:33Z",
+        "resourceVersion": "687",
+        "istioSidecar": false,
+        "isAmbient": false,
+        "isGateway": true,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "istio-ingressgateway",
+          "app.kubernetes.io/instance": "istio",
+          "app.kubernetes.io/managed-by": "Helm",
+          "app.kubernetes.io/name": "istio-ingressgateway",
+          "app.kubernetes.io/part-of": "istio",
+          "app.kubernetes.io/version": "1.28.0",
+          "chart": "gateways",
+          "helm.sh/chart": "istio-ingress-1.28.0",
+          "heritage": "Tiller",
+          "install.operator.istio.io/owning-resource": "unknown",
+          "istio": "ingressgateway",
+          "istio.io/dataplane-mode": "none",
+          "istio.io/rev": "default",
+          "operator.istio.io/component": "IngressGateways",
+          "release": "istio",
+          "service.istio.io/canonical-name": "istio-ingressgateway",
+          "service.istio.io/canonical-revision": "latest",
+          "sidecar.istio.io/inject": "false"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "istio-ingressgateway-service-account"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          },
+          "status": {
+            "errorRatio": -1,
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "istio-ingressgateway",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "istiod",
+        "namespace": "istio-system",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:46:07Z",
+        "resourceVersion": "586",
+        "istioSidecar": false,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "istiod",
+          "app.kubernetes.io/instance": "istio",
+          "app.kubernetes.io/managed-by": "Helm",
+          "app.kubernetes.io/name": "istiod",
+          "app.kubernetes.io/part-of": "istio",
+          "app.kubernetes.io/version": "1.28.0",
+          "helm.sh/chart": "istiod-1.28.0",
+          "install.operator.istio.io/owning-resource": "unknown",
+          "istio": "pilot",
+          "istio.io/dataplane-mode": "none",
+          "istio.io/rev": "default",
+          "operator.istio.io/component": "Pilot",
+          "sidecar.istio.io/inject": "false"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "istiod"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          },
+          "status": {
+            "errorRatio": -1,
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "istiod",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "jaeger",
+        "namespace": "istio-system",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:46:43Z",
+        "resourceVersion": "822",
+        "istioSidecar": false,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "jaeger",
+          "sidecar.istio.io/inject": "false"
+        },
+        "appLabel": true,
+        "versionLabel": false,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"jaeger\"},\"name\":\"jaeger\",\"namespace\":\"istio-system\"},\"spec\":{\"selector\":{\"matchLabels\":{\"app\":\"jaeger\"}},\"template\":{\"metadata\":{\"annotations\":{\"prometheus.io/port\":\"14269\",\"prometheus.io/scrape\":\"true\"},\"labels\":{\"app\":\"jaeger\",\"sidecar.istio.io/inject\":\"false\"}},\"spec\":{\"containers\":[{\"env\":[{\"name\":\"BADGER_EPHEMERAL\",\"value\":\"false\"},{\"name\":\"SPAN_STORAGE_TYPE\",\"value\":\"badger\"},{\"name\":\"BADGER_DIRECTORY_VALUE\",\"value\":\"/badger/data\"},{\"name\":\"BADGER_DIRECTORY_KEY\",\"value\":\"/badger/key\"},{\"name\":\"COLLECTOR_ZIPKIN_HOST_PORT\",\"value\":\":9411\"},{\"name\":\"MEMORY_MAX_TRACES\",\"value\":\"50000\"},{\"name\":\"QUERY_BASE_PATH\",\"value\":\"/jaeger\"}],\"image\":\"docker.io/jaegertracing/all-in-one:1.70.0\",\"livenessProbe\":{\"httpGet\":{\"path\":\"/\",\"port\":14269}},\"name\":\"jaeger\",\"readinessProbe\":{\"httpGet\":{\"path\":\"/\",\"port\":14269}},\"resources\":{\"requests\":{\"cpu\":\"10m\"}},\"volumeMounts\":[{\"mountPath\":\"/badger\",\"name\":\"data\"}]}],\"volumes\":[{\"emptyDir\":{},\"name\":\"data\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "default"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          },
+          "status": {
+            "errorRatio": -1,
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "jaeger",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "kiali",
+        "namespace": "istio-system",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:46:42Z",
+        "resourceVersion": "893",
+        "istioSidecar": false,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "kiali",
+          "app.kubernetes.io/instance": "kiali",
+          "app.kubernetes.io/name": "kiali",
+          "app.kubernetes.io/part-of": "kiali",
+          "app.kubernetes.io/version": "v2.22.0",
+          "helm.sh/chart": "kiali-server-2.22.0",
+          "sidecar.istio.io/inject": "false",
+          "version": "v2.22.0"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"kiali\",\"app.kubernetes.io/instance\":\"kiali\",\"app.kubernetes.io/name\":\"kiali\",\"app.kubernetes.io/part-of\":\"kiali\",\"app.kubernetes.io/version\":\"v2.22.0\",\"helm.sh/chart\":\"kiali-server-2.22.0\",\"version\":\"v2.22.0\"},\"name\":\"kiali\",\"namespace\":\"istio-system\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app.kubernetes.io/instance\":\"kiali\",\"app.kubernetes.io/name\":\"kiali\"}},\"strategy\":{\"rollingUpdate\":{\"maxSurge\":1,\"maxUnavailable\":1},\"type\":\"RollingUpdate\"},\"template\":{\"metadata\":{\"annotations\":{\"checksum/config\":\"0e92cf3a1b73675411d334b12dc5ff938f21a06ba65e33b702a1cca95e9acc06\",\"kiali.io/dashboards\":\"go,kiali\",\"prometheus.io/port\":\"9090\",\"prometheus.io/scheme\":\"http\",\"prometheus.io/scrape\":\"true\",\"proxy.istio.io/config\":\"{ \\\"holdApplicationUntilProxyStarts\\\": true }\"},\"labels\":{\"app\":\"kiali\",\"app.kubernetes.io/instance\":\"kiali\",\"app.kubernetes.io/name\":\"kiali\",\"app.kubernetes.io/part-of\":\"kiali\",\"app.kubernetes.io/version\":\"v2.22.0\",\"helm.sh/chart\":\"kiali-server-2.22.0\",\"sidecar.istio.io/inject\":\"false\",\"version\":\"v2.22.0\"},\"name\":\"kiali\"},\"spec\":{\"containers\":[{\"command\":[\"/opt/kiali/kiali\",\"-config\",\"/kiali-configuration/config.yaml\"],\"env\":[{\"name\":\"ACTIVE_NAMESPACE\",\"valueFrom\":{\"fieldRef\":{\"fieldPath\":\"metadata.namespace\"}}},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"},{\"name\":\"LOG_FORMAT\",\"value\":\"text\"},{\"name\":\"LOG_TIME_FIELD_FORMAT\",\"value\":\"2006-01-02T15:04:05Z07:00\"},{\"name\":\"LOG_SAMPLER_RATE\",\"value\":\"1\"}],\"image\":\"quay.io/kiali/kiali:v2.22\",\"imagePullPolicy\":\"IfNotPresent\",\"livenessProbe\":{\"httpGet\":{\"path\":\"/kiali/healthz\",\"port\":\"api-port\",\"scheme\":\"HTTP\"},\"initialDelaySeconds\":5,\"periodSeconds\":30},\"name\":\"kiali\",\"ports\":[{\"containerPort\":20001,\"name\":\"api-port\"},{\"containerPort\":9090,\"name\":\"http-metrics\"}],\"readinessProbe\":{\"httpGet\":{\"path\":\"/kiali/healthz\",\"port\":\"api-port\",\"scheme\":\"HTTP\"},\"initialDelaySeconds\":5,\"periodSeconds\":30},\"resources\":{\"limits\":{\"memory\":\"1Gi\"},\"requests\":{\"cpu\":\"10m\",\"memory\":\"64Mi\"}},\"securityContext\":{\"allowPrivilegeEscalation\":false,\"capabilities\":{\"drop\":[\"ALL\"]},\"privileged\":false,\"readOnlyRootFilesystem\":true,\"runAsNonRoot\":true},\"startupProbe\":{\"failureThreshold\":6,\"httpGet\":{\"path\":\"/kiali/healthz\",\"port\":\"api-port\",\"scheme\":\"HTTP\"},\"initialDelaySeconds\":30,\"periodSeconds\":10},\"terminationMessagePolicy\":\"FallbackToLogsOnError\",\"volumeMounts\":[{\"mountPath\":\"/kiali-configuration\",\"name\":\"kiali-configuration\"},{\"mountPath\":\"/kiali-cert\",\"name\":\"kiali-cert\"},{\"mountPath\":\"/kiali-secret\",\"name\":\"kiali-secret\"},{\"mountPath\":\"/kiali-cabundle\",\"name\":\"kiali-cabundle\"},{\"mountPath\":\"/kiali-remote-cluster-secrets/kiali-multi-cluster-secret\",\"name\":\"kiali-multi-cluster-secret\",\"readOnly\":true}]}],\"serviceAccountName\":\"kiali\",\"volumes\":[{\"configMap\":{\"name\":\"kiali\"},\"name\":\"kiali-configuration\"},{\"name\":\"kiali-cert\",\"secret\":{\"optional\":true,\"secretName\":\"istio.kiali-service-account\"}},{\"name\":\"kiali-secret\",\"secret\":{\"optional\":true,\"secretName\":\"kiali\"}},{\"configMap\":{\"name\":\"kiali-cabundle\",\"optional\":true},\"name\":\"kiali-cabundle\"},{\"name\":\"kiali-multi-cluster-secret\",\"secret\":{\"optional\":true,\"secretName\":\"kiali-multi-cluster-secret\"}}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "kiali"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          },
+          "status": {
+            "errorRatio": -1,
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "kiali",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "prometheus",
+        "namespace": "istio-system",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:46:42Z",
+        "resourceVersion": "852",
+        "istioSidecar": false,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app.kubernetes.io/component": "server",
+          "app.kubernetes.io/instance": "prometheus",
+          "app.kubernetes.io/name": "prometheus",
+          "app.kubernetes.io/part-of": "prometheus",
+          "app.kubernetes.io/version": "v3.5.0",
+          "helm.sh/chart": "prometheus-27.37.0",
+          "sidecar.istio.io/inject": "false"
+        },
+        "appLabel": true,
+        "versionLabel": true,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app.kubernetes.io/component\":\"server\",\"app.kubernetes.io/instance\":\"prometheus\",\"app.kubernetes.io/name\":\"prometheus\",\"app.kubernetes.io/part-of\":\"prometheus\",\"app.kubernetes.io/version\":\"v3.5.0\",\"helm.sh/chart\":\"prometheus-27.37.0\"},\"name\":\"prometheus\",\"namespace\":\"istio-system\"},\"spec\":{\"replicas\":1,\"revisionHistoryLimit\":10,\"selector\":{\"matchLabels\":{\"app.kubernetes.io/component\":\"server\",\"app.kubernetes.io/instance\":\"prometheus\",\"app.kubernetes.io/name\":\"prometheus\"}},\"strategy\":{\"rollingUpdate\":null,\"type\":\"Recreate\"},\"template\":{\"metadata\":{\"labels\":{\"app.kubernetes.io/component\":\"server\",\"app.kubernetes.io/instance\":\"prometheus\",\"app.kubernetes.io/name\":\"prometheus\",\"app.kubernetes.io/part-of\":\"prometheus\",\"app.kubernetes.io/version\":\"v3.5.0\",\"helm.sh/chart\":\"prometheus-27.37.0\",\"sidecar.istio.io/inject\":\"false\"}},\"spec\":{\"containers\":[{\"args\":[\"--watched-dir=/etc/config\",\"--listen-address=0.0.0.0:8080\",\"--reload-url=http://127.0.0.1:9090/-/reload\"],\"image\":\"ghcr.io/prometheus-operator/prometheus-config-reloader:v0.85.0\",\"imagePullPolicy\":\"IfNotPresent\",\"livenessProbe\":{\"httpGet\":{\"path\":\"/healthz\",\"port\":\"metrics\",\"scheme\":\"HTTP\"},\"initialDelaySeconds\":2,\"periodSeconds\":10},\"name\":\"prometheus-server-configmap-reload\",\"ports\":[{\"containerPort\":8080,\"name\":\"metrics\"}],\"readinessProbe\":{\"httpGet\":{\"path\":\"/healthz\",\"port\":\"metrics\",\"scheme\":\"HTTP\"},\"periodSeconds\":10},\"volumeMounts\":[{\"mountPath\":\"/etc/config\",\"name\":\"config-volume\",\"readOnly\":true}]},{\"args\":[\"--storage.tsdb.retention.time=15d\",\"--config.file=/etc/config/prometheus.yml\",\"--storage.tsdb.path=/data\",\"--web.console.libraries=/etc/prometheus/console_libraries\",\"--web.console.templates=/etc/prometheus/consoles\",\"--web.enable-lifecycle\"],\"image\":\"prom/prometheus:v3.5.0\",\"imagePullPolicy\":\"IfNotPresent\",\"livenessProbe\":{\"failureThreshold\":3,\"httpGet\":{\"path\":\"/-/healthy\",\"port\":9090,\"scheme\":\"HTTP\"},\"initialDelaySeconds\":30,\"periodSeconds\":15,\"successThreshold\":1,\"timeoutSeconds\":10},\"name\":\"prometheus-server\",\"ports\":[{\"containerPort\":9090}],\"readinessProbe\":{\"failureThreshold\":3,\"httpGet\":{\"path\":\"/-/ready\",\"port\":9090,\"scheme\":\"HTTP\"},\"initialDelaySeconds\":0,\"periodSeconds\":5,\"successThreshold\":1,\"timeoutSeconds\":4},\"volumeMounts\":[{\"mountPath\":\"/etc/config\",\"name\":\"config-volume\"},{\"mountPath\":\"/data\",\"name\":\"storage-volume\",\"subPath\":\"\"}]}],\"dnsPolicy\":\"ClusterFirst\",\"enableServiceLinks\":true,\"serviceAccountName\":\"prometheus\",\"terminationGracePeriodSeconds\":300,\"volumes\":[{\"configMap\":{\"name\":\"prometheus\"},\"name\":\"config-volume\"},{\"emptyDir\":{},\"name\":\"storage-volume\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "prometheus"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          },
+          "status": {
+            "errorRatio": -1,
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "prometheus",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      },
+      {
+        "name": "local-path-provisioner",
+        "namespace": "local-path-storage",
+        "cluster": "Kubernetes",
+        "gvk": {
+          "Group": "apps",
+          "Version": "v1",
+          "Kind": "Deployment"
+        },
+        "createdAt": "2026-03-05T10:46:04Z",
+        "resourceVersion": "563",
+        "istioSidecar": false,
+        "isAmbient": false,
+        "isGateway": false,
+        "isWaypoint": false,
+        "isZtunnel": false,
+        "additionalDetailSample": null,
+        "labels": {
+          "app": "local-path-provisioner"
+        },
+        "appLabel": true,
+        "versionLabel": false,
+        "podCount": 1,
+        "annotations": {
+          "deployment.kubernetes.io/revision": "1",
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"name\":\"local-path-provisioner\",\"namespace\":\"local-path-storage\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"local-path-provisioner\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"local-path-provisioner\"}},\"spec\":{\"containers\":[{\"command\":[\"local-path-provisioner\",\"--debug\",\"start\",\"--helper-image\",\"docker.io/kindest/local-path-helper:v20241212-8ac705d0\",\"--config\",\"/etc/config/config.json\"],\"env\":[{\"name\":\"POD_NAMESPACE\",\"valueFrom\":{\"fieldRef\":{\"fieldPath\":\"metadata.namespace\"}}},{\"name\":\"CONFIG_MOUNT_PATH\",\"value\":\"/etc/config/\"}],\"image\":\"docker.io/kindest/local-path-provisioner:v20250214-acbabc1a\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"local-path-provisioner\",\"volumeMounts\":[{\"mountPath\":\"/etc/config/\",\"name\":\"config-volume\"}]}],\"nodeSelector\":{\"kubernetes.io/os\":\"linux\"},\"serviceAccountName\":\"local-path-provisioner-service-account\",\"tolerations\":[{\"effect\":\"NoSchedule\",\"key\":\"node-role.kubernetes.io/control-plane\",\"operator\":\"Equal\"},{\"effect\":\"NoSchedule\",\"key\":\"node-role.kubernetes.io/master\",\"operator\":\"Equal\"}],\"volumes\":[{\"configMap\":{\"name\":\"local-path-config\"},\"name\":\"config-volume\"}]}}}}\n"
+        },
+        "healthAnnotations": {},
+        "istioReferences": [],
+        "dashboardAnnotations": null,
+        "serviceAccountNames": [
+          "local-path-provisioner-service-account"
+        ],
+        "health": {
+          "requests": {
+            "healthAnnotations": {},
+            "inbound": {},
+            "outbound": {}
+          },
+          "status": {
+            "errorRatio": -1,
+            "status": "Healthy"
+          },
+          "workloadStatus": {
+            "availableReplicas": 1,
+            "currentReplicas": 1,
+            "desiredReplicas": 1,
+            "name": "local-path-provisioner",
+            "syncedProxies": -1
+          }
+        },
+        "waypointWorkloads": null,
+        "ValidationKey": "",
+        "ValidationVersion": ""
+      }
+    ],
+    "validations": {
+      "workload": {
+        "details-v1.bookinfo": {
+          "name": "details-v1",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "istio-egressgateway.istio-system": {
+          "name": "istio-egressgateway",
+          "namespace": "istio-system",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "istio-ingressgateway.bookinfo": {
+          "name": "istio-ingressgateway",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "istio-ingressgateway.istio-system": {
+          "name": "istio-ingressgateway",
+          "namespace": "istio-system",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "istiod.istio-system": {
+          "name": "istiod",
+          "namespace": "istio-system",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "jaeger.istio-system": {
+          "name": "jaeger",
+          "namespace": "istio-system",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "kiali.istio-system": {
+          "name": "kiali",
+          "namespace": "istio-system",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "local-path-provisioner.local-path-storage": {
+          "name": "local-path-provisioner",
+          "namespace": "local-path-storage",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "productpage-v1.bookinfo": {
+          "name": "productpage-v1",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "prometheus.istio-system": {
+          "name": "prometheus",
+          "namespace": "istio-system",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "ratings-v1.bookinfo": {
+          "name": "ratings-v1",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "reviews-v1.bookinfo": {
+          "name": "reviews-v1",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "reviews-v2.bookinfo": {
+          "name": "reviews-v2",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        },
+        "reviews-v3.bookinfo": {
+          "name": "reviews-v3",
+          "namespace": "bookinfo",
+          "cluster": "Kubernetes",
+          "objectGVK": {
+            "Group": "",
+            "Version": "",
+            "Kind": "workload"
+          },
+          "valid": true,
+          "checks": [],
+          "references": null
+        }
+      }
+    }
+  }

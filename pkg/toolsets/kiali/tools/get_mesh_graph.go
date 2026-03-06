@@ -13,9 +13,8 @@ import (
 )
 
 func InitGetMeshGraph() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_mesh_graph"
-	ret = append(ret, api.ServerTool{
+	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name:        name,
 			Description: "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
@@ -51,8 +50,7 @@ func InitGetMeshGraph() []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: getMeshGraphHandler,
-	})
-	return ret
+	}}
 }
 
 func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
