@@ -34,6 +34,11 @@ A powerful and flexible Kubernetes [Model Context Protocol (MCP)](https://blog.m
   - **Install** a Helm chart in the current or provided namespace.
   - **List** Helm releases in all namespaces or in a specific namespace.
   - **Uninstall** a Helm release in the current or provided namespace.
+- **🔧 Tekton**: Tekton-specific operations that complement generic Kubernetes resource management.
+  - **Pipeline**: Start a Tekton Pipeline by creating a PipelineRun.
+  - **PipelineRun**: Restart a PipelineRun with the same spec, or bulk-delete PipelineRuns with selectors.
+  - **Task**: Start a Tekton Task by creating a TaskRun.
+  - **TaskRun**: Restart a TaskRun with the same spec, and retrieve TaskRun logs via pod resolution.
 - **🔭 Observability**: Optional OpenTelemetry distributed tracing and metrics with custom sampling rates. Includes `/stats` endpoint for real-time statistics. See [OTEL.md](docs/OTEL.md).
 
 Unlike other Kubernetes MCP server implementations, this **IS NOT** just a wrapper around `kubectl` or `helm` command-line tools.
