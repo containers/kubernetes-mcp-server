@@ -8,6 +8,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/go-logr/logr v1.4.3
+	github.com/google/gnostic-models v0.7.0
 	github.com/google/jsonschema-go v0.4.2
 	github.com/modelcontextprotocol/go-sdk v1.4.0
 	github.com/prometheus/client_golang v1.23.2
@@ -28,6 +29,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.42.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.19.0
+	google.golang.org/protobuf v1.36.11
 	helm.sh/helm/v3 v3.20.0
 	k8s.io/api v0.35.2
 	k8s.io/apiextensions-apiserver v0.35.2
@@ -35,6 +37,7 @@ require (
 	k8s.io/cli-runtime v0.35.2
 	k8s.io/client-go v0.35.2
 	k8s.io/klog/v2 v2.130.1
+	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
 	k8s.io/kubectl v0.35.2
 	k8s.io/metrics v0.35.2
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
@@ -77,7 +80,6 @@ require (
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
@@ -145,13 +147,11 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/grpc v1.79.2 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiserver v0.35.2 // indirect
 	k8s.io/component-base v0.35.2 // indirect
-	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect

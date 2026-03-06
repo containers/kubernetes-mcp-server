@@ -2,13 +2,16 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/discovery"
 	"k8s.io/klog/v2"
+	openapierrors "k8s.io/kube-openapi/pkg/util/proto/validation"
 	kubectlopenapi "k8s.io/kubectl/pkg/util/openapi"
 	kubectlvalidation "k8s.io/kubectl/pkg/validation"
 )
@@ -111,20 +114,40 @@ func convertKubectlValidationError(err error) *api.ValidationError {
 		return nil
 	}
 
-	errMsg := err.Error()
-
 	var field string
-	if strings.Contains(errMsg, "unknown field") {
-		if start := strings.Index(errMsg, "\""); start != -1 {
-			if end := strings.Index(errMsg[start+1:], "\""); end != -1 {
-				field = errMsg[start+1 : start+1+end]
+	var agg utilerrors.Aggregate
+	if errors.As(err, &agg) {
+		for _, e := range agg.Errors() {
+			if f := extractUnknownField(e); f != "" {
+				field = f
+				break
 			}
 		}
+	} else {
+		field = extractUnknownField(err)
 	}
 
 	return &api.ValidationError{
 		Code:    api.ErrorCodeInvalidField,
-		Message: errMsg,
+		Message: err.Error(),
 		Field:   field,
 	}
+}
+
+// extractUnknownField extracts the field name from an UnknownFieldError.
+// The error may be wrapped in a ValidationError from kube-openapi, which
+// does not implement Unwrap(), so we check both the error itself and the
+// wrapped Err field.
+func extractUnknownField(err error) string {
+	var unknownField openapierrors.UnknownFieldError
+	if errors.As(err, &unknownField) {
+		return unknownField.Field
+	}
+	var validationErr openapierrors.ValidationError
+	if errors.As(err, &validationErr) {
+		if errors.As(validationErr.Err, &unknownField) {
+			return unknownField.Field
+		}
+	}
+	return ""
 }
