@@ -13,7 +13,7 @@ the server doesn't have a resource type "Deploymnt"
 With validation enabled, you get clearer feedback:
 
 ```
-Resource apps/v1/Deploymnt does not exist in the cluster
+Validation Error [RESOURCE_NOT_FOUND]: Resource deploymnt does not exist in the cluster
 ```
 
 The validation layer catches these types of issues:
@@ -76,7 +76,7 @@ The access control layer validates that the requested resource type exists in th
 
 **Example error:**
 ```
-RESOURCE_NOT_FOUND: Resource deployments.apps does not exist in the cluster
+Validation Error [RESOURCE_NOT_FOUND]: Resource deploymnt.apps does not exist in the cluster
 ```
 
 ### 2. Schema Validation
@@ -90,7 +90,7 @@ Validates resource manifests against the cluster's OpenAPI schema for create/upd
 
 **Example error:**
 ```
-INVALID_FIELD: unknown field "spec.replcias"
+Validation Error [INVALID_FIELD]: unknown field "spec.replcias"
 ```
 
 **Note:** Schema validation uses kubectl's validation library and caches the OpenAPI schema for 15 minutes.
@@ -106,7 +106,7 @@ Pre-checks permissions using Kubernetes `SelfSubjectAccessReview` before attempt
 
 **Example error:**
 ```
-PERMISSION_DENIED: Cannot create deployments.apps in namespace "production"
+Validation Error [PERMISSION_DENIED]: Cannot create deployments.apps in namespace "production"
 ```
 
 **Note:** RBAC validation uses the same credentials as the actual operation - either the server's service account or the user's token (when OAuth is enabled).

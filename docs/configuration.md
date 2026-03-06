@@ -25,6 +25,7 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
   - [Prompts](#prompts)
   - [OAuth and Authorization](#oauth-and-authorization)
   - [Telemetry](#telemetry)
+  - [Validation](#validation)
   - [Toolset-Specific Configuration](#toolset-specific-configuration)
   - [Cluster Provider Configuration](#cluster-provider-configuration)
 - [CLI Configuration Options](#cli-configuration-options)
@@ -458,6 +459,28 @@ Configure OpenTelemetry distributed tracing and metrics. See [OTEL.md](OTEL.md) 
 endpoint = "http://localhost:4317"
 traces_sampler = "traceidratio"
 traces_sampler_arg = 0.1  # 10% sampling
+```
+
+### Validation
+
+Pre-execution validation catches errors before they reach the Kubernetes API, providing clearer error messages for issues like typos in resource names, invalid fields, and missing permissions.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `validation_enabled` | boolean | `false` | When `true`, enables schema validation and RBAC pre-checks for all API requests. Resource existence is always checked regardless of this setting. |
+
+When enabled, the validation layer runs at the HTTP RoundTripper level, intercepting all Kubernetes API calls (including those from plugins like Helm, KubeVirt, and Kiali). It performs:
+
+- **Schema validation** — Validates resource manifests against the cluster's OpenAPI schema for create/update operations
+- **RBAC pre-checks** — Verifies permissions using `SelfSubjectAccessReview` before attempting operations
+
+Resource existence validation (catching typos like "Deploymnt" instead of "Deployment") runs as part of access control regardless of this setting.
+
+For detailed information about the validation flow, error codes, and behavior, see the [validation specification](specs/validation.md).
+
+**Example:**
+```toml
+validation_enabled = true
 ```
 
 ### Toolset-Specific Configuration
