@@ -118,8 +118,7 @@ service:
   type: ClusterIP
   # -- This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 8080
-  # -- This sets the target port on the pod. Defaults to "http" (the container port name).
-  # -- Target port for the service. Useful when deploying with an proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container.
+  # -- Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container.
   targetPort: http
   # -- Annotations to add to the service
   annotations: {}

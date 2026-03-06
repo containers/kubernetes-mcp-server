@@ -303,14 +303,17 @@ func (m *MCPServerOptions) Validate() error {
 		}
 	}
 	// Validate that certificate_authority is a valid file
-	if caValue := strings.TrimSpace(m.StaticConfig.CertificateAuthority); caValue != "" {
-		if _, err := os.Stat(caValue); err != nil {
+	m.StaticConfig.CertificateAuthority = strings.TrimSpace(m.StaticConfig.CertificateAuthority)
+	if m.StaticConfig.CertificateAuthority != "" {
+		if _, err := os.Stat(m.StaticConfig.CertificateAuthority); err != nil {
 			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
 		}
 	}
 	// Validate TLS configuration
 	tlsCert := strings.TrimSpace(m.StaticConfig.TLSCert)
 	tlsKey := strings.TrimSpace(m.StaticConfig.TLSKey)
+	m.StaticConfig.TLSCert = tlsCert
+	m.StaticConfig.TLSKey = tlsKey
 	if (tlsCert != "" && tlsKey == "") || (tlsCert == "" && tlsKey != "") {
 		return fmt.Errorf("both --tls-cert and --tls-key must be provided together")
 	}

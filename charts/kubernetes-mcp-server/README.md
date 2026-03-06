@@ -126,7 +126,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | service | object | `{"annotations":{},"port":8080,"targetPort":"http","type":"ClusterIP"}` | This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/ |
 | service.annotations | object | `{}` | Annotations to add to the service |
 | service.port | int | `8080` | This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports |
-| service.targetPort | string | `"http"` | Target port for the service. Useful when deploying with an proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container. |
+| service.targetPort | string | `"http"` | Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container. |
 | service.type | string | `"ClusterIP"` | This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types |
 | serviceAccount | object | `{"annotations":{},"create":true,"name":""}` | This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/ |
 | serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
