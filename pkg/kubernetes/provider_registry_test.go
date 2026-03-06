@@ -16,7 +16,7 @@ func (s *ProviderRegistryTestSuite) TestRegisterProvider() {
 		RegisterProvider("test-strategy", func(cfg api.BaseConfig) (Provider, error) {
 			return nil, nil
 		})
-		_, exists := providerFactories["test-strategy"]
+		_, exists := providerReg.factories["test-strategy"]
 		s.True(exists, "Provider should be registered")
 	})
 	s.Run("With pre-existing provider, panics", func() {
@@ -33,12 +33,12 @@ func (s *ProviderRegistryTestSuite) TestRegisterProvider() {
 
 func (s *ProviderRegistryTestSuite) TestGetRegisteredStrategies() {
 	s.Run("With no registered providers, returns empty list", func() {
-		providerFactories = make(map[string]ProviderFactory)
+		providerReg.clear()
 		strategies := GetRegisteredStrategies()
 		s.Empty(strategies, "No strategies should be registered")
 	})
 	s.Run("With multiple registered providers, returns sorted list", func() {
-		providerFactories = make(map[string]ProviderFactory)
+		providerReg.clear()
 		RegisterProvider("foo-strategy", func(cfg api.BaseConfig) (Provider, error) {
 			return nil, nil
 		})

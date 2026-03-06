@@ -8,22 +8,19 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-var toolsets []api.Toolset
+var toolsetReg = &toolsetRegistry{toolsets: make(map[string]api.Toolset)}
 
 // Clear removes all registered toolsets, TESTING PURPOSES ONLY.
 func Clear() {
-	toolsets = []api.Toolset{}
+	toolsetReg.clear()
 }
 
 func Register(toolset api.Toolset) {
-	toolsets = append(toolsets, toolset)
+	toolsetReg.register(toolset)
 }
 
 func Toolsets() []api.Toolset {
-	slices.SortFunc(toolsets, func(a, b api.Toolset) int {
-		return strings.Compare(a.GetName(), b.GetName())
-	})
-	return toolsets
+	return toolsetReg.all()
 }
 
 func ToolsetNames() []string {
@@ -36,12 +33,7 @@ func ToolsetNames() []string {
 }
 
 func ToolsetFromString(name string) api.Toolset {
-	for _, toolset := range Toolsets() {
-		if toolset.GetName() == strings.TrimSpace(name) {
-			return toolset
-		}
-	}
-	return nil
+	return toolsetReg.get(strings.TrimSpace(name))
 }
 
 func Validate(toolsets []string) error {
@@ -51,4 +43,35 @@ func Validate(toolsets []string) error {
 		}
 	}
 	return nil
+}
+
+type toolsetRegistry struct {
+	toolsets map[string]api.Toolset
+}
+
+func (r *toolsetRegistry) register(toolset api.Toolset) {
+	name := toolset.GetName()
+	if _, exists := r.toolsets[name]; exists {
+		panic(fmt.Sprintf("toolset already registered for name '%s'", name))
+	}
+	r.toolsets[name] = toolset
+}
+
+func (r *toolsetRegistry) get(name string) api.Toolset {
+	return r.toolsets[name]
+}
+
+func (r *toolsetRegistry) all() []api.Toolset {
+	result := make([]api.Toolset, 0, len(r.toolsets))
+	for _, toolset := range r.toolsets {
+		result = append(result, toolset)
+	}
+	slices.SortFunc(result, func(a, b api.Toolset) int {
+		return strings.Compare(a.GetName(), b.GetName())
+	})
+	return result
+}
+
+func (r *toolsetRegistry) clear() {
+	r.toolsets = make(map[string]api.Toolset)
 }
