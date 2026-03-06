@@ -1,5 +1,7 @@
 package tools
 
+import "time"
+
 // ListMetricsOutput defines the output schema for the list_metrics tool.
 type ListMetricsOutput struct {
 	Metrics []string `json:"metrics" jsonschema:"description=List of all available metric names"`
@@ -36,15 +38,67 @@ type SeriesOutput struct {
 
 // RangeQueryOutput defines the output schema for the execute_range_query tool.
 type RangeQueryOutput struct {
-	ResultType string         `json:"resultType" jsonschema:"description=The type of result returned: matrix or vector or scalar"`
-	Result     []SeriesResult `json:"result" jsonschema:"description=The query results as an array of time series"`
-	Warnings   []string       `json:"warnings,omitempty" jsonschema:"description=Any warnings generated during query execution"`
+	ResultType string                `json:"resultType" jsonschema:"description=The type of result returned: matrix or vector or scalar"`
+	Result     []SeriesResult        `json:"result,omitempty" jsonschema:"description=The query results as an array of time series"`
+	Summary    []SeriesResultSummary `json:"summary,omitempty" jsonschema:"description=Summary statistics for each time series (when summarize flag is enabled)"`
+	Warnings   []string              `json:"warnings,omitempty" jsonschema:"description=Any warnings generated during query execution"`
 }
 
 // SeriesResult represents a single time series result from a range query.
 type SeriesResult struct {
 	Metric map[string]string `json:"metric" jsonschema:"description=The metric labels"`
 	Values [][]any           `json:"values" jsonschema:"description=Array of [timestamp, value] pairs"`
+}
+
+// SeriesResultSummary represents a summary of a time series result from a range query.
+type SeriesResultSummary struct {
+	Series         map[string]string `json:"series" jsonschema:"description=The query result series labelset as a map of label names to values"`
+	Max            float64           `json:"max" jsonschema:"description=Maximum value in the series (excluding NaN/Inf)"`
+	Min            float64           `json:"min" jsonschema:"description=Minimum value in the series (excluding NaN/Inf)"`
+	Avg            float64           `json:"avg" jsonschema:"description=Average value of all finite samples in the series"`
+	Count          int               `json:"count" jsonschema:"description=Total number of samples in the series"`
+	FirstTimestamp float64           `json:"firstTimestamp" jsonschema:"description=Timestamp of the first sample (Unix seconds)"`
+	LastTimestamp  float64           `json:"lastTimestamp" jsonschema:"description=Timestamp of the last sample (Unix seconds)"`
+	FirstValue     float64           `json:"firstValue" jsonschema:"description=Value of the first sample"`
+	LastValue      float64           `json:"lastValue" jsonschema:"description=Value of the last sample"`
+	Delta          float64           `json:"delta" jsonschema:"description=Difference between last and first values (lastValue - firstValue)"`
+	HasNaN         bool              `json:"hasNaN" jsonschema:"description=Whether the series contains any NaN values"`
+	HasInf         bool              `json:"hasInf" jsonschema:"description=Whether the series contains any Inf values"`
+	NonFiniteCount int               `json:"nonFiniteCount" jsonschema:"description=Count of NaN and Inf values in the series"`
+	Extrema        []Extremum        `json:"extrema,omitempty" jsonschema:"description=Detected peaks and troughs in the time series"`
+}
+
+// ExtremumKind represents the type of extremum (peak or trough).
+type ExtremumKind string
+
+const (
+	ExtremumPeak   ExtremumKind = "peak"
+	ExtremumTrough ExtremumKind = "trough"
+)
+
+// Extremum represents a detected peak or trough in a time series.
+type Extremum struct {
+	Kind      ExtremumKind `json:"kind" jsonschema:"description=Type of extremum: peak or trough"`
+	Timestamp time.Time    `json:"timestamp" jsonschema:"description=Timestamp of the extremum"`
+	Value     float64      `json:"value" jsonschema:"description=Value at the extremum"`
+	Index     int          `json:"index" jsonschema:"description=Sample index in the series"`
+}
+
+// ExtremaOptions configures peak and trough detection.
+type ExtremaOptions struct {
+	// Minimum absolute difference required versus both neighbors
+	// for a point to count as a peak/trough.
+	// Useful for ignoring tiny wiggles/noise.
+	MinDelta float64
+
+	// Minimum time gap between two detected extrema of the same kind.
+	// If two candidate peaks/troughs occur too close together,
+	// the more extreme one is kept.
+	MinSeparation time.Duration
+
+	// If true, first/last point may be considered a peak/trough
+	// based on their single neighbor. Usually false is better.
+	IncludeEdges bool
 }
 
 // AlertsOutput defines the output schema for the get_alerts tool.
