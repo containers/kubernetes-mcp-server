@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "Get latency workload"
   category: "Troubleshooting & Debugging"
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   verify:
-    contains: "30 minutes"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash   
+    - llmJudge:
+        contains: "30 minutes"
   prompt:
     inline: Analyze the latency for the reviews workload over the last 30 minutes?

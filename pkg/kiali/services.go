@@ -2,9 +2,12 @@ package kiali
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/kiali/transforms"
 )
 
 // ServicesList returns the list of services across specified namespaces.
@@ -14,10 +17,25 @@ func (k *Kiali) ServicesList(ctx context.Context, namespaces string) (string, er
 		endpoint += "&namespaces=" + url.QueryEscape(namespaces)
 	}
 
-	return k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
+	raw, err := k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
+	if err != nil {
+		return "", err
+	}
+
+	servicesByCluster, err := transforms.TransformServicesListResponse(raw)
+	if err != nil {
+		return raw, err
+	}
+
+	jsonBytes, err := json.Marshal(servicesByCluster)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
 }
 
 // ServiceDetails returns the details for a specific service in a namespace.
+// Response is transformed to a simplified structure (service, istio_config, workloads, health_status, endpoints).
 func (k *Kiali) ServiceDetails(ctx context.Context, namespace string, service string) (string, error) {
 	if namespace == "" {
 		return "", fmt.Errorf("namespace is required")
@@ -27,7 +45,21 @@ func (k *Kiali) ServiceDetails(ctx context.Context, namespace string, service st
 	}
 	endpoint := fmt.Sprintf(ServiceDetailsEndpoint, url.PathEscape(namespace), url.PathEscape(service)) + "?validate=true&rateInterval=" + DefaultRateInterval
 
-	return k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
+	raw, err := k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
+	if err != nil {
+		return "", err
+	}
+
+	formatted, err := transforms.TransformServiceDetailsResponse(raw)
+	if err != nil {
+		return raw, err
+	}
+
+	jsonBytes, err := json.Marshal(formatted)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
 }
 
 // ServiceMetrics returns the metrics for a specific service in a namespace.

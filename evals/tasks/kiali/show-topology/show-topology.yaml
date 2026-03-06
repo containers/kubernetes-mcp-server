@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "Show topology bookinfo"
   category: "High-Level Observability & Health"
   difficulty: easy
-steps:
-  setup:
-      inline: |-
-        #!/usr/bin/env bash
+spec:
   verify:
-    contains: "topology of the **bookinfo**"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash          
+    - llmJudge:
+        contains: "topology of the **bookinfo**"
   prompt:
     inline: Show me the topology of the bookinfo namespace.

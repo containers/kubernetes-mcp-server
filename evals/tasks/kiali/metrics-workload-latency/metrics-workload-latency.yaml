@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "Metrics for workload (latency)"
   category: "Resource Inspection"
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   verify:
-    contains: "reviews"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash
+    - llmJudge:
+        contains: "reviews"
   prompt:
     inline: What are the latency metrics (p50, p95, p99) for the reviews workload in the bookinfo namespace? Use a 5-minute rate interval.

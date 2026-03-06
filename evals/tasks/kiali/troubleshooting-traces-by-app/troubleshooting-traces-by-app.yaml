@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "Get traces for an app"
   category: "Troubleshooting & Debugging"
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   verify:
-    contains: "productpage"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash
+    - llmJudge:
+        contains: "productpage"
   prompt:
     inline: Get the latest traces for the productpage app in the bookinfo namespace.

@@ -41,7 +41,19 @@ func (k *Kiali) IstioConfig(ctx context.Context, action string, namespace string
 	switch action {
 	case "get":
 		endpoint := buildIstioObjectEndpoint(namespace, group, version, kind, name) + "?validate=true&help=true"
-		return k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
+		raw, err := k.executeRequest(ctx, http.MethodGet, endpoint, "", nil)
+		if err != nil {
+			return "", err
+		}
+		summary, err := TransformIstioConfigGet(raw)
+		if err != nil {
+			return raw, nil
+		}
+		out, err := json.Marshal(summary)
+		if err != nil {
+			return raw, nil
+		}
+		return string(out), nil
 	case "create":
 		endpoint := buildIstioObjectCreateEndpoint(namespace, group, version, kind)
 		return k.executeRequest(ctx, http.MethodPost, endpoint, "application/json", strings.NewReader(jsonData))
@@ -84,13 +96,22 @@ func (k *Kiali) IstioConfig(ctx context.Context, action string, namespace string
 			return "", validationsErr
 		}
 
-		resp := IstioConfigListResponse{
-			Configs:     json.RawMessage([]byte(configsContent)),
-			Validations: json.RawMessage([]byte(validationsContent)),
-		}
-		out, err := json.Marshal(resp)
+		summary, err := TransformIstioConfigList(configsContent, validationsContent)
 		if err != nil {
-			return "", fmt.Errorf("failed to marshal istio list response: %w", err)
+			// Fallback to raw response if transform fails
+			resp := IstioConfigListResponse{
+				Configs:     json.RawMessage([]byte(configsContent)),
+				Validations: json.RawMessage([]byte(validationsContent)),
+			}
+			out, marshalErr := json.Marshal(resp)
+			if marshalErr != nil {
+				return "", fmt.Errorf("failed to marshal istio list response: %w", marshalErr)
+			}
+			return string(out), nil
+		}
+		out, err := json.Marshal(summary)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal istio list summary: %w", err)
 		}
 		return string(out), nil
 	}

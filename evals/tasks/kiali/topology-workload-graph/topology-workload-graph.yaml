@@ -1,18 +1,14 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "Show workload-level topology"
   category: "High-Level Observability & Health"
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   verify:
-    contains: "bookinfo"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash
+    - llmJudge:
+        contains: "bookinfo"
   prompt:
     inline: Show me the workload-level graph for the bookinfo namespace.

@@ -2,6 +2,8 @@
 
 This server can expose Kiali tools so assistants can query mesh information (e.g., mesh status/graph).
 
+**Supported Kiali versions:** v2.22.0 and later.
+
 ### Enable the Kiali toolset
 
 Enable the Kiali tools via the server TOML configuration file.

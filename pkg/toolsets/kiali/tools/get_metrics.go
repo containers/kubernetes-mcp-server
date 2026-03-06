@@ -34,9 +34,8 @@ var opsMap = map[string]resourceOperations{
 }
 
 func InitGetMetrics() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_metrics"
-	ret = append(ret, api.ServerTool{
+	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name:        name,
 			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
@@ -93,16 +92,14 @@ func InitGetMetrics() []api.ServerTool {
 				Required: []string{"resource_type", "namespace", "resource_name"},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Get Metrics for a Resource",
+				Title:           "Get Metrics for a Resource (" + defaults.ToolsetName() + ")",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, Handler: resourceMetricsHandler,
-	})
-
-	return ret
+	}}
 }
 
 func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

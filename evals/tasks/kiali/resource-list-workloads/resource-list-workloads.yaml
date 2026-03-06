@@ -1,20 +1,26 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
   name: "List workloads without sidecar"
   category: "Resource Inspection"
   difficulty: easy
-steps:
+spec:
   setup:
-      inline: |-
-        #!/usr/bin/env bash
-        kubectl patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "false"}}}}}'
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "false"}}}}}'
+          sleep 5
   verify:
-    contains: "details-v1"
+    - llmJudge:
+        contains: "details-v1"
   cleanup:
-    inline: |-
-      #!/usr/bin/env bash   
-      kubectl patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "true"}}}}}'
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "true"}}}}}'
+          sleep 5
   prompt:
     inline: List all workloads in the bookinfo namespace that have missing sidecars.

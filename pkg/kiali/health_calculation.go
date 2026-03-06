@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	kialitypes "github.com/containers/kubernetes-mcp-server/pkg/kiali/types"
 )
 
 // computeMeshHealthSummary processes the health JSON and creates an aggregated summary.
 // The health data corresponds to the type specified in queryParams (app, workload, or service).
-func computeMeshHealthSummary(healthData json.RawMessage, requestedNamespaces []string, queryParams map[string]string) *MeshHealthSummary {
+func computeMeshHealthSummary(healthData json.RawMessage, requestedNamespaces []string, queryParams map[string]string) *kialitypes.MeshHealthSummary {
 	// Determine the health type from queryParams (defaults to "app")
 	healthType := "app"
 	if gt, ok := queryParams["graphType"]; ok && strings.TrimSpace(gt) != "" {
@@ -27,27 +29,27 @@ func computeMeshHealthSummary(healthData json.RawMessage, requestedNamespaces []
 	}
 
 	// Parse the health JSON into ClustersNamespaceHealth structure
-	var clustersHealth ClustersNamespaceHealth
+	var clustersHealth kialitypes.ClustersNamespaceHealth
 	if err := json.Unmarshal(healthData, &clustersHealth); err != nil {
 		// If parsing fails, return empty summary
-		return &MeshHealthSummary{
-			EntityCounts:     EntityHealthCounts{},
-			NamespaceSummary: make(map[string]NamespaceSummary),
-			TopUnhealthy:     []UnhealthyEntity{},
+		return &kialitypes.MeshHealthSummary{
+			EntityCounts:     kialitypes.EntityHealthCounts{},
+			NamespaceSummary: make(map[string]kialitypes.NamespaceSummary),
+			TopUnhealthy:     []kialitypes.UnhealthyEntity{},
 			Timestamp:        time.Now().UTC().Format(time.RFC3339),
 			RateInterval:     rateInterval,
 		}
 	}
 
 	// Create empty health structures for types we don't have
-	emptyHealth := ClustersNamespaceHealth{
-		AppHealth:      make(map[string]NamespaceAppHealth),
-		ServiceHealth:  make(map[string]NamespaceServiceHealth),
-		WorkloadHealth: make(map[string]NamespaceWorkloadHealth),
+	emptyHealth := kialitypes.ClustersNamespaceHealth{
+		AppHealth:      make(map[string]kialitypes.NamespaceAppHealth),
+		ServiceHealth:  make(map[string]kialitypes.NamespaceServiceHealth),
+		WorkloadHealth: make(map[string]kialitypes.NamespaceWorkloadHealth),
 	}
 
 	// Use the appropriate health data based on type
-	var appHealth, svcHealth, wlHealth ClustersNamespaceHealth
+	var appHealth, svcHealth, wlHealth kialitypes.ClustersNamespaceHealth
 	switch healthType {
 	case "app":
 		appHealth = clustersHealth
@@ -75,15 +77,15 @@ func computeMeshHealthSummary(healthData json.RawMessage, requestedNamespaces []
 
 // computeHealthSummary aggregates health data (same logic as old branch)
 func computeHealthSummary(
-	appHealth ClustersNamespaceHealth,
-	svcHealth ClustersNamespaceHealth,
-	wlHealth ClustersNamespaceHealth,
+	appHealth kialitypes.ClustersNamespaceHealth,
+	svcHealth kialitypes.ClustersNamespaceHealth,
+	wlHealth kialitypes.ClustersNamespaceHealth,
 	rateInterval string,
-) MeshHealthSummary {
-	summary := MeshHealthSummary{
-		EntityCounts:     EntityHealthCounts{},
-		NamespaceSummary: make(map[string]NamespaceSummary),
-		TopUnhealthy:     []UnhealthyEntity{},
+) kialitypes.MeshHealthSummary {
+	summary := kialitypes.MeshHealthSummary{
+		EntityCounts:     kialitypes.EntityHealthCounts{},
+		NamespaceSummary: make(map[string]kialitypes.NamespaceSummary),
+		TopUnhealthy:     []kialitypes.UnhealthyEntity{},
 		Timestamp:        time.Now().UTC().Format(time.RFC3339),
 		RateInterval:     rateInterval,
 	}
@@ -103,7 +105,7 @@ func computeHealthSummary(
 
 	// Aggregate per namespace
 	for ns := range nsSet {
-		nsSummary := NamespaceSummary{}
+		nsSummary := kialitypes.NamespaceSummary{}
 
 		// Process apps
 		if nsApps, ok := appHealth.AppHealth[ns]; ok {
@@ -125,7 +127,7 @@ func computeHealthSummary(
 				case "UNHEALTHY":
 					summary.EntityCounts.Apps.Unhealthy++
 					nsSummary.Apps.Unhealthy++
-					summary.TopUnhealthy = append(summary.TopUnhealthy, UnhealthyEntity{
+					summary.TopUnhealthy = append(summary.TopUnhealthy, kialitypes.UnhealthyEntity{
 						Type:      "app",
 						Namespace: ns,
 						Name:      appName,
@@ -159,7 +161,7 @@ func computeHealthSummary(
 				case "UNHEALTHY":
 					summary.EntityCounts.Services.Unhealthy++
 					nsSummary.Services.Unhealthy++
-					summary.TopUnhealthy = append(summary.TopUnhealthy, UnhealthyEntity{
+					summary.TopUnhealthy = append(summary.TopUnhealthy, kialitypes.UnhealthyEntity{
 						Type:      "service",
 						Namespace: ns,
 						Name:      svcName,
@@ -193,7 +195,7 @@ func computeHealthSummary(
 				case "UNHEALTHY":
 					summary.EntityCounts.Workloads.Unhealthy++
 					nsSummary.Workloads.Unhealthy++
-					summary.TopUnhealthy = append(summary.TopUnhealthy, UnhealthyEntity{
+					summary.TopUnhealthy = append(summary.TopUnhealthy, kialitypes.UnhealthyEntity{
 						Type:      "workload",
 						Namespace: ns,
 						Name:      wlName,
@@ -228,7 +230,7 @@ func computeHealthSummary(
 }
 
 // evaluateAppHealth determines app health status
-func evaluateAppHealth(app AppHealth) (status string, issue string) {
+func evaluateAppHealth(app kialitypes.AppHealth) (status string, issue string) {
 	// Check workload statuses
 	totalWorkloads := len(app.WorkloadStatuses)
 	if totalWorkloads == 0 {
@@ -277,7 +279,7 @@ func evaluateAppHealth(app AppHealth) (status string, issue string) {
 }
 
 // evaluateServiceHealth determines service health status
-func evaluateServiceHealth(svc ServiceHealth) (status string, issue string) {
+func evaluateServiceHealth(svc kialitypes.ServiceHealth) (status string, issue string) {
 	// If there is no inbound or outbound traffic data, service health is UNKNOWN
 	if !hasAnyRequests(svc.Requests) {
 		return "UNKNOWN", ""
@@ -293,7 +295,7 @@ func evaluateServiceHealth(svc ServiceHealth) (status string, issue string) {
 }
 
 // hasAnyRequests returns true if there is any non-zero request count in inbound or outbound
-func hasAnyRequests(req RequestHealth) bool {
+func hasAnyRequests(req kialitypes.RequestHealth) bool {
 	// Check inbound
 	for _, codes := range req.Inbound {
 		for _, count := range codes {
@@ -314,7 +316,7 @@ func hasAnyRequests(req RequestHealth) bool {
 }
 
 // evaluateWorkloadHealth determines workload health status
-func evaluateWorkloadHealth(wl WorkloadHealth) (status string, issue string) {
+func evaluateWorkloadHealth(wl kialitypes.WorkloadHealth) (status string, issue string) {
 	workloadStatus := "HEALTHY"
 
 	if wl.WorkloadStatus != nil {
@@ -378,7 +380,7 @@ func mergeHealthStatus(s1, s2 string) string {
 // calculateErrorRate computes error percentage from request health
 // This uses a simplified approach - for each protocol/code combination,
 // it checks against tolerance thresholds to determine if it's an error
-func calculateErrorRate(req RequestHealth) float64 {
+func calculateErrorRate(req kialitypes.RequestHealth) float64 {
 	totalRequests := 0.0
 	errorRequests := 0.0
 
@@ -402,6 +404,24 @@ func calculateErrorRate(req RequestHealth) float64 {
 		}
 	}
 
+	if totalRequests == 0 {
+		return 0.0
+	}
+	return errorRequests / totalRequests
+}
+
+// calculateInboundErrorRate computes error percentage from inbound requests only.
+func calculateInboundErrorRate(req kialitypes.RequestHealth) float64 {
+	totalRequests := 0.0
+	errorRequests := 0.0
+	for protocol, codes := range req.Inbound {
+		for code, count := range codes {
+			totalRequests += count
+			if isErrorCode(protocol, code) {
+				errorRequests += count
+			}
+		}
+	}
 	if totalRequests == 0 {
 		return 0.0
 	}
@@ -440,7 +460,7 @@ func isErrorCode(protocol, code string) bool {
 
 // evaluateRequestHealth evaluates health status based on request metrics
 // Returns status and worst error ratio found
-func evaluateRequestHealth(req RequestHealth) (status string, worstRatio float64) {
+func evaluateRequestHealth(req kialitypes.RequestHealth) (status string, worstRatio float64) {
 	status = "HEALTHY"
 	worstRatio = 0.0
 
@@ -536,7 +556,7 @@ func getStatusForCodeRatio(protocol, code string, ratio float64) string {
 }
 
 // computeNamespaceStatus determines namespace overall status
-func computeNamespaceStatus(ns NamespaceSummary) string {
+func computeNamespaceStatus(ns kialitypes.NamespaceSummary) string {
 	totalUnhealthy := ns.Apps.Unhealthy + ns.Services.Unhealthy + ns.Workloads.Unhealthy
 	totalEntities := ns.Apps.Total + ns.Services.Total + ns.Workloads.Total
 
@@ -553,7 +573,7 @@ func computeNamespaceStatus(ns NamespaceSummary) string {
 }
 
 // computeAvailability computes availability percentage for a namespace
-func computeAvailability(ns NamespaceSummary) float64 {
+func computeAvailability(ns kialitypes.NamespaceSummary) float64 {
 	total := ns.Apps.Total + ns.Services.Total + ns.Workloads.Total
 	if total == 0 {
 		return 100.0
@@ -566,7 +586,7 @@ func computeAvailability(ns NamespaceSummary) float64 {
 }
 
 // computeOverallStatus determines overall mesh status
-func computeOverallStatus(counts EntityHealthCounts) string {
+func computeOverallStatus(counts kialitypes.EntityHealthCounts) string {
 	total := counts.Apps.Total + counts.Services.Total + counts.Workloads.Total
 	unhealthy := counts.Apps.Unhealthy + counts.Services.Unhealthy + counts.Workloads.Unhealthy
 	degraded := counts.Apps.Degraded + counts.Services.Degraded + counts.Workloads.Degraded
@@ -592,7 +612,7 @@ func computeOverallStatus(counts EntityHealthCounts) string {
 }
 
 // computeOverallAvailability computes overall mesh availability
-func computeOverallAvailability(counts EntityHealthCounts) float64 {
+func computeOverallAvailability(counts kialitypes.EntityHealthCounts) float64 {
 	total := counts.Apps.Total + counts.Services.Total + counts.Workloads.Total
 	if total == 0 {
 		return 100.0
@@ -605,7 +625,7 @@ func computeOverallAvailability(counts EntityHealthCounts) float64 {
 }
 
 // computeTotalErrorRate sums error rates across namespaces
-func computeTotalErrorRate(nsSummaries map[string]NamespaceSummary) float64 {
+func computeTotalErrorRate(nsSummaries map[string]kialitypes.NamespaceSummary) float64 {
 	total := 0.0
 	for _, ns := range nsSummaries {
 		total += ns.ErrorRate
@@ -614,7 +634,7 @@ func computeTotalErrorRate(nsSummaries map[string]NamespaceSummary) float64 {
 }
 
 // sortUnhealthyByImpact sorts unhealthy entities by error rate
-func sortUnhealthyByImpact(unhealthy []UnhealthyEntity) {
+func sortUnhealthyByImpact(unhealthy []kialitypes.UnhealthyEntity) {
 	// Simple bubble sort by error rate descending
 	for i := 0; i < len(unhealthy); i++ {
 		for j := i + 1; j < len(unhealthy); j++ {

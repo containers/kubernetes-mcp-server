@@ -14,7 +14,8 @@ func TestValidateIstioConfigInputRejectsReadActions(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateIstioConfigInput(tt.action, "ns", "group", "v1", "Kind", "name", "{}")
+			// readOnly=false: testing write tool, which must reject list/get
+			err := validateIstioConfigInput(tt.action, "ns", "group", "v1", "Kind", "name", "{}", false)
 			if err == nil {
 				t.Fatalf("expected error for action %q, got nil", tt.action)
 			}
@@ -39,7 +40,7 @@ func TestValidateIstioConfigInputReadRejectsWriteActions(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateIstioConfigInputRead(tt.action, "ns", "group", "v1", "Kind", "name")
+			err := validateIstioConfigInput(tt.action, "ns", "group", "v1", "Kind", "name", "{}", true)
 			if err == nil {
 				t.Fatalf("expected error for action %q, got nil", tt.action)
 			}

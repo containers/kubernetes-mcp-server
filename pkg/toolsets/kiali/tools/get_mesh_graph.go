@@ -12,59 +12,106 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
+// REGEX_RATE_INTERVAL_VALID_TYPES: integer followed by s, m, h, or d (e.g. 10m, 5m, 1h, 30s, 7d).
+const REGEX_RATE_INTERVAL_VALID_TYPES = `^\d+[smhd]$`
+
 func InitGetMeshGraph() []api.ServerTool {
-	ret := make([]api.ServerTool, 0)
-	name := defaults.ToolsetName() + "_mesh_graph"
-	ret = append(ret, api.ServerTool{
-		Tool: api.Tool{
-			Name:        name,
-			Description: "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"namespace": {
-						Type:        "string",
-						Description: "Optional single namespace to include in the graph (alternative to namespaces)",
+	return []api.ServerTool{
+		{
+			Tool: api.Tool{
+				Name:        defaults.ToolsetName() + "_mesh_status",
+				Description: "Returns the status of the mesh. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"namespaces": {
+							Type:        "string",
+							Description: "Optional comma-separated list of namespaces. If empty, will return the mesh status for all namespaces.",
+						},
+						"rateInterval": {
+							Type:        "string",
+							Description: "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
+							Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
+							Pattern:     REGEX_RATE_INTERVAL_VALID_TYPES,
+						},
+						"type": {
+							Type:        "string",
+							Description: "Optional type health focused in : 'app', 'service', 'workload'",
+							Default:     api.ToRawMessage(kialiclient.DefaultHealthType),
+							Enum:        []any{"app", "service", "workload"},
+						},
 					},
-					"namespaces": {
-						Type:        "string",
-						Description: "Optional comma-separated list of namespaces to include in the graph",
-					},
-					"rateInterval": {
-						Type:        "string",
-						Description: "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
-						Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
-					},
-					"graphType": {
-						Type:        "string",
-						Description: "Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
-						Default:     api.ToRawMessage(kialiclient.DefaultGraphType),
-					},
+					Required: []string{},
 				},
-				Required: []string{},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Topology: Mesh, Graph, Health, and Status",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				IdempotentHint:  ptr.To(false),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, Handler: getMeshGraphHandler,
-	})
-	return ret
+				Annotations: api.ToolAnnotations{
+					Title:           "Mesh Status (" + defaults.ToolsetName() + ")",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(false),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: getMeshStatusHandler,
+		},
+		{
+			Tool: api.Tool{
+				Name:        defaults.ToolsetName() + "_topology_graph",
+				Description: "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"namespaces": {
+							Type:        "string",
+							Description: "Comma-separated list of namespaces to include in the graph",
+						},
+						"rateInterval": {
+							Type:        "string",
+							Description: "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
+							Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
+							Pattern:     REGEX_RATE_INTERVAL_VALID_TYPES,
+						},
+						"graphType": {
+							Type:        "string",
+							Description: "Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
+							Default:     api.ToRawMessage(kialiclient.DefaultGraphType),
+							Enum:        []any{"versionedApp", "app", "service", "workload", "mesh"},
+						},
+					},
+					Required: []string{"namespaces"},
+				},
+				Annotations: api.ToolAnnotations{
+					Title:           "Topology Graph (" + defaults.ToolsetName() + ")",
+					ReadOnlyHint:    ptr.To(true),
+					DestructiveHint: ptr.To(false),
+					IdempotentHint:  ptr.To(false),
+					OpenWorldHint:   ptr.To(true),
+				},
+			}, Handler: getMeshGraphHandler,
+		},
+	}
 }
 
-func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+func getMeshStatusHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	namespaces := cleanNamespaces(params)
 
-	// Parse arguments: allow either `namespace` or `namespaces` (comma-separated string)
-	namespaces := make([]string, 0)
-	if v, ok := params.GetArguments()["namespace"].(string); ok {
-		v = strings.TrimSpace(v)
-		if v != "" {
-			namespaces = append(namespaces, v)
-		}
+	queryParams := make(map[string]string)
+	if err := setQueryParam(params, queryParams, "rateInterval", kialiclient.DefaultRateInterval); err != nil {
+		return api.NewToolCallResult("", err), nil
 	}
+
+	if err := setQueryParam(params, queryParams, "type", kialiclient.DefaultHealthType); err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	content, err := kiali.GetMeshStatus(params.Context, namespaces, queryParams)
+
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh status: %w", err)), nil
+	}
+	return api.NewToolCallResult(content, nil), nil
+}
+
+func cleanNamespaces(params api.ToolHandlerParams) []string {
+	namespaces := make([]string, 0)
 	if v, ok := params.GetArguments()["namespaces"].(string); ok {
 		for _, ns := range strings.Split(v, ",") {
 			ns = strings.TrimSpace(ns)
@@ -73,6 +120,7 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 			}
 		}
 	}
+
 	// Deduplicate namespaces if both provided
 	if len(namespaces) > 1 {
 		seen := map[string]struct{}{}
@@ -91,6 +139,17 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 		namespaces = unique
 	}
 
+	return namespaces
+}
+
+func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	// Parse arguments: allow either `namespace` or `namespaces` (comma-separated string)
+	namespaces := cleanNamespaces(params)
+
+	if len(namespaces) == 0 {
+		return api.NewToolCallResult("", fmt.Errorf("no namespaces provided")), nil
+	}
+
 	// Extract optional query parameters
 	queryParams := make(map[string]string)
 	if err := setQueryParam(params, queryParams, "rateInterval", kialiclient.DefaultRateInterval); err != nil {
@@ -99,6 +158,7 @@ func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if err := setQueryParam(params, queryParams, "graphType", kialiclient.DefaultGraphType); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
+
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	content, err := kiali.GetMeshGraph(params.Context, namespaces, queryParams)
 	if err != nil {
