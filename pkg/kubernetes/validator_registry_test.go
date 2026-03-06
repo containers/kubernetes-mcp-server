@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/discovery"
 	authv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
@@ -42,6 +43,15 @@ func (s *ValidatorRegistryTestSuite) TestCreateValidatorsWithNilProviders() {
 		validators := CreateValidators(providers)
 		s.NotEmpty(validators, "Expected validators to be created even with nil providers")
 	})
+}
+
+func (s *ValidatorRegistryTestSuite) TestRegisterValidatorPanicsOnDuplicate() {
+	s.T().Skip("Will be enabled after refactoring validator registry to wrapped struct pattern")
+	s.Panics(func() {
+		RegisterValidator(func(p ValidatorProviders) api.HTTPValidator {
+			return NewSchemaValidator(p.Discovery)
+		})
+	}, "Expected panic on duplicate validator registration")
 }
 
 func TestValidatorRegistry(t *testing.T) {
