@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
@@ -109,7 +110,7 @@ func (k *Kubernetes) close() {
 	if k == nil || k.httpClient == nil {
 		return
 	}
-	k.httpClient.CloseIdleConnections()
+	utilnet.CloseIdleConnectionsFor(k.httpClient.Transport)
 }
 
 func (k *Kubernetes) RESTConfig() *rest.Config {
