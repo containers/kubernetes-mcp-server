@@ -54,6 +54,10 @@ func NewAccessControlRoundTripper(cfg AccessControlRoundTripperConfig) *AccessCo
 	return rt
 }
 
+func (rt *AccessControlRoundTripper) WrappedRoundTripper() http.RoundTripper {
+	return rt.delegate
+}
+
 func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	gvr, ok := parseURLToGVR(req.URL.Path)
 	// Not an API resource request, just pass through

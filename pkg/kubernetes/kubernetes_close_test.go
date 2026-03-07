@@ -66,7 +66,6 @@ func (s *DerivedClientCleanupSuite) activeConnCount() int {
 func (s *DerivedClientCleanupSuite) TestClosesIdleConnectionsWhenContextIsCancelled() {
 	// https://github.com/containers/kubernetes-mcp-server/issues/830
 	// https://github.com/containers/kubernetes-mcp-server/pull/850
-	s.T().Skip("Pending fix: derived client must close idle connections when its context is cancelled")
 	baseConns := s.activeConnCount()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -102,7 +101,6 @@ func (s *DerivedClientCleanupSuite) TestClosesIdleConnectionsWhenContextIsCancel
 func (s *DerivedClientCleanupSuite) TestMultipleDerivedClientsCleanedUpAfterContextCancellation() {
 	// https://github.com/containers/kubernetes-mcp-server/issues/830
 	// https://github.com/containers/kubernetes-mcp-server/pull/850
-	s.T().Skip("Pending fix: derived client must close idle connections when its context is cancelled")
 	// client-go caches base http.Transport instances by TLS config, so all
 	// derived clients connecting to the same server share the same transport
 	// and TCP connection pool. This test verifies that when ALL derived client
