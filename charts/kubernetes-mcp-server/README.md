@@ -1,8 +1,6 @@
 # kubernetes-mcp-server
 
-
-
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square) 
+![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
 
 Helm Chart for the Kubernetes MCP Server
 
@@ -15,15 +13,11 @@ Helm Chart for the Kubernetes MCP Server
 | Andrew Block | <ablock@redhat.com> |  |
 | Marc Nuri | <marc.nuri@redhat.com> |  |
 
-
-
-
-
 ## Installing the Chart
 
 The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified.
 
-Install the Chart using the following command from the root of this directory: 
+Install the Chart using the following command from the root of this directory:
 
 ```shell
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
@@ -82,6 +76,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
 | defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
+| extraArgs | list | `[]` | Note: For TLS configuration, use the tls section above instead of extraArgs. |
 | extraContainers | list | `[]` | Each container is defined as a complete container spec. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
@@ -91,7 +86,26 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | image.version | string | `"latest"` | This sets the tag or sha digest for the image. |
 | imagePullSecrets | list | `[]` | This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/ |
 | ingress | object | `{"annotations":{},"className":"","enabled":true,"host":"","hosts":null,"path":"/","pathType":"ImplementationSpecific","termination":"edge","tls":null}` | This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/ |
+| initContainers | list | `[]` | Init containers to run before the main container starts. Each container is defined as a complete container spec. Supports tpl for templating. |
 | livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"}}` | Liveness and readiness probes for the container. |
+| metrics | object | `{"prometheusRule":{"additionalRules":[],"annotations":{},"defaultRules":{"enabled":true},"enabled":false,"labels":{}},"serviceMonitor":{"annotations":{},"enabled":false,"interval":"","labels":{},"metricRelabelings":[],"relabelings":[],"scheme":"","scrapeTimeout":"","tlsConfig":{}}}` | Metrics and monitoring configuration |
+| metrics.prometheusRule | object | `{"additionalRules":[],"annotations":{},"defaultRules":{"enabled":true},"enabled":false,"labels":{}}` | PrometheusRule configuration for recording rules Recording rules aggregate high-cardinality metrics for efficient querying and Telemeter compatibility |
+| metrics.prometheusRule.additionalRules | list | `[]` | Additional custom recording rules (appended to default rules if enabled) Example: additionalRules:   - name: custom-mcp-rules     rules:       - record: my_custom_metric         expr: sum(some_metric) |
+| metrics.prometheusRule.annotations | object | `{}` | Annotations for the PrometheusRule |
+| metrics.prometheusRule.defaultRules | object | `{"enabled":true}` | Default recording rules configuration |
+| metrics.prometheusRule.defaultRules.enabled | bool | `true` | Enable default recording rules that aggregate MCP metrics These rules create aggregates at two levels:  Cluster-level (for Telemeter): - cluster:k8s_mcp_tool_calls:sum - Total tool calls across all tools - cluster:k8s_mcp_tool_errors:sum - Total tool errors across all tools - cluster:k8s_mcp_http_requests:sum - Total HTTP requests  Namespace-level (for multi-tenant RBAC, grouped by namespace label): - namespace:k8s_mcp_tool_calls:sum - Tool calls by namespace - namespace:k8s_mcp_tool_errors:sum - Tool errors by namespace - namespace:k8s_mcp_http_requests:sum - HTTP requests by namespace |
+| metrics.prometheusRule.enabled | bool | `false` | Enable PrometheusRule for recording rules |
+| metrics.prometheusRule.labels | object | `{}` | Additional labels for the PrometheusRule |
+| metrics.serviceMonitor | object | `{"annotations":{},"enabled":false,"interval":"","labels":{},"metricRelabelings":[],"relabelings":[],"scheme":"","scrapeTimeout":"","tlsConfig":{}}` | ServiceMonitor configuration for Prometheus Operator monitoring |
+| metrics.serviceMonitor.annotations | object | `{}` | Annotations for the ServiceMonitor |
+| metrics.serviceMonitor.enabled | bool | `false` | Enable ServiceMonitor for Prometheus scraping |
+| metrics.serviceMonitor.interval | string | `""` | Scrape interval (e.g., "30s", "1m") |
+| metrics.serviceMonitor.labels | object | `{}` | Additional labels for the ServiceMonitor (useful for prometheus-operator serviceMonitorSelector) |
+| metrics.serviceMonitor.metricRelabelings | list | `[]` | Metric relabeling rules |
+| metrics.serviceMonitor.relabelings | list | `[]` | Relabeling rules for metrics |
+| metrics.serviceMonitor.scheme | string | `""` | Scheme to use for scraping (http or https) |
+| metrics.serviceMonitor.scrapeTimeout | string | `""` | Scrape timeout (e.g., "10s") |
+| metrics.serviceMonitor.tlsConfig | object | `{}` | TLS configuration for scraping |
 | nameOverride | string | `""` |  |
 | nodeSelector | object | `{}` |  |
 | openshift | bool | `false` | Enable OpenShift specific features |
@@ -109,18 +123,26 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | replicaCount | int | `1` | This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/ |
 | resources | object | `{"limits":{"cpu":"100m","memory":"128Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Resource requests and limits for the container. |
 | securityContext | object | `{}` | Define the Security Context for the Container |
-| service | object | `{"port":8080,"type":"ClusterIP"}` | This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/ |
+| service | object | `{"annotations":{},"port":8080,"targetPort":"http","type":"ClusterIP"}` | This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/ |
+| service.annotations | object | `{}` | Annotations to add to the service |
 | service.port | int | `8080` | This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports |
+| service.targetPort | string | `"http"` | Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container. |
 | service.type | string | `"ClusterIP"` | This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types |
 | serviceAccount | object | `{"annotations":{},"create":true,"name":""}` | This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/ |
 | serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | If not set and create is true, a name is generated using the fullname template |
+| tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | This is the recommended way to enable TLS instead of using extraArgs. |
+| tls.certFile | string | `"tls.crt"` | Name of the certificate file within the secret (default: tls.crt) |
+| tls.enabled | bool | `false` | Enable TLS for the MCP server |
+| tls.keyFile | string | `"tls.key"` | Name of the key file within the secret (default: tls.key) |
+| tls.mountPath | string | `"/etc/tls"` | Path where the TLS secret will be mounted inside the container |
+| tls.secretName | string | `""` | The secret should be of type kubernetes.io/tls with tls.crt and tls.key. |
 | tolerations | list | `[]` |  |
 
 ## Updating the README
 
-The contents of the README.md file is generated using [helm-docs](https://github.com/norwoodj/helm-docs). Whenever changes are introduced to the Chart and its _Values_, the documentation should be regenerated. 
+The contents of the README.md file is generated using [helm-docs](https://github.com/norwoodj/helm-docs). Whenever changes are introduced to the Chart and its _Values_, the documentation should be regenerated.
 
 Execute the following command to regenerate the documentation from within the Helm Chart directory.
 

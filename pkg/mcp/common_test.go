@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
@@ -73,6 +73,7 @@ func TestMain(m *testing.M) {
 			CRD("route.openshift.io", "v1", "routes", "Route", "route", true),
 			// Kubevirt
 			CRD("kubevirt.io", "v1", "virtualmachines", "VirtualMachine", "virtualmachine", true),
+			CRD("clone.kubevirt.io", "v1beta1", "virtualmachineclones", "VirtualMachineClone", "virtualmachineclone", true),
 			CRD("cdi.kubevirt.io", "v1beta1", "datasources", "DataSource", "datasource", true),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterinstancetypes", "VirtualMachineClusterInstancetype", "virtualmachineclusterinstancetype", false),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
@@ -190,7 +191,7 @@ type BaseMcpSuite struct {
 }
 
 func (s *BaseMcpSuite) SetupTest() {
-	s.Cfg = config.Default()
+	s.Cfg = config.BaseDefault()
 	s.Cfg.ListOutput = "yaml"
 	s.Cfg.KubeConfig = filepath.Join(s.T().TempDir(), "config")
 	s.Require().NoError(os.WriteFile(s.Cfg.KubeConfig, envTest.KubeConfig, 0600), "Expected to write kubeconfig")
@@ -213,22 +214,12 @@ func (s *BaseMcpSuite) InitMcpClient(options ...test.McpClientOption) {
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
 }
 
-// StartCapturingNotifications begins capturing all MCP notifications.
-// Must be called BEFORE the operation that triggers the notification.
-func (s *BaseMcpSuite) StartCapturingNotifications() *test.NotificationCapture {
-	return s.McpClient.StartCapturingNotifications()
-}
-
 // StartCapturingLogNotifications begins capturing log notifications.
 // Must be called BEFORE the tool call that triggers the notification.
 // This method sets the logging level to debug to ensure all log messages are received.
 func (s *BaseMcpSuite) StartCapturingLogNotifications() *test.NotificationCapture {
 	// Set logging level to debug to receive all log messages
-	err := s.SetLevel(s.T().Context(), mcp.SetLevelRequest{
-		Params: mcp.SetLevelParams{
-			Level: mcp.LoggingLevelDebug,
-		},
-	})
+	err := s.SetLoggingLevel(mcp.LoggingLevel("debug"))
 	s.Require().NoError(err, "failed to set logging level")
 
 	return s.StartCapturingNotifications()

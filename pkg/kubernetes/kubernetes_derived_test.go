@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,6 +136,22 @@ users:
 				s.NotNilf(derived.DiscoveryClient(), "expected discoveryClient to be initialized")
 				s.NotNilf(derived.DynamicClient(), "expected dynamicClient to be initialized")
 				s.NotNilf(derived.MetricsV1beta1Client(), "expected metricsV1beta1Client to be initialized")
+			})
+			s.Run("transport wrappers are applied exactly once", func() {
+				derivedCfg := derived.RESTConfig()
+				s.Require().NotNil(derivedCfg.WrapTransport, "expected WrapTransport to be set")
+				transport := derivedCfg.WrapTransport(http.DefaultTransport)
+				// Outer layer: UserAgentRoundTripper
+				uaRT, ok := transport.(*UserAgentRoundTripper)
+				s.Require().True(ok, "expected outermost wrapper to be *UserAgentRoundTripper")
+				// Inner layer: AccessControlRoundTripper
+				acRT, ok := uaRT.delegate.(*AccessControlRoundTripper)
+				s.Require().True(ok, "expected inner wrapper to be *AccessControlRoundTripper")
+				// Innermost: should be the original transport, NOT another wrapper (regression test for PR #861)
+				_, isUA := acRT.delegate.(*UserAgentRoundTripper)
+				s.False(isUA, "transport wrappers applied more than once: found nested *UserAgentRoundTripper")
+				_, isAC := acRT.delegate.(*AccessControlRoundTripper)
+				s.False(isAC, "transport wrappers applied more than once: found nested *AccessControlRoundTripper")
 			})
 		})
 	})

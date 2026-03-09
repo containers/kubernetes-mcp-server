@@ -1,10 +1,10 @@
-# Getting Started with Kubernetes MCP Server
+# Deploying Kubernetes MCP Server in a Kubernetes Cluster
 
-This guide walks you through the foundational setup for using the Kubernetes MCP Server with your Kubernetes cluster. You'll create a dedicated, read-only ServiceAccount and generate a secure kubeconfig file that can be used with various MCP clients.
+This guide walks you through setting up the Kubernetes MCP Server for deployment in a Kubernetes cluster. You'll create a dedicated, read-only ServiceAccount and generate a secure kubeconfig file that can be used with various MCP clients.
 
 > **Note:** This setup is **recommended for production use** but not strictly required. The MCP Server can use your existing kubeconfig file (e.g., `~/.kube/config`), but using a dedicated ServiceAccount with limited permissions follows the principle of least privilege and is more secure.
 
-> **Next:** After completing this guide, continue with the [Claude Code CLI guide](GETTING_STARTED_CLAUDE_CODE.md). See the [docs README](README.md) for all available guides.
+> **Next:** After completing this guide, continue with the [Claude Code CLI guide](getting-started-claude-code.md). See the [docs README](README.md) for all available guides.
 
 ## What You'll Create
 
@@ -236,7 +236,7 @@ kubectl auth can-i list pods --as=system:serviceaccount:mcp:mcp-viewer --all-nam
 
 Now that you have a working kubeconfig with read-only access, configure Claude Code CLI:
 
-- **[Using with Claude Code CLI](GETTING_STARTED_CLAUDE_CODE.md)** - Configure the MCP server with Claude Code CLI
+- **[Using with Claude Code CLI](getting-started-claude-code.md)** - Configure the MCP server with Claude Code CLI
 
 You can also:
 - Explore the [main README](../README.md) for more MCP server capabilities

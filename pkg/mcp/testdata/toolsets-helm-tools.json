@@ -1,13 +1,12 @@
 [
   {
     "annotations": {
-      "title": "Helm: Install",
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Helm: Install"
     },
     "description": "Install (deploy) a Helm chart to create a release in the current or provided namespace",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "chart": {
           "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
@@ -29,20 +28,21 @@
       },
       "required": [
         "chart"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "helm_install"
+    "name": "helm_install",
+    "title": "Helm: Install"
   },
   {
     "annotations": {
-      "title": "Helm: List",
-      "readOnlyHint": true,
       "destructiveHint": false,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Helm: List"
     },
     "description": "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "all_namespaces": {
           "description": "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
@@ -52,20 +52,21 @@
           "description": "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
           "type": "string"
         }
-      }
+      },
+      "type": "object"
     },
-    "name": "helm_list"
+    "name": "helm_list",
+    "title": "Helm: List"
   },
   {
     "annotations": {
-      "title": "Helm: Uninstall",
       "destructiveHint": true,
       "idempotentHint": true,
-      "openWorldHint": true
+      "openWorldHint": true,
+      "title": "Helm: Uninstall"
     },
     "description": "Uninstall a Helm release in the current or provided namespace",
     "inputSchema": {
-      "type": "object",
       "properties": {
         "name": {
           "description": "Name of the Helm release to uninstall",
@@ -78,8 +79,10 @@
       },
       "required": [
         "name"
-      ]
+      ],
+      "type": "object"
     },
-    "name": "helm_uninstall"
+    "name": "helm_uninstall",
+    "title": "Helm: Uninstall"
   }
 ]

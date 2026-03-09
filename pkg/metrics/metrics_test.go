@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -25,25 +26,26 @@ func (s *MetricsSuite) TestNew() {
 		s.NotNil(m.stats)
 		s.Len(m.collectors, 1) // Stats collector
 	})
-}
 
-func (s *MetricsSuite) TestRecordToolCall() {
-	s.Run("fans out to all collectors", func() {
+	s.Run("creates metrics with telemetry config", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+		cfg := &config.TelemetryConfig{
+			Endpoint: "http://localhost:4317",
+			Protocol: "grpc",
+		}
+
 		m, err := New(Config{
 			TracerName:     "test",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.0.0",
+			Telemetry:      cfg,
 		})
-		s.Require().NoError(err)
-		ctx := context.Background()
 
-		// Record a tool call
-		m.RecordToolCall(ctx, "test_tool", 100*time.Millisecond, nil)
-
-		// Verify it was recorded in stats collector
-		stats := m.GetStats()
-		s.Equal(int64(1), stats.TotalToolCalls)
-		s.Equal(int64(1), stats.ToolCallsByName["test_tool"])
+		s.NoError(err)
+		s.NotNil(m)
+		s.NotNil(m.stats)
 	})
 }
 

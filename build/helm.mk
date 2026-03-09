@@ -11,7 +11,29 @@ HELM_CHART_NAME = kubernetes-mcp-server
 KUBECONFORM = $(shell pwd)/_output/tools/bin/kubeconform
 KUBECONFORM_VERSION ?= latest
 
+HELM_DOCS = $(shell pwd)/_output/tools/bin/helm-docs
+HELM_DOCS_VERSION ?= v1.14.2
+
 CLEAN_TARGETS += $(HELM_PACKAGE_DIR)
+
+# Download and install helm-docs if not already installed
+.PHONY: helm-docs-install
+helm-docs-install:
+	@[ -f $(HELM_DOCS) ] || { \
+		set -e ;\
+		echo "Installing helm-docs to $(HELM_DOCS)..." ;\
+		mkdir -p $(shell dirname $(HELM_DOCS)) ;\
+		TMPDIR=$$(mktemp -d) ;\
+		OS=$$(uname -s | tr '[:upper:]' '[:lower:]') ;\
+		ARCH=$$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/arm64/;s/arm64/arm64/') ;\
+		curl -L https://github.com/norwoodj/helm-docs/releases/download/$(HELM_DOCS_VERSION)/helm-docs_$$(echo $(HELM_DOCS_VERSION) | sed 's/^v//')_$${OS}_$${ARCH}.tar.gz | tar xz -C $$TMPDIR ;\
+		mv $$TMPDIR/helm-docs $(HELM_DOCS) ;\
+		rm -rf $$TMPDIR ;\
+	}
+
+.PHONY: helm-docs
+helm-docs: helm-docs-install ## Generate Helm chart documentation using helm-docs
+	$(HELM_DOCS) -c $(HELM_CHART_DIR) -t README.md.gotmpl
 
 .PHONY: helm-lint
 helm-lint: ## Lint the Helm chart

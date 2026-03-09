@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
@@ -30,19 +31,6 @@ func (s *OtelStatsCollectorSuite) TearDownTest() {
 }
 
 func (s *OtelStatsCollectorSuite) TestRecordToolCall() {
-	s.Run("records successful tool calls", func() {
-		ctx := context.Background()
-		s.collector.RecordToolCall(ctx, "test_tool", 100*time.Millisecond, nil)
-		s.collector.RecordToolCall(ctx, "test_tool", 200*time.Millisecond, nil)
-		s.collector.RecordToolCall(ctx, "another_tool", 50*time.Millisecond, nil)
-
-		stats := s.collector.GetStats()
-		s.Equal(int64(3), stats.TotalToolCalls, "Should have 3 total tool calls")
-		s.Equal(int64(2), stats.ToolCallsByName["test_tool"], "Should have 2 calls for test_tool")
-		s.Equal(int64(1), stats.ToolCallsByName["another_tool"], "Should have 1 call for another_tool")
-		s.Equal(int64(0), stats.ToolCallErrors, "Should have no errors")
-	})
-
 	s.Run("records tool call errors", func() {
 		ctx := context.Background()
 		collector, err := NewOtelStatsCollector("test-meter-errors")
@@ -100,6 +88,29 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 		s.Equal(int64(2), stats.HTTPRequestsByPath["/api/v1"], "Should have 2 requests to /api/v1")
 		s.Equal(int64(1), stats.HTTPRequestsByPath["/api/v2"], "Should have 1 request to /api/v2")
 	})
+
+	s.Run("records 3xx redirect status class", func() {
+		ctx := context.Background()
+		collector, err := NewOtelStatsCollector("test-meter-http-3xx")
+		s.Require().NoError(err)
+
+		collector.RecordHTTPRequest(ctx, "GET", "/old-path", 301, 10*time.Millisecond)
+		collector.RecordHTTPRequest(ctx, "GET", "/temp-redirect", 302, 10*time.Millisecond)
+
+		stats := collector.GetStats()
+		s.Equal(int64(2), stats.HTTPRequestsByStatus["3xx"])
+	})
+
+	s.Run("records other status class for codes outside 2xx-5xx", func() {
+		ctx := context.Background()
+		collector, err := NewOtelStatsCollector("test-meter-http-other")
+		s.Require().NoError(err)
+
+		collector.RecordHTTPRequest(ctx, "GET", "/info", 100, 10*time.Millisecond)
+
+		stats := collector.GetStats()
+		s.Equal(int64(1), stats.HTTPRequestsByStatus["other"])
+	})
 }
 
 func (s *OtelStatsCollectorSuite) TestGetStats() {
@@ -108,15 +119,6 @@ func (s *OtelStatsCollectorSuite) TestGetStats() {
 		s.NotNil(stats, "Stats should not be nil")
 		s.True(stats.UptimeSeconds >= 0, "Uptime should be non-negative")
 		s.True(stats.StartTime > 0, "Start time should be set")
-	})
-
-	s.Run("initializes all maps", func() {
-		stats := s.collector.GetStats()
-		s.NotNil(stats.ToolCallsByName, "ToolCallsByName should be initialized")
-		s.NotNil(stats.ToolErrorsByName, "ToolErrorsByName should be initialized")
-		s.NotNil(stats.HTTPRequestsByPath, "HTTPRequestsByPath should be initialized")
-		s.NotNil(stats.HTTPRequestsByStatus, "HTTPRequestsByStatus should be initialized")
-		s.NotNil(stats.HTTPRequestsByMethod, "HTTPRequestsByMethod should be initialized")
 	})
 }
 
@@ -208,18 +210,6 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 }
 
 func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
-	s.Run("returns valid Prometheus handler", func() {
-		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
-			MeterName:      "test-meter-prom",
-			ServiceName:    "test-service",
-			ServiceVersion: "1.0.0",
-		})
-		s.Require().NoError(err)
-
-		handler := collector.PrometheusHandler()
-		s.NotNil(handler, "PrometheusHandler should not be nil")
-	})
-
 	s.Run("serves metrics in Prometheus format", func() {
 		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
 			MeterName:      "test-meter-prom-serve",
@@ -250,6 +240,125 @@ func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
 		s.Contains(body, "k8s_mcp_http_requests", "Should contain k8s_mcp_http_requests metric")
 		s.Contains(body, "k8s_mcp_server_info", "Should contain k8s_mcp_server_info metric")
 	})
+}
+
+func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
+	s.Run("returns nil when OTEL_METRICS_EXPORTER is none", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "none")
+
+		exporter, err := createMetricsExporter(context.Background(), nil)
+		s.NoError(err)
+		s.Nil(exporter)
+	})
+
+	s.Run("returns nil when OTEL_METRICS_EXPORTER is none case-insensitive", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "NONE")
+
+		exporter, err := createMetricsExporter(context.Background(), nil)
+		s.NoError(err)
+		s.Nil(exporter)
+	})
+
+	s.Run("returns nil when no config and no env var endpoint", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+		exporter, err := createMetricsExporter(context.Background(), nil)
+		s.NoError(err)
+		s.Nil(exporter)
+	})
+
+	s.Run("creates exporter when config has endpoint with default gRPC protocol", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+
+		cfg := &config.TelemetryConfig{
+			Endpoint: "http://localhost:4317",
+		}
+
+		ctx := context.Background()
+		exporter, err := createMetricsExporter(ctx, cfg)
+		s.NoError(err)
+		s.NotNil(exporter)
+		defer func() { _ = exporter.Shutdown(ctx) }()
+	})
+
+	s.Run("creates HTTP exporter when config protocol is http/protobuf", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+
+		cfg := &config.TelemetryConfig{
+			Endpoint: "http://localhost:4318",
+			Protocol: "http/protobuf",
+		}
+
+		ctx := context.Background()
+		exporter, err := createMetricsExporter(ctx, cfg)
+		s.NoError(err)
+		s.NotNil(exporter)
+		defer func() { _ = exporter.Shutdown(ctx) }()
+	})
+
+	s.Run("creates gRPC exporter when config protocol is grpc", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+
+		cfg := &config.TelemetryConfig{
+			Endpoint: "http://localhost:4317",
+			Protocol: "grpc",
+		}
+
+		ctx := context.Background()
+		exporter, err := createMetricsExporter(ctx, cfg)
+		s.NoError(err)
+		s.NotNil(exporter)
+		defer func() { _ = exporter.Shutdown(ctx) }()
+	})
+
+	s.Run("falls back to gRPC for unknown protocol in config", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+
+		cfg := &config.TelemetryConfig{
+			Endpoint: "http://localhost:4317",
+			Protocol: "unknown_protocol",
+		}
+
+		ctx := context.Background()
+		exporter, err := createMetricsExporter(ctx, cfg)
+		s.NoError(err)
+		s.NotNil(exporter)
+		defer func() { _ = exporter.Shutdown(ctx) }()
+	})
+
+	s.Run("creates exporter from env var endpoint when no config", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+
+		ctx := context.Background()
+		exporter, err := createMetricsExporter(ctx, nil)
+		s.NoError(err)
+		s.NotNil(exporter)
+		defer func() { _ = exporter.Shutdown(ctx) }()
+	})
+
+	s.Run("creates HTTP exporter from env var protocol", func() {
+		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+
+		ctx := context.Background()
+		exporter, err := createMetricsExporter(ctx, nil)
+		s.NoError(err)
+		s.NotNil(exporter)
+		defer func() { _ = exporter.Shutdown(ctx) }()
+	})
+
 }
 
 // TestError is a simple error type for testing

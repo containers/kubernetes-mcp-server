@@ -6,7 +6,7 @@
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/containers/kubernetes-mcp-server?sort=semver)](https://github.com/containers/kubernetes-mcp-server/releases/latest)
 [![Build](https://github.com/containers/kubernetes-mcp-server/actions/workflows/build.yaml/badge.svg)](https://github.com/containers/kubernetes-mcp-server/actions/workflows/build.yaml)
 
-[✨ Features](#features) | [🚀 Getting Started](#getting-started) | [🎥 Demos](#demos) | [⚙️ Configuration](#configuration) | [🛠️ Tools](#tools-and-functionalities) | [🧑‍💻 Development](#development)
+[✨ Features](#features) | [🚀 Getting Started](#getting-started) | [🎥 Demos](#demos) | [⚙️ Configuration](#configuration) | [🛠️ Tools](#tools-and-functionalities) | [💬 Community](#community) | [🧑‍💻 Development](#development)
 
 https://github.com/user-attachments/assets/be2b67b3-fc1c-4d11-ae46-93deba8ed98e
 
@@ -46,8 +46,9 @@ If you're using the native binaries you don't need to have Node or Python instal
 - **✅ High-Performance / Low-Latency**: Directly interacts with the Kubernetes API server without the overhead of calling and waiting for external commands.
 - **✅ Multi-Cluster**: Can interact with multiple Kubernetes clusters simultaneously (as defined in your kubeconfig files).
 - **✅ Cross-Platform**: Available as a native binary for Linux, macOS, and Windows, as well as an npm package, a Python package, and container/Docker image.
-- **✅ Configurable**: Supports [command-line arguments](#configuration)  to configure the server behavior.
+- **✅ Configurable**: Supports [command-line arguments](#configuration), [TOML configuration files](docs/configuration.md), and environment variables.
 - **✅ Well tested**: The server has an extensive test suite to ensure its reliability and correctness across different Kubernetes environments.
+- **📚 Documentation**: Comprehensive [user documentation](docs/) including setup guides, configuration reference, and observability.
 
 ## 🚀 Getting Started <a id="getting-started"></a>
 
@@ -58,9 +59,9 @@ If you're using the native binaries you don't need to have Node or Python instal
 <details>
 <summary><b>Claude Code</b></summary>
 
-Follow the [dedicated Claude Code getting started guide](docs/GETTING_STARTED_CLAUDE_CODE.md) in our [user documentation](docs/).
+Follow the [dedicated Claude Code getting started guide](docs/getting-started-claude-code.md) in our [user documentation](docs/).
 
-For a secure production setup with dedicated ServiceAccount and read-only access, also review the [Kubernetes setup guide](docs/GETTING_STARTED_KUBERNETES.md).
+For a secure production setup with dedicated ServiceAccount and read-only access, also review the [Kubernetes setup guide](docs/getting-started-kubernetes.md).
 
 </details>
 
@@ -190,8 +191,8 @@ uvx kubernetes-mcp-server@latest --help
 |---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--port`                  | Starts the MCP server in Streamable HTTP mode (path /mcp) and Server-Sent Event (SSE) (path /sse) mode and listens on the specified port .                                                                                                                                                    |
 | `--log-level`             | Sets the logging level (values [from 0-9](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md)). Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
-| `--config`                | (Optional) Path to the main TOML configuration file. See [Drop-in Configuration](#drop-in-configuration) section below for details.                                                                                                                                                           |
-| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Drop-in Configuration](#drop-in-configuration) section below for details.                        |
+| `--config`                | (Optional) Path to the main TOML configuration file. See [Configuration Reference](docs/configuration.md) for details.                                                                                                                                                                        |
+| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Configuration Reference](docs/configuration.md) for details.                                    |
 | `--kubeconfig`            | Path to the Kubernetes configuration file. If not provided, it will try to resolve the configuration (in-cluster, default location, etc.).                                                                                                                                                    |
 | `--list-output`           | Output format for resource list operations (one of: yaml, table) (default "table")                                                                                                                                                                                                            |
 | `--read-only`             | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
@@ -199,223 +200,53 @@ uvx kubernetes-mcp-server@latest --help
 | `--stateless`             | If set, the MCP server will run in stateless mode, disabling tool and prompt change notifications. This is useful for container deployments, load balancing, and serverless environments where maintaining client state is not desired.                                                       |
 | `--toolsets`              | Comma-separated list of toolsets to enable. Check the [🛠️ Tools and Functionalities](#tools-and-functionalities) section for more information.                                                                                                                                                |
 | `--disable-multi-cluster` | If set, the MCP server will disable multi-cluster support and will only use the current context from the kubeconfig file. This is useful if you want to restrict the MCP server to a single cluster.                                                                                          |
-| `--cluster-provider`.     | Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.                                                                                                                                           |
+| `--cluster-provider`      | Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.                                                                                                                                           |
 
-### Server Instructions (for MCP Tool Search) <a id="server-instructions"></a>
+> **Note**: Most CLI options have equivalent TOML configuration fields. The `--disable-multi-cluster` flag is equivalent to setting `cluster_provider_strategy = "disabled"` in TOML. See the [Configuration Reference](docs/configuration.md) for all TOML options.
 
-The `server_instructions` configuration option allows you to provide hints to MCP clients about when to use this server's tools. This is particularly useful for clients that support **MCP Tool Search** (like Claude Code), which dynamically loads tools based on relevance to the user's query.
+### TOML Configuration Files
 
-**How it works:**
-- When an MCP client has many tools available, it may defer loading tool definitions to save context space
-- Server instructions help the client know when to search this server for relevant tools
-- The instructions are matched against user queries to determine tool relevance
+For complex or persistent configurations, use TOML configuration files instead of CLI arguments:
 
-**Example TOML configuration:**
-
-```toml
-server_instructions = """
-Use this server for Kubernetes and OpenShift cluster management tasks including:
-- Pods: list, get details, logs, exec commands, delete
-- Resources: get, list, create, update, delete any Kubernetes resource (deployments, services, configmaps, secrets, etc.)
-- Namespaces and projects: list, create, switch context
-- Nodes: list, view logs, get resource usage statistics
-- Events: view cluster events for debugging
-- Helm: install (deploy), upgrade, uninstall, list charts and releases
-- KubeVirt: create and manage virtual machines
-- Cluster config: view and switch kubeconfig contexts
-"""
-```
-
-**Recommended keywords to include:**
-- Resource types: pods, deployments, services, configmaps, secrets, namespaces, nodes
-- Actions: list, get, create, update, delete, logs, exec, scale
-- Tools: Helm, KubeVirt, OpenShift
-- Use cases: debugging, troubleshooting, cluster management
-
-### Drop-in Configuration <a id="drop-in-configuration"></a>
-
-The Kubernetes MCP server supports flexible configuration through both a main config file and drop-in files. **Both are optional** - you can use either, both, or neither (server will use built-in defaults).
-
-#### Configuration Loading Order
-
-Configuration values are loaded and merged in the following order (later sources override earlier ones):
-
-1. **Internal Defaults** - Always loaded (hardcoded default values)
-2. **Main Configuration File** - Optional, loaded via `--config` flag
-3. **Drop-in Files** - Optional, loaded from `--config-dir` in **lexical (alphabetical) order**
-
-#### How Drop-in Files Work
-
-- **Default Directory**: If `--config-dir` is not specified, the server looks for drop-in files in `conf.d/` relative to the main config file's directory (when `--config` is provided)
-- **File Naming**: Use numeric prefixes to control loading order (e.g., `00-base.toml`, `10-cluster.toml`, `99-override.toml`)
-- **File Extension**: Only `.toml` files are processed; dotfiles (starting with `.`) are ignored
-- **Partial Configuration**: Drop-in files can contain only a subset of configuration options
-- **Merge Behavior**: Values present in a drop-in file override previous values; missing values are preserved
-
-#### Dynamic Configuration Reload
-
-To reload configuration after modifying config files, send a `SIGHUP` signal to the running server process.
-
-**Prerequisite**: SIGHUP reload requires the server to be started with either the `--config` flag or `--config-dir` flag (or both). If neither is specified, SIGHUP signals will be ignored.
-
-**How to reload:**
-
-```shell
-# Find the process ID
-ps aux | grep kubernetes-mcp-server
-
-# Send SIGHUP to reload configuration
-kill -HUP <pid>
-
-# Or use pkill
-pkill -HUP kubernetes-mcp-server
-```
-
-The server will:
-- Reload the main config file and all drop-in files
-- Update configuration values (log level, output format, etc.)
-- Rebuild the toolset registry with new tool configurations
-- Log the reload status
-
-**Note**: Changing `kubeconfig` or cluster-related settings requires a server restart. Only tool configurations, log levels, and output formats can be reloaded dynamically.
-
-**Note**: SIGHUP reload is not available on Windows. On Windows, restart the server to reload configuration.
-
-#### Example: Using Both Config Methods
-
-**Command (using default `conf.d` directory):**
 ```shell
 kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml
 ```
 
-**Directory structure:**
-```
-/etc/kubernetes-mcp-server/
-├── config.toml              # Main configuration
-└── conf.d/                  # Default drop-in directory (automatically loaded)
-    ├── 00-base.toml         # Base overrides
-    ├── 10-toolsets.toml     # Toolset-specific config
-    └── 99-local.toml        # Local overrides
-```
+**Example configuration:**
 
-**Command (with explicit `--config-dir`):**
-```shell
-kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
-                      --config-dir /etc/kubernetes-mcp-server/config.d/
-```
-
-**Example drop-in file** (`10-toolsets.toml`):
 ```toml
-# Override only the toolsets - all other config preserved
-toolsets = ["core", "config", "helm", "logs"]
-```
-
-**Example drop-in file** (`99-local.toml`):
-```toml
-# Local development overrides
-log_level = 9
+log_level = 2
 read_only = true
+toolsets = ["core", "config", "helm", "kubevirt"]
+
+# Deny access to sensitive resources
+[[denied_resources]]
+group = ""
+version = "v1"
+kind = "Secret"
+
+[telemetry]
+endpoint = "http://localhost:4317"
 ```
 
-**To apply changes:**
-```shell
-# Edit config files
-vim /etc/kubernetes-mcp-server/conf.d/99-local.toml
+For comprehensive TOML configuration documentation, including:
+- All configuration options and their defaults
+- Drop-in configuration files for modular settings
+- Dynamic configuration reload via SIGHUP
+- Denied resources for restricting access to sensitive resource types
+- Server instructions for MCP Tool Search
+- [Custom MCP prompts](docs/prompts.md)
+- [OAuth/OIDC authentication](docs/KEYCLOAK_OIDC_SETUP.md) for HTTP mode
 
-# Reload without restarting
-pkill -HUP kubernetes-mcp-server
-```
-
-### MCP Prompts
-
-1. The server supports MCP prompts for workflow templates. Define custom prompts in `config.toml`:
-
-```toml
-[[prompts]]
-name = "my-workflow"
-title = "my workflow"
-description = "Custom workflow"
-
-[[prompts.arguments]]
-name = "resource_name"
-required = true
-
-[[prompts.messages]]
-role = "user"
-content = "Help me with {{resource_name}}"
-```
-
-2. Toolset prompts implemented by toolset developers
-
-See docs/PROMPTS.md for detailed documentation.
+See the **[Configuration Reference](docs/configuration.md)**.
 
 ## 📊 MCP Logging <a id="mcp-logging"></a>
 
 The server supports the MCP logging capability, allowing clients to receive debugging information via structured log messages.
+Kubernetes API errors are automatically categorized and logged to clients with appropriate severity levels.
+Sensitive data (tokens, keys, passwords, cloud credentials) is automatically redacted before being sent to clients.
 
-### For Clients
-
-Clients can control log verbosity by sending a `logging/setLevel` request:
-
-```json
-{
-  "method": "logging/setLevel",
-  "params": { "level": "info" }
-}
-```
-
-**Available log levels** (in order of increasing severity):
-- `debug` - Detailed debugging information
-- `info` - General informational messages (default)
-- `notice` - Normal but significant events
-- `warning` - Warning messages
-- `error` - Error conditions
-- `critical` - Critical conditions
-- `alert` - Action must be taken immediately
-- `emergency` - System is unusable
-
-### For Developers
-
-Toolsets can optionally send debug information to clients using helper functions from the `mcplog` package:
-
-**Recommended approach for Kubernetes errors** (automatically categorizes errors and sends appropriate messages):
-
-```go
-import "github.com/containers/kubernetes-mcp-server/pkg/mcplog"
-
-// In your tool handler:
-ret, err := client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-if err != nil {
-    mcplog.HandleK8sError(ctx, err, "pod access")
-    return api.NewToolCallResult("", fmt.Errorf("failed to get pod: %v", err)), nil
-}
-```
-
-**Manual logging** (for custom messages):
-
-```go
-import "github.com/containers/kubernetes-mcp-server/pkg/mcplog"
-
-// In your tool handler:
-if err != nil {
-    mcplog.SendMCPLog(ctx, "error", "Operation failed - check permissions")
-    return api.NewToolCallResult("", err)
-}
-```
-
-**Key Points:**
-- Logging is **optional** - toolsets work fine without sending MCP logs
-- Uses a dedicated named logger (`logger="mcp"`) for complete separation from server logs
-- Server logs (klog) remain detailed and unaffected
-- Client logs are high-level, helpful hints for debugging
-- Authentication failures send generic messages to clients (no security info leaked)
-- Sensitive data is automatically redacted with 28 pattern types:
-  - Generic fields (password, token, secret, api_key, etc.)
-  - Authorization headers (Bearer, Basic)
-  - Cloud credentials (AWS, GCP, Azure)
-  - API tokens (GitHub, GitLab, OpenAI, Anthropic)
-  - Cryptographic keys (JWT, SSH, PGP, RSA)
-  - Database connection strings (PostgreSQL, MySQL, MongoDB)
+See the **[MCP Logging Guide](docs/logging.md)**.
 
 ## 🛠️ Tools and Functionalities <a id="tools-and-functionalities"></a>
 
@@ -429,14 +260,14 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset  | Description                                                                                                                                                          | Default |
-|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
-| core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
-| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                     |         |
-| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
-| kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
-| helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
+| Toolset  | Description                                                                                                                                                                     | Default |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                         | ✓       |
+| core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                             | ✓       |
+| helm     | Tools for managing Helm charts and releases                                                                                                                                     |         |
+| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                                |         |
+| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.            |         |
+| kubevirt | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details. |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -562,6 +393,26 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <details>
 
+<summary>helm</summary>
+
+- **helm_install** - Install (deploy) a Helm chart to create a release in the current or provided namespace
+  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
+  - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
+  - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
+  - `values` (`object`) - Values to pass to the Helm chart (Optional)
+
+- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
+  - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
+  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
+
+- **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
+  - `name` (`string`) **(required)** - Name of the Helm release to uninstall
+  - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
+
+</details>
+
+<details>
+
 <summary>kcp</summary>
 
 - **kcp_workspaces_list** - List all available kcp workspaces in the current cluster
@@ -606,7 +457,6 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **kiali_get_metrics** - Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh
   - `byLabels` (`string`) - Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional
   - `direction` (`string`) - Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'
-  - `duration` (`string`) - Time range to get metrics for (optional string - if provided, gets metrics (e.g., '1m', '5m', '1h'); if empty, get default 30m).
   - `namespace` (`string`) **(required)** - Namespace to get resources from
   - `quantiles` (`string`) - Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional
   - `rateInterval` (`string`) - Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'
@@ -641,6 +491,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kubevirt</summary>
 
+- **vm_clone** - Clone a KubeVirt VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API
+  - `name` (`string`) **(required)** - The name of the source virtual machine to clone
+  - `namespace` (`string`) **(required)** - The namespace of the source virtual machine
+  - `targetName` (`string`) **(required)** - The name for the new cloned virtual machine
+
 - **vm_create** - Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.
   - `autostart` (`boolean`) - Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.
   - `instancetype` (`string`) - Optional instance type name for the VM (e.g., 'u1.small', 'u1.medium', 'u1.large')
@@ -657,26 +512,6 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
-
-</details>
-
-<details>
-
-<summary>helm</summary>
-
-- **helm_install** - Install (deploy) a Helm chart to create a release in the current or provided namespace
-  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
-  - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
-  - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
-  - `values` (`object`) - Values to pass to the Helm chart (Optional)
-
-- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
-  - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
-  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
-
-- **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
-  - `name` (`string`) **(required)** - Name of the Helm release to uninstall
-  - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
 
 </details>
 
@@ -712,7 +547,19 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 ## Helm Chart
 
-A [Helm Chart](https://helm.sh) is available to simplify the deployment of the Kubernetes MCP server. Additional details can be found in the [chart README](./charts/kubernetes-mcp-server/README.md).
+A [Helm Chart](https://helm.sh) is available to simplify the deployment of the Kubernetes MCP server.
+
+```shell
+helm install kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server
+```
+
+For configuration options including OAuth, telemetry, and resource limits, see the [chart README](./charts/kubernetes-mcp-server/README.md) and [values.yaml](./charts/kubernetes-mcp-server/values.yaml).
+
+## 💬 Community <a id="community"></a>
+
+Join the conversation and connect with other users and contributors:
+
+- [Slack](https://cloud-native.slack.com/archives/C0AHQJVR725) - Ask questions, share feedback, and discuss the Kubernetes MCP server in the `#kubernetes-mcp-server` channel on the CNCF Slack workspace. If you're not already a member, you can [request an invitation](https://slack.cncf.io).
 
 ## 🧑‍💻 Development <a id="development"></a>
 

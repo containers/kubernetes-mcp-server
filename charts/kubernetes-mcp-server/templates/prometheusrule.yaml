@@ -30,22 +30,9 @@ spec:
         - record: cluster:k8s_mcp_tool_errors:sum
           expr: sum(k8s_mcp_tool_errors_total)
 
-        # Calculate error rate (errors / total calls)
-        - record: cluster:k8s_mcp_tool_error_rate:ratio
-          expr: |
-            sum(k8s_mcp_tool_errors_total) / clamp_min(sum(k8s_mcp_tool_calls_total), 1)
-
-        # Aggregate HTTP requests by status class only (removes path, method labels)
-        - record: cluster:k8s_mcp_http_requests_by_status:sum
-          expr: sum by (http_response_status_class) (k8s_mcp_http_requests_total)
-
         # Total HTTP requests
         - record: cluster:k8s_mcp_http_requests:sum
           expr: sum(k8s_mcp_http_requests_total)
-
-        # Server info (already low cardinality, just ensures it's available)
-        - record: cluster:k8s_mcp_server_info:count
-          expr: count(k8s_mcp_server_info)
 
         # Namespace-level aggregations (for multi-tenant RBAC)
         - record: namespace:k8s_mcp_tool_calls:sum
@@ -53,10 +40,6 @@ spec:
 
         - record: namespace:k8s_mcp_tool_errors:sum
           expr: sum by (namespace) (k8s_mcp_tool_errors_total)
-
-        - record: namespace:k8s_mcp_tool_error_rate:ratio
-          expr: |
-            sum by (namespace) (k8s_mcp_tool_errors_total) / clamp_min(sum by (namespace) (k8s_mcp_tool_calls_total), 1)
 
         - record: namespace:k8s_mcp_http_requests:sum
           expr: sum by (namespace) (k8s_mcp_http_requests_total)

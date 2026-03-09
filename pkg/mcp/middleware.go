@@ -72,8 +72,10 @@ func toolCallLoggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		switch params := req.GetParams().(type) {
 		case *mcp.CallToolParamsRaw:
-			toolCallRequest, _ := GoSdkToolCallParamsToToolCallRequest(params)
-			klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, toolCallRequest.GetArguments())
+			toolCallRequest, err := GoSdkToolCallParamsToToolCallRequest(params)
+			if err == nil {
+				klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, toolCallRequest.GetArguments())
+			}
 			if req.GetExtra() != nil && req.GetExtra().Header != nil {
 				buffer := bytes.NewBuffer(make([]byte, 0))
 				if err := req.GetExtra().Header.WriteSubset(buffer, map[string]bool{"Authorization": true, "authorization": true}); err == nil {
@@ -206,7 +208,7 @@ func getMcpReqUserAgent(req mcp.Request) string {
 		return ""
 	}
 	initParams := session.InitializeParams()
-	if initParams == nil || (initParams.ClientInfo.Name == "" && initParams.ClientInfo.Version == "") {
+	if initParams == nil || initParams.ClientInfo == nil || (initParams.ClientInfo.Name == "" && initParams.ClientInfo.Version == "") {
 		return ""
 	}
 	return fmt.Sprintf("%s/%s", initParams.ClientInfo.Name, initParams.ClientInfo.Version)

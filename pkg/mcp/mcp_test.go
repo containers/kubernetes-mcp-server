@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"sync"
 	"testing"
@@ -10,7 +12,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -57,7 +58,7 @@ func (s *McpHeadersSuite) TearDownTest() {
 func (s *McpHeadersSuite) TestAuthorizationHeaderPropagation() {
 	cases := []string{"kubernetes-authorization", "Authorization"}
 	for _, header := range cases {
-		s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"})))
+		s.InitMcpClient(test.WithHTTPHeaders(map[string]string{header: "Bearer a-token-from-mcp-client"}))
 		_, _ = s.CallTool("pods_list", map[string]interface{}{})
 		s.pathHeadersMux.Lock()
 		pathHeadersLen := len(s.pathHeaders)
@@ -165,9 +166,9 @@ func (s *UserAgentPropagationSuite) TearDownTest() {
 }
 
 func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
-	s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{
+	s.InitMcpClient(test.WithHTTPHeaders(map[string]string{
 		"User-Agent": "custom-mcp-client/2.0",
-	})))
+	}))
 	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
@@ -184,10 +185,10 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentToKubeAPI() {
 }
 
 func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentWithOAuthToKubeAPI() {
-	s.InitMcpClient(test.WithTransport(transport.WithHTTPHeaders(map[string]string{
+	s.InitMcpClient(test.WithHTTPHeaders(map[string]string{
 		"Authorization": "Bearer a-token-from-mcp-client",
 		"User-Agent":    "custom-mcp-client/2.0",
-	})))
+	}))
 	_, _ = s.CallTool("pods_list", map[string]any{})
 
 	s.pathHeadersMux.Lock()
@@ -256,6 +257,54 @@ func (s *UserAgentPropagationSuite) TestFallsBackToServerPrefixWhenNoClientInfo(
 	s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
 	s.Run("User-Agent uses server prefix only without trailing space", func() {
 		// When no HTTP User-Agent and empty MCP ClientInfo, should use server prefix only
+		s.Equal(
+			fmt.Sprintf("kubernetes-mcp-server/0.0.0 (%s/%s)", runtime.GOOS, runtime.GOARCH),
+			podsHeaders.Get("User-Agent"),
+		)
+	})
+}
+
+func (s *UserAgentPropagationSuite) TestDoesNotPanicWhenClientInfoIsNil() {
+	// Regression test for https://github.com/containers/kubernetes-mcp-server/issues/842
+	// Fixed in https://github.com/containers/kubernetes-mcp-server/pull/844
+	//
+	// The MCP spec mandates that clientInfo is sent during initialization:
+	// https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization
+	// However, some non-compliant clients omit it, which caused a nil pointer panic
+	// in the user-agent middleware. This test verifies that the server handles
+	// non-compliant clients gracefully by sending a raw initialize request without clientInfo.
+	provider, err := internalk8s.NewProvider(s.Cfg)
+	s.Require().NoError(err)
+	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
+	s.Require().NoError(err)
+	handler := s.mcpServer.ServeHTTP()
+	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("User-Agent")
+		handler.ServeHTTP(w, r)
+	})
+	httpServer := httptest.NewServer(strippedHandler)
+	defer httpServer.Close()
+
+	// Send raw initialize request without clientInfo (non-compliant client)
+	endpoint := httpServer.URL + "/mcp"
+	initResp := test.McpRawPost(s.T(), endpoint, "",
+		`{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}`)
+	defer func() { _ = initResp.Body.Close() }()
+	_, _ = io.ReadAll(initResp.Body)
+	sessionID := initResp.Header.Get("Mcp-Session-Id")
+	s.Require().NotEmpty(sessionID, "Expected session ID in response")
+
+	// Send tool call - this would panic before the fix when ClientInfo was nil
+	toolResp := test.McpRawPost(s.T(), endpoint, sessionID,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pods_list","arguments":{}}}`)
+	defer func() { _ = toolResp.Body.Close() }()
+
+	s.pathHeadersMux.Lock()
+	podsHeaders := s.pathHeaders["/api/v1/namespaces/default/pods"]
+	s.pathHeadersMux.Unlock()
+
+	s.Require().NotNil(podsHeaders, "No requests were made to /api/v1/namespaces/default/pods")
+	s.Run("User-Agent uses server prefix only when clientInfo is nil", func() {
 		s.Equal(
 			fmt.Sprintf("kubernetes-mcp-server/0.0.0 (%s/%s)", runtime.GOOS, runtime.GOARCH),
 			podsHeaders.Get("User-Agent"),

@@ -1,5 +1,5 @@
 kind: Agent
 metadata:
-  name: "claude-code"
-builtin:
-  type: "claude-code"
+  name: "claude-code-acp"
+acp:
+  cmd: "claude-code-acp"

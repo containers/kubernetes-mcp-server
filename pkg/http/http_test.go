@@ -1,7 +1,6 @@
 package http
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -84,7 +83,7 @@ func (s *BaseHttpSuite) TearDownTest() {
 type httpContext struct {
 	klogState       klog.State
 	mockServer      *test.MockServer
-	LogBuffer       bytes.Buffer
+	LogBuffer       test.SyncBuffer
 	HttpAddress     string             // HTTP server address
 	timeoutCancel   context.CancelFunc // Release resources if test completes before the timeout
 	StopServer      context.CancelFunc

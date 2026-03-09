@@ -29,7 +29,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "quay.io/containers/kubernetes_mcp_server:0.0.0",
+      "identifier": "ghcr.io/containers/kubernetes-mcp-server:0.0.0",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {

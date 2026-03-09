@@ -11,7 +11,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
-	authv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
@@ -65,6 +64,10 @@ func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]
 		if err := yaml.NewYAMLToJSONDecoder(strings.NewReader(r)).Decode(&obj); err != nil {
 			return nil, err
 		}
+
+		// remove the status from the resource, disallowing agent from directly editing (only controllers should be allowed to do this)
+		delete(obj.Object, "status")
+
 		parsedResources = append(parsedResources, &obj)
 	}
 	return c.resourcesCreateOrUpdate(ctx, parsedResources)
@@ -189,6 +192,7 @@ func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstruc
 		}
 		resources[i], rErr = c.DynamicClient().Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{
 			FieldManager: version.BinaryName,
+			Force:        true,
 		})
 		if rErr != nil {
 			return nil, rErr
@@ -230,19 +234,6 @@ func (c *Core) supportsGroupVersion(groupVersion string) bool {
 }
 
 func (c *Core) canIUse(ctx context.Context, gvr *schema.GroupVersionResource, namespace, verb string) bool {
-	accessReviews := c.AuthorizationV1().SelfSubjectAccessReviews()
-	response, err := accessReviews.Create(ctx, &authv1.SelfSubjectAccessReview{
-		Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authv1.ResourceAttributes{
-			Namespace: namespace,
-			Verb:      verb,
-			Group:     gvr.Group,
-			Version:   gvr.Version,
-			Resource:  gvr.Resource,
-		}},
-	}, metav1.CreateOptions{})
-	if err != nil {
-		// TODO: maybe return the error too
-		return false
-	}
-	return response.Status.Allowed
+	allowed, _ := CanI(ctx, c.AuthorizationV1(), gvr, namespace, "", verb)
+	return allowed
 }

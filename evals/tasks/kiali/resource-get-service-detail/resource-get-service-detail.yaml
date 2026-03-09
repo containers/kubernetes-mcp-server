@@ -15,4 +15,4 @@ steps:
     inline: |-
       #!/usr/bin/env bash          
   prompt:
-    inline: Get the full details and health status for the details service
+    inline: Get the full details for the service reviews in the namespace bookinfo.

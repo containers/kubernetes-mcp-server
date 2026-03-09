@@ -87,6 +87,7 @@ type PromptHandlerParams struct {
 	ExtendedConfigProvider
 	KubernetesClient
 	PromptCallRequest
+	Elicitor
 }
 
 // PromptHandlerFunc is a function that handles prompt execution

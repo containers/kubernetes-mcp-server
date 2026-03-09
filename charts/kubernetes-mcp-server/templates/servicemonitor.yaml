@@ -24,8 +24,10 @@ spec:
       {{- with .Values.metrics.serviceMonitor.scrapeTimeout }}
       scrapeTimeout: {{ . }}
       {{- end }}
-      {{- with .Values.metrics.serviceMonitor.scheme }}
-      scheme: {{ . }}
+      {{- if .Values.metrics.serviceMonitor.scheme }}
+      scheme: {{ .Values.metrics.serviceMonitor.scheme }}
+      {{- else if .Values.tls.enabled }}
+      scheme: https
       {{- end }}
       {{- with .Values.metrics.serviceMonitor.tlsConfig }}
       tlsConfig:

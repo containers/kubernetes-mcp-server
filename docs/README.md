@@ -8,21 +8,40 @@ Choose the guide that matches your needs:
 
 | Guide | Description | Best For |
 |-------|-------------|----------|
-| **[Getting Started with Kubernetes](GETTING_STARTED_KUBERNETES.md)** | Base setup: Create ServiceAccount, token, and kubeconfig | Everyone - **start here first** |
-| **[Using with Claude Code CLI](GETTING_STARTED_CLAUDE_CODE.md)** | Configure MCP server with Claude Code CLI | Claude Code CLI users |
+| **[Getting Started with Kubernetes](getting-started-kubernetes.md)** | Base setup: Create ServiceAccount, token, and kubeconfig | Everyone - **start here first** |
+| **[Using with Claude Code CLI](getting-started-claude-code.md)** | Configure MCP server with Claude Code CLI | Claude Code CLI users |
 
 ## Recommended Workflow
 
-1. **Complete the base setup**: Start with [Getting Started with Kubernetes](GETTING_STARTED_KUBERNETES.md) to create a ServiceAccount and kubeconfig file
-2. **Configure Claude Code**: Then follow the [Claude Code CLI guide](GETTING_STARTED_CLAUDE_CODE.md)
+1. **Complete the base setup**: Start with [Getting Started with Kubernetes](getting-started-kubernetes.md) to create a ServiceAccount and kubeconfig file
+2. **Configure Claude Code**: Then follow the [Claude Code CLI guide](getting-started-claude-code.md)
 
-## Other toolsets
+## Configuration
+
+- **[Configuration Reference](configuration.md)** - Complete reference for TOML configuration files, including all options, drop-in configuration, and dynamic reload
+
+## Toolset Guides
 
 - **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
+- **[KubeVirt](kubevirt.md)** - KubeVirt virtual machine management tools
 
-## Additional Documentation
+## Feature Specifications
 
+Living documentation for implemented and planned features:
+
+| Spec | Description | Status |
+|------|-------------|--------|
+| **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
+
+## Advanced Topics
+
+- **[MCP Logging](logging.md)** - Structured logging to MCP clients with automatic K8s error categorization and secret redaction
+- **[OpenTelemetry Observability](OTEL.md)** - Distributed tracing and metrics configuration
+- **[MCP Prompts](prompts.md)** - Custom workflow templates for AI assistants
 - **[Keycloak OIDC Setup](KEYCLOAK_OIDC_SETUP.md)** - Developer guide for local Keycloak environment and testing with MCP Inspector
+
+## Reference
+
 - **[Main README](../README.md)** - Project overview and general information
 
 

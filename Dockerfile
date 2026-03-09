@@ -10,6 +10,7 @@ LABEL io.modelcontextprotocol.server.name="io.github.containers/kubernetes-mcp-s
 WORKDIR /app
 COPY --from=builder /app/kubernetes-mcp-server /app/kubernetes-mcp-server
 USER 65532:65532
-ENTRYPOINT ["/app/kubernetes-mcp-server", "--port", "8080"]
+ENTRYPOINT ["/app/kubernetes-mcp-server"]
+CMD ["--port", "8080"]
 
 EXPOSE 8080

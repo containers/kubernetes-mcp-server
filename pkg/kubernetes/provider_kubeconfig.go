@@ -47,7 +47,14 @@ func (p *kubeConfigClusterProvider) reset() error {
 	m, err := NewKubeconfigManager(p.config, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
-			return fmt.Errorf("kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %w", err)
+			return fmt.Errorf( //nolint:ST1005 // user-facing error with actionable multi-line guidance
+				"kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %w\n\n"+
+					"If you intend to connect to a different cluster from within a pod, provide the kubeconfig path explicitly:\n"+
+					"  --kubeconfig /path/to/kubeconfig --cluster-provider kubeconfig\n\n"+
+					"This overrides the in-cluster detection and uses the specified kubeconfig file instead.\n"+
+					"See https://github.com/containers/kubernetes-mcp-server/blob/main/docs/configuration.md#cross-cluster-access-from-a-pod",
+				err,
+			)
 		}
 		return err
 	}

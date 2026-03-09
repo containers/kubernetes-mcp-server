@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,6 +26,7 @@ import (
 )
 
 type MockServer struct {
+	mu           sync.RWMutex
 	server       *httptest.Server
 	config       *rest.Config
 	restHandlers []http.HandlerFunc
@@ -34,7 +37,10 @@ func NewMockServer() *MockServer {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
 	ms.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		for _, handler := range ms.restHandlers {
+		ms.mu.RLock()
+		handlers := ms.restHandlers
+		ms.mu.RUnlock()
+		for _, handler := range handlers {
 			handler(w, req)
 		}
 	}))
@@ -58,10 +64,14 @@ func (m *MockServer) Close() {
 }
 
 func (m *MockServer) Handle(handler http.Handler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.restHandlers = append(m.restHandlers, handler.ServeHTTP)
 }
 
 func (m *MockServer) ResetHandlers() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.restHandlers = make([]http.HandlerFunc, 0)
 }
 
@@ -189,6 +199,7 @@ WaitForStreams:
 }
 
 type DiscoveryClientHandler struct {
+	mu sync.RWMutex
 	// APIResourceLists defines all API groups and their resources.
 	// The handler automatically generates /api, /apis, and /apis/<group>/<version> endpoints.
 	APIResourceLists []metav1.APIResourceList
@@ -221,6 +232,9 @@ func NewDiscoveryClientHandler(additionalResources ...metav1.APIResourceList) *D
 
 func (h *DiscoveryClientHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	// Request Performed by DiscoveryClient to Kube API (Get API Groups legacy -core-)
 	if req.URL.Path == "/api" {
@@ -289,6 +303,8 @@ func parseGroupVersion(gv string) (group, version string) {
 // AddAPIResourceList adds an API resource list to the handler.
 // This is useful for dynamically modifying the handler during tests.
 func (h *DiscoveryClientHandler) AddAPIResourceList(resourceList metav1.APIResourceList) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.APIResourceLists = append(h.APIResourceLists, resourceList)
 }
 
@@ -312,4 +328,30 @@ func NewInOpenShiftHandler(additionalResources ...metav1.APIResourceList) *Disco
 	}
 	openShiftResources = append(openShiftResources, additionalResources...)
 	return NewDiscoveryClientHandler(openShiftResources...)
+}
+
+// SyncBuffer is a thread-safe wrapper around bytes.Buffer.
+// Use this for test log buffers to avoid race conditions when multiple
+// goroutines write to the logger concurrently.
+type SyncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *SyncBuffer) Write(p []byte) (n int, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *SyncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *SyncBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
 }

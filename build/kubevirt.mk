@@ -28,6 +28,10 @@ kubevirt-install: ## Install KubeVirt, CDI, and Multus on the cluster
 	@kubectl -n kubevirt wait kv kubevirt --for condition=Available --timeout=15m
 	@echo "✅ KubeVirt is ready"
 	@echo ""
+	@echo "Enabling Snapshot feature gate..."
+	@kubectl patch kubevirt kubevirt -n kubevirt --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"]}}}}'
+	@echo "✅ Snapshot feature gate enabled"
+	@echo ""
 	@echo "Installing CDI (Containerized Data Importer) $(CDI_VERSION)..."
 	@kubectl apply -f $(CDI_RELEASE_URL)/cdi-operator.yaml
 	@kubectl apply -f $(CDI_RELEASE_URL)/cdi-cr.yaml

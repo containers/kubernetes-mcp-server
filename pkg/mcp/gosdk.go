@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/utils/ptr"
@@ -23,6 +24,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		Name:        tool.Tool.Name,
 		Description: tool.Tool.Description,
 		Title:       tool.Tool.Annotations.Title,
+		Meta:        mcp.Meta(tool.Tool.Meta),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           tool.Tool.Annotations.Title,
 			ReadOnlyHint:    ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false),
@@ -50,11 +52,15 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 			KubernetesClient:       k,
 			ToolCallRequest:        toolCallRequest,
 			ListOutput:             s.configuration.ListOutput(),
+			Elicitor:               &sessionElicitor{},
 		})
 		if err != nil {
 			return nil, err
 		}
-		return NewTextResult(result.Content, result.Error), nil
+		if result.Error != nil {
+			mcplog.HandleK8sError(ctx, result.Error, tool.Tool.Name)
+		}
+		return NewStructuredResult(result.Content, result.StructuredContent, result.Error), nil
 	}
 	return goSdkTool, goSdkHandler, nil
 }
@@ -76,8 +82,10 @@ func GoSdkToolCallRequestToToolCallRequest(request *mcp.CallToolRequest) (*ToolC
 
 func GoSdkToolCallParamsToToolCallRequest(toolCallParams *mcp.CallToolParamsRaw) (*ToolCallRequest, error) {
 	var arguments map[string]any
-	if err := json.Unmarshal(toolCallParams.Arguments, &arguments); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+	if len(toolCallParams.Arguments) > 0 {
+		if err := json.Unmarshal(toolCallParams.Arguments, &arguments); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+		}
 	}
 	return &ToolCallRequest{
 		Name:      toolCallParams.Name,

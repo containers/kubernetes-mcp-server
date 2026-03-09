@@ -8,8 +8,13 @@ on:
       - 'v*'
 
 env:
-  IMAGE_NAME: quay.io/containers/kubernetes_mcp_server
+  QUAY_IMAGE_NAME: quay.io/containers/kubernetes_mcp_server
+  GHCR_IMAGE_NAME: ghcr.io/containers/kubernetes-mcp-server
   TAG: ${{ github.ref_name == 'main' && 'latest' || github.ref_type == 'tag' && github.ref_name && startsWith(github.ref_name, 'v') && github.ref_name || 'unknown' }}
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   publish-platform-images:
@@ -34,17 +39,25 @@ jobs:
       - name: Quay Login
         run: |
           echo ${{ secrets.QUAY_PASSWORD }} | podman login quay.io -u ${{ secrets.QUAY_USERNAME }} --password-stdin
+      - name: GHCR Login
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | podman login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build Image
         run: |
           podman build \
             --platform "linux/${{ matrix.platform.tag }}" \
             -f Dockerfile \
-            -t "${{ env.IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}" \
+            -t "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}" \
+            -t "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}" \
             .
-      - name: Push Image
+      - name: Push Image to Quay
         run: |
           podman push \
-            "${{ env.IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}"
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}"
+      - name: Push Image to GHCR
+        run: |
+          podman push \
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}"
 
   publish-manifest:
     name: Publish Manifest
@@ -55,13 +68,22 @@ jobs:
       - name: Quay Login
         run: |
           echo ${{ secrets.QUAY_PASSWORD }} | podman login quay.io -u ${{ secrets.QUAY_USERNAME }} --password-stdin
-      - name: Create Manifest
+      - name: GHCR Login
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Create and Push Quay Manifest
         run: |
           podman manifest create \
-            "${{ env.IMAGE_NAME }}:${{ env.TAG }}" \
-            "${{ env.IMAGE_NAME }}:${{ env.TAG }}-linux-amd64" \
-            "${{ env.IMAGE_NAME }}:${{ env.TAG }}-linux-arm64"
-      - name: Push Manifest
-        run: |
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}" \
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-amd64" \
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64"
           podman manifest push \
-            "${{ env.IMAGE_NAME }}:${{ env.TAG }}"
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}"
+      - name: Create and Push GHCR Manifest
+        run: |
+          podman manifest create \
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}" \
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-amd64" \
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64"
+          podman manifest push \
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}"

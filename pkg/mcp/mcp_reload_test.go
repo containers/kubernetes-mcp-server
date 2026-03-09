@@ -6,7 +6,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -181,17 +180,9 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 }
 
 func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
-	provider, err := kubernetes.NewProvider(s.Cfg)
-	s.Require().NoError(err)
-	server, err := NewServer(Configuration{
-		StaticConfig: s.Cfg,
-	}, provider)
-	s.Require().NoError(err)
-	s.server = server
-
 	// Get initial tools
 	s.InitMcpClient()
-	initialTools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	initialTools, err := s.ListTools()
 	s.Require().NoError(err)
 	s.Require().Greater(len(initialTools.Tools), 0)
 
@@ -200,12 +191,12 @@ func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
 	newConfig.Toolsets = []string{"core", "config", "helm"}
 	newConfig.KubeConfig = s.Cfg.KubeConfig
 
-	// Reload configuration
-	err = server.ReloadConfiguration(newConfig)
+	// Reload configuration on the server the MCP client is connected to
+	err = s.mcpServer.ReloadConfiguration(newConfig)
 	s.Require().NoError(err)
 
 	// Verify helm tools are available
-	reloadedTools, err := s.ListTools(s.T().Context(), mcp.ListToolsRequest{})
+	reloadedTools, err := s.ListTools()
 	s.Require().NoError(err)
 
 	helmToolFound := false

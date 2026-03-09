@@ -55,14 +55,45 @@ type ToolCallRequest interface {
 type ToolCallResult struct {
 	// Raw content returned by the tool.
 	Content string
+	// StructuredContent is an optional JSON-serializable value for MCP Apps UI rendering.
+	// When set, it is passed as structuredContent in the MCP CallToolResult alongside Content.
+	// Must be completely omitted (nil) when not used.
+	StructuredContent any
 	// Error (non-protocol) to send back to the LLM.
 	Error error
 }
 
+// NewToolCallResult creates a ToolCallResult with text content only.
+// Use this for tools that return human-readable text output.
 func NewToolCallResult(content string, err error) *ToolCallResult {
 	return &ToolCallResult{
 		Content: content,
 		Error:   err,
+	}
+}
+
+// NewToolCallResultStructured creates a ToolCallResult with structured content.
+// The structured value is automatically JSON-serialized into the Content field
+// for backward compatibility with MCP clients that don't support structuredContent.
+//
+// Per the MCP specification:
+// "For backwards compatibility, a tool that returns structured content SHOULD
+// also return the serialized JSON in a TextContent block."
+// https://modelcontextprotocol.io/specification/2025-11-25/server/tools#structured-content
+//
+// Use this for tools that return typed/structured data (maps, slices, structs)
+// that MCP clients can parse programmatically.
+func NewToolCallResultStructured(structured any, err error) *ToolCallResult {
+	content := ""
+	if structured != nil {
+		if b, jsonErr := json.Marshal(structured); jsonErr == nil {
+			content = string(b)
+		}
+	}
+	return &ToolCallResult{
+		Content:           content,
+		StructuredContent: structured,
+		Error:             err,
 	}
 }
 
@@ -72,9 +103,53 @@ type ToolHandlerParams struct {
 	KubernetesClient
 	ToolCallRequest
 	ListOutput output.Output
+	Elicitor
 }
 
 type ToolHandlerFunc func(params ToolHandlerParams) (*ToolCallResult, error)
+
+// Elicitor provides a mechanism for tools and prompts to request additional information
+// from the user during execution via the MCP elicitation protocol.
+// It supports two modes:
+//   - Form mode: presents a schema-based form to the user (set Message and RequestedSchema in ElicitParams).
+//   - URL mode: directs the user to a URL (set Message, URL, and optionally ElicitationID in ElicitParams).
+//
+// See MCP specification: https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation
+type Elicitor interface {
+	Elicit(ctx context.Context, params *ElicitParams) (*ElicitResult, error)
+}
+
+// ElicitParams contains the parameters for an elicitation request.
+// The elicitation mode is inferred from the fields: if URL is set, URL mode is used; otherwise form mode.
+type ElicitParams struct {
+	// Message is the message to present to the user.
+	Message string
+	// RequestedSchema is a JSON Schema defining the expected form fields. Used in form mode only.
+	RequestedSchema *jsonschema.Schema
+	// URL is the URL to present to the user. Used in URL mode only.
+	URL string
+	// ElicitationID is a tracking identifier for out-of-band URL elicitation completion. Used in URL mode only.
+	ElicitationID string
+}
+
+// ElicitAction constants define the possible user responses to an elicitation request.
+// See MCP specification: https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation
+const (
+	// ElicitActionAccept indicates the user submitted the form with content.
+	ElicitActionAccept = "accept"
+	// ElicitActionDecline indicates the user explicitly declined the request.
+	ElicitActionDecline = "decline"
+	// ElicitActionCancel indicates the user dismissed the form without making a choice.
+	ElicitActionCancel = "cancel"
+)
+
+// ElicitResult represents the user's response to an elicitation request.
+type ElicitResult struct {
+	// Action is one of the ElicitAction constants.
+	Action string
+	// Content contains the submitted form data. Only populated when Action is ElicitActionAccept.
+	Content map[string]any
+}
 
 type Tool struct {
 	// The name of the tool.
@@ -88,6 +163,9 @@ type Tool struct {
 	Description string `json:"description,omitempty"`
 	// Additional tool information.
 	Annotations ToolAnnotations `json:"annotations"`
+	// Meta contains additional metadata for the tool (e.g., MCP Apps UI resource URI).
+	// Example: map[string]any{"ui": map[string]any{"resourceUri": "ui://server/app.html"}}
+	Meta map[string]any `json:"_meta,omitempty"`
 	// A JSON Schema object defining the expected parameters for the tool.
 	InputSchema *jsonschema.Schema
 }

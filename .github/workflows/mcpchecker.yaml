@@ -13,12 +13,13 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (kubernetes, kiali, or all)'
+        description: 'Which task suite to run (kubernetes, kubevirt, kiali, or all)'
         required: false
         default: 'kubernetes'
         type: choice
         options:
           - kubernetes
+          - kubevirt
           - kiali
           - all
       task-filter:
@@ -65,6 +66,7 @@ jobs:
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
       kiali-run: ${{ steps.check.outputs.kiali-run }}
+      kubevirt-run: ${{ steps.check.outputs.kubevirt-run }}
       label-selector: ${{ steps.check.outputs.label-selector }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
@@ -107,12 +109,12 @@ jobs:
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
 
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kiali | all
+            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kubevirt | kiali | all
             COMMENT_BODY="${{ github.event.comment.body }}"
             COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
             read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
             case "${FIRST_WORD,,}" in
-              kiali|all)
+              kubevirt|kiali|all)
                 SUITE_INPUT="${FIRST_WORD,,}"
                 ;;
               kubernetes)
@@ -127,17 +129,25 @@ jobs:
           # Select label-selector and infrastructure based on suite
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
           case "$SUITE" in
+            kubevirt)
+              echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
+              echo "kiali-run=false" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=true" >> $GITHUB_OUTPUT
+              ;;
             kiali)
               echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
               echo "kiali-run=true" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=false" >> $GITHUB_OUTPUT
               ;;
             all)
               echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
               echo "kiali-run=true" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=true" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
               echo "kiali-run=false" >> $GITHUB_OUTPUT
+              echo "kubevirt-run=false" >> $GITHUB_OUTPUT
               ;;
           esac
 
@@ -168,14 +178,25 @@ jobs:
         if: needs.check-trigger.outputs.kiali-run == 'true'
         run: make setup-kiali
 
+      - name: Install KubeVirt
+        if: needs.check-trigger.outputs.kubevirt-run == 'true'
+        run: make kubevirt-install
+
       - name: Start MCP server
         run: make run-server
         env:
-          TOOLSETS: ${{ needs.check-trigger.outputs.kiali-run == 'true' && 'kiali' || '' }}
+          TOOLSETS: >-
+            ${{
+              (needs.check-trigger.outputs.kiali-run == 'true' && needs.check-trigger.outputs.kubevirt-run == 'true' && 'kiali,kubevirt') ||
+              (needs.check-trigger.outputs.kiali-run == 'true' && 'kiali') ||
+              (needs.check-trigger.outputs.kubevirt-run == 'true' && 'kubevirt') ||
+              ''
+            }}
+          MCP_CONFIG_DIR: 'dev/config/mcp-configs'
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.7
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.10
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           mcpchecker-version: 'latest'
@@ -224,7 +245,7 @@ jobs:
 
       - name: Upload PR context
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: eval-context
           path: eval-context/
@@ -247,7 +268,7 @@ jobs:
           ref: main
 
       - name: Download mcpchecker results
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: mcpchecker-results
           path: mcpchecker-results/
@@ -260,8 +281,13 @@ jobs:
           AGENT_NAME=$(echo "$EVAL_CONFIG" | sed 's|evals/||; s|/eval\.yaml||')
 
           mkdir -p evals/results
-          # Copy the mcpchecker results file with agent-specific name
-          cp mcpchecker-results/results.json "evals/results/${AGENT_NAME}-latest.json"
+          # Copy the most recent mcpchecker results file with agent-specific name
+          RESULTS_FILE=$(ls -t mcpchecker-results/mcpchecker-*-out.json 2>/dev/null | head -1)
+          if [ -z "$RESULTS_FILE" ]; then
+            echo "Error: No mcpchecker results file found"
+            exit 1
+          fi
+          cp "$RESULTS_FILE" "evals/results/${AGENT_NAME}-latest.json"
 
       - name: Create Pull Request
         env:
@@ -278,6 +304,13 @@ jobs:
           # Create or reset the branch
           git checkout -B "$BRANCH"
           git add evals/results/*-latest.json
+
+          # Skip if no changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
           git commit -m "chore(evals): update mcpchecker evaluation results"
           git push -f origin "$BRANCH"
 
