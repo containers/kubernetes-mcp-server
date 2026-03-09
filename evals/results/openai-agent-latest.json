@@ -1,0 +1,1891 @@
+[
+  {
+    "taskName": "create-canary-deployment",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/create-canary-deployment/create-canary-deployment.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "hard",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/canary-deployment-ns created\ndeployment.apps/engine-v2-0 created\nservice/recommendation-engine created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"canary-deployment-ns\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "create-network-policy",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/create-network-policy/create-network-policy.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "Waiting for namespaces to be fully deleted...\nnamespace/ns1 created\nnamespace/ns2 created\nSetup completed\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"ns1\" deleted\nnamespace \"ns2\" deleted\nCleanup completed\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "create-nginx-pod",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/create-pod/create-pod.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "easy",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/create-pod-test created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "create-pod-mount-configmaps",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/create-pod-mount-configmaps/create-pod-mount-configmaps.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "Cleanup completed\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "create-pod-resources-limits",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/create-pod-resources-limits/create-pod-resources-limits.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "easy",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "Cleanup completed\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "create-simple-rbac",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/create-simple-rbac/create-simple-rbac.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/create-simple-rbac created\nserviceaccount/reader-sa created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"create-simple-rbac\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "debug-app-logs",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/debug-app-logs/debug-app-logs.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/calc-app created\nconfigmap/calc-app-map created\npod/calc-app-pod created\nWaiting for pod to be ready...\npod/calc-app-pod condition met\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"calc-app\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "deployment-traffic-switch",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/deployment-traffic-switch/deployment-traffix-switch.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "easy",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/e-commerce created\nApplying Kubernetes resources from artifacts/ directory...\ndeployment.apps/checkout-service-blue created\ndeployment.apps/checkout-service-green created\nservice/checkout-service created\nWaiting for blue deployment to be ready...\nWaiting for deployment \"checkout-service-blue\" rollout to finish: 0 of 2 updated replicas are available...\nWaiting for deployment \"checkout-service-blue\" rollout to finish: 1 of 2 updated replicas are available...\ndeployment \"checkout-service-blue\" successfully rolled out\nWaiting for green deployment to be ready...\ndeployment \"checkout-service-green\" successfully rolled out\nSetup complete. Service 'checkout-service' is pointing to 'blue'.\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "Deleting namespace 'e-commerce'...\nnamespace \"e-commerce\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "fix-crashloop",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/fix-crashloop/fix-crashloop.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/crashloop-test created\ndeployment.apps/app created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"crashloop-test\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "fix-image-pull",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/fix-image-pull/fix-image-pull.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/debug created\ndeployment.apps/app created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"debug\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "fix-pending-pod",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/fix-pending-pod/fix-pending-pod.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "easy",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/homepage-ns created\npersistentvolumeclaim/homepage-pvc created\npod/homepage-pod created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"homepage-ns\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "fix-probes",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/fix-probes/fix-probes.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/orders created\ndeployment.apps/webapp created\nservice/webapp created\nWaiting for pod to start and begin failing health checks...\ndeployment.apps/webapp condition met\nSetup successful: Deployment is no longer available.\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "Cleanup completed\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "fix-rbac-wrong-resource",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/fix-rbac-wrong-resource/fix-rbac-wrong-resource.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "easy",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/simple-rbac-setup created\nserviceaccount/pod-reader created\nrole.rbac.authorization.k8s.io/pod-reader-role created\nrolebinding.rbac.authorization.k8s.io/pod-reader-binding created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"simple-rbac-setup\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "fix-service-routing",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/fix-service-routing/fix-service-routing.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/web created\ndeployment.apps/nginx created\nservice/nginx created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"web\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "fix-service-with-no-endpoints",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/fix-service-with-no-endpoints/fix-service-with-no-endpoints.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/webshop-frontend created\nservice/web-app-service created\ndeployment.apps/web-app-deployment created\nWaiting for resources to be created...\ndeployment.apps/web-app-deployment condition met\nWarning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice\nSetup successful: Service has no endpoints as expected\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"webshop-frontend\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "horizontal-pod-autoscaler",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/horizontal-pod-autoscaler/horizontal-pod-autoscaler.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "hard",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/hpa-test created\ndeployment.apps/web-app created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"hpa-test\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "list-images-for-pods",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/list-images-for-pods/list-images-for-pods.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/list-images-for-pods created\nsecret/mysql-secret created\nWarning: spec.SessionAffinity is ignored for headless services\nservice/mysql created\nstatefulset.apps/mysql created\npod/mysql-0 condition met\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"list-images-for-pods\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "multi-container-pod-communication",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/multi-container-pod-communication/multi-container-pod-communication.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/multi-container-test created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"multi-container-test\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "resize-pvc",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/resize-pvc/resize-pvc.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "easy",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/resize-pv created\npersistentvolumeclaim/storage-pvc created\npod/storage-pod created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"resize-pv\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "rolling-update-deployment",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/rolling-update-deployment/rolling-update-deployment.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/rollout-test created\ndeployment.apps/web-app created\ndeployment.apps/web-app condition met\nSetup succeeded for rolling-update-deployment\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"rollout-test\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "scale-deployment",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/scale-deployment/scale-deployment.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/scale-test created\ndeployment.apps/web-app created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        null
+      ],
+      "Success": false,
+      "Error": "script execution failed: exit status 1\noutput: deployment.apps/web-app condition met\nVerification failed for scale-deployment\n"
+    }
+  },
+  {
+    "taskName": "scale-down-deployment",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/scale-down-deployment/scale-down-deployment.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "medium",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/scale-down-test created\ndeployment.apps/web-service created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"scale-down-test\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "setup-dev-cluster",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/setup-dev-cluster/setup-dev-cluster.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "hard",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "Setting up cluster state for dev environment eval...\nSetup completed successfully\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "Cleaning up dev cluster eval resources...\nCleanup completed\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  },
+  {
+    "taskName": "statefulset-lifecycle",
+    "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kubernetes/statefulset-lifecycle/statefulset-lifecycle.yaml",
+    "taskPassed": false,
+    "taskOutput": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "taskError": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}",
+    "agentExecutionError": true,
+    "difficulty": "hard",
+    "assertionResults": {
+      "toolsUsed": {
+        "passed": false,
+        "reason": "Required tool not called: server=kubernetes, tool=, pattern=.*"
+      },
+      "minToolCalls": {
+        "passed": false,
+        "reason": "Too few tool calls: expected \u003e= 1, got 0"
+      },
+      "maxToolCalls": {
+        "passed": true
+      }
+    },
+    "allAssertionsPassed": false,
+    "callHistory": {
+      "ToolCalls": null,
+      "ResourceReads": null,
+      "PromptGets": null
+    },
+    "tokenEstimate": {
+      "inputTokens": 3060,
+      "outputTokens": 0,
+      "totalTokens": 3060,
+      "promptTokens": 0,
+      "messageTokens": 0,
+      "thinkingTokens": 0,
+      "toolInputTokens": 0,
+      "toolOutputTokens": 0,
+      "mcpSchemaTokens": 3060,
+      "promptGetInputTokens": 0,
+      "promptGetOutputTokens": 0,
+      "resourceInputTokens": 0,
+      "resourceOutputTokens": 0
+    },
+    "setupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace/statefulset-test created\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    },
+    "agentOutput": {
+      "Steps": [
+        {
+          "type": "agent",
+          "success": false,
+          "outputs": {
+            "output": "failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+          },
+          "error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+        }
+      ],
+      "Success": false,
+      "Error": "failed to run agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"bad request: Invalid schema for function 'configuration_view': None is not of type 'array'.\"}}"
+    },
+    "cleanupOutput": {
+      "Steps": [
+        {
+          "type": "script",
+          "success": true,
+          "message": "namespace \"statefulset-test\" deleted\n"
+        }
+      ],
+      "Success": true,
+      "Error": ""
+    }
+  }
+]
