@@ -1,8 +1,12 @@
 package kubevirt
 
 import (
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+// Scheme is the runtime scheme for KubeVirt resources
+var Scheme = runtime.NewScheme()
 
 // KubeVirt core resources
 var (
@@ -23,6 +27,13 @@ var (
 	// VirtualMachineInstanceGVR is the GroupVersionResource for VirtualMachineInstance resources
 	VirtualMachineInstanceGVR = schema.GroupVersionResource{
 		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "virtualmachineinstances",
+	}
+
+	// VirtualMachineInstanceSubresourcesGVR is the GroupVersionResource for VirtualMachineInstance subresources
+	VirtualMachineInstanceSubresourcesGVR = schema.GroupVersionResource{
+		Group:    "subresources.kubevirt.io",
 		Version:  "v1",
 		Resource: "virtualmachineinstances",
 	}
