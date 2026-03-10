@@ -151,7 +151,7 @@ jobs:
               ;;
           esac
 
-  # Run gevals evaluation with Kind cluster
+  # Run mcpchecker evaluation with Kind cluster
   run-evaluation:
     name: Run MCP Evaluation
     needs: check-trigger

@@ -1,4 +1,4 @@
-# Gevals evaluation support
+# Evals - mcpchecker evaluation support
 
 MCP_PORT ?= 8080
 MCP_HEALTH_TIMEOUT ?= 60
