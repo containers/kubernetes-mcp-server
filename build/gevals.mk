@@ -5,7 +5,32 @@ MCP_HEALTH_TIMEOUT ?= 60
 MCP_HEALTH_INTERVAL ?= 2
 MCP_CONFIG_DIR ?= dev/config/mcp-configs
 
-##@ Gevals
+MCPCHECKER = $(shell pwd)/_output/tools/bin/mcpchecker
+MCPCHECKER_VERSION ?= latest
+EVAL_CONFIG ?= evals/openai-agent/eval.yaml
+EVAL_LABEL_SELECTOR ?= suite=kubernetes
+EVAL_TASK_FILTER ?=
+EVAL_VERBOSE ?= false
+
+# Download and install mcpchecker if not already installed
+.PHONY: mcpchecker
+mcpchecker:
+	@[ -f $(MCPCHECKER) ] || { \
+		set -e ;\
+		echo "Installing mcpchecker $(MCPCHECKER_VERSION) to $(MCPCHECKER)..." ;\
+		mkdir -p $(shell dirname $(MCPCHECKER)) ;\
+		GOBIN=$(shell dirname $(MCPCHECKER)) go install github.com/mcpchecker/mcpchecker/cmd/mcpchecker@$(MCPCHECKER_VERSION) ;\
+	}
+
+##@ Evals
+
+.PHONY: run-evals
+run-evals: mcpchecker ## Run mcpchecker evaluations against the MCP server
+	$(MCPCHECKER) check $(EVAL_CONFIG) \
+		$(if $(EVAL_LABEL_SELECTOR),--label-selector $(EVAL_LABEL_SELECTOR),) \
+		$(if $(EVAL_TASK_FILTER),--run "$(EVAL_TASK_FILTER)",) \
+		$(if $(filter true,$(EVAL_VERBOSE)),--verbose,) \
+		--output json
 
 .PHONY: run-server
 run-server: build ## Start MCP server in background and wait for health check
