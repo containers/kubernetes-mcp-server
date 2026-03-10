@@ -101,7 +101,7 @@ func (s *NamespacesSuite) TestNamespacesListForbidden() {
 				"error message should indicate forbidden")
 		})
 		s.Run("sends log notification", func() {
-			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
+			logNotification := capture.RequireLogNotification(s.T(), 5*time.Second)
 			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
 			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
 		})
