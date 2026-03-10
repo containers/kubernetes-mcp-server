@@ -158,6 +158,47 @@
   },
   {
     "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Virtual Machine: Guest Agent Info"
+    },
+    "description": "Get guest operating system information from a VirtualMachine's QEMU guest agent. Requires the guest agent to be installed and running inside the VM. Provides detailed information about the OS, filesystems, network interfaces, and logged-in users.",
+    "inputSchema": {
+      "properties": {
+        "info_type": {
+          "default": "all",
+          "description": "Type of information to retrieve: 'all' (default - all available info), 'os' (operating system details), 'filesystem' (disk and filesystem info), 'users' (logged-in users), 'network' (network interfaces and IPs)",
+          "enum": [
+            "all",
+            "os",
+            "filesystem",
+            "users",
+            "network"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the virtual machine",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "vm_guest_info",
+    "title": "Virtual Machine: Guest Agent Info"
+  },
+  {
+    "annotations": {
       "destructiveHint": true,
       "openWorldHint": false,
       "title": "Virtual Machine: Lifecycle"
