@@ -1,7 +1,5 @@
 package tools
 
-import "time"
-
 // ListMetricsOutput defines the output schema for the list_metrics tool.
 type ListMetricsOutput struct {
 	Metrics []string `json:"metrics" jsonschema:"description=List of all available metric names"`
@@ -65,40 +63,6 @@ type SeriesResultSummary struct {
 	HasNaN         bool              `json:"hasNaN" jsonschema:"description=Whether the series contains any NaN values"`
 	HasInf         bool              `json:"hasInf" jsonschema:"description=Whether the series contains any Inf values"`
 	NonFiniteCount int               `json:"nonFiniteCount" jsonschema:"description=Count of NaN and Inf values in the series"`
-	Extrema        []Extremum        `json:"extrema,omitempty" jsonschema:"description=Detected peaks and troughs in the time series"`
-}
-
-// ExtremumKind represents the type of extremum (peak or trough).
-type ExtremumKind string
-
-const (
-	ExtremumPeak   ExtremumKind = "peak"
-	ExtremumTrough ExtremumKind = "trough"
-)
-
-// Extremum represents a detected peak or trough in a time series.
-type Extremum struct {
-	Kind      ExtremumKind `json:"kind" jsonschema:"description=Type of extremum: peak or trough"`
-	Timestamp time.Time    `json:"timestamp" jsonschema:"description=Timestamp of the extremum"`
-	Value     float64      `json:"value" jsonschema:"description=Value at the extremum"`
-	Index     int          `json:"index" jsonschema:"description=Sample index in the series"`
-}
-
-// ExtremaOptions configures peak and trough detection.
-type ExtremaOptions struct {
-	// Minimum absolute difference required versus both neighbors
-	// for a point to count as a peak/trough.
-	// Useful for ignoring tiny wiggles/noise.
-	MinDelta float64
-
-	// Minimum time gap between two detected extrema of the same kind.
-	// If two candidate peaks/troughs occur too close together,
-	// the more extreme one is kept.
-	MinSeparation time.Duration
-
-	// If true, first/last point may be considered a peak/trough
-	// based on their single neighbor. Usually false is better.
-	IncludeEdges bool
 }
 
 // AlertsOutput defines the output schema for the get_alerts tool.
