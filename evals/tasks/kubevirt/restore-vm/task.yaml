@@ -11,15 +11,6 @@ spec:
     - extension: kubernetes
       as: k8s
   setup:
-    # Enable Snapshot feature gate - requires kubectl patch (no extension op available)
-    - script:
-        inline: |-
-          #!/usr/bin/env bash
-          set -e
-          echo "Enabling Snapshot feature gate in KubeVirt CR..."
-          KUBEVIRT_CR=$(kubectl get kubevirt -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-          KUBEVIRT_NS=$(kubectl get kubevirt -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
-          kubectl patch kubevirt "$KUBEVIRT_CR" -n "$KUBEVIRT_NS" --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"]}}}}'
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
