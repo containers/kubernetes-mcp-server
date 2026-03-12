@@ -26,7 +26,12 @@ type ExtendedConfig interface {
 	Validate() error
 }
 
-type ExtendedConfigProvider interface {
+// ConfigProvider provides read-only access to configuration from tool and prompt handlers.
+// This interface is embedded in ToolHandlerParams and PromptHandlerParams, allowing
+// toolsets to access configuration at execution time (not just at initialization).
+type ConfigProvider interface {
+	// GetClusterProviderStrategy returns the cluster provider strategy (e.g. "kubeconfig", "in-cluster").
+	GetClusterProviderStrategy() string
 	// GetProviderConfig returns the extended configuration for the given provider strategy.
 	// The boolean return value indicates whether the configuration was found.
 	GetProviderConfig(strategy string) (ExtendedConfig, bool)
@@ -62,7 +67,7 @@ type BaseConfig interface {
 	AuthProvider
 	ClusterProvider
 	DeniedResourcesProvider
-	ExtendedConfigProvider
+	ConfigProvider
 	StsConfigProvider
 	ValidationEnabledProvider
 }

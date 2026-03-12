@@ -24,7 +24,7 @@ type Kiali struct {
 }
 
 // NewKiali creates a new Kiali instance
-func NewKiali(configProvider api.ExtendedConfigProvider, kubernetes *rest.Config) *Kiali {
+func NewKiali(configProvider api.ConfigProvider, kubernetes *rest.Config) *Kiali {
 	kiali := &Kiali{bearerToken: kubernetes.BearerToken}
 	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
 		if kc, ok := cfg.(*Config); ok && kc != nil {
