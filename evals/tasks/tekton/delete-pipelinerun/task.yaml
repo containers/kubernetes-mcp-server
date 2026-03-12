@@ -1,0 +1,116 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "delete-tekton-pipelinerun"
+  difficulty: medium
+  labels:
+    suite: tekton
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          for i in $(seq 1 60); do
+            if ! kubectl get namespace tekton-eval > /dev/null 2>&1; then
+              echo "Namespace tekton-eval is gone"
+              exit 0
+            fi
+            for tr in $(kubectl get taskrun -n tekton-eval -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+              kubectl patch taskrun -n tekton-eval "$tr" --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+            done
+            for pr in $(kubectl get pipelinerun -n tekton-eval -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+              kubectl patch pipelinerun -n tekton-eval "$pr" --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+            done
+            sleep 3
+          done
+          echo "Timeout waiting for namespace deletion"
+          exit 1
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: Task
+        metadata:
+          name: noop-task
+          namespace: tekton-eval
+        spec:
+          steps:
+            - name: noop
+              image: alpine
+              command: ["echo", "noop"]
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: hello-pipeline
+          namespace: tekton-eval
+        spec:
+          tasks:
+            - name: noop
+              taskRef:
+                name: noop-task
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: PipelineRun
+        metadata:
+          name: old-run
+          namespace: tekton-eval
+        spec:
+          pipelineRef:
+            name: hello-pipeline
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          if kubectl get pipelinerun old-run -n tekton-eval > /dev/null 2>&1; then
+            echo "ERROR: PipelineRun old-run still exists after deletion"
+            exit 1
+          fi
+          echo "PipelineRun old-run successfully deleted"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: PipelineRun
+        metadata:
+          name: old-run
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: hello-pipeline
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Task
+        metadata:
+          name: noop-task
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: Delete the Tekton PipelineRun named old-run in the tekton-eval namespace.
