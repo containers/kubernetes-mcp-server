@@ -67,6 +67,7 @@ jobs:
       should-run: ${{ steps.check.outputs.should-run }}
       kiali-run: ${{ steps.check.outputs.kiali-run }}
       kubevirt-run: ${{ steps.check.outputs.kubevirt-run }}
+      toolsets: ${{ steps.check.outputs.toolsets }}
       label-selector: ${{ steps.check.outputs.label-selector }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
@@ -133,16 +134,19 @@ jobs:
               echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
               echo "kiali-run=false" >> $GITHUB_OUTPUT
               echo "kubevirt-run=true" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,kubevirt" >> $GITHUB_OUTPUT
               ;;
             kiali)
               echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
               echo "kiali-run=true" >> $GITHUB_OUTPUT
               echo "kubevirt-run=false" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,kiali" >> $GITHUB_OUTPUT
               ;;
             all)
               echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
               echo "kiali-run=true" >> $GITHUB_OUTPUT
               echo "kubevirt-run=true" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,kiali,kubevirt" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
@@ -185,13 +189,7 @@ jobs:
       - name: Start MCP server
         run: make run-server
         env:
-          TOOLSETS: >-
-            ${{
-              (needs.check-trigger.outputs.kiali-run == 'true' && needs.check-trigger.outputs.kubevirt-run == 'true' && 'kiali,kubevirt') ||
-              (needs.check-trigger.outputs.kiali-run == 'true' && 'kiali') ||
-              (needs.check-trigger.outputs.kubevirt-run == 'true' && 'kubevirt') ||
-              ''
-            }}
+          TOOLSETS: ${{ needs.check-trigger.outputs.toolsets }}
           MCP_CONFIG_DIR: 'dev/config/mcp-configs'
 
       - name: Run mcpchecker evaluation
