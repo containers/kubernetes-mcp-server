@@ -261,7 +261,7 @@ func ListMetricsHandler(ctx context.Context, promClient prometheus.Loader, input
 }
 
 // ExecuteRangeQueryHandler handles the execution of Prometheus range queries.
-func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader, input RangeQueryInput, summarize bool) *resultutil.Result {
+func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader, input RangeQueryInput, fullResponse bool) *resultutil.Result {
 	slog.Info("ExecuteRangeQueryHandler called")
 	slog.Debug("ExecuteRangeQueryHandler params", "input", input)
 
@@ -333,13 +333,7 @@ func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader,
 		slog.Info("ExecuteRangeQueryHandler executed successfully", "resultLength", resMatrix.Len())
 		slog.Debug("ExecuteRangeQueryHandler results", "results", resMatrix)
 
-		if summarize {
-			// Return summary statistics instead of full data
-			output.Summary = make([]SeriesResultSummary, len(resMatrix))
-			for i, series := range resMatrix {
-				output.Summary[i] = CalculateSeriesSummary(series.Metric, series.Values)
-			}
-		} else {
+		if fullResponse {
 			// Return full data
 			output.Result = make([]SeriesResult, len(resMatrix))
 			for i, series := range resMatrix {
@@ -355,6 +349,12 @@ func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader,
 					Metric: labels,
 					Values: values,
 				}
+			}
+		} else {
+			// Return summary statistics instead of full data
+			output.Summary = make([]SeriesResultSummary, len(resMatrix))
+			for i, series := range resMatrix {
+				output.Summary[i] = CalculateSeriesSummary(series.Metric, series.Values)
 			}
 		}
 	} else {
