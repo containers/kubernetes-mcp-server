@@ -20,6 +20,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/containers/kubernetes-mcp-server/pkg/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/prompts"
@@ -116,6 +117,15 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	if sdkLogger == nil {
 		sdkLogger = slog.New(logr.ToSlogHandler(klog.Background()))
 	}
+	caps := &mcp.ServerCapabilities{
+		Resources: &mcp.ResourceCapabilities{ListChanged: !configuration.Stateless},
+		Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
+		Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
+		Logging:   &mcp.LoggingCapabilities{},
+	}
+	if configuration.AppsEnabled {
+		caps.AddExtension("io.modelcontextprotocol/ui", nil)
+	}
 	s := &Server{
 		server: mcp.NewServer(
 			&mcp.Implementation{
@@ -125,12 +135,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 				WebsiteURL: version.WebsiteURL,
 			},
 			&mcp.ServerOptions{
-				Capabilities: &mcp.ServerCapabilities{
-					Resources: &mcp.ResourceCapabilities{ListChanged: !configuration.Stateless},
-					Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
-					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
-					Logging:   &mcp.LoggingCapabilities{},
-				},
+				Capabilities: caps,
 				Instructions: configuration.ServerInstructions,
 				Logger:       sdkLogger,
 			}),
@@ -286,6 +291,18 @@ func (s *Server) applyToolsets(cfg *Configuration) error {
 
 	// Phase 2: commit. Pre-conversion has succeeded, so SDK mutations below
 	// don't error.
+
+	// Register per-tool MCP App resources BEFORE tools so that resources are
+	// available when clients receive the tools/list_changed notification and
+	// immediately try to read the resource URI from _meta.ui.resourceUri.
+	if cfg.AppsEnabled {
+		newToolNames := make([]string, 0, len(applicableTools))
+		for _, t := range applicableTools {
+			newToolNames = append(newToolNames, t.Tool.Name)
+		}
+		s.registerMCPAppResources(newToolNames)
+	}
+
 	newTools := commitItems(previousTools, convertedTools, s.server.RemoveTools, s.server.AddTool)
 	newPrompts := commitItems(previousPrompts, convertedPrompts, s.server.RemovePrompts, s.server.AddPrompt)
 	newResources := commitItems(previousResources, convertedResources, s.server.RemoveResources, s.server.AddResource)
@@ -380,11 +397,15 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 		cfg.isToolApplicable,
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 	)
-	mutator := ComposeMutators(
+	mutators := []ToolMutator{
 		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p),
 		WithToolOverrides(cfg.ToolOverrides),
-	)
+	}
+	if cfg.AppsEnabled {
+		mutators = append(mutators, WithAppsMeta())
+	}
+	mutator := ComposeMutators(mutators...)
 
 	tools := make([]api.ServerTool, 0)
 	for _, toolset := range cfg.Toolsets() {
@@ -444,6 +465,32 @@ func (s *Server) collectApplicableResourceTemplates(cfg *Configuration) []api.Se
 		}
 	}
 	return templates
+}
+
+// registerMCPAppResources registers per-tool viewer HTML as ui:// resources.
+// Each tool gets its own resource URI (e.g. ui://kubernetes-mcp-server/tool/pods_list)
+// so the viewer knows which tool it belongs to and can call it via serverTools.
+func (s *Server) registerMCPAppResources(toolNames []string) {
+	for _, toolName := range toolNames {
+		tn := toolName // capture for closure
+		uri := mcpapps.ToolResourceURI(tn)
+		s.server.AddResource(
+			&mcp.Resource{
+				URI:      uri,
+				Name:     "Kubernetes MCP Apps Viewer: " + tn,
+				MIMEType: mcpapps.ResourceMIMEType,
+			},
+			func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				return &mcp.ReadResourceResult{
+					Contents: []*mcp.ResourceContents{{
+						URI:      uri,
+						MIMEType: mcpapps.ResourceMIMEType,
+						Text:     mcpapps.ViewerHTMLForTool(tn),
+					}},
+				}, nil
+			},
+		)
+	}
 }
 
 // metricsMiddleware returns a metrics middleware with access to the server's metrics system
@@ -617,7 +664,8 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 //
 // Per the MCP specification, structuredContent must marshal to a JSON object.
 // If structuredContent is a slice/array, it is automatically wrapped in
-// {"items": [...]} to satisfy this requirement.
+// {"items": [...]} to satisfy this requirement. The viewer extracts .items
+// for array data.
 //
 // Per the MCP specification:
 // "For backwards compatibility, a tool that returns structured content SHOULD

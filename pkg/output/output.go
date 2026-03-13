@@ -33,7 +33,7 @@ type Output interface {
 	AsTable() bool
 	// PrintObj prints the given object as a string.
 	PrintObj(obj runtime.Unstructured) (string, error)
-	// PrintObjStructured prints the given object and also extracts structured data.
+	// PrintObjStructured prints the given object and also extracts structured data for MCP Apps UI rendering.
 	PrintObjStructured(obj runtime.Unstructured) (*PrintResult, error)
 }
 
