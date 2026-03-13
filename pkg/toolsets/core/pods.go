@@ -275,7 +275,19 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	content, err := params.ListOutput.PrintObj(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
+	}
+	structured := ret.UnstructuredContent()
+	if params.ListOutput.AsTable() {
+		structuredOptions := resourceListOptions
+		structuredOptions.AsTable = false
+		if structuredRet, sErr := kubernetes.NewCore(params).PodsListInAllNamespaces(params, structuredOptions); sErr == nil {
+			structured = structuredRet.UnstructuredContent()
+		}
+	}
+	return &api.ToolCallResult{Content: content, StructuredContent: output.PruneForStructuredOutput(structured)}, nil
 }
 
 func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -298,7 +310,19 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	content, err := params.ListOutput.PrintObj(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
+	}
+	structured := ret.UnstructuredContent()
+	if params.ListOutput.AsTable() {
+		structuredOptions := resourceListOptions
+		structuredOptions.AsTable = false
+		if structuredRet, sErr := kubernetes.NewCore(params).PodsListInNamespace(params, ns.(string), structuredOptions); sErr == nil {
+			structured = structuredRet.UnstructuredContent()
+		}
+	}
+	return &api.ToolCallResult{Content: content, StructuredContent: output.PruneForStructuredOutput(structured)}, nil
 }
 
 func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -314,7 +338,11 @@ func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s in namespace %s: %w", name, ns, err)), nil
 	}
-	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
+	marshalledYaml, err := output.MarshalYaml(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s in namespace %s: %w", name, ns, err)), nil
+	}
+	return &api.ToolCallResult{Content: marshalledYaml, StructuredContent: output.PruneForStructuredOutput(ret.Object)}, nil
 }
 
 func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -330,7 +358,15 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete pod %s in namespace %s: %w", name, ns, err)), nil
 	}
-	return api.NewToolCallResult(ret, err), nil
+	return &api.ToolCallResult{
+		Content: ret,
+		StructuredContent: map[string]any{
+			"status":    "deleted",
+			"kind":      "Pod",
+			"namespace": ns,
+			"name":      name,
+		},
+	}, nil
 }
 
 func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -357,7 +393,7 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", err)), nil
 	}
-	return api.NewToolCallResult(buf.String(), nil), nil
+	return &api.ToolCallResult{Content: buf.String(), StructuredContent: ret}, nil
 }
 
 func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -390,7 +426,16 @@ func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	} else if ret == "" {
 		ret = fmt.Sprintf("The executed command in pod %s in namespace %s has not produced any output", name, ns)
 	}
-	return api.NewToolCallResult(ret, err), nil
+	return &api.ToolCallResult{
+		Content: ret,
+		StructuredContent: map[string]any{
+			"output":    ret,
+			"pod":       name,
+			"namespace": ns,
+			"container": container,
+			"command":   command,
+		},
+	}, nil
 }
 
 func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -428,7 +473,15 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	} else if ret == "" {
 		ret = fmt.Sprintf("The pod %s in namespace %s has not logged any message yet", name, ns)
 	}
-	return api.NewToolCallResult(ret, err), nil
+	return &api.ToolCallResult{
+		Content: ret,
+		StructuredContent: map[string]any{
+			"log":       ret,
+			"pod":       name,
+			"namespace": ns,
+			"container": container,
+		},
+	}, nil
 }
 
 func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -454,7 +507,14 @@ func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	marshalledYaml, err := output.MarshalYaml(resources)
 	if err != nil {
-		err = fmt.Errorf("failed to run pod: %w", err)
+		return api.NewToolCallResult("", fmt.Errorf("failed to run pod: %w", err)), nil
 	}
-	return api.NewToolCallResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
+	structured := make([]map[string]interface{}, len(resources))
+	for i, r := range resources {
+		structured[i] = r.Object
+	}
+	return &api.ToolCallResult{
+		Content:           "# The following resources (YAML) have been created or updated successfully\n" + marshalledYaml,
+		StructuredContent: output.PruneForStructuredOutput(structured),
+	}, nil
 }

@@ -119,6 +119,51 @@ func MarshalYaml(v any) (string, error) {
 	return string(ret), nil
 }
 
+// PruneForStructuredOutput removes verbose fields from Kubernetes objects that add noise
+// without value for structured output consumers (e.g. LLMs parsing the response).
+//
+// Pruned fields:
+//   - metadata.managedFields: field ownership tracking, not useful for consumers
+//   - metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]: contains a full
+//     copy of the previous object spec
+//
+// Handles single objects (map[string]interface{}), Kubernetes lists (map with "items" key),
+// and slices of objects ([]map[string]interface{}).
+func PruneForStructuredOutput(v any) any {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		pruneObject(t)
+		if items, ok := t["items"].([]interface{}); ok {
+			for _, item := range items {
+				if obj, ok := item.(map[string]interface{}); ok {
+					pruneObject(obj)
+				}
+			}
+		}
+	case []map[string]interface{}:
+		for _, obj := range t {
+			pruneObject(obj)
+		}
+	}
+	return v
+}
+
+func pruneObject(obj map[string]interface{}) {
+	metadata, ok := obj["metadata"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	delete(metadata, "managedFields")
+	annotations, ok := metadata["annotations"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	delete(annotations, "kubectl.kubernetes.io/last-applied-configuration")
+	if len(annotations) == 0 {
+		delete(metadata, "annotations")
+	}
+}
+
 func init() {
 	Names = make([]string, 0)
 	for _, output := range Outputs {
