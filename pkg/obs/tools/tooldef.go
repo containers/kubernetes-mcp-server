@@ -124,5 +124,7 @@ func (d ToolDef) ToServerTool(handler func(api.ToolHandlerParams) (*api.ToolCall
 			},
 		},
 		Handler: handler,
+		// TODO(saswatamcode): Modify this selectively on ACM setups.
+		ClusterAware: ptr.To(false),
 	}
 }
