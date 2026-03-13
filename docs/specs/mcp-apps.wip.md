@@ -17,8 +17,9 @@ MCP Apps enables tools to return interactive HTML-based UIs rendered in sandboxe
 - [9. Output Layer](#9-output-layer)
 - [10. Per-Tool Resource URIs and Dual-Flow Viewer](#10-per-tool-resource-uris-and-dual-flow-viewer)
 - [11. structuredContent Object Wrapping](#11-structuredcontent-object-wrapping)
-- [12. Known Compatibility Notes](#12-known-compatibility-notes)
-- [13. YAML Syntax Highlighting](#13-yaml-syntax-highlighting)
+- [12. Model Context Visibility: `content` vs `structuredContent`](#12-model-context-visibility-content-vs-structuredcontent)
+- [13. Known Compatibility Notes](#13-known-compatibility-notes)
+- [14. YAML Syntax Highlighting](#14-yaml-syntax-highlighting)
 - [Appendix A: Research and Development Journal](#appendix-a-research-and-development-journal)
 
 ---
@@ -274,7 +275,7 @@ Apps can request different display modes:
 |---------|----------|---------|
 | `htm@3.1.1/preact/standalone.umd.js` | ~13 KB | Preact + HTM + Hooks in one UMD bundle |
 | `chart.js@4.4.8/dist/chart.umd.min.js` | ~205 KB | Bar charts for metrics visualization |
-| `prismjs@1.30.0` (core + YAML) | ~9.4 KB | YAML syntax highlighting (see [Section 13](#13-yaml-syntax-highlighting)) |
+| `prismjs@1.30.0` (core + YAML) | ~9.4 KB | YAML syntax highlighting (see [Section 13](#14-yaml-syntax-highlighting)) |
 | MCP protocol (custom implementation) | ~2 KB | JSON-RPC over postMessage |
 | **Total** | **~230 KB** | |
 
@@ -731,7 +732,7 @@ current implementation status.
 Text-output tools (logs, exec, delete confirmations, Helm output, Kiali JSON) don't
 benefit from specialized rendering — `GenericView` is the correct component. The 12
 pending YAML tools are the primary target for the Prism.js syntax highlighting work
-described in [Section 13](#13-yaml-syntax-highlighting).
+described in [Section 13](#14-yaml-syntax-highlighting).
 
 ## 9. Output Layer
 
@@ -958,7 +959,131 @@ The unwrapping is selective: it only extracts `structured.items` when the wrappe
 has a single key (plain wrapper), preserving self-describing objects (like metrics data
 that contain `chart`, `columns`, and `items` together).
 
-## 12. Known Compatibility Notes
+## 12. Model Context Visibility: `content` vs `structuredContent`
+
+### The rule
+
+**`structuredContent` is NOT added to the model context.** Only `content` is.
+
+This is the single most important behavioral contract for MCP Apps. When a tool returns
+both `content` and `structuredContent` in a `CallToolResult`:
+
+- **`content`** → fed to the LLM as tool result context (the model "sees" this)
+- **`structuredContent`** → consumed by the MCP Apps viewer for UI rendering (the model does NOT see this)
+- **`_meta`** → host-level metadata, not added to model context
+
+### Specification basis
+
+The ext-apps specification ([draft/apps.mdx](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/draft/apps.mdx))
+states explicitly:
+
+> **Best Practices:** `content`: Text representation for model context and text-only hosts;
+> `structuredContent`: Structured data optimized for UI rendering (not added to model context);
+> `_meta`: Additional metadata (timestamps, version info, etc.) not intended for model context
+
+The base MCP specification (tools.mdx) is being clarified via
+[SEP-1624](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1624) /
+[PR #2200](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2200) to
+formalize this guidance. The proposed language states:
+
+> - `content`: model-oriented output optimized for readability and token efficiency. Preferred
+>   for conversational agents and when tool responses are fed directly into the model's context window.
+> - `structuredContent`: machine-oriented output for programmatic use, code generation, typed
+>   orchestration, and UI hydration.
+>
+> When sending tool results to a model context, clients SHOULD use `content` when present and only
+> fall back to `structuredContent` if `content` is empty or omitted.
+>
+> Clients SHOULD NOT forward both fields verbatim to the model as separate inputs.
+
+### Current client behavior (as of March 2026)
+
+Client behavior is inconsistent, which is exactly why SEP-1624 / PR #2200 exists:
+
+| Client | What the model sees | Notes |
+|--------|-------------------|-------|
+| **Cursor** | `content` only | Switched to preferring `content` per Discord discussion |
+| **VS Code** | `structuredContent` preferred over `content` | Both shown in Chat UI; model gets `structuredContent` |
+| **Claude Code / Windsurf** | `content` only | Ignores `structuredContent` entirely |
+| **MCP Inspector** | N/A (no model) | Shows both fields in UI for debugging |
+
+### Implications for this server
+
+Since `content` is what the model sees and `structuredContent` is for the viewer:
+
+1. **`content` must be optimized for the model** — human-readable text, not JSON dumps.
+   This is what the LLM reasons about, plans with, and references in its responses to the user.
+
+2. **`structuredContent` must be optimized for the viewer** — structured data that the
+   Preact components can render as tables, charts, or highlighted YAML.
+
+3. **The two fields are semantically equivalent but differently formatted.** They carry the
+   same information but are optimized for different consumers.
+
+4. **Quality of `content` directly affects agent performance.** If `content` is a JSON blob
+   instead of readable text, the model wastes tokens parsing structure instead of reasoning
+   about the information. The
+   [Anthropic tool design guide](https://www.anthropic.com/engineering/writing-tools-for-agents)
+   recommends optimizing tool output for the model's consumption patterns.
+
+### What this means in practice
+
+For a `pods_list` call, the two fields should look like:
+
+```
+content (what the model sees):
+  "NAMESPACE  NAME              READY  STATUS   RESTARTS  AGE
+   default    nginx-abc123      1/1    Running  0         2d
+   kube-sys   coredns-def456    1/1    Running  0         5d"
+
+structuredContent (what the viewer renders):
+  {"items": [
+    {"Namespace": "default", "Name": "nginx-abc123", "Ready": "1/1", "Status": "Running", ...},
+    {"Namespace": "kube-sys", "Name": "coredns-def456", "Ready": "1/1", "Status": "Running", ...}
+  ]}
+```
+
+The model gets a compact, readable table. The viewer gets structured data it can sort, filter,
+and render as an interactive HTML table.
+
+### Eval accountability
+
+If agent performance degrades when MCP Apps is enabled, the diagnostic is:
+
+1. **Check `content`** — is the model still receiving the same quality text output as before?
+   If yes, the server is correct and the issue is in the client's handling.
+
+2. **Check client behavior** — is the client forwarding `structuredContent` to the model
+   instead of (or in addition to) `content`? If so, that's a client bug per the ext-apps
+   spec and the proposed SEP-1624 clarification.
+
+3. **Baseline comparison** — with `apps_enabled = false`, the server returns only `content`
+   (no `structuredContent`, no `_meta.ui`). This is the control group. Any behavioral
+   difference with `apps_enabled = true` where `content` is unchanged points to client-side
+   handling.
+
+The `--apps` flag being opt-in gives users a clean escape hatch if their specific MCP host
+misbehaves.
+
+### Open questions
+
+- **PR #2200 status**: The SEP is open and has broad support but is not yet merged into the
+  base MCP specification. The ext-apps spec already codifies `structuredContent` as
+  "not added to model context", but the base spec language is still ambiguous.
+
+- **VS Code behavior**: VS Code currently prefers `structuredContent` over `content` for
+  model context (see table above). If this persists after PR #2200 merges, it would be a
+  VS Code client bug. Until then, our `content` output is already optimized for the model,
+  so VS Code users get suboptimal but functional behavior.
+
+- **Token cost of dual fields**: Sending both fields doubles the wire payload for each tool
+  call. SEP-1624 discussion notes the cost is "quite low in practice (esp. when compared to
+  compute costs of inference)". For large list operations, the structured data can be
+  significant (~KBs), but it never reaches the model context window.
+
+---
+
+## 13. Known Compatibility Notes
 
 ### VS Code: Resource Registration Ordering
 
@@ -1032,7 +1157,7 @@ the referenced resources.
 
 ---
 
-## 13. YAML Syntax Highlighting
+## 14. YAML Syntax Highlighting
 
 ### Problem
 
@@ -1345,7 +1470,18 @@ implementing a Pods Top dashboard with MCP Apps.
 | Compact height management via `sendSizeChanged()` | Not started |
 | Filtering and pagination for table views | Not started |
 | Edge case handling (empty results, large datasets) | Not started |
-| Documentation: `docs/configuration.md` update for `apps_enabled` | Not started |
+| User-facing documentation (see below) | Not started |
+
+**Documentation requirements** (must be done before merging to main):
+
+- `docs/configuration.md`: Add `apps_enabled` to the configuration reference.
+- `docs/configuration.md` or dedicated `docs/apps.md`: Must clearly explain that
+  `structuredContent` is **not** added to model context — only `content` is (see
+  [Section 12](#12-model-context-visibility-content-vs-structuredcontent)). Users need
+  to understand that enabling MCP Apps does not change what the LLM sees; it only adds
+  visual rendering in supporting hosts. If their MCP host misbehaves (feeds
+  `structuredContent` to the model), the `--apps` / `apps_enabled = false` flag is the
+  escape hatch.
 
 #### Pre-existing infrastructure (unchanged)
 
