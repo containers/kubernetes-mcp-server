@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubectl/pkg/metricsutil"
+	"k8s.io/metrics/pkg/apis/metrics"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -177,5 +178,50 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to print node metrics: %w", err)), nil
 	}
 
+	if structured := extractNodesTopStructured(nodeMetrics, availableResources); structured != nil {
+		return &api.ToolCallResult{Content: buf.String(), StructuredContent: structured}, nil
+	}
 	return api.NewToolCallResult(buf.String(), nil), nil
+}
+
+func extractNodesTopStructured(nodeMetrics *metrics.NodeMetricsList, available map[string]v1.ResourceList) map[string]any {
+	if nodeMetrics == nil || len(nodeMetrics.Items) == 0 {
+		return nil
+	}
+	items := make([]map[string]any, 0, len(nodeMetrics.Items))
+	for _, nm := range nodeMetrics.Items {
+		cpuUsage := nm.Usage.Cpu().MilliValue()
+		memUsage := nm.Usage.Memory().Value()
+		item := map[string]any{
+			"name":   nm.Name,
+			"cpu":    fmt.Sprintf("%dm", cpuUsage),
+			"memory": fmt.Sprintf("%dMi", memUsage/(1024*1024)),
+		}
+		if res, ok := available[nm.Name]; ok {
+			if allocCPU, ok := res[v1.ResourceCPU]; ok && allocCPU.MilliValue() > 0 {
+				item["cpuPercent"] = fmt.Sprintf("%d%%", cpuUsage*100/allocCPU.MilliValue())
+			}
+			if allocMem, ok := res[v1.ResourceMemory]; ok && allocMem.Value() > 0 {
+				item["memPercent"] = fmt.Sprintf("%d%%", memUsage*100/allocMem.Value())
+			}
+		}
+		items = append(items, item)
+	}
+	return map[string]any{
+		"columns": []map[string]string{
+			{"key": "name", "label": "Node"},
+			{"key": "cpu", "label": "CPU"},
+			{"key": "cpuPercent", "label": "CPU%"},
+			{"key": "memory", "label": "Memory"},
+			{"key": "memPercent", "label": "Memory%"},
+		},
+		"chart": map[string]any{
+			"labelKey": "name",
+			"datasets": []map[string]string{
+				{"key": "cpu", "label": "CPU (millicores)", "unit": "cpu", "axis": "left"},
+				{"key": "memory", "label": "Memory (MiB)", "unit": "memory", "axis": "right"},
+			},
+		},
+		"items": items,
+	}
 }
