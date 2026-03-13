@@ -53,7 +53,11 @@ func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	result, err := params.ListOutput.PrintObjStructured(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
+	}
+	return api.NewToolCallResultFull(result.Text, result.Structured, nil), nil
 }
 
 func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -61,5 +65,9 @@ func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	result, err := params.ListOutput.PrintObjStructured(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
+	}
+	return api.NewToolCallResultFull(result.Text, result.Structured, nil), nil
 }

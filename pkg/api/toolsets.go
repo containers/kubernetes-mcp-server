@@ -72,6 +72,18 @@ func NewToolCallResult(content string, err error) *ToolCallResult {
 	}
 }
 
+// NewToolCallResultFull creates a ToolCallResult with both human-readable text
+// and structured content for MCP Apps UI rendering.
+// Use this when the text representation differs from a JSON serialization of the
+// structured content (e.g., YAML or Table text alongside extracted structured data).
+func NewToolCallResultFull(text string, structured any, err error) *ToolCallResult {
+	return &ToolCallResult{
+		Content:           text,
+		StructuredContent: structured,
+		Error:             err,
+	}
+}
+
 // NewToolCallResultStructured creates a ToolCallResult with structured content.
 // The structured value is automatically JSON-serialized into the Content field
 // for backward compatibility with MCP clients that don't support structuredContent.
