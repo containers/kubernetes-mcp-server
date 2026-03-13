@@ -261,7 +261,7 @@ func ListMetricsHandler(ctx context.Context, promClient prometheus.Loader, input
 }
 
 // ExecuteRangeQueryHandler handles the execution of Prometheus range queries.
-func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader, input RangeQueryInput) *resultutil.Result {
+func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader, input RangeQueryInput, fullResponse bool) *resultutil.Result {
 	slog.Info("ExecuteRangeQueryHandler called")
 	slog.Debug("ExecuteRangeQueryHandler params", "input", input)
 
@@ -333,19 +333,28 @@ func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader,
 		slog.Info("ExecuteRangeQueryHandler executed successfully", "resultLength", resMatrix.Len())
 		slog.Debug("ExecuteRangeQueryHandler results", "results", resMatrix)
 
-		output.Result = make([]SeriesResult, len(resMatrix))
-		for i, series := range resMatrix {
-			labels := make(map[string]string)
-			for k, v := range series.Metric {
-				labels[string(k)] = string(v)
+		if fullResponse {
+			// Return full data
+			output.Result = make([]SeriesResult, len(resMatrix))
+			for i, series := range resMatrix {
+				labels := make(map[string]string)
+				for k, v := range series.Metric {
+					labels[string(k)] = string(v)
+				}
+				values := make([][]any, len(series.Values))
+				for j, sample := range series.Values {
+					values[j] = []any{float64(sample.Timestamp) / millisecondsPerSecond, sample.Value.String()}
+				}
+				output.Result[i] = SeriesResult{
+					Metric: labels,
+					Values: values,
+				}
 			}
-			values := make([][]any, len(series.Values))
-			for j, sample := range series.Values {
-				values[j] = []any{float64(sample.Timestamp) / millisecondsPerSecond, sample.Value.String()}
-			}
-			output.Result[i] = SeriesResult{
-				Metric: labels,
-				Values: values,
+		} else {
+			// Return summary statistics instead of full data
+			output.Summary = make([]SeriesResultSummary, len(resMatrix))
+			for i, series := range resMatrix {
+				output.Summary[i] = CalculateSeriesSummary(series.Metric, series.Values)
 			}
 		}
 	} else {
