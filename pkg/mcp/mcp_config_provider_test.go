@@ -97,6 +97,7 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 	`))
 	s.Require().NoError(err)
 	cfg.KubeConfig = s.Cfg.KubeConfig
+	cfg.ReadOnly = s.Cfg.ReadOnly
 	s.Cfg = cfg
 
 	s.InitMcpClient()
@@ -146,7 +147,7 @@ func (s *McpConfigProviderSuite) TestStrategyReflectsConfigReload() {
 	})
 
 	// Reload config with different strategy
-	newConfig := config.Default()
+	newConfig := config.BaseDefault()
 	newConfig.KubeConfig = s.Cfg.KubeConfig
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		toolsets = ["config-provider-test"]
