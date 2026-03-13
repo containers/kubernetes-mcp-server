@@ -136,6 +136,29 @@ local-env-setup-kubevirt: ## Setup complete local development environment with K
 	@echo "KubeVirt is now available!"
 	@echo "Check status with: make kubevirt-status"
 
+.PHONY: local-env-setup-tekton
+local-env-setup-tekton: ## Setup complete local development environment with Kind cluster and Tekton Pipelines
+	@echo "========================================="
+	@echo "Kubernetes MCP Server - Local Setup"
+	@echo "        with Tekton Pipelines"
+	@echo "========================================="
+	$(MAKE) kind-create-cluster
+	$(MAKE) tekton-install
+	$(MAKE) build
+	@echo ""
+	@echo "========================================="
+	@echo "Local environment ready!"
+	@echo "========================================="
+	@echo ""
+	@echo "Run the MCP server with:"
+	@echo "  ./$(BINARY_NAME) --toolsets core,config,tekton"
+	@echo ""
+	@echo "Or run with MCP inspector:"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --toolsets core,config,tekton"
+	@echo ""
+	@echo "Tekton Pipelines is now available!"
+	@echo "Check status with: make tekton-status"
+
 .PHONY: local-env-teardown
 local-env-teardown: ## Tear down the local Kind cluster
 	$(MAKE) kind-delete-cluster
