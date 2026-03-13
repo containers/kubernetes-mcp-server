@@ -21,13 +21,17 @@ import (
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 )
 
-type OpenShift struct{}
+type ToolsetEnv struct{}
 
-func (o *OpenShift) IsOpenShift(_ context.Context) bool {
+func (o *ToolsetEnv) IsOpenShift(_ context.Context) bool {
 	return true
 }
 
-var _ api.Openshift = (*OpenShift)(nil)
+func (o *ToolsetEnv) GetClusterProviderStrategy() string {
+	return ""
+}
+
+var _ api.ToolsetEnv = (*ToolsetEnv)(nil)
 
 func main() {
 	// Snyk reports false positive unless we flow the args through filepath.Clean and filepath.Localize in this specific order
@@ -84,7 +88,7 @@ func main() {
 	toolsetTools := strings.Builder{}
 	for _, toolset := range toolsetsList {
 		toolsetTools.WriteString("<details>\n\n<summary>" + toolset.GetName() + "</summary>\n\n")
-		tools := toolset.GetTools(&OpenShift{})
+		tools := toolset.GetTools(&ToolsetEnv{})
 		for _, tool := range tools {
 			toolsetTools.WriteString(fmt.Sprintf("- **%s** - %s\n", tool.Tool.Name, tool.Tool.Description))
 			for _, propName := range slices.Sorted(maps.Keys(tool.Tool.InputSchema.Properties)) {

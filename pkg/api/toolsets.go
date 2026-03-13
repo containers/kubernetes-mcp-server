@@ -42,10 +42,15 @@ type Toolset interface {
 	// GetDescription returns a human-readable description of the toolset.
 	// Will be used to generate documentation and help text.
 	GetDescription() string
-	GetTools(o Openshift) []ServerTool
+	GetTools(e ToolsetEnv) []ServerTool
 	// GetPrompts returns the prompts provided by this toolset.
 	// Returns nil if the toolset doesn't provide any prompts.
 	GetPrompts() []ServerPrompt
+}
+
+type ToolsetEnv interface {
+	Openshift
+	GetClusterProviderStrategy() string
 }
 
 type ToolCallRequest interface {

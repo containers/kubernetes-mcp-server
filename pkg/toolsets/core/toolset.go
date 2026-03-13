@@ -25,13 +25,13 @@ func (t *Toolset) GetDescription() string {
 	return "Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)"
 }
 
-func (t *Toolset) GetTools(o api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(env api.ToolsetEnv) []api.ServerTool {
 	return slices.Concat(
 		initEvents(),
-		initNamespaces(o),
+		initNamespaces(env),
 		initNodes(),
 		initPods(),
-		initResources(o),
+		initResources(env),
 	)
 }
 
