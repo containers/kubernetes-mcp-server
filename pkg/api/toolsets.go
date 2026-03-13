@@ -99,7 +99,7 @@ func NewToolCallResultStructured(structured any, err error) *ToolCallResult {
 
 type ToolHandlerParams struct {
 	context.Context
-	ConfigProvider
+	BaseConfig
 	KubernetesClient
 	ToolCallRequest
 	ListOutput output.Output

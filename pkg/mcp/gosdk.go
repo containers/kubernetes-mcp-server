@@ -48,7 +48,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 
 		result, err := tool.Handler(api.ToolHandlerParams{
 			Context:          ctx,
-			ConfigProvider:   s.configuration,
+			BaseConfig:       s.configuration,
 			KubernetesClient: k,
 			ToolCallRequest:  toolCallRequest,
 			ListOutput:       s.configuration.ListOutput(),
