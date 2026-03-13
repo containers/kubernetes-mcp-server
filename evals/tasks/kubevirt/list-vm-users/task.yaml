@@ -1,0 +1,86 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "list-vm-users"
+  difficulty: easy
+  description: "Use vm_guest_info to list currently logged-in users in a VM"
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete namespace "$NS" --ignore-not-found
+      kubectl create namespace "$NS"
+
+      # Create a VM with guest agent and defined users
+      kubectl apply -f - <<EOF
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: test-vm
+        namespace: $NS
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: containerdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              resources:
+                requests:
+                  memory: 2Gi
+            volumes:
+            - name: containerdisk
+              containerDisk:
+                image: quay.io/containerdisks/fedora:latest
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  users:
+                    - name: admin
+                      sudo: ALL=(ALL) NOPASSWD:ALL
+                    - name: developer
+                      groups: developers
+                  packages:
+                    - qemu-guest-agent
+                  runcmd:
+                    - systemctl enable qemu-guest-agent
+                    - systemctl start qemu-guest-agent
+      EOF
+
+      kubectl wait --for=create vm/test-vm -n "${NS}" --timeout=30s
+      echo "VM created with guest agent."
+  verify:
+    inline: |-
+      #!/usr/bin/env bash
+      set -e
+      NS="${EVAL_NAMESPACE:-vm-test}"
+
+      if ! kubectl get vm test-vm -n "$NS" &>/dev/null; then
+        echo "ERROR: VirtualMachine 'test-vm' not found"
+        exit 1
+      fi
+
+      echo "Verification passed: VM exists"
+      exit 0
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+      NS="${EVAL_NAMESPACE:-vm-test}"
+      kubectl delete virtualmachine test-vm -n "$NS" --ignore-not-found
+      kubectl delete namespace "$NS" --ignore-not-found
+  prompt:
+    inline: |
+      Get the list of currently logged-in users from the VirtualMachine "test-vm" in the ${EVAL_NAMESPACE:-vm-test} namespace.
+
+      Report the usernames you find.
