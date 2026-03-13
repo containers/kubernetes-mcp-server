@@ -31,6 +31,7 @@ Living documentation for implemented and planned features:
 
 | Spec | Description | Status |
 |------|-------------|--------|
+| **[MCP Apps](specs/mcp-apps.md)** | Interactive HTML-based UIs for tool results via MCP Apps extension | In Progress |
 | **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 
 ## Advanced Topics
