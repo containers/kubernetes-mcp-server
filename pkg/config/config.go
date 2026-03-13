@@ -102,6 +102,11 @@ type StaticConfig struct {
 	// Defaults to false.
 	ValidationEnabled bool `toml:"validation_enabled,omitempty"`
 
+	// AppsEnabled enables MCP Apps interactive UI extensions.
+	// When true, tools expose a _meta.ui.resourceUri field and the server
+	// registers the viewer HTML as a ui:// resource.
+	AppsEnabled bool `toml:"apps_enabled,omitempty"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]api.ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML package)
@@ -356,4 +361,8 @@ func (c *StaticConfig) GetStsScopes() []string {
 
 func (c *StaticConfig) IsValidationEnabled() bool {
 	return c.ValidationEnabled
+}
+
+func (c *StaticConfig) IsAppsEnabled() bool {
+	return c.AppsEnabled
 }

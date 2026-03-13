@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/kubectl/pkg/metricsutil"
+	"k8s.io/metrics/pkg/apis/metrics"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -275,7 +276,11 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	result, err := params.ListOutput.PrintObjStructured(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
+	}
+	return api.NewToolCallResultFull(result.Text, result.Structured, nil), nil
 }
 
 func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -298,7 +303,11 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	result, err := params.ListOutput.PrintObjStructured(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
+	}
+	return api.NewToolCallResultFull(result.Text, result.Structured, nil), nil
 }
 
 func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -356,6 +365,9 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	err = printer.PrintPodMetrics(ret.Items, true, true, false, "", true)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", err)), nil
+	}
+	if structured := extractPodsTopStructured(ret); structured != nil {
+		return &api.ToolCallResult{Content: buf.String(), StructuredContent: structured}, nil
 	}
 	return api.NewToolCallResult(buf.String(), nil), nil
 }
@@ -457,4 +469,44 @@ func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		err = fmt.Errorf("failed to run pod: %w", err)
 	}
 	return api.NewToolCallResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
+}
+
+func extractPodsTopStructured(podMetrics *metrics.PodMetricsList) map[string]any {
+	if podMetrics == nil || len(podMetrics.Items) == 0 {
+		return nil
+	}
+	items := make([]map[string]any, 0, len(podMetrics.Items))
+	for _, pm := range podMetrics.Items {
+		var cpuTotal, memTotal int64
+		for _, c := range pm.Containers {
+			if cpu, ok := c.Usage["cpu"]; ok {
+				cpuTotal += cpu.MilliValue()
+			}
+			if mem, ok := c.Usage["memory"]; ok {
+				memTotal += mem.Value()
+			}
+		}
+		items = append(items, map[string]any{
+			"name":      pm.Name,
+			"namespace": pm.Namespace,
+			"cpu":       fmt.Sprintf("%dm", cpuTotal),
+			"memory":    fmt.Sprintf("%dMi", memTotal/(1024*1024)),
+		})
+	}
+	return map[string]any{
+		"columns": []map[string]string{
+			{"key": "namespace", "label": "Namespace"},
+			{"key": "name", "label": "Pod"},
+			{"key": "cpu", "label": "CPU"},
+			{"key": "memory", "label": "Memory"},
+		},
+		"chart": map[string]any{
+			"labelKey": "name",
+			"datasets": []map[string]string{
+				{"key": "cpu", "label": "CPU (millicores)", "unit": "cpu", "axis": "left"},
+				{"key": "memory", "label": "Memory (MiB)", "unit": "memory", "axis": "right"},
+			},
+		},
+		"items": items,
+	}
 }
