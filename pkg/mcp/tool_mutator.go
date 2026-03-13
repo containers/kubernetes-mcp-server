@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -124,6 +125,17 @@ func createTargetListHandler(targets []string, targetParameterName, defaultTarge
 		result += fmt.Sprintf("To use a specific %s with any tool, set the '%s' parameter in the tool call arguments", targetParameterName, targetParameterName)
 
 		return api.NewToolCallResult(result, nil), nil
+	}
+}
+
+// WithAppsMeta injects _meta.ui into every tool when MCP Apps is enabled.
+// Each tool gets a unique resource URI so the viewer knows which tool to call.
+func WithAppsMeta() ToolMutator {
+	return func(tool api.ServerTool) api.ServerTool {
+		if tool.Tool.Meta == nil {
+			tool.Tool.Meta = mcpapps.ToolMetaForTool(tool.Tool.Name)
+		}
+		return tool
 	}
 }
 

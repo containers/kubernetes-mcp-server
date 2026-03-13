@@ -103,6 +103,37 @@ func (s *ToolsetsSuite) TestNewToolCallResultStructured() {
 	})
 }
 
+func (s *ToolsetsSuite) TestNewToolCallResultFull() {
+	s.Run("sets text, structured, and nil error", func() {
+		structured := []map[string]any{{"name": "pod-1"}}
+		result := NewToolCallResultFull("formatted text", structured, nil)
+		s.Equal("formatted text", result.Content)
+		s.Equal(structured, result.StructuredContent)
+		s.Nil(result.Error)
+	})
+	s.Run("sets text, structured, and error", func() {
+		err := errors.New("partial failure")
+		structured := map[string]any{"key": "value"}
+		result := NewToolCallResultFull("some text", structured, err)
+		s.Equal("some text", result.Content)
+		s.Equal(structured, result.StructuredContent)
+		s.Equal(err, result.Error)
+	})
+	s.Run("preserves human-readable text separate from structured data", func() {
+		structured := []map[string]any{{"Name": "ns-1"}, {"Name": "ns-2"}}
+		result := NewToolCallResultFull("NAMESPACE   AGE\nns-1        10d\nns-2        5d", structured, nil)
+		s.Contains(result.Content, "NAMESPACE")
+		items, ok := result.StructuredContent.([]map[string]any)
+		s.Require().True(ok)
+		s.Len(items, 2)
+	})
+	s.Run("allows nil structured content", func() {
+		result := NewToolCallResultFull("text only", nil, nil)
+		s.Equal("text only", result.Content)
+		s.Nil(result.StructuredContent)
+	})
+}
+
 func (s *ToolsetsSuite) TestToolMeta() {
 	s.Run("Meta is omitted from JSON when nil", func() {
 		tool := Tool{Name: "test_tool"}

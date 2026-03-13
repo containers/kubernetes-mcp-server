@@ -118,6 +118,38 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		s.Regexpf(expectedTotal, textContent, "expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 	})
 
+	s.Run("pods_top(defaults) returns self-describing structured content", func() {
+		result, err := s.CallTool("pods_top", map[string]interface{}{})
+		s.Require().NotNil(result)
+		s.Require().NoError(err)
+		s.Require().NotNil(result.StructuredContent, "expected structured content")
+		structured, ok := result.StructuredContent.(map[string]any)
+		s.Require().True(ok, "expected map[string]any")
+		// Verify columns
+		columns, ok := structured["columns"].([]any)
+		s.Require().True(ok, "expected columns array")
+		s.Equal(4, len(columns), "expected 4 columns")
+		col0, _ := columns[0].(map[string]any)
+		s.Equal("namespace", col0["key"])
+		s.Equal("Namespace", col0["label"])
+		// Verify chart
+		chart, ok := structured["chart"].(map[string]any)
+		s.Require().True(ok, "expected chart object")
+		s.Equal("name", chart["labelKey"])
+		datasets, ok := chart["datasets"].([]any)
+		s.Require().True(ok, "expected datasets array")
+		s.Equal(2, len(datasets), "expected 2 datasets")
+		// Verify items
+		items, ok := structured["items"].([]any)
+		s.Require().True(ok, "expected items array")
+		s.Equal(2, len(items), "expected 2 pod items")
+		item0, _ := items[0].(map[string]any)
+		s.Equal("pod-1", item0["name"])
+		s.Equal("default", item0["namespace"])
+		s.Equal("300m", item0["cpu"])
+		s.Equal("500Mi", item0["memory"])
+	})
+
 	s.Run("pods_top(allNamespaces=false) returns pod metrics from configured namespace", func() {
 		result, err := s.CallTool("pods_top", map[string]interface{}{
 			"all_namespaces": false,

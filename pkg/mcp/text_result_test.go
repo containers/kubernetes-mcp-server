@@ -48,6 +48,19 @@ func (s *TextResultSuite) TestNewStructuredResult() {
 		s.Equal(`{"pods":["pod-1","pod-2"]}`, tc.Text)
 		s.Equal(structured, result.StructuredContent)
 	})
+	s.Run("wraps slice in object for MCP spec compliance", func() {
+		items := []map[string]any{{"name": "ns-1"}, {"name": "ns-2"}}
+		result := NewStructuredResult("text", items, nil)
+		s.False(result.IsError)
+		wrapped, ok := result.StructuredContent.(map[string]any)
+		s.Require().True(ok, "expected map[string]any wrapper")
+		s.Equal(items, wrapped["items"])
+	})
+	s.Run("does not wrap map structured content", func() {
+		structured := map[string]any{"key": "value"}
+		result := NewStructuredResult("text", structured, nil)
+		s.Equal(structured, result.StructuredContent)
+	})
 	s.Run("omits structured content when nil", func() {
 		result := NewStructuredResult("text output", nil, nil)
 		s.False(result.IsError)
