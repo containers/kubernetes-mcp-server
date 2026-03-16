@@ -126,7 +126,7 @@ func (h *Helm) History(name string, namespace string, max int) (string, error) {
 	if len(releases) == 0 {
 		return fmt.Sprintf("No revision history found for release %s", name), nil
 	}
-	
+
 	// Apply max limit manually if Helm didn't do it (which can happen with manually created secrets)
 	if max > 0 && len(releases) > max {
 		// Keep the most recent `max` releases (Helm returns them in chronological order)
