@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -63,11 +64,17 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 		k.restConfig.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
 
+	apiPathPrefix := ""
+	if hostURL, err := url.Parse(k.restConfig.Host); err == nil {
+		apiPathPrefix = hostURL.Path
+	}
+
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
 			Delegate:                original,
 			DeniedResourcesProvider: baseConfig,
 			RestMapperProvider:      func() meta.RESTMapper { return k.restMapper },
+			APIPathPrefix:           apiPathPrefix,
 			DiscoveryProvider:       func() discovery.DiscoveryInterface { return k.discoveryClient },
 			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
 			ValidationEnabled:       baseConfig.IsValidationEnabled(),

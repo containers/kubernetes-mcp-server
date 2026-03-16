@@ -151,6 +151,46 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDiscoveryRequests()
 	}
 }
 
+func (s *AccessControlRoundTripperTestSuite) TestRoundTripForPrefixedDiscoveryRequests() {
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	rt := &AccessControlRoundTripper{
+		delegate:                mockDelegate,
+		deniedResourcesProvider: nil,
+		restMapperProvider: func() meta.RESTMapper {
+			s.Fail("restMapper should not be consulted for discovery requests behind a path prefix")
+			return nil
+		},
+		apiPathPrefix: "/api/v1/kube/clusters/test-cluster",
+	}
+
+	testCases := []string{
+		"/api/v1/kube/clusters/test-cluster/api",
+		"/api/v1/kube/clusters/test-cluster/apis",
+		"/api/v1/kube/clusters/test-cluster/api/v1",
+		"/api/v1/kube/clusters/test-cluster/apis/apps/v1",
+		"/api/v1/kube/clusters/test-cluster/openapi/v2",
+		"/api/v1/kube/clusters/test-cluster/version",
+	}
+
+	for _, testCase := range testCases {
+		s.Run("Prefixed discovery endpoint "+testCase+" bypasses access control", func() {
+			delegateCalled = false
+			resp, err := rt.RoundTrip(httptest.NewRequest("GET", testCase, nil))
+			s.NoError(err)
+			s.NotNil(resp)
+			s.Equal(http.StatusOK, resp.StatusCode)
+			s.True(delegateCalled, "Expected delegate to be called for prefixed discovery request")
+		})
+	}
+}
+
 func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources() {
 	delegateCalled := false
 	mockDelegate := &mockRoundTripper{
@@ -219,6 +259,16 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources
 		s.NoError(err)
 		s.NotNil(resp)
 		s.True(delegateCalled, "Expected delegate to be called for namespaced deployments list")
+	})
+
+	s.Run("List pods in namespace is allowed when the API server has a path prefix", func() {
+		delegateCalled = false
+		rt.apiPathPrefix = "/api/v1/kube/clusters/test-cluster"
+		req := httptest.NewRequest("GET", "/api/v1/kube/clusters/test-cluster/api/v1/namespaces/default/pods", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for namespaced pods list behind a path prefix")
 	})
 }
 
