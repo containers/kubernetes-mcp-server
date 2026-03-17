@@ -263,6 +263,10 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources
 
 	s.Run("List pods in namespace is allowed when the API server has a path prefix", func() {
 		delegateCalled = false
+		originalAPIPathPrefix := rt.apiPathPrefix
+		defer func() {
+			rt.apiPathPrefix = originalAPIPathPrefix
+		}()
 		rt.apiPathPrefix = "/api/v1/kube/clusters/test-cluster"
 		req := httptest.NewRequest("GET", "/api/v1/kube/clusters/test-cluster/api/v1/namespaces/default/pods", nil)
 		resp, err := rt.RoundTrip(req)

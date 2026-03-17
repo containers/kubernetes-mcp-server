@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
 
@@ -65,7 +66,9 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 	}
 
 	apiPathPrefix := ""
-	if hostURL, err := url.Parse(k.restConfig.Host); err == nil {
+	if hostURL, err := url.Parse(k.restConfig.Host); err != nil {
+		klog.Warningf("failed to parse Kubernetes API server host %q to determine API path prefix: %v", k.restConfig.Host, err)
+	} else {
 		apiPathPrefix = hostURL.Path
 	}
 
