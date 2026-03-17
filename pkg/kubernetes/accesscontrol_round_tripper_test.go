@@ -315,6 +315,23 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 			s.False(delegateCalled)
 			s.Contains(err.Error(), "resource not allowed")
 		})
+
+		s.Run("List pods behind an API path prefix is denied", func() {
+			delegateCalled = false
+			originalAPIPathPrefix := rt.apiPathPrefix
+			defer func() {
+				rt.apiPathPrefix = originalAPIPathPrefix
+			}()
+			rt.apiPathPrefix = "/api/v1/kube/clusters/test-cluster"
+
+			req := httptest.NewRequest("GET", "/api/v1/kube/clusters/test-cluster/api/v1/namespaces/default/pods", nil)
+			resp, err := rt.RoundTrip(req)
+			s.Error(err)
+			s.Nil(resp)
+			s.False(delegateCalled, "Expected delegate not to be called for denied resource behind a path prefix")
+			s.Contains(err.Error(), "resource not allowed")
+			s.Contains(err.Error(), "Pod")
+		})
 	})
 
 	s.Run("Entire group/version is denied", func() {
@@ -346,6 +363,48 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	})
 }
 
+type StripAPIPathPrefixTestSuite struct {
+	suite.Suite
+}
+
+func (s *StripAPIPathPrefixTestSuite) TestStripAPIPathPrefix() {
+	s.Run("returns original path when prefix is empty", func() {
+		s.Equal("/api/v1/pods", stripAPIPathPrefix("/api/v1/pods", ""))
+	})
+
+	s.Run("returns original path when prefix is root", func() {
+		s.Equal("/api/v1/pods", stripAPIPathPrefix("/api/v1/pods", "/"))
+	})
+
+	s.Run("returns slash when path matches prefix exactly", func() {
+		s.Equal("/", stripAPIPathPrefix("/api/v1/kube/clusters/test-cluster", "/api/v1/kube/clusters/test-cluster"))
+	})
+
+	s.Run("removes the configured API path prefix", func() {
+		s.Equal(
+			"/api/v1/namespaces/default/pods",
+			stripAPIPathPrefix(
+				"/api/v1/kube/clusters/test-cluster/api/v1/namespaces/default/pods",
+				"/api/v1/kube/clusters/test-cluster",
+			),
+		)
+	})
+
+	s.Run("does not trim partial prefix matches", func() {
+		s.Equal(
+			"/api/v1/kube/clusters/test-cluster/api/v1/pods",
+			stripAPIPathPrefix(
+				"/api/v1/kube/clusters/test-cluster/api/v1/pods",
+				"/api/v1/kube/clusters/test",
+			),
+		)
+	})
+}
+
 func TestAccessControlRoundTripper(t *testing.T) {
 	suite.Run(t, new(AccessControlRoundTripperTestSuite))
+}
+
+func TestStripAPIPathPrefix(t *testing.T) {
+	suite.Run(t, new(StripAPIPathPrefixTestSuite))
 }
