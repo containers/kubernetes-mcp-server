@@ -121,7 +121,7 @@ func (s *ElicitationSuite) TestElicitationWithUnsupportedClient() {
 	s.registerElicitingToolset(func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		_, err := params.Elicit(params.Context, &api.ElicitParams{Message: "Please confirm"})
 		if err != nil {
-			if errors.Is(err, ErrElicitationNotSupported) {
+			if errors.Is(err, api.ErrElicitationNotSupported) {
 				return api.NewToolCallResult("fallback-result", nil), nil
 			}
 			return nil, err
@@ -232,7 +232,7 @@ func (s *ElicitationSuite) TestElicitationURLWithUnsupportedClient() {
 			URL:     "https://example.com/form",
 		})
 		if err != nil {
-			if errors.Is(err, ErrElicitationNotSupported) {
+			if errors.Is(err, api.ErrElicitationNotSupported) {
 				return api.NewToolCallResult("url-fallback-result", nil), nil
 			}
 			return nil, err

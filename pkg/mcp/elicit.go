@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,10 +9,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-// ErrElicitationNotSupported is returned when the MCP client does not support elicitation.
-// Tool authors can check for this error using errors.Is() to implement fallback behavior.
-var ErrElicitationNotSupported = errors.New("client does not support elicitation")
 
 type sessionElicitor struct{}
 
@@ -37,7 +32,7 @@ func (s *sessionElicitor) Elicit(ctx context.Context, params *api.ElicitParams) 
 		// The go-sdk returns three variants: "client does not support elicitation",
 		// "client does not support "form" elicitation", and "client does not support "url" elicitation".
 		if strings.Contains(err.Error(), "does not support") && strings.Contains(err.Error(), "elicitation") {
-			return nil, fmt.Errorf("%w: %s", ErrElicitationNotSupported, err.Error())
+			return nil, fmt.Errorf("%w: %s", api.ErrElicitationNotSupported, err.Error())
 		}
 		return nil, err
 	}
