@@ -137,6 +137,11 @@ func (k *Kiali) authorizationHeader() string {
 	return "Bearer " + token
 }
 
+// maxResponseBodySize is the maximum number of bytes read from a Kiali API
+// response. Responses exceeding this limit are truncated to prevent unbounded
+// memory consumption from a misbehaving or compromised upstream server.
+const maxResponseBodySize = 512 << 10 // 512 KiB
+
 // executeRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
 func (k *Kiali) executeRequest(ctx context.Context, method, endpoint, contentType string, body io.Reader) (string, error) {
 	if method == "" {
@@ -164,9 +169,12 @@ func (k *Kiali) executeRequest(ctx context.Context, method, endpoint, contentTyp
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+	if int64(len(respBody)) > maxResponseBodySize {
+		return "", fmt.Errorf("kiali API response exceeded maximum allowed size of %d bytes", maxResponseBodySize)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {

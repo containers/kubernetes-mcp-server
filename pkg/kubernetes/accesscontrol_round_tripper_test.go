@@ -390,6 +390,16 @@ func (s *StripAPIPathPrefixTestSuite) TestStripAPIPathPrefix() {
 		)
 	})
 
+	s.Run("removes prefix with trailing slash", func() {
+		s.Equal(
+			"/api/v1/pods",
+			stripAPIPathPrefix(
+				"/api/v1/kube/clusters/test-cluster/api/v1/pods",
+				"/api/v1/kube/clusters/test-cluster/",
+			),
+		)
+	})
+
 	s.Run("does not trim partial prefix matches", func() {
 		s.Equal(
 			"/api/v1/kube/clusters/test-cluster/api/v1/pods",
