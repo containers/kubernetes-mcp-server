@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -31,7 +32,7 @@ type AccessControlRoundTripperConfig struct {
 	Delegate                http.RoundTripper
 	DeniedResourcesProvider api.DeniedResourcesProvider
 	RestMapperProvider      func() meta.RESTMapper
-	APIPathPrefix           string
+	HostURL                 string
 	DiscoveryProvider       func() discovery.DiscoveryInterface
 	AuthClientProvider      func() authv1client.AuthorizationV1Interface
 	ValidationEnabled       bool
@@ -39,11 +40,19 @@ type AccessControlRoundTripperConfig struct {
 
 // NewAccessControlRoundTripper creates a new AccessControlRoundTripper.
 func NewAccessControlRoundTripper(cfg AccessControlRoundTripperConfig) *AccessControlRoundTripper {
+	var apiPathPrefix string
+	if cfg.HostURL != "" {
+		if hostURL, err := url.Parse(cfg.HostURL); err != nil {
+			klog.Warningf("failed to parse Kubernetes API server host %q to determine API path prefix: %v", cfg.HostURL, err)
+		} else {
+			apiPathPrefix = hostURL.Path
+		}
+	}
 	rt := &AccessControlRoundTripper{
 		delegate:                cfg.Delegate,
 		deniedResourcesProvider: cfg.DeniedResourcesProvider,
 		restMapperProvider:      cfg.RestMapperProvider,
-		apiPathPrefix:           strings.TrimSuffix(cfg.APIPathPrefix, "/"),
+		apiPathPrefix:           apiPathPrefix,
 		validationEnabled:       cfg.ValidationEnabled,
 	}
 
@@ -194,7 +203,8 @@ func parseURLToGVR(path string) (gvr schema.GroupVersionResource, ok bool) {
 }
 
 func stripAPIPathPrefix(path, prefix string) string {
-	if prefix == "" || prefix == "/" {
+	prefix = strings.TrimSuffix(prefix, "/")
+	if prefix == "" {
 		return path
 	}
 
