@@ -28,7 +28,7 @@ const TargetsListToolName = "targets_list"
 // WithTargetParameter adds a target selection parameter to the tool's input schema if the tool is cluster-aware
 func WithTargetParameter(defaultCluster, targetParameterName string, isMultiCluster bool) ToolMutator {
 	return func(tool api.ServerTool) api.ServerTool {
-		if !tool.IsClusterAware() || !isMultiCluster {
+		if !tool.IsClusterAware() {
 			return tool
 		}
 
@@ -40,10 +40,12 @@ func WithTargetParameter(defaultCluster, targetParameterName string, isMultiClus
 			tool.Tool.InputSchema.Properties = make(map[string]*jsonschema.Schema)
 		}
 
-		tool.Tool.InputSchema.Properties[targetParameterName] = createTargetProperty(
-			defaultCluster,
-			targetParameterName,
-		)
+		if isMultiCluster {
+			tool.Tool.InputSchema.Properties[targetParameterName] = createTargetProperty(
+				defaultCluster,
+				targetParameterName,
+			)
+		}
 
 		return tool
 	}
