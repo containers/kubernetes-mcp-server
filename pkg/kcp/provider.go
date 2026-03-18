@@ -235,7 +235,7 @@ func (p *kcpClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return false
 }
 
-func (p *kcpClusterProvider) IsMultiCluster() bool {
+func (p *kcpClusterProvider) IsMultiTarget() bool {
 	return len(p.managers) > 1
 }
 

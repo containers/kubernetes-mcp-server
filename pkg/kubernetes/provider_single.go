@@ -74,7 +74,7 @@ func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.manager.IsOpenShift(ctx)
 }
 
-func (p *singleClusterProvider) IsMultiCluster() bool {
+func (p *singleClusterProvider) IsMultiTarget() bool {
 	return false
 }
 

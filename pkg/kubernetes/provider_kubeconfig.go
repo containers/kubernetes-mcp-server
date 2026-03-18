@@ -105,7 +105,7 @@ func (p *kubeConfigClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.managers[p.defaultContext].IsOpenShift(ctx)
 }
 
-func (p *kubeConfigClusterProvider) IsMultiCluster() bool {
+func (p *kubeConfigClusterProvider) IsMultiTarget() bool {
 	return len(p.managers) > 1
 }
 

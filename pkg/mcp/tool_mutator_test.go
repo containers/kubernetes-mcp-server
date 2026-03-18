@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,21 +68,12 @@ func createTestToolWithExistingProperties(name string) api.ServerTool {
 	}
 }
 
-type mockProvider struct {
+type mockTargetLister struct {
 	targets []string
 	err     error
 }
 
-func (m *mockProvider) IsOpenShift(_ context.Context) bool                              { return false }
-func (m *mockProvider) IsMultiCluster() bool                                            { return len(m.targets) > 1 }
-func (m *mockProvider) GetTargets(_ context.Context) ([]string, error)                  { return m.targets, m.err }
-func (m *mockProvider) GetDerivedKubernetes(_ context.Context, _ string) (*internalk8s.Kubernetes, error) {
-	return nil, nil
-}
-func (m *mockProvider) GetDefaultTarget() string            { return "" }
-func (m *mockProvider) GetTargetParameterName() string      { return "" }
-func (m *mockProvider) WatchTargets(_ internalk8s.McpReload) {}
-func (m *mockProvider) Close()                              {}
+func (m *mockTargetLister) GetTargets(_ context.Context) ([]string, error) { return m.targets, m.err }
 
 func TestWithClusterParameter(t *testing.T) {
 	tests := []struct {
@@ -278,7 +268,7 @@ type TargetListToolMutatorSuite struct {
 
 func (s *TargetListToolMutatorSuite) TestMutatesTargetsListTool() {
 	tool := createTestTool(TargetsListToolName)
-	tm := WithTargetListTool("default-cluster", "cluster", &mockProvider{targets: []string{"cluster-1", "cluster-2", "cluster-3"}})
+	tm := WithTargetListTool("default-cluster", "cluster", &mockTargetLister{targets: []string{"cluster-1", "cluster-2", "cluster-3"}})
 	result := tm(tool)
 
 	s.Run("renames tool based on target parameter", func() {
@@ -298,7 +288,7 @@ func (s *TargetListToolMutatorSuite) TestMutatesTargetsListTool() {
 
 func (s *TargetListToolMutatorSuite) TestDoesNotMutateOtherTools() {
 	tool := createTestTool("some-other-tool")
-	tm := WithTargetListTool("default", "cluster", &mockProvider{targets: []string{"cluster-1", "cluster-2"}})
+	tm := WithTargetListTool("default", "cluster", &mockTargetLister{targets: []string{"cluster-1", "cluster-2"}})
 	result := tm(tool)
 
 	s.Equal("some-other-tool", result.Tool.Name, "tool name should remain unchanged")
@@ -306,7 +296,7 @@ func (s *TargetListToolMutatorSuite) TestDoesNotMutateOtherTools() {
 
 func (s *TargetListToolMutatorSuite) TestHandlerWithEmptyTargets() {
 	tool := createTestTool(TargetsListToolName)
-	tm := WithTargetListTool("default", "cluster", &mockProvider{targets: []string{}})
+	tm := WithTargetListTool("default", "cluster", &mockTargetLister{targets: []string{}})
 	result := tm(tool)
 
 	s.Require().NotNil(result.Handler)
@@ -317,7 +307,7 @@ func (s *TargetListToolMutatorSuite) TestHandlerWithEmptyTargets() {
 
 func (s *TargetListToolMutatorSuite) TestHandlerWithGetTargetsError() {
 	tool := createTestTool(TargetsListToolName)
-	tm := WithTargetListTool("default", "cluster", &mockProvider{err: fmt.Errorf("unauthorized")})
+	tm := WithTargetListTool("default", "cluster", &mockTargetLister{err: fmt.Errorf("unauthorized")})
 	result := tm(tool)
 
 	s.Require().NotNil(result.Handler)

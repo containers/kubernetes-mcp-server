@@ -1,12 +1,12 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -62,10 +62,16 @@ func createTargetProperty(defaultCluster, targetName string) *jsonschema.Schema 
 	return baseSchema
 }
 
+// targetLister is a minimal interface for listing available targets.
+// This reduces coupling with the kubernetes package.
+type targetLister interface {
+	GetTargets(ctx context.Context) ([]string, error)
+}
+
 // WithTargetListTool mutates the generic "targets_list" tool to have the correct name,
 // description, and handler based on the provider's target parameter name.
 // For example, with ACM provider (targetParameterName="cluster"), it becomes "cluster_list".
-func WithTargetListTool(defaultTarget, targetParameterName string, p internalk8s.Provider) ToolMutator {
+func WithTargetListTool(defaultTarget, targetParameterName string, p targetLister) ToolMutator {
 	return func(tool api.ServerTool) api.ServerTool {
 		if tool.Tool.Name != TargetsListToolName {
 			return tool
@@ -83,7 +89,7 @@ func WithTargetListTool(defaultTarget, targetParameterName string, p internalk8s
 	}
 }
 
-func createTargetListHandler(p internalk8s.Provider, targetParameterName, defaultTarget string) api.ToolHandlerFunc {
+func createTargetListHandler(p targetLister, targetParameterName, defaultTarget string) api.ToolHandlerFunc {
 	return func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		targets, err := p.GetTargets(params.Context)
 		if err != nil {

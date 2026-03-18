@@ -40,8 +40,8 @@ func (p *tokenExchangingProvider) IsOpenShift(ctx context.Context) bool {
 	return p.provider.IsOpenShift(ctx)
 }
 
-func (p *tokenExchangingProvider) IsMultiCluster() bool {
-	return p.provider.IsMultiCluster()
+func (p *tokenExchangingProvider) IsMultiTarget() bool {
+	return p.provider.IsMultiTarget()
 }
 
 func (p *tokenExchangingProvider) GetTargets(ctx context.Context) ([]string, error) {

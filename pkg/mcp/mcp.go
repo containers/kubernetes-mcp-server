@@ -210,10 +210,10 @@ func reloadItems[T any](
 func (s *Server) collectApplicableTools() []api.ServerTool {
 	filter := CompositeFilter(
 		s.configuration.isToolApplicable,
-		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiCluster()),
+		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 	)
 	mutator := ComposeMutators(
-		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiCluster()),
+		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p),
 	)
 
