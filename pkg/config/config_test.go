@@ -1052,6 +1052,135 @@ func (s *ConfigSuite) TestEmptyConfigFile() {
 	})
 }
 
+func (s *ConfigSuite) TestConfirmationRulesDefaults() {
+	configPath := s.writeConfig(``)
+	config, err := Read(configPath, "")
+	s.Require().NoError(err)
+	s.Run("default fallback is allow", func() {
+		s.Equal("allow", config.GetConfirmationFallback())
+	})
+	s.Run("default rules is empty", func() {
+		s.Empty(config.GetConfirmationRules())
+	})
+}
+
+func (s *ConfigSuite) TestConfirmationRulesParsing() {
+	configPath := s.writeConfig(`
+		confirmation_fallback = "deny"
+
+		[[confirmation_rules]]
+		tool = "helm_uninstall"
+		message = "This will uninstall a Helm release."
+
+		[[confirmation_rules]]
+		tool = "resources_delete"
+		message = "Deleting in kube-system."
+		[confirmation_rules.input]
+		namespace = "kube-system"
+
+		[[confirmation_rules]]
+		destructive = true
+		message = "Destructive operation."
+		fallback = "allow"
+
+		[[confirmation_rules]]
+		verb = "delete"
+		namespace = "kube-system"
+		message = "Deleting in kube-system."
+
+		[[confirmation_rules]]
+		verb = "get"
+		kind = "Secret"
+		message = "Accessing a Secret."
+		fallback = "allow"
+	`)
+	config, err := Read(configPath, "")
+	s.Require().NoError(err)
+	s.Run("confirmation_fallback parsed correctly", func() {
+		s.Equal("deny", config.GetConfirmationFallback())
+	})
+	s.Run("all rules parsed", func() {
+		s.Len(config.GetConfirmationRules(), 5)
+	})
+	s.Run("tool-level rule parsed", func() {
+		r := config.GetConfirmationRules()[0]
+		s.Equal("helm_uninstall", r.Tool)
+		s.Equal("This will uninstall a Helm release.", r.Message)
+	})
+	s.Run("tool-level rule with input parsed", func() {
+		r := config.GetConfirmationRules()[1]
+		s.Equal("resources_delete", r.Tool)
+		s.Equal("kube-system", r.Input["namespace"])
+	})
+	s.Run("destructive rule parsed", func() {
+		r := config.GetConfirmationRules()[2]
+		s.Require().NotNil(r.Destructive)
+		s.True(*r.Destructive)
+		s.Equal("allow", r.Fallback)
+	})
+	s.Run("kube-level rule parsed", func() {
+		r := config.GetConfirmationRules()[3]
+		s.Equal("delete", r.Verb)
+		s.Equal("kube-system", r.Namespace)
+	})
+	s.Run("kube-level rule with kind and fallback parsed", func() {
+		r := config.GetConfirmationRules()[4]
+		s.Equal("get", r.Verb)
+		s.Equal("Secret", r.Kind)
+		s.Equal("allow", r.Fallback)
+	})
+}
+
+func (s *ConfigSuite) TestConfirmationRulesNumericInputNormalized() {
+	configPath := s.writeConfig(`
+		[[confirmation_rules]]
+		tool = "scale"
+		message = "Scaling to zero."
+		[confirmation_rules.input]
+		replicas = 0
+	`)
+	config, err := Read(configPath, "")
+	s.Require().NoError(err)
+	s.Run("int64 input normalized to float64", func() {
+		r := config.GetConfirmationRules()[0]
+		s.Equal(float64(0), r.Input["replicas"])
+	})
+}
+
+func (s *ConfigSuite) TestConfirmationRulesValidationRejectsMixed() {
+	configPath := s.writeConfig(`
+		[[confirmation_rules]]
+		tool = "helm_uninstall"
+		verb = "delete"
+		message = "Mixed rule."
+	`)
+	_, err := Read(configPath, "")
+	s.Run("returns error for mixed tool and kube fields", func() {
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid confirmation rules")
+	})
+}
+
+func (s *ConfigSuite) TestConfirmationRulesValidationReportsAllErrors() {
+	configPath := s.writeConfig(`
+		[[confirmation_rules]]
+		tool = "a"
+		verb = "delete"
+		message = "Mixed 1."
+
+		[[confirmation_rules]]
+		destructive = true
+		kind = "Pod"
+		message = "Mixed 2."
+	`)
+	_, err := Read(configPath, "")
+	s.Run("reports all validation errors", func() {
+		s.Require().Error(err)
+		s.Contains(err.Error(), "confirmation_rules[0]")
+		s.Contains(err.Error(), "confirmation_rules[1]")
+	})
+}
+
 func TestConfig(t *testing.T) {
 	suite.Run(t, new(ConfigSuite))
 }

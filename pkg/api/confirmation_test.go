@@ -71,7 +71,7 @@ func (s *ConfirmationRuleSuite) TestValidate() {
 		s.NoError(r.Validate())
 	})
 	s.Run("valid tool-level rule with namespace in input", func() {
-		r := ConfirmationRule{Tool: "resources_delete", Input: map[string]string{"namespace": "kube-system"}, Message: "delete"}
+		r := ConfirmationRule{Tool: "resources_delete", Input: map[string]any{"namespace": "kube-system"}, Message: "delete"}
 		s.NoError(r.Validate())
 	})
 	s.Run("valid kube-level rule with namespace", func() {
