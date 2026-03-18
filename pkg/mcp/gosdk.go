@@ -40,6 +40,14 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		if err != nil {
 			return nil, fmt.Errorf("%v for tool %s", err, tool.Tool.Name)
 		}
+		// Check confirmation rules before executing the tool
+		if confirmErr := confirmation.CheckToolRules(
+			ctx, s.configuration, &sessionElicitor{},
+			tool.Tool.Name, toolCallRequest.GetArguments(), tool.Tool.Annotations.DestructiveHint,
+		); confirmErr != nil {
+			return NewTextResult("", confirmErr), nil
+		}
+
 		// get the correct derived Kubernetes client for the target specified in the request
 		cluster := toolCallRequest.GetString(s.p.GetTargetParameterName(), s.p.GetDefaultTarget())
 		k, err := s.p.GetDerivedKubernetes(ctx, cluster)
