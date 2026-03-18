@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 // ErrConfirmationDenied is returned when the user declines a confirmation prompt
@@ -28,9 +29,9 @@ func CheckToolRules(ctx context.Context, provider api.ConfirmationRulesProvider,
 // CheckKubeRules finds matching kube-level rules, merges them, and elicits confirmation.
 // Returns nil if no rules match or the user accepts.
 func CheckKubeRules(ctx context.Context, provider api.ConfirmationRulesProvider, elicitor api.Elicitor,
-	verb, kind, group, version, namespace string) error {
+	verb, kind, group, version, name, namespace string) error {
 
-	matched := MatchKubeLevelRules(provider.GetConfirmationRules(), verb, kind, group, version, namespace)
+	matched := MatchKubeLevelRules(provider.GetConfirmationRules(), verb, kind, group, version, name, namespace)
 	if len(matched) == 0 {
 		return nil
 	}
@@ -42,7 +43,13 @@ func CheckKubeRules(ctx context.Context, provider api.ConfirmationRulesProvider,
 // If the client does not support elicitation, the fallback determines behavior:
 // "deny" returns ErrConfirmationDenied, "allow" returns nil.
 func CheckConfirmation(ctx context.Context, elicitor api.Elicitor, message, fallback string) error {
-	result, err := elicitor.Elicit(ctx, &api.ElicitParams{Message: message})
+	result, err := elicitor.Elicit(ctx, &api.ElicitParams{
+		Message: message,
+		RequestedSchema: &jsonschema.Schema{
+			Type:       "object",
+			Properties: map[string]*jsonschema.Schema{},
+		},
+	})
 	if err != nil {
 		if isElicitationNotSupported(err) {
 			if fallback == "deny" {

@@ -111,64 +111,100 @@ func (s *MatchSuite) TestMatchKubeLevelRules() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Message: "deleting"},
 		}
-		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "default")
+		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "", "default")
 		s.Require().Len(matched, 1)
 	})
 	s.Run("matches by verb and kind", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "get", Kind: "Secret", Message: "accessing secret"},
 		}
-		matched := MatchKubeLevelRules(rules, "get", "Secret", "", "v1", "default")
+		matched := MatchKubeLevelRules(rules, "get", "Secret", "", "v1", "", "default")
 		s.Require().Len(matched, 1)
 	})
 	s.Run("matches by verb and namespace", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
 		}
-		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "kube-system")
+		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "", "kube-system")
 		s.Require().Len(matched, 1)
 	})
 	s.Run("matches by full GVK", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Kind: "Deployment", Group: "apps", Version: "v1", Message: "delete deployment"},
 		}
-		matched := MatchKubeLevelRules(rules, "delete", "Deployment", "apps", "v1", "default")
+		matched := MatchKubeLevelRules(rules, "delete", "Deployment", "apps", "v1", "", "default")
 		s.Require().Len(matched, 1)
 	})
 	s.Run("does not match different verb", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Message: "deleting"},
 		}
-		matched := MatchKubeLevelRules(rules, "get", "Pod", "", "v1", "default")
+		matched := MatchKubeLevelRules(rules, "get", "Pod", "", "v1", "", "default")
 		s.Empty(matched)
 	})
 	s.Run("does not match different kind", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "get", Kind: "Secret", Message: "accessing secret"},
 		}
-		matched := MatchKubeLevelRules(rules, "get", "ConfigMap", "", "v1", "default")
+		matched := MatchKubeLevelRules(rules, "get", "ConfigMap", "", "v1", "", "default")
 		s.Empty(matched)
 	})
 	s.Run("does not match different namespace", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "msg"},
 		}
-		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "default")
+		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "", "default")
 		s.Empty(matched)
 	})
 	s.Run("skips tool-level rules", func() {
 		rules := []api.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "tool rule"},
 		}
-		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "default")
+		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "", "default")
 		s.Empty(matched)
+	})
+	s.Run("matches by name", func() {
+		rules := []api.ConfirmationRule{
+			{Verb: "get", Kind: "Secret", Name: "my-secret", Message: "accessing specific secret"},
+		}
+		matched := MatchKubeLevelRules(rules, "get", "Secret", "", "v1", "my-secret", "default")
+		s.Require().Len(matched, 1)
+	})
+	s.Run("does not match different name", func() {
+		rules := []api.ConfirmationRule{
+			{Verb: "get", Kind: "Secret", Name: "my-secret", Message: "accessing specific secret"},
+		}
+		matched := MatchKubeLevelRules(rules, "get", "Secret", "", "v1", "other-secret", "default")
+		s.Empty(matched)
+	})
+	s.Run("matches by name and namespace", func() {
+		rules := []api.ConfirmationRule{
+			{Verb: "get", Kind: "Secret", Name: "my-secret", Namespace: "production", Message: "accessing secret in prod"},
+		}
+		matched := MatchKubeLevelRules(rules, "get", "Secret", "", "v1", "my-secret", "production")
+		s.Require().Len(matched, 1)
+	})
+	s.Run("does not match name when namespace differs", func() {
+		rules := []api.ConfirmationRule{
+			{Verb: "get", Kind: "Secret", Name: "my-secret", Namespace: "production", Message: "msg"},
+		}
+		matched := MatchKubeLevelRules(rules, "get", "Secret", "", "v1", "my-secret", "staging")
+		s.Empty(matched)
+	})
+	s.Run("name-only rule makes it kube-level", func() {
+		rules := []api.ConfirmationRule{
+			{Name: "critical-resource", Message: "touching critical resource"},
+		}
+		s.True(rules[0].IsKubeLevel())
+		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "critical-resource", "default")
+		s.Require().Len(matched, 1)
 	})
 	s.Run("returns multiple matches", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Message: "delete rule"},
 			{Verb: "delete", Namespace: "kube-system", Message: "kube-system rule"},
 		}
-		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "kube-system")
+		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "", "kube-system")
 		s.Len(matched, 2)
 	})
 }

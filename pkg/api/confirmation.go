@@ -15,6 +15,7 @@ type ConfirmationRule struct {
 	Kind      string `toml:"kind,omitempty"`
 	Group     string `toml:"group,omitempty"`
 	Version   string `toml:"version,omitempty"`
+	Name      string `toml:"name,omitempty"`
 	Namespace string `toml:"namespace,omitempty"`
 	// Common fields
 	Message  string `toml:"message"`
@@ -28,7 +29,7 @@ func (r *ConfirmationRule) IsToolLevel() bool {
 
 // IsKubeLevel returns true if the rule targets Kubernetes API requests.
 func (r *ConfirmationRule) IsKubeLevel() bool {
-	return r.Verb != "" || r.Kind != "" || r.Group != "" || r.Version != ""
+	return r.Verb != "" || r.Kind != "" || r.Group != "" || r.Version != "" || r.Name != ""
 }
 
 // Validate checks that the rule is well-formed.

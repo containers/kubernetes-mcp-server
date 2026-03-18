@@ -102,7 +102,7 @@ func (s *ConfirmationSuite) TestCheckKubeRules() {
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
 		}, fallback: "deny"}
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckKubeRules(ctx, provider, elicitor, "get", "Pod", "", "v1", "default")
+		err := CheckKubeRules(ctx, provider, elicitor, "get", "Pod", "", "v1", "", "default")
 		s.NoError(err)
 	})
 	s.Run("matching rule with accept returns nil", func() {
@@ -110,7 +110,7 @@ func (s *ConfirmationSuite) TestCheckKubeRules() {
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
 		}, fallback: "deny"}
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionAccept}}
-		err := CheckKubeRules(ctx, provider, elicitor, "delete", "Pod", "", "v1", "kube-system")
+		err := CheckKubeRules(ctx, provider, elicitor, "delete", "Pod", "", "v1", "", "kube-system")
 		s.NoError(err)
 	})
 	s.Run("matching rule with decline returns error", func() {
@@ -118,7 +118,7 @@ func (s *ConfirmationSuite) TestCheckKubeRules() {
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
 		}, fallback: "deny"}
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckKubeRules(ctx, provider, elicitor, "delete", "Pod", "", "v1", "kube-system")
+		err := CheckKubeRules(ctx, provider, elicitor, "delete", "Pod", "", "v1", "", "kube-system")
 		s.ErrorIs(err, ErrConfirmationDenied)
 	})
 }

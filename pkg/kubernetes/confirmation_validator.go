@@ -31,7 +31,7 @@ func (v *ConfirmationValidator) Validate(ctx context.Context, req *api.HTTPValid
 	}
 	return confirmation.CheckKubeRules(
 		ctx, v.rulesProvider, &contextElicitor{},
-		req.Verb, kind, group, version, req.Namespace,
+		req.Verb, kind, group, version, req.ResourceName, req.Namespace,
 	)
 }
 

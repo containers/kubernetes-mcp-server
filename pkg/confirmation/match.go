@@ -70,8 +70,9 @@ func NormalizeInput(input map[string]any) map[string]any {
 //   - kind: exact match on the resource kind
 //   - group: exact match on the API group
 //   - version: exact match on the API version
+//   - name: exact match on the resource name
 //   - namespace: exact match on the namespace
-func MatchKubeLevelRules(rules []api.ConfirmationRule, verb, kind, group, version, namespace string) []api.ConfirmationRule {
+func MatchKubeLevelRules(rules []api.ConfirmationRule, verb, kind, group, version, name, namespace string) []api.ConfirmationRule {
 	var matched []api.ConfirmationRule
 	for i := range rules {
 		r := &rules[i]
@@ -88,6 +89,9 @@ func MatchKubeLevelRules(rules []api.ConfirmationRule, verb, kind, group, versio
 			continue
 		}
 		if r.Version != "" && r.Version != version {
+			continue
+		}
+		if r.Name != "" && r.Name != name {
 			continue
 		}
 		if r.Namespace != "" && r.Namespace != namespace {
