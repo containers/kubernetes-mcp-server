@@ -61,6 +61,7 @@ type ValidationEnabledProvider interface {
 type BaseConfig interface {
 	AuthProvider
 	ClusterProvider
+	ConfirmationRulesProvider
 	DeniedResourcesProvider
 	ExtendedConfigProvider
 	StsConfigProvider

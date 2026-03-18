@@ -11,8 +11,9 @@ import (
 // the raw upstream configuration independent of downstream customization.
 func BaseDefault() *StaticConfig {
 	return &StaticConfig{
-		ListOutput: "table",
-		Toolsets:   []string{"core", "config"},
+		ListOutput:           "table",
+		Toolsets:             []string{"core", "config"},
+		ConfirmationFallback: "allow",
 	}
 }
 
