@@ -41,8 +41,8 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("ListOutput is table", func() {
 		s.Equal("table", base.ListOutput)
 	})
-	s.Run("Toolsets are core, config, helm", func() {
-		s.Equal([]string{"core", "config", "helm"}, base.Toolsets)
+	s.Run("Toolsets are core, config", func() {
+		s.Equal([]string{"core", "config"}, base.Toolsets)
 	})
 	s.Run("ReadOnly is false", func() {
 		s.False(base.ReadOnly)
@@ -115,6 +115,10 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			{group = "rbac.authorization.k8s.io", version = "v1", kind = "Role"}
 		]
 
+		# TLS configuration
+		tls_cert = "/path/to/cert.pem"
+		tls_key = "/path/to/key.pem"
+
 		[[prompts]]
 		name = "k8s-troubleshoot"
 		title = "Troubleshoot Kubernetes"
@@ -158,6 +162,12 @@ func (s *ConfigSuite) TestReadConfigValid() {
 	})
 	s.Run("stateless parsed correctly", func() {
 		s.Truef(config.Stateless, "Expected Stateless to be true, got %v", config.Stateless)
+	})
+	s.Run("tls_cert parsed correctly", func() {
+		s.Equalf("/path/to/cert.pem", config.TLSCert, "Expected TLSCert to be /path/to/cert.pem, got %s", config.TLSCert)
+	})
+	s.Run("tls_key parsed correctly", func() {
+		s.Equalf("/path/to/key.pem", config.TLSKey, "Expected TLSKey to be /path/to/key.pem, got %s", config.TLSKey)
 	})
 	s.Run("toolsets", func() {
 		s.Require().Lenf(config.Toolsets, 4, "Expected 4 toolsets, got %d", len(config.Toolsets))

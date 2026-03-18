@@ -3,8 +3,10 @@ package test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +25,8 @@ type mcpClientConfig struct {
 	clientInfo           *mcp.Implementation
 	endpoint             string
 	allowConnectionError bool
+	elicitationHandler   func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)
+	capabilities         *mcp.ClientCapabilities
 }
 
 // httpHeaderOption sets custom HTTP headers
@@ -91,6 +95,37 @@ func (o allowConnectionErrorOption) apply(c *mcpClientConfig) {
 // Useful for testing authentication/authorization scenarios where connection rejection is expected.
 func WithAllowConnectionError() McpClientOption {
 	return allowConnectionErrorOption{}
+}
+
+// elicitationHandlerOption sets a custom elicitation handler on the MCP client
+type elicitationHandlerOption struct {
+	handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)
+}
+
+func (o elicitationHandlerOption) apply(c *mcpClientConfig) {
+	c.elicitationHandler = o.handler
+}
+
+// WithElicitationHandler sets an elicitation handler on the MCP client.
+// When set, the client advertises elicitation support and the handler is invoked
+// when the server sends an elicitation request during tool execution.
+func WithElicitationHandler(handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)) McpClientOption {
+	return elicitationHandlerOption{handler: handler}
+}
+
+// clientCapabilitiesOption sets custom client capabilities on the MCP client
+type clientCapabilitiesOption struct {
+	capabilities *mcp.ClientCapabilities
+}
+
+func (o clientCapabilitiesOption) apply(c *mcpClientConfig) {
+	c.capabilities = o.capabilities
+}
+
+// WithClientCapabilities sets explicit client capabilities on the MCP client.
+// This overrides capabilities inferred from handlers (e.g., elicitation mode support).
+func WithClientCapabilities(capabilities *mcp.ClientCapabilities) McpClientOption {
+	return clientCapabilitiesOption{capabilities: capabilities}
 }
 
 // headerRoundTripper injects HTTP headers into requests
@@ -182,6 +217,8 @@ func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...McpClient
 
 	// Create go-sdk client with notification handlers
 	clientOptions := &mcp.ClientOptions{
+		ElicitationHandler: cfg.elicitationHandler,
+		Capabilities:       cfg.capabilities,
 		ToolListChangedHandler: func(_ context.Context, req *mcp.ToolListChangedRequest) {
 			ret.notifications.capture(&CapturedNotification{
 				Method: "notifications/tools/list_changed",
@@ -248,6 +285,36 @@ func (m *McpClient) CallTool(name string, args map[string]any) (*mcp.CallToolRes
 		Name:      name,
 		Arguments: args,
 	})
+}
+
+// CallToolRaw sends a raw JSON-RPC tools/call request bypassing the go-sdk client.
+// This allows sending requests exactly as a non-go-sdk MCP client would, without
+// the go-sdk's automatic normalization (e.g., the go-sdk always adds "arguments": {}
+// even when nil).
+// The jsonParams is the raw JSON for the "params" field of the JSON-RPC request.
+func (m *McpClient) CallToolRaw(t *testing.T, jsonParams string) *http.Response {
+	t.Helper()
+	body := fmt.Sprintf(`{"jsonrpc":"2.0","id":99,"method":"tools/call","params":%s}`, jsonParams)
+	return McpRawPost(t, m.testServer.URL+"/mcp", m.Session.ID(), body)
+}
+
+// McpRawPost sends a raw JSON-RPC request to an MCP HTTP endpoint.
+// This is useful for testing MCP protocol edge cases that can't be reproduced through
+// the go-sdk client due to its automatic normalization (e.g., always adding "arguments": {},
+// always setting clientInfo).
+// The jsonBody should be a complete JSON-RPC message.
+func McpRawPost(t *testing.T, endpoint, sessionID, jsonBody string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(jsonBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	return resp
 }
 
 // ListTools helper function to list available tools

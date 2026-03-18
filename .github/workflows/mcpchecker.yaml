@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (kubernetes, kubevirt, kiali, or all)'
+        description: 'Which task suite to run (kubernetes, kubevirt, kiali, tekton, or all)'
         required: false
         default: 'kubernetes'
         type: choice
@@ -21,6 +21,7 @@ on:
           - kubernetes
           - kubevirt
           - kiali
+          - tekton
           - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
@@ -65,8 +66,7 @@ jobs:
        contains(github.event.comment.body, '/run-mcpchecker'))
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
-      kiali-run: ${{ steps.check.outputs.kiali-run }}
-      kubevirt-run: ${{ steps.check.outputs.kubevirt-run }}
+      toolsets: ${{ steps.check.outputs.toolsets }}
       label-selector: ${{ steps.check.outputs.label-selector }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
@@ -109,12 +109,12 @@ jobs:
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
 
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kubevirt | kiali | all
+            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kubevirt | kiali | tekton | all
             COMMENT_BODY="${{ github.event.comment.body }}"
             COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
             read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
             case "${FIRST_WORD,,}" in
-              kubevirt|kiali|all)
+              kubevirt|kiali|tekton|all)
                 SUITE_INPUT="${FIRST_WORD,,}"
                 ;;
               kubernetes)
@@ -131,27 +131,27 @@ jobs:
           case "$SUITE" in
             kubevirt)
               echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
-              echo "kiali-run=false" >> $GITHUB_OUTPUT
-              echo "kubevirt-run=true" >> $GITHUB_OUTPUT
+              echo "toolsets=kubevirt" >> $GITHUB_OUTPUT
               ;;
             kiali)
               echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
-              echo "kiali-run=true" >> $GITHUB_OUTPUT
-              echo "kubevirt-run=false" >> $GITHUB_OUTPUT
+              echo "toolsets=kiali" >> $GITHUB_OUTPUT
+              ;;
+            tekton)
+              echo "label-selector=suite=tekton" >> $GITHUB_OUTPUT
+              echo "toolsets=tekton" >> $GITHUB_OUTPUT
               ;;
             all)
               echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
-              echo "kiali-run=true" >> $GITHUB_OUTPUT
-              echo "kubevirt-run=true" >> $GITHUB_OUTPUT
+              echo "toolsets=kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
-              echo "kiali-run=false" >> $GITHUB_OUTPUT
-              echo "kubevirt-run=false" >> $GITHUB_OUTPUT
+              echo "toolsets=" >> $GITHUB_OUTPUT
               ;;
           esac
 
-  # Run gevals evaluation with Kind cluster
+  # Run mcpchecker evaluation with Kind cluster
   run-evaluation:
     name: Run MCP Evaluation
     needs: check-trigger
@@ -175,23 +175,22 @@ jobs:
         run: make kind-create-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }}
 
       - name: Install Istio/Kiali and bookinfo demo
-        if: needs.check-trigger.outputs.kiali-run == 'true'
+        if: contains(needs.check-trigger.outputs.toolsets, 'kiali')
         run: make setup-kiali
 
       - name: Install KubeVirt
-        if: needs.check-trigger.outputs.kubevirt-run == 'true'
+        if: contains(needs.check-trigger.outputs.toolsets, 'kubevirt')
         run: make kubevirt-install
+
+      - name: Install Tekton
+        if: contains(needs.check-trigger.outputs.toolsets, 'tekton')
+        run: make tekton-install
 
       - name: Start MCP server
         run: make run-server
         env:
-          TOOLSETS: >-
-            ${{
-              (needs.check-trigger.outputs.kiali-run == 'true' && needs.check-trigger.outputs.kubevirt-run == 'true' && 'kiali,kubevirt') ||
-              (needs.check-trigger.outputs.kiali-run == 'true' && 'kiali') ||
-              (needs.check-trigger.outputs.kubevirt-run == 'true' && 'kubevirt') ||
-              ''
-            }}
+          TOOLSETS: ${{ needs.check-trigger.outputs.toolsets }}
+          MCP_CONFIG_DIR: 'dev/config/mcp-configs'
 
       - name: Run mcpchecker evaluation
         id: mcpchecker

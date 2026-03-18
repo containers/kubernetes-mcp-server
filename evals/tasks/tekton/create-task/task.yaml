@@ -1,0 +1,73 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "create-tekton-task"
+  difficulty: easy
+  labels:
+    suite: tekton
+    requires: tekton
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/cleanup-namespace.sh
+          cleanup_tekton_namespace
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          if ! kubectl get task echo-task -n tekton-eval > /dev/null 2>&1; then
+            echo "ERROR: Task echo-task not found in tekton-eval"
+            exit 1
+          fi
+          STEP_NAME=$(kubectl get task echo-task -n tekton-eval -o jsonpath='{.spec.steps[0].name}')
+          if [ "$STEP_NAME" != "echo" ]; then
+            echo "ERROR: expected step name echo, got $STEP_NAME"
+            exit 1
+          fi
+          STEP_IMAGE=$(kubectl get task echo-task -n tekton-eval -o jsonpath='{.spec.steps[0].image}')
+          if [ "$STEP_IMAGE" != "alpine" ]; then
+            echo "ERROR: expected step image alpine, got $STEP_IMAGE"
+            exit 1
+          fi
+          echo "Task echo-task created successfully with correct step configuration"
+    - llmJudge:
+        contains: "echo-task"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Task
+        metadata:
+          name: echo-task
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: |-
+      Create a Tekton Task named "echo-task" in the tekton-eval namespace.
+      The task should have a single step named "echo" that uses the alpine image and runs the command: echo hello-tekton

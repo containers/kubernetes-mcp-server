@@ -1,0 +1,3 @@
+[toolset_configs.kiali]
+url = "http://localhost:20001/kiali/"
+insecure = true

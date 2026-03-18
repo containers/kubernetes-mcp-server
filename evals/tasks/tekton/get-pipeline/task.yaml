@@ -1,0 +1,83 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "get-tekton-pipeline"
+  difficulty: easy
+  labels:
+    suite: tekton
+    requires: tekton
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/cleanup-namespace.sh
+          cleanup_tekton_namespace
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: Task
+        metadata:
+          name: echo-task
+          namespace: tekton-eval
+        spec:
+          steps:
+            - name: echo
+              image: alpine
+              command: ["echo", "hello"]
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: hello-pipeline
+          namespace: tekton-eval
+          labels:
+            app: eval
+        spec:
+          tasks:
+            - name: echo
+              taskRef:
+                name: echo-task
+
+  verify:
+    - llmJudge:
+        contains: "hello-pipeline"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: hello-pipeline
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Task
+        metadata:
+          name: echo-task
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: Get the Tekton Pipeline named hello-pipeline in the tekton-eval namespace.

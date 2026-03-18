@@ -76,6 +76,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
 | defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
+| extraArgs | list | `[]` | Note: For TLS configuration, use the tls section above instead of extraArgs. |
 | extraContainers | list | `[]` | Each container is defined as a complete container spec. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
@@ -85,6 +86,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | image.version | string | `"latest"` | This sets the tag or sha digest for the image. |
 | imagePullSecrets | list | `[]` | This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/ |
 | ingress | object | `{"annotations":{},"className":"","enabled":true,"host":"","hosts":null,"path":"/","pathType":"ImplementationSpecific","termination":"edge","tls":null}` | This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/ |
+| initContainers | list | `[]` | Init containers to run before the main container starts. Each container is defined as a complete container spec. Supports tpl for templating. |
 | livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"}}` | Liveness and readiness probes for the container. |
 | metrics | object | `{"prometheusRule":{"additionalRules":[],"annotations":{},"defaultRules":{"enabled":true},"enabled":false,"labels":{}},"serviceMonitor":{"annotations":{},"enabled":false,"interval":"","labels":{},"metricRelabelings":[],"relabelings":[],"scheme":"","scrapeTimeout":"","tlsConfig":{}}}` | Metrics and monitoring configuration |
 | metrics.prometheusRule | object | `{"additionalRules":[],"annotations":{},"defaultRules":{"enabled":true},"enabled":false,"labels":{}}` | PrometheusRule configuration for recording rules Recording rules aggregate high-cardinality metrics for efficient querying and Telemeter compatibility |
@@ -121,14 +123,21 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | replicaCount | int | `1` | This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/ |
 | resources | object | `{"limits":{"cpu":"100m","memory":"128Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}` | Resource requests and limits for the container. |
 | securityContext | object | `{}` | Define the Security Context for the Container |
-| service | object | `{"port":8080,"targetPort":"http","type":"ClusterIP"}` | This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/ |
+| service | object | `{"annotations":{},"port":8080,"targetPort":"http","type":"ClusterIP"}` | This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/ |
+| service.annotations | object | `{}` | Annotations to add to the service |
 | service.port | int | `8080` | This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports |
-| service.targetPort | string | `"http"` | Target port for the service. Useful when deploying with an proxy sidecar. Set this to the sidecar's port to route traffic through the proxy before reaching the main container. |
+| service.targetPort | string | `"http"` | Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container. |
 | service.type | string | `"ClusterIP"` | This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types |
 | serviceAccount | object | `{"annotations":{},"create":true,"name":""}` | This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/ |
 | serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | If not set and create is true, a name is generated using the fullname template |
+| tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | This is the recommended way to enable TLS instead of using extraArgs. |
+| tls.certFile | string | `"tls.crt"` | Name of the certificate file within the secret (default: tls.crt) |
+| tls.enabled | bool | `false` | Enable TLS for the MCP server |
+| tls.keyFile | string | `"tls.key"` | Name of the key file within the secret (default: tls.key) |
+| tls.mountPath | string | `"/etc/tls"` | Path where the TLS secret will be mounted inside the container |
+| tls.secretName | string | `""` | The secret should be of type kubernetes.io/tls with tls.crt and tls.key. |
 | tolerations | list | `[]` |  |
 
 ## Updating the README

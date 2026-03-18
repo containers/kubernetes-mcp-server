@@ -84,9 +84,10 @@ func NewPromptCallResult(description string, messages []PromptMessage, err error
 // PromptHandlerParams contains the parameters passed to a prompt handler
 type PromptHandlerParams struct {
 	context.Context
-	ExtendedConfigProvider
+	BaseConfig
 	KubernetesClient
 	PromptCallRequest
+	Elicitor
 }
 
 // PromptHandlerFunc is a function that handles prompt execution

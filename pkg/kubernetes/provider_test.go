@@ -18,15 +18,15 @@ type BaseProviderSuite struct {
 
 func (s *BaseProviderSuite) SetupTest() {
 	s.originalProviderFactories = make(map[string]ProviderFactory)
-	for k, v := range providerFactories {
+	for k, v := range providerReg.factories {
 		s.originalProviderFactories[k] = v
 	}
 }
 
 func (s *BaseProviderSuite) TearDownTest() {
-	providerFactories = make(map[string]ProviderFactory)
+	providerReg.clear()
 	for k, v := range s.originalProviderFactories {
-		providerFactories[k] = v
+		providerReg.factories[k] = v
 	}
 }
 

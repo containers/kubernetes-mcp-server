@@ -19,11 +19,6 @@
           "description": "Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'",
           "type": "string"
         },
-        "duration": {
-          "default": "30m",
-          "description": "Time range to get metrics for (optional string - if provided, gets metrics (e.g., '1m', '5m', '1h'); if empty, get default 30m).",
-          "type": "string"
-        },
         "namespace": {
           "description": "Namespace to get resources from",
           "type": "string"

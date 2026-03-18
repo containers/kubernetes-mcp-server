@@ -18,6 +18,7 @@ func (s *ToolsetsSuite) SetupTest() {
 }
 
 func (s *ToolsetsSuite) TearDownTest() {
+	Clear()
 	for _, toolset := range s.originalToolsets {
 		Register(toolset)
 	}
@@ -37,6 +38,13 @@ func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
 func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
 var _ api.Toolset = (*TestToolset)(nil)
+
+func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
+	Register(&TestToolset{name: "duplicate"})
+	s.Panics(func() {
+		Register(&TestToolset{name: "duplicate"})
+	}, "Expected panic on duplicate toolset registration")
+}
 
 func (s *ToolsetsSuite) TestToolsetNames() {
 	s.Run("Returns empty list if no toolsets registered", func() {

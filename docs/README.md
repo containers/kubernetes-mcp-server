@@ -23,6 +23,15 @@ Choose the guide that matches your needs:
 ## Toolset Guides
 
 - **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
+- **[KubeVirt](kubevirt.md)** - KubeVirt virtual machine management tools
+
+## Feature Specifications
+
+Living documentation for implemented and planned features:
+
+| Spec | Description | Status |
+|------|-------------|--------|
+| **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 
 ## Advanced Topics
 

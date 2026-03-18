@@ -17,7 +17,7 @@ steps:
         namespace: bookinfo
         name: ratings
         labels:
-          gevals.kiali.io/test: delete-fault-injection
+          gevals.kiali.io/test: gevals-testing
       spec:
         host: ratings.bookinfo.svc.cluster.local
         subsets:
@@ -31,7 +31,7 @@ steps:
         namespace: bookinfo
         name: ratings
         labels:
-          gevals.kiali.io/test: delete-fault-injection
+          gevals.kiali.io/test: gevals-testing
       spec:
         hosts:
         - ratings.bookinfo.svc.cluster.local
@@ -48,8 +48,7 @@ steps:
               httpStatus: 503
       EOF
   verify:
-    inline: |-
-      #!/usr/bin/env bash
+    contains: "bookinfo"
   cleanup: 
     inline: |-
       #!/usr/bin/env bash

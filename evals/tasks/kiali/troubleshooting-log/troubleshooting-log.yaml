@@ -22,7 +22,7 @@ steps:
             hosts:
             - "productpage"
             - "productpage.bookinfo.svc.cluster.local"
-            - "productpage-bookinfo.apps-crc.testing"  # <--- ¡AQUÍ ESTÁ LA CLAVE!
+            - "productpage-bookinfo.apps-crc.testing" 
             http:
             - fault:
                 abort:

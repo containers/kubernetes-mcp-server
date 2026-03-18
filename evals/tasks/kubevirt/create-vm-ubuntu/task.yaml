@@ -1,40 +1,54 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
     requires: kubevirt
   name: "create-ubuntu-vm"
   difficulty: easy
-steps:
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
   setup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete namespace "$NS" --ignore-not-found
-      kubectl create namespace "$NS"
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
   verify:
-    inline: |-
-      #!/usr/bin/env bash
-      source ../helpers/verify-vm.sh
-      NS="${EVAL_NAMESPACE:-vm-test}"
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="vm-test"
 
-      # Wait for VirtualMachine to be created
-      verify_vm_exists "ubuntu-vm" "$NS" || exit 1
+          verify_vm_exists "ubuntu-vm" "$NS" || exit 1
+          verify_container_disk "ubuntu-vm" "$NS" "ubuntu" || exit 1
+          verify_run_strategy "ubuntu-vm" "$NS" || exit 1
+          verify_no_deprecated_running_field "ubuntu-vm" "$NS" || exit 1
 
-      # Verify container disk is Ubuntu
-      verify_container_disk "ubuntu-vm" "$NS" "ubuntu" || exit 1
-
-      # Verify runStrategy is set and deprecated 'running' field is not used
-      verify_run_strategy "ubuntu-vm" "$NS" || exit 1
-      verify_no_deprecated_running_field "ubuntu-vm" "$NS" || exit 1
-
-      echo "All validations passed"
-      exit 0
+          echo "All validations passed"
+          exit 0
   cleanup:
-    inline: |-
-      #!/usr/bin/env bash
-      NS="${EVAL_NAMESPACE:-vm-test}"
-      kubectl delete virtualmachine ubuntu-vm -n "$NS" --ignore-not-found
-      kubectl delete namespace "$NS" --ignore-not-found
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: ubuntu-vm
+          namespace: vm-test
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
   prompt:
-    inline: Create an Ubuntu virtual machine named ubuntu-vm in the ${EVAL_NAMESPACE:-vm-test} namespace.
+    inline: Create an Ubuntu virtual machine named ubuntu-vm in the vm-test namespace.

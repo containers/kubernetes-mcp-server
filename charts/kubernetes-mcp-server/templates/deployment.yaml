@@ -30,6 +30,10 @@ spec:
       serviceAccountName: {{ include "kubernetes-mcp-server.serviceAccountName" . }}
       securityContext:
         {{- tpl (toYaml (default .Values.defaultPodSecurityContext .Values.podSecurityContext)) . | nindent 8 }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ include "kubernetes-mcp-server.name" . }}
           securityContext:
@@ -43,6 +47,13 @@ spec:
           args:
             - "--config"
             - "{{ .Values.configFilePath }}"
+          {{- if .Values.tls.enabled }}
+            - "--tls-cert={{ .Values.tls.mountPath }}/{{ .Values.tls.certFile }}"
+            - "--tls-key={{ .Values.tls.mountPath }}/{{ .Values.tls.keyFile }}"
+          {{- end }}
+          {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: POD_NAMESPACE
               valueFrom:
@@ -50,11 +61,19 @@ spec:
                   fieldPath: metadata.namespace
           {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- $probe := . | deepCopy }}
+            {{- if and $.Values.tls.enabled (hasKey $probe "httpGet") }}
+            {{- $_ := set $probe.httpGet "scheme" "HTTPS" }}
+            {{- end }}
+            {{- tpl (toYaml $probe) $ | nindent 12 }}
           {{- end }}
           {{- with .Values.readinessProbe }}
           readinessProbe:
-            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- $probe := . | deepCopy }}
+            {{- if and $.Values.tls.enabled (hasKey $probe "httpGet") }}
+            {{- $_ := set $probe.httpGet "scheme" "HTTPS" }}
+            {{- end }}
+            {{- tpl (toYaml $probe) $ | nindent 12 }}
           {{- end }}
           {{- with .Values.resources }}
           resources:
@@ -63,6 +82,11 @@ spec:
           volumeMounts:
             - name: config
               mountPath: {{ .Values.configFilePath | dir }}
+          {{- if .Values.tls.enabled }}
+            - name: tls
+              mountPath: {{ .Values.tls.mountPath }}
+              readOnly: true
+          {{- end }}
           {{- with .Values.extraVolumeMounts }}
             {{- tpl (toYaml .) $ | nindent 12 }}
           {{- end }}
@@ -73,6 +97,11 @@ spec:
         - name: config
           configMap:
             name: {{ include "kubernetes-mcp-server.fullname" . }}
+      {{- if .Values.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ required "tls.secretName is required when tls.enabled is true" .Values.tls.secretName }}
+      {{- end }}
       {{- with .Values.extraVolumes }}
         {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}

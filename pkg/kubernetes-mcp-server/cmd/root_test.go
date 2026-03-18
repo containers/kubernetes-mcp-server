@@ -484,3 +484,86 @@ func TestStateless(t *testing.T) {
 		}
 	})
 }
+
+func TestTLSValidation(t *testing.T) {
+	t.Run("tls-cert without tls-key returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=8080", "--tls-cert", certPath})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "both --tls-cert and --tls-key must be provided together")
+	})
+
+	t.Run("tls-key without tls-cert returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=8080", "--tls-key", keyPath})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "both --tls-cert and --tls-key must be provided together")
+	})
+
+	t.Run("invalid tls-cert path returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=8080", "--tls-cert", "/nonexistent/cert.pem", "--tls-key", keyPath})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tls-cert must be a valid file path")
+	})
+
+	t.Run("invalid tls-key path returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=8080", "--tls-cert", certPath, "--tls-key", "/nonexistent/key.pem"})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tls-key must be a valid file path")
+	})
+
+	t.Run("valid tls-cert and tls-key paths succeed", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=8080", "--tls-cert", certPath, "--tls-key", keyPath})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+
+	t.Run("tls-cert without port returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--tls-cert", certPath, "--tls-key", keyPath})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--tls-cert and --tls-key require --port to be set")
+	})
+}

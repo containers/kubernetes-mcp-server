@@ -12,7 +12,7 @@ import (
 func BaseDefault() *StaticConfig {
 	return &StaticConfig{
 		ListOutput: "table",
-		Toolsets:   []string{"core", "config", "helm"},
+		Toolsets:   []string{"core", "config"},
 	}
 }
 

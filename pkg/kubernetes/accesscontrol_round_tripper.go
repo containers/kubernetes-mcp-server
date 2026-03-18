@@ -21,6 +21,7 @@ type AccessControlRoundTripper struct {
 	delegate                http.RoundTripper
 	deniedResourcesProvider api.DeniedResourcesProvider
 	restMapperProvider      func() meta.RESTMapper
+	apiPathPrefix           string
 	validationEnabled       bool
 	validators              []api.HTTPValidator
 }
@@ -30,6 +31,7 @@ type AccessControlRoundTripperConfig struct {
 	Delegate                http.RoundTripper
 	DeniedResourcesProvider api.DeniedResourcesProvider
 	RestMapperProvider      func() meta.RESTMapper
+	APIPathPrefix           string
 	DiscoveryProvider       func() discovery.DiscoveryInterface
 	AuthClientProvider      func() authv1client.AuthorizationV1Interface
 	ValidationEnabled       bool
@@ -41,6 +43,7 @@ func NewAccessControlRoundTripper(cfg AccessControlRoundTripperConfig) *AccessCo
 		delegate:                cfg.Delegate,
 		deniedResourcesProvider: cfg.DeniedResourcesProvider,
 		restMapperProvider:      cfg.RestMapperProvider,
+		apiPathPrefix:           strings.TrimSuffix(cfg.APIPathPrefix, "/"),
 		validationEnabled:       cfg.ValidationEnabled,
 	}
 
@@ -54,8 +57,13 @@ func NewAccessControlRoundTripper(cfg AccessControlRoundTripperConfig) *AccessCo
 	return rt
 }
 
+func (rt *AccessControlRoundTripper) WrappedRoundTripper() http.RoundTripper {
+	return rt.delegate
+}
+
 func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	gvr, ok := parseURLToGVR(req.URL.Path)
+	kubernetesPath := stripAPIPathPrefix(req.URL.Path, rt.apiPathPrefix)
+	gvr, ok := parseURLToGVR(kubernetesPath)
 	// Not an API resource request, just pass through
 	if !ok {
 		return rt.delegate.RoundTrip(req)
@@ -89,8 +97,8 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 		return rt.delegate.RoundTrip(req)
 	}
 
-	namespace, resourceName := parseURLToNamespaceAndName(req.URL.Path)
-	verb := httpMethodToVerb(req.Method, req.URL.Path)
+	namespace, resourceName := parseURLToNamespaceAndName(kubernetesPath)
+	verb := httpMethodToVerb(req.Method, kubernetesPath)
 
 	validationReq := &api.HTTPValidationRequest{
 		GVR:          &gvr,
@@ -99,7 +107,7 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 		Verb:         verb,
 		Namespace:    namespace,
 		ResourceName: resourceName,
-		Path:         req.URL.Path,
+		Path:         kubernetesPath,
 	}
 
 	if req.Body != nil && (req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH") {
@@ -183,6 +191,22 @@ func parseURLToGVR(path string) (gvr schema.GroupVersionResource, ok bool) {
 		return
 	}
 	return gvr, true
+}
+
+func stripAPIPathPrefix(path, prefix string) string {
+	if prefix == "" || prefix == "/" {
+		return path
+	}
+
+	if path == prefix {
+		return "/"
+	}
+
+	if strings.HasPrefix(path, prefix+"/") {
+		return strings.TrimPrefix(path, prefix)
+	}
+
+	return path
 }
 
 func parseURLToNamespaceAndName(path string) (namespace, name string) {

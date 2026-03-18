@@ -1,6 +1,9 @@
 kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
   name: "clone-vm"
   difficulty: medium
 spec:

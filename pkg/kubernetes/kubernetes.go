@@ -3,10 +3,12 @@ package kubernetes
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
@@ -17,6 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
 
@@ -43,6 +46,7 @@ type Kubernetes struct {
 	config          api.BaseConfig
 	clientCmdConfig clientcmd.ClientConfig
 	restConfig      *rest.Config
+	httpClient      *http.Client
 	restMapper      meta.ResettableRESTMapper
 	discoveryClient discovery.CachedDiscoveryInterface
 	dynamicClient   dynamic.Interface
@@ -61,11 +65,19 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 		k.restConfig.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
 
+	apiPathPrefix := ""
+	if hostURL, err := url.Parse(k.restConfig.Host); err != nil {
+		klog.Warningf("failed to parse Kubernetes API server host %q to determine API path prefix: %v", k.restConfig.Host, err)
+	} else {
+		apiPathPrefix = hostURL.Path
+	}
+
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
 			Delegate:                original,
 			DeniedResourcesProvider: baseConfig,
 			RestMapperProvider:      func() meta.RESTMapper { return k.restMapper },
+			APIPathPrefix:           apiPathPrefix,
 			DiscoveryProvider:       func() discovery.DiscoveryInterface { return k.discoveryClient },
 			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
 			ValidationEnabled:       baseConfig.IsValidationEnabled(),
@@ -74,25 +86,41 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return &UserAgentRoundTripper{delegate: original}
 	})
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(k.restConfig)
+	var err error
+	k.httpClient, err = rest.HTTPClientFor(k.restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+	discoveryClient, err := discovery.NewDiscoveryClientForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discovery client: %w", err)
 	}
 	k.discoveryClient = memory.NewMemCacheClient(discoveryClient)
 	k.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(k.discoveryClient)
-	k.Interface, err = kubernetes.NewForConfig(k.restConfig)
+	k.Interface, err = kubernetes.NewForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, err
 	}
-	k.dynamicClient, err = dynamic.NewForConfig(k.restConfig)
+	k.dynamicClient, err = dynamic.NewForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, err
 	}
-	k.metricsV1beta1, err = metricsv1beta1.NewForConfig(k.restConfig)
+	k.metricsV1beta1, err = metricsv1beta1.NewForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, err
 	}
 	return k, nil
+}
+
+// close releases HTTP transport resources (TCP sockets, TLS sessions, buffers,
+// goroutines) held by this client. Intended to be registered via
+// context.AfterFunc so that derived per-request clients are cleaned up
+// automatically when the request context finishes.
+func (k *Kubernetes) close() {
+	if k == nil || k.httpClient == nil {
+		return
+	}
+	utilnet.CloseIdleConnectionsFor(k.httpClient.Transport)
 }
 
 func (k *Kubernetes) RESTConfig() *rest.Config {

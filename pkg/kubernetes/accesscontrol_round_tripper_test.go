@@ -151,6 +151,46 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDiscoveryRequests()
 	}
 }
 
+func (s *AccessControlRoundTripperTestSuite) TestRoundTripForPrefixedDiscoveryRequests() {
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	rt := &AccessControlRoundTripper{
+		delegate:                mockDelegate,
+		deniedResourcesProvider: nil,
+		restMapperProvider: func() meta.RESTMapper {
+			s.Fail("restMapper should not be consulted for discovery requests behind a path prefix")
+			return nil
+		},
+		apiPathPrefix: "/api/v1/kube/clusters/test-cluster",
+	}
+
+	testCases := []string{
+		"/api/v1/kube/clusters/test-cluster/api",
+		"/api/v1/kube/clusters/test-cluster/apis",
+		"/api/v1/kube/clusters/test-cluster/api/v1",
+		"/api/v1/kube/clusters/test-cluster/apis/apps/v1",
+		"/api/v1/kube/clusters/test-cluster/openapi/v2",
+		"/api/v1/kube/clusters/test-cluster/version",
+	}
+
+	for _, testCase := range testCases {
+		s.Run("Prefixed discovery endpoint "+testCase+" bypasses access control", func() {
+			delegateCalled = false
+			resp, err := rt.RoundTrip(httptest.NewRequest("GET", testCase, nil))
+			s.NoError(err)
+			s.NotNil(resp)
+			s.Equal(http.StatusOK, resp.StatusCode)
+			s.True(delegateCalled, "Expected delegate to be called for prefixed discovery request")
+		})
+	}
+}
+
 func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources() {
 	delegateCalled := false
 	mockDelegate := &mockRoundTripper{
@@ -220,6 +260,20 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources
 		s.NotNil(resp)
 		s.True(delegateCalled, "Expected delegate to be called for namespaced deployments list")
 	})
+
+	s.Run("List pods in namespace is allowed when the API server has a path prefix", func() {
+		delegateCalled = false
+		originalAPIPathPrefix := rt.apiPathPrefix
+		defer func() {
+			rt.apiPathPrefix = originalAPIPathPrefix
+		}()
+		rt.apiPathPrefix = "/api/v1/kube/clusters/test-cluster"
+		req := httptest.NewRequest("GET", "/api/v1/kube/clusters/test-cluster/api/v1/namespaces/default/pods", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for namespaced pods list behind a path prefix")
+	})
 }
 
 func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources() {
@@ -261,6 +315,23 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 			s.False(delegateCalled)
 			s.Contains(err.Error(), "resource not allowed")
 		})
+
+		s.Run("List pods behind an API path prefix is denied", func() {
+			delegateCalled = false
+			originalAPIPathPrefix := rt.apiPathPrefix
+			defer func() {
+				rt.apiPathPrefix = originalAPIPathPrefix
+			}()
+			rt.apiPathPrefix = "/api/v1/kube/clusters/test-cluster"
+
+			req := httptest.NewRequest("GET", "/api/v1/kube/clusters/test-cluster/api/v1/namespaces/default/pods", nil)
+			resp, err := rt.RoundTrip(req)
+			s.Error(err)
+			s.Nil(resp)
+			s.False(delegateCalled, "Expected delegate not to be called for denied resource behind a path prefix")
+			s.Contains(err.Error(), "resource not allowed")
+			s.Contains(err.Error(), "Pod")
+		})
 	})
 
 	s.Run("Entire group/version is denied", func() {
@@ -292,6 +363,48 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	})
 }
 
+type StripAPIPathPrefixTestSuite struct {
+	suite.Suite
+}
+
+func (s *StripAPIPathPrefixTestSuite) TestStripAPIPathPrefix() {
+	s.Run("returns original path when prefix is empty", func() {
+		s.Equal("/api/v1/pods", stripAPIPathPrefix("/api/v1/pods", ""))
+	})
+
+	s.Run("returns original path when prefix is root", func() {
+		s.Equal("/api/v1/pods", stripAPIPathPrefix("/api/v1/pods", "/"))
+	})
+
+	s.Run("returns slash when path matches prefix exactly", func() {
+		s.Equal("/", stripAPIPathPrefix("/api/v1/kube/clusters/test-cluster", "/api/v1/kube/clusters/test-cluster"))
+	})
+
+	s.Run("removes the configured API path prefix", func() {
+		s.Equal(
+			"/api/v1/namespaces/default/pods",
+			stripAPIPathPrefix(
+				"/api/v1/kube/clusters/test-cluster/api/v1/namespaces/default/pods",
+				"/api/v1/kube/clusters/test-cluster",
+			),
+		)
+	})
+
+	s.Run("does not trim partial prefix matches", func() {
+		s.Equal(
+			"/api/v1/kube/clusters/test-cluster/api/v1/pods",
+			stripAPIPathPrefix(
+				"/api/v1/kube/clusters/test-cluster/api/v1/pods",
+				"/api/v1/kube/clusters/test",
+			),
+		)
+	})
+}
+
 func TestAccessControlRoundTripper(t *testing.T) {
 	suite.Run(t, new(AccessControlRoundTripperTestSuite))
+}
+
+func TestStripAPIPathPrefix(t *testing.T) {
+	suite.Run(t, new(StripAPIPathPrefixTestSuite))
 }

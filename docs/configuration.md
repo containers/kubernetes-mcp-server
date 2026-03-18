@@ -25,6 +25,7 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
   - [Prompts](#prompts)
   - [OAuth and Authorization](#oauth-and-authorization)
   - [Telemetry](#telemetry)
+  - [Validation](#validation)
   - [Toolset-Specific Configuration](#toolset-specific-configuration)
   - [Cluster Provider Configuration](#cluster-provider-configuration)
 - [CLI Configuration Options](#cli-configuration-options)
@@ -131,6 +132,8 @@ The server will:
 | `sse_base_url` | string | `""` | Base URL for Server-Sent Events (SSE) connections. Used when the server is behind a reverse proxy. |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
+| `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
+| `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 
 **Example:**
 ```toml
@@ -138,6 +141,10 @@ log_level = 2
 port = "8080"
 list_output = "yaml"
 stateless = true
+
+# Enable TLS for HTTPS
+tls_cert = "/etc/tls/tls.crt"
+tls_key = "/etc/tls/tls.key"
 ```
 
 ### Kubernetes Connection
@@ -252,14 +259,14 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset  | Description                                                                                                                                                          | Default |
-|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                              | ✓       |
-| core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                  | ✓       |
-| helm     | Tools for managing Helm charts and releases                                                                                                                          | ✓       |
-| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                     |         |
-| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details. |         |
-| kubevirt | KubeVirt virtual machine management tools                                                                                                                            |         |
+| Toolset  | Description                                                                                                                                                                     | Default |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                         | ✓       |
+| core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                             | ✓       |
+| helm     | Tools for managing Helm charts and releases                                                                                                                                     |         |
+| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                                |         |
+| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.            |         |
+| kubevirt | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details. |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -454,6 +461,28 @@ traces_sampler = "traceidratio"
 traces_sampler_arg = 0.1  # 10% sampling
 ```
 
+### Validation
+
+Pre-execution validation catches errors before they reach the Kubernetes API, providing clearer error messages for issues like typos in resource names, invalid fields, and missing permissions.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `validation_enabled` | boolean | `false` | When `true`, enables schema validation and RBAC pre-checks for all API requests. Resource existence is always checked regardless of this setting. |
+
+When enabled, the validation layer runs at the HTTP RoundTripper level, intercepting all Kubernetes API calls (including those from plugins like Helm, KubeVirt, and Kiali). It performs:
+
+- **Schema validation** — Validates resource manifests against the cluster's OpenAPI schema for create/update operations
+- **RBAC pre-checks** — Verifies permissions using `SelfSubjectAccessReview` before attempting operations
+
+Resource existence validation (catching typos like "Deploymnt" instead of "Deployment") runs as part of access control regardless of this setting.
+
+For detailed information about the validation flow, error codes, and behavior, see the [validation specification](specs/validation.md).
+
+**Example:**
+```toml
+validation_enabled = true
+```
+
 ### Toolset-Specific Configuration
 
 Some toolsets accept additional configuration via the `toolset_configs` map.
@@ -504,6 +533,8 @@ The following options can be set via command-line arguments. CLI arguments overr
 | `--toolsets` | Comma-separated list of toolsets to enable |
 | `--disable-multi-cluster` | Disable multi-cluster support |
 | `--cluster-provider` | Cluster provider strategy (`kubeconfig`, `in-cluster`, `kcp`, `disabled`) |
+| `--tls-cert` | Path to TLS certificate file for HTTPS (must be used with `--tls-key`) |
+| `--tls-key` | Path to TLS private key file for HTTPS (must be used with `--tls-cert`) |
 
 ## Complete Example
 

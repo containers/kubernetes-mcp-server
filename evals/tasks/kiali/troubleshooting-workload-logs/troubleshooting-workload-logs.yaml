@@ -1,0 +1,18 @@
+kind: Task
+metadata:
+  labels:
+    suite: kiali
+  name: "Get workload logs"
+  category: "Troubleshooting & Debugging"
+  difficulty: easy
+steps:
+  setup:
+    inline: |-
+      #!/usr/bin/env bash
+  verify:
+    contains: "productpage"
+  cleanup:
+    inline: |-
+      #!/usr/bin/env bash
+  prompt:
+    inline: Show me the last 20 log lines for the productpage-v1 workload in the bookinfo namespace.

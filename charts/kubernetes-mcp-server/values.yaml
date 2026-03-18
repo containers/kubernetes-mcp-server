@@ -118,8 +118,10 @@ service:
   type: ClusterIP
   # -- This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 8080
-  # -- Target port for the service. Useful when deploying with an proxy sidecar. Set this to the sidecar's port to route traffic through the proxy before reaching the main container.
+  # -- Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container.
   targetPort: http
+  # -- Annotations to add to the service
+  annotations: {}
 
 # -- This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -165,6 +167,36 @@ extraVolumeMounts: []
 # - name: foo
 #   mountPath: "/etc/foo"
 #   readOnly: true
+
+# -- Init containers to run before the main container starts. Each container is defined as a complete container spec. Supports tpl for templating.
+initContainers: []
+# - name: init-config
+#   image: busybox:latest
+#   command: ["sh", "-c", "echo 'Preparing config...' && cp /defaults/* /config/"]
+#   volumeMounts:
+#     - name: config-volume
+#       mountPath: /config
+
+# -- TLS configuration for the MCP server.
+# -- When enabled, the server will serve HTTPS and health probes will use the HTTPS scheme.
+# -- This is the recommended way to enable TLS instead of using extraArgs.
+tls:
+  # -- Enable TLS for the MCP server
+  enabled: false
+  # -- Name of the Kubernetes Secret containing TLS certificate and key.
+  # -- The secret should be of type kubernetes.io/tls with tls.crt and tls.key.
+  secretName: ""
+  # -- Path where the TLS secret will be mounted inside the container
+  mountPath: /etc/tls
+  # -- Name of the certificate file within the secret (default: tls.crt)
+  certFile: tls.crt
+  # -- Name of the key file within the secret (default: tls.key)
+  keyFile: tls.key
+
+# -- Extra arguments to pass to the kubernetes-mcp-server command line.
+# -- Useful for passing additional configuration options. It can also be configured using ConfigMap.
+# -- Note: For TLS configuration, use the tls section above instead of extraArgs.
+extraArgs: []
 
 # -- Additional containers to add to the pod (sidecars).
 # -- Each container is defined as a complete container spec.

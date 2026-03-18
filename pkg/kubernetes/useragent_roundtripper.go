@@ -8,6 +8,10 @@ type UserAgentRoundTripper struct {
 
 var _ http.RoundTripper = &UserAgentRoundTripper{}
 
+func (u *UserAgentRoundTripper) WrappedRoundTripper() http.RoundTripper {
+	return u.delegate
+}
+
 func (u *UserAgentRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	userAgentHeader, ok := req.Context().Value(UserAgentHeader).(string)
 	if !ok || userAgentHeader == "" {

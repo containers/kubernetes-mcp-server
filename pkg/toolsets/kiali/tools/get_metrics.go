@@ -56,10 +56,6 @@ func InitGetMetrics() []api.ServerTool {
 						Type:        "string",
 						Description: "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
 					},
-					"duration": {
-						Type:        "string",
-						Description: "Time range to get metrics for (optional string - if provided, gets metrics (e.g., '1m', '5m', '1h'); if empty, get default 30m).", Default: api.ToRawMessage(kialiclient.DefaultDuration),
-					},
 					"step": {
 						Type:        "string",
 						Description: "Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds",
@@ -135,9 +131,6 @@ func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, 
 	}
 
 	queryParams := make(map[string]string)
-	if err := setQueryParam(params, queryParams, "duration", kialiclient.DefaultDuration); err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
 	if err := setQueryParam(params, queryParams, "step", kialiclient.DefaultStep); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}

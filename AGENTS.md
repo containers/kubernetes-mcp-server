@@ -311,6 +311,10 @@ The `docs/` directory contains user-facing documentation:
 - `docs/getting-started-claude-code.md` – Claude Code CLI integration
 - `docs/KEYCLOAK_OIDC_SETUP.md` – OAuth/OIDC developer setup
 
+The `docs/specs/` directory contains feature specifications (living documentation for coding agents):
+
+- `docs/specs/validation.md` – Pre-execution validation layer specification (resource existence, schema, RBAC)
+
 ### Documentation conventions
 
 - Use **lowercase filenames** for new documentation files (e.g., `configuration.md`, `prompts.md`)
