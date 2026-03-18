@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -202,6 +203,15 @@ func (s *KialiSuite) TestExecuteRequest() {
 	})
 	s.Run("response body is correct", func() {
 		s.Equal("ok", out, "Unexpected response body")
+	})
+	s.Run("returns error when response exceeds maximum allowed size", func() {
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBodySize+1)))
+		}))
+		_, err := k.executeRequest(s.T().Context(), http.MethodGet, "/api/large", "", nil)
+		s.Require().Error(err, "Expected error for oversized response")
+		s.ErrorContains(err, fmt.Sprintf("kiali API response exceeded maximum allowed size of %d bytes", maxResponseBodySize))
 	})
 }
 
