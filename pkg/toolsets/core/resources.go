@@ -39,6 +39,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 						Type:        "string",
 						Description: "Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces",
 					},
+					"clean_metadata": {
+						Type:        "boolean",
+						Description: "If true, strips verbose metadata (managedFields, resourceVersion, uid, generation, last-applied-configuration) from the output. Useful for diagnostics where only spec/status matter.",
+					},
 					"labelSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the resources by label",
@@ -76,6 +80,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 					"namespace": {
 						Type:        "string",
 						Description: "Optional Namespace to retrieve the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will get resource from configured namespace",
+					},
+					"clean_metadata": {
+						Type:        "boolean",
+						Description: "If true, strips verbose metadata (managedFields, resourceVersion, uid, generation, last-applied-configuration) from the output. Useful for diagnostics where only spec/status matter.",
 					},
 					"name": {
 						Type:        "string",
@@ -225,7 +233,14 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	if params.ListOutput.AsTable() {
+		return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	}
+	var marshalOpts []output.MarshalOption
+	if clean, _ := params.GetArguments()["clean_metadata"].(bool); clean {
+		marshalOpts = append(marshalOpts, output.WithCleanMetadata())
+	}
+	return api.NewToolCallResult(output.MarshalYaml(ret, marshalOpts...)), nil
 }
 
 func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -256,7 +271,11 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
 	}
-	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
+	var marshalOpts []output.MarshalOption
+	if clean, _ := params.GetArguments()["clean_metadata"].(bool); clean {
+		marshalOpts = append(marshalOpts, output.WithCleanMetadata())
+	}
+	return api.NewToolCallResult(output.MarshalYaml(ret, marshalOpts...)), nil
 }
 
 func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

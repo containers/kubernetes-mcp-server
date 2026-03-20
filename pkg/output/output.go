@@ -95,28 +95,61 @@ func (p *table) PrintObj(obj runtime.Unstructured) (string, error) {
 	return buf.String(), err
 }
 
-func MarshalYaml(v any) (string, error) {
-	switch t := v.(type) {
-	//case unstructured.UnstructuredList:
-	//	for i := range t.Items {
-	//		t.Items[i].SetManagedFields(nil)
-	//	}
-	//	v = t.Items
-	case *unstructured.UnstructuredList:
-		for i := range t.Items {
-			t.Items[i].SetManagedFields(nil)
+func MarshalYaml(v any, opts ...MarshalOption) (string, error) {
+	var cfg marshalConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+	if cfg.clean {
+		switch t := v.(type) {
+		case *unstructured.UnstructuredList:
+			for i := range t.Items {
+				cleanMetadata(&t.Items[i])
+			}
+		case *unstructured.Unstructured:
+			cleanMetadata(t)
 		}
+	}
+	switch t := v.(type) {
+	case *unstructured.UnstructuredList:
 		v = t.Items
-	//case unstructured.Unstructured:
-	//	t.SetManagedFields(nil)
-	case *unstructured.Unstructured:
-		t.SetManagedFields(nil)
 	}
 	ret, err := yml.Marshal(v)
 	if err != nil {
 		return "", err
 	}
 	return string(ret), nil
+}
+
+type marshalConfig struct {
+	clean bool
+}
+
+// MarshalOption configures MarshalYaml behaviour.
+type MarshalOption func(*marshalConfig)
+
+// WithCleanMetadata strips verbose metadata (managedFields, resourceVersion, uid, etc.)
+// that provides no diagnostic value to the LLM.
+func WithCleanMetadata() MarshalOption {
+	return func(c *marshalConfig) { c.clean = true }
+}
+
+// cleanMetadata strips verbose metadata that provides no diagnostic value to the LLM.
+func cleanMetadata(obj *unstructured.Unstructured) {
+	obj.SetManagedFields(nil)
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	obj.SetGeneration(0)
+
+	annotations := obj.GetAnnotations()
+	if annotations != nil {
+		delete(annotations, "kubectl.kubernetes.io/last-applied-configuration")
+		if len(annotations) == 0 {
+			obj.SetAnnotations(nil)
+		} else {
+			obj.SetAnnotations(annotations)
+		}
+	}
 }
 
 func init() {

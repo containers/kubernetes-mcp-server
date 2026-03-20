@@ -491,6 +491,10 @@
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
           "type": "string"
         },
+        "clean_metadata": {
+          "description": "If true, strips verbose metadata (managedFields, resourceVersion, uid, generation, last-applied-configuration) from the output. Useful for diagnostics where only spec/status matter.",
+          "type": "boolean"
+        },
         "kind": {
           "description": "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
           "type": "string"
@@ -527,6 +531,10 @@
         "apiVersion": {
           "description": "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
           "type": "string"
+        },
+        "clean_metadata": {
+          "description": "If true, strips verbose metadata (managedFields, resourceVersion, uid, generation, last-applied-configuration) from the output. Useful for diagnostics where only spec/status matter.",
+          "type": "boolean"
         },
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
