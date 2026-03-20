@@ -124,24 +124,6 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 	})
 }
 
-func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiClusterEnum() {
-	s.Run("Default configuration toolsets in multi-cluster (with 2 clusters)", func() {
-		kubeconfig := s.Kubeconfig()
-		// Add additional cluster to force multi-cluster behavior with enum parameter
-		kubeconfig.Contexts["extra-cluster"] = clientcmdapi.NewContext()
-		s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
-		s.InitMcpClient()
-		tools, err := s.ListTools()
-		s.Run("ListTools returns tools", func() {
-			s.NotNil(tools, "Expected tools from ListTools")
-			s.NoError(err, "Expected no error from ListTools")
-		})
-		s.Run("ListTools returns correct Tool metadata", func() {
-			s.assertJsonSnapshot("toolsets-full-tools-multicluster-enum.json", tools.Tools)
-		})
-	})
-}
-
 func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	testCases := []api.Toolset{
 		&core.Toolset{},

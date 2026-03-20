@@ -80,7 +80,7 @@ func TestWithClusterParameter(t *testing.T) {
 		name                string
 		defaultCluster      string
 		targetParameterName string
-		isMultiCluster      bool
+		isMultiTarget       bool
 		toolName            string
 		toolFactory         func(string) api.ServerTool
 		expectCluster       bool
@@ -88,7 +88,7 @@ func TestWithClusterParameter(t *testing.T) {
 		{
 			name:           "adds cluster parameter when multi-cluster",
 			defaultCluster: "default-cluster",
-			isMultiCluster: true,
+			isMultiTarget:  true,
 			toolName:       "test-tool",
 			toolFactory:    createTestTool,
 			expectCluster:  true,
@@ -96,7 +96,7 @@ func TestWithClusterParameter(t *testing.T) {
 		{
 			name:           "does not add cluster parameter when single cluster",
 			defaultCluster: "default-cluster",
-			isMultiCluster: false,
+			isMultiTarget:  false,
 			toolName:       "test-tool",
 			toolFactory:    createTestTool,
 			expectCluster:  false,
@@ -104,7 +104,7 @@ func TestWithClusterParameter(t *testing.T) {
 		{
 			name:           "creates InputSchema when nil",
 			defaultCluster: "default-cluster",
-			isMultiCluster: true,
+			isMultiTarget:  true,
 			toolName:       "test-tool",
 			toolFactory:    createTestToolWithNilSchema,
 			expectCluster:  true,
@@ -112,7 +112,7 @@ func TestWithClusterParameter(t *testing.T) {
 		{
 			name:           "creates Properties map when nil",
 			defaultCluster: "default-cluster",
-			isMultiCluster: true,
+			isMultiTarget:  true,
 			toolName:       "test-tool",
 			toolFactory:    createTestToolWithNilProperties,
 			expectCluster:  true,
@@ -120,7 +120,7 @@ func TestWithClusterParameter(t *testing.T) {
 		{
 			name:           "preserves existing properties",
 			defaultCluster: "default-cluster",
-			isMultiCluster: true,
+			isMultiTarget:  true,
 			toolName:       "test-tool",
 			toolFactory:    createTestToolWithExistingProperties,
 			expectCluster:  true,
@@ -132,7 +132,7 @@ func TestWithClusterParameter(t *testing.T) {
 			if tt.targetParameterName == "" {
 				tt.targetParameterName = "cluster"
 			}
-			mutator := WithTargetParameter(tt.defaultCluster, tt.targetParameterName, tt.isMultiCluster)
+			mutator := WithTargetParameter(tt.defaultCluster, tt.targetParameterName, tt.isMultiTarget)
 			tool := tt.toolFactory(tt.toolName)
 			originalTool := tool // Keep reference to check if tool was unchanged
 
@@ -214,9 +214,7 @@ type TargetParameterToolMutatorSuite struct {
 
 func (s *TargetParameterToolMutatorSuite) TestClusterAwareTool() {
 	tm := WithTargetParameter("default-cluster", "cluster", true)
-	tool := createTestTool("cluster-aware-tool")
-	// Tools are cluster-aware by default
-	tm(tool)
+	tool := tm(createTestTool("cluster-aware-tool"))
 	s.Require().NotNil(tool.Tool.InputSchema.Properties)
 	s.Run("adds cluster parameter", func() {
 		s.NotNil(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to be added")
@@ -230,29 +228,17 @@ func (s *TargetParameterToolMutatorSuite) TestClusterAwareTool() {
 
 func (s *TargetParameterToolMutatorSuite) TestClusterAwareToolSingleCluster() {
 	tm := WithTargetParameter("default", "cluster", false)
-	tool := createTestTool("cluster-aware-tool-single-cluster")
-	// Tools are cluster-aware by default
-	tm(tool)
+	tool := tm(createTestTool("cluster-aware-tool-single-cluster"))
 	s.Run("does not add cluster parameter for single cluster", func() {
 		s.Nilf(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to not be added for single cluster")
 	})
 }
 
-func (s *TargetParameterToolMutatorSuite) TestClusterAwareToolMultipleClusters() {
-	tm := WithTargetParameter("default", "cluster", true)
-	tool := createTestTool("cluster-aware-tool-multiple-clusters")
-	// Tools are cluster-aware by default
-	tm(tool)
-	s.Run("adds cluster parameter", func() {
-		s.NotNilf(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to be added")
-	})
-}
-
 func (s *TargetParameterToolMutatorSuite) TestNonClusterAwareTool() {
+	nonClusterAware := createTestTool("non-cluster-aware-tool")
+	nonClusterAware.ClusterAware = ptr.To(false)
 	tm := WithTargetParameter("default", "cluster", true)
-	tool := createTestTool("non-cluster-aware-tool")
-	tool.ClusterAware = ptr.To(false)
-	tm(tool)
+	tool := tm(nonClusterAware)
 	s.Run("does not add cluster parameter", func() {
 		s.Nilf(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to not be added")
 	})
