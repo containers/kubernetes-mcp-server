@@ -31,8 +31,8 @@ func NewHelm(kubernetes Kubernetes) *Helm {
 	return &Helm{kubernetes: kubernetes}
 }
 
-func (h *Helm) Install(ctx context.Context, chart string, values map[string]interface{}, name string, namespace string) (string, error) {
-	if err := validateChartReference(chart); err != nil {
+func (h *Helm) Install(ctx context.Context, chart string, values map[string]interface{}, name string, namespace string, helmCfg *Config) (string, error) {
+	if err := validateChartReference(chart, helmCfg); err != nil {
 		return "", err
 	}
 	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
@@ -127,13 +127,27 @@ func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configur
 // validateChartReference blocks chart references using dangerous URL schemes.
 // Only oci:// and https:// URLs are allowed. Non-URL references (e.g. "stable/grafana")
 // are permitted as they resolve through Helm's local repo configuration.
-func validateChartReference(chart string) error {
+// When a Config with AllowedRegistries is provided, URL-based chart references
+// must prefix-match an entry in the allowlist, and non-URL references are rejected.
+func validateChartReference(chart string, cfg *Config) error {
 	u, err := url.Parse(chart)
 	if err != nil || u.Scheme == "" {
+		// Non-URL references (e.g. "stable/grafana", local paths)
+		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
+			return fmt.Errorf("chart reference %q is not allowed: only registry URLs from the allowed list are permitted when allowed_registries is configured", chart)
+		}
 		return nil
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "oci", "https":
+		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
+			for _, allowed := range cfg.AllowedRegistries {
+				if strings.HasPrefix(chart, allowed) {
+					return nil
+				}
+			}
+			return fmt.Errorf("chart reference %q is not allowed: does not match any entry in allowed_registries", chart)
+		}
 		return nil
 	case "http":
 		return fmt.Errorf("chart reference %q is not allowed: http:// scheme is blocked, use https:// or oci://", chart)

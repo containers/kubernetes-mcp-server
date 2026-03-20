@@ -113,7 +113,13 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := helm.NewHelm(params).Install(params, chart, values, name, namespace)
+	var helmCfg *helm.Config
+	if cfg, ok := params.GetToolsetConfig("helm"); ok {
+		if hc, ok := cfg.(*helm.Config); ok {
+			helmCfg = hc
+		}
+	}
+	ret, err := helm.NewHelm(params).Install(params, chart, values, name, namespace, helmCfg)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to install helm chart '%s': %w", chart, err)), nil
 	}
