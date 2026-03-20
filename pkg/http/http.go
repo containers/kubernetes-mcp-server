@@ -48,6 +48,11 @@ const (
 	sseMessageEndpoint = "/message"
 )
 
+var (
+	// infraPaths contains infrastructure endpoints which should not have oauth applied
+	infraPaths = []string{healthEndpoint, metricsEndpoint}
+)
+
 // metricsMiddleware wraps an HTTP handler to record metrics for all requests
 func metricsMiddleware(next http.Handler, metrics *mcp.Server) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
