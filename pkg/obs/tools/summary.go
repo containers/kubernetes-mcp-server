@@ -13,10 +13,6 @@ func isFinite(x float64) bool {
 
 // convertMetricToMap converts a model.Metric to map[string]string efficiently
 func convertMetricToMap(metric model.Metric) map[string]string {
-	if len(metric) == 0 {
-		return nil
-	}
-
 	labels := make(map[string]string, len(metric))
 	for k, v := range metric {
 		labels[string(k)] = string(v)

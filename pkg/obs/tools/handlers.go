@@ -331,7 +331,6 @@ func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader,
 	resMatrix, ok := result["result"].(model.Matrix)
 	if ok {
 		slog.Info("ExecuteRangeQueryHandler executed successfully", "resultLength", resMatrix.Len())
-		slog.Debug("ExecuteRangeQueryHandler results", "results", resMatrix)
 
 		if fullResponse {
 			// Return full data
@@ -357,6 +356,8 @@ func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader,
 				output.Summary[i] = CalculateSeriesSummary(series.Metric, series.Values)
 			}
 		}
+
+		slog.Debug("ExecuteRangeQueryHandler output", "output", output)
 	} else {
 		slog.Info("ExecuteRangeQueryHandler executed successfully (unknown format)", "result", result)
 	}
