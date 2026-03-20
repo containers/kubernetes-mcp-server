@@ -110,6 +110,36 @@ func (s *HelmSuite) TestSimplify() {
 	})
 }
 
+func (s *HelmSuite) TestValidateChartReference() {
+	s.Run("allows oci:// scheme", func() {
+		s.NoError(validateChartReference("oci://ghcr.io/nginxinc/charts/nginx-ingress"))
+	})
+	s.Run("allows https:// scheme", func() {
+		s.NoError(validateChartReference("https://charts.example.com/grafana-7.0.0.tgz"))
+	})
+	s.Run("allows non-URL references", func() {
+		s.NoError(validateChartReference("stable/grafana"))
+	})
+	s.Run("allows plain chart name", func() {
+		s.NoError(validateChartReference("grafana"))
+	})
+	s.Run("blocks file:// scheme", func() {
+		err := validateChartReference("file:///tmp/malicious-chart")
+		s.Error(err)
+		s.Contains(err.Error(), "file:// scheme is blocked")
+	})
+	s.Run("blocks http:// scheme", func() {
+		err := validateChartReference("http://evil.example.com/chart")
+		s.Error(err)
+		s.Contains(err.Error(), "http:// scheme is blocked")
+	})
+	s.Run("blocks unknown scheme", func() {
+		err := validateChartReference("ftp://example.com/chart")
+		s.Error(err)
+		s.Contains(err.Error(), "only oci:// and https:// schemes are permitted")
+	})
+}
+
 func TestHelm(t *testing.T) {
 	suite.Run(t, new(HelmSuite))
 }

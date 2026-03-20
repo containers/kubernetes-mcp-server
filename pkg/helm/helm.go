@@ -3,6 +3,8 @@ package helm
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"helm.sh/helm/v3/pkg/action"
@@ -30,6 +32,9 @@ func NewHelm(kubernetes Kubernetes) *Helm {
 }
 
 func (h *Helm) Install(ctx context.Context, chart string, values map[string]interface{}, name string, namespace string) (string, error) {
+	if err := validateChartReference(chart); err != nil {
+		return "", err
+	}
 	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
 	if err != nil {
 		return "", err
@@ -117,6 +122,26 @@ func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configur
 	}
 	cfg.RegistryClient = registryClient
 	return cfg, cfg.Init(h.kubernetes, applicableNamespace, "", klog.V(5).Infof)
+}
+
+// validateChartReference blocks chart references using dangerous URL schemes.
+// Only oci:// and https:// URLs are allowed. Non-URL references (e.g. "stable/grafana")
+// are permitted as they resolve through Helm's local repo configuration.
+func validateChartReference(chart string) error {
+	u, err := url.Parse(chart)
+	if err != nil || u.Scheme == "" {
+		return nil
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "oci", "https":
+		return nil
+	case "http":
+		return fmt.Errorf("chart reference %q is not allowed: http:// scheme is blocked, use https:// or oci://", chart)
+	case "file":
+		return fmt.Errorf("chart reference %q is not allowed: file:// scheme is blocked", chart)
+	default:
+		return fmt.Errorf("chart reference %q is not allowed: only oci:// and https:// schemes are permitted", chart)
+	}
 }
 
 func simplify(release ...*release.Release) []map[string]interface{} {
