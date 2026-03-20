@@ -193,7 +193,7 @@ func (c *Core) PodsRun(ctx context.Context, namespace, name, image string, port 
 		}
 		toCreate = append(toCreate, u)
 	}
-	return c.resourcesCreateOrUpdate(ctx, toCreate)
+	return c.resourcesCreateOrUpdate(ctx, toCreate, "")
 }
 
 func (c *Core) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metrics.PodMetricsList, error) {
