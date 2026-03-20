@@ -3,11 +3,24 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
+
+const maxWellKnownResponseSize = 1 << 20 // 1 MB
+
+var allowedResponseHeaders = map[string]bool{
+	"Cache-Control": true,
+	"Date":          true,
+	"Etag":          true,
+	"Expires":       true,
+	"Last-Modified": true,
+	"Pragma":        true,
+}
 
 const (
 	oauthAuthorizationServerEndpoint = "/.well-known/oauth-authorization-server"
@@ -51,7 +64,12 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		http.Error(writer, "Authorization URL is not configured", http.StatusNotFound)
 		return
 	}
-	req, err := http.NewRequest(request.Method, w.authorizationUrl+request.URL.EscapedPath(), nil)
+	upstreamURL, err := url.JoinPath(w.authorizationUrl, request.URL.EscapedPath())
+	if err != nil || !strings.HasPrefix(upstreamURL, w.authorizationUrl+"/") {
+		http.Error(writer, "Invalid well-known path", http.StatusBadRequest)
+		return
+	}
+	req, err := http.NewRequest(request.Method, upstreamURL, nil)
 	if err != nil {
 		http.Error(writer, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -63,7 +81,7 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var resourceMetadata map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&resourceMetadata)
+	err = json.NewDecoder(io.LimitReader(resp.Body, maxWellKnownResponseSize)).Decode(&resourceMetadata)
 	if err != nil {
 		http.Error(writer, "Failed to read response body: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -81,6 +99,9 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	for key, values := range resp.Header {
+		if !allowedResponseHeaders[http.CanonicalHeaderKey(key)] {
+			continue
+		}
 		for _, value := range values {
 			writer.Header().Add(key, value)
 		}
