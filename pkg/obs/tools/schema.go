@@ -131,6 +131,13 @@ type RangeQueryInput struct {
 	Duration string `json:"duration,omitempty"`
 }
 
+// ShowTimeseriesInput defines the input parameters for ShowTimeseriesHandler.
+type ShowTimeseriesInput struct {
+	RangeQueryInput
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
 // InstantQueryInput defines the input parameters for ExecuteInstantQueryHandler.
 type InstantQueryInput struct {
 	Query string `json:"query"`
