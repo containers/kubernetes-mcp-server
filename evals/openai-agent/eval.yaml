@@ -27,7 +27,7 @@ config:
         maxToolCalls: 20
     - glob: ../tasks/config/*/*.yaml
       labelSelector:
-        suite: kubernetes
+        suite: config
       assertions:
         toolsUsed:
           - server: kubernetes

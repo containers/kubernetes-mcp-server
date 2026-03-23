@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubernetes
+  name: nodes-top
+  difficulty: easy
+steps:
+  setup:
+  verify:
+    contains: "master"
+  cleanup:
+  prompt:
+    inline: "Check the resource usage of the master nodes in the cluster."
