@@ -131,8 +131,8 @@ func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configur
 // must prefix-match an entry in the allowlist, and non-URL references are rejected.
 func validateChartReference(chart string, cfg *Config) error {
 	u, err := url.Parse(chart)
-	if err != nil || u.Scheme == "" {
-		// Non-URL references (e.g. "stable/grafana", local paths)
+	if err != nil || u.Scheme == "" || len(u.Scheme) == 1 {
+		// Non-URL references (e.g. "stable/grafana", local paths, Windows drive letters like D:\...)
 		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
 			return fmt.Errorf("chart reference %q is not allowed: only registry URLs from the allowed list are permitted when allowed_registries is configured", chart)
 		}

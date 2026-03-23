@@ -124,6 +124,9 @@ func (s *HelmSuite) TestValidateChartReference() {
 		s.Run("allows plain chart name", func() {
 			s.NoError(validateChartReference("grafana", nil))
 		})
+		s.Run("allows Windows drive letter path", func() {
+			s.NoError(validateChartReference(`D:\a\kubernetes-mcp-server\testdata\helm-chart`, nil))
+		})
 		s.Run("blocks file:// scheme", func() {
 			err := validateChartReference("file:///tmp/malicious-chart", nil)
 			s.Error(err)
