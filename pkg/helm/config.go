@@ -22,7 +22,7 @@ func (c *Config) Validate() error {
 	if c == nil {
 		return fmt.Errorf("helm config is nil")
 	}
-	for _, entry := range c.AllowedRegistries {
+	for i, entry := range c.AllowedRegistries {
 		u, err := url.Parse(entry)
 		if err != nil || u.Scheme == "" {
 			return fmt.Errorf("allowed_registries entry %q must be a valid URL with scheme and host", entry)
@@ -34,6 +34,7 @@ func (c *Config) Validate() error {
 		if u.Host == "" {
 			return fmt.Errorf("allowed_registries entry %q must be a valid URL with scheme and host", entry)
 		}
+		c.AllowedRegistries[i] = strings.TrimRight(entry, "/")
 	}
 	return nil
 }

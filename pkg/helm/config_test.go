@@ -30,6 +30,17 @@ func (s *ConfigSuite) TestValidate() {
 		var cfg *Config
 		s.Error(cfg.Validate())
 	})
+	s.Run("trims trailing slashes from allowed registries", func() {
+		cfg := &Config{
+			AllowedRegistries: []string{
+				"oci://ghcr.io/myorg/",
+				"https://charts.example.com/",
+			},
+		}
+		s.NoError(cfg.Validate())
+		s.Equal("oci://ghcr.io/myorg", cfg.AllowedRegistries[0])
+		s.Equal("https://charts.example.com", cfg.AllowedRegistries[1])
+	})
 	s.Run("rejects entry without scheme", func() {
 		cfg := &Config{AllowedRegistries: []string{"ghcr.io/myorg"}}
 		err := cfg.Validate()
