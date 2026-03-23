@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -88,6 +91,43 @@ func (s *BrowserSuite) openViewer() (*rod.Page, *rod.Page) {
 	frame := page.MustElement("#viewer").MustFrame()
 	frame.MustElementR(".status", "Waiting for tool result")
 	return page, frame
+}
+
+// screenshotsDir is the output directory for visual captures.
+// Located under _output/ which is already gitignored.
+const screenshotsDir = "_output/screenshots"
+
+// screenshot captures the viewer iframe as a PNG and saves it to _output/screenshots/<name>.png.
+func (s *BrowserSuite) screenshot(page *rod.Page, name string) {
+	s.T().Helper()
+	dir := filepath.Join(findRepoRoot(s.T()), screenshotsDir)
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	data, err := page.Screenshot(true, &proto.PageCaptureScreenshot{
+		Format: proto.PageCaptureScreenshotFormatPng,
+	})
+	s.Require().NoError(err)
+	path := filepath.Join(dir, name+".png")
+	s.Require().NoError(os.WriteFile(path, data, 0o644))
+	s.T().Logf("screenshot saved: %s", path)
+}
+
+// findRepoRoot walks up from the test binary's working directory to find go.mod.
+func findRepoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("could not find repo root (go.mod)")
+		}
+		dir = parent
+	}
 }
 
 func (s *BrowserSuite) TestProtocolHandshake() {
@@ -564,6 +604,178 @@ func (s *BrowserSuite) TestYamlViewXSS() {
 		inner := frame.MustEval(`() => document.querySelector('pre.raw.yaml').innerHTML`).Str()
 		s.Contains(inner, "&amp;lt;script")
 		s.NotContains(inner, "<script>")
+	})
+}
+
+func (s *BrowserSuite) TestScreenshots() {
+	// Set a consistent viewport for reproducible screenshots
+	const width, height = 1024, 768
+
+	s.Run("waiting state", func() {
+		page, _ := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		s.screenshot(page, "01-waiting")
+	})
+
+	s.Run("table view light", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendToolResult({
+			structuredContent: {
+				items: [
+					{namespace: "default", name: "nginx-7c5b4f", status: "Running", restarts: "0", age: "2d"},
+					{namespace: "default", name: "redis-8d3a1b", status: "Running", restarts: "1", age: "5d"},
+					{namespace: "kube-system", name: "coredns-5644d7", status: "Running", restarts: "0", age: "12d"},
+					{namespace: "kube-system", name: "etcd-master", status: "Running", restarts: "0", age: "12d"},
+					{namespace: "monitoring", name: "prometheus-0", status: "Running", restarts: "2", age: "3d"}
+				]
+			}
+		})`)
+		frame.MustElement("table")
+		s.screenshot(page, "02-table-light")
+	})
+
+	s.Run("table view dark", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendNotification('ui/notifications/host-context-changed', {theme: 'dark'})`)
+		frame.MustWait(`() => document.documentElement.getAttribute('data-theme') === 'dark'`)
+		page.MustEval(`() => window.sendToolResult({
+			structuredContent: {
+				items: [
+					{namespace: "default", name: "nginx-7c5b4f", status: "Running", restarts: "0", age: "2d"},
+					{namespace: "default", name: "redis-8d3a1b", status: "Running", restarts: "1", age: "5d"},
+					{namespace: "kube-system", name: "coredns-5644d7", status: "Running", restarts: "0", age: "12d"},
+					{namespace: "kube-system", name: "etcd-master", status: "Running", restarts: "0", age: "12d"},
+					{namespace: "monitoring", name: "prometheus-0", status: "Running", restarts: "2", age: "3d"}
+				]
+			}
+		})`)
+		frame.MustElement("table")
+		s.screenshot(page, "03-table-dark")
+	})
+
+	s.Run("metrics view light", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendToolResult({
+			structuredContent: {
+				columns: [
+					{key: "namespace", label: "Namespace"},
+					{key: "name", label: "Pod"},
+					{key: "cpu", label: "CPU"},
+					{key: "memory", label: "Memory"}
+				],
+				chart: {
+					labelKey: "name",
+					datasets: [
+						{key: "cpu", label: "CPU (millicores)", unit: "cpu", axis: "left"},
+						{key: "memory", label: "Memory (MiB)", unit: "memory", axis: "right"}
+					]
+				},
+				items: [
+					{namespace: "default", name: "nginx-1", cpu: "250m", memory: "128Mi"},
+					{namespace: "default", name: "redis-1", cpu: "100m", memory: "256Mi"},
+					{namespace: "kube-system", name: "coredns", cpu: "15m", memory: "32Mi"},
+					{namespace: "monitoring", name: "prometheus", cpu: "500m", memory: "512Mi"},
+					{namespace: "monitoring", name: "grafana", cpu: "80m", memory: "192Mi"}
+				]
+			}
+		})`)
+		frame.MustElement("canvas")
+		frame.MustElement("table")
+		s.screenshot(page, "04-metrics-light")
+	})
+
+	s.Run("metrics view dark", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendNotification('ui/notifications/host-context-changed', {theme: 'dark'})`)
+		frame.MustWait(`() => document.documentElement.getAttribute('data-theme') === 'dark'`)
+		page.MustEval(`() => window.sendToolResult({
+			structuredContent: {
+				columns: [
+					{key: "namespace", label: "Namespace"},
+					{key: "name", label: "Pod"},
+					{key: "cpu", label: "CPU"},
+					{key: "memory", label: "Memory"}
+				],
+				chart: {
+					labelKey: "name",
+					datasets: [
+						{key: "cpu", label: "CPU (millicores)", unit: "cpu", axis: "left"},
+						{key: "memory", label: "Memory (MiB)", unit: "memory", axis: "right"}
+					]
+				},
+				items: [
+					{namespace: "default", name: "nginx-1", cpu: "250m", memory: "128Mi"},
+					{namespace: "default", name: "redis-1", cpu: "100m", memory: "256Mi"},
+					{namespace: "kube-system", name: "coredns", cpu: "15m", memory: "32Mi"},
+					{namespace: "monitoring", name: "prometheus", cpu: "500m", memory: "512Mi"},
+					{namespace: "monitoring", name: "grafana", cpu: "80m", memory: "192Mi"}
+				]
+			}
+		})`)
+		frame.MustElement("canvas")
+		frame.MustElement("table")
+		s.screenshot(page, "05-metrics-dark")
+	})
+
+	s.Run("yaml view light", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendToolResult({
+			content: [{type: "text", text: "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx-7c5b4f\n  namespace: default\n  labels:\n    app: nginx\n    tier: frontend\nspec:\n  containers:\n    - name: nginx\n      image: nginx:1.25\n      ports:\n        - containerPort: 80\n          protocol: TCP\n      resources:\n        requests:\n          cpu: 100m\n          memory: 128Mi\n        limits:\n          cpu: 500m\n          memory: 256Mi\nstatus:\n  phase: Running\n  podIP: 10.244.0.5"}]
+		})`)
+		frame.MustElement("pre.raw.yaml")
+		s.screenshot(page, "06-yaml-light")
+	})
+
+	s.Run("yaml view dark", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendNotification('ui/notifications/host-context-changed', {theme: 'dark'})`)
+		frame.MustWait(`() => document.documentElement.getAttribute('data-theme') === 'dark'`)
+		page.MustEval(`() => window.sendToolResult({
+			content: [{type: "text", text: "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx-7c5b4f\n  namespace: default\n  labels:\n    app: nginx\n    tier: frontend\nspec:\n  containers:\n    - name: nginx\n      image: nginx:1.25\n      ports:\n        - containerPort: 80\n          protocol: TCP\n      resources:\n        requests:\n          cpu: 100m\n          memory: 128Mi\n        limits:\n          cpu: 500m\n          memory: 256Mi\nstatus:\n  phase: Running\n  podIP: 10.244.0.5"}]
+		})`)
+		frame.MustElement("pre.raw.yaml")
+		s.screenshot(page, "07-yaml-dark")
+	})
+
+	s.Run("generic view with JSON", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendToolResult({
+			structuredContent: {
+				cluster: "production",
+				version: {major: "1", minor: "28", gitVersion: "v1.28.4"},
+				platform: "linux/amd64",
+				nodes: 5,
+				totalPods: 42
+			}
+		})`)
+		frame.MustElement("pre.raw")
+		s.screenshot(page, "08-generic-json")
+	})
+
+	s.Run("generic view with plain text", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustSetViewport(width, height, 0, false)
+		page.MustEval(`() => window.sendToolResult({
+			content: [{type: "text", text: "deployment.apps/nginx scaled to 3 replicas\ndeployment.apps/nginx condition met"}]
+		})`)
+		frame.MustElement("pre.raw")
+		s.screenshot(page, "09-generic-text")
 	})
 }
 
