@@ -142,7 +142,7 @@ func validateChartReference(chart string, cfg *Config) error {
 	case "oci", "https":
 		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
 			for _, allowed := range cfg.AllowedRegistries {
-				if strings.HasPrefix(chart, allowed) {
+				if chart == allowed || strings.HasPrefix(chart, allowed+"/") {
 					return nil
 				}
 			}

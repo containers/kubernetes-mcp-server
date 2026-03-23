@@ -162,6 +162,14 @@ func (s *HelmSuite) TestValidateChartReference() {
 		s.Run("allows matching https:// registry", func() {
 			s.NoError(validateChartReference("https://charts.example.com/grafana-7.0.0.tgz", cfg))
 		})
+		s.Run("allows exact match of allowed entry", func() {
+			s.NoError(validateChartReference("oci://ghcr.io/myorg", cfg))
+		})
+		s.Run("rejects similar prefix that is a different org", func() {
+			err := validateChartReference("oci://ghcr.io/myorg-evil/chart", cfg)
+			s.Error(err)
+			s.Contains(err.Error(), "does not match any entry in allowed_registries")
+		})
 		s.Run("rejects non-matching oci:// registry", func() {
 			err := validateChartReference("oci://ghcr.io/otherorg/chart", cfg)
 			s.Error(err)
