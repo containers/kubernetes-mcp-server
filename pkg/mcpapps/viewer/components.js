@@ -43,27 +43,29 @@
 
     return html`
       <div class="count">${data.length} item${data.length !== 1 ? 's' : ''}</div>
-      <table>
-        <thead>
-          <tr>
-            ${columns.map(function(c) {
-              var arrow = sortCol === c.key ? (sortAsc ? '\u25B2' : '\u25BC') : '';
-              return html`<th key=${c.key} onClick=${function() { handleSort(c.key); }}>
-                ${c.label}<span class="sort-arrow">${arrow}</span>
-              </th>`;
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          ${sorted.map(function(row, i) {
-            return html`<tr key=${i}>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
               ${columns.map(function(c) {
-                return html`<td key=${c.key}>${row[c.key] != null ? String(row[c.key]) : ''}</td>`;
+                var arrow = sortCol === c.key ? (sortAsc ? '\u25B2' : '\u25BC') : '';
+                return html`<th key=${c.key} onClick=${function() { handleSort(c.key); }}>
+                  ${c.label}<span class="sort-arrow">${arrow}</span>
+                </th>`;
               })}
-            </tr>`;
-          })}
-        </tbody>
-      </table>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map(function(row, i) {
+              return html`<tr key=${i}>
+                ${columns.map(function(c) {
+                  return html`<td key=${c.key}>${row[c.key] != null ? String(row[c.key]) : ''}</td>`;
+                })}
+              </tr>`;
+            })}
+          </tbody>
+        </table>
+      </div>
     `;
   }
 

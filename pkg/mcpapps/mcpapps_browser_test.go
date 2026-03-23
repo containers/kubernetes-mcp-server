@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-rod/rod"
@@ -93,6 +94,15 @@ func (s *BrowserSuite) openViewer() (*rod.Page, *rod.Page) {
 	return page, frame
 }
 
+// containsFold asserts that actual contains expected, case-insensitively.
+// Header text is CSS text-transform: uppercase, so MustText() returns
+// uppercased text while the source labels may be mixed-case.
+func (s *BrowserSuite) containsFold(actual, expected string) {
+	s.T().Helper()
+	s.True(strings.Contains(strings.ToLower(actual), strings.ToLower(expected)),
+		"%q does not contain %q (case-insensitive)", actual, expected)
+}
+
 // screenshotsDir is the output directory for visual captures.
 // Located under _output/ which is already gitignored.
 const screenshotsDir = "_output/screenshots"
@@ -167,8 +177,8 @@ func (s *BrowserSuite) TestTableView() {
 		})`)
 		headers := frame.MustElements("table thead th")
 		s.Len(headers, 2)
-		s.Contains(headers[0].MustText(), "name")
-		s.Contains(headers[1].MustText(), "namespace")
+		s.containsFold(headers[0].MustText(), "name")
+		s.containsFold(headers[1].MustText(), "namespace")
 	})
 
 	s.Run("renders correct cell values", func() {
@@ -301,8 +311,8 @@ func (s *BrowserSuite) TestMetricsTable() {
 			}
 		})`)
 		headers := frame.MustElements("table thead th")
-		s.Contains(headers[0].MustText(), "Pod Name")
-		s.Contains(headers[1].MustText(), "CPU Usage")
+		s.containsFold(headers[0].MustText(), "Pod Name")
+		s.containsFold(headers[1].MustText(), "CPU Usage")
 	})
 }
 
@@ -493,11 +503,11 @@ func (s *BrowserSuite) TestSelfDescribingMetrics() {
 		})`)
 		headers := frame.MustElements("table thead th")
 		s.Len(headers, 5)
-		s.Contains(headers[0].MustText(), "Node")
-		s.Contains(headers[1].MustText(), "CPU (cores)")
-		s.Contains(headers[2].MustText(), "Memory (bytes)")
-		s.Contains(headers[3].MustText(), "CPU%")
-		s.Contains(headers[4].MustText(), "Memory%")
+		s.containsFold(headers[0].MustText(), "Node")
+		s.containsFold(headers[1].MustText(), "CPU (cores)")
+		s.containsFold(headers[2].MustText(), "Memory (bytes)")
+		s.containsFold(headers[3].MustText(), "CPU%")
+		s.containsFold(headers[4].MustText(), "Memory%")
 	})
 }
 
