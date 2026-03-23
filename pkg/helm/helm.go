@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -141,8 +142,9 @@ func validateChartReference(chart string, cfg *Config) error {
 	switch strings.ToLower(u.Scheme) {
 	case "oci", "https":
 		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
+			normalized := u.Scheme + "://" + u.Host + path.Clean(u.Path)
 			for _, allowed := range cfg.AllowedRegistries {
-				if chart == allowed || strings.HasPrefix(chart, allowed+"/") {
+				if normalized == allowed || strings.HasPrefix(normalized, allowed+"/") {
 					return nil
 				}
 			}

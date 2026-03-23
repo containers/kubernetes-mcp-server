@@ -173,6 +173,11 @@ func (s *HelmSuite) TestValidateChartReference() {
 			s.Error(err)
 			s.Contains(err.Error(), "does not match any entry in allowed_registries")
 		})
+		s.Run("rejects path traversal to bypass allowlist", func() {
+			err := validateChartReference("oci://ghcr.io/myorg/../evil-corp/chart", cfg)
+			s.Error(err)
+			s.Contains(err.Error(), "does not match any entry in allowed_registries")
+		})
 		s.Run("rejects non-matching oci:// registry", func() {
 			err := validateChartReference("oci://ghcr.io/otherorg/chart", cfg)
 			s.Error(err)
