@@ -209,11 +209,42 @@
     return html`<pre class="raw">${props.text || 'No content'}</pre>`;
   }
 
+  // HTML-escape a string for safe insertion into innerHTML.
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // Render Prism token stream to HTML with explicit escaping.
+  // Uses Prism.tokenize() instead of Prism.highlight() so we control all
+  // HTML generation — no reliance on Prism's internal encode() for XSS safety.
+  function renderTokens(tokens) {
+    var out = '';
+    for (var i = 0; i < tokens.length; i++) {
+      var token = tokens[i];
+      if (typeof token === 'string') {
+        out += escapeHtml(token);
+      } else {
+        // token.content can be a string, Token[], or a single Token object;
+        // wrap the single-Token case in an array so renderTokens can recurse uniformly.
+        var content = typeof token.content === 'string' ? escapeHtml(token.content) :
+                      Array.isArray(token.content) ? renderTokens(token.content) :
+                      renderTokens([token.content]);
+        var cls = 'token ' + token.type;
+        if (token.alias) {
+          cls += ' ' + (Array.isArray(token.alias) ? token.alias.join(' ') : token.alias);
+        }
+        out += '<span class="' + escapeHtml(cls) + '">' + content + '</span>';
+      }
+    }
+    return out;
+  }
+
   // YamlView: syntax-highlighted YAML using Prism.js
   function YamlView(props) {
     var highlighted = useMemo(function() {
       if (!props.text || typeof Prism === 'undefined' || !Prism.languages.yaml) return null;
-      return Prism.highlight(props.text, Prism.languages.yaml, 'yaml');
+      var tokens = Prism.tokenize(props.text, Prism.languages.yaml);
+      return renderTokens(tokens);
     }, [props.text]);
     if (!highlighted) {
       return html`<${GenericView} text=${props.text} />`;
