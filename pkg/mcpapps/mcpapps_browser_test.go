@@ -506,6 +506,67 @@ func (s *BrowserSuite) TestThemeApplication() {
 	})
 }
 
+func (s *BrowserSuite) TestYamlViewXSS() {
+	s.Run("HTML tags in YAML values are escaped", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustEval(`() => window.sendToolResult({
+			content: [{type: "text", text: "apiVersion: v1\nkind: Pod\nmetadata:\n  annotations:\n    note: <script>alert(1)</script>"}]
+		})`)
+		pre := frame.MustElement("pre.raw.yaml")
+		// The raw text should show the angle brackets as visible characters, not execute them
+		text := pre.MustText()
+		s.Contains(text, "<script>alert(1)</script>")
+		// The innerHTML must NOT contain an actual <script> tag.
+		// Prism tokenizes ">" as punctuation wrapped in <span>, so "&lt;script&gt;"
+		// won't appear as a contiguous string — check for "&lt;script" (the opening
+		// bracket escape is the security-critical part).
+		inner := frame.MustEval(`() => document.querySelector('pre.raw.yaml').innerHTML`).Str()
+		s.NotContains(inner, "<script>")
+		s.Contains(inner, "&lt;script")
+	})
+
+	s.Run("HTML attribute injection in YAML values is escaped", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustEval(`() => window.sendToolResult({
+			content: [{type: "text", text: "apiVersion: v1\nkind: Pod\nmetadata:\n  name: \"<img onerror=alert(1) src=x>\""}]
+		})`)
+		frame.MustElement("pre.raw.yaml")
+		inner := frame.MustEval(`() => document.querySelector('pre.raw.yaml').innerHTML`).Str()
+		s.NotContains(inner, "<img")
+		s.Contains(inner, "&lt;img")
+	})
+
+	s.Run("span injection attempt in YAML values is escaped", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustEval(`() => window.sendToolResult({
+			content: [{type: "text", text: "apiVersion: v1\nkind: Pod\nmetadata:\n  name: </span><script>alert(1)</script><span>"}]
+		})`)
+		frame.MustElement("pre.raw.yaml")
+		inner := frame.MustEval(`() => document.querySelector('pre.raw.yaml').innerHTML`).Str()
+		s.NotContains(inner, "<script>")
+	})
+
+	s.Run("ampersand in YAML values is escaped to prevent double-decode", func() {
+		page, frame := s.openViewer()
+		defer page.MustClose()
+		page.MustEval(`() => window.sendToolResult({
+			content: [{type: "text", text: "apiVersion: v1\nkind: Pod\nmetadata:\n  annotations:\n    note: '&lt;script&gt;alert(1)&lt;/script&gt;'"}]
+		})`)
+		pre := frame.MustElement("pre.raw.yaml")
+		// The visible text must show the literal ampersand sequences
+		text := pre.MustText()
+		s.Contains(text, "&lt;script&gt;")
+		// In innerHTML the ampersand must be double-escaped so the browser
+		// does not decode &lt; back into <
+		inner := frame.MustEval(`() => document.querySelector('pre.raw.yaml').innerHTML`).Str()
+		s.Contains(inner, "&amp;lt;script")
+		s.NotContains(inner, "<script>")
+	})
+}
+
 func TestBrowser(t *testing.T) {
 	suite.Run(t, new(BrowserSuite))
 }
