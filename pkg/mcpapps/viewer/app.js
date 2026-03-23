@@ -6,6 +6,7 @@
   var render = hp.render;
   var useState = hp.useState;
   var useEffect = hp.useEffect;
+  var useRef = hp.useRef;
 
   var protocol = window.mcpProtocol;
   var components = window.mcpComponents;
@@ -58,9 +59,8 @@
     var state = stateArr[0];
     var setState = stateArr[1];
 
-    var toolNameArr = useState(embeddedToolName);
-    var toolName = toolNameArr[0];
-    var setToolName = toolNameArr[1];
+    // Use a ref for toolName so the tool-input closure always reads the latest value
+    var toolNameRef = useRef(embeddedToolName);
 
     var resultArr = useState(null);
     var result = resultArr[0];
@@ -82,11 +82,12 @@
 
       // Fallback flow: host sends tool-input, viewer calls the tool via serverTools
       protocol.onNotification('ui/notifications/tool-input', function(params) {
-        console.log('[mcp-app] tool-input received, toolName:', toolName);
-        if (toolName) {
+        var name = toolNameRef.current;
+        console.log('[mcp-app] tool-input received, toolName:', name);
+        if (name) {
           var args = (params && params.arguments) || {};
-          console.log('[mcp-app] calling tool via serverTools:', toolName);
-          protocol.sendRequest('tools/call', { name: toolName, arguments: args }).then(function(callResult) {
+          console.log('[mcp-app] calling tool via serverTools:', name);
+          protocol.sendRequest('tools/call', { name: name, arguments: args }).then(function(callResult) {
             console.log('[mcp-app] tool call result received');
             setResult(callResult);
             setState('result');
@@ -116,7 +117,7 @@
           name = initResult.hostContext.toolInfo.tool.name;
         }
         console.log('[mcp-app] initialized, toolName:', name);
-        setToolName(name);
+        toolNameRef.current = name;
         setState('ready');
 
       }).catch(function(err) {
@@ -144,7 +145,9 @@
     // Extract structured content or fall back to text.
     // The server wraps plain array data in {"items": [...]} because the MCP spec
     // requires structuredContent to be a JSON object. Unwrap it here, but only
-    // when the object is a plain items-wrapper (no other keys like columns/chart).
+    // when the object has a single "items" key (plain wrapper). Self-describing
+    // objects like MetricsTable data ({chart, columns, items}) are preserved
+    // intact — the Object.keys check distinguishes between the two cases.
     var raw = result.structuredContent;
     var structured = raw;
     if (raw && raw.items && Array.isArray(raw.items) && Object.keys(raw).length === 1) {

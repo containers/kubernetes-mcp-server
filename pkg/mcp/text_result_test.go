@@ -37,6 +37,29 @@ func (s *TextResultSuite) TestNewTextResult() {
 	})
 }
 
+func (s *TextResultSuite) TestEnsureStructuredObject() {
+	s.Run("returns nil for nil input", func() {
+		result := ensureStructuredObject(nil)
+		s.Nil(result)
+	})
+	s.Run("wraps slice in items object", func() {
+		items := []string{"a", "b"}
+		result := ensureStructuredObject(items)
+		wrapped, ok := result.(map[string]any)
+		s.Require().True(ok)
+		s.Equal(items, wrapped["items"])
+	})
+	s.Run("passes map through unchanged", func() {
+		m := map[string]any{"key": "value"}
+		result := ensureStructuredObject(m)
+		s.Equal(m, result)
+	})
+	s.Run("passes string through unchanged", func() {
+		result := ensureStructuredObject("hello")
+		s.Equal("hello", result)
+	})
+}
+
 func (s *TextResultSuite) TestNewStructuredResult() {
 	s.Run("returns text and structured content for successful result", func() {
 		structured := map[string]any{"pods": []string{"pod-1", "pod-2"}}

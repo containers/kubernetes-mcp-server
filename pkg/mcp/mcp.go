@@ -492,6 +492,9 @@ func NewStructuredResult(content string, structuredContent any, err error) *mcp.
 // would not be wrapped. All current callers pass value types.
 func ensureStructuredObject(v any) any {
 	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return v
+	}
 	if rv.Kind() == reflect.Slice {
 		if rv.IsNil() {
 			return nil

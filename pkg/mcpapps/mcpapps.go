@@ -51,8 +51,8 @@ func ViewerHTMLForTool(toolName string) string {
 		return cached.(string)
 	}
 	html := strings.Replace(buildBaseHTML(), "INJECT_TOOL_NAME", toolName, 1)
-	toolHTMLCache.Store(toolName, html)
-	return html
+	actual, _ := toolHTMLCache.LoadOrStore(toolName, html)
+	return actual.(string)
 }
 
 // ToolResourceURI returns the per-tool resource URI for the given tool name.

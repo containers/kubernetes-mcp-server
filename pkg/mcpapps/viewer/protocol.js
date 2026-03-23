@@ -6,6 +6,9 @@
   var notificationHandlers = {};
   var requestHandlers = {};
 
+  // Target origin '*' is required: sandboxed iframes have a null origin,
+  // making targeted postMessage impossible. CSS isolation is provided by
+  // the iframe sandbox itself (per MCP Apps spec).
   function sendMessage(msg) {
     window.parent.postMessage(msg, '*');
   }

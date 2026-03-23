@@ -366,10 +366,7 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", err)), nil
 	}
-	if structured := extractPodsTopStructured(ret); structured != nil {
-		return &api.ToolCallResult{Content: buf.String(), StructuredContent: structured}, nil
-	}
-	return api.NewToolCallResult(buf.String(), nil), nil
+	return api.NewToolCallResultFull(buf.String(), extractPodsTopStructured(ret), nil), nil
 }
 
 func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
