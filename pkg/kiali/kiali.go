@@ -81,8 +81,9 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 }
 
 func (k *Kiali) createHTTPClient() *http.Client {
-	// Base TLS configuration, optionally extended with a custom CA
+	// Base TLS configuration with minimum version for security
 	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: k.kialiInsecure,
 	}
 

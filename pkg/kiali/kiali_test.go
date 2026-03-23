@@ -58,6 +58,41 @@ func (s *KialiSuite) TestNewKiali_InvalidConfig() {
 	s.Nil(cfg, "Unexpected Kiali config")
 }
 
+func (s *KialiSuite) TestRequireTLS_ConfigValidation() {
+	s.Run("rejects HTTP URL when require_tls is enabled", func() {
+		_, err := config.ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+			insecure = true
+		`))
+		s.Require().Error(err)
+		s.ErrorContains(err, "require_tls is enabled but Kiali URL uses \"http\" scheme (HTTPS required)")
+	})
+
+	s.Run("accepts HTTPS URL when require_tls is enabled", func() {
+		cfg, err := config.ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			insecure = true
+		`))
+		s.Require().NoError(err)
+		s.NotNil(cfg)
+	})
+
+	s.Run("accepts HTTP URL when require_tls is disabled", func() {
+		cfg, err := config.ReadToml([]byte(`
+			require_tls = false
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+			insecure = true
+		`))
+		s.Require().NoError(err)
+		s.NotNil(cfg)
+	})
+}
+
 func (s *KialiSuite) TestCertificateRequiredForHTTPSWhenNotInsecure() {
 	cfg, err := config.ReadToml([]byte(`
 		[toolset_configs.kiali]

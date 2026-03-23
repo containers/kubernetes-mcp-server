@@ -134,6 +134,7 @@ The server will:
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
+| `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
 
 **Example:**
 ```toml
@@ -145,6 +146,9 @@ stateless = true
 # Enable TLS for HTTPS
 tls_cert = "/etc/tls/tls.crt"
 tls_key = "/etc/tls/tls.key"
+
+# Enforce TLS for all connections (requires tls_cert and tls_key)
+require_tls = true
 ```
 
 ### Kubernetes Connection
@@ -558,6 +562,7 @@ The following options can be set via command-line arguments. CLI arguments overr
 | `--cluster-provider` | Cluster provider strategy (`kubeconfig`, `in-cluster`, `kcp`, `disabled`) |
 | `--tls-cert` | Path to TLS certificate file for HTTPS (must be used with `--tls-key`) |
 | `--tls-key` | Path to TLS private key file for HTTPS (must be used with `--tls-cert`) |
+| `--require-tls` | Enforce TLS for server and all outbound connections |
 
 ## Complete Example
 

@@ -75,6 +75,10 @@ type StaticConfig struct {
 	TLSCert string `toml:"tls_cert,omitempty"`
 	// TLSKey is the path to the TLS private key file for HTTPS
 	TLSKey string `toml:"tls_key,omitempty"`
+	// RequireTLS enforces TLS for all server and client connections.
+	// When true, the server will refuse to start without TLS certificates,
+	// and outbound connections to non-HTTPS endpoints will be rejected.
+	RequireTLS bool `toml:"require_tls,omitempty"`
 
 	// ClusterProviderStrategy is how the server finds clusters.
 	// If set to "kubeconfig", the clusters will be loaded from those in the kubeconfig.
@@ -297,6 +301,7 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	}
 
 	ctx := withConfigDirPath(context.Background(), config.configDirPath)
+	ctx = withRequireTLS(ctx, config.RequireTLS)
 
 	config.parsedClusterProviderConfigs, err = providerConfigRegistry.parse(ctx, md, config.ClusterProviderConfigs)
 	if err != nil {
@@ -356,4 +361,8 @@ func (c *StaticConfig) GetStsScopes() []string {
 
 func (c *StaticConfig) IsValidationEnabled() bool {
 	return c.ValidationEnabled
+}
+
+func (c *StaticConfig) IsRequireTLS() bool {
+	return c.RequireTLS
 }

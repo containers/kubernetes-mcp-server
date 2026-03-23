@@ -64,14 +64,26 @@ func (c *TargetTokenExchangeConfig) HTTPCLient() (*http.Client, error) {
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 
+	// Always set MinVersion for security, regardless of CAFile
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
 	if c.CAFile != "" {
-		tlsConfig, err := buildTlsConfigForCaFile(c.CAFile)
+		caCert, err := os.ReadFile(c.CAFile)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to read CA file '%s': %w", c.CAFile, err)
 		}
 
-		transport.TLSClientConfig = tlsConfig
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to parse CA certificate from '%s'", c.CAFile)
+		}
+
+		tlsConfig.RootCAs = caCertPool
 	}
+
+	transport.TLSClientConfig = tlsConfig
 
 	c.client = &http.Client{
 		Timeout:   30 * time.Second,
@@ -79,24 +91,4 @@ func (c *TargetTokenExchangeConfig) HTTPCLient() (*http.Client, error) {
 	}
 
 	return c.client, nil
-}
-
-func buildTlsConfigForCaFile(caFile string) (*tls.Config, error) {
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-
-	caCert, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read CA file '%s': %w", caFile, err)
-	}
-
-	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to parce CA certificate from '%s'", caFile)
-	}
-
-	tlsConfig.RootCAs = caCertPool
-
-	return tlsConfig, nil
 }
