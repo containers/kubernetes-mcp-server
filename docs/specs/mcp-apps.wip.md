@@ -595,8 +595,8 @@ func ViewerHTMLForTool(toolName string) string {
         return cached.(string)
     }
     html := strings.Replace(buildBaseHTML(), "INJECT_TOOL_NAME", toolName, 1)
-    toolHTMLCache.Store(toolName, html)
-    return html
+    actual, _ := toolHTMLCache.LoadOrStore(toolName, html)
+    return actual.(string)
 }
 ```
 
@@ -939,6 +939,9 @@ and wraps them in `{"items": [...]}`:
 ```go
 func ensureStructuredObject(v any) any {
     rv := reflect.ValueOf(v)
+    if !rv.IsValid() {
+        return v
+    }
     if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
         return map[string]any{"items": v}
     }

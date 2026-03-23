@@ -178,10 +178,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to print node metrics: %w", err)), nil
 	}
 
-	if structured := extractNodesTopStructured(nodeMetrics, availableResources); structured != nil {
-		return &api.ToolCallResult{Content: buf.String(), StructuredContent: structured}, nil
-	}
-	return api.NewToolCallResult(buf.String(), nil), nil
+	return api.NewToolCallResultFull(buf.String(), extractNodesTopStructured(nodeMetrics, availableResources), nil), nil
 }
 
 func extractNodesTopStructured(nodeMetrics *metrics.NodeMetricsList, available map[string]v1.ResourceList) map[string]any {
