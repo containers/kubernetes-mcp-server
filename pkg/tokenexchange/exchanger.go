@@ -48,21 +48,30 @@ type TokenExchanger interface {
 }
 
 // injectClientAuth adds client credentials to the request based on auth style
-func injectClientAuth(cfg *TargetTokenExchangeConfig, data url.Values, header http.Header) {
+func injectClientAuth(cfg *TargetTokenExchangeConfig, data url.Values, header http.Header) error {
 	if cfg.ClientID == "" {
-		return
+		return nil
 	}
 
 	switch cfg.AuthStyle {
 	case AuthStyleHeader:
 		credentials := cfg.ClientID + ":" + cfg.ClientSecret
 		header.Set(HeaderAuthorization, "Basic "+base64.StdEncoding.EncodeToString([]byte(credentials)))
+	case AuthStyleAssertion:
+		assertion, err := cfg.GetOrBuildAssertion()
+		if err != nil {
+			return fmt.Errorf("failed to build client assertion: %w", err)
+		}
+		data.Set(FormKeyClientID, cfg.ClientID)
+		data.Set(FormKeyClientAssertionType, ClientAssertionType)
+		data.Set(FormKeyClientAssertion, assertion)
 	default: // AuthStyleParams or empty (default)
 		data.Set(FormKeyClientID, cfg.ClientID)
 		if cfg.ClientSecret != "" {
 			data.Set(FormKeyClientSecret, cfg.ClientSecret)
 		}
 	}
+	return nil
 }
 
 // tokenExchangeResponse represents the OAuth token exchange response

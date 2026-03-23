@@ -73,9 +73,31 @@ type StaticConfig struct {
 	// StsAudience is the audience for the STS token exchange.
 	StsAudience string `toml:"sts_audience,omitempty"`
 	// StsScopes is the scopes for the STS token exchange.
-	StsScopes            []string `toml:"sts_scopes,omitempty"`
-	CertificateAuthority string   `toml:"certificate_authority,omitempty"`
-	ServerURL            string   `toml:"server_url,omitempty"`
+	StsScopes []string `toml:"sts_scopes,omitempty"`
+	// TokenExchangeStrategy is the token exchange strategy to use (rfc8693, keycloak-v1, entra-obo).
+	// When set with passthrough mode, the token is exchanged before being passed to the cluster.
+	TokenExchangeStrategy string `toml:"token_exchange_strategy,omitempty"`
+	// StsAuthStyle specifies how client credentials are sent during token exchange.
+	// "params" (default): client_id/secret in request body
+	// "header": HTTP Basic Authentication header
+	// "assertion": JWT client assertion (RFC 7523, for Entra ID certificate auth)
+	StsAuthStyle string `toml:"sts_auth_style,omitempty"`
+	// StsClientCertFile is the path to the client certificate PEM file for JWT assertion auth
+	StsClientCertFile string `toml:"sts_client_cert_file,omitempty"`
+	// StsClientKeyFile is the path to the client private key PEM file for JWT assertion auth
+	StsClientKeyFile string `toml:"sts_client_key_file,omitempty"`
+	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
+	// Valid values: "passthrough" (use OAuth token, with optional exchange), "kubeconfig" (use kubeconfig credentials).
+	// If empty, auto-detects: passthrough when require_oauth=true, otherwise kubeconfig.
+	ClusterAuthMode      string `toml:"cluster_auth_mode,omitempty"`
+	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	ServerURL            string `toml:"server_url,omitempty"`
+	// TrustProxyHeaders allows the server to use X-Forwarded-Host, X-Forwarded-Proto,
+	// X-Forwarded-For, and X-Real-IP headers from reverse proxies.
+	// Only enable this when the server is behind a trusted reverse proxy.
+	// When false (default), the server requires server_url to be set for well-known
+	// endpoint metadata and ignores forwarded headers for client IP and scheme detection.
+	TrustProxyHeaders bool `toml:"trust_proxy_headers,omitempty"`
 
 	// TLS configuration for the HTTP server
 	// TLSCert is the path to the TLS certificate file for HTTPS
@@ -389,6 +411,22 @@ func (c *StaticConfig) GetStsScopes() []string {
 	return c.StsScopes
 }
 
+func (c *StaticConfig) GetStsStrategy() string {
+	return c.TokenExchangeStrategy
+}
+
+func (c *StaticConfig) GetStsAuthStyle() string {
+	return c.StsAuthStyle
+}
+
+func (c *StaticConfig) GetStsClientCertFile() string {
+	return c.StsClientCertFile
+}
+
+func (c *StaticConfig) GetStsClientKeyFile() string {
+	return c.StsClientKeyFile
+}
+
 func (c *StaticConfig) IsValidationEnabled() bool {
 	return c.ValidationEnabled
 }
@@ -416,4 +454,40 @@ func (c *StaticConfig) ValidateRequireTLS() error {
 		"server_url":        c.ServerURL,
 		"sse_base_url":      c.SSEBaseURL,
 	})
+}
+
+func (c *StaticConfig) GetClusterAuthMode() string {
+	return c.ClusterAuthMode
+}
+
+// ResolveClusterAuthMode returns the effective cluster auth mode.
+// If explicitly set, returns that value. Otherwise auto-detects:
+// passthrough when require_oauth is true, kubeconfig otherwise.
+func (c *StaticConfig) ResolveClusterAuthMode() string {
+	if c.ClusterAuthMode != "" {
+		return c.ClusterAuthMode
+	}
+	if c.RequireOAuth {
+		return api.ClusterAuthPassthrough
+	}
+	return api.ClusterAuthKubeconfig
+}
+
+// ValidateClusterAuthMode validates cluster_auth_mode and its interaction with
+// other auth-related settings (require_oauth, token exchange).
+func (c *StaticConfig) ValidateClusterAuthMode() error {
+	if c.ClusterAuthMode != "" && c.ClusterAuthMode != api.ClusterAuthPassthrough && c.ClusterAuthMode != api.ClusterAuthKubeconfig {
+		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", c.ClusterAuthMode, api.ClusterAuthPassthrough, api.ClusterAuthKubeconfig)
+	}
+	hasTokenExchange := c.TokenExchangeStrategy != "" || c.StsAudience != ""
+	if c.ClusterAuthMode == api.ClusterAuthPassthrough && !c.RequireOAuth {
+		return fmt.Errorf("cluster_auth_mode %q requires require_oauth=true (no token to pass through without OAuth)", api.ClusterAuthPassthrough)
+	}
+	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && hasTokenExchange {
+		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) are incompatible with cluster_auth_mode %q (exchanged token would be unused)", api.ClusterAuthKubeconfig)
+	}
+	if !c.RequireOAuth && hasTokenExchange {
+		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) require require_oauth=true (no token to exchange without OAuth)")
+	}
+	return nil
 }

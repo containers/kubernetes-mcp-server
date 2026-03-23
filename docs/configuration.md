@@ -468,10 +468,15 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `sts_client_secret` | string | `""` | OAuth client secret for backend token exchange. |
 | `sts_audience` | string | `""` | Audience for STS token exchange. |
 | `sts_scopes` | string[] | `[]` | Scopes for STS token exchange. |
+| `token_exchange_strategy` | string | `""` | Token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. |
+| `sts_auth_style` | string | `"params"` | How client credentials are sent: `params` (body), `header` (Basic Auth), or `assertion` (JWT). |
+| `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
+| `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
+| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (use OAuth token) or `kubeconfig` (use kubeconfig credentials). |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
 
-**Example:**
+**Example (with client secret):**
 ```toml
 require_oauth = true
 authorization_url = "https://keycloak.example.com/realms/mcp"
@@ -483,7 +488,21 @@ sts_client_secret = "your-client-secret"
 sts_audience = "kubernetes-api"
 ```
 
-For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md).
+**Example (with certificate-based auth for Entra ID):**
+```toml
+require_oauth = true
+authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
+oauth_audience = "<CLIENT_ID>"
+
+token_exchange_strategy = "entra-obo"
+sts_client_id = "<CLIENT_ID>"
+sts_auth_style = "assertion"
+sts_client_cert_file = "/path/to/client.crt"
+sts_client_key_file = "/path/to/client.key"
+sts_scopes = ["api://<DOWNSTREAM_API>/.default"]
+```
+
+For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) or [ENTRA_ID_SETUP.md](ENTRA_ID_SETUP.md).
 
 ### Telemetry
 

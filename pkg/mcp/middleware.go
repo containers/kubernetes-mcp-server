@@ -46,6 +46,9 @@ func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 				return next(context.WithValue(ctx, internalk8s.OAuthAuthorizationHeader, customAuthHeader), method, req)
 			}
 		}
+
+		// If no auth header in RequestExtra, context may already have it from HTTP middleware
+		// (used by SSE transport where HTTP headers aren't propagated to RequestExtra)
 		return next(ctx, method, req)
 	}
 }

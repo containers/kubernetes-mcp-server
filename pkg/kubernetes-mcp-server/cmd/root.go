@@ -2,12 +2,9 @@ package cmd
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -17,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/spf13/cobra"
 
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -31,6 +27,7 @@ import (
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
+	internaloauth "github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
@@ -346,6 +343,9 @@ func (m *MCPServerOptions) Validate() error {
 	if err := m.StaticConfig.ValidateRequireTLS(); err != nil {
 		return err
 	}
+	if err := m.StaticConfig.ValidateClusterAuthMode(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -375,48 +375,13 @@ func (m *MCPServerOptions) Run() error {
 		return nil
 	}
 
-	var oidcProvider *oidc.Provider
-	var httpClient *http.Client
-	if m.StaticConfig.AuthorizationURL != "" {
-		ctx := context.Background()
-		if m.StaticConfig.CertificateAuthority != "" {
-			httpClient = &http.Client{}
-			caCert, err := os.ReadFile(m.StaticConfig.CertificateAuthority)
-			if err != nil {
-				return fmt.Errorf("failed to read CA certificate from %s: %w", m.StaticConfig.CertificateAuthority, err)
-			}
-			caCertPool := x509.NewCertPool()
-			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return fmt.Errorf("failed to append CA certificate from %s to pool", m.StaticConfig.CertificateAuthority)
-			}
-
-			if caCertPool.Equal(x509.NewCertPool()) {
-				caCertPool = nil
-			}
-
-			var transport http.RoundTripper = &http.Transport{
-				TLSClientConfig: &tls.Config{
-					MinVersion: tls.VersionTLS12,
-					RootCAs:    caCertPool,
-				},
-			}
-			// Wrap transport with TLS enforcement
-			transport = config.NewTLSEnforcingTransport(transport, m.StaticConfig.IsRequireTLS)
-			httpClient.Transport = transport
-			ctx = oidc.ClientContext(ctx, httpClient)
-		} else {
-			// No custom CA, but still enforce TLS if required
-			httpClient = config.NewTLSEnforcingClient(nil, m.StaticConfig.IsRequireTLS)
-			ctx = oidc.ClientContext(ctx, httpClient)
-		}
-		provider, err := oidc.NewProvider(ctx, m.StaticConfig.AuthorizationURL)
-		if err != nil {
-			return fmt.Errorf("unable to setup OIDC provider: %w", err)
-		}
-		oidcProvider = provider
+	oidcProvider, httpClient, err := internaloauth.CreateOIDCProviderAndClient(m.StaticConfig)
+	if err != nil {
+		return err
 	}
+	oauthState := internaloauth.NewState(internaloauth.SnapshotFromConfig(m.StaticConfig, oidcProvider, httpClient))
 
-	provider, err := kubernetes.NewProvider(m.StaticConfig, kubernetes.WithTokenExchange(oidcProvider, httpClient))
+	provider, err := kubernetes.NewProvider(m.StaticConfig, kubernetes.WithTokenExchange(oauthState))
 	if err != nil {
 		return fmt.Errorf("unable to create kubernetes target provider: %w", err)
 	}
@@ -437,12 +402,12 @@ func (m *MCPServerOptions) Run() error {
 
 	// Set up SIGHUP handler for configuration reload
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		_ = m.setupSIGHUPHandler(mcpServer)
+		_ = m.setupSIGHUPHandler(mcpServer, oauthState)
 	}
 
 	if m.StaticConfig.Port != "" {
 		ctx := context.Background()
-		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oidcProvider, httpClient)
+		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oauthState)
 	}
 
 	ctx := context.Background()
@@ -456,7 +421,7 @@ func (m *MCPServerOptions) Run() error {
 // setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP.
 // Returns a stop function that should be called to clean up the handler.
 // The stop function waits for the handler goroutine to finish.
-func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) (stop func()) {
+func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState *internaloauth.State) (stop func()) {
 	sigHupCh := make(chan os.Signal, 1)
 	done := make(chan struct{})
 	signal.Notify(sigHupCh, syscall.SIGHUP)
@@ -473,10 +438,33 @@ func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) (stop func(
 				continue
 			}
 
-			// Apply the new configuration to the MCP server
+			// Apply the new configuration to the MCP server first — if this fails,
+			// we skip the OAuth state update to avoid inconsistent state.
 			if err := mcpServer.ReloadConfiguration(newConfig); err != nil {
 				klog.Errorf("Failed to apply reloaded configuration: %v", err)
 				continue
+			}
+
+			// Check if OAuth-relevant config changed and update the shared state
+			currentSnapshot := oauthState.Load()
+			if currentSnapshot == nil {
+				currentSnapshot = &internaloauth.Snapshot{}
+			}
+			newSnapshot := internaloauth.SnapshotFromConfig(newConfig, currentSnapshot.OIDCProvider, currentSnapshot.HTTPClient)
+			if currentSnapshot.HasProviderConfigChanged(newSnapshot) {
+				klog.V(1).Info("OAuth configuration changed, recreating OIDC provider...")
+				newProvider, newClient, err := internaloauth.CreateOIDCProviderAndClient(newConfig)
+				if err != nil {
+					klog.Errorf("Failed to recreate OIDC provider during reload: %v", err)
+					continue
+				}
+				newSnapshot.OIDCProvider = newProvider
+				newSnapshot.HTTPClient = newClient
+				oauthState.Store(newSnapshot)
+				klog.V(1).Info("OIDC provider and HTTP client updated successfully")
+			} else if currentSnapshot.HasWellKnownConfigChanged(newSnapshot) {
+				oauthState.Store(newSnapshot)
+				klog.V(1).Info("OAuth well-known configuration updated")
 			}
 
 			klog.V(1).Info("Configuration reloaded successfully via SIGHUP")

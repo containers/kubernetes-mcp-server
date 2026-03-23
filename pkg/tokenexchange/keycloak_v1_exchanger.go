@@ -16,7 +16,7 @@ type keycloakV1Exchanger struct{}
 var _ TokenExchanger = &keycloakV1Exchanger{}
 
 func (e *keycloakV1Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error) {
-	httpClient, err := cfg.HTTPCLient()
+	httpClient, err := cfg.HTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire http client to talk to IdP for target: %w", err)
 	}
@@ -36,7 +36,9 @@ func (e *keycloakV1Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExch
 	}
 
 	headers := http.Header{}
-	injectClientAuth(cfg, data, headers)
+	if err := injectClientAuth(cfg, data, headers); err != nil {
+		return nil, err
+	}
 
 	return doTokenExchange(ctx, httpClient, cfg.TokenURL, data, headers)
 }

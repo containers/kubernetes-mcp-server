@@ -15,6 +15,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
+	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
@@ -78,7 +79,8 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
 		ConfigPath: configPath,
 		ConfigDir:  configDir,
 	}
-	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server)
+	oauthState := oauth.NewState(&oauth.Snapshot{})
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState)
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {

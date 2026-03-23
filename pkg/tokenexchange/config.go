@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,8 @@ const (
 	AuthStyleParams = "params"
 	// AuthStyleHeader sends client credentials as HTTP Basic Authentication header
 	AuthStyleHeader = "header"
+	// AuthStyleAssertion sends a signed JWT client assertion (RFC 7523)
+	AuthStyleAssertion = "assertion"
 )
 
 // TargetTokenExchangeConfig holds per-target token exchange configuration
@@ -43,21 +46,52 @@ type TargetTokenExchangeConfig struct {
 	// AuthStyle specifies how client credentials are sent to the token endpoint
 	// "params" (default): client_id/secret in request body
 	// "header": HTTP Basic Authentication header
+	// "assertion": JWT client assertion (RFC 7523)
 	AuthStyle string `toml:"auth_style,omitempty"`
+	// ClientCertFile is the path to the client certificate PEM file
+	// Used with AuthStyleAssertion for JWT client assertion authentication
+	ClientCertFile string `toml:"client_cert_file,omitempty"`
+	// ClientKeyFile is the path to the client private key PEM file
+	// Used with AuthStyleAssertion for JWT client assertion authentication
+	ClientKeyFile string `toml:"client_key_file,omitempty"`
+	// AssertionLifetime is the validity duration for generated JWT assertions
+	// Defaults to 5 minutes if not specified
+	AssertionLifetime time.Duration `toml:"assertion_lifetime,omitempty"`
 
 	// client is a http client configured to work with the IdP for this target
 	client *http.Client `toml:"-"`
+	// cachedAssertion stores the most recently generated JWT assertion
+	cachedAssertion string `toml:"-"`
+	// cachedAssertionExpiry is when the cached assertion expires
+	cachedAssertionExpiry time.Time `toml:"-"`
+	// assertionMutex protects assertion caching from race conditions
+	assertionMutex sync.Mutex `toml:"-"`
+	// clientMutex protects HTTP client creation from race conditions
+	clientMutex sync.Mutex `toml:"-"`
 }
 
 // Validate checks that the configuration values are valid
 func (c *TargetTokenExchangeConfig) Validate() error {
-	if c.AuthStyle != "" && c.AuthStyle != AuthStyleParams && c.AuthStyle != AuthStyleHeader {
-		return fmt.Errorf("invalid auth_style %q: must be %q or %q", c.AuthStyle, AuthStyleParams, AuthStyleHeader)
+	switch c.AuthStyle {
+	case "", AuthStyleParams, AuthStyleHeader:
+		// valid
+	case AuthStyleAssertion:
+		if c.ClientCertFile == "" {
+			return fmt.Errorf("client_cert_file is required when auth_style is %q", AuthStyleAssertion)
+		}
+		if c.ClientKeyFile == "" {
+			return fmt.Errorf("client_key_file is required when auth_style is %q", AuthStyleAssertion)
+		}
+	default:
+		return fmt.Errorf("invalid auth_style %q: must be %q, %q, or %q", c.AuthStyle, AuthStyleParams, AuthStyleHeader, AuthStyleAssertion)
 	}
 	return nil
 }
 
-func (c *TargetTokenExchangeConfig) HTTPCLient() (*http.Client, error) {
+func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
+
 	if c.client != nil {
 		return c.client, nil
 	}

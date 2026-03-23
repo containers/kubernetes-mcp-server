@@ -328,6 +328,124 @@ func (s *WellknownSuite) TestOversizedUpstreamResponse() {
 	})
 }
 
+func (s *WellknownSuite) TestMetadataGenerationFallback() {
+	s.Run("generates oauth-authorization-server from openid-configuration when endpoint returns 404", func() {
+		// Simulate OIDC providers that only implement openid-configuration (e.g., Entra ID, Auth0)
+		s.TestServer.Close()
+		s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.EscapedPath() {
+			case "/.well-known/openid-configuration":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"issuer": "https://login.microsoftonline.com/tenant/v2.0",
+					"authorization_endpoint": "https://login.microsoftonline.com/tenant/oauth2/v2.0/authorize",
+					"token_endpoint": "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+					"jwks_uri": "https://login.microsoftonline.com/tenant/discovery/v2.0/keys",
+					"scopes_supported": ["openid", "profile", "email"]
+				}`))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		s.StaticConfig.AuthorizationURL = s.TestServer.URL
+		s.StaticConfig.RequireOAuth = true
+		s.StartServer()
+
+		// oauth-authorization-server should work via fallback
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+		s.Require().NoError(err)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+
+		s.Equal(http.StatusOK, resp.StatusCode, "Expected fallback to succeed")
+
+		body, err := io.ReadAll(resp.Body)
+		s.Require().NoError(err)
+		s.Contains(string(body), "login.microsoftonline.com", "Expected Entra ID issuer in response")
+		s.Contains(string(body), "authorization_endpoint", "Expected authorization_endpoint in response")
+	})
+
+	s.Run("generates RFC 9728 compliant oauth-protected-resource when endpoint returns 404", func() {
+		s.TestServer.Close()
+		s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.EscapedPath() {
+			case "/.well-known/openid-configuration":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"issuer": "https://login.microsoftonline.com/tenant/v2.0",
+					"token_endpoint": "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+					"scopes_supported": ["openid", "profile"]
+				}`))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		s.StaticConfig.AuthorizationURL = s.TestServer.URL
+		s.StaticConfig.RequireOAuth = true
+		s.StartServer()
+
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource", s.StaticConfig.Port))
+		s.Require().NoError(err)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+
+		s.Equal(http.StatusOK, resp.StatusCode, "Expected fallback to succeed")
+
+		body, err := io.ReadAll(resp.Body)
+		s.Require().NoError(err)
+
+		// Verify RFC 9728 format - MCP server is the authorization_server from client's perspective
+		s.Contains(string(body), `"authorization_servers":`, "Expected authorization_servers array per RFC 9728")
+		s.Contains(string(body), fmt.Sprintf("127.0.0.1:%s", s.StaticConfig.Port), "Expected authorization_servers to contain MCP server URL")
+		s.Contains(string(body), `"scopes_supported":`, "Expected scopes_supported from openid-configuration")
+	})
+
+	s.Run("returns 404 when both oauth-authorization-server and openid-configuration return 404", func() {
+		s.TestServer.Close()
+		s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		}))
+		s.StaticConfig.AuthorizationURL = s.TestServer.URL
+		s.StaticConfig.RequireOAuth = true
+		s.StartServer()
+
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+		s.Require().NoError(err)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+
+		s.Equal(http.StatusNotFound, resp.StatusCode, "Expected 404 when all endpoints fail")
+	})
+
+	s.Run("applies config overrides to fallback response", func() {
+		s.TestServer.Close()
+		s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.EscapedPath() {
+			case "/.well-known/openid-configuration":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"issuer": "https://login.microsoftonline.com/tenant/v2.0",
+					"scopes_supported": ["openid"],
+					"registration_endpoint": "https://should-be-removed"
+				}`))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		s.StaticConfig.AuthorizationURL = s.TestServer.URL
+		s.StaticConfig.RequireOAuth = true
+		s.StaticConfig.DisableDynamicClientRegistration = true
+		s.StaticConfig.OAuthScopes = []string{"custom-scope"}
+		s.StartServer()
+
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+		s.Require().NoError(err)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+
+		body, err := io.ReadAll(resp.Body)
+		s.Require().NoError(err)
+		s.NotContains(string(body), "registration_endpoint", "registration_endpoint should be removed")
+		s.Contains(string(body), `"scopes_supported":["custom-scope"]`, "scopes should be overridden")
+	})
+}
+
 func TestWellknown(t *testing.T) {
 	suite.Run(t, new(WellknownSuite))
 }
