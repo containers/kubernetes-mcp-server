@@ -67,7 +67,7 @@ func (s *KialiSuite) TestRequireTLS_ConfigValidation() {
 			insecure = true
 		`))
 		s.Require().Error(err)
-		s.ErrorContains(err, "require_tls is enabled but Kiali URL uses \"http\" scheme (HTTPS required)")
+		s.ErrorContains(err, "require_tls is enabled but Kiali URL uses \"http\" scheme (secure scheme required)")
 	})
 
 	s.Run("accepts HTTPS URL when require_tls is enabled", func() {

@@ -23,16 +23,21 @@ func (s *TLSSuite) TestValidateURLRequiresTLS() {
 		s.NoError(err)
 	})
 
+	s.Run("returns nil for WSS URL", func() {
+		err := ValidateURLRequiresTLS("wss://example.com/path", "test_url")
+		s.NoError(err)
+	})
+
 	s.Run("returns error for HTTP URL", func() {
 		err := ValidateURLRequiresTLS("http://example.com/path", "test_url")
 		s.Require().Error(err)
-		s.Contains(err.Error(), "require_tls is enabled but test_url uses \"http\" scheme (HTTPS required)")
+		s.Contains(err.Error(), "require_tls is enabled but test_url uses \"http\" scheme (secure scheme required)")
 	})
 
 	s.Run("returns error for non-HTTPS scheme", func() {
 		err := ValidateURLRequiresTLS("ftp://example.com/path", "test_url")
 		s.Require().Error(err)
-		s.Contains(err.Error(), "uses \"ftp\" scheme (HTTPS required)")
+		s.Contains(err.Error(), "uses \"ftp\" scheme (secure scheme required)")
 	})
 
 	s.Run("includes field name in error message", func() {

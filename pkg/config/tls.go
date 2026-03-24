@@ -1,15 +1,18 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"k8s.io/klog/v2"
 )
 
-// ValidateURLRequiresTLS validates that a URL uses HTTPS scheme when TLS is required.
-// Returns nil if the URL is empty. Returns an error if the URL does not use HTTPS.
+// ValidateURLRequiresTLS validates that a URL uses a secure scheme when TLS is required.
+// Returns nil if the URL is empty. Returns an error if the URL does not use a secure scheme.
 // This provides Layer 1 (config-time) validation for fail-fast feedback.
 func ValidateURLRequiresTLS(urlStr string, fieldName string) error {
 	if urlStr == "" {
@@ -19,21 +22,27 @@ func ValidateURLRequiresTLS(urlStr string, fieldName string) error {
 	if err != nil {
 		return fmt.Errorf("invalid %s: %w", fieldName, err)
 	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("require_tls is enabled but %s uses %q scheme (HTTPS required)", fieldName, u.Scheme)
+	if !isSecureHTTPScheme(u.Scheme) {
+		return fmt.Errorf("require_tls is enabled but %s uses %q scheme (secure scheme required)", fieldName, u.Scheme)
 	}
 	return nil
 }
 
-// ValidateURLsRequireTLS validates multiple URLs use HTTPS scheme.
+// ValidateURLsRequireTLS validates multiple URLs use a secure scheme.
 // The map keys are field names, values are the URLs to validate.
+// All URLs are validated and errors are combined.
+// Keys are sorted for deterministic error ordering.
 func ValidateURLsRequireTLS(urls map[string]string) error {
-	for fieldName, urlStr := range urls {
-		if err := ValidateURLRequiresTLS(urlStr, fieldName); err != nil {
-			return err
+	var errs []error
+	for _, fieldName := range slices.Sorted(maps.Keys(urls)) {
+		if err := ValidateURLRequiresTLS(urls[fieldName], fieldName); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("TLS validation failed: %w", errors.Join(errs...))
 }
 
 // TLSEnforcingTransport wraps an http.RoundTripper and rejects non-HTTPS requests
