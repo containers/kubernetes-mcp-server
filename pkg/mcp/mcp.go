@@ -64,14 +64,14 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
-	mu                   sync.RWMutex
-	configuration        *Configuration
-	server               *mcp.Server
-	enabledTools         []string
-	enabledPrompts       []string
-	registeredAppURIs    []string // tracked for cleanup on reload
-	p                    internalk8s.Provider
-	metrics              *metrics.Metrics // Metrics collection system
+	mu                sync.RWMutex
+	configuration     *Configuration
+	server            *mcp.Server
+	enabledTools      []string
+	enabledPrompts    []string
+	registeredAppURIs []string // tracked for cleanup on reload
+	p                 internalk8s.Provider
+	metrics           *metrics.Metrics // Metrics collection system
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
