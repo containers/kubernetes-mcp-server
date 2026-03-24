@@ -2,7 +2,7 @@
   'use strict';
 
   var nextId = 1;
-  var pending = new Map();
+  var pending = {};
   var notificationHandlers = {};
   var requestHandlers = {};
 
@@ -17,7 +17,7 @@
     var id = nextId++;
     sendMessage({ jsonrpc: '2.0', id: id, method: method, params: params });
     return new Promise(function(resolve, reject) {
-      pending.set(id, { resolve: resolve, reject: reject });
+      pending[id] = { resolve: resolve, reject: reject };
     });
   }
 
@@ -43,9 +43,9 @@
     console.log('[mcp-protocol] <<', msg.method || ('response id=' + msg.id), JSON.stringify(msg).substring(0, 500));
 
     // Response to our request
-    if (msg.id != null && pending.has(msg.id)) {
-      var p = pending.get(msg.id);
-      pending.delete(msg.id);
+    if (msg.id != null && pending[msg.id]) {
+      var p = pending[msg.id];
+      delete pending[msg.id];
       if (msg.error) p.reject(new Error(msg.error.message));
       else p.resolve(msg.result);
       return;
