@@ -45,6 +45,14 @@ func (c *Configuration) ListOutput() output.Output {
 	return c.listOutput
 }
 
+// IsRequireTLS returns whether TLS is required for outbound connections.
+// This method exists to support dynamic config reload via SIGHUP - it reads
+// from the current StaticConfig rather than being a promoted method bound
+// to a potentially stale config reference.
+func (c *Configuration) IsRequireTLS() bool {
+	return c.RequireTLS
+}
+
 func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 	if c.ReadOnly && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
 		return false

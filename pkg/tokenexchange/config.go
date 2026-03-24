@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 const (
@@ -44,6 +46,10 @@ type TargetTokenExchangeConfig struct {
 	// "params" (default): client_id/secret in request body
 	// "header": HTTP Basic Authentication header
 	AuthStyle string `toml:"auth_style,omitempty"`
+
+	// RequireTLS is a function that returns whether TLS is required for outbound connections.
+	// When set and returns true, HTTP requests to non-HTTPS endpoints will be rejected.
+	RequireTLS func() bool `toml:"-"`
 
 	// client is a http client configured to work with the IdP for this target
 	client *http.Client `toml:"-"`
@@ -85,9 +91,15 @@ func (c *TargetTokenExchangeConfig) HTTPCLient() (*http.Client, error) {
 
 	transport.TLSClientConfig = tlsConfig
 
+	// Wrap transport with TLS enforcement if RequireTLS is configured
+	var finalTransport http.RoundTripper = transport
+	if c.RequireTLS != nil {
+		finalTransport = config.NewTLSEnforcingTransport(transport, c.RequireTLS)
+	}
+
 	c.client = &http.Client{
 		Timeout:   30 * time.Second,
-		Transport: transport,
+		Transport: finalTransport,
 	}
 
 	return c.client, nil

@@ -344,7 +344,11 @@ func (m *MCPServerOptions) Validate() error {
 	}
 	// Validate outbound URLs when require_tls is enabled
 	if m.StaticConfig.RequireTLS {
-		if err := config.ValidateURLRequiresTLS(m.StaticConfig.AuthorizationURL, "authorization_url"); err != nil {
+		if err := config.ValidateURLsRequireTLS(map[string]string{
+			"authorization_url": m.StaticConfig.AuthorizationURL,
+			"server_url":        m.StaticConfig.ServerURL,
+			"sse_base_url":      m.StaticConfig.SSEBaseURL,
+		}); err != nil {
 			return err
 		}
 	}
@@ -396,13 +400,19 @@ func (m *MCPServerOptions) Run() error {
 				caCertPool = nil
 			}
 
-			transport := &http.Transport{
+			var transport http.RoundTripper = &http.Transport{
 				TLSClientConfig: &tls.Config{
 					MinVersion: tls.VersionTLS12,
 					RootCAs:    caCertPool,
 				},
 			}
+			// Wrap transport with TLS enforcement
+			transport = config.NewTLSEnforcingTransport(transport, m.StaticConfig.IsRequireTLS)
 			httpClient.Transport = transport
+			ctx = oidc.ClientContext(ctx, httpClient)
+		} else {
+			// No custom CA, but still enforce TLS if required
+			httpClient = config.NewTLSEnforcingClient(nil, m.StaticConfig.IsRequireTLS)
 			ctx = oidc.ClientContext(ctx, httpClient)
 		}
 		provider, err := oidc.NewProvider(ctx, m.StaticConfig.AuthorizationURL)
