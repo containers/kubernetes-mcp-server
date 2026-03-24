@@ -193,6 +193,16 @@ func (s *HelmSuite) TestValidateChartReference() {
 			s.Error(err)
 			s.Contains(err.Error(), "only registry URLs from the allowed list are permitted")
 		})
+		s.Run("matches case-insensitively", func() {
+			s.NoError(validateChartReference("OCI://GHCR.IO/myorg/mychart", cfg))
+		})
+		s.Run("matches registry with no path", func() {
+			registryCfg := &Config{
+				AllowedRegistries: []string{"oci://registry.example.com"},
+			}
+			s.NoError(validateChartReference("oci://registry.example.com/chart", registryCfg))
+			s.NoError(validateChartReference("oci://registry.example.com", registryCfg))
+		})
 		s.Run("still blocks file:// scheme", func() {
 			err := validateChartReference("file:///tmp/chart", cfg)
 			s.Error(err)

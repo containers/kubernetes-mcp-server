@@ -142,7 +142,11 @@ func validateChartReference(chart string, cfg *Config) error {
 	switch strings.ToLower(u.Scheme) {
 	case "oci", "https":
 		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
-			normalized := u.Scheme + "://" + u.Host + path.Clean(u.Path)
+			cleaned := path.Clean(u.Path)
+			if cleaned == "." {
+				cleaned = ""
+			}
+			normalized := strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + cleaned
 			for _, allowed := range cfg.AllowedRegistries {
 				if normalized == allowed || strings.HasPrefix(normalized, allowed+"/") {
 					return nil

@@ -34,7 +34,9 @@ func (c *Config) Validate() error {
 		if u.Host == "" {
 			return fmt.Errorf("allowed_registries entry %q must be a valid URL with scheme and host", entry)
 		}
-		c.AllowedRegistries[i] = strings.TrimRight(entry, "/")
+		// Normalize to lowercase scheme + host and strip trailing slashes
+		// so runtime comparison against the normalized chart reference is case-insensitive.
+		c.AllowedRegistries[i] = strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + strings.TrimRight(u.Path, "/")
 	}
 	return nil
 }
