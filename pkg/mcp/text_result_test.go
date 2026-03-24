@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
@@ -118,4 +119,71 @@ func (s *TextResultSuite) TestNewStructuredResult() {
 
 func TestTextResult(t *testing.T) {
 	suite.Run(t, new(TextResultSuite))
+}
+
+type RegisterMCPAppResourcesSuite struct {
+	suite.Suite
+}
+
+func (s *RegisterMCPAppResourcesSuite) newServer() *Server {
+	return &Server{
+		server: mcp.NewServer(
+			&mcp.Implementation{Name: "test"},
+			&mcp.ServerOptions{
+				Capabilities: &mcp.ServerCapabilities{
+					Resources: &mcp.ResourceCapabilities{},
+				},
+			},
+		),
+	}
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestTracksRegisteredURIs() {
+	srv := s.newServer()
+	srv.registerMCPAppResources([]string{"pods_list", "nodes_top"})
+	s.ElementsMatch(
+		[]string{
+			mcpapps.ToolResourceURI("pods_list"),
+			mcpapps.ToolResourceURI("nodes_top"),
+		},
+		srv.registeredAppURIs,
+	)
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestRemovesStaleResources() {
+	srv := s.newServer()
+	// First registration: two tools
+	srv.registerMCPAppResources([]string{"pods_list", "nodes_top"})
+	s.Len(srv.registeredAppURIs, 2)
+	// Second registration: only one tool remains — stale nodes_top should be cleaned up
+	srv.registerMCPAppResources([]string{"pods_list"})
+	s.Equal(
+		[]string{mcpapps.ToolResourceURI("pods_list")},
+		srv.registeredAppURIs,
+	)
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestUpdatesTrackingOnReRegister() {
+	srv := s.newServer()
+	srv.registerMCPAppResources([]string{"pods_list"})
+	srv.registerMCPAppResources([]string{"pods_list", "namespaces_list"})
+	s.ElementsMatch(
+		[]string{
+			mcpapps.ToolResourceURI("pods_list"),
+			mcpapps.ToolResourceURI("namespaces_list"),
+		},
+		srv.registeredAppURIs,
+	)
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestEmptyListClearsAll() {
+	srv := s.newServer()
+	srv.registerMCPAppResources([]string{"pods_list"})
+	s.Len(srv.registeredAppURIs, 1)
+	srv.registerMCPAppResources([]string{})
+	s.Empty(srv.registeredAppURIs)
+}
+
+func TestRegisterMCPAppResources(t *testing.T) {
+	suite.Run(t, new(RegisterMCPAppResourcesSuite))
 }

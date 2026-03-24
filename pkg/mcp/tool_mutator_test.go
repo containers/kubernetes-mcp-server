@@ -307,3 +307,62 @@ func (s *TargetListToolMutatorSuite) TestHandlerWithGetTargetsError() {
 func TestTargetListToolMutator(t *testing.T) {
 	suite.Run(t, new(TargetListToolMutatorSuite))
 }
+
+type AppsMetaMutatorSuite struct {
+	suite.Suite
+}
+
+func (s *AppsMetaMutatorSuite) TestInjectsMetaWhenNil() {
+	tool := createTestTool("pods_list")
+	s.Nil(tool.Tool.Meta)
+	mutator := WithAppsMeta()
+	result := mutator(tool)
+	s.Run("sets Meta", func() {
+		s.NotNil(result.Tool.Meta)
+	})
+	s.Run("contains ui key", func() {
+		_, hasUI := result.Tool.Meta["ui"]
+		s.True(hasUI)
+	})
+	s.Run("contains legacy flat key", func() {
+		_, hasLegacy := result.Tool.Meta["ui/resourceUri"]
+		s.True(hasLegacy)
+	})
+}
+
+func (s *AppsMetaMutatorSuite) TestMergesIntoExistingMeta() {
+	tool := createTestTool("pods_list")
+	tool.Tool.Meta = map[string]any{"custom": "value"}
+	mutator := WithAppsMeta()
+	result := mutator(tool)
+	s.Run("preserves existing keys", func() {
+		s.Equal("value", result.Tool.Meta["custom"])
+	})
+	s.Run("adds ui key", func() {
+		_, hasUI := result.Tool.Meta["ui"]
+		s.True(hasUI)
+	})
+	s.Run("adds legacy flat key", func() {
+		_, hasLegacy := result.Tool.Meta["ui/resourceUri"]
+		s.True(hasLegacy)
+	})
+}
+
+func (s *AppsMetaMutatorSuite) TestSkipsWhenUIKeyExists() {
+	existingUI := map[string]any{"resourceUri": "ui://custom/resource"}
+	tool := createTestTool("pods_list")
+	tool.Tool.Meta = map[string]any{"ui": existingUI}
+	mutator := WithAppsMeta()
+	result := mutator(tool)
+	s.Run("does not overwrite existing ui key", func() {
+		s.Equal(existingUI, result.Tool.Meta["ui"])
+	})
+	s.Run("does not add legacy flat key", func() {
+		_, hasLegacy := result.Tool.Meta["ui/resourceUri"]
+		s.False(hasLegacy)
+	})
+}
+
+func TestAppsMetaMutator(t *testing.T) {
+	suite.Run(t, new(AppsMetaMutatorSuite))
+}
