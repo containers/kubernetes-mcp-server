@@ -64,13 +64,14 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
-	mu             sync.RWMutex
-	configuration  *Configuration
-	server         *mcp.Server
-	enabledTools   []string
-	enabledPrompts []string
-	p              internalk8s.Provider
-	metrics        *metrics.Metrics // Metrics collection system
+	mu                   sync.RWMutex
+	configuration        *Configuration
+	server               *mcp.Server
+	enabledTools         []string
+	enabledPrompts       []string
+	registeredAppURIs    []string // tracked for cleanup on reload
+	p                    internalk8s.Provider
+	metrics              *metrics.Metrics // Metrics collection system
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
@@ -286,14 +287,32 @@ func (s *Server) registerPrompt(prompt api.ServerPrompt) error {
 // registerMCPAppResources registers per-tool viewer HTML as ui:// resources.
 // Each tool gets its own resource URI (e.g. ui://kubernetes-mcp-server/tool/pods_list)
 // so the viewer knows which tool it belongs to and can call it via serverTools.
+// Stale resources from previously enabled tools are removed.
 func (s *Server) registerMCPAppResources(toolNames []string) {
+	// Build the new URI set
+	newURIs := make(map[string]bool, len(toolNames))
 	for _, toolName := range toolNames {
-		tn := toolName // capture for closure
-		uri := mcpapps.ToolResourceURI(tn)
+		newURIs[mcpapps.ToolResourceURI(toolName)] = true
+	}
+	// Remove stale resources that are no longer needed
+	var staleURIs []string
+	for _, uri := range s.registeredAppURIs {
+		if !newURIs[uri] {
+			staleURIs = append(staleURIs, uri)
+		}
+	}
+	if len(staleURIs) > 0 {
+		s.server.RemoveResources(staleURIs...)
+	}
+	// Register new/updated resources
+	registeredURIs := make([]string, 0, len(toolNames))
+	for _, toolName := range toolNames {
+		uri := mcpapps.ToolResourceURI(toolName)
+		registeredURIs = append(registeredURIs, uri)
 		s.server.AddResource(
 			&mcp.Resource{
 				URI:      uri,
-				Name:     "Kubernetes MCP Apps Viewer: " + tn,
+				Name:     "Kubernetes MCP Apps Viewer: " + toolName,
 				MIMEType: mcpapps.ResourceMIMEType,
 			},
 			func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -301,12 +320,13 @@ func (s *Server) registerMCPAppResources(toolNames []string) {
 					Contents: []*mcp.ResourceContents{{
 						URI:      uri,
 						MIMEType: mcpapps.ResourceMIMEType,
-						Text:     mcpapps.ViewerHTMLForTool(tn),
+						Text:     mcpapps.ViewerHTMLForTool(toolName),
 					}},
 				}, nil
 			},
 		)
 	}
+	s.registeredAppURIs = registeredURIs
 }
 
 // metricsMiddleware returns a metrics middleware with access to the server's metrics system

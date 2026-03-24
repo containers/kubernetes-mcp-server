@@ -162,11 +162,13 @@ func tableToStructured(t *metav1.Table) []map[string]any {
 				item[col.Name] = row.Cells[ci]
 			}
 		}
-		// Add namespace from the embedded object metadata if available
-		if row.Object.Object != nil {
-			if u, ok := row.Object.Object.(*unstructured.Unstructured); ok {
-				if ns := u.GetNamespace(); ns != "" {
-					item["Namespace"] = ns
+		// Add namespace from the embedded object metadata if not already present from column definitions
+		if _, hasNS := item["Namespace"]; !hasNS {
+			if row.Object.Object != nil {
+				if u, ok := row.Object.Object.(*unstructured.Unstructured); ok {
+					if ns := u.GetNamespace(); ns != "" {
+						item["Namespace"] = ns
+					}
 				}
 			}
 		}

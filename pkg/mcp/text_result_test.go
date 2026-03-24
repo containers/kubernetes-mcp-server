@@ -58,6 +58,11 @@ func (s *TextResultSuite) TestEnsureStructuredObject() {
 		result := ensureStructuredObject("hello")
 		s.Equal("hello", result)
 	})
+	s.Run("passes nil slice through unchanged", func() {
+		var nilSlice []map[string]any
+		result := ensureStructuredObject(nilSlice)
+		s.Nil(result)
+	})
 }
 
 func (s *TextResultSuite) TestNewStructuredResult() {

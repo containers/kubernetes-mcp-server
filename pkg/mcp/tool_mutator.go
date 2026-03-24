@@ -128,10 +128,16 @@ func createTargetListHandler(p targetLister, targetParameterName, defaultTarget 
 
 // WithAppsMeta injects _meta.ui into every tool when MCP Apps is enabled.
 // Each tool gets a unique resource URI so the viewer knows which tool to call.
+// If a tool already has Meta with a "ui" key, it is left unchanged.
 func WithAppsMeta() ToolMutator {
 	return func(tool api.ServerTool) api.ServerTool {
+		appsMeta := mcpapps.ToolMetaForTool(tool.Tool.Name)
 		if tool.Tool.Meta == nil {
-			tool.Tool.Meta = mcpapps.ToolMetaForTool(tool.Tool.Name)
+			tool.Tool.Meta = appsMeta
+		} else if _, hasUI := tool.Tool.Meta["ui"]; !hasUI {
+			for k, v := range appsMeta {
+				tool.Tool.Meta[k] = v
+			}
 		}
 		return tool
 	}
