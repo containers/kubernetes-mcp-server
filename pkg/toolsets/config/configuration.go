@@ -122,11 +122,7 @@ func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func configurationView(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	minify := true
-	minified := params.GetArguments()["minified"]
-	if _, ok := minified.(bool); ok {
-		minify = minified.(bool)
-	}
+	minify := api.OptionalBool(params, "minified", true)
 	ret, err := kubernetes.NewCore(params).ConfigurationView(minify)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get configuration: %w", err)), nil

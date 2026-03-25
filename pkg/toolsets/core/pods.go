@@ -406,11 +406,7 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if container == nil {
 		container = ""
 	}
-	previous := params.GetArguments()["previous"]
-	var previousBool bool
-	if previous != nil {
-		previousBool = previous.(bool)
-	}
+	previousBool := api.OptionalBool(params, "previous", false)
 	// Extract tailLines parameter
 	tail := params.GetArguments()["tail"]
 	var tailInt int64
