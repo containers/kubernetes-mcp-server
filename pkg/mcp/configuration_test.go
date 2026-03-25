@@ -93,10 +93,8 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 		toolResult, err := s.CallTool("configuration_view", map[string]interface{}{
 			"minified": "false",
 		})
-		s.Run("returns configuration", func() {
-			s.Nilf(err, "call tool failed %v", err)
-			s.Falsef(toolResult.IsError, "call tool failed")
-		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed")
 	})
 	s.Run("configuration_view(minified=false)", func() {
 		toolResult, err := s.CallTool("configuration_view", map[string]interface{}{
