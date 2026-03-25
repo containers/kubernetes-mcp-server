@@ -12,6 +12,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/strings/slices"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
@@ -94,7 +95,9 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oi
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			// Inject validated JWT claims into context for downstream middleware (scope validation)
+			ctx := context.WithValue(r.Context(), api.ScopeProviderContextKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -118,14 +121,25 @@ var allSignatureAlgorithms = []jose.SignatureAlgorithm{
 type JWTClaims struct {
 	jwt.Claims
 	Token string `json:"-"`
+	// Standard OAuth scope claim (space-separated string)
 	Scope string `json:"scope,omitempty"`
+	// Entra ID / Azure AD scope claim (space-separated string)
+	Scp string `json:"scp,omitempty"`
 }
 
+// Ensure JWTClaims implements api.ScopeProvider
+var _ api.ScopeProvider = (*JWTClaims)(nil)
+
 func (c *JWTClaims) GetScopes() []string {
-	if c.Scope == "" {
-		return nil
+	// Standard OAuth scope claim takes precedence
+	if c.Scope != "" {
+		return strings.Fields(c.Scope)
 	}
-	return strings.Fields(c.Scope)
+	// Fall back to Entra ID's scp claim
+	if c.Scp != "" {
+		return strings.Fields(c.Scp)
+	}
+	return nil
 }
 
 // ValidateOffline Checks if the JWT claims are valid and if the audience matches the expected one.

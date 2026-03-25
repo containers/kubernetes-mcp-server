@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 )
 
 // sessionInjectionMiddleware injects the MCP session into the context for logging support.
@@ -47,6 +49,90 @@ func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			}
 		}
 		return next(ctx, method, req)
+	}
+}
+
+// scopeValidationMiddleware validates OAuth scopes against tool requirements.
+// If OAuth is enabled (scope provider present in context) AND the token has scopes:
+// - read-only tools (readOnlyHint=true) require the read scope
+// - other tools require the write scope
+// If OAuth is disabled (no scope provider) or token has no scopes, all tools are allowed.
+// The "no scopes = allow" behavior ensures backward compatibility with existing OAuth setups.
+//
+// The scopeGetter function is called per-request to support dynamic configuration reload.
+func scopeValidationMiddleware(scopeGetter func() (readScope, writeScope string), toolLookup func(string) *api.ServerTool) func(mcp.MethodHandler) mcp.MethodHandler {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			// Only validate tools/call method
+			if method != "tools/call" {
+				return next(ctx, method, req)
+			}
+
+			// Get scope provider from context (injected by HTTP AuthorizationMiddleware)
+			// If no provider exists, OAuth is disabled - allow all tools (existing behavior)
+			scopeProvider := api.GetScopeProviderFromContext(ctx)
+			if scopeProvider == nil {
+				// No OAuth configured or running in STDIO mode - skip scope validation
+				return next(ctx, method, req)
+			}
+
+			// Backward compatibility: if token has no scopes, allow access
+			// This supports existing OAuth setups where tokens don't include scope claims
+			scopes := scopeProvider.GetScopes()
+			if len(scopes) == 0 {
+				klog.V(2).Infof("Scope validation skipped: token has no scope claims (backward compatibility)")
+				return next(ctx, method, req)
+			}
+
+			// Parse tool name from request
+			// When OAuth is enabled, reject requests we can't parse (fail secure)
+			params, ok := req.GetParams().(*mcp.CallToolParamsRaw)
+			if !ok {
+				klog.V(1).Infof("Scope validation failed: unexpected params type %T", req.GetParams())
+				return nil, fmt.Errorf("forbidden: unable to validate scope for request")
+			}
+
+			toolReq, err := GoSdkToolCallParamsToToolCallRequest(params)
+			if err != nil {
+				klog.V(1).Infof("Scope validation failed: unable to parse tool request: %v", err)
+				return nil, fmt.Errorf("forbidden: unable to validate scope for request")
+			}
+			if toolReq == nil {
+				klog.V(1).Infof("Scope validation failed: parsed tool request is nil")
+				return nil, fmt.Errorf("forbidden: unable to validate scope for request")
+			}
+
+			// Get current scope configuration (supports dynamic reload)
+			readScope, writeScope := scopeGetter()
+
+			// Determine if tool is read-only based on annotations
+			isReadOnly := false
+			if tool := toolLookup(toolReq.Name); tool != nil {
+				isReadOnly = ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false)
+			} else {
+				klog.V(2).Infof("Scope validation: tool %q not found in registry, defaulting to write scope", toolReq.Name)
+			}
+
+			// Check if user has required scope
+			// Write scope implies read access (users with write can also read)
+			var hasAccess bool
+			var requiredScope string
+			if isReadOnly {
+				requiredScope = readScope
+				hasAccess = api.HasScope(scopes, readScope) || api.HasScope(scopes, writeScope)
+			} else {
+				requiredScope = writeScope
+				hasAccess = api.HasScope(scopes, writeScope)
+			}
+
+			if !hasAccess {
+				klog.V(1).Infof("Scope validation failed for tool %s: required scope %q not present",
+					toolReq.Name, requiredScope)
+				return nil, fmt.Errorf("forbidden: insufficient scope for tool %s, required: %s", toolReq.Name, requiredScope)
+			}
+
+			return next(ctx, method, req)
+		}
 	}
 }
 

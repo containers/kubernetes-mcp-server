@@ -412,12 +412,37 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
+| `read_scope` | string | `"read"` | OAuth scope required for read-only tool operations. Tools with `readOnlyHint=true` require this scope. |
+| `write_scope` | string | `"write"` | OAuth scope required for write tool operations. Tools without `readOnlyHint=true` require this scope. |
 | `sts_client_id` | string | `""` | OAuth client ID for backend token exchange. |
 | `sts_client_secret` | string | `""` | OAuth client secret for backend token exchange. |
 | `sts_audience` | string | `""` | Audience for STS token exchange. |
 | `sts_scopes` | string[] | `[]` | Scopes for STS token exchange. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
+
+**Scope-Based Tool Authorization:**
+
+When `require_oauth` is enabled, the server enforces scope-based authorization for MCP tool calls:
+
+- **Read-only tools** (annotated with `readOnlyHint=true`) require the scope specified by `read_scope`
+- **Write tools** (all other tools) require the scope specified by `write_scope`
+
+**Note:** Write scope implies read access. Users with only the `write_scope` can also call read-only tools. This follows standard RBAC conventions where write permissions include read permissions.
+
+The JWT must include the required scope in either the `scope` claim (standard OAuth) or `scp` claim (Entra ID / Azure AD). Both use space-separated lists:
+
+**Standard OAuth (Keycloak, Auth0, etc.):**
+```json
+{
+  "scope": "openid read write",
+  "aud": "kubernetes-mcp-server"
+}
+```
+
+The server automatically detects which claim is present, with `scope` taking precedence if both exist.
+
+**Backward Compatibility:** If the JWT has no scope claims (neither `scope` nor `scp`), all tools are allowed. This ensures existing OAuth setups continue working without modification.
 
 **Example:**
 ```toml
@@ -426,12 +451,16 @@ authorization_url = "https://keycloak.example.com/realms/mcp"
 oauth_audience = "kubernetes-mcp-server"
 oauth_scopes = ["openid", "profile"]
 
+# Scope configuration (these are the defaults)
+read_scope = "read"
+write_scope = "write"
+
 sts_client_id = "mcp-backend"
 sts_client_secret = "your-client-secret"
 sts_audience = "kubernetes-api"
 ```
 
-For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md).
+For a complete OIDC setup guide including scope configuration in Keycloak, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md).
 
 ### Telemetry
 

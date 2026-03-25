@@ -152,6 +152,38 @@ The setup automatically configures:
 - **mcp:openshift**: Optional scope for token exchange with audience mapper
 - **groups**: Group membership mapper (included in tokens)
 
+### Tool Authorization Scopes (Optional)
+
+The MCP server supports scope-based access control for tools. When configured, users must have the appropriate scope in their JWT to call tools:
+
+- **read**: Required for read-only tools (list, get, view operations)
+- **write**: Required for write tools (create, update, delete operations)
+
+**To enable scope-based authorization:**
+
+1. **Create client scopes in Keycloak Admin Console:**
+   - Go to `openshift` realm → **Client Scopes** → **Create**
+   - Create scope named `read` (Type: Optional, Protocol: openid-connect)
+   - Create scope named `write` (Type: Optional, Protocol: openid-connect)
+
+2. **Assign scopes to the mcp-server client:**
+   - Go to **Clients** → **mcp-server** → **Client Scopes**
+   - Add `read` and `write` as **Default** scopes
+
+3. **Configure the MCP server** (in `config.toml`):
+   ```toml
+   read_scope = "read"    # Default
+   write_scope = "write"  # Default
+   ```
+
+**Backward Compatibility:** If tokens don't include scope claims, all tools are allowed. This ensures existing setups continue working without modification.
+
+**Note:** Write scope implies read access. Users with only the `write` scope can also call read-only tools.
+
+**Role-based access example:**
+- Create a `viewer` role with only `read` scope → can only use read-only tools
+- Create an `operator` role with `write` scope → full access (write implies read)
+
 ### Default User
 - **Username**: `mcp`
 - **Password**: `mcp`
@@ -175,6 +207,10 @@ sts_audience = "openshift"  # Triggers token exchange
 sts_scopes = ["mcp:openshift"]
 
 certificate_authority = "_output/cert-manager-ca/ca.crt"  # For HTTPS validation
+
+# Tool authorization scopes (optional - defaults shown)
+# read_scope = "read"   # Required for read-only tools
+# write_scope = "write" # Required for write tools
 ```
 
 ## Useful Commands

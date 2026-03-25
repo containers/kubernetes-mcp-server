@@ -69,6 +69,14 @@ type StaticConfig struct {
 	StsScopes            []string `toml:"sts_scopes,omitempty"`
 	CertificateAuthority string   `toml:"certificate_authority,omitempty"`
 	ServerURL            string   `toml:"server_url,omitempty"`
+	// ReadScope is the OAuth scope required for read-only tool operations.
+	// Tools with readOnlyHint=true require this scope.
+	// Defaults to "read".
+	ReadScope string `toml:"read_scope,omitempty"`
+	// WriteScope is the OAuth scope required for write tool operations.
+	// Tools without readOnlyHint=true require this scope.
+	// Defaults to "write".
+	WriteScope string `toml:"write_scope,omitempty"`
 
 	// TLS configuration for the HTTP server
 	// TLSCert is the path to the TLS certificate file for HTTPS

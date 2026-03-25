@@ -269,7 +269,8 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedTokenExchangeFailure()
 	rawClaims := `{
 		"iss": "` + oidcTestServer.URL + `",
 		"exp": ` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `,
-		"aud": "%s"
+		"aud": "%s",
+		"scope": "read write"
 	}`
 	validOidcClientToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256,
 		fmt.Sprintf(rawClaims, "mcp-server"))
@@ -358,7 +359,8 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	rawClaims := `{
 		"iss": "` + oidcTestServer.URL + `",
 		"exp": ` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `,
-		"aud": "mcp-server"
+		"aud": "mcp-server",
+		"scope": "read write"
 	}`
 	validOidcToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256, rawClaims)
 
@@ -389,7 +391,8 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	rawClaims := `{
 		"iss": "` + oidcTestServer.URL + `",
 		"exp": ` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `,
-		"aud": "%s"
+		"aud": "%s",
+		"scope": "read write"
 	}`
 	validOidcClientToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256,
 		fmt.Sprintf(rawClaims, "mcp-server"))

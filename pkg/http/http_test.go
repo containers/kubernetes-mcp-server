@@ -246,7 +246,7 @@ func TestHealthCheck(t *testing.T) {
 		})
 	})
 	// Health exposed even when require Authorization
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ReadScope: "read", WriteScope: "write", ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
 		if err != nil {
 			t.Fatalf("Failed to get health check endpoint with OAuth: %v", err)

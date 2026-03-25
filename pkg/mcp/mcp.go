@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,11 +63,44 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 	return true
 }
 
+// validateScopeConfig validates scope configuration and logs warnings for potential issues.
+// Returns an error only for critical misconfigurations.
+func validateScopeConfig(cfg *config.StaticConfig) error {
+	// Only validate scopes when OAuth is enabled
+	if !cfg.IsRequireOAuth() {
+		return nil
+	}
+
+	// Reject empty scope names when OAuth is enabled
+	if cfg.ReadScope == "" {
+		return fmt.Errorf("read_scope must not be empty when require_oauth is enabled")
+	}
+	if cfg.WriteScope == "" {
+		return fmt.Errorf("write_scope must not be empty when require_oauth is enabled")
+	}
+
+	// Warn if scope names contain spaces (should be single tokens)
+	if strings.Contains(cfg.ReadScope, " ") {
+		klog.Warningf("read_scope %q contains spaces; scope names should be single tokens", cfg.ReadScope)
+	}
+	if strings.Contains(cfg.WriteScope, " ") {
+		klog.Warningf("write_scope %q contains spaces; scope names should be single tokens", cfg.WriteScope)
+	}
+
+	// Warn if read and write scopes are the same (unusual configuration)
+	if cfg.ReadScope == cfg.WriteScope {
+		klog.Warningf("read_scope and write_scope are both %q; this means all tools require the same scope", cfg.ReadScope)
+	}
+
+	return nil
+}
+
 type Server struct {
 	mu             sync.RWMutex
 	configuration  *Configuration
 	server         *mcp.Server
 	enabledTools   []string
+	toolsByName    map[string]*api.ServerTool // For scope validation lookups
 	enabledPrompts []string
 	p              internalk8s.Provider
 	metrics        *metrics.Metrics // Metrics collection system
@@ -106,10 +140,21 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	}
 	s.metrics = metricsInstance
 
+	// Validate scope configuration (logs warnings for potential issues)
+	if err := validateScopeConfig(configuration.StaticConfig); err != nil {
+		return nil, err
+	}
+
 	s.server.AddReceivingMiddleware(sessionInjectionMiddleware)
 	s.server.AddReceivingMiddleware(traceContextPropagationMiddleware)
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
+	s.server.AddReceivingMiddleware(scopeValidationMiddleware(
+		func() (string, string) {
+			return s.configuration.ReadScope, s.configuration.WriteScope
+		},
+		s.GetToolByName,
+	))
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
 	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
@@ -161,9 +206,16 @@ func (s *Server) reloadToolsets() error {
 		return err
 	}
 
+	// Build tools lookup map for scope validation
+	newToolsByName := make(map[string]*api.ServerTool, len(applicableTools))
+	for i := range applicableTools {
+		newToolsByName[applicableTools[i].Tool.Name] = &applicableTools[i]
+	}
+
 	// Only hold write lock for the final assignment
 	s.mu.Lock()
 	s.enabledTools = newTools
+	s.toolsByName = newToolsByName
 	s.enabledPrompts = newPrompts
 	s.mu.Unlock()
 
@@ -329,6 +381,14 @@ func (s *Server) GetEnabledTools() []string {
 	return s.enabledTools
 }
 
+// GetToolByName returns a tool by name for scope validation.
+// Returns nil if the tool is not found.
+func (s *Server) GetToolByName(name string) *api.ServerTool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.toolsByName[name]
+}
+
 // GetEnabledPrompts returns the names of the currently enabled prompts
 func (s *Server) GetEnabledPrompts() []string {
 	s.mu.RLock()
@@ -341,6 +401,11 @@ func (s *Server) GetEnabledPrompts() []string {
 // configuration changes are detected.
 func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 	klog.V(1).Info("Reloading MCP server configuration...")
+
+	// Validate scope configuration before applying
+	if err := validateScopeConfig(newConfig); err != nil {
+		return fmt.Errorf("invalid scope configuration: %w", err)
+	}
 
 	// Update the configuration
 	s.configuration.StaticConfig = newConfig

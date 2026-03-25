@@ -13,6 +13,8 @@ func BaseDefault() *StaticConfig {
 	return &StaticConfig{
 		ListOutput: "table",
 		Toolsets:   []string{"core", "config"},
+		ReadScope:  "read",
+		WriteScope: "write",
 	}
 }
 

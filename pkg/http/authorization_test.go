@@ -217,4 +217,36 @@ func TestJWTClaimsGetScopes(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("Entra ID scp claim", func(t *testing.T) {
+		claims := &JWTClaims{
+			Scp: "read write",
+		}
+		scopes := claims.GetScopes()
+		expected := []string{"read", "write"}
+
+		if len(scopes) != 2 {
+			t.Errorf("expected 2 scopes, got %d", len(scopes))
+		}
+		for i, expectedScope := range expected {
+			if i >= len(scopes) || scopes[i] != expectedScope {
+				t.Errorf("expected scope[%d] to be '%s', got '%s'", i, expectedScope, scopes[i])
+			}
+		}
+	})
+
+	t.Run("standard scope takes precedence over scp", func(t *testing.T) {
+		claims := &JWTClaims{
+			Scope: "admin",
+			Scp:   "read write",
+		}
+		scopes := claims.GetScopes()
+
+		if len(scopes) != 1 {
+			t.Errorf("expected 1 scope, got %d", len(scopes))
+		}
+		if scopes[0] != "admin" {
+			t.Errorf("expected scope 'admin' (from standard claim), got '%s'", scopes[0])
+		}
+	})
 }
