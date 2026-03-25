@@ -127,10 +127,7 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	allNamespaces := false
-	if v, ok := params.GetArguments()["all_namespaces"].(bool); ok {
-		allNamespaces = v
-	}
+	allNamespaces := api.OptionalBool(params, "all_namespaces", false)
 	namespace := ""
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
