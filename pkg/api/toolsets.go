@@ -66,9 +66,18 @@ type ToolCallResult struct {
 // NewToolCallResult creates a ToolCallResult with text content only.
 // Use this for tools that return human-readable text output.
 func NewToolCallResult(content string, err error) *ToolCallResult {
+	return NewToolCallResultFull(content, nil, err)
+}
+
+// NewToolCallResultFull creates a ToolCallResult with both human-readable text
+// and structured content.
+// Use this when the text representation differs from a JSON serialization of the
+// structured content (e.g., YAML or Table text alongside extracted structured data).
+func NewToolCallResultFull(text string, structured any, err error) *ToolCallResult {
 	return &ToolCallResult{
-		Content: content,
-		Error:   err,
+		Content:           text,
+		StructuredContent: structured,
+		Error:             err,
 	}
 }
 
@@ -90,11 +99,7 @@ func NewToolCallResultStructured(structured any, err error) *ToolCallResult {
 			content = string(b)
 		}
 	}
-	return &ToolCallResult{
-		Content:           content,
-		StructuredContent: structured,
-		Error:             err,
-	}
+	return NewToolCallResultFull(content, structured, err)
 }
 
 type ToolHandlerParams struct {
