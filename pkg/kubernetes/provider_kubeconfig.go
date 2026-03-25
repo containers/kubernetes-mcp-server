@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
@@ -18,6 +19,7 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
+	mu                  sync.RWMutex
 	config              api.BaseConfig
 	defaultContext      string
 	managers            map[string]*Manager
@@ -84,12 +86,17 @@ func (p *kubeConfigClusterProvider) reset() error {
 }
 
 func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager, error) {
+	p.mu.RLock()
 	m, ok := p.managers[context]
+	defaultContext := p.defaultContext
+	p.mu.RUnlock()
 	if ok && m != nil {
 		return m, nil
 	}
 
-	baseManager := p.managers[p.defaultContext]
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	baseManager := p.managers[defaultContext]
 
 	m, err := NewKubeconfigManager(baseManager.config, context)
 	if err != nil {
@@ -102,14 +109,20 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 }
 
 func (p *kubeConfigClusterProvider) IsOpenShift(ctx context.Context) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.managers[p.defaultContext].IsOpenShift(ctx)
 }
 
 func (p *kubeConfigClusterProvider) IsMultiTarget() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return len(p.managers) > 1
 }
 
 func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	contextNames := make([]string, 0, len(p.managers))
 	for contextName := range p.managers {
 		contextNames = append(contextNames, contextName)
@@ -131,6 +144,8 @@ func (p *kubeConfigClusterProvider) GetDerivedKubernetes(ctx context.Context, co
 }
 
 func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.defaultContext
 }
 
