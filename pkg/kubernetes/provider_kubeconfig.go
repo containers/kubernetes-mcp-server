@@ -46,6 +46,9 @@ func newKubeConfigClusterProvider(cfg api.BaseConfig) (Provider, error) {
 }
 
 func (p *kubeConfigClusterProvider) reset() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	m, err := NewKubeconfigManager(p.config, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
@@ -88,7 +91,6 @@ func (p *kubeConfigClusterProvider) reset() error {
 func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager, error) {
 	p.mu.RLock()
 	m, ok := p.managers[context]
-	defaultContext := p.defaultContext
 	p.mu.RUnlock()
 	if ok && m != nil {
 		return m, nil
@@ -96,7 +98,12 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	baseManager := p.managers[defaultContext]
+
+	m, ok = p.managers[context]
+	if ok && m != nil {
+		return m, nil
+	}
+	baseManager := p.managers[p.defaultContext]
 
 	m, err := NewKubeconfigManager(baseManager.config, context)
 	if err != nil {
