@@ -31,6 +31,7 @@ Living documentation for implemented and planned features:
 
 | Spec | Description | Status |
 |------|-------------|--------|
+| **[Authorization](specs/authorization.md)** | OAuth/OIDC authorization, token exchange, and per-request identity propagation | Implemented |
 | **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 
 ## Advanced Topics

@@ -313,6 +313,7 @@ The `docs/` directory contains user-facing documentation:
 
 The `docs/specs/` directory contains feature specifications (living documentation for coding agents):
 
+- `docs/specs/authorization.md` – Authorization specification (OAuth/OIDC, token exchange, per-request identity)
 - `docs/specs/validation.md` – Pre-execution validation layer specification (resource existence, schema, RBAC)
 
 ### Documentation conventions
