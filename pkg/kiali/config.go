@@ -61,10 +61,13 @@ func kialiToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.M
 		// If it's already absolute or configDir is empty, use as-is
 	}
 
-	// Validate URL scheme when require_tls is enabled
+	// Validate TLS settings when require_tls is enabled
 	if config.RequireTLSFromContext(ctx) {
 		if err := config.ValidateURLRequiresTLS(cfg.Url, "Kiali URL"); err != nil {
 			return nil, err
+		}
+		if cfg.Insecure {
+			return nil, errors.New("require_tls is enabled but Kiali insecure=true disables certificate verification")
 		}
 	}
 

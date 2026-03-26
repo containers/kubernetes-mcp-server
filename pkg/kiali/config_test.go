@@ -81,6 +81,40 @@ func (s *ConfigSuite) TestConfigParser_RejectsInvalidFile() {
 	s.Nil(cfg, "Config should be nil when validation fails")
 }
 
+func (s *ConfigSuite) TestConfigParser_RejectsInsecureWithRequireTLS() {
+	caFileForTOML := filepath.ToSlash(s.caFile)
+
+	_, err := config.ReadToml([]byte(`
+		require_tls = true
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		insecure = true
+		certificate_authority = "` + caFileForTOML + `"
+	`))
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "insecure=true disables certificate verification")
+}
+
+func (s *ConfigSuite) TestConfigParser_AllowsSecureWithRequireTLS() {
+	caFileForTOML := filepath.ToSlash(s.caFile)
+
+	cfg, err := config.ReadToml([]byte(`
+		require_tls = true
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		insecure = false
+		certificate_authority = "` + caFileForTOML + `"
+	`))
+
+	s.Require().NoError(err)
+	kialiCfg, ok := cfg.GetToolsetConfig("kiali")
+	s.Require().True(ok)
+	kcfg, ok := kialiCfg.(*Config)
+	s.Require().True(ok)
+	s.False(kcfg.Insecure)
+}
+
 func TestConfig(t *testing.T) {
 	suite.Run(t, new(ConfigSuite))
 }

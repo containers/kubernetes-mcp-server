@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,11 +73,18 @@ func (s *KialiSuite) TestRequireTLS_ConfigValidation() {
 	})
 
 	s.Run("accepts HTTPS URL when require_tls is enabled", func() {
+		tempDir := s.T().TempDir()
+		caFile := filepath.Join(tempDir, "ca.crt")
+		err := os.WriteFile(caFile, []byte("test ca content"), 0644)
+		s.Require().NoError(err)
+		caFileForTOML := filepath.ToSlash(caFile)
+
 		cfg, err := config.ReadToml([]byte(`
 			require_tls = true
 			[toolset_configs.kiali]
 			url = "https://kiali.example/"
-			insecure = true
+			insecure = false
+			certificate_authority = "` + caFileForTOML + `"
 		`))
 		s.Require().NoError(err)
 		s.NotNil(cfg)
