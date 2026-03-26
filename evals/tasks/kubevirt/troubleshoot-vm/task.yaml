@@ -89,40 +89,12 @@ spec:
 
           # Wait for VM to become ready after the fix (with timeout)
           echo "Waiting for VM to become ready after fix..."
-          READY=false
-          for i in {1..30}; do
-              VM_READY=$(kubectl get virtualmachine broken-vm -n "$NS" -o jsonpath='{.status.ready}' 2>/dev/null || echo "false")
-              if [[ "$VM_READY" == "true" ]]; then
-                  READY=true
-                  break
-              fi
-              sleep 5
-          done
-
-          if [[ "$READY" == "true" ]]; then
-              echo "✓ VM is now ready - fix was successful!"
-          else
+          if ! kubectl wait --for=condition=Ready virtualmachine/broken-vm -n "$NS" --timeout=150s 2>/dev/null; then
               VM_STATUS=$(kubectl get virtualmachine broken-vm -n "$NS" -o jsonpath='{.status.printableStatus}' 2>/dev/null || echo "Unknown")
-              echo "⚠ VM is not ready yet (status: $VM_STATUS) - fix may need more time or was incomplete"
+              echo "✗ VM is not ready (status: $VM_STATUS) - fix was unsuccessful"
+              exit 1
           fi
-
-          # Check if virt-launcher pod exists and is running
-          LAUNCHER_POD=$(kubectl get pods -n "$NS" -l kubevirt.io=virt-launcher,vm.kubevirt.io/name=broken-vm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-          if [[ -n "$LAUNCHER_POD" ]]; then
-              POD_PHASE=$(kubectl get pod "$LAUNCHER_POD" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-              echo "✓ virt-launcher pod exists (phase: $POD_PHASE)"
-          else
-              echo "ℹ No virt-launcher pod found yet"
-          fi
-
-          echo ""
-          echo "=== Troubleshooting and Fix Eval Complete ==="
-          echo "The agent should have:"
-          echo "  1. Used the vm-troubleshoot prompt with namespace=$NS and name=broken-vm"
-          echo "  2. Identified the root cause (missing Secret vm-cloud-init)"
-          echo "  3. Created the missing Secret to fix the VM"
-          echo "  4. Reported the action taken and result"
-          echo ""
+          echo "✓ VM is now ready - fix was successful!"
 
           exit 0
   cleanup:
