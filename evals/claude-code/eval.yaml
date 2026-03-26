@@ -53,6 +53,11 @@ config:
             toolPattern: ".*"
         minToolCalls: 1
         maxToolCalls: 20
+    - path: ../tasks/kubevirt/troubleshoot-vm/task.yaml
+      assertions:
+        promptsUsed:
+          - server: kubernetes
+            prompt: vm-troubleshoot
     # Kiali tasks
     - glob: ../tasks/*/*/*.yaml
       labelSelector:
