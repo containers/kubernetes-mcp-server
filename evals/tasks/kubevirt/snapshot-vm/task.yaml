@@ -4,6 +4,7 @@ metadata:
   labels:
     suite: kubevirt
     requires: kubevirt
+    expected-tool: resources_create_or_update
   name: "snapshot-vm"
   difficulty: medium
 spec:

@@ -4,6 +4,7 @@ metadata:
   labels:
     suite: kubevirt
     requires: kubevirt
+    expected-tool: vm_create
   name: "create-basic-vm"
   difficulty: easy
 spec:

@@ -53,6 +53,41 @@ config:
             toolPattern: ".*"
         minToolCalls: 1
         maxToolCalls: 20
+    - glob: ../tasks/kubevirt/*/*.yaml
+      labelSelector:
+        expected-tool: vm_create
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: vm_create
+    - glob: ../tasks/kubevirt/*/*.yaml
+      labelSelector:
+        expected-tool: vm_clone
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: vm_clone
+    - glob: ../tasks/kubevirt/*/*.yaml
+      labelSelector:
+        expected-tool: vm_lifecycle
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: vm_lifecycle
+    - glob: ../tasks/kubevirt/*/*.yaml
+      labelSelector:
+        expected-tool: resources_delete
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: resources_delete
+    - glob: ../tasks/kubevirt/*/*.yaml
+      labelSelector:
+        expected-tool: resources_create_or_update
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: resources_create_or_update
     - path: ../tasks/kubevirt/troubleshoot-vm/task.yaml
       assertions:
         promptsUsed:
