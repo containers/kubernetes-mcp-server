@@ -1,0 +1,7 @@
+toolset/kubevirt:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/toolsets/kubevirt/**'
+      - 'pkg/kubevirt/**'
+      - 'pkg/mcp/kubevirt*'
+      - 'build/kubevirt.mk'
