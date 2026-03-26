@@ -1,9 +1,7 @@
 package tools
 
 import (
-	"context"
 	"fmt"
-	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
@@ -13,68 +11,54 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-type resourceOperations struct {
-	singularName string
-	metricsFunc  func(ctx context.Context, k *kialiclient.Kiali, namespace, name string, queryParams map[string]string) (string, error)
-}
-
-var opsMap = map[string]resourceOperations{
-	"service": {
-		singularName: "service",
-		metricsFunc: func(ctx context.Context, k *kialiclient.Kiali, ns, name string, queryParams map[string]string) (string, error) {
-			return k.ServiceMetrics(ctx, ns, name, queryParams)
-		},
-	},
-	"workload": {
-		singularName: "workload",
-		metricsFunc: func(ctx context.Context, k *kialiclient.Kiali, ns, name string, queryParams map[string]string) (string, error) {
-			return k.WorkloadMetrics(ctx, ns, name, queryParams)
-		},
-	},
-}
-
 func InitGetMetrics() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_metrics"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        name,
-			Description: "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
+			Description: "Returns metrics for the given resource type, namespaces and resource name.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
-					"resource_type": {
+					"resourceType": {
 						Type:        "string",
-						Description: "Type of resource to get details for (service, workload)",
-						Enum:        []any{"service", "workload"},
+						Description: "Type of resource to get metrics",
+						Enum:        []any{"service", "workload", "app"},
 					},
 					"namespace": {
 						Type:        "string",
-						Description: "Namespace to get resources from",
+						Description: "Namespace to get metrics from",
 					},
-					"resource_name": {
+					"clusterName": {
 						Type:        "string",
-						Description: "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
+						Description: "Cluster name to get metrics from. Optional, defaults to the cluster name in the Kiali configuration (KubeConfig)",
+					},
+					"resourceName": {
+						Type:        "string",
+						Description: "Name of the resource to get metrics for",
 					},
 					"step": {
 						Type:        "string",
 						Description: "Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds",
-						Default:     api.ToRawMessage(kialiclient.DefaultStep),
+						Default:     api.ToRawMessage(DefaultStep),
 					},
 					"rateInterval": {
 						Type:        "string",
 						Description: "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'",
-						Default:     api.ToRawMessage(kialiclient.DefaultRateInterval),
+						Default:     api.ToRawMessage(DefaultRateInterval),
 					},
 					"direction": {
 						Type:        "string",
-						Description: "Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'",
-						Default:     api.ToRawMessage(kialiclient.DefaultDirection),
+						Description: "Traffic direction. Optional, defaults to 'outbound'",
+						Default:     api.ToRawMessage(DefaultDirection),
+						Enum:        []any{"inbound", "outbound"},
 					},
 					"reporter": {
 						Type:        "string",
-						Description: "Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'",
-						Default:     api.ToRawMessage(kialiclient.DefaultReporter),
+						Description: "Metrics reporter. Optional, defaults to 'source'",
+						Default:     api.ToRawMessage(DefaultReporter),
+						Enum:        []any{"source", "destination", "both"},
 					},
 					"requestProtocol": {
 						Type:        "string",
@@ -83,14 +67,14 @@ func InitGetMetrics() []api.ServerTool {
 					"quantiles": {
 						Type:        "string",
 						Description: "Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional",
-						Default:     api.ToRawMessage(kialiclient.DefaultQuantiles),
+						Default:     api.ToRawMessage(DefaultQuantiles),
 					},
 					"byLabels": {
 						Type:        "string",
 						Description: "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
 					},
 				},
-				Required: []string{"resource_type", "namespace", "resource_name"},
+				Required: []string{"resourceType", "namespace", "resourceName"},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Get Metrics for a Resource",
@@ -106,57 +90,11 @@ func InitGetMetrics() []api.ServerTool {
 }
 
 func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	// Extract parameters
-	resourceType, _ := params.GetArguments()["resource_type"].(string)
-	namespace, _ := params.GetArguments()["namespace"].(string)
-	resourceName, _ := params.GetArguments()["resource_name"].(string)
-
-	resourceType = strings.ToLower(strings.TrimSpace(resourceType))
-	namespace = strings.TrimSpace(namespace)
-	resourceName = strings.TrimSpace(resourceName)
-
-	if resourceType == "" {
-		return api.NewToolCallResult("", fmt.Errorf("resource_type is required")), nil
-	}
-	if namespace == "" || len(strings.Split(namespace, ",")) != 1 {
-		return api.NewToolCallResult("", fmt.Errorf("namespace is required")), nil
-	}
-	if resourceName == "" {
-		return api.NewToolCallResult("", fmt.Errorf("resource_name is required")), nil
-	}
-
-	ops, ok := opsMap[resourceType]
-	if !ok {
-		return api.NewToolCallResult("", fmt.Errorf("invalid resource type: %s", resourceType)), nil
-	}
-
-	queryParams := make(map[string]string)
-	if err := setQueryParam(params, queryParams, "step", kialiclient.DefaultStep); err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-	if err := setQueryParam(params, queryParams, "rateInterval", kialiclient.DefaultRateInterval); err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-	if err := setQueryParam(params, queryParams, "direction", kialiclient.DefaultDirection); err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-	if err := setQueryParam(params, queryParams, "reporter", kialiclient.DefaultReporter); err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-	if requestProtocol, ok := params.GetArguments()["requestProtocol"].(string); ok && requestProtocol != "" {
-		queryParams["requestProtocol"] = requestProtocol
-	}
-	if err := setQueryParam(params, queryParams, "quantiles", kialiclient.DefaultQuantiles); err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-	if byLabels, ok := params.GetArguments()["byLabels"].(string); ok && byLabels != "" {
-		queryParams["byLabels"] = byLabels
-	}
-
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
-	content, err := ops.metricsFunc(params.Context, kiali, namespace, resourceName, queryParams)
+	arguments := params.GetArguments()
+	content, err := kiali.ExecuteRequest(params.Context, KialiGetMetricsEndpoint, arguments)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get %s metrics: %w", ops.singularName, err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve metrics: %w", err)), nil
 	}
 	return api.NewToolCallResult(content, nil), nil
 }

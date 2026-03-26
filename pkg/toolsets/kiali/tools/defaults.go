@@ -1,4 +1,4 @@
-package kiali
+package tools
 
 // Default values for Kiali API parameters shared across this package.
 const (
@@ -12,8 +12,10 @@ const (
 	DefaultReporter        = "source"
 	DefaultRequestProtocol = "http"
 	DefaultQuantiles       = "0.5,0.95,0.99,0.999"
-	DefaultLimit           = "100"
-	DefaultTail            = "100"
+	DefaultLimit           = "10"
+	DefaultTail            = "50"
+	DefaultLookbackSeconds = 600
+	DefaultMaxSpans        = 7
 
 	// Default graph parameters
 	DefaultIncludeIdleEdges   = "false"

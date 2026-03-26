@@ -2,6 +2,7 @@ package kiali
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -112,6 +113,22 @@ func (s *KialiSuite) TestCertificateRequiredForHTTPSWhenNotInsecure() {
 	s.Nil(cfg, "Unexpected Kiali config")
 }
 
+func (s *KialiSuite) TestNewKiali_NoKialiConfig() {
+	k := NewKiali(s.Config, s.MockServer.Config())
+
+	s.Run("URL is empty when no kiali config", func() {
+		s.Empty(k.kialiURL, "Expected empty Kiali URL")
+	})
+	s.Run("Insecure defaults to false", func() {
+		s.False(k.kialiInsecure, "Expected Kiali Insecure to be false")
+	})
+	s.Run("ExecuteRequest returns error", func() {
+		_, err := k.ExecuteRequest(s.T().Context(), "/api/test", nil)
+		s.Error(err, "Expected error when kiali URL is not configured")
+		s.ErrorContains(err, "kiali client not initialized")
+	})
+}
+
 func (s *KialiSuite) TestValidateAndGetURL() {
 	s.Config = test.Must(config.ReadToml([]byte(`
 		[toolset_configs.kiali]
@@ -119,6 +136,12 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 		insecure = true
 	`)))
 	k := NewKiali(s.Config, s.MockServer.Config())
+
+	s.Run("returns base URL for empty endpoint", func() {
+		full, err := k.validateAndGetURL("")
+		s.Require().NoError(err, "Expected no error for empty endpoint")
+		s.Equal("https://kiali.example/", full, "Expected base URL when endpoint is empty")
+	})
 
 	s.Run("Computes full URL", func() {
 		s.Run("with leading slash", func() {
@@ -237,7 +260,7 @@ func (s *KialiSuite) TestExecuteRequest() {
 	`, s.MockServer.Config().Host))))
 	k := NewKiali(s.Config, s.MockServer.Config())
 
-	out, err := k.executeRequest(s.T().Context(), http.MethodGet, "/api/ping?q=1", "", nil)
+	out, err := k.ExecuteRequest(s.T().Context(), "/api/ping?q=1", nil)
 	s.Require().NoError(err, "Expected no error executing request")
 	s.Run("auth header set", func() {
 		s.Equal("Bearer token-xyz", seenAuth, "Unexpected Authorization header")
@@ -253,9 +276,91 @@ func (s *KialiSuite) TestExecuteRequest() {
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBodySize+1)))
 		}))
-		_, err := k.executeRequest(s.T().Context(), http.MethodGet, "/api/large", "", nil)
+		_, err := k.ExecuteRequest(s.T().Context(), "/api/large", nil)
 		s.Require().Error(err, "Expected error for oversized response")
 		s.ErrorContains(err, fmt.Sprintf("kiali API response exceeded maximum allowed size of %d bytes", maxResponseBodySize))
+	})
+	s.Run("returns error including response body for non-2xx status", func() {
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("internal failure details"))
+		}))
+		_, err := k.ExecuteRequest(s.T().Context(), "/api/error", nil)
+		s.Require().Error(err, "Expected error for non-2xx status")
+		s.ErrorContains(err, "internal failure details", "Error should include response body")
+	})
+	s.Run("returns error with status code for non-2xx without body", func() {
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		_, err := k.ExecuteRequest(s.T().Context(), "/api/forbidden", nil)
+		s.Require().Error(err, "Expected error for non-2xx status")
+		s.ErrorContains(err, "status 403", "Error should include status code")
+	})
+	s.Run("sends arguments as JSON body", func() {
+		var capturedBody string
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			capturedBody = string(body)
+			_, _ = w.Write([]byte("ok"))
+		}))
+		_, err := k.ExecuteRequest(s.T().Context(), "/api/test", map[string]any{"key": "value"})
+		s.Require().NoError(err, "Expected no error executing request with arguments")
+		s.Contains(capturedBody, `"key":"value"`, "Request body should contain serialized arguments")
+	})
+	s.Run("sets Content-Type and X-Kubernetes-MCP-Server headers", func() {
+		var capturedContentType string
+		var capturedMCPHeader string
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedContentType = r.Header.Get("Content-Type")
+			capturedMCPHeader = r.Header.Get("X-Kubernetes-MCP-Server")
+			_, _ = w.Write([]byte("ok"))
+		}))
+		_, err := k.ExecuteRequest(s.T().Context(), "/api/test", nil)
+		s.Require().NoError(err, "Expected no error executing request")
+		s.Equal("application/json", capturedContentType, "Expected Content-Type header")
+		s.Equal("true", capturedMCPHeader, "Expected X-Kubernetes-MCP-Server header")
+	})
+	s.Run("uses POST method", func() {
+		var capturedMethod string
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedMethod = r.Method
+			_, _ = w.Write([]byte("ok"))
+		}))
+		_, err := k.ExecuteRequest(s.T().Context(), "/api/test", nil)
+		s.Require().NoError(err, "Expected no error executing request")
+		s.Equal(http.MethodPost, capturedMethod, "Expected POST method")
+	})
+	s.Run("omits Authorization header when bearer token is empty", func() {
+		s.MockServer.Config().BearerToken = ""
+		kNoAuth := NewKiali(s.Config, s.MockServer.Config())
+		var capturedAuth string
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedAuth = r.Header.Get("Authorization")
+			_, _ = w.Write([]byte("ok"))
+		}))
+		_, err := kNoAuth.ExecuteRequest(s.T().Context(), "/api/test", nil)
+		s.Require().NoError(err, "Expected no error executing request")
+		s.Empty(capturedAuth, "Expected no Authorization header when token is empty")
+	})
+	s.Run("does not duplicate Bearer prefix when token already prefixed", func() {
+		s.MockServer.Config().BearerToken = "Bearer already-prefixed"
+		kPrefixed := NewKiali(s.Config, s.MockServer.Config())
+		var capturedAuth string
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedAuth = r.Header.Get("Authorization")
+			_, _ = w.Write([]byte("ok"))
+		}))
+		_, err := kPrefixed.ExecuteRequest(s.T().Context(), "/api/test", nil)
+		s.Require().NoError(err, "Expected no error executing request")
+		s.Equal("Bearer already-prefixed", capturedAuth, "Should not duplicate Bearer prefix")
 	})
 }
 

@@ -2,25 +2,148 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Workload: Logs"
+    },
+    "description": "Get the logs of a Kubernetes Pod (or workload name that will be resolved to a pod) in a namespace. Output is plain text, matching kubernetes-mcp-server pods_log.",
+    "inputSchema": {
+      "properties": {
+        "clusterName": {
+          "description": "Optional. Name of the cluster to get the logs from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+          "type": "string"
+        },
+        "container": {
+          "description": "Optional. Name of the Pod container to get the logs fro ",
+          "type": "string"
+        },
+        "format": {
+          "description": "Output formatting for chat. 'codeblock' wraps logs in ~~~ fences (recommended). 'plain' returns raw text like kubernetes-mcp-server pods_log.",
+          "enum": [
+            "codeblock",
+            "plain"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod to get the logs from. If it does not exist, it will be treated as a workload name and a running pod will be selected.",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the Pod logs from",
+          "type": "string"
+        },
+        "previous": {
+          "description": "Optional. Return previous terminated container logs",
+          "type": "boolean"
+        },
+        "severity": {
+          "description": "Optional severity filter applied client-side. Accepts 'ERROR', 'WARN' or combinations like 'ERROR,WARN'.",
+          "type": "string"
+        },
+        "tail": {
+          "default": "50",
+          "description": "Number of lines to retrieve from the end of the logs (Optional, defaults to 50). Cannot exceed 200 lines.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workload": {
+          "description": "Optional. Workload name override (used when name lookup fails).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "kiali_get_logs",
+    "title": "Workload: Logs"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Mesh Status"
+    },
+    "description": "Retrieves the high-level health, topology, and environment details of the Istio service mesh. Returns multi-cluster control plane status (istiod), data plane namespace health (including ambient mesh status), observability stack health (Prometheus, Grafana...), and component connectivity. Use this tool as the first step to diagnose mesh-wide issues, verify Istio/Kiali versions, or check overall health before drilling into specific workloads.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "kiali_get_mesh_status",
+    "title": "Get Mesh Status"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Mesh Traffic Graph"
+    },
+    "description": "Returns service-to-service traffic topology, dependencies, and network metrics (throughput, response time, mTLS) for the specified namespaces. Use this to diagnose routing issues, latency, or find upstream/downstream dependencies.",
+    "inputSchema": {
+      "properties": {
+        "clusterName": {
+          "description": "Optional cluster name to include in the graph. Default is the cluster name in the Kiali configuration (KubeConfig).",
+          "type": "string"
+        },
+        "graphType": {
+          "default": "versionedApp",
+          "description": "Granularity of the graph. 'app' aggregates by app name, 'versionedApp' separates by versions, 'workload' maps specific pods/deployments. Default: versionedApp.",
+          "enum": [
+            "app",
+            "versionedApp",
+            "service",
+            "workload"
+          ],
+          "type": "string"
+        },
+        "namespaces": {
+          "description": "Comma-separated list of namespaces to map",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespaces"
+      ],
+      "type": "object"
+    },
+    "name": "kiali_get_mesh_traffic_graph",
+    "title": "Get Mesh Traffic Graph"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "Get Metrics for a Resource"
     },
-    "description": "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
+    "description": "Returns metrics for the given resource type, namespaces and resource name.",
     "inputSchema": {
       "properties": {
         "byLabels": {
           "description": "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
           "type": "string"
         },
+        "clusterName": {
+          "description": "Cluster name to get metrics from. Optional, defaults to the cluster name in the Kiali configuration (KubeConfig)",
+          "type": "string"
+        },
         "direction": {
           "default": "outbound",
-          "description": "Traffic direction: 'inbound' or 'outbound'. Optional, defaults to 'outbound'",
+          "description": "Traffic direction. Optional, defaults to 'outbound'",
+          "enum": [
+            "inbound",
+            "outbound"
+          ],
           "type": "string"
         },
         "namespace": {
-          "description": "Namespace to get resources from",
+          "description": "Namespace to get metrics from",
           "type": "string"
         },
         "quantiles": {
@@ -35,22 +158,28 @@
         },
         "reporter": {
           "default": "source",
-          "description": "Metrics reporter: 'source', 'destination', or 'both'. Optional, defaults to 'source'",
+          "description": "Metrics reporter. Optional, defaults to 'source'",
+          "enum": [
+            "source",
+            "destination",
+            "both"
+          ],
           "type": "string"
         },
         "requestProtocol": {
           "description": "Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional",
           "type": "string"
         },
-        "resource_name": {
-          "description": "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
+        "resourceName": {
+          "description": "Name of the resource to get metrics for",
           "type": "string"
         },
-        "resource_type": {
-          "description": "Type of resource to get details for (service, workload)",
+        "resourceType": {
+          "description": "Type of resource to get metrics",
           "enum": [
             "service",
-            "workload"
+            "workload",
+            "app"
           ],
           "type": "string"
         },
@@ -61,9 +190,9 @@
         }
       },
       "required": [
-        "resource_type",
+        "resourceType",
         "namespace",
-        "resource_name"
+        "resourceName"
       ],
       "type": "object"
     },
@@ -76,28 +205,87 @@
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
-      "title": "List or Resource Details"
+      "title": "Get Pod Performance"
     },
-    "description": "Gets lists or detailed info for Kubernetes resources (services, workloads) within the mesh",
+    "description": "Returns a human-readable text summary with current Pod CPU/memory usage (from Prometheus) compared to Kubernetes requests/limits (from the Pod spec). Useful to answer questions like 'Is this workload using too much memory?'",
     "inputSchema": {
       "properties": {
+        "clusterName": {
+          "description": "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Kubernetes namespace of the Pod.",
+          "type": "string"
+        },
+        "podName": {
+          "description": "Kubernetes Pod name. If workloadName is provided, the tool will attempt to resolve a Pod from that workload first.",
+          "type": "string"
+        },
+        "queryTime": {
+          "description": "Optional end timestamp (RFC3339) for the query. Defaults to now.",
+          "type": "string"
+        },
+        "timeRange": {
+          "default": "10m",
+          "description": "Time window used to compute CPU rate (Prometheus duration like '5m', '10m', '1h', '1d'). Defaults to '10m'.",
+          "type": "string"
+        },
+        "workloadName": {
+          "description": "Kubernetes Workload name (e.g. Deployment/StatefulSet/etc). Tool will look up the workload and pick one of its Pods. If not found, it will fall back to treating this value as a podName.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace"
+      ],
+      "type": "object"
+    },
+    "name": "kiali_get_pod_performance",
+    "title": "Get Pod Performance"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List or Resource Details"
+    },
+    "description": "Fetches a list of resources OR retrieves detailed data for a specific resource. If 'resourceName' is omitted, it returns a list. If 'resourceName' is provided, it returns details for that specific resource.",
+    "inputSchema": {
+      "dependentRequired": {
+        "resourceName": [
+          "namespaces"
+        ]
+      },
+      "properties": {
+        "clusterName": {
+          "description": "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+          "type": "string"
+        },
         "namespaces": {
-          "description": "Comma-separated list of namespaces to get services from (e.g. 'bookinfo' or 'bookinfo,default'). If not provided, will list services from all accessible namespaces",
+          "description": "Comma-separated list of namespaces to query (e.g., 'bookinfo' or 'bookinfo,default'). If not provided, it will query across all accessible namespaces.",
           "type": "string"
         },
-        "resource_name": {
-          "description": "Name of the resource to get details for (optional string - if provided, gets details; if empty, lists all).",
+        "resourceName": {
+          "description": "Optional. The specific name of the resource. If left empty, the tool returns a list of all resources of the specified type. If provided, the tool returns deep details for this specific resource.",
           "type": "string"
         },
-        "resource_type": {
-          "description": "Type of resource to get details for (service, workload)",
+        "resourceType": {
+          "description": "The type of resource to query.",
           "enum": [
+            "app",
+            "namespace",
             "service",
             "workload"
           ],
           "type": "string"
         }
       },
+      "required": [
+        "resourceType"
+      ],
       "type": "object"
     },
     "name": "kiali_get_resource_details",
@@ -111,55 +299,42 @@
       "readOnlyHint": true,
       "title": "Get Traces for a Resource or Trace Details"
     },
-    "description": "Gets traces for a specific resource (app, service, workload) in a namespace, or gets detailed information for a specific trace by its ID. If traceId is provided, it returns detailed trace information and other parameters are not required.",
+    "description": "Fetches a distributed trace (Jaeger/Tempo) by trace_id or searches by service_name (optionally only error traces) and summarizes bottlenecks and error spans.",
     "inputSchema": {
       "properties": {
         "clusterName": {
-          "description": "Cluster name for multi-cluster environments (optional, only used when traceId is not provided)",
+          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
           "type": "string"
         },
-        "endMicros": {
-          "description": "End time for traces in microseconds since epoch (optional, defaults to 10 minutes after startMicros if not provided, only used when traceId is not provided)",
-          "type": "string"
+        "errorOnly": {
+          "description": "If true, only consider traces that contain errors (e.g. error=true / non-200 status). Default false.",
+          "type": "boolean"
         },
         "limit": {
-          "default": "100",
-          "description": "Maximum number of traces to return (default: 100, only used when traceId is not provided)",
-          "minimum": 1,
+          "default": "10",
+          "description": "Max number of traces to consider when searching by service_name. Default 10.",
           "type": "integer"
         },
-        "minDuration": {
-          "description": "Minimum trace duration in microseconds (optional, only used when traceId is not provided)",
-          "minimum": 0,
+        "lookbackSeconds": {
+          "default": 600,
+          "description": "How far back to search when using service_name. Default 600 (10m).",
+          "type": "integer"
+        },
+        "maxSpans": {
+          "default": 7,
+          "description": "Max number of spans to return in each summary section (bottlenecks, errors, roots). Default 7.",
           "type": "integer"
         },
         "namespace": {
-          "description": "Namespace to get resources from. Required if traceId is not provided.",
+          "description": "Kubernetes namespace of the service (required when trace_id is not provided).",
           "type": "string"
         },
-        "resource_name": {
-          "description": "Name of the resource to get traces for. Required if traceId is not provided.",
-          "type": "string"
-        },
-        "resource_type": {
-          "description": "Type of resource to get traces for (app, service, workload). Required if traceId is not provided.",
-          "enum": [
-            "app",
-            "service",
-            "workload"
-          ],
-          "type": "string"
-        },
-        "startMicros": {
-          "description": "Start time for traces in microseconds since epoch (optional, defaults to 10 minutes before current time if not provided, only used when traceId is not provided)",
-          "type": "string"
-        },
-        "tags": {
-          "description": "JSON string of tags to filter traces (optional, only used when traceId is not provided)",
+        "serviceName": {
+          "description": "Service name to search traces for (required when trace_id is not provided).",
           "type": "string"
         },
         "traceId": {
-          "description": "Unique identifier of the trace to retrieve detailed information for. If provided, this will return detailed trace information and other parameters (resource_type, namespace, resource_name) are not required.",
+          "description": "Trace ID to fetch and summarize. If provided, namespace/service_name are ignored.",
           "type": "string"
         }
       },
@@ -175,40 +350,59 @@
       "openWorldHint": true,
       "title": "Manage Istio Config: Create, Patch, Delete"
     },
-    "description": "Creates, patches, or deletes Istio configuration objects (Gateways, VirtualServices, etc.)",
+    "description": "Create, patch, or delete Istio config. For list and get (read-only) use manage_istio_config_read.",
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "Action to perform: create, patch, or delete",
+          "description": "Action to perform (write)",
+          "enum": [
+            "create",
+            "patch",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "clusterName": {
+          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
+          "type": "string"
+        },
+        "confirmed": {
+          "default": false,
+          "description": "CRITICAL: If 'true', the destructive action (create/patch/delete) is executed. If 'false' (or omitted) for create/patch, the tool returns a YAML PREVIEW. Display it to the user and ask for confirmation before calling again with confirmed=true.",
+          "type": "boolean"
+        },
+        "data": {
+          "description": "Complete JSON or YAML data to apply or create the object. Required for create and patch actions. You MUST provide a COMPLETE and VALID manifest with ALL required fields for the resource type. Arrays (like servers, http, etc.) are REPLACED entirely, so you must include ALL required fields within each array element.",
           "type": "string"
         },
         "group": {
-          "description": "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
-          "type": "string"
-        },
-        "json_data": {
-          "description": "JSON data to apply or create the object",
+          "description": "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io').",
           "type": "string"
         },
         "kind": {
-          "description": "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
-          "type": "string"
-        },
-        "name": {
-          "description": "Name of the Istio object",
+          "description": "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule').",
           "type": "string"
         },
         "namespace": {
           "description": "Namespace containing the Istio object",
           "type": "string"
         },
+        "object": {
+          "description": "Name of the Istio object",
+          "type": "string"
+        },
         "version": {
-          "description": "API version of the Istio object (e.g., 'v1', 'v1beta1')",
+          "description": "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway.",
           "type": "string"
         }
       },
       "required": [
-        "action"
+        "action",
+        "namespace",
+        "group",
+        "version",
+        "kind",
+        "object"
       ],
       "type": "object"
     },
@@ -223,31 +417,47 @@
       "readOnlyHint": true,
       "title": "Manage Istio Config: List or Get"
     },
-    "description": "Lists or gets Istio configuration objects (Gateways, VirtualServices, etc.)",
+    "description": "Read-only Istio config: list or get objects. For action 'list', returns an array of objects with {name, namespace, type, validation}. For create, patch, or delete use manage_istio_config.",
     "inputSchema": {
+      "dependentRequired": {
+        "object": [
+          "group",
+          "version",
+          "kind",
+          "namespace"
+        ]
+      },
       "properties": {
         "action": {
-          "description": "Action to perform: list or get",
+          "description": "Action to perform (read-only)",
+          "enum": [
+            "list",
+            "get"
+          ],
+          "type": "string"
+        },
+        "clusterName": {
+          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
           "type": "string"
         },
         "group": {
-          "description": "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
+          "description": "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io'). Required for 'get' action.",
           "type": "string"
         },
         "kind": {
-          "description": "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
-          "type": "string"
-        },
-        "name": {
-          "description": "Name of the Istio object",
+          "description": "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule'). Required for 'get' action.",
           "type": "string"
         },
         "namespace": {
-          "description": "Namespace containing the Istio object",
+          "description": "Namespace containing the Istio object. For 'list', if not provided, returns objects across all namespaces. For 'get', required.",
+          "type": "string"
+        },
+        "object": {
+          "description": "Name of the Istio object. Required for 'get' action.",
           "type": "string"
         },
         "version": {
-          "description": "API version of the Istio object (e.g., 'v1', 'v1beta1')",
+          "description": "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.",
           "type": "string"
         }
       },
@@ -258,80 +468,5 @@
     },
     "name": "kiali_manage_istio_config_read",
     "title": "Manage Istio Config: List or Get"
-  },
-  {
-    "annotations": {
-      "destructiveHint": false,
-      "openWorldHint": true,
-      "readOnlyHint": true,
-      "title": "Topology: Mesh, Graph, Health, and Status"
-    },
-    "description": "Returns the topology of a specific namespaces, health, status of the mesh and namespaces. Includes a mesh health summary overview with aggregated counts of healthy, degraded, and failing apps, workloads, and services. Use this for high-level overviews",
-    "inputSchema": {
-      "properties": {
-        "graphType": {
-          "default": "versionedApp",
-          "description": "Optional type of graph to return: 'versionedApp', 'app', 'service', 'workload', 'mesh'",
-          "type": "string"
-        },
-        "namespace": {
-          "description": "Optional single namespace to include in the graph (alternative to namespaces)",
-          "type": "string"
-        },
-        "namespaces": {
-          "description": "Optional comma-separated list of namespaces to include in the graph",
-          "type": "string"
-        },
-        "rateInterval": {
-          "default": "10m",
-          "description": "Optional rate interval for fetching (e.g., '10m', '5m', '1h').",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "kiali_mesh_graph",
-    "title": "Topology: Mesh, Graph, Health, and Status"
-  },
-  {
-    "annotations": {
-      "destructiveHint": false,
-      "openWorldHint": true,
-      "readOnlyHint": true,
-      "title": "Workload: Logs"
-    },
-    "description": "Get logs for a specific workload's pods in a namespace. Only requires namespace and workload name - automatically discovers pods and containers. Optionally filter by container name, time range, and other parameters. Container is auto-detected if not specified.",
-    "inputSchema": {
-      "properties": {
-        "container": {
-          "description": "Optional container name to filter logs. If not provided, automatically detects and uses the main application container (excludes istio-proxy and istio-init)",
-          "type": "string"
-        },
-        "namespace": {
-          "description": "Namespace containing the workload",
-          "type": "string"
-        },
-        "since": {
-          "description": "Time duration to fetch logs from (e.g., '5m', '1h', '30s'). If not provided, returns recent logs",
-          "type": "string"
-        },
-        "tail": {
-          "description": "Number of lines to retrieve from the end of logs (default: 100)",
-          "minimum": 1,
-          "type": "integer"
-        },
-        "workload": {
-          "description": "Name of the workload to get logs for",
-          "type": "string"
-        }
-      },
-      "required": [
-        "namespace",
-        "workload"
-      ],
-      "type": "object"
-    },
-    "name": "kiali_workload_logs",
-    "title": "Workload: Logs"
   }
 ]
