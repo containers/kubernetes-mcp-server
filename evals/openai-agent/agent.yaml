@@ -2,7 +2,7 @@ kind: Agent
 metadata:
   name: "openai-agent"
 builtin:
-  type: "openai-agent"
+  type: "llm-agent"
   model: "gpt-5"  # Change to your model
 # Before running, set environment variables:
 #   export MODEL_BASE_URL="https://api.openai.com/v1"

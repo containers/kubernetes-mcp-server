@@ -90,14 +90,14 @@ commands:
     claude {{ .McpServerFileArgs }} --print "{{ .Prompt }}"
 ```
 
-### OpenAI Agent (openai-agent/agent.yaml)
+### OpenAI ACP (openai-agent/agent.yaml)
 ```yaml
 builtin:
-  type: "openai-agent"
+  type: "llm-agent"
   model: "gpt-4"
 ```
 
-Uses the built-in OpenAI agent with model configuration.
+Uses the built-in OpenAI ACP agent with model configuration.
 
 ## Filtering Tasks by Suite
 
