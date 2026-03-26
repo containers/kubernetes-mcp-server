@@ -2,7 +2,7 @@ package tools
 
 // All tool definitions as a single source of truth
 var (
-	ListMetrics = ToolDef{
+	ListMetrics = ToolDef[ListMetricsOutput]{
 		Name:        "list_metrics",
 		Description: ListMetricsPrompt,
 		Title:       "List Available Metrics",
@@ -20,7 +20,7 @@ var (
 		OpenWorld:   true,
 	}
 
-	ExecuteInstantQuery = ToolDef{
+	ExecuteInstantQuery = ToolDef[InstantQueryOutput]{
 		Name:        "execute_instant_query",
 		Description: ExecuteInstantQueryPrompt,
 		Title:       "Execute Instant Query",
@@ -44,7 +44,7 @@ var (
 		},
 	}
 
-	ExecuteRangeQuery = ToolDef{
+	ExecuteRangeQuery = ToolDef[RangeQueryOutput]{
 		Name:        "execute_range_query",
 		Description: ExecuteRangeQueryPrompt,
 		Title:       "Execute Range Query",
@@ -88,7 +88,7 @@ var (
 		},
 	}
 
-	GetLabelNames = ToolDef{
+	GetLabelNames = ToolDef[LabelNamesOutput]{
 		Name:        "get_label_names",
 		Description: GetLabelNamesPrompt,
 		Title:       "Get Label Names",
@@ -118,7 +118,7 @@ var (
 		},
 	}
 
-	GetLabelValues = ToolDef{
+	GetLabelValues = ToolDef[LabelValuesOutput]{
 		Name:        "get_label_values",
 		Description: GetLabelValuesPrompt,
 		Title:       "Get Label Values",
@@ -154,7 +154,7 @@ var (
 		},
 	}
 
-	GetSeries = ToolDef{
+	GetSeries = ToolDef[SeriesOutput]{
 		Name:        "get_series",
 		Description: GetSeriesPrompt,
 		Title:       "Get Series",
@@ -184,7 +184,7 @@ var (
 		},
 	}
 
-	GetAlerts = ToolDef{
+	GetAlerts = ToolDef[AlertsOutput]{
 		Name:        "get_alerts",
 		Description: GetAlertsPrompt,
 		Title:       "Get Alerts",
@@ -232,7 +232,7 @@ var (
 		},
 	}
 
-	GetSilences = ToolDef{
+	GetSilences = ToolDef[SilencesOutput]{
 		Name:        "get_silences",
 		Description: GetSilencesPrompt,
 		Title:       "Get Silences",
@@ -252,8 +252,8 @@ var (
 )
 
 // AllTools returns all tool definitions
-func AllTools() []ToolDef {
-	return []ToolDef{
+func AllTools() []ToolDefInterface {
+	return []ToolDefInterface{
 		ListMetrics,
 		ExecuteInstantQuery,
 		ExecuteRangeQuery,
