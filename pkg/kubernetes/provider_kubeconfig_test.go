@@ -1,12 +1,16 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -94,6 +98,126 @@ func (s *ProviderKubeconfigTestSuite) TestGetDefaultTarget() {
 
 func (s *ProviderKubeconfigTestSuite) TestGetTargetParameterName() {
 	s.Equal("context", s.provider.GetTargetParameterName(), "Expected context as target parameter name")
+}
+
+func (s *ProviderKubeconfigTestSuite) TestConcurrentReads() {
+	s.Run("all read-only methods can be called concurrently without racing", func() {
+		const goroutines = 20
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+
+		ops := []func(){
+			func() {_, _ = s.provider.GetTargets(context.Background())},
+			func() {_ = s.provider.GetDefaultTarget()},
+			func() {_ = s.provider.IsMultiTarget()},
+			func() {_ = s.provider.IsOpenShift(context.Background())},
+			func() {_, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context")},
+			func() {_ = s.provider.GetTargetParameterName()},
+		}
+
+		wg.Add(goroutines)
+		for i := range goroutines {
+			op := ops[i%len(ops)]
+			go func() {
+				defer wg.Done()
+				<-start
+				op()
+			}()
+		}
+		close(start)
+		wg.Wait()
+	})
+}
+
+func (s *ProviderKubeconfigTestSuite) TestConcurrentLazyManagerInit() {
+	s.Run("concurrent GetDerivedKubernetes for unitialized contexts does not race", func() {
+		// Build a kubeconfig with several valid but unitialized contexts.
+		// Calling GetDerivedKubernetes for them simultaneusly exercises the write-lock
+		// upgrade path inside managerForContext.
+		kubeconfig := s.mockServer.Kubeconfig()
+		const extraContexts = 5
+		for i := range extraContexts {
+			ctx := clientcmdapi.NewContext()
+			ctx.Cluster = "fake"
+			ctx.AuthInfo = "fake"
+			kubeconfig.Contexts[fmt.Sprintf("lazy-context-%d", i)] = ctx
+		}
+
+		provider, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		s.Require().NoError(err, "Expected no error creating provider")
+
+		const goroutines = 20
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		wg.Add(goroutines)
+		for i := range goroutines {
+			name := fmt.Sprintf("lazy-context-%d", i%extraContexts)
+			go func() {
+				defer wg.Done()
+				<-start
+				_, _ = provider.GetDerivedKubernetes(context.Background(), name)
+			}()
+		}
+		close(start)
+		wg.Wait()
+	})
+}
+
+func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
+	s.Run("reset via WatchTargets does not race with concurrent reads", func() {
+		s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
+		s.T().Setenv("CLUSTER_STATE_POLL_INGTERVAL_MS", "50")
+		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
+
+		kubeconfig := s.mockServer.Kubeconfig()
+		const extraContexts = 5
+		for i := range extraContexts {
+			ctx := clientcmdapi.NewContext()
+			ctx.Cluster = "fake"
+			ctx.AuthInfo = "fake"
+			kubeconfig.Contexts[fmt.Sprintf("lazy-context-%d", i)] = ctx
+		}
+
+		kubeconfigPath := test.KubeconfigFile(s.T(), kubeconfig)
+		provider, err := NewProvider(&config.StaticConfig{KubeConfig: kubeconfigPath})
+		s.Require().NoError(err, "Expected no error creating provider")
+		s.T().Cleanup(provider.Close)
+
+		callback, waitForCallback := CallbackWaiter()
+		provider.WatchTargets(callback)
+
+		const readers = 10
+		stop := make(chan struct{})
+		var readerWg sync.WaitGroup
+		readerWg.Add(readers)
+
+		for range readers {
+			go func() {
+				defer readerWg.Done()
+				for {
+					select {
+					case <-stop:
+						return
+					default:
+						_, _ = s.provider.GetTargets(context.Background())
+						_ = s.provider.GetDefaultTarget()
+						_ = s.provider.IsMultiTarget()
+						_ = s.provider.IsOpenShift(context.Background())
+						_, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context")
+					}
+				}
+			}()
+		}
+
+		for i := range extraContexts {
+			kubeconfig.CurrentContext = fmt.Sprintf("lazy-context-%d", i)
+			s.Require().NoError(clientcmd.WriteToFile(*kubeconfig, kubeconfigPath))
+			s.Require().NoError(waitForCallback(5 *time.Second))
+		}
+
+		close(stop)
+		readerWg.Wait()
+	})
 }
 
 func TestProviderKubeconfig(t *testing.T) {
