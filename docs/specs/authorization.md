@@ -43,11 +43,11 @@ The server operates without any authentication middleware. Kubernetes operations
 
 The server requires a Bearer JWT and performs offline checks:
 
-- The token must parse as a valid JWT (any supported signature algorithm)
+- The token must be a structurally valid JWT (well-formed base64 segments with parseable header and claims) — no cryptographic signature verification is performed since no JWKS is available in this mode
 - The `exp` claim must not have passed
 - If `oauth_audience` is set, the token's `aud` claim must contain that value
 
-No network call to an identity provider is made. This mode is useful when the caller already holds a trusted token and the server just needs to gate access.
+No network call to an identity provider is made. This mode gates access based on token structure and claims, not cryptographic proof of origin. It is useful when the caller already holds a trusted token and the server just needs to enforce expiration and audience.
 
 ```bash
 ./kubernetes-mcp-server --port 8080 --require-oauth
@@ -83,7 +83,7 @@ sts_scopes = ["mcp:openshift"]
 
 ## Token Passthrough
 
-When `require_oauth` is false and the server has no OIDC provider configured, the authorization middleware is effectively disabled. However, if a client includes an Authorization header in this mode, the token is passed through directly to the Kubernetes API without any server-side validation. The MCP auth header propagation middleware always extracts the Authorization header from request extras regardless of whether `require_oauth` is enabled. When the Kubernetes client is derived for a tool call, any Bearer token found in the context is used as-is to authenticate against the Kubernetes API.
+When `require_oauth` is false and the server has no OIDC provider configured, the authorization middleware is effectively disabled. However, if a client includes an Authorization header in this mode, the token is passed through directly to the Kubernetes API without any server-side validation. In this mode, the Kubernetes API server is the sole authentication and authorization boundary — the MCP server performs no token verification and relies entirely on the cluster's own RBAC to accept or reject the request. The MCP auth header propagation middleware always extracts the Authorization header from request extras regardless of whether `require_oauth` is enabled. When the Kubernetes client is derived for a tool call, any Bearer token found in the context is used as-is to authenticate against the Kubernetes API.
 
 This is a deliberate exception to the [MCP specification's guidance against token passthrough](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices#token-passthrough). The MCP specification explicitly warns that token passthrough is an anti-pattern because the MCP server cannot verify the token was issued for it, which breaks audience restriction and opens security risks like lateral token reuse.
 
@@ -317,7 +317,7 @@ token_exchange_strategy = "keycloak-v1"
 [cluster_provider_configs.acm.clusters."local-cluster"]
 token_url = "https://keycloak.example.com/realms/hub/protocol/openid-connect/token"
 client_id = "mcp-sts"
-client_secret = "secret"
+client_secret = "<your-client-secret>"
 audience = "mcp-server"
 subject_token_type = "urn:ietf:params:oauth:token-type:access_token"
 ca_file = "/etc/certs/ca.crt"
@@ -325,7 +325,7 @@ ca_file = "/etc/certs/ca.crt"
 [cluster_provider_configs.acm.clusters."managed-cluster"]
 token_url = "https://keycloak.example.com/realms/managed/protocol/openid-connect/token"
 client_id = "mcp-server"
-client_secret = "managed-secret"
+client_secret = "<your-managed-client-secret>"
 subject_issuer = "hub-realm"
 audience = "mcp-server"
 subject_token_type = "urn:ietf:params:oauth:token-type:jwt"
