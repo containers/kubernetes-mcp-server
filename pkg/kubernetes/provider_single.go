@@ -50,6 +50,9 @@ func (p *singleClusterProvider) reset() error {
 			p.config.GetKubeConfigPath())
 	}
 
+	if p.manager != nil {
+		p.manager.Close()
+	}
 	var err error
 	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p.config) {
 		p.manager, err = NewInClusterManager(p.config)
