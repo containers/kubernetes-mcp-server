@@ -1,0 +1,56 @@
+# Build artifacts and tools
+_output/
+
+# IDE and editor directories
+.idea/
+.vscode/
+
+# Documentation
+docs/
+
+# Git
+.git/
+.gitignore
+
+# Source code (only the binary is needed)
+cmd/
+pkg/
+internal/
+go.mod
+go.sum
+Makefile
+build/
+charts/
+
+# Built binaries (platform-specific binaries are added per-bundle)
+kubernetes-mcp-server-*
+
+# NPM package artifacts
+npm/
+
+# PyPI artifacts
+python/
+
+# Container
+Dockerfile
+.dockerignore
+
+# CI/CD
+.github/
+
+# Keycloak config
+.keycloak-config
+
+# Other distribution configs
+server.json
+smithery.yaml
+.mcpbignore
+
+# MCP Registry
+mcp-publisher
+
+# Misc
+*.md
+LICENSE
+.golangci.yml
+.editorconfig
