@@ -16,19 +16,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-create-vlan
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-create-vlan
     - k8s.create:
         apiVersion: k8s.cni.cncf.io/v1
         kind: NetworkAttachmentDefinition
         metadata:
           name: vlan-network
-          namespace: vm-test
+          namespace: kvt-create-vlan
         spec:
           config: '{"bridge":"br10","cniVersion":"0.3.1","ipam":null,"macspoofchk":false,"mtu":1400,"name":"linux-bridge-net-vlan100","type":"bridge","vlan":100}'
   verify:
@@ -36,7 +36,7 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           source ../helpers/verify-vm.sh
-          NS="vm-test"
+          NS="kvt-create-vlan"
 
           verify_vm_exists "test-vm" "$NS" || exit 1
           verify_container_disk "test-vm" "$NS" "fedora" || exit 1
@@ -52,20 +52,20 @@ spec:
         kind: VirtualMachine
         metadata:
           name: test-vm
-          namespace: vm-test
+          namespace: kvt-create-vlan
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: k8s.cni.cncf.io/v1
         kind: NetworkAttachmentDefinition
         metadata:
           name: vlan-network
-          namespace: vm-test
+          namespace: kvt-create-vlan
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-create-vlan
         ignoreNotFound: true
   prompt:
-    inline: Please create a Fedora virtual machine named test-vm in the vm-test namespace with a secondary network interface connected to the vlan-network multus network.
+    inline: Please create a Fedora virtual machine named test-vm in the kvt-create-vlan namespace with a secondary network interface connected to the vlan-network multus network.

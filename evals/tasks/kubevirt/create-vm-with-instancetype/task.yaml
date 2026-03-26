@@ -16,19 +16,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-create-instancetype
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-create-instancetype
   verify:
     - script:
         inline: |-
           #!/usr/bin/env bash
           source ../helpers/verify-vm.sh
-          NS="vm-test"
+          NS="kvt-create-instancetype"
 
           verify_vm_exists "test-vm-instancetype" "$NS" || exit 1
           verify_instancetype "test-vm-instancetype" "$NS" "u1.medium" || exit 1
@@ -45,13 +45,13 @@ spec:
         kind: VirtualMachine
         metadata:
           name: test-vm-instancetype
-          namespace: vm-test
+          namespace: kvt-create-instancetype
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-create-instancetype
         ignoreNotFound: true
   prompt:
-    inline: Create a Fedora virtual machine named test-vm-instancetype in the vm-test namespace with instancetype 'u1.medium'.
+    inline: Create a Fedora virtual machine named test-vm-instancetype in the kvt-create-instancetype namespace with instancetype 'u1.medium'.

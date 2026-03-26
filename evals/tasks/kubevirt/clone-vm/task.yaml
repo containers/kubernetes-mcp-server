@@ -16,19 +16,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-clone
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-clone
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: source-vm
-          namespace: vm-test
+          namespace: kvt-clone
           labels:
             app: source
         spec:
@@ -49,7 +49,7 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           set -e
-          NS="vm-test"
+          NS="kvt-clone"
           SOURCE_VM="source-vm"
           TARGET_VM="cloned-vm"
 
@@ -84,27 +84,27 @@ spec:
     - script:
         inline: |-
           #!/usr/bin/env bash
-          kubectl delete virtualmachineclone --all -n vm-test --ignore-not-found=true 2>/dev/null || true
+          kubectl delete virtualmachineclone --all -n kvt-clone --ignore-not-found=true 2>/dev/null || true
     - k8s.delete:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: cloned-vm
-          namespace: vm-test
+          namespace: kvt-clone
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: source-vm
-          namespace: vm-test
+          namespace: kvt-clone
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: kvt-clone
         ignoreNotFound: true
   prompt:
     inline: |
-      Clone the virtual machine named source-vm in the vm-test namespace to a new virtual machine named cloned-vm.
+      Clone the virtual machine named source-vm in the kvt-clone namespace to a new virtual machine named cloned-vm.
