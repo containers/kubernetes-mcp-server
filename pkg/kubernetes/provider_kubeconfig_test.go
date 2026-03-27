@@ -166,7 +166,7 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentLazyManagerInit() {
 func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 	s.Run("reset via WatchTargets does not race with concurrent reads", func() {
 		s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
-		s.T().Setenv("CLUSTER_STATE_POLL_INGTERVAL_MS", "50")
+		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
 		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
 
 		kubeconfig := s.mockServer.Kubeconfig()
@@ -199,11 +199,11 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 					case <-stop:
 						return
 					default:
-						_, _ = s.provider.GetTargets(context.Background())
-						_ = s.provider.GetDefaultTarget()
-						_ = s.provider.IsMultiTarget()
-						_ = s.provider.IsOpenShift(context.Background())
-						_, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context")
+						_, _ = provider.GetTargets(context.Background())
+						_ = provider.GetDefaultTarget()
+						_ = provider.IsMultiTarget()
+						_ = provider.IsOpenShift(context.Background())
+						_, _ = provider.GetDerivedKubernetes(context.Background(), "fake-context")
 					}
 				}
 			}()
