@@ -20,6 +20,7 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
   - [Access Control](#access-control)
   - [Toolsets](#toolsets)
   - [Tool Filtering](#tool-filtering)
+  - [Tool Overrides](#tool-overrides)
   - [Denied Resources](#denied-resources)
   - [Server Instructions](#server-instructions)
   - [Prompts](#prompts)
@@ -292,6 +293,28 @@ enabled_tools = ["pods_list", "pods_get", "pods_log"]
 
 # Or disable specific tools from enabled toolsets
 disabled_tools = ["resources_delete", "pods_delete"]
+```
+
+### Tool Overrides
+
+Customize tool descriptions shown to MCP clients without modifying source code. This enables adding domain-specific guidance to tool descriptions (e.g., "Prefer using label selectors over listing all pods").
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `tool_overrides` | map | `{}` | Map of tool name to override configuration. |
+
+**Override Fields:**
+- `description` (optional): Custom description for the tool. Empty strings are ignored.
+
+Tools are keyed by their flat name (e.g., `pods_list`, `resources_get`), consistent with `enabled_tools` and `disabled_tools`.
+
+**Example:**
+```toml
+[tool_overrides.pods_list]
+description = "List pods in the cluster. Prefer using label selectors over listing all pods when the namespace has many workloads."
+
+[tool_overrides.resources_get]
+description = "Get a Kubernetes resource by name. Always specify the namespace explicitly rather than relying on the default."
 ```
 
 ### Denied Resources
@@ -583,6 +606,10 @@ toolsets = ["core", "config", "helm", "kubevirt"]
 
 # Tool filtering
 disabled_tools = ["resources_delete"]
+
+# Tool overrides
+[tool_overrides.pods_list]
+description = "List pods in the cluster. Prefer using label selectors over listing all pods when the namespace has many workloads."
 
 # Denied resources
 [[denied_resources]]

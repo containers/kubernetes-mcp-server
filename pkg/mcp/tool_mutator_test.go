@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -306,4 +307,78 @@ func (s *TargetListToolMutatorSuite) TestHandlerWithGetTargetsError() {
 
 func TestTargetListToolMutator(t *testing.T) {
 	suite.Run(t, new(TargetListToolMutatorSuite))
+}
+
+type ToolOverridesMutatorSuite struct {
+	suite.Suite
+}
+
+func (s *ToolOverridesMutatorSuite) TestOverridesMatchingToolDescription() {
+	overrides := map[string]config.ToolOverride{
+		"pods_list": {Description: "Custom pods list description"},
+	}
+	tm := WithToolOverrides(overrides)
+	tool := createTestTool("pods_list")
+	result := tm(tool)
+
+	s.Equal("Custom pods list description", result.Tool.Description)
+}
+
+func (s *ToolOverridesMutatorSuite) TestLeavesUnmatchedToolsUnchanged() {
+	overrides := map[string]config.ToolOverride{
+		"pods_list": {Description: "Custom description"},
+	}
+	tm := WithToolOverrides(overrides)
+	tool := createTestTool("resources_get")
+	result := tm(tool)
+
+	s.Equal("A test tool", result.Tool.Description)
+}
+
+func (s *ToolOverridesMutatorSuite) TestHandlesNilOverridesMap() {
+	tm := WithToolOverrides(nil)
+	tool := createTestTool("pods_list")
+	result := tm(tool)
+
+	s.Equal("A test tool", result.Tool.Description)
+}
+
+func (s *ToolOverridesMutatorSuite) TestHandlesEmptyOverridesMap() {
+	overrides := map[string]config.ToolOverride{}
+	tm := WithToolOverrides(overrides)
+	tool := createTestTool("pods_list")
+	result := tm(tool)
+
+	s.Equal("A test tool", result.Tool.Description)
+}
+
+func (s *ToolOverridesMutatorSuite) TestEmptyDescriptionDoesNotBlankExisting() {
+	overrides := map[string]config.ToolOverride{
+		"pods_list": {Description: ""},
+	}
+	tm := WithToolOverrides(overrides)
+	tool := createTestTool("pods_list")
+	result := tm(tool)
+
+	s.Equal("A test tool", result.Tool.Description)
+}
+
+func (s *ToolOverridesMutatorSuite) TestMultipleToolsOverriddenIndependently() {
+	overrides := map[string]config.ToolOverride{
+		"pods_list":     {Description: "Custom pods description"},
+		"resources_get": {Description: "Custom resources description"},
+	}
+	tm := WithToolOverrides(overrides)
+
+	podsResult := tm(createTestTool("pods_list"))
+	resourcesResult := tm(createTestTool("resources_get"))
+	otherResult := tm(createTestTool("events_list"))
+
+	s.Equal("Custom pods description", podsResult.Tool.Description)
+	s.Equal("Custom resources description", resourcesResult.Tool.Description)
+	s.Equal("A test tool", otherResult.Tool.Description)
+}
+
+func TestToolOverridesMutator(t *testing.T) {
+	suite.Run(t, new(ToolOverridesMutatorSuite))
 }

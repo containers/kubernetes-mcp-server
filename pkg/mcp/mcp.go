@@ -216,6 +216,7 @@ func (s *Server) collectApplicableTools() []api.ServerTool {
 	mutator := ComposeMutators(
 		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p),
+		WithToolOverrides(s.configuration.ToolOverrides),
 	)
 
 	tools := make([]api.ServerTool, 0)

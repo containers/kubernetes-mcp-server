@@ -1052,6 +1052,80 @@ func (s *ConfigSuite) TestEmptyConfigFile() {
 	})
 }
 
+func (s *ConfigSuite) TestToolOverridesParsed() {
+	configPath := s.writeConfig(`
+		[tool_overrides.pods_list]
+		description = "Custom pods list description"
+
+		[tool_overrides.resources_get]
+		description = "Custom resources get description"
+	`)
+
+	config, err := Read(configPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("parses tool_overrides with multiple entries", func() {
+		s.Require().Len(config.ToolOverrides, 2)
+		s.Equal("Custom pods list description", config.ToolOverrides["pods_list"].Description)
+		s.Equal("Custom resources get description", config.ToolOverrides["resources_get"].Description)
+	})
+}
+
+func (s *ConfigSuite) TestToolOverridesNilWhenNotSpecified() {
+	configPath := s.writeConfig(`
+		log_level = 1
+	`)
+
+	config, err := Read(configPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("ToolOverrides is nil when not specified", func() {
+		s.Nil(config.ToolOverrides)
+	})
+}
+
+func (s *ConfigSuite) TestToolOverridesDropInMerge() {
+	tempDir := s.T().TempDir()
+
+	mainConfigPath := filepath.Join(tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
+		[tool_overrides.pods_list]
+		description = "Main pods description"
+
+		[tool_overrides.resources_get]
+		description = "Main resources description"
+	`), 0644))
+
+	confDDir := filepath.Join(tempDir, "conf.d")
+	s.Require().NoError(os.Mkdir(confDDir, 0755))
+
+	s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "10-override.toml"), []byte(`
+		[tool_overrides.pods_list]
+		description = "Overridden pods description"
+
+		[tool_overrides.events_list]
+		description = "New events description"
+	`), 0644))
+
+	config, err := Read(mainConfigPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("drop-in overrides existing tool override", func() {
+		s.Equal("Overridden pods description", config.ToolOverrides["pods_list"].Description)
+	})
+
+	s.Run("drop-in adds new tool override", func() {
+		s.Equal("New events description", config.ToolOverrides["events_list"].Description)
+	})
+
+	s.Run("preserves tool overrides not in drop-in", func() {
+		s.Equal("Main resources description", config.ToolOverrides["resources_get"].Description)
+	})
+}
+
 func TestConfig(t *testing.T) {
 	suite.Run(t, new(ConfigSuite))
 }

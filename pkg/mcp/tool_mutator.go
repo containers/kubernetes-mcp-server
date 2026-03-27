@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -130,4 +131,20 @@ func capitalizeFirst(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// WithToolOverrides returns a mutator that applies per-tool configuration overrides
+// (such as custom descriptions) from the user's config file.
+func WithToolOverrides(overrides map[string]config.ToolOverride) ToolMutator {
+	return func(tool api.ServerTool) api.ServerTool {
+		if overrides == nil {
+			return tool
+		}
+		if o, ok := overrides[tool.Tool.Name]; ok {
+			if o.Description != "" {
+				tool.Tool.Description = o.Description
+			}
+		}
+		return tool
+	}
 }

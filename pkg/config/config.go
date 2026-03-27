@@ -18,6 +18,11 @@ const (
 	DefaultDropInConfigDir = "conf.d"
 )
 
+// ToolOverride contains per-tool configuration overrides.
+type ToolOverride struct {
+	Description string `toml:"description,omitempty"`
+}
+
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
@@ -41,8 +46,9 @@ type StaticConfig struct {
 	DisableDestructive bool     `toml:"disable_destructive,omitempty"`
 	Toolsets           []string `toml:"toolsets,omitempty"`
 	// Tool configuration
-	EnabledTools  []string `toml:"enabled_tools,omitempty"`
-	DisabledTools []string `toml:"disabled_tools,omitempty"`
+	EnabledTools  []string                `toml:"enabled_tools,omitempty"`
+	DisabledTools []string                `toml:"disabled_tools,omitempty"`
+	ToolOverrides map[string]ToolOverride `toml:"tool_overrides,omitempty"`
 	// Prompt configuration
 	Prompts []api.Prompt `toml:"prompts,omitempty"`
 
