@@ -107,12 +107,12 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentReads() {
 		start := make(chan struct{})
 
 		ops := []func(){
-			func() {_, _ = s.provider.GetTargets(context.Background())},
-			func() {_ = s.provider.GetDefaultTarget()},
-			func() {_ = s.provider.IsMultiTarget()},
-			func() {_ = s.provider.IsOpenShift(context.Background())},
-			func() {_, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context")},
-			func() {_ = s.provider.GetTargetParameterName()},
+			func() { _, _ = s.provider.GetTargets(context.Background()) },
+			func() { _ = s.provider.GetDefaultTarget() },
+			func() { _ = s.provider.IsMultiTarget() },
+			func() { _ = s.provider.IsOpenShift(context.Background()) },
+			func() { _, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context") },
+			func() { _ = s.provider.GetTargetParameterName() },
 		}
 
 		wg.Add(goroutines)
@@ -212,7 +212,7 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 		for i := range extraContexts {
 			kubeconfig.CurrentContext = fmt.Sprintf("lazy-context-%d", i)
 			s.Require().NoError(clientcmd.WriteToFile(*kubeconfig, kubeconfigPath))
-			s.Require().NoError(waitForCallback(5 *time.Second))
+			s.Require().NoError(waitForCallback(5 * time.Second))
 		}
 
 		close(stop)
