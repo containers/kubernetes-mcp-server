@@ -61,6 +61,7 @@ func (p *kubeConfigClusterProvider) reset() error {
 
 	rawConfig, err := m.kubernetes.clientCmdConfig.RawConfig()
 	if err != nil {
+		m.Close()
 		return err
 	}
 
