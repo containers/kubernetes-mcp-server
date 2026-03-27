@@ -7,4 +7,4 @@ metadata:
     {{- include "kubernetes-mcp-server.labels" . | nindent 4 }}
 data:
   config.toml: |
-    {{- tpl (toToml .Values.config) . | replace ".0" "" | nindent 4 }}
+    {{- tpl (toToml .Values.config) . | regexReplaceAll "(?m)(= \\d+)\\.0$" "${1}" | nindent 4 }}
