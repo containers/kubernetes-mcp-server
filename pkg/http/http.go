@@ -50,7 +50,7 @@ const (
 
 var (
 	// infraPaths contains infrastructure endpoints which should not have oauth applied
-	infraPaths = []string{healthEndpoint, metricsEndpoint}
+	infraPaths = []string{healthEndpoint, metricsEndpoint, statsEndpoint}
 )
 
 // metricsMiddleware wraps an HTTP handler to record metrics for all requests
