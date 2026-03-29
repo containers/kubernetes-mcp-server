@@ -577,3 +577,8 @@ npx @modelcontextprotocol/inspector@latest $(pwd)/kubernetes-mcp-server
 ---
 
 mcp-name: io.github.containers/kubernetes-mcp-server
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/manusa-kubernetes-mcp-server).
+
