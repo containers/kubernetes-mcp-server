@@ -60,6 +60,10 @@ build-all-platforms: clean tidy format lint ## Build the project for all platfor
 test: ## Run the tests
 	go test -count=1 -v ./...
 
+.PHONY: test-browser
+test-browser: ## Run browser-based tests (requires Chromium, auto-downloaded by Rod on first run)
+	go test -count=1 -v -tags browser ./pkg/mcpapps/...
+
 .PHONY: test-update-snapshots
 test-update-snapshots: ## Update test snapshots for toolset tests
 	UPDATE_TOOLSETS_JSON=1 go test -count=1 -v ./pkg/mcp
@@ -166,6 +170,25 @@ local-env-teardown: ## Tear down the local Kind cluster
 .PHONY: print-git-tag-version
 print-git-tag-version: ## Print the GIT_TAG_VERSION
 	@echo $(GIT_TAG_VERSION)
+
+##@ MCP Apps
+
+HTM_VERSION ?= 3.1.1
+CHART_JS_VERSION ?= 4.4.8
+PRISM_VERSION ?= 1.30.0
+MCP_APPS_VENDOR_DIR ?= pkg/mcpapps/vendor
+
+.PHONY: vendor-js
+vendor-js: ## Download vendored JavaScript dependencies for MCP Apps
+	@mkdir -p $(MCP_APPS_VENDOR_DIR)
+	curl -sL "https://cdn.jsdelivr.net/npm/htm@$(HTM_VERSION)/preact/standalone.umd.js" \
+		-o $(MCP_APPS_VENDOR_DIR)/htm-preact-standalone.umd.js
+	curl -sL "https://cdn.jsdelivr.net/npm/chart.js@$(CHART_JS_VERSION)/dist/chart.umd.min.js" \
+		-o $(MCP_APPS_VENDOR_DIR)/chart.umd.min.js
+	curl -sL "https://cdn.jsdelivr.net/npm/prismjs@$(PRISM_VERSION)/components/prism-core.min.js" \
+		-o $(MCP_APPS_VENDOR_DIR)/prism-core.min.js
+	curl -sL "https://cdn.jsdelivr.net/npm/prismjs@$(PRISM_VERSION)/components/prism-yaml.min.js" \
+		-o $(MCP_APPS_VENDOR_DIR)/prism-yaml.min.js
 
 # Include build configuration files
 -include build/*.mk

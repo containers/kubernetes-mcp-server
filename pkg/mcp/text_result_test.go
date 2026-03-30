@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
@@ -34,6 +35,34 @@ func (s *TextResultSuite) TestNewTextResult() {
 	s.Run("does not set structured content", func() {
 		result := NewTextResult("output", nil)
 		s.Nil(result.StructuredContent)
+	})
+}
+
+func (s *TextResultSuite) TestEnsureStructuredObject() {
+	s.Run("returns nil for nil input", func() {
+		result := ensureStructuredObject(nil)
+		s.Nil(result)
+	})
+	s.Run("wraps slice in items object", func() {
+		items := []string{"a", "b"}
+		result := ensureStructuredObject(items)
+		wrapped, ok := result.(map[string]any)
+		s.Require().True(ok)
+		s.Equal(items, wrapped["items"])
+	})
+	s.Run("passes map through unchanged", func() {
+		m := map[string]any{"key": "value"}
+		result := ensureStructuredObject(m)
+		s.Equal(m, result)
+	})
+	s.Run("passes string through unchanged", func() {
+		result := ensureStructuredObject("hello")
+		s.Equal("hello", result)
+	})
+	s.Run("passes nil slice through unchanged", func() {
+		var nilSlice []map[string]any
+		result := ensureStructuredObject(nilSlice)
+		s.Nil(result)
 	})
 }
 
@@ -90,4 +119,71 @@ func (s *TextResultSuite) TestNewStructuredResult() {
 
 func TestTextResult(t *testing.T) {
 	suite.Run(t, new(TextResultSuite))
+}
+
+type RegisterMCPAppResourcesSuite struct {
+	suite.Suite
+}
+
+func (s *RegisterMCPAppResourcesSuite) newServer() *Server {
+	return &Server{
+		server: mcp.NewServer(
+			&mcp.Implementation{Name: "test"},
+			&mcp.ServerOptions{
+				Capabilities: &mcp.ServerCapabilities{
+					Resources: &mcp.ResourceCapabilities{},
+				},
+			},
+		),
+	}
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestTracksRegisteredURIs() {
+	srv := s.newServer()
+	srv.registerMCPAppResources([]string{"pods_list", "nodes_top"})
+	s.ElementsMatch(
+		[]string{
+			mcpapps.ToolResourceURI("pods_list"),
+			mcpapps.ToolResourceURI("nodes_top"),
+		},
+		srv.registeredAppURIs,
+	)
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestRemovesStaleResources() {
+	srv := s.newServer()
+	// First registration: two tools
+	srv.registerMCPAppResources([]string{"pods_list", "nodes_top"})
+	s.Len(srv.registeredAppURIs, 2)
+	// Second registration: only one tool remains — stale nodes_top should be cleaned up
+	srv.registerMCPAppResources([]string{"pods_list"})
+	s.Equal(
+		[]string{mcpapps.ToolResourceURI("pods_list")},
+		srv.registeredAppURIs,
+	)
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestUpdatesTrackingOnReRegister() {
+	srv := s.newServer()
+	srv.registerMCPAppResources([]string{"pods_list"})
+	srv.registerMCPAppResources([]string{"pods_list", "namespaces_list"})
+	s.ElementsMatch(
+		[]string{
+			mcpapps.ToolResourceURI("pods_list"),
+			mcpapps.ToolResourceURI("namespaces_list"),
+		},
+		srv.registeredAppURIs,
+	)
+}
+
+func (s *RegisterMCPAppResourcesSuite) TestEmptyListClearsAll() {
+	srv := s.newServer()
+	srv.registerMCPAppResources([]string{"pods_list"})
+	s.Len(srv.registeredAppURIs, 1)
+	srv.registerMCPAppResources([]string{})
+	s.Empty(srv.registeredAppURIs)
+}
+
+func TestRegisterMCPAppResources(t *testing.T) {
+	suite.Run(t, new(RegisterMCPAppResourcesSuite))
 }

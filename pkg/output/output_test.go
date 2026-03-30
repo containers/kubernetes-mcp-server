@@ -188,6 +188,51 @@ func (s *OutputSuite) TestTableToStructured() {
 		_, hasNs := result[0]["Namespace"]
 		s.False(hasNs, "expected no Namespace key for cluster-scoped resource")
 	})
+	s.Run("returns nil for table with no rows", func() {
+		t := &metav1.Table{
+			ColumnDefinitions: []metav1.TableColumnDefinition{{Name: "Name"}},
+		}
+		result := tableToStructured(t)
+		s.Nil(result)
+	})
+	s.Run("does not duplicate Namespace from embedded object when column exists", func() {
+		t := &metav1.Table{
+			ColumnDefinitions: []metav1.TableColumnDefinition{
+				{Name: "Name"},
+				{Name: "Namespace"},
+			},
+			Rows: []metav1.TableRow{{
+				Cells: []any{"my-pod", "from-column"},
+				Object: runtime.RawExtension{
+					Object: &unstructured.Unstructured{Object: map[string]any{
+						"metadata": map[string]any{"namespace": "from-object"},
+					}},
+				},
+			}},
+		}
+		result := tableToStructured(t)
+		s.Require().Len(result, 1)
+		s.Equal("from-column", result[0]["Namespace"], "column value should take precedence over embedded object")
+	})
+	s.Run("adds Namespace from embedded object when no column exists", func() {
+		t := &metav1.Table{
+			ColumnDefinitions: []metav1.TableColumnDefinition{
+				{Name: "Name"},
+			},
+			Rows: []metav1.TableRow{{
+				Cells: []any{"my-pod"},
+				Object: runtime.RawExtension{
+					Object: &unstructured.Unstructured{Object: map[string]any{
+						"metadata": map[string]any{"namespace": "default"},
+					}},
+				},
+			}},
+		}
+		result := tableToStructured(t)
+		s.Require().Len(result, 1)
+		s.Equal("my-pod", result[0]["Name"])
+		s.Equal("default", result[0]["Namespace"])
+	})
 }
 
 func TestOutput(t *testing.T) {
