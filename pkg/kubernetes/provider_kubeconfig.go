@@ -117,8 +117,12 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 
 func (p *kubeConfigClusterProvider) IsOpenShift(ctx context.Context) bool {
 	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.managers[p.defaultContext].IsOpenShift(ctx)
+	m := p.managers[p.defaultContext]
+	p.mu.RUnlock()
+	if m == nil {
+		return false
+	}
+	return m.IsOpenShift(ctx)
 }
 
 func (p *kubeConfigClusterProvider) IsMultiTarget() bool {
