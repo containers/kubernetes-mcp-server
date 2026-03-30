@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -14,6 +15,13 @@ func BaseDefault() *StaticConfig {
 		ListOutput:           "table",
 		Toolsets:             []string{"core", "config"},
 		ConfirmationFallback: "allow",
+		HTTP: HTTPConfig{
+			ReadTimeout:       Duration(30 * time.Second),
+			IdleTimeout:       Duration(60 * time.Second), // Per Apache recommendation
+			ReadHeaderTimeout: Duration(10 * time.Second), // Slowloris protection
+			MaxHeaderBytes:    1 << 20,                    // 1 MB
+			MaxBodyBytes:      1 << 20,                    // 1 MB
+		},
 	}
 }
 

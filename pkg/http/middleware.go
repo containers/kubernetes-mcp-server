@@ -200,3 +200,27 @@ func (lrw *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) 
 	}
 	return nil, nil, http.ErrNotSupported
 }
+
+// MaxBodyMiddleware limits the size of incoming request bodies.
+// It wraps the request body with http.MaxBytesReader to enforce the limit.
+// Requests exceeding the limit receive a 413 Request Entity Too Large response.
+func MaxBodyMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip for methods that typically don't have bodies
+			if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Skip if maxBytes is 0 or negative (disabled)
+			if maxBytes <= 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			next.ServeHTTP(w, r)
+		})
+	}
+}

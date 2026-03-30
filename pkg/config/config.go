@@ -81,6 +81,9 @@ type StaticConfig struct {
 	// and outbound connections to non-HTTPS endpoints will be rejected.
 	RequireTLS bool `toml:"require_tls,omitempty"`
 
+	// HTTP server configuration (timeouts, size limits)
+	HTTP HTTPConfig `toml:"http,omitempty"`
+
 	// ClusterProviderStrategy is how the server finds clusters.
 	// If set to "kubeconfig", the clusters will be loaded from those in the kubeconfig.
 	// If set to "in-cluster", the server will use the in cluster config

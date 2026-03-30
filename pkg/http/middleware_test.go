@@ -1,8 +1,10 @@
 package http
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
@@ -136,4 +138,147 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 
 func TestHTTPTraceContextPropagation(t *testing.T) {
 	suite.Run(t, new(HTTPTraceContextPropagationSuite))
+}
+
+type MaxBodyMiddlewareSuite struct {
+	suite.Suite
+}
+
+func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
+	s.Run("allows requests under limit", func() {
+		handler := MaxBodyMiddleware(100)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			s.Require().NoError(err)
+			s.Equal("small body", string(body))
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader("small body"))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.Equal(http.StatusOK, rr.Code)
+	})
+
+	s.Run("rejects requests exceeding limit", func() {
+		handlerCalled := false
+		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+			// Attempt to read the body - this should fail
+			_, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		largeBody := strings.Repeat("x", 100)
+		req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(largeBody))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.True(handlerCalled, "handler should be called")
+		s.Equal(http.StatusRequestEntityTooLarge, rr.Code)
+	})
+
+	s.Run("skips GET requests", func() {
+		handlerCalled := false
+		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.True(handlerCalled)
+		s.Equal(http.StatusOK, rr.Code)
+	})
+
+	s.Run("skips HEAD requests", func() {
+		handlerCalled := false
+		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodHead, "/test", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.True(handlerCalled)
+		s.Equal(http.StatusOK, rr.Code)
+	})
+
+	s.Run("skips OPTIONS requests", func() {
+		handlerCalled := false
+		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodOptions, "/test", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.True(handlerCalled)
+		s.Equal(http.StatusOK, rr.Code)
+	})
+
+	s.Run("skips when maxBytes is zero", func() {
+		handler := MaxBodyMiddleware(0)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			s.Require().NoError(err)
+			s.Equal("large body that would exceed any limit", string(body))
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader("large body that would exceed any limit"))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.Equal(http.StatusOK, rr.Code)
+	})
+
+	s.Run("applies to PUT requests", func() {
+		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		largeBody := strings.Repeat("x", 100)
+		req := httptest.NewRequest(http.MethodPut, "/test", strings.NewReader(largeBody))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.Equal(http.StatusRequestEntityTooLarge, rr.Code)
+	})
+
+	s.Run("applies to PATCH requests", func() {
+		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		largeBody := strings.Repeat("x", 100)
+		req := httptest.NewRequest(http.MethodPatch, "/test", strings.NewReader(largeBody))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		s.Equal(http.StatusRequestEntityTooLarge, rr.Code)
+	})
+}
+
+func TestMaxBodyMiddleware(t *testing.T) {
+	suite.Run(t, new(MaxBodyMiddlewareSuite))
 }

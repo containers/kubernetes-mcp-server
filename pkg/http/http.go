@@ -108,15 +108,21 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	mux := http.NewServeMux()
 
 	wrappedMux := RequestMiddleware(
-		AuthorizationMiddleware(staticConfig, oidcProvider)(mux),
+		AuthorizationMiddleware(staticConfig, oidcProvider)(
+			MaxBodyMiddleware(staticConfig.HTTP.MaxBodyBytes)(mux),
+		),
 	)
 
 	// Wrap with metrics middleware
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
 
 	httpServer := &http.Server{
-		Addr:    ":" + staticConfig.Port,
-		Handler: instrumentedHandler,
+		Addr:              ":" + staticConfig.Port,
+		Handler:           instrumentedHandler,
+		ReadTimeout:       staticConfig.HTTP.ReadTimeout.Duration(),
+		IdleTimeout:       staticConfig.HTTP.IdleTimeout.Duration(),
+		ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Duration(),
+		MaxHeaderBytes:    staticConfig.HTTP.MaxHeaderBytes,
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},
