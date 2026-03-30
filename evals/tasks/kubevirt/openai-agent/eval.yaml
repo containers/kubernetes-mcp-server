@@ -4,7 +4,7 @@ metadata:
 config:
   agent:
     type: "builtin.llm-agent"
-    model: "gemini-2.0-flash"
+    model: "google:gemini-2.0-flash"
   mcpConfigFile: ../../../mcp-config.yaml
   extensions:
     kubernetes:
