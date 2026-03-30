@@ -73,7 +73,7 @@ func (s *ConfirmationSuite) TestCheckToolRules() {
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}, fallback: "deny"}
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckToolRules(ctx, provider, elicitor, "pods_list", nil, nil)
+		err := CheckToolRules(ctx, provider, elicitor, "pods_list", nil)
 		s.NoError(err)
 	})
 	s.Run("matching rule with accept returns nil", func() {
@@ -81,7 +81,7 @@ func (s *ConfirmationSuite) TestCheckToolRules() {
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}, fallback: "deny"}
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionAccept}}
-		err := CheckToolRules(ctx, provider, elicitor, "helm_uninstall", nil, nil)
+		err := CheckToolRules(ctx, provider, elicitor, "helm_uninstall", nil)
 		s.NoError(err)
 	})
 	s.Run("matching rule with decline returns error", func() {
@@ -89,7 +89,7 @@ func (s *ConfirmationSuite) TestCheckToolRules() {
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}, fallback: "deny"}
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckToolRules(ctx, provider, elicitor, "helm_uninstall", nil, nil)
+		err := CheckToolRules(ctx, provider, elicitor, "helm_uninstall", nil)
 		s.ErrorIs(err, ErrConfirmationDenied)
 	})
 }

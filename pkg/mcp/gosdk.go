@@ -43,7 +43,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		// Check confirmation rules before executing the tool
 		if confirmErr := confirmation.CheckToolRules(
 			ctx, s.configuration, &sessionElicitor{},
-			tool.Tool.Name, toolCallRequest.GetArguments(), tool.Tool.Annotations.DestructiveHint,
+			tool.Tool.Name, tool.Tool.Annotations.DestructiveHint,
 		); confirmErr != nil {
 			return NewTextResult("", confirmErr), nil
 		}

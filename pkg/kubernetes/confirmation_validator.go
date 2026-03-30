@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,10 +30,17 @@ func (v *ConfirmationValidator) Validate(ctx context.Context, req *api.HTTPValid
 		group = req.GVK.Group
 		version = req.GVK.Version
 	}
-	return confirmation.CheckKubeRules(
+	err := confirmation.CheckKubeRules(
 		ctx, v.rulesProvider, &contextElicitor{},
 		req.Verb, kind, group, version, req.ResourceName, req.Namespace,
 	)
+	if errors.Is(err, confirmation.ErrConfirmationDenied) {
+		return &api.ValidationError{
+			Code:    api.ErrorCodePermissionDenied,
+			Message: err.Error(),
+		}
+	}
+	return err
 }
 
 // contextElicitor extracts the MCP session from the request context to perform elicitation.

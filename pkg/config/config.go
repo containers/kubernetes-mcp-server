@@ -12,7 +12,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/confirmation"
 	"k8s.io/klog/v2"
 )
 
@@ -106,7 +105,6 @@ type StaticConfig struct {
 
 	// ConfirmationFallback is the global default fallback behavior when a client
 	// does not support elicitation. Valid values are "deny" and "allow".
-	// Defaults to "deny".
 	ConfirmationFallback string `toml:"confirmation_fallback,omitempty"`
 	// ConfirmationRules define rules for prompting the user before dangerous actions.
 	ConfirmationRules []api.ConfirmationRule `toml:"confirmation_rules,omitempty"`
@@ -322,7 +320,6 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		if ruleErr := config.ConfirmationRules[i].Validate(); ruleErr != nil {
 			ruleErrors = append(ruleErrors, fmt.Errorf("confirmation_rules[%d]: %w", i, ruleErr))
 		}
-		config.ConfirmationRules[i].Input = confirmation.NormalizeInput(config.ConfirmationRules[i].Input)
 	}
 	if len(ruleErrors) > 0 {
 		return nil, fmt.Errorf("invalid confirmation rules:\n%w", errors.Join(ruleErrors...))

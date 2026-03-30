@@ -11,8 +11,7 @@ import (
 // A rule matches if all of its non-empty fields match the call:
 //   - tool: exact match on tool name
 //   - destructive: matches when the tool's DestructiveHint equals the rule value
-//   - input: all key-value pairs must match the tool's arguments (string comparison)
-func MatchToolLevelRules(rules []api.ConfirmationRule, toolName string, args map[string]any, destructiveHint *bool) []api.ConfirmationRule {
+func MatchToolLevelRules(rules []api.ConfirmationRule, toolName string, destructiveHint *bool) []api.ConfirmationRule {
 	var matched []api.ConfirmationRule
 	for i := range rules {
 		r := &rules[i]
@@ -27,41 +26,9 @@ func MatchToolLevelRules(rules []api.ConfirmationRule, toolName string, args map
 				continue
 			}
 		}
-		if !inputMatches(r.Input, args) {
-			continue
-		}
 		matched = append(matched, *r)
 	}
 	return matched
-}
-
-// inputMatches returns true if every key-value pair in ruleInput is present in args
-// with an equal value. Rule input values must be normalized to JSON types at config
-// load time (via NormalizeInput) so that plain == comparison works here.
-func inputMatches(ruleInput map[string]any, args map[string]any) bool {
-	for k, ruleVal := range ruleInput {
-		argVal, ok := args[k]
-		if !ok {
-			return false
-		}
-		if ruleVal != argVal {
-			return false
-		}
-	}
-	return true
-}
-
-// NormalizeInput converts TOML-parsed input values to JSON-equivalent Go types.
-// TOML parses integers as int64 while JSON parses numbers as float64. Converting
-// int64 to float64 at load time ensures plain == comparison works at match time
-// without per-match type coercion.
-func NormalizeInput(input map[string]any) map[string]any {
-	for k, v := range input {
-		if i, ok := v.(int64); ok {
-			input[k] = float64(i)
-		}
-	}
-	return input
 }
 
 // MatchKubeLevelRules returns all kube-level rules that match the given Kubernetes API request.
@@ -102,16 +69,16 @@ func MatchKubeLevelRules(rules []api.ConfirmationRule, verb, kind, group, versio
 	return matched
 }
 
-// MergeMatchedRules combines matched rules into a single message and effective fallback.
-// If a single rule matched, its message and fallback are used directly.
-// If multiple rules matched, messages are combined as a bulleted list and the
-// most restrictive fallback wins ("deny" beats "allow").
+// MergeMatchedRules combines matched rules into a single message.
+// If a single rule matched, its message is used directly.
+// If multiple rules matched, messages are combined as a bulleted list.
+// The global fallback is always used as the effective fallback.
 func MergeMatchedRules(matched []api.ConfirmationRule, globalFallback string) (message string, effectiveFallback string) {
 	if len(matched) == 0 {
 		return "", globalFallback
 	}
 	if len(matched) == 1 {
-		return matched[0].Message, matched[0].EffectiveFallback(globalFallback)
+		return matched[0].Message, globalFallback
 	}
 
 	var sb strings.Builder
@@ -119,14 +86,5 @@ func MergeMatchedRules(matched []api.ConfirmationRule, globalFallback string) (m
 	for _, r := range matched {
 		sb.WriteString(fmt.Sprintf("\n- %s", r.Message))
 	}
-	message = sb.String()
-
-	effectiveFallback = "allow"
-	for _, r := range matched {
-		if r.EffectiveFallback(globalFallback) == "deny" {
-			effectiveFallback = "deny"
-			break
-		}
-	}
-	return message, effectiveFallback
+	return sb.String(), globalFallback
 }

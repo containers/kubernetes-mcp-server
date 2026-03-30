@@ -17,7 +17,7 @@ func (s *MatchSuite) TestMatchToolLevelRules() {
 		rules := []api.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}
-		matched := MatchToolLevelRules(rules, "helm_uninstall", nil, nil)
+		matched := MatchToolLevelRules(rules, "helm_uninstall", nil)
 		s.Require().Len(matched, 1)
 		s.Equal("uninstall", matched[0].Message)
 	})
@@ -25,75 +25,35 @@ func (s *MatchSuite) TestMatchToolLevelRules() {
 		rules := []api.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}
-		matched := MatchToolLevelRules(rules, "pods_list", nil, nil)
+		matched := MatchToolLevelRules(rules, "pods_list", nil)
 		s.Empty(matched)
-	})
-	s.Run("matches by tool name and input", func() {
-		rules := []api.ConfirmationRule{
-			{Tool: "resources_delete", Input: map[string]any{"namespace": "kube-system"}, Message: "delete in kube-system"},
-		}
-		args := map[string]any{"namespace": "kube-system", "name": "my-pod"}
-		matched := MatchToolLevelRules(rules, "resources_delete", args, nil)
-		s.Require().Len(matched, 1)
-	})
-	s.Run("does not match when input value differs", func() {
-		rules := []api.ConfirmationRule{
-			{Tool: "resources_delete", Input: map[string]any{"namespace": "kube-system"}, Message: "msg"},
-		}
-		args := map[string]any{"namespace": "default"}
-		matched := MatchToolLevelRules(rules, "resources_delete", args, nil)
-		s.Empty(matched)
-	})
-	s.Run("does not match when input key is missing from args", func() {
-		rules := []api.ConfirmationRule{
-			{Tool: "resources_delete", Input: map[string]any{"namespace": "kube-system"}, Message: "msg"},
-		}
-		args := map[string]any{"name": "my-pod"}
-		matched := MatchToolLevelRules(rules, "resources_delete", args, nil)
-		s.Empty(matched)
-	})
-	s.Run("matches numeric input values", func() {
-		rules := []api.ConfirmationRule{
-			{Tool: "scale", Input: map[string]any{"replicas": float64(0)}, Message: "scaling to zero"},
-		}
-		args := map[string]any{"replicas": float64(0)}
-		matched := MatchToolLevelRules(rules, "scale", args, nil)
-		s.Require().Len(matched, 1)
-	})
-	s.Run("matches boolean input values", func() {
-		rules := []api.ConfirmationRule{
-			{Tool: "apply", Input: map[string]any{"force": true}, Message: "force apply"},
-		}
-		args := map[string]any{"force": true}
-		matched := MatchToolLevelRules(rules, "apply", args, nil)
-		s.Require().Len(matched, 1)
 	})
 	s.Run("matches by destructive hint true", func() {
 		rules := []api.ConfirmationRule{
 			{Destructive: ptr.To(true), Message: "destructive"},
 		}
-		matched := MatchToolLevelRules(rules, "any_tool", nil, ptr.To(true))
+		matched := MatchToolLevelRules(rules, "any_tool", ptr.To(true))
 		s.Require().Len(matched, 1)
 	})
 	s.Run("does not match destructive rule when hint is false", func() {
 		rules := []api.ConfirmationRule{
 			{Destructive: ptr.To(true), Message: "destructive"},
 		}
-		matched := MatchToolLevelRules(rules, "any_tool", nil, ptr.To(false))
+		matched := MatchToolLevelRules(rules, "any_tool", ptr.To(false))
 		s.Empty(matched)
 	})
 	s.Run("does not match destructive rule when hint is nil", func() {
 		rules := []api.ConfirmationRule{
 			{Destructive: ptr.To(true), Message: "destructive"},
 		}
-		matched := MatchToolLevelRules(rules, "any_tool", nil, nil)
+		matched := MatchToolLevelRules(rules, "any_tool", nil)
 		s.Empty(matched)
 	})
 	s.Run("skips kube-level rules", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Message: "kube rule"},
 		}
-		matched := MatchToolLevelRules(rules, "any_tool", nil, nil)
+		matched := MatchToolLevelRules(rules, "any_tool", nil)
 		s.Empty(matched)
 	})
 	s.Run("returns multiple matches", func() {
@@ -101,7 +61,7 @@ func (s *MatchSuite) TestMatchToolLevelRules() {
 			{Tool: "helm_uninstall", Message: "tool match"},
 			{Destructive: ptr.To(true), Message: "destructive match"},
 		}
-		matched := MatchToolLevelRules(rules, "helm_uninstall", nil, ptr.To(true))
+		matched := MatchToolLevelRules(rules, "helm_uninstall", ptr.To(true))
 		s.Len(matched, 2)
 	})
 }
@@ -199,6 +159,14 @@ func (s *MatchSuite) TestMatchKubeLevelRules() {
 		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "critical-resource", "default")
 		s.Require().Len(matched, 1)
 	})
+	s.Run("namespace-only rule makes it kube-level", func() {
+		rules := []api.ConfirmationRule{
+			{Namespace: "kube-system", Message: "operating in kube-system"},
+		}
+		s.True(rules[0].IsKubeLevel())
+		matched := MatchKubeLevelRules(rules, "delete", "Pod", "", "v1", "", "kube-system")
+		s.Require().Len(matched, 1)
+	})
 	s.Run("returns multiple matches", func() {
 		rules := []api.ConfirmationRule{
 			{Verb: "delete", Message: "delete rule"},
@@ -217,13 +185,13 @@ func (s *MatchSuite) TestMergeMatchedRules() {
 	})
 	s.Run("single rule passes message through", func() {
 		matched := []api.ConfirmationRule{
-			{Message: "Deleting resource.", Fallback: "deny"},
+			{Message: "Deleting resource."},
 		}
-		message, fallback := MergeMatchedRules(matched, "allow")
+		message, fallback := MergeMatchedRules(matched, "deny")
 		s.Equal("Deleting resource.", message)
 		s.Equal("deny", fallback)
 	})
-	s.Run("single rule uses global fallback when unset", func() {
+	s.Run("single rule uses global fallback", func() {
 		matched := []api.ConfirmationRule{
 			{Message: "Deleting resource."},
 		}
@@ -240,23 +208,7 @@ func (s *MatchSuite) TestMergeMatchedRules() {
 		s.Contains(message, "- Destructive operation.")
 		s.Contains(message, "- Uninstalling Helm release.")
 	})
-	s.Run("deny wins over allow in mixed fallbacks", func() {
-		matched := []api.ConfirmationRule{
-			{Message: "msg1", Fallback: "allow"},
-			{Message: "msg2", Fallback: "deny"},
-		}
-		_, fallback := MergeMatchedRules(matched, "allow")
-		s.Equal("deny", fallback)
-	})
-	s.Run("all allow produces allow fallback", func() {
-		matched := []api.ConfirmationRule{
-			{Message: "msg1", Fallback: "allow"},
-			{Message: "msg2", Fallback: "allow"},
-		}
-		_, fallback := MergeMatchedRules(matched, "allow")
-		s.Equal("allow", fallback)
-	})
-	s.Run("global deny wins when rules have no override", func() {
+	s.Run("multiple rules use global fallback", func() {
 		matched := []api.ConfirmationRule{
 			{Message: "msg1"},
 			{Message: "msg2"},
@@ -266,30 +218,38 @@ func (s *MatchSuite) TestMergeMatchedRules() {
 	})
 }
 
-func (s *MatchSuite) TestNormalizeInput() {
-	s.Run("converts int64 to float64", func() {
-		input := map[string]any{"replicas": int64(3)}
-		result := NormalizeInput(input)
-		s.Equal(float64(3), result["replicas"])
+func (s *MatchSuite) TestConfirmationRuleValidation() {
+	s.Run("valid tool-level rule", func() {
+		rule := api.ConfirmationRule{Tool: "helm_uninstall", Message: "uninstall"}
+		s.NoError(rule.Validate())
 	})
-	s.Run("leaves float64 unchanged", func() {
-		input := map[string]any{"ratio": float64(1.5)}
-		result := NormalizeInput(input)
-		s.Equal(float64(1.5), result["ratio"])
+	s.Run("valid destructive rule", func() {
+		rule := api.ConfirmationRule{Destructive: ptr.To(true), Message: "destructive"}
+		s.NoError(rule.Validate())
 	})
-	s.Run("leaves strings unchanged", func() {
-		input := map[string]any{"namespace": "kube-system"}
-		result := NormalizeInput(input)
-		s.Equal("kube-system", result["namespace"])
+	s.Run("valid kube-level rule", func() {
+		rule := api.ConfirmationRule{Verb: "delete", Kind: "Pod", Message: "delete pod"}
+		s.NoError(rule.Validate())
 	})
-	s.Run("leaves booleans unchanged", func() {
-		input := map[string]any{"force": true}
-		result := NormalizeInput(input)
-		s.Equal(true, result["force"])
+	s.Run("valid namespace-only kube rule", func() {
+		rule := api.ConfirmationRule{Namespace: "kube-system", Message: "kube-system"}
+		s.NoError(rule.Validate())
 	})
-	s.Run("handles nil input", func() {
-		result := NormalizeInput(nil)
-		s.Nil(result)
+	s.Run("valid name-only kube rule", func() {
+		rule := api.ConfirmationRule{Name: "critical-resource", Message: "critical"}
+		s.NoError(rule.Validate())
+	})
+	s.Run("rejects mixed tool and kube fields", func() {
+		rule := api.ConfirmationRule{Tool: "resources_delete", Verb: "delete", Message: "mixed"}
+		s.Error(rule.Validate())
+	})
+	s.Run("rejects tool with namespace", func() {
+		rule := api.ConfirmationRule{Tool: "resources_delete", Namespace: "kube-system", Message: "mixed"}
+		s.Error(rule.Validate())
+	})
+	s.Run("rejects rule with no level fields", func() {
+		rule := api.ConfirmationRule{Message: "orphan rule"}
+		s.Error(rule.Validate())
 	})
 }
 

@@ -488,28 +488,27 @@ validation_enabled = true
 
 Prompt users for confirmation before dangerous actions. Rules operate at two levels:
 
-- **Tool-level** — matches on tool name, input arguments, or `DestructiveHint` annotation. Fires once before the tool handler runs.
-- **Kube-level** — matches on Kubernetes API verb, kind, group, version, or namespace. Fires per API call during handler execution.
+- **Tool-level** — matches on tool name or `DestructiveHint` annotation. Fires once before the tool handler runs.
+- **Kube-level** — matches on Kubernetes API verb, kind, group, version, name, or namespace. Fires per API call during handler execution.
 
-When a client doesn't support elicitation, the `fallback` determines behavior: `"allow"` proceeds silently, `"deny"` blocks the action. The global default is set via `confirmation_fallback` (defaults to `"allow"`). Per-rule `fallback` overrides the global default.
+When a client doesn't support elicitation, the `confirmation_fallback` determines behavior: `"allow"` proceeds silently (with a warning log), `"deny"` blocks the action. The default is `"allow"`.
 
-If multiple rules match at the same level, their messages are merged into a single prompt, and the most restrictive fallback wins (`"deny"` beats `"allow"`).
+If multiple rules match at the same level, their messages are merged into a single prompt.
 
 | Field | Type | Level | Description |
 |-------|------|-------|-------------|
 | `confirmation_fallback` | string | global | Default fallback: `"allow"` or `"deny"` (default: `"allow"`) |
 | `tool` | string | tool | Tool name to match (e.g. `"helm_uninstall"`) |
 | `destructive` | boolean | tool | Match tools with `DestructiveHint` annotation |
-| `input` | map | tool | Key-value pairs that must match tool arguments |
 | `verb` | string | kube | Kubernetes verb (`"get"`, `"delete"`, `"list"`, etc.) |
 | `kind` | string | kube | Resource kind (`"Secret"`, `"Deployment"`, etc.) |
 | `group` | string | kube | API group (`"apps"`, `""` for core, etc.) |
 | `version` | string | kube | API version (`"v1"`, `"v1beta1"`, etc.) |
-| `namespace` | string | both | Namespace to match |
+| `name` | string | kube | Resource name to match |
+| `namespace` | string | kube | Namespace to match |
 | `message` | string | both | Message shown in the confirmation prompt |
-| `fallback` | string | both | Per-rule fallback override: `"allow"` or `"deny"` |
 
-A rule must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`).
+A rule must be either tool-level or kube-level. It must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`, `name`, `namespace`), and must set at least one of these fields.
 
 **Examples:**
 
@@ -521,18 +520,10 @@ confirmation_fallback = "deny"
 tool = "helm_uninstall"
 message = "This will uninstall a Helm release."
 
-# Confirm before deleting resources in kube-system
-[[confirmation_rules]]
-tool = "resources_delete"
-message = "Deleting in kube-system."
-[confirmation_rules.input]
-namespace = "kube-system"
-
-# Confirm all destructive tool operations (allow if client can't prompt)
+# Confirm all destructive tool operations
 [[confirmation_rules]]
 destructive = true
 message = "Destructive operation."
-fallback = "allow"
 
 # Confirm Kubernetes delete calls in kube-system
 [[confirmation_rules]]
@@ -540,12 +531,11 @@ verb = "delete"
 namespace = "kube-system"
 message = "Deleting in kube-system."
 
-# Confirm reading Secrets (allow if client can't prompt)
+# Confirm reading Secrets
 [[confirmation_rules]]
 verb = "get"
 kind = "Secret"
 message = "Accessing a Secret."
-fallback = "allow"
 ```
 
 ### Toolset-Specific Configuration

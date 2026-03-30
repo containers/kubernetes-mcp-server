@@ -6,6 +6,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
+	"k8s.io/klog/v2"
 )
 
 // ErrConfirmationDenied is returned when the user declines a confirmation prompt
@@ -16,9 +17,9 @@ var ErrConfirmationDenied = errors.New("action requires confirmation")
 // Returns nil if no rules match or the user accepts. Returns an error if the user
 // declines or elicitation is not supported and the fallback is "deny".
 func CheckToolRules(ctx context.Context, provider api.ConfirmationRulesProvider, elicitor api.Elicitor,
-	toolName string, args map[string]any, destructiveHint *bool) error {
+	toolName string, destructiveHint *bool) error {
 
-	matched := MatchToolLevelRules(provider.GetConfirmationRules(), toolName, args, destructiveHint)
+	matched := MatchToolLevelRules(provider.GetConfirmationRules(), toolName, destructiveHint)
 	if len(matched) == 0 {
 		return nil
 	}
@@ -41,7 +42,7 @@ func CheckKubeRules(ctx context.Context, provider api.ConfirmationRulesProvider,
 
 // CheckConfirmation prompts the user for confirmation via the elicitor.
 // If the client does not support elicitation, the fallback determines behavior:
-// "deny" returns ErrConfirmationDenied, "allow" returns nil.
+// "deny" returns ErrConfirmationDenied, "allow" returns nil (with a warning log).
 func CheckConfirmation(ctx context.Context, elicitor api.Elicitor, message, fallback string) error {
 	result, err := elicitor.Elicit(ctx, &api.ElicitParams{
 		Message: message,
@@ -55,6 +56,7 @@ func CheckConfirmation(ctx context.Context, elicitor api.Elicitor, message, fall
 			if fallback == "deny" {
 				return ErrConfirmationDenied
 			}
+			klog.Warningf("Confirmation rules matched but client does not support elicitation, proceeding with fallback \"allow\": %s", message)
 			return nil
 		}
 		return err

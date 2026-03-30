@@ -51,6 +51,14 @@ func (s *ConfirmationRuleSuite) TestIsKubeLevel() {
 		r := ConfirmationRule{Version: "v1"}
 		s.True(r.IsKubeLevel())
 	})
+	s.Run("true when namespace is set", func() {
+		r := ConfirmationRule{Namespace: "kube-system"}
+		s.True(r.IsKubeLevel())
+	})
+	s.Run("true when name is set", func() {
+		r := ConfirmationRule{Name: "my-secret"}
+		s.True(r.IsKubeLevel())
+	})
 	s.Run("false when only tool fields are set", func() {
 		r := ConfirmationRule{Tool: "helm_uninstall"}
 		s.False(r.IsKubeLevel())
@@ -70,10 +78,6 @@ func (s *ConfirmationRuleSuite) TestValidate() {
 		r := ConfirmationRule{Verb: "delete", Kind: "Pod", Message: "delete pod"}
 		s.NoError(r.Validate())
 	})
-	s.Run("valid tool-level rule with namespace in input", func() {
-		r := ConfirmationRule{Tool: "resources_delete", Input: map[string]any{"namespace": "kube-system"}, Message: "delete"}
-		s.NoError(r.Validate())
-	})
 	s.Run("valid kube-level rule with namespace", func() {
 		r := ConfirmationRule{Verb: "delete", Namespace: "kube-system", Message: "delete"}
 		s.NoError(r.Validate())
@@ -90,24 +94,13 @@ func (s *ConfirmationRuleSuite) TestValidate() {
 		r := ConfirmationRule{Tool: "some_tool", Group: "apps", Message: "mixed"}
 		s.Error(r.Validate())
 	})
-	s.Run("no fields is valid", func() {
+	s.Run("error when tool and namespace are both set", func() {
+		r := ConfirmationRule{Tool: "some_tool", Namespace: "kube-system", Message: "mixed"}
+		s.Error(r.Validate())
+	})
+	s.Run("error when no level fields are set", func() {
 		r := ConfirmationRule{Message: "generic"}
-		s.NoError(r.Validate())
-	})
-}
-
-func (s *ConfirmationRuleSuite) TestEffectiveFallback() {
-	s.Run("returns rule fallback when set", func() {
-		r := ConfirmationRule{Fallback: "allow"}
-		s.Equal("allow", r.EffectiveFallback("deny"))
-	})
-	s.Run("returns global default when rule fallback is empty", func() {
-		r := ConfirmationRule{}
-		s.Equal("deny", r.EffectiveFallback("deny"))
-	})
-	s.Run("returns global allow default when rule fallback is empty", func() {
-		r := ConfirmationRule{}
-		s.Equal("allow", r.EffectiveFallback("allow"))
+		s.Error(r.Validate())
 	})
 }
 
