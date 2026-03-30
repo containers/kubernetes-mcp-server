@@ -366,3 +366,16 @@ func (c *StaticConfig) IsValidationEnabled() bool {
 func (c *StaticConfig) IsRequireTLS() bool {
 	return c.RequireTLS
 }
+
+// ValidateRequireTLS validates outbound URL schemes when RequireTLS is enabled.
+// Called at startup (root.go Validate) and on config reload (ReloadConfiguration).
+func (c *StaticConfig) ValidateRequireTLS() error {
+	if !c.RequireTLS {
+		return nil
+	}
+	return ValidateURLsRequireTLS(map[string]string{
+		"authorization_url": c.AuthorizationURL,
+		"server_url":        c.ServerURL,
+		"sse_base_url":      c.SSEBaseURL,
+	})
+}

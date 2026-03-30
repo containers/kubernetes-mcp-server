@@ -343,14 +343,8 @@ func (m *MCPServerOptions) Validate() error {
 		}
 	}
 	// Validate outbound URLs when require_tls is enabled
-	if m.StaticConfig.RequireTLS {
-		if err := config.ValidateURLsRequireTLS(map[string]string{
-			"authorization_url": m.StaticConfig.AuthorizationURL,
-			"server_url":        m.StaticConfig.ServerURL,
-			"sse_base_url":      m.StaticConfig.SSEBaseURL,
-		}); err != nil {
-			return err
-		}
+	if err := m.StaticConfig.ValidateRequireTLS(); err != nil {
+		return err
 	}
 	return nil
 }

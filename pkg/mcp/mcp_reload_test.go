@@ -209,6 +209,57 @@ func (s *ConfigReloadSuite) TestReloadUpdatesToolsets() {
 	s.True(helmToolFound, "helm tools should be available after reload")
 }
 
+func (s *ConfigReloadSuite) TestReloadRejectsHTTPURLsWhenRequireTLS() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
+	server, err := NewServer(Configuration{
+		StaticConfig: s.Cfg,
+	}, provider)
+	s.Require().NoError(err)
+	s.server = server
+
+	s.Run("reload with require_tls and HTTP authorization_url is rejected", func() {
+		newConfig := config.Default()
+		newConfig.RequireTLS = true
+		newConfig.AuthorizationURL = "http://example.com/auth"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "authorization_url")
+		s.Contains(err.Error(), "secure scheme required")
+	})
+
+	s.Run("reload with require_tls and HTTP server_url is rejected", func() {
+		newConfig := config.Default()
+		newConfig.RequireTLS = true
+		newConfig.ServerURL = "http://example.com:8080"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "server_url")
+		s.Contains(err.Error(), "secure scheme required")
+	})
+
+	s.Run("reload with require_tls and HTTPS URLs succeeds", func() {
+		newConfig := config.Default()
+		newConfig.RequireTLS = true
+		newConfig.AuthorizationURL = "https://example.com/auth"
+		newConfig.ServerURL = "https://example.com:8080"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.NoError(err)
+	})
+
+	s.Run("reload without require_tls allows HTTP URLs", func() {
+		newConfig := config.Default()
+		newConfig.RequireTLS = false
+		newConfig.AuthorizationURL = "http://example.com/auth"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.NoError(err)
+	})
+}
+
 func (s *ConfigReloadSuite) TestServerLifecycle() {
 	provider, err := kubernetes.NewProvider(s.Cfg)
 	s.Require().NoError(err)

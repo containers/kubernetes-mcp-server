@@ -3,6 +3,7 @@ package config
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -50,6 +51,57 @@ func (s *TLSSuite) TestValidateURLRequiresTLS() {
 		err := ValidateURLRequiresTLS("://invalid", "test_url")
 		s.Require().Error(err)
 		s.Contains(err.Error(), "invalid test_url")
+	})
+}
+
+func (s *TLSSuite) TestValidateURLsRequireTLS() {
+	s.Run("returns nil when all URLs are HTTPS", func() {
+		err := ValidateURLsRequireTLS(map[string]string{
+			"authorization_url": "https://example.com/auth",
+			"server_url":        "https://example.com:8080",
+		})
+		s.NoError(err)
+	})
+
+	s.Run("returns nil when all URLs are empty", func() {
+		err := ValidateURLsRequireTLS(map[string]string{
+			"authorization_url": "",
+			"server_url":        "",
+			"sse_base_url":      "",
+		})
+		s.NoError(err)
+	})
+
+	s.Run("returns error for single HTTP URL", func() {
+		err := ValidateURLsRequireTLS(map[string]string{
+			"authorization_url": "https://example.com/auth",
+			"server_url":        "http://example.com:8080",
+		})
+		s.Require().Error(err)
+		s.Contains(err.Error(), "server_url")
+		s.Contains(err.Error(), "secure scheme required")
+	})
+
+	s.Run("returns combined errors for multiple HTTP URLs in sorted order", func() {
+		err := ValidateURLsRequireTLS(map[string]string{
+			"server_url":        "http://example.com:8080",
+			"authorization_url": "http://example.com/auth",
+		})
+		s.Require().Error(err)
+		msg := err.Error()
+		s.Contains(msg, "authorization_url")
+		s.Contains(msg, "server_url")
+		// Verify sorted order: authorization_url should appear before server_url
+		s.Less(
+			strings.Index(msg, "authorization_url"),
+			strings.Index(msg, "server_url"),
+			"authorization_url error should appear before server_url (sorted order)",
+		)
+	})
+
+	s.Run("returns nil for empty map", func() {
+		err := ValidateURLsRequireTLS(map[string]string{})
+		s.NoError(err)
 	})
 }
 

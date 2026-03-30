@@ -485,6 +485,103 @@ func TestStateless(t *testing.T) {
 	})
 }
 
+func TestRequireTLSValidation(t *testing.T) {
+	t.Run("require-tls without TLS certs in HTTP mode returns error", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=8080", "--require-tls"})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "require_tls is enabled but TLS certificates are not configured")
+	})
+
+	t.Run("require-tls with TLS certs in HTTP mode succeeds", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=8080", "--require-tls", "--tls-cert", certPath, "--tls-key", keyPath})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+
+	t.Run("require-tls in STDIO mode does not require TLS certs", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--require-tls"})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+
+	t.Run("require-tls rejects HTTP authorization-url", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{
+			"--version", "--port=8080", "--require-tls",
+			"--tls-cert", certPath, "--tls-key", keyPath,
+			"--require-oauth",
+			"--authorization-url", "http://example.com/auth",
+			"--server-url", "https://example.com:8080",
+		})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "authorization_url")
+		assert.Contains(t, err.Error(), "secure scheme required")
+	})
+
+	t.Run("require-tls rejects HTTP server-url", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{
+			"--version", "--port=8080", "--require-tls",
+			"--tls-cert", certPath, "--tls-key", keyPath,
+			"--require-oauth",
+			"--authorization-url", "https://example.com/auth",
+			"--server-url", "http://example.com:8080",
+		})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "server_url")
+		assert.Contains(t, err.Error(), "secure scheme required")
+	})
+
+	t.Run("require-tls accepts all HTTPS URLs", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath := filepath.Join(tempDir, "cert.pem")
+		keyPath := filepath.Join(tempDir, "key.pem")
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{
+			"--version", "--port=8080", "--require-tls",
+			"--tls-cert", certPath, "--tls-key", keyPath,
+			"--require-oauth",
+			"--authorization-url", "https://example.com/auth",
+			"--server-url", "https://example.com:8080",
+		})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+}
+
 func TestTLSValidation(t *testing.T) {
 	t.Run("tls-cert without tls-key returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
