@@ -84,7 +84,7 @@ func MergeMatchedRules(matched []api.ConfirmationRule, globalFallback string) (m
 	var sb strings.Builder
 	sb.WriteString("Confirmation required:")
 	for _, r := range matched {
-		sb.WriteString(fmt.Sprintf("\n- %s", r.Message))
+		fmt.Fprintf(&sb, "\n- %s", r.Message)
 	}
 	return sb.String(), globalFallback
 }
