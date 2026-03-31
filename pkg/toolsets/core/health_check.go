@@ -263,7 +263,7 @@ func gatherNodeDiagnostics(params api.PromptHandlerParams) (string, error) {
 		}
 	}
 
-	sb.WriteString(fmt.Sprintf("**Total:** %d | **Healthy:** %d\n\n", totalNodes, healthyNodes))
+	fmt.Fprintf(&sb, "**Total:** %d | **Healthy:** %d\n\n", totalNodes, healthyNodes)
 	if len(nodesWithIssues) > 0 {
 		sb.WriteString(strings.Join(nodesWithIssues, "\n\n"))
 	} else {
@@ -330,7 +330,7 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**Total:** %d | **With Issues:** %d\n\n", totalPods, len(problemPods)))
+	fmt.Fprintf(&sb, "**Total:** %d | **With Issues:** %d\n\n", totalPods, len(problemPods))
 	if len(problemPods) > 0 {
 		sb.WriteString(strings.Join(problemPods, "\n\n"))
 	} else {
@@ -423,11 +423,11 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**%ss with Issues:** %d\n\n", kind, len(workloadsWithIssues)))
+	fmt.Fprintf(&sb, "**%ss with Issues:** %d\n\n", kind, len(workloadsWithIssues))
 	if len(workloadsWithIssues) > 0 {
 		sb.WriteString(strings.Join(workloadsWithIssues, "\n\n"))
 	} else {
-		sb.WriteString(fmt.Sprintf("*No %s issues detected*", kind))
+		fmt.Fprintf(&sb, "*No %s issues detected*", kind)
 	}
 
 	return sb.String(), nil
@@ -454,7 +454,7 @@ func gatherPVCDiagnostics(params api.PromptHandlerParams, namespace string) (str
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**PVCs with Issues:** %d\n\n", len(pvcsWithIssues)))
+	fmt.Fprintf(&sb, "**PVCs with Issues:** %d\n\n", len(pvcsWithIssues))
 	if len(pvcsWithIssues) > 0 {
 		sb.WriteString(strings.Join(pvcsWithIssues, "\n\n"))
 	} else {
@@ -528,7 +528,7 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**Operators with Issues:** %d\n\n", len(operatorsWithIssues)))
+	fmt.Fprintf(&sb, "**Operators with Issues:** %d\n\n", len(operatorsWithIssues))
 	if len(operatorsWithIssues) > 0 {
 		sb.WriteString(strings.Join(operatorsWithIssues, "\n\n"))
 	} else {
@@ -608,7 +608,7 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**Warnings:** %d | **Errors:** %d\n\n", totalWarnings, totalErrors))
+	fmt.Fprintf(&sb, "**Warnings:** %d | **Errors:** %d\n\n", totalWarnings, totalErrors)
 	if len(recentEvents) > 0 {
 		sb.WriteString(strings.Join(recentEvents, "\n\n"))
 	} else {
@@ -623,7 +623,7 @@ func formatHealthCheckPrompt(diag *clusterDiagnostics) string {
 	var sb strings.Builder
 
 	sb.WriteString("# Cluster Health Check Diagnostic Data\n\n")
-	sb.WriteString(fmt.Sprintf("**Collection Time:** %s\n", diag.CollectionTime.Format(time.RFC3339)))
+	fmt.Fprintf(&sb, "**Collection Time:** %s\n", diag.CollectionTime.Format(time.RFC3339))
 
 	// Show namespace warning prominently if present
 	if diag.NamespaceWarning != "" {
@@ -634,9 +634,9 @@ func formatHealthCheckPrompt(diag *clusterDiagnostics) string {
 	}
 
 	if diag.NamespaceScoped {
-		sb.WriteString(fmt.Sprintf("**Scope:** Namespace `%s`\n", diag.TargetNamespace))
+		fmt.Fprintf(&sb, "**Scope:** Namespace `%s`\n", diag.TargetNamespace)
 	} else {
-		sb.WriteString(fmt.Sprintf("**Scope:** All namespaces (Total: %d)\n", diag.TotalNamespaces))
+		fmt.Fprintf(&sb, "**Scope:** All namespaces (Total: %d)\n", diag.TotalNamespaces)
 	}
 	sb.WriteString("\n")
 

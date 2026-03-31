@@ -45,10 +45,10 @@ type ValidationError struct {
 // Error implements the error interface.
 func (e *ValidationError) Error() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Validation Error [%s]: %s", e.Code, e.Message))
+	fmt.Fprintf(&sb, "Validation Error [%s]: %s", e.Code, e.Message)
 
 	if e.Field != "" {
-		sb.WriteString(fmt.Sprintf("\n  Field: %s", e.Field))
+		fmt.Fprintf(&sb, "\n  Field: %s", e.Field)
 	}
 
 	return sb.String()

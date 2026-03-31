@@ -61,9 +61,15 @@ func (p *kubeConfigClusterProvider) reset() error {
 
 	rawConfig, err := m.kubernetes.clientCmdConfig.RawConfig()
 	if err != nil {
+		m.Close()
 		return err
 	}
 
+	for _, old := range p.managers {
+		if old != nil {
+			old.Close()
+		}
+	}
 	p.managers = map[string]*Manager{
 		rawConfig.CurrentContext: m, // we already initialized a manager for the default context, let's use it
 	}
@@ -103,6 +109,10 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 
 func (p *kubeConfigClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.managers[p.defaultContext].IsOpenShift(ctx)
+}
+
+func (p *kubeConfigClusterProvider) IsMultiTarget() bool {
+	return len(p.managers) > 1
 }
 
 func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, error) {

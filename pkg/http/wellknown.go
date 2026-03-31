@@ -3,11 +3,25 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"k8s.io/klog/v2"
 )
+
+const maxWellKnownResponseSize = 1 << 20 // 1 MB
+
+var allowedResponseHeaders = map[string]bool{
+	"Cache-Control": true,
+	"Date":          true,
+	"Etag":          true,
+	"Expires":       true,
+	"Last-Modified": true,
+	"Pragma":        true,
+}
 
 const (
 	oauthAuthorizationServerEndpoint = "/.well-known/oauth-authorization-server"
@@ -36,7 +50,8 @@ func WellKnownHandler(staticConfig *config.StaticConfig, httpClient *http.Client
 		authorizationUrl = strings.TrimSuffix(authorizationUrl, "/")
 	}
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		// Create a TLS-enforcing client instead of using http.DefaultClient
+		httpClient = config.NewTLSEnforcingClient(nil, staticConfig.IsRequireTLS)
 	}
 	return &WellKnown{
 		authorizationUrl:                 authorizationUrl,
@@ -51,21 +66,29 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		http.Error(writer, "Authorization URL is not configured", http.StatusNotFound)
 		return
 	}
-	req, err := http.NewRequest(request.Method, w.authorizationUrl+request.URL.EscapedPath(), nil)
+	upstreamURL, err := url.JoinPath(w.authorizationUrl, request.URL.EscapedPath())
+	if err != nil || !strings.HasPrefix(upstreamURL, w.authorizationUrl+"/") {
+		http.Error(writer, "Invalid well-known path", http.StatusBadRequest)
+		return
+	}
+	req, err := http.NewRequest(request.Method, upstreamURL, nil)
 	if err != nil {
-		http.Error(writer, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
+		klog.V(1).Infof("Well-known proxy failed to create request for %s: %v", request.URL.Path, err)
+		http.Error(writer, "Failed to create upstream request", http.StatusInternalServerError)
 		return
 	}
 	resp, err := w.httpClient.Do(req.WithContext(request.Context()))
 	if err != nil {
-		http.Error(writer, "Failed to perform request: "+err.Error(), http.StatusInternalServerError)
+		klog.V(1).Infof("Well-known proxy request failed for %s: %v", request.URL.Path, err)
+		http.Error(writer, "Failed to fetch upstream well-known metadata", http.StatusInternalServerError)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var resourceMetadata map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&resourceMetadata)
+	err = json.NewDecoder(io.LimitReader(resp.Body, maxWellKnownResponseSize)).Decode(&resourceMetadata)
 	if err != nil {
-		http.Error(writer, "Failed to read response body: "+err.Error(), http.StatusInternalServerError)
+		klog.V(1).Infof("Well-known proxy failed to decode response for %s: %v", request.URL.Path, err)
+		http.Error(writer, "Failed to read upstream response", http.StatusInternalServerError)
 		return
 	}
 	if w.disableDynamicClientRegistration {
@@ -77,10 +100,14 @@ func (w WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	}
 	body, err := json.Marshal(resourceMetadata)
 	if err != nil {
-		http.Error(writer, "Failed to marshal response body: "+err.Error(), http.StatusInternalServerError)
+		klog.V(1).Infof("Well-known proxy failed to marshal response for %s: %v", request.URL.Path, err)
+		http.Error(writer, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	for key, values := range resp.Header {
+		if !allowedResponseHeaders[http.CanonicalHeaderKey(key)] {
+			continue
+		}
 		for _, value := range values {
 			writer.Header().Add(key, value)
 		}

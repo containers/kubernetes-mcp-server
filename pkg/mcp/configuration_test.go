@@ -89,6 +89,13 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 			s.Equalf("fake", decoded.AuthInfos[0].Name, "fake-auth not found: %v", decoded.AuthInfos)
 		})
 	})
+	s.Run("configuration_view with minified as string does not panic", func() {
+		toolResult, err := s.CallTool("configuration_view", map[string]interface{}{
+			"minified": "false",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed")
+	})
 	s.Run("configuration_view(minified=false)", func() {
 		toolResult, err := s.CallTool("configuration_view", map[string]interface{}{
 			"minified": false,

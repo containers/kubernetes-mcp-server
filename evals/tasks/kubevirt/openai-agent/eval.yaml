@@ -3,8 +3,8 @@ metadata:
   name: "kubevirt-basic-operations"
 config:
   agent:
-    type: "builtin.openai-agent"
-    model: "gemini-2.0-flash"
+    type: "builtin.llm-agent"
+    model: "google:gemini-2.0-flash"
   mcpConfigFile: ../../../mcp-config.yaml
   extensions:
     kubernetes:

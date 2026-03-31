@@ -48,32 +48,37 @@ func (s *ToolFilterSuite) TestCompositeFilter() {
 }
 
 func (s *ToolFilterSuite) TestShouldIncludeTargetListTool() {
-	s.Run("non-target-list-provider tools: returns true ", func() {
-		filter := ShouldIncludeTargetListTool("any", []string{"a", "b", "c", "d", "e", "f"})
+	s.Run("non-target-list-provider tools: returns true", func() {
+		filter := ShouldIncludeTargetListTool("any", true)
 		tool := api.ServerTool{Tool: api.Tool{Name: "test"}, TargetListProvider: ptr.To(false)}
 		s.True(filter(tool))
 	})
 	s.Run("target-list-provider tools", func() {
-		s.Run("with targets == 1: returns false", func() {
-			filter := ShouldIncludeTargetListTool("any", []string{"1"})
+		s.Run("with single cluster: returns false", func() {
+			filter := ShouldIncludeTargetListTool("any", false)
 			tool := api.ServerTool{Tool: api.Tool{Name: "test"}, TargetListProvider: ptr.To(true)}
 			s.False(filter(tool))
 		})
-		s.Run("with targets == 1", func() {
+		s.Run("with multiple clusters", func() {
 			s.Run("and tool is configuration_contexts_list and targetName is not context: returns false", func() {
-				filter := ShouldIncludeTargetListTool("not_context", []string{"1"})
+				filter := ShouldIncludeTargetListTool("not_context", true)
 				tool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}, TargetListProvider: ptr.To(true)}
 				s.False(filter(tool))
 			})
-			s.Run("and tool is configuration_contexts_list and targetName is context: returns false", func() {
-				filter := ShouldIncludeTargetListTool("context", []string{"1"})
+			s.Run("and tool is configuration_contexts_list and targetName is context: returns true", func() {
+				filter := ShouldIncludeTargetListTool("context", true)
 				tool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}, TargetListProvider: ptr.To(true)}
+				s.True(filter(tool))
+			})
+			s.Run("and tool is mutated targets_list and targetName is context: returns false", func() {
+				filter := ShouldIncludeTargetListTool("context", true)
+				tool := api.ServerTool{Tool: api.Tool{Name: "context_list"}, TargetListProvider: ptr.To(true)}
 				s.False(filter(tool))
 			})
-			s.Run("and tool is not configuration_contexts_list: returns false", func() {
-				filter := ShouldIncludeTargetListTool("any", []string{"1"})
-				tool := api.ServerTool{Tool: api.Tool{Name: "other_tool"}, TargetListProvider: ptr.To(true)}
-				s.False(filter(tool))
+			s.Run("and tool is mutated targets_list and targetName is not context: returns true", func() {
+				filter := ShouldIncludeTargetListTool("cluster", true)
+				tool := api.ServerTool{Tool: api.Tool{Name: "cluster_list"}, TargetListProvider: ptr.To(true)}
+				s.True(filter(tool))
 			})
 		})
 	})

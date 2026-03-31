@@ -37,13 +37,17 @@ func (s *WellknownSuite) SetupTest() {
 	s.StaticConfig.ClusterProviderStrategy = api.ClusterProviderKubeConfig
 	s.TestServerPayload = defaultWellknownPayload
 	s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.EscapedPath(), "/.well-known/") {
+		if !strings.Contains(r.URL.EscapedPath(), "/.well-known/") {
 			http.NotFound(w, r)
 			return
 		}
 		s.ReceivedRequest = r.Clone(s.T().Context())
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Custom-Backend-Header", "backend-value")
+		w.Header().Set("Server", "TestIdP/1.0")
+		w.Header().Set("Set-Cookie", "session=abc123")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 		_, _ = w.Write([]byte(s.TestServerPayload))
 	}))
 	s.StaticConfig.AuthorizationURL = s.TestServer.URL
@@ -98,20 +102,25 @@ func (s *WellknownSuite) TestCorsHeaders() {
 	}
 }
 
-func (s *WellknownSuite) TestResponseHeaderPropagation() {
+func (s *WellknownSuite) TestResponseHeaderFiltering() {
 	s.StaticConfig.RequireOAuth = true
 	s.StartServer()
 
 	for _, path := range wellknownPaths {
-		s.Run("Well-known proxy propagates backend headers for "+path, func() {
-			req, err := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path), nil)
-			s.NoError(err, "Failed to create request")
-
-			resp, err := http.DefaultClient.Do(req)
-			s.Require().NoErrorf(err, "Failed to get %s endpoint", path)
+		s.Run("propagates allowed headers for "+path, func() {
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
-
-			s.Equal("backend-value", resp.Header.Get("Custom-Backend-Header"), "Expected Custom-Backend-Header to be propagated from backend")
+			s.Equal("no-cache", resp.Header.Get("Cache-Control"))
+		})
+		s.Run("does not propagate non-allowed headers for "+path, func() {
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			s.Require().NoError(err)
+			s.T().Cleanup(func() { _ = resp.Body.Close() })
+			s.Empty(resp.Header.Get("Custom-Backend-Header"), "Custom backend headers should not be forwarded")
+			s.Empty(resp.Header.Get("Server"), "Server header should not be forwarded")
+			s.Empty(resp.Header.Get("Set-Cookie"), "Set-Cookie header should not be forwarded")
+			s.Empty(resp.Header.Get("Strict-Transport-Security"), "HSTS header should not be forwarded")
 		})
 	}
 }
@@ -245,6 +254,77 @@ func (s *WellknownSuite) TestOAuthScopesOverride() {
 				s.Contains(string(body), `"require_request_uri_registration":true`, "Expected require_request_uri_registration to be preserved")
 			})
 		}
+	})
+}
+
+func (s *WellknownSuite) TestPathTraversal() {
+	s.StaticConfig.RequireOAuth = true
+	s.StartServer()
+
+	traversalPaths := []string{
+		".well-known/oauth-authorization-server/../../admin",
+		".well-known/oauth-authorization-server/../../../etc/passwd",
+		".well-known/../secrets",
+	}
+	for _, path := range traversalPaths {
+		s.Run("rejects path traversal for "+path, func() {
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			s.Require().NoError(err)
+			s.T().Cleanup(func() { _ = resp.Body.Close() })
+			s.NotEqual(http.StatusOK, resp.StatusCode, "Path traversal request should not succeed")
+		})
+	}
+}
+
+func (s *WellknownSuite) TestUpstreamPathStaysWithinWellKnown() {
+	s.StaticConfig.RequireOAuth = true
+	s.StartServer()
+
+	for _, path := range wellknownPaths {
+		s.Run("upstream request path starts with /.well-known/ for "+path, func() {
+			s.ReceivedRequest = nil
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			s.Require().NoError(err)
+			s.T().Cleanup(func() { _ = resp.Body.Close() })
+			s.Require().NotNil(s.ReceivedRequest)
+			s.True(
+				strings.HasPrefix(s.ReceivedRequest.URL.Path, "/.well-known/"),
+				"Upstream request path %q should start with /.well-known/", s.ReceivedRequest.URL.Path,
+			)
+		})
+	}
+}
+
+func (s *WellknownSuite) TestAuthorizationURLWithBasePath() {
+	s.StaticConfig.RequireOAuth = true
+	s.StaticConfig.AuthorizationURL = s.TestServer.URL + "/realms/openshift"
+	s.StartServer()
+
+	for _, path := range wellknownPaths {
+		s.Run("proxies correctly with base path for "+path, func() {
+			s.ReceivedRequest = nil
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			s.Require().NoError(err)
+			s.T().Cleanup(func() { _ = resp.Body.Close() })
+			s.Require().NotNil(s.ReceivedRequest)
+			s.True(
+				strings.HasPrefix(s.ReceivedRequest.URL.Path, "/realms/openshift/.well-known/"),
+				"Upstream request path %q should start with /realms/openshift/.well-known/", s.ReceivedRequest.URL.Path,
+			)
+		})
+	}
+}
+
+func (s *WellknownSuite) TestOversizedUpstreamResponse() {
+	s.Run("rejects upstream response exceeding size limit", func() {
+		s.TestServerPayload = `{"data":"` + strings.Repeat("x", 2*1024*1024) + `"}`
+		s.StaticConfig.RequireOAuth = true
+		s.StartServer()
+
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, wellknownPaths[0]))
+		s.Require().NoError(err)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+		s.Equal(http.StatusInternalServerError, resp.StatusCode, "Oversized response should be rejected")
 	})
 }
 

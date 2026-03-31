@@ -50,6 +50,9 @@ func (p *singleClusterProvider) reset() error {
 			p.config.GetKubeConfigPath())
 	}
 
+	if p.manager != nil {
+		p.manager.Close()
+	}
 	var err error
 	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p.config) {
 		p.manager, err = NewInClusterManager(p.config)
@@ -72,6 +75,10 @@ func (p *singleClusterProvider) reset() error {
 
 func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
 	return p.manager.IsOpenShift(ctx)
+}
+
+func (p *singleClusterProvider) IsMultiTarget() bool {
+	return false
 }
 
 func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {

@@ -319,10 +319,10 @@ func fetchVirtLauncherPod(ctx context.Context, dynamicClient dynamic.Interface, 
 		podNames = append(podNames, pod.GetName())
 		yamlStr, err := output.MarshalYaml(&pod)
 		if err != nil {
-			result.WriteString(fmt.Sprintf("*Error marshaling pod %s: %v*\n\n", pod.GetName(), err))
+			fmt.Fprintf(&result, "*Error marshaling pod %s: %v*\n\n", pod.GetName(), err)
 			continue
 		}
-		result.WriteString(fmt.Sprintf("#### %s\n\n```yaml\n%s```\n\n", pod.GetName(), yamlStr))
+		fmt.Fprintf(&result, "#### %s\n\n```yaml\n%s```\n\n", pod.GetName(), yamlStr)
 	}
 
 	return result.String(), podNames
@@ -340,7 +340,7 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 
 	containerName := "compute"
 	for _, podName := range podNames {
-		result.WriteString(fmt.Sprintf("#### Pod: %s\n\n", podName))
+		fmt.Fprintf(&result, "#### Pod: %s\n\n", podName)
 
 		// Fetch last 50 lines of logs
 		logs, err := core.PodsLog(ctx, namespace, podName, containerName, false, 50)
@@ -348,7 +348,7 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 			return fmt.Sprintf("### virt-launcher Pod Logs\n\n*Error fetching logs: %v*", err)
 		}
 
-		result.WriteString(fmt.Sprintf("**Container: %s**\n\n```\n%s\n```\n\n", containerName, logs))
+		fmt.Fprintf(&result, "**Container: %s**\n\n```\n%s\n```\n\n", containerName, logs)
 	}
 
 	return result.String()

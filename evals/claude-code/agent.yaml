@@ -2,4 +2,4 @@ kind: Agent
 metadata:
   name: "claude-code-acp"
 acp:
-  cmd: "claude-code-acp"
+  cmd: "claude-agent-acp"

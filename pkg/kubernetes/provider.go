@@ -19,6 +19,12 @@ type Provider interface {
 	// For the kubecontext case, a user might be targeting both an OpenShift flavored cluster and a vanilla Kubernetes cluster.
 	// See: https://github.com/containers/kubernetes-mcp-server/pull/372#discussion_r2421592315
 	api.Openshift
+	// IsMultiTarget reports whether the provider is configured for multiple targets.
+	// Unlike GetTargets, it does not require a user-scoped context and should be
+	// implementable without expensive lookups.
+	// Note that GetTargets may return fewer targets than the provider is configured for
+	// (e.g. due to user-scoped access restrictions).
+	IsMultiTarget() bool
 	GetTargets(ctx context.Context) ([]string, error)
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	GetDefaultTarget() string

@@ -131,19 +131,19 @@ jobs:
           case "$SUITE" in
             kubevirt)
               echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
-              echo "toolsets=kubevirt" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,kubevirt" >> $GITHUB_OUTPUT
               ;;
             kiali)
               echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
-              echo "toolsets=kiali" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,kiali" >> $GITHUB_OUTPUT
               ;;
             tekton)
               echo "label-selector=suite=tekton" >> $GITHUB_OUTPUT
-              echo "toolsets=tekton" >> $GITHUB_OUTPUT
+              echo "toolsets=core,tekton" >> $GITHUB_OUTPUT
               ;;
             all)
               echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
-              echo "toolsets=kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
@@ -194,7 +194,7 @@ jobs:
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.10
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.12
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           mcpchecker-version: 'latest'

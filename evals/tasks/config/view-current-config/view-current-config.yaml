@@ -1,6 +1,8 @@
 kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
+  labels:
+    suite: config
   name: "view-current-config"
   difficulty: easy
 spec:

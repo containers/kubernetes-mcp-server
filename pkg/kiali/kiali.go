@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 )
@@ -21,11 +22,15 @@ type Kiali struct {
 	kialiURL             string
 	kialiInsecure        bool
 	certificateAuthority string
+	requireTLS           func() bool
 }
 
 // NewKiali creates a new Kiali instance
-func NewKiali(configProvider api.ExtendedConfigProvider, kubernetes *rest.Config) *Kiali {
-	kiali := &Kiali{bearerToken: kubernetes.BearerToken}
+func NewKiali(configProvider api.BaseConfig, kubernetes *rest.Config) *Kiali {
+	kiali := &Kiali{
+		bearerToken: kubernetes.BearerToken,
+		requireTLS:  configProvider.IsRequireTLS,
+	}
 	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
 		if kc, ok := cfg.(*Config); ok && kc != nil {
 			kiali.kialiURL = kc.Url
@@ -81,8 +86,9 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 }
 
 func (k *Kiali) createHTTPClient() *http.Client {
-	// Base TLS configuration, optionally extended with a custom CA
+	// Base TLS configuration with minimum version for security
 	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: k.kialiInsecure,
 	}
 
@@ -92,11 +98,11 @@ func (k *Kiali) createHTTPClient() *http.Client {
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
 			klog.Errorf("failed to read CA certificate from file %s: %v; proceeding without custom CA", caValue, err)
-			return &http.Client{
+			return k.wrapWithTLSEnforcement(&http.Client{
 				Transport: &http.Transport{
 					TLSClientConfig: tlsConfig,
 				},
-			}
+			})
 		}
 
 		// Start with the host system pool when possible so we don't drop system roots
@@ -113,11 +119,19 @@ func (k *Kiali) createHTTPClient() *http.Client {
 		}
 	}
 
-	return &http.Client{
+	return k.wrapWithTLSEnforcement(&http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: tlsConfig,
 		},
+	})
+}
+
+// wrapWithTLSEnforcement wraps the HTTP client with TLS enforcement if require_tls is configured.
+func (k *Kiali) wrapWithTLSEnforcement(client *http.Client) *http.Client {
+	if k.requireTLS == nil {
+		return client
 	}
+	return config.NewTLSEnforcingClient(client, k.requireTLS)
 }
 
 // CurrentAuthorizationHeader returns the Authorization header value that the

@@ -3,6 +3,9 @@ package helm
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"helm.sh/helm/v3/pkg/action"
@@ -29,7 +32,10 @@ func NewHelm(kubernetes Kubernetes) *Helm {
 	return &Helm{kubernetes: kubernetes}
 }
 
-func (h *Helm) Install(ctx context.Context, chart string, values map[string]interface{}, name string, namespace string) (string, error) {
+func (h *Helm) Install(ctx context.Context, chart string, values map[string]interface{}, name string, namespace string, helmCfg *Config) (string, error) {
+	if err := validateChartReference(chart, helmCfg); err != nil {
+		return "", err
+	}
 	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
 	if err != nil {
 		return "", err
@@ -117,6 +123,45 @@ func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configur
 	}
 	cfg.RegistryClient = registryClient
 	return cfg, cfg.Init(h.kubernetes, applicableNamespace, "", klog.V(5).Infof)
+}
+
+// validateChartReference blocks chart references using dangerous URL schemes.
+// Only oci:// and https:// URLs are allowed. Non-URL references (e.g. "stable/grafana")
+// are permitted as they resolve through Helm's local repo configuration.
+// When a Config with AllowedRegistries is provided, URL-based chart references
+// must prefix-match an entry in the allowlist, and non-URL references are rejected.
+func validateChartReference(chart string, cfg *Config) error {
+	u, err := url.Parse(chart)
+	if err != nil || u.Scheme == "" || len(u.Scheme) == 1 {
+		// Non-URL references (e.g. "stable/grafana", local paths, Windows drive letters like D:\...)
+		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
+			return fmt.Errorf("chart reference %q is not allowed: only registry URLs from the allowed list are permitted when allowed_registries is configured", chart)
+		}
+		return nil
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "oci", "https":
+		if cfg != nil && len(cfg.AllowedRegistries) > 0 {
+			cleaned := path.Clean(u.Path)
+			if cleaned == "." {
+				cleaned = ""
+			}
+			normalized := strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + cleaned
+			for _, allowed := range cfg.AllowedRegistries {
+				if normalized == allowed || strings.HasPrefix(normalized, allowed+"/") {
+					return nil
+				}
+			}
+			return fmt.Errorf("chart reference %q is not allowed: does not match any entry in allowed_registries", chart)
+		}
+		return nil
+	case "http":
+		return fmt.Errorf("chart reference %q is not allowed: http:// scheme is blocked, use https:// or oci://", chart)
+	case "file":
+		return fmt.Errorf("chart reference %q is not allowed: file:// scheme is blocked", chart)
+	default:
+		return fmt.Errorf("chart reference %q is not allowed: only oci:// and https:// schemes are permitted", chart)
+	}
 }
 
 func simplify(release ...*release.Release) []map[string]interface{} {

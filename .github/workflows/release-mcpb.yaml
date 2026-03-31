@@ -1,0 +1,126 @@
+name: Publish MCPB Bundles
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g., v0.0.51)'
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write  # Required to upload assets to the GitHub release
+
+jobs:
+  mcpb:
+    name: Publish MCPB Bundles
+    if: github.repository == 'containers/kubernetes-mcp-server' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: darwin
+            arch: arm64
+            go_arch: arm64
+            binary_suffix: ""
+          - os: darwin
+            arch: x64
+            go_arch: amd64
+            binary_suffix: ""
+          - os: linux
+            arch: arm64
+            go_arch: arm64
+            binary_suffix: ""
+          - os: linux
+            arch: x64
+            go_arch: amd64
+            binary_suffix: ""
+          - os: windows
+            arch: arm64
+            go_arch: arm64
+            binary_suffix: ".exe"
+          - os: windows
+            arch: x64
+            go_arch: amd64
+            binary_suffix: ".exe"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Get version and tag
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$HEAD_BRANCH"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          # Strip the v prefix
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Download binary from GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          BINARY_NAME: kubernetes-mcp-server-${{ matrix.os }}-${{ matrix.go_arch }}${{ matrix.binary_suffix }}
+        run: |
+          gh release download "$TAG" --pattern "$BINARY_NAME" --dir bundle
+
+      - name: Prepare bundle
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          OS: ${{ matrix.os }}
+          BINARY_SUFFIX: ${{ matrix.binary_suffix }}
+          BINARY_NAME: kubernetes-mcp-server-${{ matrix.os }}-${{ matrix.go_arch }}${{ matrix.binary_suffix }}
+        run: |
+          # Map Go OS names to MCPB platform names
+          MCPB_PLATFORM="$OS"
+          if [ "$OS" = "windows" ]; then
+            MCPB_PLATFORM="win32"
+          fi
+          # Update manifest.json with the release version and platform
+          ENTRY_POINT="kubernetes-mcp-server${BINARY_SUFFIX}"
+          jq --arg v "$VERSION" --arg p "$MCPB_PLATFORM" --arg ep "$ENTRY_POINT" --arg cmd "\${__dirname}/$ENTRY_POINT" \
+            '.version = $v | .compatibility.platforms = [$p] | .server.entry_point = $ep | .server.mcp_config.command = $cmd' \
+            manifest.json > bundle/manifest.json
+          # Rename binary to match the entry_point in manifest.json
+          mv "bundle/$BINARY_NAME" "bundle/$ENTRY_POINT"
+          chmod +x "bundle/$ENTRY_POINT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Pack MCPB bundle
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          OS: ${{ matrix.os }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          npx --yes @anthropic-ai/mcpb pack bundle "kubernetes-mcp-server-${VERSION}-${OS}-${ARCH}.mcpb"
+
+      - name: Upload MCPB bundle to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          OS: ${{ matrix.os }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          gh release upload "$TAG" "kubernetes-mcp-server-${VERSION}-${OS}-${ARCH}.mcpb" --clobber

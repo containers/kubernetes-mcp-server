@@ -165,6 +165,13 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	return derived, nil
 }
 
+// Close releases HTTP transport resources held by this manager.
+func (m *Manager) Close() {
+	if m != nil {
+		m.kubernetes.close()
+	}
+}
+
 // Invalidate invalidates the cached discovery information.
 func (m *Manager) Invalidate() {
 	m.kubernetes.DiscoveryClient().Invalidate()

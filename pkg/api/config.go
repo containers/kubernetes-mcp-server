@@ -58,6 +58,11 @@ type ValidationEnabledProvider interface {
 	IsValidationEnabled() bool
 }
 
+// RequireTLSProvider provides access to require_tls setting.
+type RequireTLSProvider interface {
+	IsRequireTLS() bool
+}
+
 type BaseConfig interface {
 	AuthProvider
 	ClusterProvider
@@ -66,4 +71,5 @@ type BaseConfig interface {
 	ExtendedConfigProvider
 	StsConfigProvider
 	ValidationEnabledProvider
+	RequireTLSProvider
 }

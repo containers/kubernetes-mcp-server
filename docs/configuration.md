@@ -135,6 +135,7 @@ The server will:
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
+| `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
 
 **Example:**
 ```toml
@@ -146,6 +147,9 @@ stateless = true
 # Enable TLS for HTTPS
 tls_cert = "/etc/tls/tls.crt"
 tls_key = "/etc/tls/tls.key"
+
+# Enforce TLS for all connections (requires tls_cert and tls_key)
+require_tls = true
 ```
 
 ### Kubernetes Connection
@@ -553,6 +557,29 @@ url = "https://kiali.example.com"
 token = "your-kiali-token"
 ```
 
+**Example (Helm):**
+```toml
+[toolset_configs.helm]
+allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
+```
+
+#### Helm Configuration
+
+The Helm toolset supports an optional `allowed_registries` allowlist to restrict which registries
+`helm_install` can fetch charts from.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `allowed_registries` | string array | Optional list of permitted chart registry URL prefixes. Only `oci://` and `https://` schemes are accepted. |
+
+**Behavior:**
+
+- `file://` and `http://` chart references are always blocked regardless of configuration.
+- When `allowed_registries` is **not configured**, any `oci://` or `https://` chart reference is allowed, as well as non-URL references (e.g. `stable/grafana`) that resolve through Helm's local repository configuration.
+- When `allowed_registries` **is configured**, chart references must be URL-based and prefix-match an entry in the list. Non-URL references (local paths, repo/chart names) are rejected.
+
+**Accepted risk:** bare filesystem paths (e.g. `/absolute/path`, `./relative/path`) are not blocked when no allowlist is configured, because they are indistinguishable from Helm repository references at the string level. When the server runs in a container, the blast radius is limited to the container filesystem. To fully restrict chart sources, configure `allowed_registries`.
+
 Refer to individual toolset documentation for available options:
 - [Kiali Configuration](KIALI.md)
 
@@ -590,6 +617,7 @@ The following options can be set via command-line arguments. CLI arguments overr
 | `--cluster-provider` | Cluster provider strategy (`kubeconfig`, `in-cluster`, `kcp`, `disabled`) |
 | `--tls-cert` | Path to TLS certificate file for HTTPS (must be used with `--tls-key`) |
 | `--tls-key` | Path to TLS private key file for HTTPS (must be used with `--tls-cert`) |
+| `--require-tls` | Enforce TLS for server and all outbound connections |
 
 ## Complete Example
 
@@ -651,6 +679,9 @@ traces_sampler_arg = 0.1
 # Toolset-specific configuration
 [toolset_configs.kiali]
 url = "https://kiali.example.com"
+
+[toolset_configs.helm]
+allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 ```
 
 ## Related Documentation

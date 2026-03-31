@@ -621,6 +621,24 @@ func (s *PodsSuite) TestPodsLog() {
 		s.Nilf(err, "call tool failed %v", err)
 		s.Falsef(podsPreviousLogFalse.IsError, "call tool failed")
 	})
+	s.Run("pods_log with previous as string does not panic", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"namespace": "ns-1",
+			"name":      "a-pod-in-ns-1",
+			"previous":  "false",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed")
+	})
+	s.Run("pods_log with previous as float64 does not panic", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"namespace": "ns-1",
+			"name":      "a-pod-in-ns-1",
+			"previous":  float64(0),
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed")
+	})
 	s.Run("pods_log(tail=50) returns pod log", func() {
 		podsTailLines, err := s.CallTool("pods_log", map[string]interface{}{
 			"namespace": "ns-1",

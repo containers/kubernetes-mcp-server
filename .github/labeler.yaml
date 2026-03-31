@@ -1,0 +1,23 @@
+toolset/kiali:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/toolsets/kiali/**'
+      - 'pkg/kiali/**'
+      - 'pkg/mcp/kiali*'
+      - 'build/kiali.mk'
+
+toolset/kubevirt:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/toolsets/kubevirt/**'
+      - 'pkg/kubevirt/**'
+      - 'pkg/mcp/kubevirt*'
+      - 'build/kubevirt.mk'
+
+toolset/tekton:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/toolsets/tekton/**'
+      - 'pkg/mcp/tekton*'
+      - 'evals/tasks/tekton/**'
+      - 'build/tekton.mk'

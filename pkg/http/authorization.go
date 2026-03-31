@@ -51,7 +51,8 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 func AuthorizationMiddleware(staticConfig *config.StaticConfig, oidcProvider *oidc.Provider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == healthEndpoint || slices.Contains(WellKnownEndpoints, r.URL.EscapedPath()) {
+			if slices.Contains(infraPaths, r.URL.Path) ||
+				slices.Contains(WellKnownEndpoints, r.URL.EscapedPath()) {
 				next.ServeHTTP(w, r)
 				return
 			}

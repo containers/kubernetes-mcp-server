@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"slices"
 	"sync"
 	"time"
@@ -123,18 +124,11 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 }
 
 func (s *Server) reloadToolsets() error {
-	ctx := context.Background()
-
-	targets, err := s.p.GetTargets(ctx)
-	if err != nil {
-		return err
-	}
-
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(tools...)
 
 	// Collect applicable items
-	applicableTools := s.collectApplicableTools(targets)
+	applicableTools := s.collectApplicableTools()
 	applicablePrompts := s.collectApplicablePrompts()
 
 	// Read the previous state with read lock - don't hold lock while calling external code
@@ -214,14 +208,14 @@ func reloadItems[T any](
 }
 
 // collectApplicableTools returns tools after applying filtering and mutation
-func (s *Server) collectApplicableTools(targets []string) []api.ServerTool {
+func (s *Server) collectApplicableTools() []api.ServerTool {
 	filter := CompositeFilter(
 		s.configuration.isToolApplicable,
-		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), targets),
+		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 	)
 	mutator := ComposeMutators(
-		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), targets),
-		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), targets),
+		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
+		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p),
 	)
 
 	tools := make([]api.ServerTool, 0)
@@ -406,6 +400,10 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 // The Content field contains the JSON-serialized form of structuredContent
 // for backward compatibility with MCP clients that don't support structuredContent.
 //
+// Per the MCP specification, structuredContent must marshal to a JSON object.
+// If structuredContent is a slice/array, it is automatically wrapped in
+// {"items": [...]} to satisfy this requirement.
+//
 // Per the MCP specification:
 // "For backwards compatibility, a tool that returns structured content SHOULD
 // also return the serialized JSON in a TextContent block."
@@ -432,7 +430,26 @@ func NewStructuredResult(content string, structuredContent any, err error) *mcp.
 		},
 	}
 	if structuredContent != nil {
-		result.StructuredContent = structuredContent
+		result.StructuredContent = ensureStructuredObject(structuredContent)
 	}
 	return result
+}
+
+// ensureStructuredObject wraps slice/array values in a {"items": ...} object
+// because the MCP specification requires structuredContent to be a JSON object.
+// A typed nil slice (e.g. []string(nil)) returns nil to avoid {"items": null}.
+// Note: this checks the top-level reflect.Kind, so a pointer-to-slice (*[]T)
+// would not be wrapped. All current callers pass value types.
+func ensureStructuredObject(v any) any {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Slice {
+		if rv.IsNil() {
+			return nil
+		}
+		return map[string]any{"items": v}
+	}
+	if rv.Kind() == reflect.Array {
+		return map[string]any{"items": v}
+	}
+	return v
 }

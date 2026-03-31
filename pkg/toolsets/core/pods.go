@@ -338,9 +338,7 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		podsTopOptions.Namespace = v
 	}
-	if v, ok := params.GetArguments()["all_namespaces"].(bool); ok {
-		podsTopOptions.AllNamespaces = v
-	}
+	podsTopOptions.AllNamespaces = api.OptionalBool(params, "all_namespaces", true)
 	if v, ok := params.GetArguments()["name"].(string); ok {
 		podsTopOptions.Name = v
 	}
@@ -406,11 +404,7 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if container == nil {
 		container = ""
 	}
-	previous := params.GetArguments()["previous"]
-	var previousBool bool
-	if previous != nil {
-		previousBool = previous.(bool)
-	}
+	previousBool := api.OptionalBool(params, "previous", false)
 	// Extract tailLines parameter
 	tail := params.GetArguments()["tail"]
 	var tailInt int64
