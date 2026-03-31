@@ -124,6 +124,51 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 	})
 }
 
+func (s *ToolsetsSuite) TestDefaultToolsetsPrompts() {
+	s.Run("Default configuration toolsets", func() {
+		s.InitMcpClient()
+		prompts, err := s.ListPrompts()
+		s.Run("ListPrompts returns prompts", func() {
+			s.NotNil(prompts, "Expected prompts from ListPrompts")
+			s.NoError(err, "Expected no error from ListPrompts")
+			s.NotEmpty(prompts.Prompts, "Expected at least one prompt")
+		})
+		s.Run("ListPrompts returns correct Prompt metadata", func() {
+			s.assertJsonSnapshot("toolsets-full-prompts.json", prompts.Prompts)
+		})
+		s.Run("cluster-aware prompts do not have context argument in single cluster", func() {
+			s.Require().NotNil(prompts)
+			for _, prompt := range prompts.Prompts {
+				for _, arg := range prompt.Arguments {
+					s.NotEqualf("context", arg.Name,
+						"Prompt %s should not have context argument in single-cluster mode", prompt.Name)
+				}
+			}
+		})
+	})
+}
+
+func (s *ToolsetsSuite) TestDefaultToolsetsPromptsInMultiCluster() {
+	s.Run("Default configuration toolsets in multi-cluster (with 11 clusters)", func() {
+		kubeconfig := s.Kubeconfig()
+		for i := 0; i < 10; i++ {
+			// Add multiple fake contexts to force multi-cluster behavior
+			kubeconfig.Contexts[strconv.Itoa(i)] = clientcmdapi.NewContext()
+		}
+		s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
+		s.InitMcpClient()
+		prompts, err := s.ListPrompts()
+		s.Run("ListPrompts returns prompts", func() {
+			s.NotNil(prompts, "Expected prompts from ListPrompts")
+			s.NoError(err, "Expected no error from ListPrompts")
+			s.NotEmpty(prompts.Prompts, "Expected at least one prompt")
+		})
+		s.Run("ListPrompts returns correct Prompt metadata", func() {
+			s.assertJsonSnapshot("toolsets-full-prompts-multicluster.json", prompts.Prompts)
+		})
+	})
+}
+
 func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	testCases := []api.Toolset{
 		&core.Toolset{},

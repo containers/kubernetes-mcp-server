@@ -1,0 +1,16 @@
+[
+  {
+    "arguments": [
+      {
+        "name": "namespace",
+        "description": "Optional namespace to limit health check scope (default: all namespaces)"
+      },
+      {
+        "name": "check_events",
+        "description": "Include recent warning/error events (true/false, default: true)"
+      }
+    ],
+    "description": "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
+    "name": "cluster-health-check"
+  }
+]
