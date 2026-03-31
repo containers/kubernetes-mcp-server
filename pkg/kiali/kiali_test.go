@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -56,6 +58,48 @@ func (s *KialiSuite) TestNewKiali_InvalidConfig() {
 	s.Error(err, "Expected error reading invalid config")
 	s.ErrorContains(err, "url must be a valid URL", "Unexpected error message")
 	s.Nil(cfg, "Unexpected Kiali config")
+}
+
+func (s *KialiSuite) TestRequireTLS_ConfigValidation() {
+	s.Run("rejects HTTP URL when require_tls is enabled", func() {
+		_, err := config.ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+			insecure = true
+		`))
+		s.Require().Error(err)
+		s.ErrorContains(err, "require_tls is enabled but Kiali URL uses \"http\" scheme (secure scheme required)")
+	})
+
+	s.Run("accepts HTTPS URL when require_tls is enabled", func() {
+		tempDir := s.T().TempDir()
+		caFile := filepath.Join(tempDir, "ca.crt")
+		err := os.WriteFile(caFile, []byte("test ca content"), 0644)
+		s.Require().NoError(err)
+		caFileForTOML := filepath.ToSlash(caFile)
+
+		cfg, err := config.ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			insecure = false
+			certificate_authority = "` + caFileForTOML + `"
+		`))
+		s.Require().NoError(err)
+		s.NotNil(cfg)
+	})
+
+	s.Run("accepts HTTP URL when require_tls is disabled", func() {
+		cfg, err := config.ReadToml([]byte(`
+			require_tls = false
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+			insecure = true
+		`))
+		s.Require().NoError(err)
+		s.NotNil(cfg)
+	})
 }
 
 func (s *KialiSuite) TestCertificateRequiredForHTTPSWhenNotInsecure() {

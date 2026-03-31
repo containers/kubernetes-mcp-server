@@ -23,19 +23,19 @@ type AccessControlRoundTripper struct {
 	deniedResourcesProvider api.DeniedResourcesProvider
 	restMapperProvider      func() meta.RESTMapper
 	apiPathPrefix           string
-	validationEnabled       bool
 	validators              []api.HTTPValidator
 }
 
 // AccessControlRoundTripperConfig configures the AccessControlRoundTripper.
 type AccessControlRoundTripperConfig struct {
-	Delegate                http.RoundTripper
-	DeniedResourcesProvider api.DeniedResourcesProvider
-	RestMapperProvider      func() meta.RESTMapper
-	HostURL                 string
-	DiscoveryProvider       func() discovery.DiscoveryInterface
-	AuthClientProvider      func() authv1client.AuthorizationV1Interface
-	ValidationEnabled       bool
+	Delegate                  http.RoundTripper
+	DeniedResourcesProvider   api.DeniedResourcesProvider
+	RestMapperProvider        func() meta.RESTMapper
+	HostURL                   string
+	DiscoveryProvider         func() discovery.DiscoveryInterface
+	AuthClientProvider        func() authv1client.AuthorizationV1Interface
+	ValidationEnabled         bool
+	ConfirmationRulesProvider api.ConfirmationRulesProvider
 }
 
 // NewAccessControlRoundTripper creates a new AccessControlRoundTripper.
@@ -53,14 +53,19 @@ func NewAccessControlRoundTripper(cfg AccessControlRoundTripperConfig) *AccessCo
 		deniedResourcesProvider: cfg.DeniedResourcesProvider,
 		restMapperProvider:      cfg.RestMapperProvider,
 		apiPathPrefix:           apiPathPrefix,
-		validationEnabled:       cfg.ValidationEnabled,
 	}
 
+	// Schema/RBAC validators run first so the user isn't prompted for
+	// confirmation on an operation that would fail anyway.
 	if cfg.ValidationEnabled {
-		rt.validators = CreateValidators(ValidatorProviders{
+		rt.validators = append(rt.validators, CreateValidators(ValidatorProviders{
 			Discovery:  cfg.DiscoveryProvider,
 			AuthClient: cfg.AuthClientProvider,
-		})
+		})...)
+	}
+
+	if cfg.ConfirmationRulesProvider != nil && len(cfg.ConfirmationRulesProvider.GetConfirmationRules()) > 0 {
+		rt.validators = append(rt.validators, &ConfirmationValidator{rulesProvider: cfg.ConfirmationRulesProvider})
 	}
 
 	return rt
@@ -100,9 +105,8 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 		return nil, fmt.Errorf("resource not allowed: %s", gvk.String())
 	}
 
-	// Skip validators if disabled or if this is SelfSubjectAccessReview (used by RBAC validator)
-	skipValidation := !rt.validationEnabled || (gvr.Group == "authorization.k8s.io" && gvr.Resource == "selfsubjectaccessreviews")
-	if skipValidation {
+	// Skip validators for SelfSubjectAccessReview to avoid recursion from RBAC validator
+	if gvr.Group == "authorization.k8s.io" && gvr.Resource == "selfsubjectaccessreviews" {
 		return rt.delegate.RoundTrip(req)
 	}
 

@@ -65,13 +65,14 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
-			Delegate:                original,
-			DeniedResourcesProvider: baseConfig,
-			RestMapperProvider:      func() meta.RESTMapper { return k.restMapper },
-			HostURL:                 k.restConfig.Host,
-			DiscoveryProvider:       func() discovery.DiscoveryInterface { return k.discoveryClient },
-			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
-			ValidationEnabled:       baseConfig.IsValidationEnabled(),
+			Delegate:                  original,
+			DeniedResourcesProvider:   baseConfig,
+			RestMapperProvider:        func() meta.RESTMapper { return k.restMapper },
+			HostURL:                   k.restConfig.Host,
+			DiscoveryProvider:         func() discovery.DiscoveryInterface { return k.discoveryClient },
+			AuthClientProvider:        func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
+			ValidationEnabled:         baseConfig.IsValidationEnabled(),
+			ConfirmationRulesProvider: baseConfig,
 		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {

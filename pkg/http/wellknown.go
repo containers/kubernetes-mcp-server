@@ -50,7 +50,8 @@ func WellKnownHandler(staticConfig *config.StaticConfig, httpClient *http.Client
 		authorizationUrl = strings.TrimSuffix(authorizationUrl, "/")
 	}
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		// Create a TLS-enforcing client instead of using http.DefaultClient
+		httpClient = config.NewTLSEnforcingClient(nil, staticConfig.IsRequireTLS)
 	}
 	return &WellKnown{
 		authorizationUrl:                 authorizationUrl,

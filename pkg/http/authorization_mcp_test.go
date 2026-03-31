@@ -449,6 +449,22 @@ func (s *AuthorizationSuite) TestAuthorizationMetricsEndpointExemptFromOAuth() {
 	})
 }
 
+func (s *AuthorizationSuite) TestAuthorizationStatsEndpointExemptFromOAuth() {
+	// https://github.com/containers/kubernetes-mcp-server/issues/964
+	// When require_oauth is true, the /stats endpoint should still be accessible
+	// without an OAuth token as an infrastructure/observability endpoint.
+	s.StartServer()
+
+	s.Run("stats endpoint accessible without OAuth token", func() {
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s/stats", s.StaticConfig.Port), nil)
+		s.Require().NoError(err, "Failed to create request")
+		resp, err := http.DefaultClient.Do(req)
+		s.Require().NoError(err, "Failed to get stats endpoint")
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+		s.Equal(http.StatusOK, resp.StatusCode, "Expected /stats to be accessible without OAuth token")
+	})
+}
+
 func TestAuthorization(t *testing.T) {
 	suite.Run(t, new(AuthorizationSuite))
 }

@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -50,7 +51,7 @@ const (
 
 var (
 	// infraPaths contains infrastructure endpoints which should not have oauth applied
-	infraPaths = []string{healthEndpoint, metricsEndpoint}
+	infraPaths = []string{healthEndpoint, metricsEndpoint, statsEndpoint}
 )
 
 // metricsMiddleware wraps an HTTP handler to record metrics for all requests
@@ -116,6 +117,9 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	httpServer := &http.Server{
 		Addr:    ":" + staticConfig.Port,
 		Handler: instrumentedHandler,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 
 	// Only set up custom error logger for TLS mode to filter noisy TLS handshake errors

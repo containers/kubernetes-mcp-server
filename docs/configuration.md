@@ -27,6 +27,7 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
   - [OAuth and Authorization](#oauth-and-authorization)
   - [Telemetry](#telemetry)
   - [Validation](#validation)
+  - [Confirmation Rules](#confirmation-rules)
   - [Toolset-Specific Configuration](#toolset-specific-configuration)
   - [Cluster Provider Configuration](#cluster-provider-configuration)
 - [CLI Configuration Options](#cli-configuration-options)
@@ -135,6 +136,7 @@ The server will:
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
+| `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
 
 **Example:**
 ```toml
@@ -146,6 +148,9 @@ stateless = true
 # Enable TLS for HTTPS
 tls_cert = "/etc/tls/tls.crt"
 tls_key = "/etc/tls/tls.key"
+
+# Enforce TLS for all connections (requires tls_cert and tls_key)
+require_tls = true
 ```
 
 ### Kubernetes Connection
@@ -506,6 +511,60 @@ For detailed information about the validation flow, error codes, and behavior, s
 validation_enabled = true
 ```
 
+### Confirmation Rules
+
+Prompt users for confirmation before dangerous actions. Rules operate at two levels:
+
+- **Tool-level** — matches on tool name or `DestructiveHint` annotation. Fires once before the tool handler runs.
+- **Kube-level** — matches on Kubernetes API verb, kind, group, version, name, or namespace. Fires per API call during handler execution.
+
+When a client doesn't support elicitation, the `confirmation_fallback` determines behavior: `"allow"` proceeds silently (with a warning log), `"deny"` blocks the action. The default is `"allow"`.
+
+If multiple rules match at the same level, their messages are merged into a single prompt.
+
+| Field | Type | Level | Description |
+|-------|------|-------|-------------|
+| `confirmation_fallback` | string | global | Default fallback: `"allow"` or `"deny"` (default: `"allow"`) |
+| `tool` | string | tool | Tool name to match (e.g. `"helm_uninstall"`) |
+| `destructive` | boolean | tool | Match tools with `DestructiveHint` annotation |
+| `verb` | string | kube | Kubernetes verb (`"get"`, `"delete"`, `"list"`, etc.) |
+| `kind` | string | kube | Resource kind (`"Secret"`, `"Deployment"`, etc.) |
+| `group` | string | kube | API group (`"apps"`, `""` for core, etc.) |
+| `version` | string | kube | API version (`"v1"`, `"v1beta1"`, etc.) |
+| `name` | string | kube | Resource name to match |
+| `namespace` | string | kube | Namespace to match |
+| `message` | string | both | Message shown in the confirmation prompt |
+
+A rule must be either tool-level or kube-level. It must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`, `name`, `namespace`), and must set at least one of these fields.
+
+**Examples:**
+
+```toml
+confirmation_fallback = "deny"
+
+# Confirm before uninstalling any Helm release
+[[confirmation_rules]]
+tool = "helm_uninstall"
+message = "This will uninstall a Helm release."
+
+# Confirm all destructive tool operations
+[[confirmation_rules]]
+destructive = true
+message = "Destructive operation."
+
+# Confirm Kubernetes delete calls in kube-system
+[[confirmation_rules]]
+verb = "delete"
+namespace = "kube-system"
+message = "Deleting in kube-system."
+
+# Confirm reading Secrets
+[[confirmation_rules]]
+verb = "get"
+kind = "Secret"
+message = "Accessing a Secret."
+```
+
 ### Toolset-Specific Configuration
 
 Some toolsets accept additional configuration via the `toolset_configs` map.
@@ -581,6 +640,7 @@ The following options can be set via command-line arguments. CLI arguments overr
 | `--cluster-provider` | Cluster provider strategy (`kubeconfig`, `in-cluster`, `kcp`, `disabled`) |
 | `--tls-cert` | Path to TLS certificate file for HTTPS (must be used with `--tls-key`) |
 | `--tls-key` | Path to TLS private key file for HTTPS (must be used with `--tls-cert`) |
+| `--require-tls` | Enforce TLS for server and all outbound connections |
 
 ## Complete Example
 

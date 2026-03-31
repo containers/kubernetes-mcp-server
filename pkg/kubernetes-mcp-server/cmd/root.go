@@ -88,6 +88,7 @@ const (
 	flagClusterProvider      = "cluster-provider"
 	flagTLSCert              = "tls-cert"
 	flagTLSKey               = "tls-key"
+	flagRequireTLS           = "require-tls"
 )
 
 type MCPServerOptions struct {
@@ -110,6 +111,7 @@ type MCPServerOptions struct {
 	ClusterProvider      string
 	TLSCert              string
 	TLSKey               string
+	RequireTLS           bool
 
 	ConfigPath   string
 	ConfigDir    string
@@ -173,6 +175,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.ClusterProvider, flagClusterProvider, o.ClusterProvider, "Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.")
 	cmd.Flags().StringVar(&o.TLSCert, flagTLSCert, o.TLSCert, "Path to TLS certificate file for HTTPS. Must be used together with --tls-key.")
 	cmd.Flags().StringVar(&o.TLSKey, flagTLSKey, o.TLSKey, "Path to TLS private key file for HTTPS. Must be used together with --tls-cert.")
+	cmd.Flags().BoolVar(&o.RequireTLS, flagRequireTLS, o.RequireTLS, "Require TLS for server and all outbound connections")
 
 	return cmd
 }
@@ -253,6 +256,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	if cmd.Flag(flagTLSKey).Changed {
 		m.StaticConfig.TLSKey = m.TLSKey
 	}
+	if cmd.Flag(flagRequireTLS).Changed {
+		m.StaticConfig.RequireTLS = m.RequireTLS
+	}
 }
 
 func (m *MCPServerOptions) initializeLogging() {
@@ -330,6 +336,22 @@ func (m *MCPServerOptions) Validate() error {
 			return fmt.Errorf("tls-key must be a valid file path: %w", err)
 		}
 	}
+	// Validate require_tls configuration
+	if m.StaticConfig.RequireTLS && m.StaticConfig.Port != "" {
+		if tlsCert == "" || tlsKey == "" {
+			return fmt.Errorf("require_tls is enabled but TLS certificates are not configured (set tls_cert and tls_key)")
+		}
+	}
+	// Validate outbound URLs when require_tls is enabled
+	if m.StaticConfig.RequireTLS {
+		if err := config.ValidateURLsRequireTLS(map[string]string{
+			"authorization_url": m.StaticConfig.AuthorizationURL,
+			"server_url":        m.StaticConfig.ServerURL,
+			"sse_base_url":      m.StaticConfig.SSEBaseURL,
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -378,12 +400,19 @@ func (m *MCPServerOptions) Run() error {
 				caCertPool = nil
 			}
 
-			transport := &http.Transport{
+			var transport http.RoundTripper = &http.Transport{
 				TLSClientConfig: &tls.Config{
-					RootCAs: caCertPool,
+					MinVersion: tls.VersionTLS12,
+					RootCAs:    caCertPool,
 				},
 			}
+			// Wrap transport with TLS enforcement
+			transport = config.NewTLSEnforcingTransport(transport, m.StaticConfig.IsRequireTLS)
 			httpClient.Transport = transport
+			ctx = oidc.ClientContext(ctx, httpClient)
+		} else {
+			// No custom CA, but still enforce TLS if required
+			httpClient = config.NewTLSEnforcingClient(nil, m.StaticConfig.IsRequireTLS)
 			ctx = oidc.ClientContext(ctx, httpClient)
 		}
 		provider, err := oidc.NewProvider(ctx, m.StaticConfig.AuthorizationURL)

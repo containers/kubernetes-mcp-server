@@ -94,7 +94,7 @@ commands:
 ```yaml
 builtin:
   type: "llm-agent"
-  model: "gpt-4"
+  model: "openai:gpt-5"
 ```
 
 Uses the built-in OpenAI ACP agent with model configuration.

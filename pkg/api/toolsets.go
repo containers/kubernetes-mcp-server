@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -112,6 +113,9 @@ type ToolHandlerParams struct {
 }
 
 type ToolHandlerFunc func(params ToolHandlerParams) (*ToolCallResult, error)
+
+// ErrElicitationNotSupported is returned when the MCP client does not support elicitation.
+var ErrElicitationNotSupported = errors.New("client does not support elicitation")
 
 // Elicitor provides a mechanism for tools and prompts to request additional information
 // from the user during execution via the MCP elicitation protocol.

@@ -63,6 +63,21 @@ helm-validate: kubeconform ## Validate Helm chart manifests with kubeconform
 	@echo ""
 	@echo "Validating with tpl-exercising values..."
 	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tpl-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@echo ""
+	@echo "Validating with configmap-numeric-test values..."
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@echo ""
+	@echo "Testing ConfigMap numeric .0 cleanup..."
+	@output=$$(helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml 2>&1); \
+	failed=0; \
+	if echo "$$output" | grep -q 'log_level = 2\.0'; then echo "FAIL: log_level has unwanted .0 suffix"; failed=1; else echo "PASS: log_level integer .0 stripped"; fi; \
+	if echo "$$output" | grep -q 'positive_port = 8080\.0'; then echo "FAIL: positive_port has unwanted .0 suffix"; failed=1; else echo "PASS: positive_port integer .0 stripped"; fi; \
+	if echo "$$output" | grep -q 'zero_value = 0\.0'; then echo "FAIL: zero_value has unwanted .0 suffix"; failed=1; else echo "PASS: zero_value integer .0 stripped"; fi; \
+	if echo "$$output" | grep -q 'negative_offset = -5\.0'; then echo "FAIL: negative_offset has unwanted .0 suffix"; failed=1; else echo "PASS: negative_offset integer .0 stripped"; fi; \
+	if ! echo "$$output" | grep -q 'v2\.0'; then echo "FAIL: authorization_url should preserve v2.0"; failed=1; else echo "PASS: authorization_url preserves v2.0"; fi; \
+	if ! echo "$$output" | grep -q 'v3\.0'; then echo "FAIL: some_url should preserve v3.0"; failed=1; else echo "PASS: some_url preserves v3.0"; fi; \
+	if [ $$failed -eq 1 ]; then echo ""; echo "ConfigMap numeric cleanup test FAILED"; exit 1; fi; \
+	echo ""; echo "ConfigMap numeric cleanup test PASSED"
 
 .PHONY: helm-package
 helm-package: helm-lint helm-template ## Package the Helm chart (supports HELM_CHART_VERSION override)

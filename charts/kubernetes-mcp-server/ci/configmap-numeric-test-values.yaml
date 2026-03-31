@@ -1,0 +1,21 @@
+# Test values to verify that numeric .0 cleanup in configmap.yaml
+# only strips the .0 suffix from integer TOML values, not from string values.
+#
+# Helm's toToml function can serialize YAML integers as floats (e.g., 8080.0),
+# and the configmap template's regexReplaceAll must strip the .0 from numeric
+# values while preserving .0 in string values (e.g., OIDC URLs like /v2.0).
+
+ingress:
+  host: localhost
+
+config:
+  # Positive integers: .0 suffix should be stripped
+  log_level: 2
+  positive_port: 8080
+  # Zero value: .0 suffix should be stripped
+  zero_value: 0
+  # Negative integers: .0 suffix should also be stripped
+  negative_offset: -5
+  # String values containing .0: must be preserved as-is
+  authorization_url: "https://login.microsoftonline.com/TENANT/v2.0"
+  some_url: "https://example.com/api/v3.0/resource"
