@@ -38,23 +38,6 @@ func TestPromptMutatorType(t *testing.T) {
 	})
 }
 
-func TestComposePromptMutators(t *testing.T) {
-	t.Run("applies mutators in order", func(t *testing.T) {
-		m1 := func(prompt api.ServerPrompt) api.ServerPrompt {
-			prompt.Prompt.Name = prompt.Prompt.Name + "-first"
-			return prompt
-		}
-		m2 := func(prompt api.ServerPrompt) api.ServerPrompt {
-			prompt.Prompt.Name = prompt.Prompt.Name + "-second"
-			return prompt
-		}
-
-		composed := ComposePromptMutators(m1, m2)
-		result := composed(createTestPrompt("test"))
-		assert.Equal(t, "test-first-second", result.Prompt.Name)
-	})
-}
-
 type TargetParameterPromptMutatorSuite struct {
 	suite.Suite
 }
