@@ -320,6 +320,10 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		return nil, err
 	}
 
+	if fb := config.ConfirmationFallback; fb != "" && fb != "allow" && fb != "deny" {
+		return nil, fmt.Errorf("invalid confirmation_fallback %q: must be \"allow\" or \"deny\"", fb)
+	}
+
 	var ruleErrors []error
 	for i := range config.ConfirmationRules {
 		if ruleErr := config.ConfirmationRules[i].Validate(); ruleErr != nil {

@@ -3,15 +3,19 @@ package kubernetes
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/kubernetes"
+	authv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	"k8s.io/client-go/restmapper"
 )
 
@@ -273,6 +277,55 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources
 		s.NoError(err)
 		s.NotNil(resp)
 		s.True(delegateCalled, "Expected delegate to be called for namespaced pods list behind a path prefix")
+	})
+}
+
+func (s *AccessControlRoundTripperTestSuite) TestValidationDisabledBypassesValidators() {
+	s.mockServer.Handle(newOpenAPISchemaHandler())
+	clientSet, err := kubernetes.NewForConfig(s.mockServer.Config())
+	s.Require().NoError(err)
+
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	s.Run("validation disabled allows request with unknown fields", func() {
+		delegateCalled = false
+		rt := NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
+			Delegate:                mockDelegate,
+			RestMapperProvider:      func() meta.RESTMapper { return s.restMapper },
+			ValidationEnabled:       false,
+			DiscoveryProvider:       func() discovery.DiscoveryInterface { return clientSet.Discovery() },
+			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
+		})
+		req := httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called when validation is disabled")
+	})
+
+	s.Run("validation enabled rejects request with unknown fields", func() {
+		delegateCalled = false
+		rt := NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
+			Delegate:                mockDelegate,
+			RestMapperProvider:      func() meta.RESTMapper { return s.restMapper },
+			ValidationEnabled:       true,
+			DiscoveryProvider:       func() discovery.DiscoveryInterface { return clientSet.Discovery() },
+			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
+		})
+		req := httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
+		resp, err := rt.RoundTrip(req)
+		s.Error(err, "Expected validation error for unknown field")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called when validation rejects request")
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeInvalidField, ve.Code)
 	})
 }
 

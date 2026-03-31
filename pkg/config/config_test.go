@@ -1150,6 +1150,27 @@ func (s *ConfigSuite) TestConfirmationRulesValidationReportsAllErrors() {
 	})
 }
 
+func (s *ConfigSuite) TestConfirmationFallbackValidation() {
+	s.Run("rejects invalid fallback value", func() {
+		configPath := s.writeConfig(`confirmation_fallback = "block"`)
+		_, err := Read(configPath, "")
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid confirmation_fallback")
+	})
+	s.Run("accepts allow", func() {
+		configPath := s.writeConfig(`confirmation_fallback = "allow"`)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Equal("allow", config.GetConfirmationFallback())
+	})
+	s.Run("accepts deny", func() {
+		configPath := s.writeConfig(`confirmation_fallback = "deny"`)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Equal("deny", config.GetConfirmationFallback())
+	})
+}
+
 func (s *ConfigSuite) TestConfirmationRulesValidationRejectsEmptyRule() {
 	configPath := s.writeConfig(`
 		[[confirmation_rules]]
