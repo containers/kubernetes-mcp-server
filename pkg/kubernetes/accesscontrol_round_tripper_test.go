@@ -296,11 +296,11 @@ func (s *AccessControlRoundTripperTestSuite) TestValidationDisabledBypassesValid
 	s.Run("validation disabled allows request with unknown fields", func() {
 		delegateCalled = false
 		rt := NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
-			Delegate:                mockDelegate,
-			RestMapperProvider:      func() meta.RESTMapper { return s.restMapper },
-			ValidationEnabled:       false,
-			DiscoveryProvider:       func() discovery.DiscoveryInterface { return clientSet.Discovery() },
-			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
+			Delegate:           mockDelegate,
+			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
+			ValidationEnabled:  false,
+			DiscoveryProvider:  func() discovery.DiscoveryInterface { return clientSet.Discovery() },
+			AuthClientProvider: func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
 		})
 		req := httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
 		resp, err := rt.RoundTrip(req)
@@ -312,11 +312,11 @@ func (s *AccessControlRoundTripperTestSuite) TestValidationDisabledBypassesValid
 	s.Run("validation enabled rejects request with unknown fields", func() {
 		delegateCalled = false
 		rt := NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
-			Delegate:                mockDelegate,
-			RestMapperProvider:      func() meta.RESTMapper { return s.restMapper },
-			ValidationEnabled:       true,
-			DiscoveryProvider:       func() discovery.DiscoveryInterface { return clientSet.Discovery() },
-			AuthClientProvider:      func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
+			Delegate:           mockDelegate,
+			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
+			ValidationEnabled:  true,
+			DiscoveryProvider:  func() discovery.DiscoveryInterface { return clientSet.Discovery() },
+			AuthClientProvider: func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
 		})
 		req := httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
 		resp, err := rt.RoundTrip(req)
