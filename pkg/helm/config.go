@@ -14,6 +14,7 @@ import (
 // Config holds Helm toolset configuration
 type Config struct {
 	AllowedRegistries []string `toml:"allowed_registries,omitempty"`
+	StorageDriver     string   `toml:"storage_driver,omitempty"`
 }
 
 var _ api.ExtendedConfig = (*Config)(nil)
@@ -38,6 +39,14 @@ func (c *Config) Validate() error {
 		// so runtime comparison against the normalized chart reference is case-insensitive.
 		c.AllowedRegistries[i] = strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + strings.TrimRight(u.Path, "/")
 	}
+	if c.StorageDriver != "" {
+		// Normalize to lowercase
+		c.StorageDriver = strings.ToLower(c.StorageDriver)
+		if c.StorageDriver != "secret" && c.StorageDriver != "configmap" {
+			return fmt.Errorf("unsupported Helm storage driver %q: must be \"secret\" or \"configmap\"", c.StorageDriver)
+		}
+	}
+
 	return nil
 }
 

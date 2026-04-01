@@ -584,16 +584,18 @@ token = "your-kiali-token"
 ```toml
 [toolset_configs.helm]
 allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
+storage_driver = "configmap"
 ```
 
 #### Helm Configuration
 
-The Helm toolset supports an optional `allowed_registries` allowlist to restrict which registries
-`helm_install` can fetch charts from.
-
 | Field | Type | Description |
 |-------|------|-------------|
 | `allowed_registries` | string array | Optional list of permitted chart registry URL prefixes. Only `oci://` and `https://` schemes are accepted. |
+| `storage_driver` | string | Optional default storage driver for Helm operations. Supported values: `secret` (default) and `configmap`. |
+
+The Helm toolset supports an optional `allowed_registries` allowlist to restrict which registries
+`helm_install` can fetch charts from.
 
 **Behavior:**
 

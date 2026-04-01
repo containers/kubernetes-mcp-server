@@ -132,7 +132,13 @@ func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := helm.NewHelm(params).List(namespace, allNamespaces)
+	var helmCfg *helm.Config
+	if cfg, ok := params.GetToolsetConfig("helm"); ok {
+		if hc, ok := cfg.(*helm.Config); ok {
+			helmCfg = hc
+		}
+	}
+	ret, err := helm.NewHelm(params).List(namespace, allNamespaces, helmCfg)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases in namespace '%s': %w", namespace, err)), nil
 	}
@@ -149,7 +155,13 @@ func helmUninstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := helm.NewHelm(params).Uninstall(name, namespace)
+	var helmCfg *helm.Config
+	if cfg, ok := params.GetToolsetConfig("helm"); ok {
+		if hc, ok := cfg.(*helm.Config); ok {
+			helmCfg = hc
+		}
+	}
+	ret, err := helm.NewHelm(params).Uninstall(name, namespace, helmCfg)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
 	}
