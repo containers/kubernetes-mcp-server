@@ -10,10 +10,9 @@ config:
     kubernetes:
       package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
   llmJudge:
-    env:
-      baseUrlKey: JUDGE_BASE_URL
-      apiKeyKey: JUDGE_API_KEY
-      modelNameKey: JUDGE_MODEL_NAME
+    ref:
+      type: builtin.llm-agent
+      model: "openai:gpt-5"
   taskSets:
     # Kubernetes tasks
     - glob: ../tasks/*/*/*.yaml
