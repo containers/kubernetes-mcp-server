@@ -16,11 +16,8 @@ func BaseDefault() *StaticConfig {
 		Toolsets:             []string{"core", "config"},
 		ConfirmationFallback: "allow",
 		HTTP: HTTPConfig{
-			ReadTimeout:       Duration(30 * time.Second),
-			IdleTimeout:       Duration(60 * time.Second), // Per Apache recommendation
 			ReadHeaderTimeout: Duration(10 * time.Second), // Slowloris protection
-			MaxHeaderBytes:    1 << 20,                    // 1 MB
-			MaxBodyBytes:      1 << 20,                    // 1 MB
+			MaxBodyBytes:      16 << 20,                   // 16 MB for large K8s manifests
 		},
 	}
 }

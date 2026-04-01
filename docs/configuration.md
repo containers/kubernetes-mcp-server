@@ -155,31 +155,24 @@ require_tls = true
 
 ### HTTP Server Security
 
-Configure HTTP server timeouts and request size limits to protect against denial-of-service attacks such as Slowloris.
+Configure HTTP server settings to protect against denial-of-service attacks.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `http.read_timeout` | duration | `"30s"` | Maximum duration for reading the entire request, including body. |
-| `http.idle_timeout` | duration | `"60s"` | Maximum duration to wait for the next request on keep-alive connections. |
 | `http.read_header_timeout` | duration | `"10s"` | Maximum duration for reading request headers. Primary defense against Slowloris attacks. |
-| `http.max_header_bytes` | integer | `1048576` | Maximum size of request headers in bytes (default: 1 MB). |
-| `http.max_body_bytes` | integer | `1048576` | Maximum size of request body in bytes (default: 1 MB). |
+| `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). |
 
 Duration values use Go duration syntax: `"30s"`, `"5m"`, `"1h30m"`.
 
 **Security Considerations:**
 - `read_header_timeout` is the primary defense against Slowloris attacks, which send headers extremely slowly to exhaust server connections
-- `max_body_bytes` prevents memory exhaustion from large request payloads
-- `idle_timeout` is set to 60 seconds per Apache performance tuning recommendations
+- `max_body_bytes` prevents memory exhaustion from unbounded request payloads. The 16 MB default accommodates large Kubernetes manifests (CRDs, ConfigMaps)
 
 **Example:**
 ```toml
 [http]
-read_timeout = "30s"
-idle_timeout = "60s"
 read_header_timeout = "10s"
-max_header_bytes = 1048576   # 1 MB
-max_body_bytes = 1048576     # 1 MB
+max_body_bytes = 16777216    # 16 MB
 ```
 
 ### Kubernetes Connection
@@ -660,10 +653,10 @@ port = "8080"
 list_output = "table"
 stateless = false
 
-# HTTP server security (timeouts and limits)
+# HTTP server security
 [http]
 read_header_timeout = "10s"  # Slowloris protection
-max_body_bytes = 1048576     # 1 MB request body limit
+max_body_bytes = 16777216    # 16 MB for large K8s manifests
 
 # Kubernetes connection
 kubeconfig = "/home/user/.kube/config"
