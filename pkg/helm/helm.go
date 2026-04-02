@@ -25,18 +25,19 @@ type Kubernetes interface {
 
 type Helm struct {
 	kubernetes Kubernetes
+	config     *Config
 }
 
 // NewHelm creates a new Helm instance
-func NewHelm(kubernetes Kubernetes) *Helm {
-	return &Helm{kubernetes: kubernetes}
+func NewHelm(kubernetes Kubernetes, config *Config) *Helm {
+	return &Helm{kubernetes: kubernetes, config: config}
 }
 
-func (h *Helm) Install(ctx context.Context, chart string, values map[string]interface{}, name string, namespace string, helmCfg *Config) (string, error) {
-	if err := validateChartReference(chart, helmCfg); err != nil {
+func (h *Helm) Install(ctx context.Context, chart string, values map[string]interface{}, name string, namespace string) (string, error) {
+	if err := validateChartReference(chart, h.config); err != nil {
 		return "", err
 	}
-	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false, helmCfg)
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
 	if err != nil {
 		return "", err
 	}
@@ -73,8 +74,8 @@ func (h *Helm) Install(ctx context.Context, chart string, values map[string]inte
 }
 
 // List lists all the releases for the specified namespace (or current namespace if). Or allNamespaces is true, it lists all releases across all namespaces.
-func (h *Helm) List(namespace string, allNamespaces bool, helmCfg *Config) (string, error) {
-	cfg, err := h.newAction(namespace, allNamespaces, helmCfg)
+func (h *Helm) List(namespace string, allNamespaces bool) (string, error) {
+	cfg, err := h.newAction(namespace, allNamespaces)
 	if err != nil {
 		return "", err
 	}
@@ -93,8 +94,8 @@ func (h *Helm) List(namespace string, allNamespaces bool, helmCfg *Config) (stri
 	return string(ret), nil
 }
 
-func (h *Helm) Uninstall(name string, namespace string, helmCfg *Config) (string, error) {
-	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false, helmCfg)
+func (h *Helm) Uninstall(name string, namespace string) (string, error) {
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
 	if err != nil {
 		return "", err
 	}
@@ -111,10 +112,10 @@ func (h *Helm) Uninstall(name string, namespace string, helmCfg *Config) (string
 	return fmt.Sprintf("Uninstalled release %s %s", uninstalledRelease.Release.Name, uninstalledRelease.Info), nil
 }
 
-func (h *Helm) newAction(namespace string, allNamespaces bool, helmCfg *Config) (*action.Configuration, error) {
+func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configuration, error) {
 	storageDriver := ""
-	if helmCfg != nil {
-		storageDriver = helmCfg.StorageDriver
+	if h.config != nil {
+		storageDriver = h.config.StorageDriver
 	}
 	cfg := new(action.Configuration)
 	applicableNamespace := ""

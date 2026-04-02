@@ -95,6 +95,16 @@ func initHelm() []api.ServerTool {
 	}
 }
 
+func newHelmClient(params api.ToolHandlerParams) *helm.Helm {
+	var cfg *helm.Config
+	if c, ok := params.GetToolsetConfig("helm"); ok {
+		if hc, ok := c.(*helm.Config); ok {
+			cfg = hc
+		}
+	}
+	return helm.NewHelm(params, cfg)
+}
+
 func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	var chart string
 	ok := false
@@ -113,13 +123,7 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	var helmCfg *helm.Config
-	if cfg, ok := params.GetToolsetConfig("helm"); ok {
-		if hc, ok := cfg.(*helm.Config); ok {
-			helmCfg = hc
-		}
-	}
-	ret, err := helm.NewHelm(params).Install(params, chart, values, name, namespace, helmCfg)
+	ret, err := newHelmClient(params).Install(params, chart, values, name, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to install helm chart '%s': %w", chart, err)), nil
 	}
@@ -132,13 +136,7 @@ func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	var helmCfg *helm.Config
-	if cfg, ok := params.GetToolsetConfig("helm"); ok {
-		if hc, ok := cfg.(*helm.Config); ok {
-			helmCfg = hc
-		}
-	}
-	ret, err := helm.NewHelm(params).List(namespace, allNamespaces, helmCfg)
+	ret, err := newHelmClient(params).List(namespace, allNamespaces)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases in namespace '%s': %w", namespace, err)), nil
 	}
@@ -155,13 +153,7 @@ func helmUninstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	var helmCfg *helm.Config
-	if cfg, ok := params.GetToolsetConfig("helm"); ok {
-		if hc, ok := cfg.(*helm.Config); ok {
-			helmCfg = hc
-		}
-	}
-	ret, err := helm.NewHelm(params).Uninstall(name, namespace, helmCfg)
+	ret, err := newHelmClient(params).Uninstall(name, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
 	}
