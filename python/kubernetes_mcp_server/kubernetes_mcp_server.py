@@ -82,15 +82,22 @@ def execute(args=None):
         process = subprocess.Popen(cmd)
 
         def handle_signal(signum, frame):
-            process.send_signal(signum)
+            try:
+                process.send_signal(signum)
+            except OSError:
+                pass
 
         signal.signal(signal.SIGTERM, handle_signal)
-        signal.signal(signal.SIGHUP, handle_signal)
+        if hasattr(signal, "SIGHUP"):
+            signal.signal(signal.SIGHUP, handle_signal)
 
         try:
             return process.wait()
         except KeyboardInterrupt:
-            process.send_signal(signal.SIGINT)
+            try:
+                process.send_signal(signal.SIGINT)
+            except OSError:
+                pass
             return process.wait()
     except Exception as e:
         print(f"Error executing kubernetes-mcp-server: {e}", file=sys.stderr)
