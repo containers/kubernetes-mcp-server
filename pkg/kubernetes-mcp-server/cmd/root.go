@@ -58,7 +58,7 @@ kubernetes-mcp-server --port 8443 --sse-base-url https://example.com:8443
 # start a SSE server on port 8080 with multi-cluster tools disabled
 kubernetes-mcp-server --port 8080 --disable-multi-cluster
 
-# start with explicit cluster provider strategy (kubeconfig, in-cluster, kcp, or disabled)
+# start with explicit cluster provider strategy
 kubernetes-mcp-server --cluster-provider kubeconfig
 
 # start with kcp cluster provider for multi-workspace support
@@ -172,7 +172,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.CertificateAuthority, flagCertificateAuthority, o.CertificateAuthority, "Certificate authority path to verify certificates. Optional. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden(flagCertificateAuthority)
 	cmd.Flags().BoolVar(&o.DisableMultiCluster, flagDisableMultiCluster, o.DisableMultiCluster, "Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.")
-	cmd.Flags().StringVar(&o.ClusterProvider, flagClusterProvider, o.ClusterProvider, "Cluster provider strategy to use (one of: kubeconfig, in-cluster, kcp, disabled). If not set, the server will auto-detect based on the environment.")
+	cmd.Flags().StringVar(&o.ClusterProvider, flagClusterProvider, o.ClusterProvider, "Cluster provider strategy to use (one of: "+strings.Join(kubernetes.GetRegisteredStrategies(), ", ")+"). If not set, the server will auto-detect based on the environment.")
 	cmd.Flags().StringVar(&o.TLSCert, flagTLSCert, o.TLSCert, "Path to TLS certificate file for HTTPS. Must be used together with --tls-key.")
 	cmd.Flags().StringVar(&o.TLSKey, flagTLSKey, o.TLSKey, "Path to TLS private key file for HTTPS. Must be used together with --tls-cert.")
 	cmd.Flags().BoolVar(&o.RequireTLS, flagRequireTLS, o.RequireTLS, "Require TLS for server and all outbound connections")
@@ -286,9 +286,9 @@ func (m *MCPServerOptions) Validate() error {
 	if err := toolsets.Validate(m.StaticConfig.Toolsets); err != nil {
 		return err
 	}
-	// Validate cluster provider strategy
+	// Validate cluster provider strategy using registered providers
 	if m.StaticConfig.ClusterProviderStrategy != "" {
-		validStrategies := []string{api.ClusterProviderKubeConfig, api.ClusterProviderInCluster, api.ClusterProviderKcp, api.ClusterProviderDisabled}
+		validStrategies := kubernetes.GetRegisteredStrategies()
 		if !slices.Contains(validStrategies, m.StaticConfig.ClusterProviderStrategy) {
 			return fmt.Errorf("invalid cluster-provider: %s, valid values are: %s", m.StaticConfig.ClusterProviderStrategy, strings.Join(validStrategies, ", "))
 		}

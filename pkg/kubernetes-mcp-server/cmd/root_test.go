@@ -462,6 +462,46 @@ func TestDisableMultiCluster(t *testing.T) {
 	})
 }
 
+func TestClusterProviderValidation(t *testing.T) {
+	t.Run("valid cluster provider kubeconfig", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--cluster-provider", "kubeconfig"})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+	t.Run("valid cluster provider in-cluster", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--cluster-provider", "in-cluster"})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+	t.Run("valid cluster provider disabled", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--cluster-provider", "disabled"})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+	t.Run("valid cluster provider kcp", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--cluster-provider", "kcp"})
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+	})
+	t.Run("invalid cluster provider returns error", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--cluster-provider", "invalid-provider"})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid cluster-provider: invalid-provider")
+		assert.Contains(t, err.Error(), "valid values are:")
+	})
+}
+
 func TestStateless(t *testing.T) {
 	t.Run("matches default config", func(t *testing.T) {
 		ioStreams, out := testStream()
