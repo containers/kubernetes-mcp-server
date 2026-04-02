@@ -7,7 +7,7 @@ name = "kubernetes-mcp-server"
 version = "0.0.0"
 description = "Kubernetes MCP Server (Model Context Protocol) with special support for OpenShift"
 readme = {file="README.md", content-type="text/markdown"}
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 license = "Apache-2.0"
 authors = [
     { name = "Marc Nuri", email = "marc@marcnuri.com" }
