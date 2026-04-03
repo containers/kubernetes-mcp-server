@@ -1,0 +1,24 @@
+{
+  "name": "kubernetes-mcp-server",
+  "version": "0.1.0",
+  "description": "Kubernetes and OpenShift management from Codex via MCP",
+  "author": {
+    "name": "containers",
+    "url": "https://github.com/containers/kubernetes-mcp-server"
+  },
+  "homepage": "https://github.com/containers/kubernetes-mcp-server",
+  "repository": "https://github.com/containers/kubernetes-mcp-server",
+  "keywords": [
+    "mcp",
+    "codex"
+  ],
+  "mcpServers": "./.mcp.json",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Kubernetes MCP Server",
+    "shortDescription": "Kubernetes and OpenShift management from Codex via MCP",
+    "longDescription": "MCP server for Kubernetes and OpenShift. Manage resources and query cluster state.",
+    "category": "Infrastructure",
+    "websiteURL": "https://github.com/containers/kubernetes-mcp-server"
+  }
+}
