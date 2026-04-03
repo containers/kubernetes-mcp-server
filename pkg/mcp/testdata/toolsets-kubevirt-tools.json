@@ -166,7 +166,7 @@
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+          "description": "The lifecycle action to perform: 'start', 'stop', or 'restart'",
           "enum": [
             "start",
             "stop",
@@ -180,6 +180,15 @@
         },
         "namespace": {
           "description": "The namespace of the virtual machine",
+          "type": "string"
+        },
+        "run_policy": {
+          "description": "The run policy to use when starting or restarting a VM (applies to 'start' and 'restart' actions; ignored for 'stop'). Options:\n  - 'HighAvailability': VM runs continuously (sets runStrategy to Always)\n  - 'RestartOnFailure': VM restarts on failure (sets runStrategy to RerunOnFailure)\n  - 'Once': VM runs once and stops after completion (sets runStrategy to Once)\nDefaults to 'HighAvailability' if not specified.",
+          "enum": [
+            "HighAvailability",
+            "RestartOnFailure",
+            "Once"
+          ],
           "type": "string"
         }
       },
