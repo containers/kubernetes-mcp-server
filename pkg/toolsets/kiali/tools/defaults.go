@@ -19,6 +19,7 @@ const (
 
 	// Default graph parameters
 	DefaultIncludeIdleEdges   = "false"
+	DefaultErrorOnly          = "false"
 	DefaultInjectServiceNodes = "true"
 	DefaultBoxBy              = "cluster,namespace,app"
 	DefaultAmbientTraffic     = "none"

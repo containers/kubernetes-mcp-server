@@ -456,6 +456,10 @@
           "description": "Name of the Istio object. Required for 'get' action.",
           "type": "string"
         },
+        "serviceName": {
+          "description": "Filter Istio configurations (VirtualServices, DestinationRules, and their referenced Gateways) that affect a specific service. Only applicable for 'list' action",
+          "type": "string"
+        },
         "version": {
           "description": "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.",
           "type": "string"

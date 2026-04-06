@@ -37,7 +37,8 @@ func InitManageIstioConfig() []api.ServerTool {
 					},
 					"group": {
 						Type:        "string",
-						Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io').",
+						Description: "API group of the Istio object",
+						Enum:        []any{"networking.istio.io", "security.istio.io"},
 					},
 					"version": {
 						Type:        "string",
@@ -46,6 +47,7 @@ func InitManageIstioConfig() []api.ServerTool {
 					"kind": {
 						Type:        "string",
 						Description: "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule').",
+						Enum:        []any{"VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication"},
 					},
 					"object": {
 						Type:        "string",

@@ -32,7 +32,8 @@ func InitManageIstioConfigRead() []api.ServerTool {
 					},
 					"group": {
 						Type:        "string",
-						Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io'). Required for 'get' action.",
+						Description: "API group of the Istio object. Required for 'get' action.",
+						Enum:        []any{"networking.istio.io", "security.istio.io"},
 					},
 					"version": {
 						Type:        "string",
@@ -40,7 +41,8 @@ func InitManageIstioConfigRead() []api.ServerTool {
 					},
 					"kind": {
 						Type:        "string",
-						Description: "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule'). Required for 'get' action.",
+						Description: "Kind of the Istio object. Required for 'get' action.",
+						Enum:        []any{"VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication"},
 					},
 					"object": {
 						Type:        "string",
@@ -49,6 +51,10 @@ func InitManageIstioConfigRead() []api.ServerTool {
 					"clusterName": {
 						Type:        "string",
 						Description: "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
+					},
+					"serviceName": {
+						Type:        "string",
+						Description: "Filter Istio configurations (VirtualServices, DestinationRules, and their referenced Gateways) that affect a specific service. Only applicable for 'list' action",
 					},
 				},
 				Required: []string{"action"},

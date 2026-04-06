@@ -163,6 +163,12 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 	if err != nil {
 		return "", err
 	}
+
+	if arguments == nil {
+		arguments = make(map[string]any)
+	}
+	arguments["mcp_mode"] = "true"
+
 	jsonData, err := json.Marshal(arguments)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal arguments: %w", err)

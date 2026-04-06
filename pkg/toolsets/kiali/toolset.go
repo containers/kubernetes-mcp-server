@@ -28,8 +28,9 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 		kialiTools.InitManageIstioConfigRead(),
 		kialiTools.InitManageIstioConfig(),
 		kialiTools.InitListOrGetResources(),
+		kialiTools.InitListTraces(),
+		kialiTools.InitGetTraceDetails(),
 		kialiTools.InitGetPodPerformance(),
-		kialiTools.InitGetTraces(),
 		kialiTools.InitGetLogs(),
 		kialiTools.InitGetMetrics(),
 	)

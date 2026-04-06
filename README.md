@@ -446,6 +446,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `kind` (`string`) - Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule'). Required for 'get' action.
   - `namespace` (`string`) - Namespace containing the Istio object. For 'list', if not provided, returns objects across all namespaces. For 'get', required.
   - `object` (`string`) - Name of the Istio object. Required for 'get' action.
+  - `serviceName` (`string`) - Filter Istio configurations (VirtualServices, DestinationRules, and their referenced Gateways) that affect a specific service. Only applicable for 'list' action
   - `version` (`string`) - API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.
 
 - **kiali_manage_istio_config** - Create, patch, or delete Istio config. For list and get (read-only) use manage_istio_config_read.
