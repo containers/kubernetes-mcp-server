@@ -388,6 +388,10 @@
     "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "properties": {
+        "dryRun": {
+          "description": "If true, only validate the resource without actually creating or updating it. The server will perform validation but won't persist the changes",
+          "type": "boolean"
+        },
         "resource": {
           "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
           "type": "string"
@@ -534,6 +538,10 @@
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are apps/v1)",
           "type": "string"
+        },
+        "dryRun": {
+          "description": "If true, only validate the scale operation without actually applying it. The server will perform validation but won't persist the changes",
+          "type": "boolean"
         },
         "kind": {
           "description": "kind of the resource (examples of valid kind are: StatefulSet, Deployment)",

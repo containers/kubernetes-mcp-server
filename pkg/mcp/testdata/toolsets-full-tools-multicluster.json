@@ -481,6 +481,10 @@
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "type": "string"
         },
+        "dryRun": {
+          "description": "If true, only validate the resource without actually creating or updating it. The server will perform validation but won't persist the changes",
+          "type": "boolean"
+        },
         "resource": {
           "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
           "type": "string"
@@ -643,6 +647,10 @@
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "type": "string"
+        },
+        "dryRun": {
+          "description": "If true, only validate the scale operation without actually applying it. The server will perform validation but won't persist the changes",
+          "type": "boolean"
         },
         "kind": {
           "description": "kind of the resource (examples of valid kind are: StatefulSet, Deployment)",
