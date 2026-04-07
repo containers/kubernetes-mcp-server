@@ -34,6 +34,11 @@ A powerful and flexible Kubernetes [Model Context Protocol (MCP)](https://blog.m
   - **Install** a Helm chart in the current or provided namespace.
   - **List** Helm releases in all namespaces or in a specific namespace.
   - **Uninstall** a Helm release in the current or provided namespace.
+- **🔧 Tekton**: Tekton-specific operations that complement generic Kubernetes resource management.
+  - **Pipeline**: Start a Tekton Pipeline by creating a PipelineRun.
+  - **PipelineRun**: Restart a PipelineRun with the same spec.
+  - **Task**: Start a Tekton Task by creating a TaskRun.
+  - **TaskRun**: Restart a TaskRun with the same spec, and retrieve TaskRun logs via pod resolution.
 - **🔭 Observability**: Optional OpenTelemetry distributed tracing and metrics with custom sampling rates. Includes `/stats` endpoint for real-time statistics. See [OTEL.md](docs/OTEL.md).
 
 Unlike other Kubernetes MCP server implementations, this **IS NOT** just a wrapper around `kubectl` or `helm` command-line tools.
@@ -268,6 +273,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 | kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                                |         |
 | kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.            |         |
 | kubevirt | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details. |         |
+| tekton   | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                              |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -512,6 +518,35 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+
+</details>
+
+<details>
+
+<summary>tekton</summary>
+
+- **tekton_pipeline_start** - Start a Tekton Pipeline by creating a PipelineRun that references it
+  - `name` (`string`) **(required)** - Name of the Pipeline to start
+  - `namespace` (`string`) - Namespace of the Pipeline
+  - `params` (`object`) - Parameter values to pass to the Pipeline. Keys are parameter names; values can be a string, an array of strings, or an object (map of string to string) depending on the parameter type defined in the Pipeline spec
+
+- **tekton_pipelinerun_restart** - Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec
+  - `name` (`string`) **(required)** - Name of the PipelineRun to restart
+  - `namespace` (`string`) - Namespace of the PipelineRun
+
+- **tekton_task_start** - Start a Tekton Task by creating a TaskRun that references it
+  - `name` (`string`) **(required)** - Name of the Task to start
+  - `namespace` (`string`) - Namespace of the Task
+  - `params` (`object`) - Parameter values to pass to the Task. Keys are parameter names; values can be a string, an array of strings, or an object (map of string to string) depending on the parameter type defined in the Task spec
+
+- **tekton_taskrun_restart** - Restart a Tekton TaskRun by creating a new TaskRun with the same spec
+  - `name` (`string`) **(required)** - Name of the TaskRun to restart
+  - `namespace` (`string`) - Namespace of the TaskRun
+
+- **tekton_taskrun_logs** - Get the logs from a Tekton TaskRun by resolving its underlying pod
+  - `name` (`string`) **(required)** - Name of the TaskRun to get logs from
+  - `namespace` (`string`) - Namespace of the TaskRun
+  - `tail` (`integer`) - Number of lines to retrieve from the end of the logs (Optional, default: 100)
 
 </details>
 

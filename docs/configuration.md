@@ -296,6 +296,7 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 | kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                                |         |
 | kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.            |         |
 | kubevirt | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details. |         |
+| tekton   | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                              |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	kialiToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,13 +20,15 @@ import (
 // requests when require_tls is enabled.
 type KialiRequireTLSSuite struct {
 	BaseMcpSuite
-	mockServer *test.MockServer
+	mockServer  *test.MockServer
+	toolsetName string
 }
 
 func (s *KialiRequireTLSSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Config().BearerToken = "token-xyz"
+	s.toolsetName = (&kialiToolset.Toolset{}).GetName()
 }
 
 func (s *KialiRequireTLSSuite) TearDownTest() {
@@ -40,10 +43,10 @@ func (s *KialiRequireTLSSuite) setupConfig(requireTLS bool) {
 	// Parse config without require_tls to bypass Layer 1 (config-time) URL validation,
 	// then enable require_tls to test Layer 2 (runtime) TLSEnforcingTransport enforcement.
 	s.Cfg = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
-		toolsets = ["kiali"]
+		toolsets = ["%s"]
 		[toolset_configs.kiali]
 		url = "%s"
-	`, s.mockServer.Config().Host))))
+	`, s.toolsetName, s.mockServer.Config().Host))))
 	s.Cfg.KubeConfig = kubeConfig
 	s.Cfg.RequireTLS = requireTLS
 }
@@ -56,7 +59,7 @@ func (s *KialiRequireTLSSuite) TestRequireTLS_BlocksHTTPRequests() {
 	s.InitMcpClient()
 
 	s.Run("kiali tool call to HTTP server is blocked", func() {
-		toolResult, err := s.CallTool("kiali_get_traces", map[string]interface{}{
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_traces", s.toolsetName), map[string]interface{}{
 			"traceId": "test-trace-123",
 		})
 		s.Require().Nilf(err, "MCP protocol error: %v", err)
@@ -77,7 +80,7 @@ func (s *KialiRequireTLSSuite) TestRequireTLS_AllowsHTTPWhenDisabled() {
 	s.InitMcpClient()
 
 	s.Run("kiali tool call to HTTP server succeeds", func() {
-		toolResult, err := s.CallTool("kiali_get_traces", map[string]interface{}{
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_traces", s.toolsetName), map[string]interface{}{
 			"traceId": "test-trace-456",
 		})
 		s.Nilf(err, "call tool failed: %v", err)
