@@ -378,6 +378,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **resources_create_or_update** - Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
+  - `dryRun` (`boolean`) - If true, only validate the resource without actually creating or updating it. The server will perform validation but won't persist the changes
   - `resource` (`string`) **(required)** - A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec
 
 - **resources_delete** - Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name
@@ -390,6 +391,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **resources_scale** - Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource
   - `apiVersion` (`string`) **(required)** - apiVersion of the resource (examples of valid apiVersion are apps/v1)
+  - `dryRun` (`boolean`) - If true, only validate the scale operation without actually applying it. The server will perform validation but won't persist the changes
   - `kind` (`string`) **(required)** - kind of the resource (examples of valid kind are: StatefulSet, Deployment)
   - `name` (`string`) **(required)** - Name of the resource
   - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
