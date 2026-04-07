@@ -55,7 +55,7 @@ func (c *Core) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, n
 	return c.DynamicClient().Resource(*gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]*unstructured.Unstructured, error) {
+func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string, dryRun bool) ([]*unstructured.Unstructured, error) {
 	separator := regexp.MustCompile(`\r?\n---\r?\n`)
 	resources := separator.Split(resource, -1)
 	var parsedResources []*unstructured.Unstructured
@@ -70,7 +70,7 @@ func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]
 
 		parsedResources = append(parsedResources, &obj)
 	}
-	return c.resourcesCreateOrUpdate(ctx, parsedResources)
+	return c.resourcesCreateOrUpdate(ctx, parsedResources, dryRun)
 }
 
 func (c *Core) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string, gracePeriodSeconds *int64) error {
@@ -94,6 +94,7 @@ func (c *Core) ResourcesScale(
 	namespace, name string,
 	desiredScale int64,
 	shouldScale bool,
+	dryRun bool,
 ) (*unstructured.Unstructured, error) {
 	gvr, err := c.resourceFor(gvk)
 	if err != nil {
@@ -121,7 +122,12 @@ func (c *Core) ResourcesScale(
 			return scale, fmt.Errorf("failed to set .spec.replicas on scale object %v: %w", scale, err)
 		}
 
-		scale, err = resourceClient.Update(ctx, scale, metav1.UpdateOptions{}, "scale")
+		updateOptions := metav1.UpdateOptions{}
+		if dryRun {
+			updateOptions.DryRun = []string{"All"}
+		}
+
+		scale, err = resourceClient.Update(ctx, scale, updateOptions, "scale")
 		if err != nil {
 			return scale, fmt.Errorf("failed to update scale: %w", err)
 		}
@@ -177,7 +183,7 @@ func (c *Core) resourcesListAsTable(ctx context.Context, gvk *schema.GroupVersio
 	return &unstructured.Unstructured{Object: unstructuredObject}, err
 }
 
-func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstructured.Unstructured, dryRun bool) ([]*unstructured.Unstructured, error) {
 	for i, obj := range resources {
 		gvk := obj.GroupVersionKind()
 		gvr, rErr := c.resourceFor(&gvk)
@@ -190,15 +196,22 @@ func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstruc
 		if namespaced, nsErr := c.isNamespaced(&gvk); nsErr == nil && namespaced {
 			namespace = c.NamespaceOrDefault(namespace)
 		}
-		resources[i], rErr = c.DynamicClient().Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{
+		// Prepare apply options with dry run support
+		applyOptions := metav1.ApplyOptions{
 			FieldManager: version.BinaryName,
 			Force:        true,
-		})
+		}
+
+		if dryRun {
+			applyOptions.DryRun = []string{"All"}
+		}
+
+		resources[i], rErr = c.DynamicClient().Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, applyOptions)
 		if rErr != nil {
 			return nil, rErr
 		}
 		// Clear the cache to ensure the next operation is performed on the latest exposed APIs (will change after the CRD creation)
-		if gvk.Kind == "CustomResourceDefinition" {
+		if gvk.Kind == "CustomResourceDefinition" && !dryRun {
 			c.RESTMapper().Reset()
 		}
 	}
