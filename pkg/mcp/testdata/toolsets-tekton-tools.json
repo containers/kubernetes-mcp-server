@@ -1,0 +1,152 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Tekton: Start Pipeline"
+    },
+    "description": "Start a Tekton Pipeline by creating a PipelineRun that references it",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Pipeline to start",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Pipeline",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "Parameter values to pass to the Pipeline. Keys are parameter names; values can be a string, an array of strings, or an object (map of string to string) depending on the parameter type defined in the Pipeline spec",
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "tekton_pipeline_start",
+    "title": "Tekton: Start Pipeline"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Tekton: Restart PipelineRun"
+    },
+    "description": "Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the PipelineRun to restart",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the PipelineRun",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "tekton_pipelinerun_restart",
+    "title": "Tekton: Restart PipelineRun"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Tekton: Start Task"
+    },
+    "description": "Start a Tekton Task by creating a TaskRun that references it",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Task to start",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Task",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "Parameter values to pass to the Task. Keys are parameter names; values can be a string, an array of strings, or an object (map of string to string) depending on the parameter type defined in the Task spec",
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "tekton_task_start",
+    "title": "Tekton: Start Task"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Tekton: Get TaskRun Logs"
+    },
+    "description": "Get the logs from a Tekton TaskRun by resolving its underlying pod",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the TaskRun to get logs from",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the TaskRun",
+          "type": "string"
+        },
+        "tail": {
+          "default": 100,
+          "description": "Number of lines to retrieve from the end of the logs (Optional, default: 100)",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "tekton_taskrun_logs",
+    "title": "Tekton: Get TaskRun Logs"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Tekton: Restart TaskRun"
+    },
+    "description": "Restart a Tekton TaskRun by creating a new TaskRun with the same spec",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the TaskRun to restart",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the TaskRun",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "tekton_taskrun_restart",
+    "title": "Tekton: Restart TaskRun"
+  }
+]
