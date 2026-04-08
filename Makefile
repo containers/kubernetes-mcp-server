@@ -23,7 +23,7 @@ GOLANGCI_LINT_VERSION ?= v2.11.4
 # NPM version should not append the -dirty flag
 GIT_TAG_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
 OSES = darwin linux windows
-ARCHS = amd64 arm64
+ARCHS = amd64 arm64 s390x ppc64le
 
 CLEAN_TARGETS :=
 CLEAN_TARGETS += '$(BINARY_NAME)'
@@ -49,6 +49,9 @@ clean: ## Clean up all build artifacts
 build: clean tidy format lint ## Build the project
 	go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME) ./cmd/kubernetes-mcp-server
 
+.PHONY: build-multiarch
+build-multiarch: ## Build the project for a specific OS/ARCH (used by Docker multi-arch builds)
+	CGO_ENABLED=0 GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME) ./cmd/kubernetes-mcp-server
 
 .PHONY: build-all-platforms
 build-all-platforms: clean tidy format lint ## Build the project for all platforms
