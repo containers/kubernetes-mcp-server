@@ -85,6 +85,20 @@ TIME PARAMETERS:
 
 The 'query' parameter MUST use metric names that were returned by list_metrics.`
 
+	ShowTimeseriesPrompt = `Display the results as an interactive timeseries chart.
+
+This tool works like execute_range_query but renders the results as a visual chart in the UI clients.
+Use it when the user wants to see a graph or visualization of time-series data and to use visuals to provide the answer.
+Use the show_timeseries as the last tool call after all the other Prometheus tool calls where finalized.
+
+TIME PARAMETERS:
+- 'duration': Look back from now (e.g., "5m", "1h", "24h")
+- 'step': Data point resolution (e.g., "1m" for 1-hour duration, "5m" for 24-hour duration)
+- 'title': A descriptive chart title (e.g., "API Error Rate Over Last Hour")
+- 'description': An explanation of the chart's meaning or context (e.g., "Shows the rate of HTTP 5xx errors per second, broken down by pod")
+
+The 'query' parameter MUST be a range query and must use metric names that were returned by list_metrics.`
+
 	GetLabelNamesPrompt = `Get all label names (dimensions) available for filtering a metric.
 
 WHEN TO USE (after calling list_metrics):

@@ -195,6 +195,14 @@ func BuildRangeQueryInput(args map[string]any) RangeQueryInput {
 	}
 }
 
+func BuildShowTimeseriesInput(args map[string]any) ShowTimeseriesInput {
+	return ShowTimeseriesInput{
+		RangeQueryInput: BuildRangeQueryInput(args),
+		Title:           GetString(args, "title", ""),
+		Description:     GetString(args, "description", ""),
+	}
+}
+
 func BuildLabelNamesInput(args map[string]any) LabelNamesInput {
 	return LabelNamesInput{
 		Metric: GetString(args, "metric", ""),
@@ -367,6 +375,20 @@ func ExecuteRangeQueryHandler(ctx context.Context, promClient prometheus.Loader,
 	}
 
 	return resultutil.NewSuccessResult(output)
+}
+
+// ShowTimeseriesHandler handles the show_timeseries tool, returning full range query data for chart rendering.
+func ShowTimeseriesHandler(ctx context.Context, promClient prometheus.Loader, input ShowTimeseriesInput) *resultutil.Result {
+	slog.Info("ShowTimeseriesHandler called")
+	slog.Debug("ShowTimeseriesHandler params", "input", input)
+
+	// Executing the query handler just to validate the query is correct.
+	result := ExecuteRangeQueryHandler(ctx, promClient, input.RangeQueryInput, true)
+	if result.Error != nil {
+		return result
+	}
+
+	return resultutil.NewSuccessResult(struct{}{})
 }
 
 // ExecuteInstantQueryHandler handles the execution of Prometheus instant queries.
