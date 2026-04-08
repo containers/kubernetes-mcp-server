@@ -12,7 +12,7 @@ var (
 			{
 				Name:        "name_regex",
 				Type:        ParamTypeString,
-				Description: "Regex pattern to filter metric names (e.g., 'http_.*', 'node_.*', 'kube.*'). This parameter is required. Don't pass in blanket regex.",
+				Description: "Regex pattern to filter metric names. IMPORTANT: Metric names are typically prefixed (e.g., 'prometheus_tsdb_head_series'). Use wildcards to match substrings: '.*tsdb.*' matches any metric containing 'tsdb', while 'tsdb' only matches the exact string 'tsdb'. Examples: 'http_.*' (starts with http_), '.*memory.*' (contains memory), 'node_.*' (starts with node_). This parameter is required. Don't pass in blanket regex like '.*' or '.+'.",
 				Required:    true,
 			},
 		},

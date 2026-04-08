@@ -52,6 +52,13 @@ This tool MUST be called first for EVERY observability question to:
 4. The 'name_regex' parameter should always be provided, and be a best guess of what the metric would be named like.
 5. Do not use a blanket regex like .* or .+ in the 'name_regex' parameter. Use specific ones like kube.*, node.*, etc.
 
+REGEX PATTERN GUIDANCE:
+- Prometheus metrics are typically prefixed (e.g., 'prometheus_tsdb_head_series', 'kube_pod_status_phase')
+- To match metrics CONTAINING a substring, use wildcards: '.*tsdb.*' matches 'prometheus_tsdb_head_series'
+- Without wildcards, the pattern matches EXACTLY: 'tsdb' only matches a metric literally named 'tsdb' (which rarely exists)
+- Common patterns: 'kube_pod.*' (pods), '.*memory.*' (memory-related), 'node_.*' (node metrics)
+- If you get empty results, try adding '.*' before/after your search term
+
 NEVER skip this step. NEVER guess metric names. Metric names vary between environments.
 
 After calling this tool:
