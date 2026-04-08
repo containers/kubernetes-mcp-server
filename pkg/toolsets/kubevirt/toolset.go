@@ -36,6 +36,7 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	return slices.Concat(
 		initVMTroubleshoot(),
+		initWindowsGoldenImage(),
 	)
 }
 
