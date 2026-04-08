@@ -1,8 +1,9 @@
 package defaults
 
 const (
-	toolsetDescriptionOverride = ""
-	productNameOverride        = ""
+	toolsetDescriptionOverride               = ""
+	productNameOverride                      = ""
+	windowsEFIInstallerTektonCatalogOverride = ""
 )
 
 func ToolsetDescriptionOverride() string {
@@ -11,4 +12,8 @@ func ToolsetDescriptionOverride() string {
 
 func ProductNameOverride() string {
 	return productNameOverride
+}
+
+func WindowsEFIInstallerTektonCatalogOverride() string {
+	return windowsEFIInstallerTektonCatalogOverride
 }
