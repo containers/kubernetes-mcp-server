@@ -223,6 +223,44 @@ jobs:
           make stop-server || true
           make kind-delete-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }} || true
 
+      # Compare PR results against baseline from main branch
+      - name: Fetch baseline results from main
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        env:
+          EVAL_CONFIG: 'evals/openai-agent/eval.yaml'
+        run: |
+          # Derive agent name from eval-config path (same logic as commit-results job)
+          AGENT_NAME=$(echo "$EVAL_CONFIG" | sed 's|evals/||; s|/eval\.yaml||')
+          git fetch origin main --depth=1
+          git show "origin/main:evals/results/${AGENT_NAME}-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
+
+      - name: Run mcpchecker diff
+        id: mcpchecker-diff
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        run: |
+          RESULTS_FILE=$(ls -t mcpchecker-*-out.json 2>/dev/null | head -1)
+          if [ -z "$RESULTS_FILE" ]; then
+            echo "No mcpchecker results file found, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [ ! -s /tmp/baseline-results.json ]; then
+            echo "No baseline results found on main branch, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          make mcpchecker
+          MCPCHECKER=$(pwd)/_output/tools/bin/mcpchecker
+
+          mkdir -p eval-context
+          if $MCPCHECKER diff --base /tmp/baseline-results.json --current "$RESULTS_FILE" --output markdown > eval-context/diff-output.txt; then
+            echo "has-diff=true" >> $GITHUB_OUTPUT
+          else
+            echo "mcpchecker diff exited with non-zero status, output may still be useful"
+            echo "has-diff=true" >> $GITHUB_OUTPUT
+          fi
+
       # Save context and results for the reporting workflow
       - name: Save evaluation context
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
@@ -237,7 +275,8 @@ jobs:
             "task_pass_rate": "${{ steps.mcpchecker.outputs.task-pass-rate }}",
             "assertions_passed": "${{ steps.mcpchecker.outputs.assertions-passed }}",
             "assertions_total": "${{ steps.mcpchecker.outputs.assertions-total }}",
-            "passed": "${{ steps.mcpchecker.outputs.passed }}"
+            "passed": "${{ steps.mcpchecker.outputs.passed }}",
+            "has_diff": "${{ steps.mcpchecker-diff.outputs.has-diff || 'false' }}"
           }
           EOF
 

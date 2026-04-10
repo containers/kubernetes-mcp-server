@@ -32,6 +32,23 @@ run-evals: mcpchecker ## Run mcpchecker evaluations against the MCP server
 		$(if $(filter true,$(EVAL_VERBOSE)),--verbose,) \
 		--output json
 
+.PHONY: diff-evals
+diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
+	@AGENT_NAME=$$(echo "$(EVAL_CONFIG)" | sed 's|evals/||; s|/eval\.yaml||'); \
+	RESULTS_FILE=$$(ls -t mcpchecker-*-out.json 2>/dev/null | head -1); \
+	BASELINE="evals/results/$${AGENT_NAME}-latest.json"; \
+	if [ -z "$$RESULTS_FILE" ]; then \
+		echo "Error: No mcpchecker results file found"; \
+		exit 1; \
+	fi; \
+	if [ ! -f "$$BASELINE" ]; then \
+		echo "No baseline results found at $$BASELINE, skipping diff"; \
+		exit 0; \
+	fi; \
+	echo ""; \
+	echo "=== Diff vs. baseline ($$BASELINE) ==="; \
+	$(MCPCHECKER) diff --base "$$BASELINE" --current "$$RESULTS_FILE" --output markdown
+
 .PHONY: run-server
 run-server: build ## Start MCP server in background and wait for health check
 	@echo "Starting MCP server on port $(MCP_PORT)..."
