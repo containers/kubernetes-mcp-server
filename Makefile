@@ -23,7 +23,6 @@ GOLANGCI_LINT_VERSION ?= v2.11.4
 # NPM version should not append the -dirty flag
 GIT_TAG_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
 OSES = darwin linux windows
-#ARCHS = amd64 arm64 s390x ppc64le
 LINUX_ARCHS   = amd64 arm64 s390x ppc64le
 DARWIN_ARCHS  = amd64 arm64
 WINDOWS_ARCHS = amd64 arm64
