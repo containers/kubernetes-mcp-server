@@ -88,3 +88,22 @@ jobs:
         run: make build
       - name: Test
         run: make test
+
+  cross-compile:
+    needs: [check-format, check-readme]
+    name: Cross-compile for linux/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch:
+          - s390x
+          - ppc64le
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Build
+        run: make build-multiarch TARGETOS=linux TARGETARCH=${{ matrix.goarch }}
