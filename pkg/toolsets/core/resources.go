@@ -286,14 +286,13 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 	}
 
 	var result string
+	marshalledYaml, err := output.MarshalYaml(resources)
 	if dryRun {
-		marshalledYaml, err := output.MarshalYaml(resources)
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to validate resources: %w", err)), nil
 		}
 		result = "# The following resources (YAML) passed validation (dry run mode)\n" + marshalledYaml
 	} else {
-		marshalledYaml, err := output.MarshalYaml(resources)
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
 		}
