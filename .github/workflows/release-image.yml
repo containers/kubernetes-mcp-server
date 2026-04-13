@@ -28,6 +28,10 @@ jobs:
             tag: amd64
           - runner: ubuntu-24.04-arm
             tag: arm64
+          - runner: ubuntu-latest
+            tag: s390x
+          - runner: ubuntu-latest
+            tag: ppc64le
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - name: Checkout
@@ -76,7 +80,9 @@ jobs:
           podman manifest create \
             "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}" \
             "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-amd64" \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64"
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64" \
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-s390x" \
+            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-ppc64le"
           podman manifest push \
             "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}"
       - name: Create and Push GHCR Manifest
@@ -84,6 +90,8 @@ jobs:
           podman manifest create \
             "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}" \
             "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-amd64" \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64"
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64" \
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-s390x" \
+            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-ppc64le"
           podman manifest push \
             "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}"
