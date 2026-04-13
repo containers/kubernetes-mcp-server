@@ -122,7 +122,7 @@ func (s *PodsSuite) TestPodsListInNamespace() {
 	s.Run("pods_list_in_namespace with nil namespace returns error", func() {
 		toolResult, _ := s.CallTool("pods_list_in_namespace", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to list pods in namespace, missing argument namespace", toolResult.Content[0].(*mcp.TextContent).Text,
+		s.Equalf("failed to list pods in namespace: namespace parameter required", toolResult.Content[0].(*mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_list_in_namespace(namespace=ns-1) returns pods list", func() {
@@ -321,7 +321,7 @@ func (s *PodsSuite) TestPodsGet() {
 	s.Run("pods_get with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_get", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Equalf("failed to get pod: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_get(name=not-found) with not found name", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -404,7 +404,7 @@ func (s *PodsSuite) TestPodsDelete() {
 	s.Run("pods_delete with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_delete", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete pod, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Equalf("failed to delete pod: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_delete(name=not-found) with not found name", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -562,7 +562,7 @@ func (s *PodsSuite) TestPodsLog() {
 	s.Run("pods_log with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_log", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod log, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Equalf("failed to get pod log: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_log with not found name returns error", func() {
 		toolResult, _ := s.CallTool("pods_log", map[string]interface{}{"name": "not-found"})

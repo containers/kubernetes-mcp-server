@@ -36,11 +36,8 @@ func initEvents() []api.ServerTool {
 }
 
 func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	namespace := params.GetArguments()["namespace"]
-	if namespace == nil {
-		namespace = ""
-	}
-	eventMap, err := kubernetes.NewCore(params).EventsList(params, namespace.(string))
+	namespace := api.OptionalString(params, "namespace", "")
+	eventMap, err := kubernetes.NewCore(params).EventsList(params, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
 	}

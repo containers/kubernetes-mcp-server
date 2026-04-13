@@ -21,7 +21,7 @@ func (s *PodsRunSuite) TestPodsRun() {
 	s.Run("pods_run with nil image returns error", func() {
 		toolResult, _ := s.CallTool("pods_run", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to run pod, missing argument image", toolResult.Content[0].(*mcp.TextContent).Text,
+		s.Equalf("failed to run pod: image parameter required", toolResult.Content[0].(*mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_run(image=nginx, namespace=nil), uses configured namespace", func() {

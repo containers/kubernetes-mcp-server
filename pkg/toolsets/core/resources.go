@@ -389,12 +389,16 @@ func parseGroupVersionKind(arguments map[string]interface{}) (*schema.GroupVersi
 
 	a, ok := apiVersion.(string)
 	if !ok {
-		return nil, fmt.Errorf("name is not a string")
+		return nil, fmt.Errorf("apiVersion is not a string")
 	}
 
 	gv, err := schema.ParseGroupVersion(a)
 	if err != nil {
 		return nil, errors.New("invalid argument apiVersion")
 	}
-	return &schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: kind.(string)}, nil
+	k, ok := kind.(string)
+	if !ok {
+		return nil, fmt.Errorf("kind is not a string")
+	}
+	return &schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: k}, nil
 }
