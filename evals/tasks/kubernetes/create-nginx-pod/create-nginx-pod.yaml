@@ -12,4 +12,4 @@ steps:
   cleanup:
     file: cleanup.sh
   prompt:
-    inline: Please create a nginx pod named web-server in the create-pod-test namespace
+    inline: Please create a nginx pod named web-server in the create-pod-test namespace using the image quay.io/nginx/nginx-unprivileged:latest. Make sure the pod is in Ready state.

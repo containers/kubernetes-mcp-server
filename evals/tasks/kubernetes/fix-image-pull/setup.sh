@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:invalid-tag  # This will cause ImagePullBackOff error
+        image: quay.io/nginx/nginx-unprivileged:invalid-tag  # This will cause ImagePullBackOff error
 EOF
 
 # Wait for deployment's pod to enter ImagePullBackOff state

@@ -6,7 +6,7 @@ metadata:
 spec:
   containers:
     - name: nginx
-      image: nginx:latest
+      image: quay.io/nginx/nginx-unprivileged:latest
       ports:
         - containerPort: 80
       volumeMounts:

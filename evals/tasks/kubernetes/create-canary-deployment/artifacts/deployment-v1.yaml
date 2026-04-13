@@ -18,7 +18,15 @@ spec:
         version: v2.0
     spec:
       containers:
-      - name: rec-engine
-        image: nginx:1.28
-        ports:
-        - containerPort: 80
+        - name: rec-engine
+          image: quay.io/nginx/nginx-unprivileged:1.28
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - containerPort: 8080

@@ -1,0 +1,6 @@
+kind: Agent
+metadata:
+  name: "openai-agent"
+builtin:
+  type: "llm-agent"
+  model: "openai:gpt-5"

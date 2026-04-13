@@ -2,7 +2,7 @@
 # Configuration constants
 NAMESPACE="rollout-test"
 DEPLOYMENT="web-app"
-EXPECTED_IMAGE="nginx:1.22"
+EXPECTED_IMAGE="quay.io/nginx/nginx-unprivileged:1.25"
 TIMEOUT="120s"
 TASK_NAME="rolling-update-deployment"
 

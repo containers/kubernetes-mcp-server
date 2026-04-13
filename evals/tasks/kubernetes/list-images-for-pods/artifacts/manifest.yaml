@@ -36,7 +36,7 @@ spec:
         app: mysql
     spec:
       containers:
-      - image: mysql:8.0.36 # Using the official, public MySQL image
+      - image: quay.io/fedora/mysql-80:latest # Using quay.io MySQL image
         name: mysql
         env:
         - name: MYSQL_ROOT_PASSWORD

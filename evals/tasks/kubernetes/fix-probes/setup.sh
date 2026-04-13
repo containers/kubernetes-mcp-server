@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
       - name: webapp
-        image: nginx:latest
+        image: quay.io/nginx/nginx-unprivileged:latest
         ports:
         - containerPort: 80
         # The problem: incorrect health probes causing restarts

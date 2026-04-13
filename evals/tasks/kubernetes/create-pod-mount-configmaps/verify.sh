@@ -41,8 +41,8 @@ fi
 
 # Verify pod has the correct image
 POD_IMAGE=$(kubectl get pod pod1 -n $NAMESPACE -o jsonpath='{.spec.containers[0].image}')
-if [[ "$POD_IMAGE" != "nginx:alpine" ]]; then
-    echo "Pod has incorrect image: $POD_IMAGE, expected: nginx:alpine"
+if [[ "$POD_IMAGE" != "quay.io/nginx/nginx-unprivileged:alpine" ]]; then
+    echo "Pod has incorrect image: $POD_IMAGE, expected: quay.io/nginx/nginx-unprivileged:alpine"
     exit 1
 fi
 

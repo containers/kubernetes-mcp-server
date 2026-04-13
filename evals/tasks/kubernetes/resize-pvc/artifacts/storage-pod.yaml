@@ -10,7 +10,7 @@ spec:
         claimName: storage-pvc
   containers:
     - name: storage-user
-      image: nginx:alpine
+      image: quay.io/nginx/nginx-unprivileged:alpine
       volumeMounts:
         - name: my-storage
           mountPath: /usr/share/nginx/html

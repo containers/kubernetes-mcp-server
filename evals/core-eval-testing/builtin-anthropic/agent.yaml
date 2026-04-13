@@ -1,0 +1,6 @@
+kind: Agent
+metadata:
+  name: "anthropic-agent"
+builtin:
+  type: "llm-agent"
+  model: "anthropic:claude-sonnet-4-6"

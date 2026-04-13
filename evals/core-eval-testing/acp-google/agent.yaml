@@ -1,0 +1,7 @@
+kind: Agent
+metadata:
+  name: "google-acp"
+acp:
+  cmd: "gemini"
+  args:
+    - "--experimental-acp"

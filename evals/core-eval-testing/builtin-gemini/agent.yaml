@@ -1,0 +1,6 @@
+kind: Agent
+metadata:
+  name: "gemini-agent"
+builtin:
+  type: "llm-agent"
+  model: "gemini:gemini-2.5-pro"

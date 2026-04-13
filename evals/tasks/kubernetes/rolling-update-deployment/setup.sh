@@ -2,7 +2,7 @@
 # Initialize namespace and deployment with the old image
 kubectl delete namespace rollout-test --ignore-not-found
 kubectl create namespace rollout-test
-kubectl create deployment web-app --image=nginx:1.21 --replicas=3 -n rollout-test
+kubectl create deployment web-app --image=quay.io/nginx/nginx-unprivileged:1.24 --replicas=3 -n rollout-test
 
 # Wait until all replicas are available
 TIMEOUT="120s"

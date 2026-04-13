@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx
+        image: quay.io/nginx/nginx-unprivileged
         command: ["/bin/sh", "-c"]
         args: ["nonexistent_command"]  # This will cause the pod to crash
 EOF

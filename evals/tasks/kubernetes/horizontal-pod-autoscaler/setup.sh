@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: web-app
-        image: busybox
+        image: quay.io/prometheus/busybox
         command: ["sh", "-c", "while true; do dd if=/dev/zero of=/dev/null; done"]
         resources:
           requests:

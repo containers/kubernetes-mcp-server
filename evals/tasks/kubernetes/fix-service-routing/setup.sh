@@ -4,7 +4,7 @@ kubectl delete namespace web --ignore-not-found
 kubectl create namespace web
 
 # Create deployment with label app=nginx
-kubectl create deployment nginx --image=nginx -n web
+kubectl create deployment nginx --image=quay.io/nginx/nginx-unprivileged -n web
 # kubectl label deployment nginx -n web app=nginx --overwrite
 
 # Create service with different selector (app=web)
