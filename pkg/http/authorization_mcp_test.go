@@ -108,7 +108,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedMissingHeader() {
 
 	s.Run("Protected resource with MISSING Authorization header", func() {
 		resp := s.HttpGet("")
-		s.T().Cleanup(func() { _ = resp.Body.Close })
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
 		s.Run("returns 401 - Unauthorized status", func() {
 			s.Equal(401, resp.StatusCode, "Expected HTTP 401 for MISSING Authorization header")
@@ -137,7 +137,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderIncompatible() {
 
 	s.Run("Protected resource with INCOMPATIBLE Authorization header", func() {
 		resp := s.HttpGet("Basic YWxhZGRpbjpvcGVuc2VzYW1l")
-		s.T().Cleanup(func() { _ = resp.Body.Close })
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
 		s.Run("returns 401 - Unauthorized status", func() {
 			s.Equal(401, resp.StatusCode, "Expected HTTP 401 for INCOMPATIBLE Authorization header")
@@ -166,7 +166,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalid() {
 
 	s.Run("Protected resource with INVALID Authorization header", func() {
 		resp := s.HttpGet("Bearer " + strings.ReplaceAll(tokenBasicNotExpired, ".", ".invalid"))
-		s.T().Cleanup(func() { _ = resp.Body.Close })
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
 		s.Run("returns 401 - Unauthorized status", func() {
 			s.Equal(401, resp.StatusCode, "Expected HTTP 401 for INVALID Authorization header")
@@ -196,7 +196,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderExpired() {
 
 	s.Run("Protected resource with EXPIRED Authorization header", func() {
 		resp := s.HttpGet("Bearer " + tokenBasicExpired)
-		s.T().Cleanup(func() { _ = resp.Body.Close })
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
 		s.Run("returns 401 - Unauthorized status", func() {
 			s.Equal(401, resp.StatusCode, "Expected HTTP 401 for EXPIRED Authorization header")
@@ -227,7 +227,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalidAudience(
 
 	s.Run("Protected resource with INVALID AUDIENCE Authorization header", func() {
 		resp := s.HttpGet("Bearer " + tokenBasicNotExpired)
-		s.T().Cleanup(func() { _ = resp.Body.Close })
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
 		s.Run("returns 401 - Unauthorized status", func() {
 			s.Equal(401, resp.StatusCode, "Expected HTTP 401 for INVALID AUDIENCE Authorization header")
@@ -261,7 +261,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedOidcValidation() {
 
 	s.Run("Protected resource with INVALID OIDC Authorization header", func() {
 		resp := s.HttpGet("Bearer " + tokenBasicNotExpired)
-		s.T().Cleanup(func() { _ = resp.Body.Close })
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
 		s.Run("returns 401 - Unauthorized status", func() {
 			s.Equal(401, resp.StatusCode, "Expected HTTP 401 for INVALID OIDC Authorization header")

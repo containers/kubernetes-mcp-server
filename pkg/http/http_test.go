@@ -243,7 +243,7 @@ func TestHealthCheck(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to get health check endpoint: %v", err)
 			}
-			t.Cleanup(func() { _ = resp.Body.Close })
+			t.Cleanup(func() { _ = resp.Body.Close() })
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("Expected HTTP 200 OK, got %d", resp.StatusCode)
 			}
