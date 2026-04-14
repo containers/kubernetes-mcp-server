@@ -6,21 +6,27 @@ This directory contains examples for testing the **same Kubernetes MCP server** 
 
 ```
 kube-mcp-server/
-├── README.md                    # This file
-├── mcp-config.yaml              # Shared MCP server configuration
-├── tasks/                       # Shared test tasks
-│   ├── create-pod.yaml
-│   ├── setup.sh
-│   ├── verify.sh
-│   └── cleanup.sh
-├── claude-code/                 # Claude Code agent configuration
-│   ├── agent.yaml
-│   ├── eval.yaml
-│   └── eval-inline.yaml
-└── openai-agent/                # OpenAI-compatible agent configuration
-    ├── agent.yaml
-    ├── eval.yaml
-    └── eval-inline.yaml
+└── evals/
+    ├── README.md                        # This file
+    ├── mcp-config.yaml                  # Shared MCP server configuration
+    ├── core-eval-testing/               # Core eval configurations per provider/agent type
+    │   ├── acp-anthropic/               # ACP agent with Anthropic
+    │   ├── acp-google/                  # ACP agent with Google
+    │   ├── builtin-anthropic/           # Built-in agent with Anthropic
+    │   ├── builtin-google/              # Built-in agent with Google
+    │   └── builtin-openai/              # Built-in agent with OpenAI
+    ├── claude-code/                     # Claude Code agent configuration
+    ├── openai-agent/                    # OpenAI-compatible agent configuration
+    ├── results/                         # Weekly eval results
+    └── tasks/                           # Shared test tasks organized by suite (see tasks/README.md)
+        └── <toolset>/
+            └── <task-name>/
+                ├── task.yaml            # Task definition (prompt, verify, labels)
+                ├── setup.sh             # Pre-task cluster setup
+                ├── verify.sh            # Post-task verification
+                ├── cleanup.sh           # Resource cleanup
+                └── artifacts/           # Optional K8s manifests
+
 ```
 
 ## What This Tests

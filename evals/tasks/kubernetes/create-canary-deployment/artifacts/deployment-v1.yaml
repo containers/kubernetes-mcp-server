@@ -20,13 +20,5 @@ spec:
       containers:
         - name: rec-engine
           image: quay.io/nginx/nginx-unprivileged:1.28
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
-            seccompProfile:
-              type: RuntimeDefault
           ports:
-            - containerPort: 8080
+            - containerPort: 80
