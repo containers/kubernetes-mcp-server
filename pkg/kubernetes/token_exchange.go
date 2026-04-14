@@ -90,14 +90,14 @@ func exchangePassthroughToken(
 	stsConfig *tokenexchange.TargetTokenExchangeConfig,
 ) (string, error) {
 	if strategy := baseConfig.GetStsStrategy(); strategy != "" {
-		return doTokenExchange(ctx, baseConfig, oidcProvider, httpClient, token, func(ctx context.Context) (context.Context, error) {
+		return doTokenExchange(ctx, token, func(ctx context.Context) (context.Context, error) {
 			return strategyBasedTokenExchange(ctx, baseConfig, oidcProvider, httpClient, token, strategy, stsConfig)
 		})
 	}
 
 	sts := NewFromConfig(baseConfig, oidcProvider)
 	if sts.IsEnabled() {
-		return doTokenExchange(ctx, baseConfig, oidcProvider, httpClient, token, func(ctx context.Context) (context.Context, error) {
+		return doTokenExchange(ctx, token, func(ctx context.Context) (context.Context, error) {
 			if httpClient != nil {
 				ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 			}
@@ -116,11 +116,9 @@ func exchangePassthroughToken(
 }
 
 // doTokenExchange runs an exchange function and extracts the Bearer token from the resulting context.
+// Falls back to the original token if the exchange doesn't produce one.
 func doTokenExchange(
 	ctx context.Context,
-	baseConfig api.BaseConfig,
-	oidcProvider *oidc.Provider,
-	httpClient *http.Client,
 	token string,
 	exchangeFn func(ctx context.Context) (context.Context, error),
 ) (string, error) {

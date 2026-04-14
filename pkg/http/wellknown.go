@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"k8s.io/klog/v2"
@@ -86,7 +88,8 @@ type WellKnown struct {
 	oidcConfigCache     map[string]interface{}
 	oidcConfigCacheTime time.Time
 	oidcConfigCacheURL  string // tracks which authURL the cache was fetched for
-	oidcConfigCacheLock sync.RWMutex
+	oidcConfigCacheMu   sync.RWMutex
+	oidcConfigFlight    singleflight.Group
 }
 
 var _ http.Handler = &WellKnown{}
@@ -235,36 +238,54 @@ func (w *WellKnown) fetchWellKnownEndpoint(request *http.Request, url string) (m
 }
 
 // fetchOpenIDConfiguration fetches and caches the openid-configuration from the authorization server.
+// Uses singleflight to deduplicate concurrent fetches for the same authorization URL.
 func (w *WellKnown) fetchOpenIDConfiguration(request *http.Request) (map[string]interface{}, error) {
 	authURL := w.authorizationURL()
 
 	// Check cache first (with TTL and URL match — invalidate if authorization URL changed)
-	w.oidcConfigCacheLock.RLock()
+	w.oidcConfigCacheMu.RLock()
 	if w.oidcConfigCache != nil && w.oidcConfigCacheURL == authURL && time.Since(w.oidcConfigCacheTime) < oidcConfigCacheTTL {
 		result := copyMap(w.oidcConfigCache)
-		w.oidcConfigCacheLock.RUnlock()
+		w.oidcConfigCacheMu.RUnlock()
 		return result, nil
 	}
-	w.oidcConfigCacheLock.RUnlock()
+	w.oidcConfigCacheMu.RUnlock()
 
-	// Fetch openid-configuration
-	oidcURL := authURL + openIDConfigurationEndpoint
-	oidcConfig, _, err := w.fetchWellKnownEndpoint(request, oidcURL)
+	// singleflight deduplicates concurrent cache misses for the same authURL
+	val, err, _ := w.oidcConfigFlight.Do(authURL, func() (interface{}, error) {
+		// Re-check cache under singleflight in case another goroutine just populated it
+		w.oidcConfigCacheMu.RLock()
+		if w.oidcConfigCache != nil && w.oidcConfigCacheURL == authURL && time.Since(w.oidcConfigCacheTime) < oidcConfigCacheTTL {
+			result := copyMap(w.oidcConfigCache)
+			w.oidcConfigCacheMu.RUnlock()
+			return result, nil
+		}
+		w.oidcConfigCacheMu.RUnlock()
+
+		oidcURL := authURL + openIDConfigurationEndpoint
+		oidcConfig, _, err := w.fetchWellKnownEndpoint(request, oidcURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch openid-configuration: %w", err)
+		}
+		if oidcConfig == nil {
+			return nil, nil
+		}
+
+		w.oidcConfigCacheMu.Lock()
+		w.oidcConfigCache = copyMap(oidcConfig)
+		w.oidcConfigCacheTime = time.Now()
+		w.oidcConfigCacheURL = authURL
+		w.oidcConfigCacheMu.Unlock()
+
+		return oidcConfig, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch openid-configuration: %w", err)
+		return nil, err
 	}
-	if oidcConfig == nil {
+	if val == nil {
 		return nil, nil
 	}
-
-	// Cache the result with timestamp and URL
-	w.oidcConfigCacheLock.Lock()
-	w.oidcConfigCache = copyMap(oidcConfig)
-	w.oidcConfigCacheTime = time.Now()
-	w.oidcConfigCacheURL = authURL
-	w.oidcConfigCacheLock.Unlock()
-
-	return oidcConfig, nil
+	return copyMap(val.(map[string]interface{})), nil
 }
 
 // generateAuthorizationServerMetadata generates oauth-authorization-server metadata
