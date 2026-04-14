@@ -19,11 +19,6 @@ const (
 	ClusterAuthKubeconfig = "kubeconfig"
 )
 
-type AuthProvider interface {
-	// IsRequireOAuth indicates whether OAuth authentication is required.
-	IsRequireOAuth() bool
-}
-
 // ClusterAuthProvider provides configuration for how the MCP server authenticates to clusters.
 type ClusterAuthProvider interface {
 	// GetClusterAuthMode returns the raw cluster authentication mode from config.
@@ -90,7 +85,6 @@ type RequireTLSProvider interface {
 }
 
 type BaseConfig interface {
-	AuthProvider
 	ClusterAuthProvider
 	ClusterProvider
 	ConfirmationRulesProvider

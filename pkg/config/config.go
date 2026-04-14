@@ -391,10 +391,6 @@ func (c *StaticConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) 
 	return cfg, ok
 }
 
-func (c *StaticConfig) IsRequireOAuth() bool {
-	return c.RequireOAuth
-}
-
 func (c *StaticConfig) GetStsClientId() string {
 	return c.StsClientId
 }
