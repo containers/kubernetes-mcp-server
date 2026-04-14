@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 
 const maxWellKnownResponseSize = 1 << 20 // 1 MB
 const oidcConfigCacheTTL = 5 * time.Minute
+const oidcConfigFetchTimeout = 30 * time.Second
 
 var allowedResponseHeaders = map[string]bool{
 	"Cache-Control": true,
@@ -207,14 +209,20 @@ func (w *WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 	_, _ = writer.Write(body)
 }
 
-// fetchWellKnownEndpoint fetches a well-known endpoint and returns the parsed JSON.
-// Returns nil metadata if the endpoint returns 404 (to allow fallback).
+// fetchWellKnownEndpoint creates a new request from the incoming request's method and context,
+// then fetches the well-known endpoint. Returns nil metadata if the endpoint returns 404.
 func (w *WellKnown) fetchWellKnownEndpoint(request *http.Request, url string) (map[string]interface{}, http.Header, error) {
-	req, err := http.NewRequest(request.Method, url, nil)
+	req, err := http.NewRequestWithContext(request.Context(), request.Method, url, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	resp, err := w.wellKnownHTTPClient().Do(req.WithContext(request.Context()))
+	return w.fetchWellKnownEndpointFromRequest(req)
+}
+
+// fetchWellKnownEndpointFromRequest performs the HTTP fetch using a pre-built request.
+// Returns nil metadata if the endpoint returns 404 (to allow fallback).
+func (w *WellKnown) fetchWellKnownEndpointFromRequest(req *http.Request) (map[string]interface{}, http.Header, error) {
+	resp, err := w.wellKnownHTTPClient().Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to perform request: %w", err)
 	}
@@ -251,19 +259,20 @@ func (w *WellKnown) fetchOpenIDConfiguration(request *http.Request) (map[string]
 	}
 	w.oidcConfigCacheMu.RUnlock()
 
-	// singleflight deduplicates concurrent cache misses for the same authURL
-	val, err, _ := w.oidcConfigFlight.Do(authURL, func() (interface{}, error) {
-		// Re-check cache under singleflight in case another goroutine just populated it
-		w.oidcConfigCacheMu.RLock()
-		if w.oidcConfigCache != nil && w.oidcConfigCacheURL == authURL && time.Since(w.oidcConfigCacheTime) < oidcConfigCacheTTL {
-			result := copyMap(w.oidcConfigCache)
-			w.oidcConfigCacheMu.RUnlock()
-			return result, nil
-		}
-		w.oidcConfigCacheMu.RUnlock()
+	// singleflight deduplicates concurrent cache misses for the same authURL.
+	// We use context.WithoutCancel so that if the winning request is cancelled,
+	// the in-flight fetch still completes for all waiters.
+	val, err, _ := w.oidcConfigFlight.Do(authURL, func() (any, error) {
+		// Decouple from the caller's request lifecycle and apply our own timeout
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(request.Context()), oidcConfigFetchTimeout)
+		defer cancel()
 
-		oidcURL := authURL + openIDConfigurationEndpoint
-		oidcConfig, _, err := w.fetchWellKnownEndpoint(request, oidcURL)
+		fetchReq, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, authURL+openIDConfigurationEndpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create openid-configuration request: %w", err)
+		}
+
+		oidcConfig, _, err := w.fetchWellKnownEndpointFromRequest(fetchReq)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch openid-configuration: %w", err)
 		}
@@ -285,7 +294,7 @@ func (w *WellKnown) fetchOpenIDConfiguration(request *http.Request) (map[string]
 	if val == nil {
 		return nil, nil
 	}
-	return copyMap(val.(map[string]interface{})), nil
+	return copyMap(val.(map[string]any)), nil
 }
 
 // generateAuthorizationServerMetadata generates oauth-authorization-server metadata
