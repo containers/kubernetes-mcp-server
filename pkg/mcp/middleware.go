@@ -3,9 +3,12 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
@@ -15,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/time/rate"
 	"k8s.io/klog/v2"
 )
 
@@ -213,6 +217,74 @@ func getMcpReqUserAgent(req mcp.Request) string {
 		return ""
 	}
 	return fmt.Sprintf("%s/%s", initParams.ClientInfo.Name, initParams.ClientInfo.Version)
+}
+
+// rateLimitingMiddleware creates a per-session rate limiting middleware.
+// Each session gets its own rate.Limiter keyed by session ID.
+// Requests with an empty session ID (e.g. STDIO transport before initialization) bypass rate limiting.
+// Stale session entries are reaped periodically to prevent unbounded memory growth.
+func rateLimitingMiddleware(done <-chan struct{}, limit rate.Limit, burst int) mcp.Middleware {
+	var (
+		mu       sync.Mutex
+		limiters = make(map[string]*rateLimiterEntry)
+	)
+
+	// Reap stale sessions every 5 minutes
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				mu.Lock()
+				now := time.Now()
+				for id, entry := range limiters {
+					if now.Sub(entry.lastSeen) > 10*time.Minute {
+						delete(limiters, id)
+					}
+				}
+				mu.Unlock()
+			}
+		}
+	}()
+
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			session, ok := req.GetSession().(*mcp.ServerSession)
+			if !ok || session == nil {
+				return next(ctx, method, req)
+			}
+			sessionID := session.ID()
+			if sessionID == "" {
+				return next(ctx, method, req)
+			}
+
+			mu.Lock()
+			entry, ok := limiters[sessionID]
+			if !ok {
+				entry = &rateLimiterEntry{
+					limiter:  rate.NewLimiter(limit, burst),
+					lastSeen: time.Now(),
+				}
+				limiters[sessionID] = entry
+			} else {
+				entry.lastSeen = time.Now()
+			}
+			mu.Unlock()
+
+			if !entry.limiter.Allow() {
+				return nil, errors.New("rate limit exceeded")
+			}
+			return next(ctx, method, req)
+		}
+	}
+}
+
+type rateLimiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
 // metaCarrier adapts an MCP Meta map to the OpenTelemetry TextMapCarrier interface

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/time/rate"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
@@ -70,6 +71,7 @@ type Server struct {
 	enabledPrompts []string
 	p              internalk8s.Provider
 	metrics        *metrics.Metrics // Metrics collection system
+	rateLimitDone  chan struct{}    // Closed to stop the rate limiter reaper goroutine
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
@@ -108,6 +110,16 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 
 	s.server.AddReceivingMiddleware(sessionInjectionMiddleware)
 	s.server.AddReceivingMiddleware(traceContextPropagationMiddleware)
+	if configuration.HTTP.RateLimitRPS > 0 {
+		burst := configuration.HTTP.RateLimitBurst
+		if burst == 0 {
+			burst = 10
+		}
+		s.rateLimitDone = make(chan struct{})
+		s.server.AddReceivingMiddleware(
+			rateLimitingMiddleware(s.rateLimitDone, rate.Limit(configuration.HTTP.RateLimitRPS), burst),
+		)
+	}
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
@@ -368,6 +380,10 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 }
 
 func (s *Server) Close() {
+	if s.rateLimitDone != nil {
+		close(s.rateLimitDone)
+		s.rateLimitDone = nil
+	}
 	if s.p != nil {
 		s.p.Close()
 	}
