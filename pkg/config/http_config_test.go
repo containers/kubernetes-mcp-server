@@ -73,6 +73,43 @@ read_header_timeout = "invalid"
 	})
 }
 
+func (s *HTTPConfigSuite) TestValidate() {
+	s.Run("zero RPS is valid (disabled)", func() {
+		cfg := HTTPConfig{RateLimitRPS: 0}
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("positive RPS is valid", func() {
+		cfg := HTTPConfig{RateLimitRPS: 10}
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("negative RPS is rejected", func() {
+		cfg := HTTPConfig{RateLimitRPS: -1}
+		err := cfg.Validate()
+		s.Error(err)
+		s.Contains(err.Error(), "rate_limit_rps must not be negative")
+	})
+
+	s.Run("negative burst is rejected", func() {
+		cfg := HTTPConfig{RateLimitBurst: -5}
+		err := cfg.Validate()
+		s.Error(err)
+		s.Contains(err.Error(), "rate_limit_burst must not be negative")
+	})
+
+	s.Run("zero burst is valid (uses default)", func() {
+		cfg := HTTPConfig{RateLimitRPS: 10, RateLimitBurst: 0}
+		s.NoError(cfg.Validate())
+	})
+}
+
+func (s *HTTPConfigSuite) TestDefaultRateLimitBurst() {
+	s.Run("constant has expected value", func() {
+		s.Equal(10, DefaultRateLimitBurst)
+	})
+}
+
 func TestHTTPConfig(t *testing.T) {
 	suite.Run(t, new(HTTPConfigSuite))
 }

@@ -72,6 +72,7 @@ type Server struct {
 	p              internalk8s.Provider
 	metrics        *metrics.Metrics // Metrics collection system
 	rateLimitDone  chan struct{}    // Closed to stop the rate limiter reaper goroutine
+	closeOnce      sync.Once
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
@@ -110,16 +111,19 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 
 	s.server.AddReceivingMiddleware(sessionInjectionMiddleware)
 	s.server.AddReceivingMiddleware(traceContextPropagationMiddleware)
-	if configuration.HTTP.RateLimitRPS > 0 {
-		burst := configuration.HTTP.RateLimitBurst
-		if burst == 0 {
-			burst = 10
-		}
-		s.rateLimitDone = make(chan struct{})
-		s.server.AddReceivingMiddleware(
-			rateLimitingMiddleware(s.rateLimitDone, rate.Limit(configuration.HTTP.RateLimitRPS), burst),
-		)
-	}
+	s.rateLimitDone = make(chan struct{})
+	s.server.AddReceivingMiddleware(
+		rateLimitingMiddleware(s.rateLimitDone, func() (rate.Limit, int) {
+			s.mu.RLock()
+			rps := s.configuration.HTTP.RateLimitRPS
+			burst := s.configuration.HTTP.RateLimitBurst
+			s.mu.RUnlock()
+			if burst == 0 {
+				burst = config.DefaultRateLimitBurst
+			}
+			return rate.Limit(rps), burst
+		}),
+	)
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
@@ -363,12 +367,18 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 	if err := newConfig.ValidateRequireTLS(); err != nil {
 		return fmt.Errorf("configuration reload rejected: %w", err)
 	}
+	if err := newConfig.HTTP.Validate(); err != nil {
+		return fmt.Errorf("configuration reload rejected: %w", err)
+	}
 
-	// Update the configuration
+	// Update the configuration (protected by mu so concurrent readers see a
+	// consistent snapshot, e.g. the rate-limit configFn closure).
+	s.mu.Lock()
 	s.configuration.StaticConfig = newConfig
 	// Clear cached values so they get recomputed
 	s.configuration.listOutput = nil
 	s.configuration.toolsets = nil
+	s.mu.Unlock()
 
 	// Reload the Kubernetes provider (this will also rebuild tools)
 	if err := s.reloadToolsets(); err != nil {
@@ -380,13 +390,12 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 }
 
 func (s *Server) Close() {
-	if s.rateLimitDone != nil {
+	s.closeOnce.Do(func() {
 		close(s.rateLimitDone)
-		s.rateLimitDone = nil
-	}
-	if s.p != nil {
-		s.p.Close()
-	}
+		if s.p != nil {
+			s.p.Close()
+		}
+	})
 }
 
 // Shutdown gracefully shuts down the server, flushing any pending metrics.

@@ -3,7 +3,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -219,14 +219,28 @@ func getMcpReqUserAgent(req mcp.Request) string {
 	return fmt.Sprintf("%s/%s", initParams.ClientInfo.Name, initParams.ClientInfo.Version)
 }
 
+// CodeRateLimitExceeded is the JSON-RPC error code returned when a session
+// exceeds its rate limit. The value -32029 echoes HTTP 429 and does not
+// conflict with standard JSON-RPC codes or existing SDK application codes.
+const CodeRateLimitExceeded = -32029
+
 // rateLimitingMiddleware creates a per-session rate limiting middleware.
 // Each session gets its own rate.Limiter keyed by session ID.
 // Requests with an empty session ID (e.g. STDIO transport before initialization) bypass rate limiting.
 // Stale session entries are reaped periodically to prevent unbounded memory growth.
-func rateLimitingMiddleware(done <-chan struct{}, limit rate.Limit, burst int) mcp.Middleware {
+//
+// The configFn is called on every request to obtain the current rate limit and
+// burst values, making the middleware safe for dynamic configuration reloads.
+// When the returned limit is <= 0 the request is passed through (rate limiting
+// disabled). When the returned values differ from the previously observed ones
+// all existing per-session limiters are discarded so the new settings take
+// effect immediately.
+func rateLimitingMiddleware(done <-chan struct{}, configFn func() (rate.Limit, int)) mcp.Middleware {
 	var (
-		mu       sync.Mutex
-		limiters = make(map[string]*rateLimiterEntry)
+		mu           sync.Mutex
+		limiters     = make(map[string]*rateLimiterEntry)
+		currentLimit rate.Limit
+		currentBurst int
 	)
 
 	// Reap stale sessions every 5 minutes
@@ -252,6 +266,13 @@ func rateLimitingMiddleware(done <-chan struct{}, limit rate.Limit, burst int) m
 
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			limit, burst := configFn()
+
+			// When limit <= 0, rate limiting is disabled — pass through
+			if limit <= 0 {
+				return next(ctx, method, req)
+			}
+
 			session, ok := req.GetSession().(*mcp.ServerSession)
 			if !ok || session == nil {
 				return next(ctx, method, req)
@@ -262,6 +283,12 @@ func rateLimitingMiddleware(done <-chan struct{}, limit rate.Limit, burst int) m
 			}
 
 			mu.Lock()
+			// If config changed, discard all existing limiters
+			if limit != currentLimit || burst != currentBurst {
+				clear(limiters)
+				currentLimit = limit
+				currentBurst = burst
+			}
 			entry, ok := limiters[sessionID]
 			if !ok {
 				entry = &rateLimiterEntry{
@@ -275,7 +302,7 @@ func rateLimitingMiddleware(done <-chan struct{}, limit rate.Limit, burst int) m
 			mu.Unlock()
 
 			if !entry.limiter.Allow() {
-				return nil, errors.New("rate limit exceeded")
+				return nil, &jsonrpc.Error{Code: CodeRateLimitExceeded, Message: "rate limit exceeded"}
 			}
 			return next(ctx, method, req)
 		}

@@ -346,6 +346,9 @@ func (m *MCPServerOptions) Validate() error {
 	if err := m.StaticConfig.ValidateClusterAuthMode(); err != nil {
 		return err
 	}
+	if err := m.StaticConfig.HTTP.Validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
