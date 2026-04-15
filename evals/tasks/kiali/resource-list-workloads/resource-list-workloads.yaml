@@ -1,0 +1,34 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "Inventory Workloads with Sidecar Status"
+  category: "Resource Inspection"
+  description: "Lists workloads in a namespace and identifies those missing the Istio sidecar proxy."
+  difficulty: easy
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  setup:
+  - script:
+      file: ./setup.sh
+      timeout: 60s
+  - script:
+      inline: |
+        #!/usr/bin/env bash
+        sleep 20
+  verify:
+  - llmJudge:
+      contains: "details-v1"
+  cleanup:
+  - script:
+      file: ./cleanup.sh
+      timeout: 60s
+  - script:
+      inline: |
+        #!/usr/bin/env bash
+        sleep 20
+  prompt:
+    inline: "Identify any workloads in the 'bookinfo' namespace that are missing the Istio sidecar proxy."

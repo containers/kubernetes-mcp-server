@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "Inventory Namespace Services"
+  category: "Resource Inspection"
+  description: "Lists all services within a specific namespace to provide an inventory of available resources."
+  difficulty: easy
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  verify:
+  - llmJudge:
+      contains: "reviews"
+  prompt:
+    inline: "List all services available in the 'bookinfo' namespace."

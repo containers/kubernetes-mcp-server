@@ -26,11 +26,6 @@ func InitManageIstioConfig() []api.ServerTool {
 						Description: "Action to perform (write)",
 						Enum:        []any{"create", "patch", "delete"},
 					},
-					"confirmed": {
-						Type:        "boolean",
-						Description: "CRITICAL: If 'true', the destructive action (create/patch/delete) is executed. If 'false' (or omitted) for create/patch, the tool returns a YAML PREVIEW. Display it to the user and ask for confirmation before calling again with confirmed=true.",
-						Default:     api.ToRawMessage(false),
-					},
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace containing the Istio object",

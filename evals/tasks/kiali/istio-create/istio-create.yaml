@@ -1,0 +1,24 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "Create Istio Gateway"
+  category: "Configuration Management"
+  description: "Creates a new Istio Gateway in the istio-system namespace to manage ingress traffic."
+  difficulty: medium
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  verify:
+  - script:
+      file: ./verify.sh
+      timeout: 10s
+  cleanup:
+  - script:
+      inline: |
+        #!/usr/bin/env bash
+        kubectl delete gw my-gateway -n istio-system --ignore-not-found
+  prompt:
+    inline: "Create a new Istio Gateway named 'my-gateway' in the 'istio-system' namespace."

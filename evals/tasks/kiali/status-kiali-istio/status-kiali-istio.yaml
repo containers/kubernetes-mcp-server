@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "Audit Control Plane Connectivity"
+  category: "Mesh Health & Status"
+  description: "Verifies the connectivity and status of Kiali's interaction with Istio control plane components."
+  difficulty: easy
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  verify:
+  - llmJudge:
+      contains: "kiali"
+  prompt:
+    inline: "Report on the current status and connectivity between Kiali and the Istio control plane components."

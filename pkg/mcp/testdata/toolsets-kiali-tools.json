@@ -122,7 +122,7 @@
       "readOnlyHint": true,
       "title": "Get Metrics for a Resource"
     },
-    "description": "Returns metrics for the given resource type, namespaces and resource name.",
+    "description": "Returns a compact JSON summary of Istio metrics (latency quantiles, traffic trends, throughput, payload sizes) for the given resource.",
     "inputSchema": {
       "properties": {
         "byLabels": {
@@ -297,9 +297,33 @@
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
-      "title": "Get Traces for a Resource or Trace Details"
+      "title": "Get Trace Details"
     },
-    "description": "Fetches a distributed trace (Jaeger/Tempo) by trace_id or searches by service_name (optionally only error traces) and summarizes bottlenecks and error spans.",
+    "description": "Fetches a single distributed trace by trace_id and returns its call hierarchy (service tree with duration, status, and nested calls). Use this after list_traces to drill into a specific trace.",
+    "inputSchema": {
+      "properties": {
+        "traceId": {
+          "description": "Trace ID to fetch and summarize. If provided, namespace/service_name are ignored.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "traceId"
+      ],
+      "type": "object"
+    },
+    "name": "kiali_get_trace_details",
+    "title": "Get Trace Details"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Traces by Service Name"
+    },
+    "description": "Lists distributed traces for a service in a namespace. Returns a summary (namespace, service, total_found, avg_duration_ms) and a list of traces with id, duration_ms, spans_count, root_op, slowest_service, has_errors. Use get_trace_details with a trace id to get full hierarchy.",
     "inputSchema": {
       "properties": {
         "clusterName": {
@@ -307,41 +331,37 @@
           "type": "string"
         },
         "errorOnly": {
-          "description": "If true, only consider traces that contain errors (e.g. error=true / non-200 status). Default false.",
+          "default": "false",
+          "description": "If true, only consider traces that contain errors. Default false.",
           "type": "boolean"
         },
         "limit": {
           "default": "10",
-          "description": "Max number of traces to consider when searching by service_name. Default 10.",
+          "description": "Maximum number of traces to return. Default 10.",
           "type": "integer"
         },
         "lookbackSeconds": {
           "default": 600,
-          "description": "How far back to search when using service_name. Default 600 (10m).",
-          "type": "integer"
-        },
-        "maxSpans": {
-          "default": 7,
-          "description": "Max number of spans to return in each summary section (bottlenecks, errors, roots). Default 7.",
+          "description": "How far back to search. Default 600 (10m).",
           "type": "integer"
         },
         "namespace": {
-          "description": "Kubernetes namespace of the service (required when trace_id is not provided).",
+          "description": "Kubernetes namespace of the service.",
           "type": "string"
         },
         "serviceName": {
-          "description": "Service name to search traces for (required when trace_id is not provided).",
-          "type": "string"
-        },
-        "traceId": {
-          "description": "Trace ID to fetch and summarize. If provided, namespace/service_name are ignored.",
+          "description": "Service name to search traces for (required). Returns multiple traces up to limit.",
           "type": "string"
         }
       },
+      "required": [
+        "namespace",
+        "serviceName"
+      ],
       "type": "object"
     },
-    "name": "kiali_get_traces",
-    "title": "Get Traces for a Resource or Trace Details"
+    "name": "kiali_list_traces",
+    "title": "List Traces by Service Name"
   },
   {
     "annotations": {
@@ -366,21 +386,33 @@
           "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
           "type": "string"
         },
-        "confirmed": {
-          "default": false,
-          "description": "CRITICAL: If 'true', the destructive action (create/patch/delete) is executed. If 'false' (or omitted) for create/patch, the tool returns a YAML PREVIEW. Display it to the user and ask for confirmation before calling again with confirmed=true.",
-          "type": "boolean"
-        },
         "data": {
           "description": "Complete JSON or YAML data to apply or create the object. Required for create and patch actions. You MUST provide a COMPLETE and VALID manifest with ALL required fields for the resource type. Arrays (like servers, http, etc.) are REPLACED entirely, so you must include ALL required fields within each array element.",
           "type": "string"
         },
         "group": {
-          "description": "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io').",
+          "description": "API group of the Istio object",
+          "enum": [
+            "networking.istio.io",
+            "security.istio.io"
+          ],
           "type": "string"
         },
         "kind": {
           "description": "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule').",
+          "enum": [
+            "VirtualService",
+            "DestinationRule",
+            "Gateway",
+            "ServiceEntry",
+            "Sidecar",
+            "WorkloadEntry",
+            "WorkloadGroup",
+            "EnvoyFilter",
+            "AuthorizationPolicy",
+            "PeerAuthentication",
+            "RequestAuthentication"
+          ],
           "type": "string"
         },
         "namespace": {
@@ -441,11 +473,28 @@
           "type": "string"
         },
         "group": {
-          "description": "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io'). Required for 'get' action.",
+          "description": "API group of the Istio object. Required for 'get' action.",
+          "enum": [
+            "networking.istio.io",
+            "security.istio.io"
+          ],
           "type": "string"
         },
         "kind": {
-          "description": "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule'). Required for 'get' action.",
+          "description": "Kind of the Istio object. Required for 'get' action.",
+          "enum": [
+            "VirtualService",
+            "DestinationRule",
+            "Gateway",
+            "ServiceEntry",
+            "Sidecar",
+            "WorkloadEntry",
+            "WorkloadGroup",
+            "EnvoyFilter",
+            "AuthorizationPolicy",
+            "PeerAuthentication",
+            "RequestAuthentication"
+          ],
           "type": "string"
         },
         "namespace": {

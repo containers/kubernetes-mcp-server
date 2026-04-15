@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "List Mesh-Enabled Namespaces"
+  category: "Resource Inspection"
+  description: "Retrieves a list of all namespaces currently managed or observed by the Istio service mesh."
+  difficulty: easy
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  verify:
+  - llmJudge:
+      contains: "namespaces in your mesh"
+  prompt:
+    inline: "Provide a list of all namespaces currently included in my Istio service mesh."

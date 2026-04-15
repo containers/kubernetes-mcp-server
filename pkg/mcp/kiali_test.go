@@ -50,9 +50,9 @@ func (s *KialiSuite) TestGetTraces() {
 	}))
 	s.InitMcpClient()
 
-	s.Run("get_traces(traceId = 'test-trace-123')", func() {
+	s.Run("get_trace_details(traceId = 'test-trace-123')", func() {
 		traceId := "test-trace-123"
-		toolResult, err := s.CallTool("kiali_get_traces", map[string]interface{}{
+		toolResult, err := s.CallTool("kiali_get_trace_details", map[string]interface{}{
 			"traceId": traceId,
 		})
 		s.Run("no error", func() {
@@ -60,7 +60,7 @@ func (s *KialiSuite) TestGetTraces() {
 			s.Falsef(toolResult.IsError, "call tool failed")
 		})
 		s.Run("path is correct", func() {
-			s.Equal("/api/chat/mcp/get_traces", capturedURL.Path, "Unexpected path")
+			s.Equal("/api/chat/mcp/get_trace_details", capturedURL.Path, "Unexpected path")
 		})
 		s.Run("request body contains traceId", func() {
 			s.Contains(capturedBody, traceId, "Request body should contain trace ID")

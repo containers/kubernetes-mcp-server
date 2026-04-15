@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "Retrieve Recent Workload Logs"
+  category: "Troubleshooting & Diagnostics"
+  description: "Fetches the most recent log entries for a specific workload to aid in immediate troubleshooting."
+  difficulty: easy
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  verify:
+  - llmJudge:
+      contains: "productpage"
+  prompt:
+    inline: "Retrieve the last 20 log lines for the 'productpage-v1' workload in the 'bookinfo' namespace."

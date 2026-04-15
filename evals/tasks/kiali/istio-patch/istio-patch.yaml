@@ -1,0 +1,27 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "Update Traffic Shifting"
+  category: "Configuration Management"
+  description: "Applies a patch to a VirtualService to implement weight-based traffic shifting between versions."
+  difficulty: medium
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  setup:
+  - script:
+      file: ./setup.sh
+      timeout: 120s
+  verify:
+  - script:
+      file: ./verify.sh
+      timeout: 60s
+  cleanup:
+  - script:
+      file: ./cleanup.sh
+      timeout: 120s
+  prompt:
+    inline: "I need to implement a 50/50 traffic split between versions for the 'reviews' service in the 'bookinfo' namespace. Apply the necessary patch to the 'reviews' VirtualService without asking for confirmation."

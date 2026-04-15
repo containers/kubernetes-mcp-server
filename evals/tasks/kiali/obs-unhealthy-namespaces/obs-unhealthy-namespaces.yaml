@@ -1,0 +1,27 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "Identify Degraded Namespaces"
+  category: "Mesh Health & Status"
+  description: "Scans the entire mesh to identify namespaces with health issues or degraded performance."
+  difficulty: easy
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  setup:
+  - script:
+      file: ./setup.sh
+      timeout: 120s
+  verify:
+  - llmJudge:
+      contains: "unhealthy"
+  cleanup:
+  - script:
+      file: ./cleanup.sh
+      timeout: 120s
+  prompt:
+    inline: "Check the health of my mesh and let me know if there are any unhealthy namespaces right now."
+
