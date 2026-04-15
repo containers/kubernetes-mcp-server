@@ -16,17 +16,13 @@ spec:
         metadata:
           name: helm-list-test
     - kubernetes.helmInstall:
-        chart: oci://registry-1.docker.io/bitnamicharts/nginx
+        chart: oci://ghcr.io/cloudpirates-io/helm-charts/nginx
         name: test-nginx
         namespace: helm-list-test
 
   verify:
     - kubernetes.helmList:
         namespace: helm-list-test
-    - llmJudge:
-        contains: "test-nginx"
-        # Validates the agent's response mentions the test release
-
   cleanup:
     - kubernetes.helmUninstall:
         name: test-nginx

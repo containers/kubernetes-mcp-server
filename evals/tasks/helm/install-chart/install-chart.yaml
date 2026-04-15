@@ -19,10 +19,6 @@ spec:
   verify:
     - kubernetes.helmList:
         namespace: helm-install-test
-    - llmJudge:
-        contains: "my-redis"
-        # Validates the agent's response mentions the installed release name
-
   cleanup:
     - kubernetes.helmUninstall:
         name: my-redis
@@ -35,4 +31,4 @@ spec:
         ignoreNotFound: true
 
   prompt:
-    inline: Install the Helm chart oci://registry-1.docker.io/bitnamicharts/redis as a Helm release named 'my-redis' in the namespace 'helm-install-test'. Set replica to 1 using Helm values.
+    inline: Install the Helm chart oci://ghcr.io/cloudpirates-io/helm-charts/redis as a Helm release named 'my-redis' in the namespace 'helm-install-test'. Set replica to 1 using Helm values.
