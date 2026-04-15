@@ -131,10 +131,11 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	allNamespaces := api.OptionalBool(params, "all_namespaces", false)
-	namespace := ""
-	if v, ok := params.GetArguments()["namespace"].(string); ok {
-		namespace = v
+	p := api.WrapParams(params)
+	allNamespaces := p.OptionalBool("all_namespaces", false)
+	namespace := p.OptionalString("namespace", "")
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases: %w", err)), nil
 	}
 	ret, err := newHelmClient(params).List(namespace, allNamespaces)
 	if err != nil {

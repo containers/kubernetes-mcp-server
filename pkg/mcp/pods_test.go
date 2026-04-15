@@ -621,23 +621,27 @@ func (s *PodsSuite) TestPodsLog() {
 		s.Nilf(err, "call tool failed %v", err)
 		s.Falsef(podsPreviousLogFalse.IsError, "call tool failed")
 	})
-	s.Run("pods_log with previous as string does not panic", func() {
+	s.Run("pods_log with previous as string returns error without panicking", func() {
 		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
 			"namespace": "ns-1",
 			"name":      "a-pod-in-ns-1",
 			"previous":  "false",
 		})
-		s.Nilf(err, "call tool failed %v", err)
-		s.Falsef(toolResult.IsError, "call tool failed")
+		s.Nilf(err, "call tool should not return error object")
+		s.Truef(toolResult.IsError, "call tool should fail with type mismatch")
+		s.Equalf("failed to get pod log: previous parameter must be a boolean", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
-	s.Run("pods_log with previous as float64 does not panic", func() {
+	s.Run("pods_log with previous as float64 returns error without panicking", func() {
 		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
 			"namespace": "ns-1",
 			"name":      "a-pod-in-ns-1",
 			"previous":  float64(0),
 		})
-		s.Nilf(err, "call tool failed %v", err)
-		s.Falsef(toolResult.IsError, "call tool failed")
+		s.Nilf(err, "call tool should not return error object")
+		s.Truef(toolResult.IsError, "call tool should fail with type mismatch")
+		s.Equalf("failed to get pod log: previous parameter must be a boolean", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_log(tail=50) returns pod log", func() {
 		podsTailLines, err := s.CallTool("pods_log", map[string]interface{}{
@@ -655,7 +659,7 @@ func (s *PodsSuite) TestPodsLog() {
 			"tail":      "invalid",
 		})
 		s.Truef(podsInvalidTailLines.IsError, "call tool should fail")
-		expectedErrorMsg := "failed to parse tail parameter: expected integer"
+		expectedErrorMsg := "failed to get pod log: tail parameter must be an integer"
 		errMsg := podsInvalidTailLines.Content[0].(*mcp.TextContent).Text
 		s.Containsf(errMsg, expectedErrorMsg, "unexpected error message, expected to contain '%s', got '%s'", expectedErrorMsg, errMsg)
 	})

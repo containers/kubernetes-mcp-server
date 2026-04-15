@@ -260,11 +260,15 @@ func initPods() []api.ServerTool {
 }
 
 func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
 	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
-	resourceListOptions.LabelSelector = api.OptionalString(params, "labelSelector", "")
-	resourceListOptions.FieldSelector = api.OptionalString(params, "fieldSelector", "")
+	resourceListOptions.LabelSelector = p.OptionalString("labelSelector", "")
+	resourceListOptions.FieldSelector = p.OptionalString("fieldSelector", "")
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
+	}
 	ret, err := kubernetes.NewCore(params).PodsListInAllNamespaces(params, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
@@ -273,15 +277,16 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 }
 
 func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ns, err := api.RequiredString(params, "namespace")
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace: %w", err)), nil
-	}
+	p := api.WrapParams(params)
+	ns := p.RequiredString("namespace")
 	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
-	resourceListOptions.LabelSelector = api.OptionalString(params, "labelSelector", "")
-	resourceListOptions.FieldSelector = api.OptionalString(params, "fieldSelector", "")
+	resourceListOptions.LabelSelector = p.OptionalString("labelSelector", "")
+	resourceListOptions.FieldSelector = p.OptionalString("fieldSelector", "")
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace: %w", err)), nil
+	}
 	ret, err := kubernetes.NewCore(params).PodsListInNamespace(params, ns, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
@@ -290,9 +295,10 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 }
 
 func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ns := api.OptionalString(params, "namespace", "")
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
+	p := api.WrapParams(params)
+	ns := p.OptionalString("namespace", "")
+	name := p.RequiredString("name")
+	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).PodsGet(params, ns, name)
@@ -303,9 +309,10 @@ func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ns := api.OptionalString(params, "namespace", "")
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
+	p := api.WrapParams(params)
+	ns := p.OptionalString("namespace", "")
+	name := p.RequiredString("name")
+	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete pod: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).PodsDelete(params, ns, name)
@@ -316,16 +323,15 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	podsTopOptions := api.PodsTopOptions{AllNamespaces: true}
-	if v, ok := params.GetArguments()["namespace"].(string); ok {
-		podsTopOptions.Namespace = v
+	p := api.WrapParams(params)
+	podsTopOptions := api.PodsTopOptions{
+		AllNamespaces: p.OptionalBool("all_namespaces", true),
+		Namespace:     p.OptionalString("namespace", ""),
+		Name:          p.OptionalString("name", ""),
 	}
-	podsTopOptions.AllNamespaces = api.OptionalBool(params, "all_namespaces", true)
-	if v, ok := params.GetArguments()["name"].(string); ok {
-		podsTopOptions.Name = v
-	}
-	if v, ok := params.GetArguments()["label_selector"].(string); ok {
-		podsTopOptions.LabelSelector = v
+	podsTopOptions.LabelSelector = p.OptionalString("label_selector", "")
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).PodsTop(params, podsTopOptions)
 	if err != nil {
@@ -341,24 +347,24 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ns := api.OptionalString(params, "namespace", "")
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
+	p := api.WrapParams(params)
+	ns := p.OptionalString("namespace", "")
+	name := p.RequiredString("name")
+	container := p.OptionalString("container", "")
+	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to exec in pod: %w", err)), nil
 	}
-	container := api.OptionalString(params, "container", "")
-	commandArg := params.GetArguments()["command"]
-	command := make([]string, 0)
-	if cmdSlice, ok := commandArg.([]interface{}); ok {
-		for _, cmd := range cmdSlice {
-			s, ok := cmd.(string)
-			if !ok {
-				return api.NewToolCallResult("", errors.New("failed to exec in pod, all command elements must be strings")), nil
-			}
-			command = append(command, s)
+	cmdSlice, ok := params.GetArguments()["command"].([]interface{})
+	if !ok {
+		return api.NewToolCallResult("", errors.New("failed to exec in pod: command parameter must be an array of strings")), nil
+	}
+	command := make([]string, 0, len(cmdSlice))
+	for _, cmd := range cmdSlice {
+		s, ok := cmd.(string)
+		if !ok {
+			return api.NewToolCallResult("", errors.New("failed to exec in pod: command parameter must be an array of strings")), nil
 		}
-	} else {
-		return api.NewToolCallResult("", errors.New("failed to exec in pod, invalid command argument")), nil
+		command = append(command, s)
 	}
 	ret, err := kubernetes.NewCore(params).PodsExec(params, ns, name, container, command)
 	if err != nil {
@@ -370,24 +376,15 @@ func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ns := api.OptionalString(params, "namespace", "")
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
+	p := api.WrapParams(params)
+	ns := p.OptionalString("namespace", "")
+	name := p.RequiredString("name")
+	container := p.OptionalString("container", "")
+	previousBool := p.OptionalBool("previous", false)
+	tailInt := p.OptionalInt64("tail", 0)
+	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod log: %w", err)), nil
 	}
-	container := api.OptionalString(params, "container", "")
-	previousBool := api.OptionalBool(params, "previous", false)
-	// Extract tailLines parameter
-	tail := params.GetArguments()["tail"]
-	var tailInt int64
-	if tail != nil {
-		var err error
-		tailInt, err = api.ParseInt64(tail)
-		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: %w", err)), nil
-		}
-	}
-
 	ret, err := kubernetes.NewCore(params).PodsLog(params.Context, ns, name, container, previousBool, tailInt)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s log in namespace %s: %w", name, ns, err)), nil
@@ -398,19 +395,13 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ns := api.OptionalString(params, "namespace", "")
-	name := api.OptionalString(params, "name", "")
-	image, err := api.RequiredString(params, "image")
-	if err != nil {
+	p := api.WrapParams(params)
+	ns := p.OptionalString("namespace", "")
+	name := p.OptionalString("name", "")
+	image := p.RequiredString("image")
+	port := int32(p.OptionalInt64("port", 0))
+	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to run pod: %w", err)), nil
-	}
-	var port int32
-	if portVal, ok := params.GetArguments()["port"]; ok && portVal != nil {
-		portInt, err := api.ParseInt64(portVal)
-		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse port parameter: %w", err)), nil
-		}
-		port = int32(portInt)
 	}
 	resources, err := kubernetes.NewCore(params).PodsRun(params, ns, name, image, port)
 	if err != nil {
