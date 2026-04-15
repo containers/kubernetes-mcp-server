@@ -90,7 +90,7 @@ func restartTaskRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	name := p.RequiredString("name")
 	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
 	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", err), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to restart task run: %w", err)), nil
 	}
 
 	dynamicClient := params.DynamicClient()
@@ -143,7 +143,7 @@ func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
 	tailInt := p.OptionalInt64("tail", kubernetes.DefaultTailLines)
 	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", err), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get task run logs: %w", err)), nil
 	}
 
 	dynamicClient := params.DynamicClient()

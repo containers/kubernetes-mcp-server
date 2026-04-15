@@ -56,7 +56,7 @@ func startPipeline(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	name := p.RequiredString("name")
 	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
 	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", err), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to start pipeline: %w", err)), nil
 	}
 
 	dynamicClient := params.DynamicClient()

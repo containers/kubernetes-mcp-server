@@ -83,7 +83,7 @@ func optionalString(params ToolHandlerParams, key, defaultVal string) (string, e
 	}
 	str, ok := val.(string)
 	if !ok {
-		return "", fmt.Errorf("%s parameter must be a string", key)
+		return defaultVal, fmt.Errorf("%s parameter must be a string", key)
 	}
 	return str, nil
 }
@@ -98,7 +98,7 @@ func optionalBool(params ToolHandlerParams, key string, defaultVal bool) (bool, 
 	}
 	b, ok := val.(bool)
 	if !ok {
-		return false, fmt.Errorf("%s parameter must be a boolean", key)
+		return defaultVal, fmt.Errorf("%s parameter must be a boolean", key)
 	}
 	return b, nil
 }
