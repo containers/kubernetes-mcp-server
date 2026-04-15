@@ -38,14 +38,13 @@ spec:
                     - name: containerdisk
                       disk:
                         bus: virtio
-                resources:
-                  requests:
-                    memory: 2Gi
+                memory:
+                  guest: 2Gi
               terminationGracePeriodSeconds: 0
               volumes:
                 - name: containerdisk
                   containerDisk:
-                    image: quay.io/containerdisks/opensuse-leap:15.6
+                    image: quay.io/containerdisks/fedora:latest
     - k8s.wait:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
@@ -53,7 +52,7 @@ spec:
           name: paused-vm
           namespace: vm-test-pause
         condition: Ready
-        timeout: 30s
+        timeout: 120s
   verify:
     - k8s.wait:
         apiVersion: kubevirt.io/v1

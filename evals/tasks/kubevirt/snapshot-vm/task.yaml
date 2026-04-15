@@ -29,15 +29,22 @@ spec:
           name: snapshot-test-vm
           namespace: vm-test-snapshot
         spec:
-          runStrategy: Always
+          runStrategy: Halted
           template:
             spec:
               domain:
-                devices: {}
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
                 memory:
                   guest: 512Mi
-                resources: {}
               terminationGracePeriodSeconds: 180
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
   verify:
     - script:
         inline: |-

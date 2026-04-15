@@ -29,7 +29,7 @@ spec:
           name: deleted-vm
           namespace: vm-test-delete
         spec:
-          runStrategy: Always
+          runStrategy: Halted
           template:
             spec:
               domain:
@@ -38,22 +38,13 @@ spec:
                     - name: containerdisk
                       disk:
                         bus: virtio
-                resources:
-                  requests:
-                    memory: 2Gi
+                memory:
+                  guest: 2Gi
               terminationGracePeriodSeconds: 0
               volumes:
                 - name: containerdisk
                   containerDisk:
-                    image: quay.io/containerdisks/opensuse-leap:15.6
-    - k8s.wait:
-        apiVersion: kubevirt.io/v1
-        kind: VirtualMachine
-        metadata:
-          name: deleted-vm
-          namespace: vm-test-delete
-        condition: Ready
-        timeout: 30s
+                    image: quay.io/containerdisks/fedora:latest
   verify:
     # kubectl wait --for=delete is not a condition-based wait,
     # so it must remain as a script step
