@@ -15,19 +15,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-snapshot
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-snapshot
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: snapshot-test-vm
-          namespace: vm-test
+          namespace: vm-test-snapshot
         spec:
           runStrategy: Always
           template:
@@ -43,7 +43,7 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           set -e
-          NS="vm-test"
+          NS="vm-test-snapshot"
           SNAPSHOT_NAME="test-snapshot"
 
           # Verify snapshot was created
@@ -67,21 +67,21 @@ spec:
         kind: VirtualMachineSnapshot
         metadata:
           name: test-snapshot
-          namespace: vm-test
+          namespace: vm-test-snapshot
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: snapshot-test-vm
-          namespace: vm-test
+          namespace: vm-test-snapshot
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-snapshot
         ignoreNotFound: true
   prompt:
     inline: |
-      Create a snapshot named test-snapshot of the virtual machine snapshot-test-vm in the vm-test namespace.
+      Create a snapshot named test-snapshot of the virtual machine snapshot-test-vm in the vm-test-snapshot namespace.

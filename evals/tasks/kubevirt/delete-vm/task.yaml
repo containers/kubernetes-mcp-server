@@ -15,19 +15,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-delete
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-delete
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: deleted-vm
-          namespace: vm-test
+          namespace: vm-test-delete
         spec:
           runStrategy: Always
           template:
@@ -51,7 +51,7 @@ spec:
         kind: VirtualMachine
         metadata:
           name: deleted-vm
-          namespace: vm-test
+          namespace: vm-test-delete
         condition: Ready
         timeout: 30s
   verify:
@@ -60,14 +60,14 @@ spec:
     - script:
         inline: |-
           #!/usr/bin/env bash
-          kubectl wait --for=delete vm/deleted-vm -n vm-test --timeout 30s || exit 1
+          kubectl wait --for=delete vm/deleted-vm -n vm-test-delete --timeout 30s || exit 1
   cleanup:
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-delete
         ignoreNotFound: true
   prompt:
     inline: |
-      Please delete the virtual machine named deleted-vm in the vm-test namespace.
+      Please delete the virtual machine named deleted-vm in the vm-test-delete namespace.

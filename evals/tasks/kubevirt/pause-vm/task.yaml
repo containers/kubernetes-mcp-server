@@ -15,19 +15,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-pause
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-pause
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: paused-vm
-          namespace: vm-test
+          namespace: vm-test-pause
         spec:
           runStrategy: Always
           template:
@@ -51,7 +51,7 @@ spec:
         kind: VirtualMachine
         metadata:
           name: paused-vm
-          namespace: vm-test
+          namespace: vm-test-pause
         condition: Ready
         timeout: 30s
   verify:
@@ -60,7 +60,7 @@ spec:
         kind: VirtualMachine
         metadata:
           name: paused-vm
-          namespace: vm-test
+          namespace: vm-test-pause
         condition: Paused
         timeout: 5s
   cleanup:
@@ -69,14 +69,14 @@ spec:
         kind: VirtualMachine
         metadata:
           name: paused-vm
-          namespace: vm-test
+          namespace: vm-test-pause
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-pause
         ignoreNotFound: true
   prompt:
     inline: |
-      Please pause the virtual machine named paused-vm in the vm-test namespace.
+      Please pause the virtual machine named paused-vm in the vm-test-pause namespace.

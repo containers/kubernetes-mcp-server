@@ -15,19 +15,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-update
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-update
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: test-vm-update
-          namespace: vm-test
+          namespace: vm-test-update
         spec:
           runStrategy: Halted
           template:
@@ -51,7 +51,7 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           source ../helpers/verify-vm.sh
-          NS="vm-test"
+          NS="vm-test-update"
 
           verify_vm_exists "test-vm-update" "$NS" || exit 1
           verify_cpu_cores "test-vm-update" "$NS" 2 || exit 1
@@ -65,17 +65,17 @@ spec:
         kind: VirtualMachine
         metadata:
           name: test-vm-update
-          namespace: vm-test
+          namespace: vm-test-update
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-update
         ignoreNotFound: true
   prompt:
     inline: |-
-      A VirtualMachine named test-vm-update exists in the vm-test namespace.
+      A VirtualMachine named test-vm-update exists in the vm-test-update namespace.
 
       It currently has 1 vCPU and 2Gi of memory.
 

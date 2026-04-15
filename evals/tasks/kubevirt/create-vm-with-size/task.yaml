@@ -15,19 +15,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-size
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-size
   verify:
     - script:
         inline: |-
           #!/usr/bin/env bash
           source ../helpers/verify-vm.sh
-          NS="vm-test"
+          NS="vm-test-size"
 
           verify_vm_exists "test-vm-size" "$NS" || exit 1
           verify_has_resources_or_instancetype "test-vm-size" "$NS" || exit 1
@@ -44,13 +44,13 @@ spec:
         kind: VirtualMachine
         metadata:
           name: test-vm-size
-          namespace: vm-test
+          namespace: vm-test-size
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-size
         ignoreNotFound: true
   prompt:
-    inline: Create a Fedora virtual machine named test-vm-size in the vm-test namespace with size 'large'
+    inline: Create a Fedora virtual machine named test-vm-size in the vm-test-size namespace with size 'large'

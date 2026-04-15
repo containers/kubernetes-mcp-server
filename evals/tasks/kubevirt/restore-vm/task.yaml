@@ -15,19 +15,19 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-restore
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-restore
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: restore-test-vm
-          namespace: vm-test
+          namespace: vm-test-restore
         spec:
           runStrategy: Always
           template:
@@ -43,7 +43,7 @@ spec:
         kind: VirtualMachineSnapshot
         metadata:
           name: restore-snapshot
-          namespace: vm-test
+          namespace: vm-test-restore
         spec:
           source:
             apiGroup: kubevirt.io
@@ -54,7 +54,7 @@ spec:
         kind: VirtualMachineSnapshot
         metadata:
           name: restore-snapshot
-          namespace: vm-test
+          namespace: vm-test-restore
         condition: Ready
         timeout: 30s
   verify:
@@ -62,7 +62,7 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           set -e
-          NS="vm-test"
+          NS="vm-test-restore"
           RESTORE_NAME="test-restore"
 
           # Verify restore was created
@@ -93,35 +93,35 @@ spec:
         kind: VirtualMachineRestore
         metadata:
           name: test-restore
-          namespace: vm-test
+          namespace: vm-test-restore
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: snapshot.kubevirt.io/v1beta1
         kind: VirtualMachineSnapshot
         metadata:
           name: restore-snapshot
-          namespace: vm-test
+          namespace: vm-test-restore
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: restore-test-vm
-          namespace: vm-test
+          namespace: vm-test-restore
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: restored-vm
-          namespace: vm-test
+          namespace: vm-test-restore
         ignoreNotFound: true
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-restore
         ignoreNotFound: true
   prompt:
     inline: |
-      Restore the snapshot named restore-snapshot in the vm-test namespace to a new virtual machine named restored-vm. Use the restore name test-restore.
+      Restore the snapshot named restore-snapshot in the vm-test-restore namespace to a new virtual machine named restored-vm. Use the restore name test-restore.
