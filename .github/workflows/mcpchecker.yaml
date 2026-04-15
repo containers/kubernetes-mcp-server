@@ -19,6 +19,7 @@ on:
         type: choice
         options:
           - kubernetes
+          - helm
           - kubevirt
           - kiali
           - tekton
@@ -109,12 +110,12 @@ jobs:
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
 
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kubevirt | kiali | tekton | all
+            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | helm | kubevirt | kiali | tekton | all
             COMMENT_BODY="${{ github.event.comment.body }}"
             COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
             read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
             case "${FIRST_WORD,,}" in
-              kubevirt|kiali|tekton|all)
+              helm|kubevirt|kiali|tekton|all)
                 SUITE_INPUT="${FIRST_WORD,,}"
                 ;;
               kubernetes)
@@ -129,6 +130,10 @@ jobs:
           # Select label-selector and infrastructure based on suite
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
           case "$SUITE" in
+            helm)
+              echo "label-selector=suite=helm" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,helm" >> $GITHUB_OUTPUT
+              ;;
             kubevirt)
               echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
               echo "toolsets=core,config,kubevirt" >> $GITHUB_OUTPUT
@@ -143,7 +148,7 @@ jobs:
               ;;
             all)
               echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
-              echo "toolsets=core,config,kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,helm,kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
