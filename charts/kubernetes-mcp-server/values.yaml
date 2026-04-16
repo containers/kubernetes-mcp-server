@@ -136,6 +136,28 @@ ingress:
   tls:
     #secretName: ""
 
+# -- Gateway API HTTPRoute ([gateway.networking.k8s.io/v1](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute)).
+# -- Disabled by default. When enabled, set `parentRefs`, `rules` (with `matches` / optional `filters` / `timeouts`), and optionally `hostnames`; the chart appends `backendRefs` to the release Service.
+httpRoute:
+  enabled: false
+  annotations: {}
+  labels: {}
+  parentRefs: []
+  # parentRefs:
+  #   - group: gateway.networking.k8s.io
+  #     kind: Gateway
+  #     name: my-gateway
+  #     namespace: gateway-system
+  #     sectionName: http
+  hostnames: []
+  # hostnames:
+  #   - mcp.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+
 # -- Resource requests and limits for the container.
 resources:
   limits:

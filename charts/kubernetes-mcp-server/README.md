@@ -15,12 +15,36 @@ Helm Chart for the Kubernetes MCP Server
 
 ## Installing the Chart
 
-The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified.
+The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified unless you disable Ingress and use another exposure mechanism (for example Gateway API; see below).
 
 Install the Chart using the following command from the root of this directory:
 
 ```shell
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
+```
+
+### Gateway API (HTTPRoute)
+
+If your platform uses [Gateway API](https://gateway.networking.k8s.io/) instead of classic Ingress, set `ingress.enabled` to `false` and enable `httpRoute` with `parentRefs`, `rules` (each rule must include `matches`; optional `filters` and `timeouts` are passed through), and optionally `hostnames`. The chart adds `backendRefs` pointing at the release `Service` and `service.port`. `parentRefs` and `hostnames` are rendered with `tpl` on their YAML so you can reference `Release` metadata in values.
+
+```yaml
+ingress:
+  enabled: false
+httpRoute:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: my-gateway
+      namespace: gateway-system
+      sectionName: http
+  hostnames:
+    - mcp.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
 ```
 
 ### Optimized OpenShift Deployment
@@ -81,6 +105,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
+| httpRoute | object | `{"annotations":{},"enabled":false,"hostnames":[],"labels":{},"parentRefs":[],"rules":[{"matches":[{"path":{"type":"PathPrefix","value":"/"}}]}]}` | Disabled by default. When enabled, set `parentRefs`, `rules` (with `matches` / optional `filters` / `timeouts`), and optionally `hostnames`; the chart appends `backendRefs` to the release Service. |
 | image | object | `{"pullPolicy":"IfNotPresent","registry":"quay.io","repository":"containers/kubernetes_mcp_server","version":"latest"}` | This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/ |
 | image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. |
 | image.version | string | `"latest"` | This sets the tag or sha digest for the image. |

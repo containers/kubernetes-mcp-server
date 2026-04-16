@@ -1,0 +1,19 @@
+# HTTPRoute alongside Ingress; tpl in parentRefs/hostnames via chart tpl(toYaml).
+ingress:
+  host: localhost
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: "{{ .Release.Name }}-gateway"
+      namespace: "{{ .Release.Namespace }}"
+      sectionName: http
+  hostnames:
+    - "mcp.{{ .Release.Name }}.example.test"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
