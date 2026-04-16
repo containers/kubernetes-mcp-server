@@ -278,7 +278,11 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	dryRun := api.OptionalBool(params, "dryRun", false)
+	p := api.WrapParams(params)
+	dryRun := p.OptionalBool("dryRun", false)
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
+	}
 
 	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r, dryRun)
 	if err != nil {
@@ -377,7 +381,11 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 	}
 
-	dryRun := api.OptionalBool(params, "dryRun", false)
+	p := api.WrapParams(params)
+	dryRun := p.OptionalBool("dryRun", false)
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
+	}
 
 	scale, err := kubernetes.NewCore(params).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale, dryRun)
 	if err != nil {
