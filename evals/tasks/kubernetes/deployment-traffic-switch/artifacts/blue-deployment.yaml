@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.25
+        image: quay.io/nginx/nginx-unprivileged:1.25
         ports:
         - containerPort: 80

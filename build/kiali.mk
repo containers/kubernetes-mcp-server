@@ -28,7 +28,9 @@ istioctl:
 # Install Istio (demo profile) and enable sidecar injection in default namespace
 .PHONY: install-istio
 install-istio: istioctl
-	$(ISTIOCTL) install --set profile=demo -y
+	$(ISTIOCTL) install --set profile=demo \
+		--set meshConfig.defaultConfig.tracing.zipkin.address=zipkin.istio-system:9411 \
+		-y
 	kubectl apply -f $(ISTIO_ADDONS_DIR)/prometheus.yaml -n istio-system
 	kubectl apply -f $(ISTIO_ADDONS_DIR)/kiali.yaml -n istio-system
 	kubectl apply -f $(ISTIO_ADDONS_DIR)/jaeger.yaml -n istio-system

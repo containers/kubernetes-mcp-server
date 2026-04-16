@@ -192,7 +192,7 @@ metadata:
 spec:
   containers:
   - name: curl
-    image: curlimages/curl:latest
+    image: quay.io/curl/curl:latest
     command: ["sleep", "3600"]
     resources:
         limits:

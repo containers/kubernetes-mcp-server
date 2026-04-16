@@ -18,16 +18,16 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
+	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 )
 
 type BaseHttpSuite struct {
@@ -36,6 +36,7 @@ type BaseHttpSuite struct {
 	StaticConfig    *config.StaticConfig
 	mcpServer       *mcp.Server
 	OidcProvider    *oidc.Provider
+	OAuthState      *oauth.State
 	timeoutCancel   context.CancelFunc
 	StopServer      context.CancelFunc
 	WaitForShutdown func() error
@@ -55,7 +56,8 @@ func (s *BaseHttpSuite) StartServer() {
 	s.Require().NoError(err, "Expected no error getting random port address")
 	s.StaticConfig.Port = strconv.Itoa(tcpAddr.Port)
 
-	provider, err := kubernetes.NewProvider(s.StaticConfig, kubernetes.WithTokenExchange(s.OidcProvider, nil))
+	s.OAuthState = oauth.NewState(oauth.SnapshotFromConfig(s.StaticConfig, s.OidcProvider, nil))
+	provider, err := kubernetes.NewProvider(s.StaticConfig, kubernetes.WithTokenExchange(s.OAuthState))
 	s.Require().NoError(err, "Expected no error creating kubernetes target provider")
 	s.mcpServer, err = mcp.NewServer(mcp.Configuration{StaticConfig: s.StaticConfig}, provider)
 	s.Require().NoError(err, "Expected no error creating MCP server")
@@ -64,7 +66,7 @@ func (s *BaseHttpSuite) StartServer() {
 	timeoutCtx, s.timeoutCancel = context.WithTimeout(s.T().Context(), 10*time.Second)
 	group, gc := errgroup.WithContext(timeoutCtx)
 	cancelCtx, s.StopServer = context.WithCancel(gc)
-	group.Go(func() error { return Serve(cancelCtx, s.mcpServer, s.StaticConfig, s.OidcProvider, nil) })
+	group.Go(func() error { return Serve(cancelCtx, s.mcpServer, s.StaticConfig, s.OAuthState) })
 	s.WaitForShutdown = group.Wait
 	s.Require().NoError(test.WaitForServer(tcpAddr), "HTTP server did not start in time")
 	s.Require().NoError(test.WaitForHealthz(tcpAddr), "HTTP server /healthz endpoint did not respond with non-404 in time")
@@ -90,6 +92,7 @@ type httpContext struct {
 	WaitForShutdown func() error
 	StaticConfig    *config.StaticConfig
 	OidcProvider    *oidc.Provider
+	OAuthState      *oauth.State
 }
 
 func (c *httpContext) beforeEach(t *testing.T) {
@@ -117,7 +120,8 @@ func (c *httpContext) beforeEach(t *testing.T) {
 		t.Fatalf("Failed to close random port listener: %v", randomPortErr)
 	}
 	c.StaticConfig.Port = fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
-	provider, err := kubernetes.NewProvider(c.StaticConfig, kubernetes.WithTokenExchange(c.OidcProvider, nil))
+	c.OAuthState = oauth.NewState(oauth.SnapshotFromConfig(c.StaticConfig, c.OidcProvider, nil))
+	provider, err := kubernetes.NewProvider(c.StaticConfig, kubernetes.WithTokenExchange(c.OAuthState))
 	if err != nil {
 		t.Fatalf("Failed to create kubernetes target provider: %v", err)
 	}
@@ -129,7 +133,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	timeoutCtx, c.timeoutCancel = context.WithTimeout(t.Context(), 10*time.Second)
 	group, gc := errgroup.WithContext(timeoutCtx)
 	cancelCtx, c.StopServer = context.WithCancel(gc)
-	group.Go(func() error { return Serve(cancelCtx, mcpServer, c.StaticConfig, c.OidcProvider, nil) })
+	group.Go(func() error { return Serve(cancelCtx, mcpServer, c.StaticConfig, c.OAuthState) })
 	c.WaitForShutdown = group.Wait
 	// Wait for HTTP server to start (using net)
 	for i := 0; i < 10; i++ {
@@ -239,7 +243,7 @@ func TestHealthCheck(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to get health check endpoint: %v", err)
 			}
-			t.Cleanup(func() { _ = resp.Body.Close })
+			t.Cleanup(func() { _ = resp.Body.Close() })
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("Expected HTTP 200 OK, got %d", resp.StatusCode)
 			}

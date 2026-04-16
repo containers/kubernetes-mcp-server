@@ -12,4 +12,4 @@ steps:
   cleanup:
     file: cleanup.sh
   prompt:
-    inline: "We want to test a new version of our recommendation engine (image tag 1.29) in production without disturbing the existing stable deployment. Can you deploy it as a canary (as engine-v2-1)? We want about 50% of traffic to go to the new version. The current deployment is named engine-v2-0 in the canary-deployment-ns."
+    inline: "We want to test a new version of our recommendation engine (quay.io/nginx/nginx-unprivileged:1.29) in production without disturbing the existing stable deployment. Deploy it as a canary named engine-v2-1 with 2 replicas, matching the same container port and security configuration as the stable deployment. Route about 50% of the traffic to the canary by updating the service to target both deployments. The current stable deployment is engine-v2-0 in namespace canary-deployment-ns."

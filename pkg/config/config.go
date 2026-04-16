@@ -5,13 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"k8s.io/klog/v2"
 )
 
@@ -73,9 +77,31 @@ type StaticConfig struct {
 	// StsAudience is the audience for the STS token exchange.
 	StsAudience string `toml:"sts_audience,omitempty"`
 	// StsScopes is the scopes for the STS token exchange.
-	StsScopes            []string `toml:"sts_scopes,omitempty"`
-	CertificateAuthority string   `toml:"certificate_authority,omitempty"`
-	ServerURL            string   `toml:"server_url,omitempty"`
+	StsScopes []string `toml:"sts_scopes,omitempty"`
+	// TokenExchangeStrategy is the token exchange strategy to use (rfc8693, keycloak-v1, entra-obo).
+	// When set with passthrough mode, the token is exchanged before being passed to the cluster.
+	TokenExchangeStrategy string `toml:"token_exchange_strategy,omitempty"`
+	// StsAuthStyle specifies how client credentials are sent during token exchange.
+	// "params" (default): client_id/secret in request body
+	// "header": HTTP Basic Authentication header
+	// "assertion": JWT client assertion (RFC 7523, for Entra ID certificate auth)
+	StsAuthStyle string `toml:"sts_auth_style,omitempty"`
+	// StsClientCertFile is the path to the client certificate PEM file for JWT assertion auth
+	StsClientCertFile string `toml:"sts_client_cert_file,omitempty"`
+	// StsClientKeyFile is the path to the client private key PEM file for JWT assertion auth
+	StsClientKeyFile string `toml:"sts_client_key_file,omitempty"`
+	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
+	// Valid values: "passthrough" (use OAuth token, with optional exchange), "kubeconfig" (use kubeconfig credentials).
+	// If empty, auto-detects: passthrough when require_oauth=true, otherwise kubeconfig.
+	ClusterAuthMode      string `toml:"cluster_auth_mode,omitempty"`
+	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	ServerURL            string `toml:"server_url,omitempty"`
+	// TrustProxyHeaders allows the server to use X-Forwarded-Host, X-Forwarded-Proto,
+	// X-Forwarded-For, and X-Real-IP headers from reverse proxies.
+	// Only enable this when the server is behind a trusted reverse proxy.
+	// When false (default), the server requires server_url to be set for well-known
+	// endpoint metadata and ignores forwarded headers for client IP and scheme detection.
+	TrustProxyHeaders bool `toml:"trust_proxy_headers,omitempty"`
 
 	// TLS configuration for the HTTP server
 	// TLSCert is the path to the TLS certificate file for HTTPS
@@ -129,6 +155,8 @@ type StaticConfig struct {
 
 	// Internal: the config.toml directory, to help resolve relative file paths
 	configDirPath string
+	// Internal: known provider strategies, set via WithProviderStrategies
+	providerStrategies []string
 }
 
 var _ api.BaseConfig = (*StaticConfig)(nil)
@@ -369,10 +397,6 @@ func (c *StaticConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) 
 	return cfg, ok
 }
 
-func (c *StaticConfig) IsRequireOAuth() bool {
-	return c.RequireOAuth
-}
-
 func (c *StaticConfig) GetStsClientId() string {
 	return c.StsClientId
 }
@@ -387,6 +411,22 @@ func (c *StaticConfig) GetStsAudience() string {
 
 func (c *StaticConfig) GetStsScopes() []string {
 	return c.StsScopes
+}
+
+func (c *StaticConfig) GetStsStrategy() string {
+	return c.TokenExchangeStrategy
+}
+
+func (c *StaticConfig) GetStsAuthStyle() string {
+	return c.StsAuthStyle
+}
+
+func (c *StaticConfig) GetStsClientCertFile() string {
+	return c.StsClientCertFile
+}
+
+func (c *StaticConfig) GetStsClientKeyFile() string {
+	return c.StsClientKeyFile
 }
 
 func (c *StaticConfig) IsValidationEnabled() bool {
@@ -405,6 +445,79 @@ func (c *StaticConfig) IsRequireTLS() bool {
 	return c.RequireTLS
 }
 
+// WithProviderStrategies sets the known cluster-provider strategies for
+// validation. Callers that have access to the provider registry should chain
+// this before Validate so that cluster_provider_strategy is checked:
+//
+//	cfg.WithProviderStrategies(kubernetes.GetRegisteredStrategies()).Validate()
+func (c *StaticConfig) WithProviderStrategies(strategies []string) *StaticConfig {
+	c.providerStrategies = strategies
+	return c
+}
+
+// Validate validates config-level invariants that must hold at both startup and
+// on SIGHUP reload.
+func (c *StaticConfig) Validate() error {
+	// Normalize whitespace-padded fields before any checks use them.
+	c.CertificateAuthority = strings.TrimSpace(c.CertificateAuthority)
+	c.TLSCert = strings.TrimSpace(c.TLSCert)
+	c.TLSKey = strings.TrimSpace(c.TLSKey)
+	if output.FromString(c.ListOutput) == nil {
+		return fmt.Errorf("invalid output name: %s, valid names are: %s", c.ListOutput, strings.Join(output.Names, ", "))
+	}
+	if err := toolsets.Validate(c.Toolsets); err != nil {
+		return err
+	}
+	if c.ClusterProviderStrategy != "" && len(c.providerStrategies) > 0 {
+		if !slices.Contains(c.providerStrategies, c.ClusterProviderStrategy) {
+			return fmt.Errorf("invalid cluster-provider: %s, valid values are: %s", c.ClusterProviderStrategy, strings.Join(c.providerStrategies, ", "))
+		}
+	}
+	if !c.RequireOAuth && (c.OAuthAudience != "" || c.AuthorizationURL != "" || c.ServerURL != "" || c.CertificateAuthority != "") {
+		return fmt.Errorf("oauth-audience, authorization-url, server-url and certificate-authority are only valid if require-oauth is enabled. Missing --port may implicitly set require-oauth to false")
+	}
+	if c.AuthorizationURL != "" {
+		u, err := url.Parse(c.AuthorizationURL)
+		if err != nil {
+			return err
+		}
+		if u.Scheme != "https" && u.Scheme != "http" {
+			return fmt.Errorf("--authorization-url must be a valid URL")
+		}
+		if u.Scheme == "http" {
+			klog.Warningf("authorization-url is using http://, this is not recommended production use")
+		}
+	}
+	if c.CertificateAuthority != "" {
+		if _, err := os.Stat(c.CertificateAuthority); err != nil {
+			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
+		}
+	}
+	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {
+		return fmt.Errorf("both --tls-cert and --tls-key must be provided together")
+	}
+	if c.TLSCert != "" {
+		if _, err := os.Stat(c.TLSCert); err != nil {
+			return fmt.Errorf("tls-cert must be a valid file path: %w", err)
+		}
+	}
+	if c.TLSKey != "" {
+		if _, err := os.Stat(c.TLSKey); err != nil {
+			return fmt.Errorf("tls-key must be a valid file path: %w", err)
+		}
+	}
+	if err := c.ValidateRequireTLS(); err != nil {
+		return err
+	}
+	if err := c.ValidateClusterAuthMode(); err != nil {
+		return err
+	}
+	if err := c.HTTP.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ValidateRequireTLS validates outbound URL schemes when RequireTLS is enabled.
 // Called at startup (root.go Validate) and on config reload (ReloadConfiguration).
 func (c *StaticConfig) ValidateRequireTLS() error {
@@ -416,4 +529,40 @@ func (c *StaticConfig) ValidateRequireTLS() error {
 		"server_url":        c.ServerURL,
 		"sse_base_url":      c.SSEBaseURL,
 	})
+}
+
+func (c *StaticConfig) GetClusterAuthMode() string {
+	return c.ClusterAuthMode
+}
+
+// ResolveClusterAuthMode returns the effective cluster auth mode.
+// If explicitly set, returns that value. Otherwise auto-detects:
+// passthrough when require_oauth is true, kubeconfig otherwise.
+func (c *StaticConfig) ResolveClusterAuthMode() string {
+	if c.ClusterAuthMode != "" {
+		return c.ClusterAuthMode
+	}
+	if c.RequireOAuth {
+		return api.ClusterAuthPassthrough
+	}
+	return api.ClusterAuthKubeconfig
+}
+
+// ValidateClusterAuthMode validates cluster_auth_mode and its interaction with
+// other auth-related settings (require_oauth, token exchange).
+func (c *StaticConfig) ValidateClusterAuthMode() error {
+	if c.ClusterAuthMode != "" && c.ClusterAuthMode != api.ClusterAuthPassthrough && c.ClusterAuthMode != api.ClusterAuthKubeconfig {
+		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", c.ClusterAuthMode, api.ClusterAuthPassthrough, api.ClusterAuthKubeconfig)
+	}
+	hasTokenExchange := c.TokenExchangeStrategy != "" || c.StsAudience != ""
+	if c.ClusterAuthMode == api.ClusterAuthPassthrough && !c.RequireOAuth {
+		return fmt.Errorf("cluster_auth_mode %q requires require_oauth=true (no token to pass through without OAuth)", api.ClusterAuthPassthrough)
+	}
+	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && hasTokenExchange {
+		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) are incompatible with cluster_auth_mode %q (exchanged token would be unused)", api.ClusterAuthKubeconfig)
+	}
+	if !c.RequireOAuth && hasTokenExchange {
+		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) require require_oauth=true (no token to exchange without OAuth)")
+	}
+	return nil
 }

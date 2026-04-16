@@ -15,7 +15,7 @@ type rfc8693Exchanger struct{}
 var _ TokenExchanger = &rfc8693Exchanger{}
 
 func (e *rfc8693Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error) {
-	httpClient, err := cfg.HTTPCLient()
+	httpClient, err := cfg.HTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire http client to talk to IdP for target: %w", err)
 	}
@@ -32,7 +32,9 @@ func (e *rfc8693Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExchang
 	}
 
 	headers := http.Header{}
-	injectClientAuth(cfg, data, headers)
+	if err := injectClientAuth(cfg, data, headers); err != nil {
+		return nil, err
+	}
 
 	return doTokenExchange(ctx, httpClient, cfg.TokenURL, data, headers)
 }

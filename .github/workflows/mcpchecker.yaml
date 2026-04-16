@@ -19,6 +19,7 @@ on:
         type: choice
         options:
           - kubernetes
+          - helm
           - kubevirt
           - kiali
           - tekton
@@ -109,12 +110,12 @@ jobs:
           TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
 
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | kubevirt | kiali | tekton | all
+            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | helm | kubevirt | kiali | tekton | all
             COMMENT_BODY="${{ github.event.comment.body }}"
             COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
             read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
             case "${FIRST_WORD,,}" in
-              kubevirt|kiali|tekton|all)
+              helm|kubevirt|kiali|tekton|all)
                 SUITE_INPUT="${FIRST_WORD,,}"
                 ;;
               kubernetes)
@@ -129,6 +130,10 @@ jobs:
           # Select label-selector and infrastructure based on suite
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
           case "$SUITE" in
+            helm)
+              echo "label-selector=suite=helm" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,helm" >> $GITHUB_OUTPUT
+              ;;
             kubevirt)
               echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
               echo "toolsets=core,config,kubevirt" >> $GITHUB_OUTPUT
@@ -143,7 +148,7 @@ jobs:
               ;;
             all)
               echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
-              echo "toolsets=core,config,kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,helm,kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
@@ -194,7 +199,7 @@ jobs:
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.14
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.16
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           mcpchecker-version: 'latest'
@@ -223,6 +228,44 @@ jobs:
           make stop-server || true
           make kind-delete-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }} || true
 
+      # Compare PR results against baseline from main branch
+      - name: Fetch baseline results from main
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        env:
+          EVAL_CONFIG: 'evals/openai-agent/eval.yaml'
+        run: |
+          # Derive agent name from eval-config path (same logic as commit-results job)
+          AGENT_NAME=$(echo "$EVAL_CONFIG" | sed 's|evals/||; s|/eval\.yaml||')
+          git fetch origin main --depth=1
+          git show "origin/main:evals/results/${AGENT_NAME}-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
+
+      - name: Run mcpchecker diff
+        id: mcpchecker-diff
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        run: |
+          RESULTS_FILE=$(ls -t mcpchecker-*-out.json 2>/dev/null | head -1)
+          if [ -z "$RESULTS_FILE" ]; then
+            echo "No mcpchecker results file found, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [ ! -s /tmp/baseline-results.json ]; then
+            echo "No baseline results found on main branch, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          make mcpchecker
+          MCPCHECKER=$(pwd)/_output/tools/bin/mcpchecker
+
+          mkdir -p eval-context
+          if $MCPCHECKER diff --base /tmp/baseline-results.json --current "$RESULTS_FILE" --output markdown > eval-context/diff-output.txt; then
+            echo "has-diff=true" >> $GITHUB_OUTPUT
+          else
+            echo "mcpchecker diff exited with non-zero status, output may still be useful"
+            echo "has-diff=true" >> $GITHUB_OUTPUT
+          fi
+
       # Save context and results for the reporting workflow
       - name: Save evaluation context
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
@@ -237,7 +280,8 @@ jobs:
             "task_pass_rate": "${{ steps.mcpchecker.outputs.task-pass-rate }}",
             "assertions_passed": "${{ steps.mcpchecker.outputs.assertions-passed }}",
             "assertions_total": "${{ steps.mcpchecker.outputs.assertions-total }}",
-            "passed": "${{ steps.mcpchecker.outputs.passed }}"
+            "passed": "${{ steps.mcpchecker.outputs.passed }}",
+            "has_diff": "${{ steps.mcpchecker-diff.outputs.has-diff || 'false' }}"
           }
           EOF
 

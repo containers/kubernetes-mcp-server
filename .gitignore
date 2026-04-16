@@ -20,6 +20,10 @@ kubernetes-mcp-server-linux-amd64
 !npm/kubernetes-mcp-server-linux-amd64
 kubernetes-mcp-server-linux-arm64
 !npm/kubernetes-mcp-server-linux-arm64
+kubernetes-mcp-server-linux-s390x
+!npm/kubernetes-mcp-server-linux-s390x
+kubernetes-mcp-server-linux-ppc64le
+!npm/kubernetes-mcp-server-linux-ppc64le
 kubernetes-mcp-server-windows-amd64.exe
 kubernetes-mcp-server-windows-arm64.exe
 

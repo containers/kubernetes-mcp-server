@@ -52,11 +52,12 @@ func taskTools() []api.ServerTool {
 }
 
 func startTask(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
-		return api.NewToolCallResult("", err), nil
+	p := api.WrapParams(params)
+	name := p.RequiredString("name")
+	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to start task: %w", err)), nil
 	}
-	namespace := api.OptionalString(params, "namespace", params.NamespaceOrDefault(""))
 
 	dynamicClient := params.DynamicClient()
 
@@ -67,6 +68,7 @@ func startTask(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	var tektonParams []tektonv1.Param
 	if rawParams, ok := params.GetArguments()["params"].(map[string]interface{}); ok {
+		var err error
 		tektonParams, err = parseParams(rawParams)
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to parse params: %w", err)), nil

@@ -220,6 +220,7 @@ func (s *ConfigReloadSuite) TestReloadRejectsHTTPURLsWhenRequireTLS() {
 
 	s.Run("reload with require_tls and HTTP authorization_url is rejected", func() {
 		newConfig := config.Default()
+		newConfig.RequireOAuth = true
 		newConfig.RequireTLS = true
 		newConfig.AuthorizationURL = "http://example.com/auth"
 		newConfig.KubeConfig = s.Cfg.KubeConfig
@@ -231,6 +232,7 @@ func (s *ConfigReloadSuite) TestReloadRejectsHTTPURLsWhenRequireTLS() {
 
 	s.Run("reload with require_tls and HTTP server_url is rejected", func() {
 		newConfig := config.Default()
+		newConfig.RequireOAuth = true
 		newConfig.RequireTLS = true
 		newConfig.ServerURL = "http://example.com:8080"
 		newConfig.KubeConfig = s.Cfg.KubeConfig
@@ -242,6 +244,7 @@ func (s *ConfigReloadSuite) TestReloadRejectsHTTPURLsWhenRequireTLS() {
 
 	s.Run("reload with require_tls and HTTPS URLs succeeds", func() {
 		newConfig := config.Default()
+		newConfig.RequireOAuth = true
 		newConfig.RequireTLS = true
 		newConfig.AuthorizationURL = "https://example.com/auth"
 		newConfig.ServerURL = "https://example.com:8080"
@@ -252,11 +255,79 @@ func (s *ConfigReloadSuite) TestReloadRejectsHTTPURLsWhenRequireTLS() {
 
 	s.Run("reload without require_tls allows HTTP URLs", func() {
 		newConfig := config.Default()
+		newConfig.RequireOAuth = true
 		newConfig.RequireTLS = false
 		newConfig.AuthorizationURL = "http://example.com/auth"
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 		err := server.ReloadConfiguration(newConfig)
 		s.NoError(err)
+	})
+}
+
+func (s *ConfigReloadSuite) TestReloadRejectsInvalidConfig() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
+	server, err := NewServer(Configuration{
+		StaticConfig: s.Cfg,
+	}, provider)
+	s.Require().NoError(err)
+	s.server = server
+
+	s.Run("reload with invalid list_output is rejected", func() {
+		newConfig := config.Default()
+		newConfig.ListOutput = "invalid-format"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid output name")
+	})
+
+	s.Run("reload with invalid toolset name is rejected", func() {
+		newConfig := config.Default()
+		newConfig.Toolsets = []string{"nonexistent-toolset"}
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid toolset name")
+	})
+
+	s.Run("reload with invalid cluster_provider_strategy is rejected", func() {
+		newConfig := config.Default()
+		newConfig.ClusterProviderStrategy = "nonexistent-strategy"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid cluster-provider")
+	})
+
+	s.Run("reload with invalid authorization_url scheme is rejected", func() {
+		newConfig := config.Default()
+		newConfig.RequireOAuth = true
+		newConfig.AuthorizationURL = "ftp://example.com/auth"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "--authorization-url must be a valid URL")
+	})
+
+	s.Run("reload with non-existent certificate_authority is rejected", func() {
+		newConfig := config.Default()
+		newConfig.RequireOAuth = true
+		newConfig.CertificateAuthority = "/nonexistent/path/ca.crt"
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "certificate-authority must be a valid file path")
+	})
+
+	s.Run("reload with mismatched tls_cert and tls_key is rejected", func() {
+		newConfig := config.Default()
+		newConfig.TLSCert = "/some/cert.pem"
+		newConfig.TLSKey = ""
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "both --tls-cert and --tls-key must be provided together")
 	})
 }
 

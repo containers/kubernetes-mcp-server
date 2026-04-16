@@ -24,10 +24,12 @@ GOLANGCI_LINT_VERSION ?= v2.11.4
 GIT_TAG_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
 OSES = darwin linux windows
 ARCHS = amd64 arm64
+LINUX_EXTRA_ARCHS = s390x ppc64le
 
 CLEAN_TARGETS :=
 CLEAN_TARGETS += '$(BINARY_NAME)'
 CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,)))
+CLEAN_TARGETS += $(foreach arch,$(LINUX_EXTRA_ARCHS),$(BINARY_NAME)-linux-$(arch))
 
 # The help will print out all targets with their descriptions organized bellow their categories. The categories are represented by `##@` and the target descriptions by `##`.
 # The awk commands is responsible to read the entire set of makefiles included in this invocation, looking for lines of the file as xyz: ## something, and then pretty-format the target and help. Then, if there's a line with ##@ something, that gets pretty-printed as a category.
@@ -49,12 +51,18 @@ clean: ## Clean up all build artifacts
 build: clean tidy format lint ## Build the project
 	go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME) ./cmd/kubernetes-mcp-server
 
+.PHONY: build-multiarch
+build-multiarch: ## Build the project for a specific OS/ARCH (used by container multi-arch builds)
+	CGO_ENABLED=0 GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME) ./cmd/kubernetes-mcp-server
 
 .PHONY: build-all-platforms
 build-all-platforms: clean tidy format lint ## Build the project for all platforms
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
 		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
+	$(foreach arch,$(LINUX_EXTRA_ARCHS), \
+		GOOS=linux GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-linux-$(arch) ./cmd/kubernetes-mcp-server; \
+	)
 
 .PHONY: test
 test: ## Run the tests

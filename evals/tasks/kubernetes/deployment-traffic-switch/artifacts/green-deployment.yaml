@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.26 # Use a different image tag to represent a new version
+        image: quay.io/nginx/nginx-unprivileged:1.26 # Use a different image tag to represent a new version
         ports:
         - containerPort: 80

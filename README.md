@@ -241,7 +241,7 @@ For comprehensive TOML configuration documentation, including:
 - Denied resources for restricting access to sensitive resource types
 - Server instructions for MCP Tool Search
 - [Custom MCP prompts](docs/prompts.md)
-- [OAuth/OIDC authentication](docs/KEYCLOAK_OIDC_SETUP.md) for HTTP mode
+- OAuth/OIDC authentication for HTTP mode ([Keycloak](docs/KEYCLOAK_OIDC_SETUP.md), [Microsoft Entra ID](docs/ENTRA_ID_SETUP.md))
 
 See the **[Configuration Reference](docs/configuration.md)**.
 

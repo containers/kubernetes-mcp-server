@@ -14,8 +14,8 @@ steps:
   prompt:
     inline: |
       In the multi-container-logging namespace, run a pod called communication-pod with two containers:
-      1. A 'web-server' nginx instance that serves traffic
-      2. A 'logger' busybox instance that processes those logs from a shared volume, 'logs-volume' with 'tail -f /var/log/nginx/access.log'
+      1. A 'web-server' nginx instance (quay.io/nginx/nginx-unprivileged image) that serves traffic
+      2. A 'logger' busybox instance (quay.io/prometheus/busybox image) that processes those logs from a shared volume, 'logs-volume' with 'tail -f /var/log/nginx/access.log'
 
       Both containers should be defined in spec.containers (not as init containers or sidecars).
       Both containers should mount logs-volume at '/var/log/nginx'.

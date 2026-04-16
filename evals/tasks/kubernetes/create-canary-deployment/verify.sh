@@ -8,7 +8,8 @@ NAMESPACE="canary-deployment-ns"
 CANARY_DEPLOYMENT="engine-v2-1"
 STABLE_DEPLOYMENT="engine-v2-0"
 SERVICE="recommendation-engine"
-CANARY_IMAGE="nginx:1.29"
+CANARY_IMAGE="quay.io/nginx/nginx-unprivileged:1.29"
+CANARY_CONTAINER_PORT=80
 CANARY_REPLICAS=2
 STABLE_REPLICAS=2
 EXPECTED_TOTAL_ENDPOINTS=$((CANARY_REPLICAS + STABLE_REPLICAS))
@@ -45,6 +46,20 @@ fi
 CURRENT_CANARY_IMAGE=$(kubectl get deployment "$CANARY_DEPLOYMENT" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}')
 if [[ "$CURRENT_CANARY_IMAGE" != "$CANARY_IMAGE" ]]; then
   echo "ERROR: Canary deployment image is '$CURRENT_CANARY_IMAGE', expected '$CANARY_IMAGE'."
+  exit 1
+fi
+
+# Verify the canary deployment container port matches the expected port
+CURRENT_CANARY_PORT=$(kubectl get deployment "$CANARY_DEPLOYMENT" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].ports[0].containerPort}')
+if [[ "$CURRENT_CANARY_PORT" != "$CANARY_CONTAINER_PORT" ]]; then
+  echo "ERROR: Canary container port is '$CURRENT_CANARY_PORT', expected '$CANARY_CONTAINER_PORT'."
+  exit 1
+fi
+
+# Verify the canary deployment has the correct app label to match the service selector
+CANARY_APP_LABEL=$(kubectl get deployment "$CANARY_DEPLOYMENT" -n "$NAMESPACE" -o jsonpath='{.spec.template.metadata.labels.app}')
+if [[ "$CANARY_APP_LABEL" != "recommendation-engine" ]]; then
+  echo "ERROR: Canary deployment pod label 'app' is '$CANARY_APP_LABEL', expected 'recommendation-engine'."
   exit 1
 fi
 

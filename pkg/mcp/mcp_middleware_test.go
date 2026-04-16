@@ -7,12 +7,16 @@ import (
 	"strconv"
 	"testing"
 
+	"errors"
+
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/time/rate"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
 )
@@ -247,4 +251,218 @@ func (s *TraceContextPropagationSuite) TestTraceContextPropagationCarrierWithPro
 
 func TestTraceContextPropagation(t *testing.T) {
 	suite.Run(t, new(TraceContextPropagationSuite))
+}
+
+// RateLimitingSuite tests the rateLimitingMiddleware
+type RateLimitingSuite struct {
+	BaseMcpSuite
+}
+
+func (s *RateLimitingSuite) TestRequestsWithinRateLimitSucceed() {
+	s.Run("multiple requests under the limit all succeed", func() {
+		s.Cfg.HTTP.RateLimitRPS = 100
+		s.Cfg.HTTP.RateLimitBurst = 100
+		s.InitMcpClient()
+
+		for i := 0; i < 5; i++ {
+			_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+			s.NoError(err)
+		}
+	})
+}
+
+func (s *RateLimitingSuite) TestRequestsExceedingRateLimitReturnError() {
+	s.Run("returns rate limit error after exceeding burst", func() {
+		s.Cfg.HTTP.RateLimitRPS = 0.001 // nearly zero replenishment
+		s.Cfg.HTTP.RateLimitBurst = 10
+		s.InitMcpClient()
+
+		var rateLimitErr error
+		for i := 0; i < 20; i++ {
+			_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+			if err != nil {
+				rateLimitErr = err
+				break
+			}
+		}
+		s.Require().Error(rateLimitErr, "Expected rate limit error after exceeding burst")
+		s.Contains(rateLimitErr.Error(), "rate limit exceeded")
+		var rpcErr *jsonrpc.Error
+		s.Require().True(errors.As(rateLimitErr, &rpcErr), "Expected error to be a jsonrpc.Error")
+		s.Equal(int64(CodeRateLimitExceeded), rpcErr.Code)
+	})
+}
+
+func (s *RateLimitingSuite) TestSeparateSessionsHaveIndependentLimits() {
+	s.Run("second session succeeds after first is exhausted", func() {
+		s.Cfg.HTTP.RateLimitRPS = 0.001
+		s.Cfg.HTTP.RateLimitBurst = 10
+		s.InitMcpClient()
+
+		// Create a second client against the same server
+		client2 := test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP())
+		defer client2.Close()
+
+		// Exhaust rate limit on first session
+		for i := 0; i < 20; i++ {
+			_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+			if err != nil {
+				break
+			}
+		}
+
+		// Second session should still work (independent limiter)
+		_, err := client2.CallTool("configuration_view", map[string]any{"minified": false})
+		s.NoError(err, "Second session should have independent rate limit")
+	})
+}
+
+func (s *RateLimitingSuite) TestDisabledRateLimiting() {
+	s.Run("requests succeed when rate limiting is disabled", func() {
+		s.Cfg.HTTP.RateLimitRPS = 0
+		s.InitMcpClient()
+
+		for i := 0; i < 20; i++ {
+			_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+			s.NoError(err)
+		}
+	})
+}
+
+func (s *RateLimitingSuite) TestDefaultBurst() {
+	s.Run("requests succeed when burst is not specified", func() {
+		s.Cfg.HTTP.RateLimitRPS = 100
+		s.Cfg.HTTP.RateLimitBurst = 0 // should default to 10
+		s.InitMcpClient()
+
+		// Verify that requests succeed, confirming the default burst was applied
+		for i := 0; i < 5; i++ {
+			_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+			s.NoError(err)
+		}
+	})
+}
+
+func (s *RateLimitingSuite) TestSessionBypass() {
+	s.Run("empty session ID bypasses rate limiting", func() {
+		done := make(chan struct{})
+		defer close(done)
+		middleware := rateLimitingMiddleware(done, func() (rate.Limit, int) {
+			return rate.Limit(0.001), 1
+		})
+
+		called := 0
+		handler := middleware(func(_ context.Context, _ string, _ mcp.Request) (mcp.Result, error) {
+			called++
+			return nil, nil
+		})
+
+		req := &mcp.ServerRequest[*mcp.CallToolParamsRaw]{
+			Session: &mcp.ServerSession{},
+			Params:  &mcp.CallToolParamsRaw{},
+		}
+
+		for i := 0; i < 5; i++ {
+			_, err := handler(context.Background(), "tools/call", req)
+			s.NoError(err)
+		}
+		s.Equal(5, called)
+	})
+
+	s.Run("nil session bypasses rate limiting", func() {
+		done := make(chan struct{})
+		defer close(done)
+		middleware := rateLimitingMiddleware(done, func() (rate.Limit, int) {
+			return rate.Limit(0.001), 1
+		})
+
+		called := 0
+		handler := middleware(func(_ context.Context, _ string, _ mcp.Request) (mcp.Result, error) {
+			called++
+			return nil, nil
+		})
+
+		req := &mcp.ServerRequest[*mcp.CallToolParamsRaw]{
+			Params: &mcp.CallToolParamsRaw{},
+		}
+
+		for i := 0; i < 5; i++ {
+			_, err := handler(context.Background(), "tools/call", req)
+			s.NoError(err)
+		}
+		s.Equal(5, called)
+	})
+}
+
+func (s *RateLimitingSuite) TestConfigReloadTakesEffect() {
+	s.Run("reload with higher values allows more requests", func() {
+		s.Cfg.HTTP.RateLimitRPS = 0.001 // nearly zero replenishment
+		s.Cfg.HTTP.RateLimitBurst = 2
+		s.InitMcpClient()
+
+		// Exhaust the initial burst
+		for i := 0; i < 5; i++ {
+			_, _ = s.CallTool("configuration_view", map[string]any{"minified": false})
+		}
+
+		// Verify that we are rate limited
+		_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+		s.Require().Error(err, "Expected rate limit error")
+
+		// Reload with much higher limits
+		s.Cfg.HTTP.RateLimitRPS = 1000
+		s.Cfg.HTTP.RateLimitBurst = 1000
+
+		// After reload, requests should succeed
+		_, err = s.CallTool("configuration_view", map[string]any{"minified": false})
+		s.NoError(err, "Expected request to succeed after config reload")
+	})
+}
+
+func (s *RateLimitingSuite) TestDisabledToEnabled() {
+	s.Run("enabling rate limiting after starting disabled", func() {
+		s.Cfg.HTTP.RateLimitRPS = 0 // disabled
+		s.InitMcpClient()
+
+		// Requests should succeed when disabled
+		for i := 0; i < 20; i++ {
+			_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+			s.NoError(err)
+		}
+
+		// Enable rate limiting with tight burst
+		s.Cfg.HTTP.RateLimitRPS = 0.001
+		s.Cfg.HTTP.RateLimitBurst = 2
+
+		// Eventually should hit rate limit
+		var rateLimitErr error
+		for i := 0; i < 20; i++ {
+			_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+			if err != nil {
+				rateLimitErr = err
+				break
+			}
+		}
+		s.Require().Error(rateLimitErr, "Expected rate limit error after enabling")
+		s.Contains(rateLimitErr.Error(), "rate limit exceeded")
+	})
+}
+
+func (s *RateLimitingSuite) TestDoubleCloseDoesNotPanic() {
+	s.Run("calling Close twice does not panic", func() {
+		s.Cfg.HTTP.RateLimitRPS = 10
+		s.Cfg.HTTP.RateLimitBurst = 10
+		s.InitMcpClient()
+
+		s.NotPanics(func() {
+			s.mcpServer.Close()
+			s.mcpServer.Close()
+		})
+		// Prevent TearDownTest from closing again (already closed)
+		s.mcpServer = nil
+	})
+}
+
+func TestRateLimiting(t *testing.T) {
+	suite.Run(t, new(RateLimitingSuite))
 }

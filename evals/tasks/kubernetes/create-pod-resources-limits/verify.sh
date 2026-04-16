@@ -15,8 +15,8 @@ fi
 
 # Verify the pod has the correct image
 POD_IMAGE=$(kubectl get pod resource-limits-pod -n limits-test -o jsonpath='{.spec.containers[0].image}')
-if [[ "$POD_IMAGE" != "httpd:alpine" ]]; then
-    echo "Pod has incorrect image: $POD_IMAGE, expected: httpd:alpine"
+if [[ "$POD_IMAGE" != "quay.io/fedora/httpd-24:latest" ]]; then
+    echo "Pod has incorrect image: $POD_IMAGE, expected: quay.io/fedora/httpd-24:latest"
     exit 1
 fi
 

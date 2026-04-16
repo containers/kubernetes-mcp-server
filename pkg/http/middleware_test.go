@@ -1,6 +1,7 @@
 package http
 
 import (
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,10 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -50,7 +54,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(handler)
+		middleware := RequestMiddleware(false)(handler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -77,7 +81,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(handler)
+		middleware := RequestMiddleware(false)(handler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		rr := httptest.NewRecorder()
@@ -94,7 +98,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(handler)
+		middleware := RequestMiddleware(false)(handler)
 
 		req := httptest.NewRequest("GET", "/healthz", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -121,7 +125,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			innerHandler.ServeHTTP(w, r)
 		})
 
-		middleware := RequestMiddleware(intermediateHandler)
+		middleware := RequestMiddleware(false)(intermediateHandler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -281,4 +285,173 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 
 func TestMaxBodyMiddleware(t *testing.T) {
 	suite.Run(t, new(MaxBodyMiddlewareSuite))
+}
+
+// TrustProxyHeadersSuite verifies that RequestMiddleware only honors
+// X-Forwarded-* and X-Real-IP headers when trust_proxy_headers is enabled.
+// Assertions read url.scheme and client.address from OpenTelemetry span
+// attributes captured by an in-memory recorder bound to httpTracer for the
+// lifetime of each test.
+type TrustProxyHeadersSuite struct {
+	suite.Suite
+	spanRecorder     *tracetest.SpanRecorder
+	origHTTPTracer   trace.Tracer
+	cleanupTelemetry func()
+}
+
+func (s *TrustProxyHeadersSuite) SetupTest() {
+	// Bind httpTracer directly to a fresh in-memory recorder. Swapping the
+	// package-level tracer sidesteps OTel's one-shot delegate locking
+	// (sync.Once on the global proxy tracer), so this suite doesn't need a
+	// TestMain and doesn't interfere with other suites in this package.
+	s.spanRecorder = tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(s.spanRecorder),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	s.origHTTPTracer = httpTracer
+	httpTracer = tp.Tracer("test")
+
+	// RequestMiddleware skips span creation when telemetry.Enabled() is false,
+	// so flip the flag on by initializing the tracer with an OTLP endpoint.
+	s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+	cleanup, err := telemetry.InitTracer("test", "1.0.0")
+	s.Require().NoError(err, "Expected telemetry.InitTracer to succeed")
+	s.cleanupTelemetry = cleanup
+}
+
+func (s *TrustProxyHeadersSuite) TearDownTest() {
+	httpTracer = s.origHTTPTracer
+	if s.cleanupTelemetry != nil {
+		s.cleanupTelemetry()
+	}
+}
+
+// runRequest drives a request through RequestMiddleware(trustProxy) and
+// returns the attributes of the span that was ended by the middleware.
+// The recorder is reset before each invocation so this helper is safe to call
+// from nested s.Run subtests (SetupTest only runs per top-level test method).
+func (s *TrustProxyHeadersSuite) runRequest(trustProxy bool, mutate func(*http.Request)) map[string]attribute.Value {
+	s.T().Helper()
+	s.spanRecorder.Reset()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	middleware := RequestMiddleware(trustProxy)(handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.RemoteAddr = "192.168.1.1:443"
+	if mutate != nil {
+		mutate(req)
+	}
+
+	rr := httptest.NewRecorder()
+	middleware.ServeHTTP(rr, req)
+
+	ended := s.spanRecorder.Ended()
+	s.Require().Len(ended, 1, "expected exactly one span to be recorded")
+	attrs := make(map[string]attribute.Value, len(ended[0].Attributes()))
+	for _, kv := range ended[0].Attributes() {
+		attrs[string(kv.Key)] = kv.Value
+	}
+	return attrs
+}
+
+func (s *TrustProxyHeadersSuite) TestClientAddress() {
+	s.Run("trust_proxy=true", func() {
+		s.Run("uses first X-Forwarded-For IP", func() {
+			attrs := s.runRequest(true, func(r *http.Request) {
+				r.Header.Set("X-Forwarded-For", "10.0.0.1")
+			})
+			s.Equal("10.0.0.1", attrs["client.address"].AsString())
+		})
+		s.Run("takes first entry from comma-separated X-Forwarded-For", func() {
+			attrs := s.runRequest(true, func(r *http.Request) {
+				r.Header.Set("X-Forwarded-For", "10.0.0.1, 10.0.0.2, 10.0.0.3")
+			})
+			s.Equal("10.0.0.1", attrs["client.address"].AsString())
+		})
+		s.Run("trims whitespace around X-Forwarded-For entry", func() {
+			attrs := s.runRequest(true, func(r *http.Request) {
+				r.Header.Set("X-Forwarded-For", " 10.0.0.1 ")
+			})
+			s.Equal("10.0.0.1", attrs["client.address"].AsString())
+		})
+		s.Run("falls back to X-Real-IP when X-Forwarded-For absent", func() {
+			attrs := s.runRequest(true, func(r *http.Request) {
+				r.Header.Set("X-Real-IP", "10.0.0.2")
+			})
+			s.Equal("10.0.0.2", attrs["client.address"].AsString())
+		})
+		s.Run("X-Forwarded-For wins over X-Real-IP when both present", func() {
+			attrs := s.runRequest(true, func(r *http.Request) {
+				r.Header.Set("X-Forwarded-For", "10.0.0.1")
+				r.Header.Set("X-Real-IP", "10.0.0.2")
+			})
+			s.Equal("10.0.0.1", attrs["client.address"].AsString())
+		})
+	})
+
+	s.Run("trust_proxy=false", func() {
+		s.Run("ignores X-Forwarded-For and X-Real-IP", func() {
+			attrs := s.runRequest(false, func(r *http.Request) {
+				r.Header.Set("X-Forwarded-For", "10.0.0.1")
+				r.Header.Set("X-Real-IP", "10.0.0.2")
+			})
+			s.Equal("192.168.1.1", attrs["client.address"].AsString(),
+				"proxy headers must be ignored when trust_proxy_headers is disabled")
+		})
+		s.Run("uses RemoteAddr host when no proxy headers set", func() {
+			attrs := s.runRequest(false, nil)
+			s.Equal("192.168.1.1", attrs["client.address"].AsString())
+		})
+		s.Run("falls back to RemoteAddr when SplitHostPort fails", func() {
+			attrs := s.runRequest(false, func(r *http.Request) {
+				r.RemoteAddr = "bad-remote-addr"
+			})
+			s.Equal("bad-remote-addr", attrs["client.address"].AsString())
+		})
+	})
+}
+
+func (s *TrustProxyHeadersSuite) TestURLScheme() {
+	s.Run("trust_proxy=true", func() {
+		s.Run("honors X-Forwarded-Proto=https", func() {
+			attrs := s.runRequest(true, func(r *http.Request) {
+				r.Header.Set("X-Forwarded-Proto", "https")
+			})
+			s.Equal("https", attrs["url.scheme"].AsString())
+		})
+		s.Run("defaults to http when X-Forwarded-Proto absent and no TLS", func() {
+			attrs := s.runRequest(true, nil)
+			s.Equal("http", attrs["url.scheme"].AsString())
+		})
+		s.Run("returns https when request has TLS", func() {
+			attrs := s.runRequest(true, func(r *http.Request) {
+				r.TLS = &tls.ConnectionState{}
+			})
+			s.Equal("https", attrs["url.scheme"].AsString())
+		})
+	})
+
+	s.Run("trust_proxy=false", func() {
+		s.Run("ignores X-Forwarded-Proto", func() {
+			attrs := s.runRequest(false, func(r *http.Request) {
+				r.Header.Set("X-Forwarded-Proto", "https")
+			})
+			s.Equal("http", attrs["url.scheme"].AsString(),
+				"X-Forwarded-Proto must be ignored when trust_proxy_headers is disabled")
+		})
+		s.Run("returns https when request has TLS", func() {
+			attrs := s.runRequest(false, func(r *http.Request) {
+				r.TLS = &tls.ConnectionState{}
+			})
+			s.Equal("https", attrs["url.scheme"].AsString())
+		})
+	})
+}
+
+func TestTrustProxyHeaders(t *testing.T) {
+	suite.Run(t, new(TrustProxyHeadersSuite))
 }

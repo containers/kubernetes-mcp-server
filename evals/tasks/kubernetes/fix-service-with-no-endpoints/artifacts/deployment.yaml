@@ -19,6 +19,6 @@ spec:
         environment: production-gpu
       containers:
       - name: web-app-container
-        image: nginx:latest
+        image: quay.io/nginx/nginx-unprivileged:latest
         ports:
         - containerPort: 80

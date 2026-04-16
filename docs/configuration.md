@@ -162,18 +162,23 @@ Configure HTTP server settings to protect against denial-of-service attacks.
 |-------|------|---------|-------------|
 | `http.read_header_timeout` | duration | `"10s"` | Maximum duration for reading request headers. Primary defense against Slowloris attacks. |
 | `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). |
+| `http.rate_limit_rps` | float | `0` | Maximum requests per second per session. When `0` (default), rate limiting is disabled. |
+| `http.rate_limit_burst` | integer | `10` | Maximum burst size for rate limiting. Allows short bursts above the rate limit. Only effective when `rate_limit_rps > 0`. |
 
 Duration values use Go duration syntax: `"30s"`, `"5m"`, `"1h30m"`.
 
 **Security Considerations:**
 - `read_header_timeout` is the primary defense against Slowloris attacks, which send headers extremely slowly to exhaust server connections
 - `max_body_bytes` prevents memory exhaustion from unbounded request payloads. The 16 MB default accommodates large Kubernetes manifests (CRDs, ConfigMaps)
+- `rate_limit_rps` prevents any single session from overwhelming the server with requests. Rate limiting is per-session, so one client hitting the limit does not affect other sessions. Requests with no session ID (e.g., STDIO transport) bypass rate limiting.
 
 **Example:**
 ```toml
 [http]
 read_header_timeout = "10s"
 max_body_bytes = 16777216    # 16 MB
+rate_limit_rps = 5           # 5 requests per second per session
+rate_limit_burst = 10        # allow bursts of up to 10 requests
 ```
 
 ### Kubernetes Connection
@@ -468,10 +473,15 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `sts_client_secret` | string | `""` | OAuth client secret for backend token exchange. |
 | `sts_audience` | string | `""` | Audience for STS token exchange. |
 | `sts_scopes` | string[] | `[]` | Scopes for STS token exchange. |
+| `token_exchange_strategy` | string | `""` | Token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. |
+| `sts_auth_style` | string | `"params"` | How client credentials are sent: `params` (body), `header` (Basic Auth), or `assertion` (JWT). |
+| `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
+| `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
+| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (use OAuth token) or `kubeconfig` (use kubeconfig credentials). |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
 
-**Example:**
+**Example (with client secret):**
 ```toml
 require_oauth = true
 authorization_url = "https://keycloak.example.com/realms/mcp"
@@ -483,7 +493,21 @@ sts_client_secret = "your-client-secret"
 sts_audience = "kubernetes-api"
 ```
 
-For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md).
+**Example (with certificate-based auth for Entra ID):**
+```toml
+require_oauth = true
+authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
+oauth_audience = "<CLIENT_ID>"
+
+token_exchange_strategy = "entra-obo"
+sts_client_id = "<CLIENT_ID>"
+sts_auth_style = "assertion"
+sts_client_cert_file = "/path/to/client.crt"
+sts_client_key_file = "/path/to/client.key"
+sts_scopes = ["api://<DOWNSTREAM_API>/.default"]
+```
+
+For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) or [ENTRA_ID_SETUP.md](ENTRA_ID_SETUP.md).
 
 ### Telemetry
 
@@ -683,6 +707,8 @@ stateless = false
 [http]
 read_header_timeout = "10s"  # Slowloris protection
 max_body_bytes = 16777216    # 16 MB for large K8s manifests
+rate_limit_rps = 5           # Per-session rate limiting
+rate_limit_burst = 10
 
 # Kubernetes connection
 kubeconfig = "/home/user/.kube/config"

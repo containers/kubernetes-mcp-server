@@ -2,22 +2,16 @@ package cmd
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/spf13/cobra"
 
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -31,6 +25,7 @@ import (
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
+	internaloauth "github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
@@ -280,71 +275,18 @@ func (m *MCPServerOptions) initializeLogging() {
 }
 
 func (m *MCPServerOptions) Validate() error {
-	if output.FromString(m.StaticConfig.ListOutput) == nil {
-		return fmt.Errorf("invalid output name: %s, valid names are: %s", m.StaticConfig.ListOutput, strings.Join(output.Names, ", "))
-	}
-	if err := toolsets.Validate(m.StaticConfig.Toolsets); err != nil {
+	// Config-level validations (shared with SIGHUP reload)
+	if err := m.StaticConfig.WithProviderStrategies(kubernetes.GetRegisteredStrategies()).Validate(); err != nil {
 		return err
 	}
-	// Validate cluster provider strategy using registered providers
-	if m.StaticConfig.ClusterProviderStrategy != "" {
-		validStrategies := kubernetes.GetRegisteredStrategies()
-		if !slices.Contains(validStrategies, m.StaticConfig.ClusterProviderStrategy) {
-			return fmt.Errorf("invalid cluster-provider: %s, valid values are: %s", m.StaticConfig.ClusterProviderStrategy, strings.Join(validStrategies, ", "))
-		}
-	}
-	if !m.StaticConfig.RequireOAuth && (m.StaticConfig.OAuthAudience != "" || m.StaticConfig.AuthorizationURL != "" || m.StaticConfig.ServerURL != "" || m.StaticConfig.CertificateAuthority != "") {
-		return fmt.Errorf("oauth-audience, authorization-url, server-url and certificate-authority are only valid if require-oauth is enabled. Missing --port may implicitly set require-oauth to false")
-	}
-	if m.StaticConfig.AuthorizationURL != "" {
-		u, err := url.Parse(m.StaticConfig.AuthorizationURL)
-		if err != nil {
-			return err
-		}
-		if u.Scheme != "https" && u.Scheme != "http" {
-			return fmt.Errorf("--authorization-url must be a valid URL")
-		}
-		if u.Scheme == "http" {
-			klog.Warningf("authorization-url is using http://, this is not recommended production use")
-		}
-	}
-	// Validate that certificate_authority is a valid file
-	m.StaticConfig.CertificateAuthority = strings.TrimSpace(m.StaticConfig.CertificateAuthority)
-	if m.StaticConfig.CertificateAuthority != "" {
-		if _, err := os.Stat(m.StaticConfig.CertificateAuthority); err != nil {
-			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
-		}
-	}
-	// Validate TLS configuration
-	tlsCert := strings.TrimSpace(m.StaticConfig.TLSCert)
-	tlsKey := strings.TrimSpace(m.StaticConfig.TLSKey)
-	m.StaticConfig.TLSCert = tlsCert
-	m.StaticConfig.TLSKey = tlsKey
-	if (tlsCert != "" && tlsKey == "") || (tlsCert == "" && tlsKey != "") {
-		return fmt.Errorf("both --tls-cert and --tls-key must be provided together")
-	}
-	if tlsCert != "" && m.StaticConfig.Port == "" {
+	// CLI-level validations (flag interactions that can't change on reload)
+	if m.StaticConfig.TLSCert != "" && m.StaticConfig.Port == "" {
 		return fmt.Errorf("--tls-cert and --tls-key require --port to be set (TLS is only supported in HTTP mode)")
 	}
-	if tlsCert != "" {
-		if _, err := os.Stat(tlsCert); err != nil {
-			return fmt.Errorf("tls-cert must be a valid file path: %w", err)
-		}
-	}
-	if tlsKey != "" {
-		if _, err := os.Stat(tlsKey); err != nil {
-			return fmt.Errorf("tls-key must be a valid file path: %w", err)
-		}
-	}
-	// Validate require_tls configuration
 	if m.StaticConfig.RequireTLS && m.StaticConfig.Port != "" {
-		if tlsCert == "" || tlsKey == "" {
+		if m.StaticConfig.TLSCert == "" || m.StaticConfig.TLSKey == "" {
 			return fmt.Errorf("require_tls is enabled but TLS certificates are not configured (set tls_cert and tls_key)")
 		}
-	}
-	// Validate outbound URLs when require_tls is enabled
-	if err := m.StaticConfig.ValidateRequireTLS(); err != nil {
-		return err
 	}
 	return nil
 }
@@ -375,48 +317,13 @@ func (m *MCPServerOptions) Run() error {
 		return nil
 	}
 
-	var oidcProvider *oidc.Provider
-	var httpClient *http.Client
-	if m.StaticConfig.AuthorizationURL != "" {
-		ctx := context.Background()
-		if m.StaticConfig.CertificateAuthority != "" {
-			httpClient = &http.Client{}
-			caCert, err := os.ReadFile(m.StaticConfig.CertificateAuthority)
-			if err != nil {
-				return fmt.Errorf("failed to read CA certificate from %s: %w", m.StaticConfig.CertificateAuthority, err)
-			}
-			caCertPool := x509.NewCertPool()
-			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return fmt.Errorf("failed to append CA certificate from %s to pool", m.StaticConfig.CertificateAuthority)
-			}
-
-			if caCertPool.Equal(x509.NewCertPool()) {
-				caCertPool = nil
-			}
-
-			var transport http.RoundTripper = &http.Transport{
-				TLSClientConfig: &tls.Config{
-					MinVersion: tls.VersionTLS12,
-					RootCAs:    caCertPool,
-				},
-			}
-			// Wrap transport with TLS enforcement
-			transport = config.NewTLSEnforcingTransport(transport, m.StaticConfig.IsRequireTLS)
-			httpClient.Transport = transport
-			ctx = oidc.ClientContext(ctx, httpClient)
-		} else {
-			// No custom CA, but still enforce TLS if required
-			httpClient = config.NewTLSEnforcingClient(nil, m.StaticConfig.IsRequireTLS)
-			ctx = oidc.ClientContext(ctx, httpClient)
-		}
-		provider, err := oidc.NewProvider(ctx, m.StaticConfig.AuthorizationURL)
-		if err != nil {
-			return fmt.Errorf("unable to setup OIDC provider: %w", err)
-		}
-		oidcProvider = provider
+	oidcProvider, httpClient, err := internaloauth.CreateOIDCProviderAndClient(m.StaticConfig)
+	if err != nil {
+		return err
 	}
+	oauthState := internaloauth.NewState(internaloauth.SnapshotFromConfig(m.StaticConfig, oidcProvider, httpClient))
 
-	provider, err := kubernetes.NewProvider(m.StaticConfig, kubernetes.WithTokenExchange(oidcProvider, httpClient))
+	provider, err := kubernetes.NewProvider(m.StaticConfig, kubernetes.WithTokenExchange(oauthState))
 	if err != nil {
 		return fmt.Errorf("unable to create kubernetes target provider: %w", err)
 	}
@@ -437,12 +344,12 @@ func (m *MCPServerOptions) Run() error {
 
 	// Set up SIGHUP handler for configuration reload
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		_ = m.setupSIGHUPHandler(mcpServer)
+		_ = m.setupSIGHUPHandler(mcpServer, oauthState)
 	}
 
 	if m.StaticConfig.Port != "" {
 		ctx := context.Background()
-		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oidcProvider, httpClient)
+		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oauthState)
 	}
 
 	ctx := context.Background()
@@ -456,7 +363,7 @@ func (m *MCPServerOptions) Run() error {
 // setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP.
 // Returns a stop function that should be called to clean up the handler.
 // The stop function waits for the handler goroutine to finish.
-func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) (stop func()) {
+func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState *internaloauth.State) (stop func()) {
 	sigHupCh := make(chan os.Signal, 1)
 	done := make(chan struct{})
 	signal.Notify(sigHupCh, syscall.SIGHUP)
@@ -473,10 +380,33 @@ func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server) (stop func(
 				continue
 			}
 
-			// Apply the new configuration to the MCP server
+			// Apply the new configuration to the MCP server first — if this fails,
+			// we skip the OAuth state update to avoid inconsistent state.
 			if err := mcpServer.ReloadConfiguration(newConfig); err != nil {
 				klog.Errorf("Failed to apply reloaded configuration: %v", err)
 				continue
+			}
+
+			// Check if OAuth-relevant config changed and update the shared state
+			currentSnapshot := oauthState.Load()
+			if currentSnapshot == nil {
+				currentSnapshot = &internaloauth.Snapshot{}
+			}
+			newSnapshot := internaloauth.SnapshotFromConfig(newConfig, currentSnapshot.OIDCProvider, currentSnapshot.HTTPClient)
+			if currentSnapshot.HasProviderConfigChanged(newSnapshot) {
+				klog.V(1).Info("OAuth configuration changed, recreating OIDC provider...")
+				newProvider, newClient, err := internaloauth.CreateOIDCProviderAndClient(newConfig)
+				if err != nil {
+					klog.Errorf("Failed to recreate OIDC provider during reload: %v", err)
+					continue
+				}
+				newSnapshot.OIDCProvider = newProvider
+				newSnapshot.HTTPClient = newClient
+				oauthState.Store(newSnapshot)
+				klog.V(1).Info("OIDC provider and HTTP client updated successfully")
+			} else if currentSnapshot.HasWellKnownConfigChanged(newSnapshot) {
+				oauthState.Store(newSnapshot)
+				klog.V(1).Info("OAuth well-known configuration updated")
 			}
 
 			klog.V(1).Info("Configuration reloaded successfully via SIGHUP")

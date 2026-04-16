@@ -1,0 +1,6 @@
+kind: Agent
+metadata:
+  name: "google-agent"
+builtin:
+  type: "llm-agent"
+  model: "google:gemini-3.1-pro-preview"

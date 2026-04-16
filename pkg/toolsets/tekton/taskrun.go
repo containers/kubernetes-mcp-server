@@ -86,11 +86,12 @@ func taskRunTools() []api.ServerTool {
 }
 
 func restartTaskRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
-		return api.NewToolCallResult("", err), nil
+	p := api.WrapParams(params)
+	name := p.RequiredString("name")
+	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to restart task run: %w", err)), nil
 	}
-	namespace := api.OptionalString(params, "namespace", params.NamespaceOrDefault(""))
 
 	dynamicClient := params.DynamicClient()
 
@@ -137,22 +138,12 @@ func restartTaskRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-	namespace := api.OptionalString(params, "namespace", params.NamespaceOrDefault(""))
-
-	tail := params.GetArguments()["tail"]
-	var tailInt int64
-	if tail != nil {
-		var err error
-		tailInt, err = api.ParseInt64(tail)
-		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: %w", err)), nil
-		}
-	} else {
-		tailInt = kubernetes.DefaultTailLines
+	p := api.WrapParams(params)
+	name := p.RequiredString("name")
+	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	tailInt := p.OptionalInt64("tail", kubernetes.DefaultTailLines)
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get task run logs: %w", err)), nil
 	}
 
 	dynamicClient := params.DynamicClient()

@@ -201,18 +201,21 @@ type createParameters struct {
 
 // parseCreateParameters parses and validates input parameters
 func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, error) {
-	namespace, err := api.RequiredString(params, "namespace")
-	if err != nil {
+	p := api.WrapParams(params)
+	namespace := p.RequiredString("namespace")
+	name := p.RequiredString("name")
+	workload := p.OptionalString("workload", "fedora")
+	instancetype := p.OptionalString("instancetype", "")
+	preference := p.OptionalString("preference", "")
+	size := p.OptionalString("size", "")
+	performance := p.OptionalString("performance", "")
+	storage := p.OptionalString("storage", "30Gi")
+	autostart := p.OptionalBool("autostart", false)
+	if err := p.Err(); err != nil {
 		return nil, err
 	}
 
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
-		return nil, err
-	}
-
-	networksInput := optionalArray(params, "networks")
-	networks, err := parseNetworks(networksInput)
+	networks, err := parseNetworks(optionalArray(params, "networks"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid networks parameter: %w", err)
 	}
@@ -220,13 +223,13 @@ func parseCreateParameters(params api.ToolHandlerParams) (*createParameters, err
 	return &createParameters{
 		Namespace:    namespace,
 		Name:         name,
-		Workload:     api.OptionalString(params, "workload", "fedora"),
-		Instancetype: api.OptionalString(params, "instancetype", ""),
-		Preference:   api.OptionalString(params, "preference", ""),
-		Size:         api.OptionalString(params, "size", ""),
-		Performance:  normalizePerformance(api.OptionalString(params, "performance", "")),
-		Storage:      api.OptionalString(params, "storage", "30Gi"),
-		Autostart:    api.OptionalBool(params, "autostart", false),
+		Workload:     workload,
+		Instancetype: instancetype,
+		Preference:   preference,
+		Size:         size,
+		Performance:  normalizePerformance(performance),
+		Storage:      storage,
+		Autostart:    autostart,
 		Networks:     networks,
 	}, nil
 }

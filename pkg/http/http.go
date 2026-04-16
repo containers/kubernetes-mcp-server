@@ -14,12 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
-
 	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
+	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 )
 
 // tlsErrorFilterWriter filters out noisy TLS handshake errors from health checks
@@ -104,11 +103,11 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 	}
 }
 
-func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oidcProvider *oidc.Provider, httpClient *http.Client) error {
+func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oauthState *oauth.State) error {
 	mux := http.NewServeMux()
 
-	wrappedMux := RequestMiddleware(
-		AuthorizationMiddleware(staticConfig, oidcProvider)(
+	wrappedMux := RequestMiddleware(staticConfig.TrustProxyHeaders)(
+		AuthorizationMiddleware(staticConfig, oauthState)(
 			MaxBodyMiddleware(staticConfig.HTTP.MaxBodyBytes)(mux),
 		),
 	)
@@ -144,7 +143,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	})
 	mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
 	mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
-	mux.Handle("/.well-known/", WellKnownHandler(staticConfig, httpClient))
+	mux.Handle("/.well-known/", WellKnownHandler(staticConfig, oauthState))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

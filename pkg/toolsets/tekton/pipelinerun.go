@@ -46,11 +46,12 @@ func pipelineRunTools() []api.ServerTool {
 }
 
 func restartPipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
-		return api.NewToolCallResult("", err), nil
+	p := api.WrapParams(params)
+	name := p.RequiredString("name")
+	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to restart pipeline run: %w", err)), nil
 	}
-	namespace := api.OptionalString(params, "namespace", params.NamespaceOrDefault(""))
 
 	dynamicClient := params.DynamicClient()
 

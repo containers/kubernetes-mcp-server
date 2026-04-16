@@ -115,12 +115,18 @@ func NewManager(config api.BaseConfig, restConfig *rest.Config, clientCmdConfig 
 
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	authorization, ok := ctx.Value(OAuthAuthorizationHeader).(string)
-	if !ok || !strings.HasPrefix(authorization, "Bearer ") {
-		if m.config.IsRequireOAuth() {
-			return nil, errors.New("oauth token required")
+	hasToken := ok && strings.HasPrefix(authorization, "Bearer ")
+
+	// No token: use kubeconfig credentials, or reject if passthrough requires one.
+	// In kubeconfig mode, the token exchange layer clears the auth header before we get here,
+	// so this branch handles both "no token sent" and "kubeconfig mode cleared it".
+	if !hasToken {
+		if m.config.ResolveClusterAuthMode() == api.ClusterAuthPassthrough {
+			return nil, errors.New("oauth token required for passthrough auth mode")
 		}
 		return m.kubernetes, nil
 	}
+
 	klog.V(5).Infof("%s header found (Bearer), using provided bearer token", OAuthAuthorizationHeader)
 	userAgent := CustomUserAgent
 	if ua, ok := ctx.Value(UserAgentHeader).(string); ok && ua != "" {
@@ -146,20 +152,12 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	}
 	clientCmdApiConfig, err := m.kubernetes.clientCmdConfig.RawConfig()
 	if err != nil {
-		if m.config.IsRequireOAuth() {
-			klog.Errorf("failed to get kubeconfig: %v", err)
-			return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
-		}
-		return m.kubernetes, nil
+		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
 	derived, err := NewKubernetes(m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
 	if err != nil {
-		if m.config.IsRequireOAuth() {
-			klog.Errorf("failed to create derived client: %v", err)
-			return nil, fmt.Errorf("failed to create derived client: %w", err)
-		}
-		return m.kubernetes, nil
+		return nil, fmt.Errorf("failed to create derived client: %w", err)
 	}
 	context.AfterFunc(ctx, derived.close)
 	return derived, nil

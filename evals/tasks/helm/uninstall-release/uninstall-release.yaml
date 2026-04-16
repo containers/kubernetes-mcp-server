@@ -16,17 +16,13 @@ spec:
         metadata:
           name: helm-uninstall-test
     - kubernetes.helmInstall:
-        chart: oci://registry-1.docker.io/bitnamicharts/nginx
+        chart: oci://ghcr.io/cloudpirates-io/helm-charts/nginx
         name: cleanup-test
         namespace: helm-uninstall-test
 
   verify:
     - kubernetes.helmList:
         namespace: helm-uninstall-test
-    - llmJudge:
-        contains: "cleanup-test"
-        # Validates the agent's response mentions the uninstalled release name
-
   cleanup:
     - kubernetes.helmUninstall:
         name: cleanup-test

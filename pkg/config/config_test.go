@@ -1066,13 +1066,14 @@ func (s *ConfigSuite) TestToolOverridesParsed() {
 	s.Require().NotNil(config)
 
 	s.Run("parses tool_overrides with multiple entries", func() {
-		s.Require().Len(config.ToolOverrides, 2)
+		s.Require().Contains(config.ToolOverrides, "pods_list")
+		s.Require().Contains(config.ToolOverrides, "resources_get")
 		s.Equal("Custom pods list description", config.ToolOverrides["pods_list"].Description)
 		s.Equal("Custom resources get description", config.ToolOverrides["resources_get"].Description)
 	})
 }
 
-func (s *ConfigSuite) TestToolOverridesNilWhenNotSpecified() {
+func (s *ConfigSuite) TestToolOverridesMatchDefaultsWhenNotSpecified() {
 	configPath := s.writeConfig(`
 		log_level = 1
 	`)
@@ -1081,8 +1082,8 @@ func (s *ConfigSuite) TestToolOverridesNilWhenNotSpecified() {
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
-	s.Run("ToolOverrides is nil when not specified", func() {
-		s.Nil(config.ToolOverrides)
+	s.Run("ToolOverrides matches defaults when not specified", func() {
+		s.Equal(s.defaults.ToolOverrides, config.ToolOverrides)
 	})
 }
 

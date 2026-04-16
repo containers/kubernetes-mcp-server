@@ -122,7 +122,7 @@ func (s *PodsSuite) TestPodsListInNamespace() {
 	s.Run("pods_list_in_namespace with nil namespace returns error", func() {
 		toolResult, _ := s.CallTool("pods_list_in_namespace", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to list pods in namespace, missing argument namespace", toolResult.Content[0].(*mcp.TextContent).Text,
+		s.Equalf("failed to list pods in namespace: namespace parameter required", toolResult.Content[0].(*mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_list_in_namespace(namespace=ns-1) returns pods list", func() {
@@ -321,7 +321,7 @@ func (s *PodsSuite) TestPodsGet() {
 	s.Run("pods_get with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_get", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Equalf("failed to get pod: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_get(name=not-found) with not found name", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -404,7 +404,7 @@ func (s *PodsSuite) TestPodsDelete() {
 	s.Run("pods_delete with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_delete", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to delete pod, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Equalf("failed to delete pod: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_delete(name=not-found) with not found name", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -562,7 +562,7 @@ func (s *PodsSuite) TestPodsLog() {
 	s.Run("pods_log with nil name returns error", func() {
 		toolResult, _ := s.CallTool("pods_log", map[string]interface{}{})
 		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to get pod log, missing argument name", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Equalf("failed to get pod log: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_log with not found name returns error", func() {
 		toolResult, _ := s.CallTool("pods_log", map[string]interface{}{"name": "not-found"})
@@ -621,23 +621,27 @@ func (s *PodsSuite) TestPodsLog() {
 		s.Nilf(err, "call tool failed %v", err)
 		s.Falsef(podsPreviousLogFalse.IsError, "call tool failed")
 	})
-	s.Run("pods_log with previous as string does not panic", func() {
+	s.Run("pods_log with previous as string returns error without panicking", func() {
 		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
 			"namespace": "ns-1",
 			"name":      "a-pod-in-ns-1",
 			"previous":  "false",
 		})
-		s.Nilf(err, "call tool failed %v", err)
-		s.Falsef(toolResult.IsError, "call tool failed")
+		s.Nilf(err, "call tool should not return error object")
+		s.Truef(toolResult.IsError, "call tool should fail with type mismatch")
+		s.Equalf("failed to get pod log: previous parameter must be a boolean", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
-	s.Run("pods_log with previous as float64 does not panic", func() {
+	s.Run("pods_log with previous as float64 returns error without panicking", func() {
 		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
 			"namespace": "ns-1",
 			"name":      "a-pod-in-ns-1",
 			"previous":  float64(0),
 		})
-		s.Nilf(err, "call tool failed %v", err)
-		s.Falsef(toolResult.IsError, "call tool failed")
+		s.Nilf(err, "call tool should not return error object")
+		s.Truef(toolResult.IsError, "call tool should fail with type mismatch")
+		s.Equalf("failed to get pod log: previous parameter must be a boolean", toolResult.Content[0].(*mcp.TextContent).Text,
+			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 	s.Run("pods_log(tail=50) returns pod log", func() {
 		podsTailLines, err := s.CallTool("pods_log", map[string]interface{}{
@@ -655,7 +659,7 @@ func (s *PodsSuite) TestPodsLog() {
 			"tail":      "invalid",
 		})
 		s.Truef(podsInvalidTailLines.IsError, "call tool should fail")
-		expectedErrorMsg := "failed to parse tail parameter: expected integer"
+		expectedErrorMsg := "failed to get pod log: tail parameter must be an integer"
 		errMsg := podsInvalidTailLines.Content[0].(*mcp.TextContent).Text
 		s.Containsf(errMsg, expectedErrorMsg, "unexpected error message, expected to contain '%s', got '%s'", expectedErrorMsg, errMsg)
 	})
@@ -679,6 +683,60 @@ func (s *PodsSuite) TestPodsLogDenied() {
 			s.Regexpf(expectedMessage, msg,
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
+	})
+}
+
+func (s *PodsSuite) TestPodsLogDefaultContainer() {
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Multi-container pod with default-container annotation
+	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "multi-container-with-annotation",
+			Annotations: map[string]string{
+				"kubectl.kubernetes.io/default-container": "sidecar",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "main", Image: "nginx"},
+				{Name: "sidecar", Image: "nginx"},
+			},
+		},
+	}, metav1.CreateOptions{})
+	// Multi-container pod without annotation
+	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "multi-container-no-annotation",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "first", Image: "nginx"},
+				{Name: "second", Image: "nginx"},
+			},
+		},
+	}, metav1.CreateOptions{})
+	s.InitMcpClient()
+	s.Run("multi-container pod with annotation uses annotated container", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"name": "multi-container-with-annotation",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should not fail, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("multi-container pod without annotation falls back to first container", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"name": "multi-container-no-annotation",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should not fail, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("explicit container param takes precedence over annotation", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"name":      "multi-container-with-annotation",
+			"container": "main",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should not fail, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 }
 

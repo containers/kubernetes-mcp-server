@@ -52,6 +52,7 @@ jobs:
           ASSERTIONS_PASSED=$(jq -r '.assertions_passed' eval-context/context.json)
           ASSERTIONS_TOTAL=$(jq -r '.assertions_total' eval-context/context.json)
           PASSED=$(jq -r '.passed' eval-context/context.json)
+          HAS_DIFF=$(jq -r '.has_diff // "false"' eval-context/context.json)
 
           PASS_RATE=$(awk "BEGIN {printf \"%.1f\", $TASK_PASS_RATE * 100}")
 
@@ -61,6 +62,24 @@ jobs:
             OVERALL="✅ Passed"
           else
             OVERALL="❌ Failed"
+          fi
+
+          # Build diff section if available
+          DIFF_SECTION=""
+          if [[ "$HAS_DIFF" == "true" ]] && [[ -f eval-context/diff-output.txt ]]; then
+            DIFF_CONTENT=$(cat eval-context/diff-output.txt)
+            DIFF_SECTION=$(cat <<DIFF_EOF
+
+          ### Diff vs. Baseline (main)
+
+          <details>
+          <summary>Click to expand mcpchecker diff</summary>
+
+          ${DIFF_CONTENT}
+
+          </details>
+          DIFF_EOF
+          )
           fi
 
           gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$(cat <<EOF
@@ -74,6 +93,7 @@ jobs:
           | Tasks Passed | ${TASKS_PASSED}/${TASKS_TOTAL} |
           | Assertions Passed | ${ASSERTIONS_PASSED}/${ASSERTIONS_TOTAL} |
           | Overall | ${OVERALL} |
+          ${DIFF_SECTION}
 
           [View full results](https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }})
           EOF

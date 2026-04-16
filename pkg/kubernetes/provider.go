@@ -2,11 +2,10 @@ package kubernetes
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
-	"github.com/coreos/go-oidc/v3/oidc"
 )
 
 // McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
@@ -54,20 +53,12 @@ type TokenExchangeProvider interface {
 type ProviderOption func(*providerOptions)
 
 type providerOptions struct {
-	tokenExchangeConfig *providerTokenExchangeConfig
+	oauthState *oauth.State
 }
 
-type providerTokenExchangeConfig struct {
-	oidcProvider *oidc.Provider
-	httpClient   *http.Client
-}
-
-func WithTokenExchange(oidcProvider *oidc.Provider, httpClient *http.Client) ProviderOption {
+func WithTokenExchange(oauthState *oauth.State) ProviderOption {
 	return func(opts *providerOptions) {
-		opts.tokenExchangeConfig = &providerTokenExchangeConfig{
-			oidcProvider: oidcProvider,
-			httpClient:   httpClient,
-		}
+		opts.oauthState = oauthState
 	}
 }
 
@@ -89,12 +80,11 @@ func NewProvider(cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
 		return nil, err
 	}
 
-	if providerOpts.tokenExchangeConfig != nil {
+	if providerOpts.oauthState != nil {
 		provider = newTokenExchangingProvider(
 			provider,
 			cfg,
-			providerOpts.tokenExchangeConfig.oidcProvider,
-			providerOpts.tokenExchangeConfig.httpClient,
+			providerOpts.oauthState,
 		)
 	}
 
