@@ -27,6 +27,34 @@ import (
 // DefaultTailLines is the default number of lines to retrieve from the end of the logs
 const DefaultTailLines = int64(100)
 
+// DefaultContainerAnnotation is the annotation key used by kubectl to specify the default container
+// for operations like logs and exec in multi-container pods (KEP-2227).
+const DefaultContainerAnnotation = "kubectl.kubernetes.io/default-container"
+
+// resolveContainer returns the container name to use when no explicit container is provided.
+// It follows the KEP-2227 resolution order:
+//  1. If container is explicitly specified, use it.
+//  2. If the pod has a single container, use it.
+//  3. If the kubectl.kubernetes.io/default-container annotation is set, use it.
+//  4. Fall back to the first container in the pod spec.
+func resolveContainer(pod *v1.Pod, container string) string {
+	if container != "" {
+		return container
+	}
+	if len(pod.Spec.Containers) == 1 {
+		return pod.Spec.Containers[0].Name
+	}
+	if pod.Annotations != nil {
+		if defaultContainer, exists := pod.Annotations[DefaultContainerAnnotation]; exists && defaultContainer != "" {
+			return defaultContainer
+		}
+	}
+	if len(pod.Spec.Containers) > 0 {
+		return pod.Spec.Containers[0].Name
+	}
+	return ""
+}
+
 func (c *Core) PodsListInAllNamespaces(ctx context.Context, options api.ListOptions) (runtime.Unstructured, error) {
 	return c.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Pod",
@@ -89,7 +117,16 @@ func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, 
 }
 
 func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
-	pods := c.CoreV1().Pods(c.NamespaceOrDefault(namespace))
+	namespace = c.NamespaceOrDefault(namespace)
+	pods := c.CoreV1().Pods(namespace)
+
+	if container == "" {
+		pod, err := pods.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return "", err
+		}
+		container = resolveContainer(pod, "")
+	}
 
 	logOptions := &v1.PodLogOptions{
 		Container: container,
@@ -236,9 +273,7 @@ func (c *Core) PodsExec(ctx context.Context, namespace, name, container string, 
 	if pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed {
 		return "", fmt.Errorf("cannot exec into a container in a completed pod; current phase is %s", pod.Status.Phase)
 	}
-	if container == "" {
-		container = pod.Spec.Containers[0].Name
-	}
+	container = resolveContainer(pod, container)
 	podExecOptions := &v1.PodExecOptions{
 		Container: container,
 		Command:   command,

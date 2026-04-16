@@ -109,6 +109,91 @@ func (s *PodsExecSuite) TestPodsExec() {
 	})
 }
 
+func (s *PodsExecSuite) TestPodsExecDefaultContainer() {
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !strings.HasSuffix(req.URL.Path, "/exec") {
+			return
+		}
+		var stdin, stdout bytes.Buffer
+		ctx, err := test.CreateHTTPStreams(w, req, &test.StreamOptions{
+			Stdin:  &stdin,
+			Stdout: &stdout,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(err.Error()))
+			return
+		}
+		defer func(conn io.Closer) { _ = conn.Close() }(ctx.Closer)
+		_, _ = io.WriteString(ctx.StdoutStream, "container:"+strings.Join(req.URL.Query()["container"], " ")+"\n")
+	}))
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/api/v1/namespaces/default/pods/multi-with-annotation":
+			test.WriteObject(w, &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "multi-with-annotation",
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/default-container": "sidecar",
+					},
+				},
+				Spec: v1.PodSpec{Containers: []v1.Container{
+					{Name: "main"},
+					{Name: "sidecar"},
+				}},
+			})
+		case "/api/v1/namespaces/default/pods/multi-no-annotation":
+			test.WriteObject(w, &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "multi-no-annotation",
+				},
+				Spec: v1.PodSpec{Containers: []v1.Container{
+					{Name: "first"},
+					{Name: "second"},
+				}},
+			})
+		}
+	}))
+	s.InitMcpClient()
+
+	s.Run("multi-container pod with annotation uses annotated container", func() {
+		result, err := s.CallTool("pods_exec", map[string]interface{}{
+			"name":    "multi-with-annotation",
+			"command": []interface{}{"echo", "hello"},
+		})
+		s.Require().NotNil(result)
+		s.Require().NoError(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "container:sidecar",
+			"expected annotation container 'sidecar', got %v", result.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("multi-container pod without annotation falls back to first container", func() {
+		result, err := s.CallTool("pods_exec", map[string]interface{}{
+			"name":    "multi-no-annotation",
+			"command": []interface{}{"echo", "hello"},
+		})
+		s.Require().NotNil(result)
+		s.Require().NoError(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "container:first",
+			"expected first container 'first', got %v", result.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("explicit container takes precedence over annotation", func() {
+		result, err := s.CallTool("pods_exec", map[string]interface{}{
+			"name":      "multi-with-annotation",
+			"command":   []interface{}{"echo", "hello"},
+			"container": "main",
+		})
+		s.Require().NotNil(result)
+		s.Require().NoError(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "container:main",
+			"expected explicit container 'main', got %v", result.Content[0].(*mcp.TextContent).Text)
+	})
+}
+
 func (s *PodsExecSuite) TestPodsExecDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "Pod" } ]

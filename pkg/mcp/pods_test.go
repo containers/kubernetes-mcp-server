@@ -686,6 +686,60 @@ func (s *PodsSuite) TestPodsLogDenied() {
 	})
 }
 
+func (s *PodsSuite) TestPodsLogDefaultContainer() {
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	// Multi-container pod with default-container annotation
+	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "multi-container-with-annotation",
+			Annotations: map[string]string{
+				"kubectl.kubernetes.io/default-container": "sidecar",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "main", Image: "nginx"},
+				{Name: "sidecar", Image: "nginx"},
+			},
+		},
+	}, metav1.CreateOptions{})
+	// Multi-container pod without annotation
+	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "multi-container-no-annotation",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "first", Image: "nginx"},
+				{Name: "second", Image: "nginx"},
+			},
+		},
+	}, metav1.CreateOptions{})
+	s.InitMcpClient()
+	s.Run("multi-container pod with annotation uses annotated container", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"name": "multi-container-with-annotation",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should not fail, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("multi-container pod without annotation falls back to first container", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"name": "multi-container-no-annotation",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should not fail, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("explicit container param takes precedence over annotation", func() {
+		toolResult, err := s.CallTool("pods_log", map[string]interface{}{
+			"name":      "multi-container-with-annotation",
+			"container": "main",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should not fail, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+}
+
 func (s *PodsSuite) TestPodsListWithLabelSelector() {
 	s.InitMcpClient()
 	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
