@@ -70,18 +70,28 @@ func (p *kubeConfigClusterProvider) reset() error {
 		return err
 	}
 
+	// Determine the effective default context.
+	// RawConfig() returns the file's current-context which may be empty when
+	// NewKubeconfigManager auto-selected the only available context.
+	defaultContext := rawConfig.CurrentContext
+	if defaultContext == "" && len(rawConfig.Contexts) == 1 {
+		for name := range rawConfig.Contexts {
+			defaultContext = name
+		}
+	}
+
 	for _, old := range p.managers {
 		if old != nil {
 			old.Close()
 		}
 	}
 	p.managers = map[string]*Manager{
-		rawConfig.CurrentContext: m, // we already initialized a manager for the default context, let's use it
+		defaultContext: m,
 	}
 
 	for name := range rawConfig.Contexts {
-		if name == rawConfig.CurrentContext {
-			continue // already initialized this, don't want to set it to nil
+		if name == defaultContext {
+			continue
 		}
 		p.managers[name] = nil
 	}
@@ -89,7 +99,7 @@ func (p *kubeConfigClusterProvider) reset() error {
 	p.Close()
 	p.kubeconfigWatcher = watcher.NewKubeconfig(m.kubernetes.clientCmdConfig)
 	p.clusterStateWatcher = watcher.NewClusterState(m.kubernetes.DiscoveryClient())
-	p.defaultContext = rawConfig.CurrentContext
+	p.defaultContext = defaultContext
 
 	return nil
 }
