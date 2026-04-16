@@ -363,11 +363,8 @@ func (s *Server) GetEnabledPrompts() []string {
 func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 	klog.V(1).Info("Reloading MCP server configuration...")
 
-	// Validate require_tls constraints (fail-fast on reload, same check as startup)
-	if err := newConfig.ValidateRequireTLS(); err != nil {
-		return fmt.Errorf("configuration reload rejected: %w", err)
-	}
-	if err := newConfig.HTTP.Validate(); err != nil {
+	// Validate config-level invariants (same checks as startup)
+	if err := newConfig.WithProviderStrategies(internalk8s.GetRegisteredStrategies()).Validate(); err != nil {
 		return fmt.Errorf("configuration reload rejected: %w", err)
 	}
 

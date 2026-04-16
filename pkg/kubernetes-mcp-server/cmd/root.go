@@ -5,10 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"os/signal"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -277,77 +275,18 @@ func (m *MCPServerOptions) initializeLogging() {
 }
 
 func (m *MCPServerOptions) Validate() error {
-	if output.FromString(m.StaticConfig.ListOutput) == nil {
-		return fmt.Errorf("invalid output name: %s, valid names are: %s", m.StaticConfig.ListOutput, strings.Join(output.Names, ", "))
-	}
-	if err := toolsets.Validate(m.StaticConfig.Toolsets); err != nil {
+	// Config-level validations (shared with SIGHUP reload)
+	if err := m.StaticConfig.WithProviderStrategies(kubernetes.GetRegisteredStrategies()).Validate(); err != nil {
 		return err
 	}
-	// Validate cluster provider strategy using registered providers
-	if m.StaticConfig.ClusterProviderStrategy != "" {
-		validStrategies := kubernetes.GetRegisteredStrategies()
-		if !slices.Contains(validStrategies, m.StaticConfig.ClusterProviderStrategy) {
-			return fmt.Errorf("invalid cluster-provider: %s, valid values are: %s", m.StaticConfig.ClusterProviderStrategy, strings.Join(validStrategies, ", "))
-		}
-	}
-	if !m.StaticConfig.RequireOAuth && (m.StaticConfig.OAuthAudience != "" || m.StaticConfig.AuthorizationURL != "" || m.StaticConfig.ServerURL != "" || m.StaticConfig.CertificateAuthority != "") {
-		return fmt.Errorf("oauth-audience, authorization-url, server-url and certificate-authority are only valid if require-oauth is enabled. Missing --port may implicitly set require-oauth to false")
-	}
-	if m.StaticConfig.AuthorizationURL != "" {
-		u, err := url.Parse(m.StaticConfig.AuthorizationURL)
-		if err != nil {
-			return err
-		}
-		if u.Scheme != "https" && u.Scheme != "http" {
-			return fmt.Errorf("--authorization-url must be a valid URL")
-		}
-		if u.Scheme == "http" {
-			klog.Warningf("authorization-url is using http://, this is not recommended production use")
-		}
-	}
-	// Validate that certificate_authority is a valid file
-	m.StaticConfig.CertificateAuthority = strings.TrimSpace(m.StaticConfig.CertificateAuthority)
-	if m.StaticConfig.CertificateAuthority != "" {
-		if _, err := os.Stat(m.StaticConfig.CertificateAuthority); err != nil {
-			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
-		}
-	}
-	// Validate TLS configuration
-	tlsCert := strings.TrimSpace(m.StaticConfig.TLSCert)
-	tlsKey := strings.TrimSpace(m.StaticConfig.TLSKey)
-	m.StaticConfig.TLSCert = tlsCert
-	m.StaticConfig.TLSKey = tlsKey
-	if (tlsCert != "" && tlsKey == "") || (tlsCert == "" && tlsKey != "") {
-		return fmt.Errorf("both --tls-cert and --tls-key must be provided together")
-	}
-	if tlsCert != "" && m.StaticConfig.Port == "" {
+	// CLI-level validations (flag interactions that can't change on reload)
+	if m.StaticConfig.TLSCert != "" && m.StaticConfig.Port == "" {
 		return fmt.Errorf("--tls-cert and --tls-key require --port to be set (TLS is only supported in HTTP mode)")
 	}
-	if tlsCert != "" {
-		if _, err := os.Stat(tlsCert); err != nil {
-			return fmt.Errorf("tls-cert must be a valid file path: %w", err)
-		}
-	}
-	if tlsKey != "" {
-		if _, err := os.Stat(tlsKey); err != nil {
-			return fmt.Errorf("tls-key must be a valid file path: %w", err)
-		}
-	}
-	// Validate require_tls configuration
 	if m.StaticConfig.RequireTLS && m.StaticConfig.Port != "" {
-		if tlsCert == "" || tlsKey == "" {
+		if m.StaticConfig.TLSCert == "" || m.StaticConfig.TLSKey == "" {
 			return fmt.Errorf("require_tls is enabled but TLS certificates are not configured (set tls_cert and tls_key)")
 		}
-	}
-	// Validate outbound URLs when require_tls is enabled
-	if err := m.StaticConfig.ValidateRequireTLS(); err != nil {
-		return err
-	}
-	if err := m.StaticConfig.ValidateClusterAuthMode(); err != nil {
-		return err
-	}
-	if err := m.StaticConfig.HTTP.Validate(); err != nil {
-		return err
 	}
 	return nil
 }

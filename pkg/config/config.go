@@ -5,13 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"k8s.io/klog/v2"
 )
 
@@ -151,6 +155,8 @@ type StaticConfig struct {
 
 	// Internal: the config.toml directory, to help resolve relative file paths
 	configDirPath string
+	// Internal: known provider strategies, set via WithProviderStrategies
+	providerStrategies []string
 }
 
 var _ api.BaseConfig = (*StaticConfig)(nil)
@@ -437,6 +443,79 @@ func (c *StaticConfig) GetConfirmationFallback() string {
 
 func (c *StaticConfig) IsRequireTLS() bool {
 	return c.RequireTLS
+}
+
+// WithProviderStrategies sets the known cluster-provider strategies for
+// validation. Callers that have access to the provider registry should chain
+// this before Validate so that cluster_provider_strategy is checked:
+//
+//	cfg.WithProviderStrategies(kubernetes.GetRegisteredStrategies()).Validate()
+func (c *StaticConfig) WithProviderStrategies(strategies []string) *StaticConfig {
+	c.providerStrategies = strategies
+	return c
+}
+
+// Validate validates config-level invariants that must hold at both startup and
+// on SIGHUP reload.
+func (c *StaticConfig) Validate() error {
+	// Normalize whitespace-padded fields before any checks use them.
+	c.CertificateAuthority = strings.TrimSpace(c.CertificateAuthority)
+	c.TLSCert = strings.TrimSpace(c.TLSCert)
+	c.TLSKey = strings.TrimSpace(c.TLSKey)
+	if output.FromString(c.ListOutput) == nil {
+		return fmt.Errorf("invalid output name: %s, valid names are: %s", c.ListOutput, strings.Join(output.Names, ", "))
+	}
+	if err := toolsets.Validate(c.Toolsets); err != nil {
+		return err
+	}
+	if c.ClusterProviderStrategy != "" && len(c.providerStrategies) > 0 {
+		if !slices.Contains(c.providerStrategies, c.ClusterProviderStrategy) {
+			return fmt.Errorf("invalid cluster-provider: %s, valid values are: %s", c.ClusterProviderStrategy, strings.Join(c.providerStrategies, ", "))
+		}
+	}
+	if !c.RequireOAuth && (c.OAuthAudience != "" || c.AuthorizationURL != "" || c.ServerURL != "" || c.CertificateAuthority != "") {
+		return fmt.Errorf("oauth-audience, authorization-url, server-url and certificate-authority are only valid if require-oauth is enabled. Missing --port may implicitly set require-oauth to false")
+	}
+	if c.AuthorizationURL != "" {
+		u, err := url.Parse(c.AuthorizationURL)
+		if err != nil {
+			return err
+		}
+		if u.Scheme != "https" && u.Scheme != "http" {
+			return fmt.Errorf("--authorization-url must be a valid URL")
+		}
+		if u.Scheme == "http" {
+			klog.Warningf("authorization-url is using http://, this is not recommended production use")
+		}
+	}
+	if c.CertificateAuthority != "" {
+		if _, err := os.Stat(c.CertificateAuthority); err != nil {
+			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
+		}
+	}
+	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {
+		return fmt.Errorf("both --tls-cert and --tls-key must be provided together")
+	}
+	if c.TLSCert != "" {
+		if _, err := os.Stat(c.TLSCert); err != nil {
+			return fmt.Errorf("tls-cert must be a valid file path: %w", err)
+		}
+	}
+	if c.TLSKey != "" {
+		if _, err := os.Stat(c.TLSKey); err != nil {
+			return fmt.Errorf("tls-key must be a valid file path: %w", err)
+		}
+	}
+	if err := c.ValidateRequireTLS(); err != nil {
+		return err
+	}
+	if err := c.ValidateClusterAuthMode(); err != nil {
+		return err
+	}
+	if err := c.HTTP.Validate(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ValidateRequireTLS validates outbound URL schemes when RequireTLS is enabled.
