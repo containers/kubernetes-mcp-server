@@ -15,6 +15,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"k8s.io/klog/v2"
 )
@@ -544,20 +545,15 @@ func (c *StaticConfig) validateTokenExchange() error {
 			return fmt.Errorf("invalid token_exchange_strategy: %s, valid values are: %s", c.TokenExchangeStrategy, strings.Join(c.tokenExchangeStrategies, ", "))
 		}
 	}
-	const (
-		authStyleParams    = "params"
-		authStyleHeader    = "header"
-		authStyleAssertion = "assertion"
-	)
 	switch c.StsAuthStyle {
-	case "", authStyleParams, authStyleHeader:
+	case "", tokenexchange.AuthStyleParams, tokenexchange.AuthStyleHeader:
 		// valid
-	case authStyleAssertion:
+	case tokenexchange.AuthStyleAssertion:
 		if c.StsClientCertFile == "" {
-			return fmt.Errorf("sts_client_cert_file is required when sts_auth_style is %q", authStyleAssertion)
+			return fmt.Errorf("sts_client_cert_file is required when sts_auth_style is %q", tokenexchange.AuthStyleAssertion)
 		}
 		if c.StsClientKeyFile == "" {
-			return fmt.Errorf("sts_client_key_file is required when sts_auth_style is %q", authStyleAssertion)
+			return fmt.Errorf("sts_client_key_file is required when sts_auth_style is %q", tokenexchange.AuthStyleAssertion)
 		}
 		if _, err := os.Stat(c.StsClientCertFile); err != nil {
 			return fmt.Errorf("sts_client_cert_file must be a valid file path: %w", err)
@@ -566,7 +562,7 @@ func (c *StaticConfig) validateTokenExchange() error {
 			return fmt.Errorf("sts_client_key_file must be a valid file path: %w", err)
 		}
 	default:
-		return fmt.Errorf("invalid sts_auth_style %q: must be %q, %q, or %q", c.StsAuthStyle, authStyleParams, authStyleHeader, authStyleAssertion)
+		return fmt.Errorf("invalid sts_auth_style %q: must be %q, %q, or %q", c.StsAuthStyle, tokenexchange.AuthStyleParams, tokenexchange.AuthStyleHeader, tokenexchange.AuthStyleAssertion)
 	}
 	return nil
 }
