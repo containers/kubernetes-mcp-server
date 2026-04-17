@@ -237,6 +237,126 @@ func (s *ValidateSuite) TestTLSCertKey() {
 	})
 }
 
+func (s *ValidateSuite) TestTokenExchangeStrategy() {
+	s.Run("unknown strategy is skipped without WithTokenExchangeStrategies", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.TokenExchangeStrategy = "nonexistent-strategy"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("unknown strategy is rejected with WithTokenExchangeStrategies", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.TokenExchangeStrategy = "nonexistent-strategy"
+		err := cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid token_exchange_strategy")
+		s.Contains(err.Error(), "nonexistent-strategy")
+	})
+
+	s.Run("valid strategy is accepted with WithTokenExchangeStrategies", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.TokenExchangeStrategy = "rfc8693"
+		s.NoError(cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate())
+	})
+}
+
+func (s *ValidateSuite) TestStsAuthStyle() {
+	s.Run("invalid sts_auth_style is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "invalid-style"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid sts_auth_style")
+		s.Contains(err.Error(), "invalid-style")
+	})
+
+	s.Run("empty sts_auth_style is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = ""
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("params sts_auth_style is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "params"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("header sts_auth_style is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "header"
+		s.NoError(cfg.Validate())
+	})
+}
+
+func (s *ValidateSuite) TestStsClientCertKey() {
+	s.Run("assertion auth_style without cert file is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_cert_file is required")
+	})
+
+	s.Run("assertion auth_style without key file is rejected", func() {
+		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = certPath
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_key_file is required")
+	})
+
+	s.Run("non-existent sts_client_cert_file is rejected", func() {
+		tmpDir := s.T().TempDir()
+		keyPath := filepath.Join(tmpDir, "key.pem")
+		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = "/nonexistent/cert.pem"
+		cfg.StsClientKeyFile = keyPath
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_cert_file must be a valid file path")
+	})
+
+	s.Run("non-existent sts_client_key_file is rejected", func() {
+		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = certPath
+		cfg.StsClientKeyFile = "/nonexistent/key.pem"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_key_file must be a valid file path")
+	})
+
+	s.Run("assertion auth_style with valid cert and key is accepted", func() {
+		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
+		keyPath := filepath.Join(tmpDir, "key.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
+		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = certPath
+		cfg.StsClientKeyFile = keyPath
+		s.NoError(cfg.Validate())
+	})
+}
+
 func TestValidate(t *testing.T) {
 	suite.Run(t, new(ValidateSuite))
 }

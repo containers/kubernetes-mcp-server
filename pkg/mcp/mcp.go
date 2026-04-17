@@ -21,6 +21,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/prompts"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
@@ -364,7 +365,10 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 	klog.V(1).Info("Reloading MCP server configuration...")
 
 	// Validate config-level invariants (same checks as startup)
-	if err := newConfig.WithProviderStrategies(internalk8s.GetRegisteredStrategies()).Validate(); err != nil {
+	if err := newConfig.
+		WithProviderStrategies(internalk8s.GetRegisteredStrategies()).
+		WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
+		Validate(); err != nil {
 		return fmt.Errorf("configuration reload rejected: %w", err)
 	}
 

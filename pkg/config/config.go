@@ -157,6 +157,8 @@ type StaticConfig struct {
 	configDirPath string
 	// Internal: known provider strategies, set via WithProviderStrategies
 	providerStrategies []string
+	// Internal: known token exchange strategies, set via WithTokenExchangeStrategies
+	tokenExchangeStrategies []string
 }
 
 var _ api.BaseConfig = (*StaticConfig)(nil)
@@ -455,6 +457,16 @@ func (c *StaticConfig) WithProviderStrategies(strategies []string) *StaticConfig
 	return c
 }
 
+// WithTokenExchangeStrategies sets the known token exchange strategies for
+// validation. Callers that have access to the token exchange registry should
+// chain this before Validate so that token_exchange_strategy is checked:
+//
+//	cfg.WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).Validate()
+func (c *StaticConfig) WithTokenExchangeStrategies(strategies []string) *StaticConfig {
+	c.tokenExchangeStrategies = strategies
+	return c
+}
+
 // Validate validates config-level invariants that must hold at both startup and
 // on SIGHUP reload.
 func (c *StaticConfig) Validate() error {
@@ -512,8 +524,49 @@ func (c *StaticConfig) Validate() error {
 	if err := c.ValidateClusterAuthMode(); err != nil {
 		return err
 	}
+	if err := c.validateTokenExchange(); err != nil {
+		return err
+	}
 	if err := c.HTTP.Validate(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateTokenExchange validates token-exchange-related fields:
+//   - token_exchange_strategy must be a known strategy (when registry is provided)
+//   - sts_auth_style must be one of "params", "header", "assertion"
+//   - when sts_auth_style is "assertion", sts_client_cert_file and sts_client_key_file
+//     must both be set and reference existing files
+func (c *StaticConfig) validateTokenExchange() error {
+	if c.TokenExchangeStrategy != "" && len(c.tokenExchangeStrategies) > 0 {
+		if !slices.Contains(c.tokenExchangeStrategies, c.TokenExchangeStrategy) {
+			return fmt.Errorf("invalid token_exchange_strategy: %s, valid values are: %s", c.TokenExchangeStrategy, strings.Join(c.tokenExchangeStrategies, ", "))
+		}
+	}
+	const (
+		authStyleParams    = "params"
+		authStyleHeader    = "header"
+		authStyleAssertion = "assertion"
+	)
+	switch c.StsAuthStyle {
+	case "", authStyleParams, authStyleHeader:
+		// valid
+	case authStyleAssertion:
+		if c.StsClientCertFile == "" {
+			return fmt.Errorf("sts_client_cert_file is required when sts_auth_style is %q", authStyleAssertion)
+		}
+		if c.StsClientKeyFile == "" {
+			return fmt.Errorf("sts_client_key_file is required when sts_auth_style is %q", authStyleAssertion)
+		}
+		if _, err := os.Stat(c.StsClientCertFile); err != nil {
+			return fmt.Errorf("sts_client_cert_file must be a valid file path: %w", err)
+		}
+		if _, err := os.Stat(c.StsClientKeyFile); err != nil {
+			return fmt.Errorf("sts_client_key_file must be a valid file path: %w", err)
+		}
+	default:
+		return fmt.Errorf("invalid sts_auth_style %q: must be %q, %q, or %q", c.StsAuthStyle, authStyleParams, authStyleHeader, authStyleAssertion)
 	}
 	return nil
 }
