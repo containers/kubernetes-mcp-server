@@ -1,0 +1,15 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubernetes
+  name: dryrun-scale-deployment
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Dry run scale up the replicas of deployment 'web-app' in namespace 'dryrun-scale-test' by 100%"
