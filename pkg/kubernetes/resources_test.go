@@ -179,6 +179,49 @@ func (s *CoreTestSuite) TestResourcesScale() {
 
 		s.Require().NoError(err)
 		s.NotNil(result)
+
+		// Verify the replicas count is 3
+		replicas, found, err := unstructured.NestedInt64(result.Object, "spec", "replicas")
+		s.Require().NoError(err)
+		s.True(found, "replicas field should be found")
+		s.Equal(int64(3), replicas, "deployment should have 3 replicas")
+	})
+	s.Run("scales deployment to 5 replicas", func() {
+		deployment := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "apps/v1",
+				"kind":       "Deployment",
+				"metadata": map[string]interface{}{
+					"name":      "my-deploy",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"replicas": int64(3),
+				},
+			},
+		}
+
+		fakeClient := newFakeKubernetesClient(
+			map[schema.GroupVersionResource]string{
+				podsGVR:        "PodList",
+				deploymentsGVR: "DeploymentList",
+			},
+			deployment,
+		)
+		core := NewCore(fakeClient)
+
+		result, err := core.ResourcesScale(ctx(), &schema.GroupVersionKind{
+			Group: "apps", Version: "v1", Kind: "Deployment",
+		}, "default", "my-deploy", 5, true)
+
+		s.Require().NoError(err)
+		s.NotNil(result)
+
+		// Verify the replicas count is 5
+		replicas, found, err := unstructured.NestedInt64(result.Object, "spec", "replicas")
+		s.Require().NoError(err)
+		s.True(found, "replicas field should be found")
+		s.Equal(int64(5), replicas, "deployment should have 5 replicas")
 	})
 }
 
