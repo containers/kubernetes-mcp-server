@@ -1,6 +1,6 @@
 {{- if .Values.httpRoute.enabled -}}
 {{- if empty .Values.httpRoute.parentRefs -}}
-{{- fail "httpRoute.parentRefs must be set when httpRoute.enabled=true" -}}
+{{- fail "httpRoute.parentRefs is required when httpRoute.enabled=true (see charts/kubernetes-mcp-server/README.md#gateway-api-httproute)" -}}
 {{- end -}}
 {{- $fullName := include "kubernetes-mcp-server.fullname" . -}}
 {{- $servicePort := .Values.service.port -}}
