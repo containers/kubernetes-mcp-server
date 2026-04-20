@@ -169,7 +169,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Run("returns error", func() {
 				s.Error(err)
 				s.Nil(manager)
-				s.ErrorContains(err, "failed to create kubernetes rest config")
+				s.ErrorContains(err, "no current-context is set and no contexts are defined")
 			})
 		})
 		s.Run("with empty kubeconfig in env", func() {
@@ -180,7 +180,44 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			s.Run("returns error", func() {
 				s.Error(err)
 				s.Nil(manager)
-				s.ErrorContains(err, "no configuration has been provided")
+				s.ErrorContains(err, "no current-context is set and no contexts are defined")
+			})
+		})
+		s.Run("with empty current-context and single context auto-selects it", func() {
+			kubeconfig := s.mockServer.Kubeconfig()
+			kubeconfig.CurrentContext = ""
+			kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
+			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
+			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			s.Require().NoError(err)
+			s.Require().NotNil(manager)
+			s.Run("rest config host points to mock server", func() {
+				s.Equal(s.mockServer.Config().Host, manager.kubernetes.RESTConfig().Host)
+			})
+		})
+		s.Run("with empty current-context and multiple contexts returns error", func() {
+			kubeconfig := s.mockServer.Kubeconfig()
+			kubeconfig.CurrentContext = ""
+			kubeconfig.Contexts["another-context"] = clientcmdapi.NewContext()
+			kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
+			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
+			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			s.Run("returns error listing available contexts", func() {
+				s.Error(err)
+				s.Nil(manager)
+				s.ErrorContains(err, "current-context is not set")
+				s.ErrorContains(err, "kubectl config use-context")
+			})
+		})
+		s.Run("with empty current-context and no contexts returns error", func() {
+			kubeconfig := clientcmdapi.NewConfig()
+			kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
+			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
+			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			s.Run("returns error", func() {
+				s.Error(err)
+				s.Nil(manager)
+				s.ErrorContains(err, "no current-context is set and no contexts are defined")
 			})
 		})
 	})

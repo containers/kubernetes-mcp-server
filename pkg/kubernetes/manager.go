@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -37,11 +38,17 @@ func NewKubeconfigManager(config api.BaseConfig, kubeconfigContext string) (*Man
 	if config.GetKubeConfigPath() != "" {
 		pathOptions.LoadingRules.ExplicitPath = config.GetKubeConfigPath()
 	}
+
+	resolvedContext, err := resolveKubeconfigContext(pathOptions.LoadingRules, kubeconfigContext)
+	if err != nil {
+		return nil, err
+	}
+
 	clientCmdConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		pathOptions.LoadingRules,
 		&clientcmd.ConfigOverrides{
 			ClusterInfo:    clientcmdapi.Cluster{Server: ""},
-			CurrentContext: kubeconfigContext,
+			CurrentContext: resolvedContext,
 		})
 
 	restConfig, err := clientCmdConfig.ClientConfig()
@@ -50,6 +57,49 @@ func NewKubeconfigManager(config api.BaseConfig, kubeconfigContext string) (*Man
 	}
 
 	return NewManager(config, restConfig, clientCmdConfig)
+}
+
+// resolveKubeconfigContext determines which kubeconfig context to use.
+// If kubeconfigContext is explicitly set, it is returned as-is.
+// If it is empty, the function loads the kubeconfig and:
+//   - returns the current-context if set
+//   - auto-selects the only available context if there is exactly one
+//   - returns a descriptive error if there are zero or multiple contexts
+func resolveKubeconfigContext(loadingRules *clientcmd.ClientConfigLoadingRules, kubeconfigContext string) (string, error) {
+	if kubeconfigContext != "" {
+		return kubeconfigContext, nil
+	}
+
+	rawConfig, err := loadingRules.Load()
+	if err != nil {
+		return "", fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
+	if rawConfig.CurrentContext != "" {
+		return rawConfig.CurrentContext, nil
+	}
+
+	switch len(rawConfig.Contexts) {
+	case 0:
+		return "", fmt.Errorf( //nolint:ST1005 // user-facing error with actionable guidance
+			"no current-context is set and no contexts are defined in kubeconfig.\n" +
+				"Configure a context with 'kubectl config set-context <name>' and 'kubectl config use-context <name>'")
+	case 1:
+		for name := range rawConfig.Contexts {
+			klog.Infof("current-context is not set in kubeconfig, auto-selecting the only available context %q", name)
+			return name, nil
+		}
+	}
+
+	names := make([]string, 0, len(rawConfig.Contexts))
+	for name := range rawConfig.Contexts {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return "", fmt.Errorf( //nolint:ST1005 // user-facing error with actionable guidance
+		"current-context is not set in kubeconfig and multiple contexts are available (%s).\n"+
+			"Set one with 'kubectl config use-context <context-name>'",
+		strings.Join(names, ", "))
 }
 
 func NewInClusterManager(config api.BaseConfig) (*Manager, error) {

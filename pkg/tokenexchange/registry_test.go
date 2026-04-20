@@ -33,6 +33,13 @@ func (s *TokenExchangerRegistryTestSuite) TestGetTokenExchanger() {
 	})
 }
 
+func (s *TokenExchangerRegistryTestSuite) TestGetRegisteredStrategies() {
+	s.Run("returns sorted list of registered strategies", func() {
+		strategies := GetRegisteredStrategies()
+		s.Equal([]string{StrategyEntraOBO, StrategyKeycloakV1, StrategyRFC8693}, strategies)
+	})
+}
+
 func (s *TokenExchangerRegistryTestSuite) TestRegisterTokenExchanger() {
 	s.Run("panics on duplicate registration", func() {
 		s.Panics(func() {

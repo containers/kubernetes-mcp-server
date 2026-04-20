@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 
 	// Blank imports to register toolsets and providers in their respective registries.
@@ -160,6 +161,7 @@ func (s *ValidateSuite) TestCertificateAuthority() {
 		cfg := s.validConfig()
 		cfg.CertificateAuthority = "   "
 		s.NoError(cfg.Validate())
+		s.Equal("", cfg.CertificateAuthority, "whitespace should be trimmed from certificate-authority")
 	})
 }
 
@@ -234,6 +236,250 @@ func (s *ValidateSuite) TestTLSCertKey() {
 		cfg.TLSCert = "   "
 		cfg.TLSKey = "   "
 		s.NoError(cfg.Validate())
+		s.Equal("", cfg.TLSCert, "whitespace should be trimmed from tls-cert")
+		s.Equal("", cfg.TLSKey, "whitespace should be trimmed from tls-key")
+	})
+}
+
+func (s *ValidateSuite) TestTokenExchangeStrategy() {
+	s.Run("unknown strategy is skipped without WithTokenExchangeStrategies", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.TokenExchangeStrategy = "nonexistent-strategy"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("unknown strategy is rejected with WithTokenExchangeStrategies", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.TokenExchangeStrategy = "nonexistent-strategy"
+		err := cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid token_exchange_strategy")
+		s.Contains(err.Error(), "nonexistent-strategy")
+	})
+
+	s.Run("valid strategy is accepted with WithTokenExchangeStrategies", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.TokenExchangeStrategy = "rfc8693"
+		s.NoError(cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate())
+	})
+}
+
+func (s *ValidateSuite) TestStsAuthStyle() {
+	s.Run("invalid sts_auth_style is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "invalid-style"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid sts_auth_style")
+		s.Contains(err.Error(), "invalid-style")
+	})
+
+	s.Run("empty sts_auth_style is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = ""
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("params sts_auth_style is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "params"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("header sts_auth_style is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "header"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("whitespace-only sts_auth_style is treated as empty", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "   "
+		s.NoError(cfg.Validate())
+		s.Equal("", cfg.StsAuthStyle, "whitespace should be trimmed from sts_auth_style")
+	})
+}
+
+func (s *ValidateSuite) TestStsClientCertKey() {
+	s.Run("assertion auth_style without cert file is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_cert_file is required")
+	})
+
+	s.Run("assertion auth_style without key file is rejected", func() {
+		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = certPath
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_key_file is required")
+	})
+
+	s.Run("non-existent sts_client_cert_file is rejected", func() {
+		tmpDir := s.T().TempDir()
+		keyPath := filepath.Join(tmpDir, "key.pem")
+		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = "/nonexistent/cert.pem"
+		cfg.StsClientKeyFile = keyPath
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_cert_file must be a valid file path")
+	})
+
+	s.Run("non-existent sts_client_key_file is rejected", func() {
+		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = certPath
+		cfg.StsClientKeyFile = "/nonexistent/key.pem"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_key_file must be a valid file path")
+	})
+
+	s.Run("assertion auth_style with valid cert and key is accepted", func() {
+		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
+		keyPath := filepath.Join(tmpDir, "key.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
+		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = certPath
+		cfg.StsClientKeyFile = keyPath
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("whitespace-only sts_client_cert_file is treated as empty", func() {
+		tmpDir := s.T().TempDir()
+		keyPath := filepath.Join(tmpDir, "key.pem")
+		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = "   "
+		cfg.StsClientKeyFile = keyPath
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_cert_file is required")
+		s.Equal("", cfg.StsClientCertFile, "whitespace should be trimmed from sts_client_cert_file")
+	})
+
+	s.Run("whitespace-only sts_client_key_file is treated as empty", func() {
+		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "assertion"
+		cfg.StsClientCertFile = certPath
+		cfg.StsClientKeyFile = "   "
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_client_key_file is required")
+		s.Equal("", cfg.StsClientKeyFile, "whitespace should be trimmed from sts_client_key_file")
+	})
+}
+
+func (s *ValidateSuite) TestConfirmationFallback() {
+	s.Run("empty fallback is accepted", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationFallback = ""
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("allow fallback is accepted", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationFallback = "allow"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("deny fallback is accepted", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationFallback = "deny"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("invalid fallback value is rejected", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationFallback = "block"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid confirmation_fallback")
+		s.Contains(err.Error(), "block")
+	})
+}
+
+func (s *ValidateSuite) TestConfirmationRules() {
+	s.Run("empty rules are accepted", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationRules = nil
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("valid tool-level rule is accepted", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationRules = []api.ConfirmationRule{
+			{Tool: "helm_uninstall", Message: "Uninstall a release."},
+		}
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("valid kube-level rule is accepted", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationRules = []api.ConfirmationRule{
+			{Verb: "delete", Kind: "Secret", Message: "Delete a Secret."},
+		}
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("rule mixing tool and kube fields is rejected", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationRules = []api.ConfirmationRule{
+			{Tool: "helm_uninstall", Verb: "delete", Message: "Mixed rule."},
+		}
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid confirmation rules")
+	})
+
+	s.Run("rule with no classifying fields is rejected", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationRules = []api.ConfirmationRule{
+			{Message: "No level fields."},
+		}
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "must set at least one")
+	})
+
+	s.Run("reports all rule errors with indices", func() {
+		cfg := s.validConfig()
+		cfg.ConfirmationRules = []api.ConfirmationRule{
+			{Tool: "a", Verb: "delete", Message: "Mixed 1."},
+			{Kind: "Pod", Tool: "b", Message: "Mixed 2."},
+		}
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "confirmation_rules[0]")
+		s.Contains(err.Error(), "confirmation_rules[1]")
 	})
 }
 

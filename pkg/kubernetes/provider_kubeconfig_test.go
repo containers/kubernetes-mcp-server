@@ -96,6 +96,25 @@ func (s *ProviderKubeconfigTestSuite) TestGetDefaultTarget() {
 	})
 }
 
+func (s *ProviderKubeconfigTestSuite) TestEmptyCurrentContext() {
+	s.Run("with single context auto-selects it as default target", func() {
+		kubeconfig := s.mockServer.Kubeconfig()
+		kubeconfig.CurrentContext = ""
+		provider, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		s.Require().NoError(err, "Expected no error creating provider with empty current-context and single context")
+		s.Equal("fake-context", provider.GetDefaultTarget(), "Expected auto-selected fake-context as default target")
+	})
+	s.Run("with multiple contexts returns error", func() {
+		kubeconfig := s.mockServer.Kubeconfig()
+		kubeconfig.CurrentContext = ""
+		kubeconfig.Contexts["another-context"] = clientcmdapi.NewContext()
+		_, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		s.Require().Error(err, "Expected error creating provider with empty current-context and multiple contexts")
+		s.ErrorContains(err, "current-context is not set")
+		s.ErrorContains(err, "kubectl config use-context")
+	})
+}
+
 func (s *ProviderKubeconfigTestSuite) TestGetTargetParameterName() {
 	s.Equal("context", s.provider.GetTargetParameterName(), "Expected context as target parameter name")
 }

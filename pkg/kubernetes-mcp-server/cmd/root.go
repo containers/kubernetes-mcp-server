@@ -28,6 +28,7 @@ import (
 	internaloauth "github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
@@ -276,7 +277,10 @@ func (m *MCPServerOptions) initializeLogging() {
 
 func (m *MCPServerOptions) Validate() error {
 	// Config-level validations (shared with SIGHUP reload)
-	if err := m.StaticConfig.WithProviderStrategies(kubernetes.GetRegisteredStrategies()).Validate(); err != nil {
+	if err := m.StaticConfig.
+		WithProviderStrategies(kubernetes.GetRegisteredStrategies()).
+		WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
+		Validate(); err != nil {
 		return err
 	}
 	// CLI-level validations (flag interactions that can't change on reload)
