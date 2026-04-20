@@ -360,20 +360,6 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		return nil, err
 	}
 
-	if fb := config.ConfirmationFallback; fb != "" && fb != "allow" && fb != "deny" {
-		return nil, fmt.Errorf("invalid confirmation_fallback %q: must be \"allow\" or \"deny\"", fb)
-	}
-
-	var ruleErrors []error
-	for i := range config.ConfirmationRules {
-		if ruleErr := config.ConfirmationRules[i].Validate(); ruleErr != nil {
-			ruleErrors = append(ruleErrors, fmt.Errorf("confirmation_rules[%d]: %w", i, ruleErr))
-		}
-	}
-	if len(ruleErrors) > 0 {
-		return nil, fmt.Errorf("invalid confirmation rules:\n%w", errors.Join(ruleErrors...))
-	}
-
 	return config, nil
 }
 
@@ -531,8 +517,31 @@ func (c *StaticConfig) Validate() error {
 	if err := c.validateTokenExchange(); err != nil {
 		return err
 	}
+	if err := c.validateConfirmation(); err != nil {
+		return err
+	}
 	if err := c.HTTP.Validate(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateConfirmation validates confirmation-related fields:
+//   - confirmation_fallback must be "allow", "deny", or empty
+//   - each entry in confirmation_rules must be well-formed
+//     (tool-level xor kube-level, with at least one classifying field)
+func (c *StaticConfig) validateConfirmation() error {
+	if fb := c.ConfirmationFallback; fb != "" && fb != "allow" && fb != "deny" {
+		return fmt.Errorf("invalid confirmation_fallback %q: must be \"allow\" or \"deny\"", fb)
+	}
+	var ruleErrors []error
+	for i := range c.ConfirmationRules {
+		if ruleErr := c.ConfirmationRules[i].Validate(); ruleErr != nil {
+			ruleErrors = append(ruleErrors, fmt.Errorf("confirmation_rules[%d]: %w", i, ruleErr))
+		}
+	}
+	if len(ruleErrors) > 0 {
+		return fmt.Errorf("invalid confirmation rules:\n%w", errors.Join(ruleErrors...))
 	}
 	return nil
 }
