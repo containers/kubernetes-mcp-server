@@ -475,6 +475,9 @@ func (c *StaticConfig) Validate() error {
 	c.CertificateAuthority = strings.TrimSpace(c.CertificateAuthority)
 	c.TLSCert = strings.TrimSpace(c.TLSCert)
 	c.TLSKey = strings.TrimSpace(c.TLSKey)
+	c.StsAuthStyle = strings.TrimSpace(c.StsAuthStyle)
+	c.StsClientCertFile = strings.TrimSpace(c.StsClientCertFile)
+	c.StsClientKeyFile = strings.TrimSpace(c.StsClientKeyFile)
 	if output.FromString(c.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", c.ListOutput, strings.Join(output.Names, ", "))
 	}

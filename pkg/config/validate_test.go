@@ -290,6 +290,12 @@ func (s *ValidateSuite) TestStsAuthStyle() {
 		cfg.StsAuthStyle = "header"
 		s.NoError(cfg.Validate())
 	})
+
+	s.Run("whitespace-only sts_auth_style is treated as empty", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "   "
+		s.NoError(cfg.Validate())
+	})
 }
 
 func (s *ValidateSuite) TestStsClientCertKey() {
@@ -353,6 +359,13 @@ func (s *ValidateSuite) TestStsClientCertKey() {
 		cfg.StsAuthStyle = "assertion"
 		cfg.StsClientCertFile = certPath
 		cfg.StsClientKeyFile = keyPath
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("whitespace-only sts_client_cert_file and sts_client_key_file are treated as empty", func() {
+		cfg := s.validConfig()
+		cfg.StsClientCertFile = "   "
+		cfg.StsClientKeyFile = "   "
 		s.NoError(cfg.Validate())
 	})
 }
