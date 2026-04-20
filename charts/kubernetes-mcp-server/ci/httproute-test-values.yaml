@@ -1,6 +1,7 @@
-# HTTPRoute alongside Ingress; tpl in parentRefs/hostnames via chart tpl(toYaml).
+# HTTPRoute in place of Ingress (matches the documented flow in README.md);
+# tpl in parentRefs/hostnames via chart tpl(toYaml); exercises rules with and without matches.
 ingress:
-  host: localhost
+  enabled: false
 
 httpRoute:
   enabled: true
@@ -16,4 +17,18 @@ httpRoute:
     - matches:
         - path:
             type: PathPrefix
-            value: /
+            value: /api
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            add:
+              - name: X-Forwarded-Prefix
+                value: /api
+      timeouts:
+        request: 10s
+    - filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set:
+              - name: X-Route
+                value: catch-all

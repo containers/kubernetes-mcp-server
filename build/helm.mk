@@ -10,6 +10,9 @@ HELM_CHART_NAME = kubernetes-mcp-server
 
 KUBECONFORM = $(shell pwd)/_output/tools/bin/kubeconform
 KUBECONFORM_VERSION ?= latest
+# CRD schemas from the datreeio catalog (e.g. gateway.networking.k8s.io/HTTPRoute); required so kubeconform
+# actually validates the HTTPRoute spec instead of silently skipping it under -ignore-missing-schemas.
+KUBECONFORM_SCHEMA_LOCATIONS = -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
 HELM_DOCS = $(shell pwd)/_output/tools/bin/helm-docs
 HELM_DOCS_VERSION ?= v1.14.2
@@ -59,16 +62,16 @@ kubeconform:
 .PHONY: helm-validate
 helm-validate: kubeconform ## Validate Helm chart manifests with kubeconform
 	@echo "Validating with default values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas $(KUBECONFORM_SCHEMA_LOCATIONS)'
 	@echo ""
 	@echo "Validating with tpl-exercising values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tpl-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tpl-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas $(KUBECONFORM_SCHEMA_LOCATIONS)'
 	@echo ""
 	@echo "Validating with configmap-numeric-test values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas $(KUBECONFORM_SCHEMA_LOCATIONS)'
 	@echo ""
 	@echo "Validating with Gateway API HTTPRoute values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/httproute-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/httproute-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas $(KUBECONFORM_SCHEMA_LOCATIONS)'
 	@echo ""
 	@echo "Testing ConfigMap numeric .0 cleanup..."
 	@output=$$(helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml 2>&1); \

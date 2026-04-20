@@ -25,7 +25,7 @@ helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-serve
 
 ### Gateway API (HTTPRoute)
 
-If your platform uses [Gateway API](https://gateway.networking.k8s.io/) instead of classic Ingress, set `ingress.enabled` to `false` and enable `httpRoute` with `parentRefs`, `rules` (each rule must include `matches`; optional `filters` and `timeouts` are passed through), and optionally `hostnames`. The chart adds `backendRefs` pointing at the release `Service` and `service.port`. `parentRefs` and `hostnames` are rendered with `tpl` on their YAML so you can reference `Release` metadata in values.
+If your platform uses [Gateway API](https://gateway.networking.k8s.io/) instead of classic Ingress, set `ingress.enabled` to `false` and enable `httpRoute` with `parentRefs`, `rules` (optional `matches`, `filters`, and `timeouts` are passed through), and optionally `hostnames`. The chart adds `backendRefs` pointing at the release `Service` and `service.port`. `parentRefs` and `hostnames` are rendered with `tpl` on their YAML so you can reference `Release` metadata in values. `httpRoute.parentRefs` is required when `httpRoute.enabled=true`; leaving it empty fails at `helm template` / `helm install` time.
 
 ```yaml
 ingress:
