@@ -345,6 +345,7 @@ func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 
 func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 	s.MockServer.ResetHandlers()
+	s.StaticConfig.SkipJWTVerification = true
 
 	cases := []string{"", "mcp-server"}
 	for _, audience := range cases {
@@ -509,6 +510,94 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 			s.Require().NoError(s.WaitForShutdown())
 		})
 	}
+}
+
+func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarning() {
+	// When require_oauth=true, skip_jwt_verification=true, and no OIDC provider
+	// is configured (offline-only mode), a warning log should be emitted once.
+	s.MockServer.ResetHandlers()
+	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.StaticConfig.AuthorizationURL = ""
+	s.StaticConfig.SkipJWTVerification = true
+	s.logBuffer.Reset()
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + tokenBasicNotExpired,
+	})
+
+	s.Run("warning log emitted for offline-only JWT validation", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+		s.Contains(s.logBuffer.String(), "JWT accepted without signature verification",
+			"Expected warning log for offline-only JWT validation")
+		s.Contains(s.logBuffer.String(), "set authorization_url for secure validation",
+			"Expected guidance to set authorization_url in warning")
+	})
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarningOnce() {
+	// The warning should fire exactly once even with multiple requests.
+	s.MockServer.ResetHandlers()
+	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.StaticConfig.AuthorizationURL = ""
+	s.StaticConfig.SkipJWTVerification = true
+	s.logBuffer.Reset()
+	s.StartServer()
+
+	// Send multiple HTTP requests
+	for i := 0; i < 3; i++ {
+		resp := s.HttpGet("Bearer " + tokenBasicNotExpired)
+		_ = resp.Body.Close()
+	}
+
+	s.Run("warning log appears exactly once", func() {
+		logs := s.logBuffer.String()
+		count := strings.Count(logs, "JWT accepted without signature verification")
+		s.Equal(1, count, "Expected warning to fire exactly once, got %d", count)
+	})
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyRejectedWithoutSkipFlag() {
+	// When require_oauth=true, skip_jwt_verification=false (default), and no OIDC
+	// provider is configured, requests should be rejected at runtime.
+	s.MockServer.ResetHandlers()
+	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.StaticConfig.AuthorizationURL = ""
+	s.StaticConfig.SkipJWTVerification = false
+	s.logBuffer.Reset()
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + tokenBasicNotExpired,
+	})
+
+	s.Run("MCP session is rejected without skip_jwt_verification", func() {
+		s.Nil(s.mcpClient.Session, "Expected no session when skip_jwt_verification is false")
+	})
+
+	s.Run("HTTP request returns 500 Internal Server Error", func() {
+		resp := s.HttpGet("Bearer " + tokenBasicNotExpired)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+
+		s.Equal(http.StatusInternalServerError, resp.StatusCode, "Expected HTTP 500 for server misconfiguration")
+	})
+
+	s.Run("logs rejection", func() {
+		s.Contains(s.logBuffer.String(), "JWT verification not configured",
+			"Expected log entry for JWT verification not configured")
+	})
+
+	if s.mcpClient != nil {
+		s.mcpClient.Close()
+		s.mcpClient = nil
+	}
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
 }
 
 func (s *AuthorizationSuite) TestAuthorizationExemptEndpointsFromOAuth() {

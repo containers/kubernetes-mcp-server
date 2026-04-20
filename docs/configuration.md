@@ -467,6 +467,7 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. |
 | `oauth_audience` | string | `""` | Valid audience for OAuth tokens (for offline JWT claim validation). |
 | `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
+| `skip_jwt_verification` | boolean | `false` | When `true`, allows JWTs without cryptographic signature verification when `require_oauth` is enabled but no `authorization_url` is configured. Only use behind a trusted reverse proxy that already verifies tokens. When `false` (default), the server refuses to start in this configuration. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
 | `sts_client_id` | string | `""` | OAuth client ID for backend token exchange. |

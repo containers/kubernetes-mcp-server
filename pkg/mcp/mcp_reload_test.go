@@ -234,6 +234,7 @@ func (s *ConfigReloadSuite) TestReloadRejectsHTTPURLsWhenRequireTLS() {
 		newConfig := config.Default()
 		newConfig.RequireOAuth = true
 		newConfig.RequireTLS = true
+		newConfig.AuthorizationURL = "https://example.com/auth"
 		newConfig.ServerURL = "http://example.com:8080"
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 		err := server.ReloadConfiguration(newConfig)
@@ -313,6 +314,7 @@ func (s *ConfigReloadSuite) TestReloadRejectsInvalidConfig() {
 	s.Run("reload with non-existent certificate_authority is rejected", func() {
 		newConfig := config.Default()
 		newConfig.RequireOAuth = true
+		newConfig.AuthorizationURL = "https://example.com/auth"
 		newConfig.CertificateAuthority = "/nonexistent/path/ca.crt"
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 		err := server.ReloadConfiguration(newConfig)
@@ -328,6 +330,27 @@ func (s *ConfigReloadSuite) TestReloadRejectsInvalidConfig() {
 		err := server.ReloadConfiguration(newConfig)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "both --tls-cert and --tls-key must be provided together")
+	})
+
+	s.Run("reload with require_oauth without authorization_url and skip_jwt_verification=false is rejected", func() {
+		newConfig := config.Default()
+		newConfig.RequireOAuth = true
+		newConfig.AuthorizationURL = ""
+		newConfig.SkipJWTVerification = false
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "require_oauth is enabled but authorization_url is not configured")
+	})
+
+	s.Run("reload with require_oauth without authorization_url and skip_jwt_verification=true is accepted", func() {
+		newConfig := config.Default()
+		newConfig.RequireOAuth = true
+		newConfig.AuthorizationURL = ""
+		newConfig.SkipJWTVerification = true
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+		err := server.ReloadConfiguration(newConfig)
+		s.NoError(err)
 	})
 }
 

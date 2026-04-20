@@ -66,6 +66,12 @@ type StaticConfig struct {
 	// AuthorizationURL is the URL of the OIDC authorization server.
 	// It is used for token validation and for STS token exchange.
 	AuthorizationURL string `toml:"authorization_url,omitempty"`
+	// SkipJWTVerification allows the server to accept JWTs without cryptographic
+	// signature verification when require_oauth is enabled but no authorization_url
+	// is configured (offline-only validation). Only use behind a trusted reverse proxy
+	// that performs token verification. When false (default), the server refuses to
+	// start if require_oauth is true and authorization_url is empty.
+	SkipJWTVerification bool `toml:"skip_jwt_verification,omitempty"`
 	// DisableDynamicClientRegistration indicates whether dynamic client registration is disabled.
 	// If true, the .well-known endpoints will not expose the registration endpoint.
 	DisableDynamicClientRegistration bool `toml:"disable_dynamic_client_registration,omitempty"`
@@ -490,6 +496,9 @@ func (c *StaticConfig) Validate() error {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
 		}
 	}
+	if err := c.validateSkipJWTVerification(); err != nil {
+		return err
+	}
 	if c.CertificateAuthority != "" {
 		if _, err := os.Stat(c.CertificateAuthority); err != nil {
 			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
@@ -544,6 +553,24 @@ func (c *StaticConfig) validateConfirmation() error {
 		return fmt.Errorf("invalid confirmation rules:\n%w", errors.Join(ruleErrors...))
 	}
 	return nil
+}
+
+// validateSkipJWTVerification checks that the user has explicitly opted in to
+// skipping JWT signature verification when require_oauth is enabled but no
+// authorization_url is configured.
+func (c *StaticConfig) validateSkipJWTVerification() error {
+	if !c.RequireOAuth || c.AuthorizationURL != "" {
+		return nil
+	}
+	if c.SkipJWTVerification {
+		klog.Warningf("skip_jwt_verification is enabled: JWTs will be accepted without cryptographic signature verification. " +
+			"Only use this behind a trusted reverse proxy that performs token verification.")
+		return nil
+	}
+	return fmt.Errorf("require_oauth is enabled but authorization_url is not configured: " +
+		"JWTs cannot be cryptographically verified without an OIDC provider. " +
+		"Set authorization_url to an OIDC issuer, or set skip_jwt_verification=true " +
+		"if the server is behind a trusted reverse proxy that verifies tokens")
 }
 
 // validateTokenExchange validates token-exchange-related fields:
