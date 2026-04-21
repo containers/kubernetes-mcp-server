@@ -17,7 +17,7 @@ config:
     # Kubernetes tasks
     - glob: ../tasks/*/*/*.yaml
       labelSelector:
-        suite: kubernetes
+        suite: core
       assertions:
         toolsUsed:
           - server: kubernetes
