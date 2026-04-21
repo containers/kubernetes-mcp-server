@@ -622,6 +622,118 @@ func TestRequireTLSValidation(t *testing.T) {
 	})
 }
 
+func TestLogFile(t *testing.T) {
+	t.Run("http mode writes logs to file instead of stdout", func(t *testing.T) {
+		tempDir := t.TempDir()
+		logPath := filepath.Join(tempDir, "server.log")
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--log-file", logPath})
+		require.NoError(t, rootCmd.Execute())
+
+		assert.Equal(t, "0.0.0\n", out.String(), "stdout should contain only version output, not logs")
+		logContent, err := os.ReadFile(logPath)
+		require.NoError(t, err)
+		assert.Contains(t, string(logContent), "Starting kubernetes-mcp-server")
+	})
+
+	t.Run("stdio mode writes logs to file", func(t *testing.T) {
+		tempDir := t.TempDir()
+		logPath := filepath.Join(tempDir, "server.log")
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file", logPath})
+		require.NoError(t, rootCmd.Execute())
+
+		assert.Equal(t, "0.0.0\n", out.String(), "stdout should contain only version output in stdio mode")
+		logContent, err := os.ReadFile(logPath)
+		require.NoError(t, err)
+		assert.Contains(t, string(logContent), "Starting kubernetes-mcp-server")
+	})
+
+	t.Run("log file is created if it does not exist", func(t *testing.T) {
+		tempDir := t.TempDir()
+		logPath := filepath.Join(tempDir, "new-server.log")
+
+		_, err := os.Stat(logPath)
+		require.True(t, os.IsNotExist(err), "log file should not exist before the test")
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file", logPath})
+		require.NoError(t, rootCmd.Execute())
+
+		_, err = os.Stat(logPath)
+		require.NoError(t, err, "log file should have been created")
+	})
+
+	t.Run("log file is appended to if it already exists", func(t *testing.T) {
+		tempDir := t.TempDir()
+		logPath := filepath.Join(tempDir, "server.log")
+		existingContent := "existing log line\n"
+		require.NoError(t, os.WriteFile(logPath, []byte(existingContent), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file", logPath})
+		require.NoError(t, rootCmd.Execute())
+
+		logContent, err := os.ReadFile(logPath)
+		require.NoError(t, err)
+		assert.True(t, strings.HasPrefix(string(logContent), existingContent), "existing content should be preserved at the start")
+		assert.Greater(t, len(logContent), len(existingContent), "new content should be appended after existing content")
+	})
+
+	t.Run("nonexistent parent directory returns error", func(t *testing.T) {
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-file", "/nonexistent/dir/server.log"})
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to open log file")
+		assert.Contains(t, err.Error(), "/nonexistent/dir/server.log")
+	})
+
+	t.Run("log_file from TOML config is used", func(t *testing.T) {
+		tempDir := t.TempDir()
+		logPath := filepath.Join(tempDir, "server.log")
+		configPath := filepath.Join(tempDir, "config.toml")
+		require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", logPath)), 0644))
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--config", configPath})
+		require.NoError(t, rootCmd.Execute())
+
+		assert.Equal(t, "0.0.0\n", out.String(), "stdout should not contain log output when log_file is set")
+		logContent, err := os.ReadFile(logPath)
+		require.NoError(t, err)
+		assert.Contains(t, string(logContent), "Starting kubernetes-mcp-server")
+	})
+
+	t.Run("--log-file flag overrides log_file in TOML config", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configLogPath := filepath.Join(tempDir, "config-server.log")
+		flagLogPath := filepath.Join(tempDir, "flag-server.log")
+		configPath := filepath.Join(tempDir, "config.toml")
+		require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", configLogPath)), 0644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--config", configPath, "--log-file", flagLogPath})
+		require.NoError(t, rootCmd.Execute())
+
+		flagContent, err := os.ReadFile(flagLogPath)
+		require.NoError(t, err)
+		assert.Contains(t, string(flagContent), "Starting kubernetes-mcp-server", "flag log path should receive logs")
+
+		_, err = os.Stat(configLogPath)
+		require.True(t, os.IsNotExist(err), "config log file should not be created when flag overrides it")
+	})
+}
+
 func TestTLSValidation(t *testing.T) {
 	t.Run("tls-cert without tls-key returns error", func(t *testing.T) {
 		tempDir := t.TempDir()

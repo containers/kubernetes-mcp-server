@@ -2,6 +2,30 @@
 
 The server supports the MCP logging capability, allowing clients to receive debugging information via structured log messages.
 
+## Server Log Output
+
+By default, server logs (startup messages, errors, debug output) go to **stdout in HTTP mode** and are **silenced in stdio mode** (stdout is reserved for the MCP protocol).
+
+Use `log_file` to redirect server logs to a file, which works in both modes:
+
+```toml
+log_level = 2
+log_file = "/var/log/kubernetes-mcp-server.log"
+```
+
+Or via CLI flag:
+
+```bash
+kubernetes-mcp-server --log-file /var/log/kubernetes-mcp-server.log --log-level 2
+```
+
+| Setting | Description |
+|---|---|
+| `log_file` | Path to the log file. Created if it does not exist; opened in append mode (`O_APPEND`). |
+| `log_level` | Verbosity level 0-9 (default `0`). Higher values produce more output. |
+
+**Note for stdio mode:** `log_file` is the *only* way to get server-side diagnostic logs when using the STDIO transport, because stdout is the MCP protocol channel.
+
 ## For Clients
 
 Clients can control log verbosity by sending a `logging/setLevel` request:

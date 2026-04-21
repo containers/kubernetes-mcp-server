@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strconv"
@@ -65,6 +66,7 @@ kubernetes-mcp-server --cluster-provider kcp
 const (
 	flagVersion              = "version"
 	flagLogLevel             = "log-level"
+	flagLogFile              = "log-file"
 	flagConfig               = "config"
 	flagConfigDir            = "config-dir"
 	flagPort                 = "port"
@@ -91,6 +93,7 @@ const (
 type MCPServerOptions struct {
 	Version              bool
 	LogLevel             int
+	LogFile              string
 	Port                 string
 	SSEBaseUrl           string
 	Kubeconfig           string
@@ -115,6 +118,7 @@ type MCPServerOptions struct {
 	ConfigDir    string
 	StaticConfig *config.StaticConfig
 
+	logFileHandle *os.File
 	genericiooptions.IOStreams
 }
 
@@ -149,6 +153,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 
 	cmd.Flags().BoolVar(&o.Version, flagVersion, o.Version, "Print version information and quit")
 	cmd.Flags().IntVar(&o.LogLevel, flagLogLevel, o.LogLevel, "Set the log level (from 0 to 9)")
+	cmd.Flags().StringVar(&o.LogFile, flagLogFile, o.LogFile, "Write logs to this file path instead of stdout (applies to both stdio and HTTP modes)")
 	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
 	cmd.Flags().StringVar(&o.ConfigDir, flagConfigDir, o.ConfigDir, "Path to drop-in configuration directory (files loaded in lexical order). Defaults to "+config.DefaultDropInConfigDir+" relative to the config file if --config is set.")
 	cmd.Flags().StringVar(&o.Port, flagPort, o.Port, "Start a streamable HTTP and SSE HTTP server on the specified port (e.g. 8080)")
@@ -191,7 +196,9 @@ func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
 
 	m.loadFlags(cmd)
 
-	m.initializeLogging()
+	if err := m.initializeLogging(); err != nil {
+		return err
+	}
 
 	if m.StaticConfig.RequireOAuth && m.StaticConfig.Port == "" {
 		// RequireOAuth is not relevant flow for STDIO transport
@@ -204,6 +211,9 @@ func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
 func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	if cmd.Flag(flagLogLevel).Changed {
 		m.StaticConfig.LogLevel = m.LogLevel
+	}
+	if cmd.Flag(flagLogFile).Changed {
+		m.StaticConfig.LogFile = m.LogFile
 	}
 	if cmd.Flag(flagPort).Changed {
 		m.StaticConfig.Port = m.Port
@@ -264,22 +274,41 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 }
 
-func (m *MCPServerOptions) initializeLogging() {
+func (m *MCPServerOptions) initializeLogging() error {
 	flagSet := flag.NewFlagSet("klog", flag.ContinueOnError)
 	klog.InitFlags(flagSet)
-	if m.StaticConfig.Port == "" {
-		// disable klog output for stdio mode
-		// this is needed to avoid klog writing to stderr and breaking the protocol
-		_ = flagSet.Parse([]string{"-logtostderr=false", "-alsologtostderr=false", "-stderrthreshold=FATAL"})
-		return
+
+	// Determine log output writer.
+	// Default: stdout for HTTP mode, discard for stdio mode (stdout is the protocol channel).
+	logOut := io.Discard
+	if m.StaticConfig.Port != "" {
+		logOut = m.Out
 	}
-	loggerOptions := []textlogger.ConfigOption{textlogger.Output(m.Out)}
+
+	// A configured log file overrides the default for both stdio and HTTP modes.
+	if m.StaticConfig.LogFile != "" {
+		f, err := os.OpenFile(m.StaticConfig.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open log file %q: %w", m.StaticConfig.LogFile, err)
+		}
+		m.logFileHandle = f
+		logOut = f
+	}
+
+	if logOut == io.Discard {
+		// No output destination: silence klog entirely.
+		_ = flagSet.Parse([]string{"-logtostderr=false", "-alsologtostderr=false", "-stderrthreshold=FATAL"})
+		return nil
+	}
+
+	loggerOptions := []textlogger.ConfigOption{textlogger.Output(logOut)}
 	if m.StaticConfig.LogLevel >= 0 {
 		loggerOptions = append(loggerOptions, textlogger.Verbosity(m.StaticConfig.LogLevel))
 		_ = flagSet.Parse([]string{"--v", strconv.Itoa(m.StaticConfig.LogLevel)})
 	}
-	logger := textlogger.NewLogger(textlogger.NewConfig(loggerOptions...))
-	klog.SetLoggerWithOptions(logger)
+
+	klog.SetLoggerWithOptions(textlogger.NewLogger(textlogger.NewConfig(loggerOptions...)))
+	return nil
 }
 
 func (m *MCPServerOptions) Validate() error {
@@ -303,6 +332,14 @@ func (m *MCPServerOptions) Validate() error {
 }
 
 func (m *MCPServerOptions) Run() error {
+	if m.logFileHandle != nil {
+		defer func() {
+			if err := m.logFileHandle.Close(); err != nil {
+				klog.Errorf("failed to close log file: %v", err)
+			}
+		}()
+	}
+
 	// Initialize OpenTelemetry tracing with config (env vars take precedence)
 	cleanup, _ := telemetry.InitTracerWithConfig(&m.StaticConfig.Telemetry, version.BinaryName, version.Version)
 	defer cleanup()

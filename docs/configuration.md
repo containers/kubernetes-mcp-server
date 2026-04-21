@@ -131,6 +131,7 @@ The server will:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `log_level` | integer | `0` | Logging verbosity level (0-9). Higher values produce more verbose output. Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
+| `log_file` | string | `""` | Write logs to this file path instead of stdout. When set, applies to both stdio and HTTP modes. In stdio mode, this is the only way to get logs (stdout is reserved for the MCP protocol). The file is created if it does not exist and opened in append mode. |
 | `port` | string | `""` | When set, starts the MCP server in HTTP mode (Streamable HTTP at `/mcp`, SSE at `/sse`) on the specified port. |
 | `sse_base_url` | string | `""` | Base URL for Server-Sent Events (SSE) connections. Used when the server is behind a reverse proxy. |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
@@ -142,6 +143,7 @@ The server will:
 **Example:**
 ```toml
 log_level = 2
+log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
 list_output = "yaml"
 stateless = true
@@ -679,6 +681,7 @@ The following options can be set via command-line arguments. CLI arguments overr
 |--------|-------------|
 | `--port` | Start in HTTP mode on the specified port |
 | `--log-level` | Logging verbosity (0-9) |
+| `--log-file` | Write logs to this file path instead of stdout |
 | `--config` | Path to main TOML configuration file |
 | `--config-dir` | Path to drop-in configuration directory |
 | `--kubeconfig` | Path to Kubernetes configuration file |
@@ -700,6 +703,7 @@ A comprehensive configuration file demonstrating all major options:
 ```toml
 # Server settings
 log_level = 2
+log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
 list_output = "table"
 stateless = false
