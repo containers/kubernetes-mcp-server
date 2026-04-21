@@ -6,29 +6,12 @@ const (
 	// This value is used when rateInterval is not explicitly provided in API calls.
 	DefaultRateInterval    = "10m"
 	DefaultGraphType       = "versionedApp"
-	DefaultDuration        = "30m"
 	DefaultStep            = "15"
 	DefaultDirection       = "outbound"
 	DefaultReporter        = "source"
-	DefaultRequestProtocol = "http"
 	DefaultQuantiles       = "0.5,0.95,0.99,0.999"
 	DefaultLimit           = "10"
 	DefaultTail            = "50"
 	DefaultLookbackSeconds = 600
-	DefaultMaxSpans        = 7
-
-	// Default graph parameters
-	DefaultIncludeIdleEdges   = "false"
-	DefaultErrorOnly          = "false"
-	DefaultInjectServiceNodes = "true"
-	DefaultBoxBy              = "cluster,namespace,app"
-	DefaultAmbientTraffic     = "none"
-	DefaultAppenders          = "deadNode,istio,serviceEntry,meshCheck,workloadEntry,health"
-	DefaultRateGrpc           = "requests"
-	DefaultRateHttp           = "requests"
-	DefaultRateTcp            = "sent"
-
-	// Default mesh status parameters
-	DefaultIncludeGateways  = "false"
-	DefaultIncludeWaypoints = "false"
+	DefaultErrorOnly       = "false"
 )
