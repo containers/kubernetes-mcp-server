@@ -68,6 +68,13 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oauthState *oaut
 				return
 			}
 			if !staticConfig.RequireOAuth {
+				// Always extract the Authorization header so it can be forwarded
+				// to the cluster, even without OAuth validation.
+				if authHeader := r.Header.Get("Authorization"); authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+					ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 				next.ServeHTTP(w, r)
 				return
 			}

@@ -529,6 +529,31 @@ func (s *ValidateSuite) TestSkipJWTVerification() {
 	})
 }
 
+func (s *ValidateSuite) TestClusterAuthMode() {
+	s.Run("passthrough without require_oauth is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("passthrough with require_oauth is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.SkipJWTVerification = true
+		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("invalid cluster_auth_mode is rejected", func() {
+		cfg := s.validConfig()
+		cfg.ClusterAuthMode = "bogus"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid cluster_auth_mode")
+	})
+}
+
 func TestValidate(t *testing.T) {
 	suite.Run(t, new(ValidateSuite))
 }
