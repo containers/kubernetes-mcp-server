@@ -67,7 +67,7 @@ func InitListTraces() []api.ServerTool {
 func listTracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiGetTracesEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiListTracesEndpoint, arguments)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve list of traces: %w", err)), nil
 	}

@@ -486,7 +486,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **kiali_get_logs** - Get the logs of a Kubernetes Pod (or workload name that will be resolved to a pod) in a namespace. Output is plain text, matching kubernetes-mcp-server pods_log.
   - `clusterName` (`string`) - Optional. Name of the cluster to get the logs from. If not provided, will use the default cluster name in the Kiali KubeConfig
-  - `container` (`string`) - Optional. Name of the Pod container to get the logs fro 
+  - `container` (`string`) - Optional. Name of the Pod container to get the logs from.
   - `format` (`string`) - Output formatting for chat. 'codeblock' wraps logs in ~~~ fences (recommended). 'plain' returns raw text like kubernetes-mcp-server pods_log.
   - `name` (`string`) **(required)** - Name of the Pod to get the logs from. If it does not exist, it will be treated as a workload name and a running pod will be selected.
   - `namespace` (`string`) **(required)** - Namespace to get the Pod logs from

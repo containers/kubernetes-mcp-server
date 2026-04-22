@@ -10,8 +10,8 @@ const (
 	DefaultDirection       = "outbound"
 	DefaultReporter        = "source"
 	DefaultQuantiles       = "0.5,0.95,0.99,0.999"
-	DefaultLimit           = "10"
-	DefaultTail            = "50"
+	DefaultLimit           = 10
+	DefaultTail            = 50
 	DefaultLookbackSeconds = 600
-	DefaultErrorOnly       = "false"
+	DefaultErrorOnly       = false
 )

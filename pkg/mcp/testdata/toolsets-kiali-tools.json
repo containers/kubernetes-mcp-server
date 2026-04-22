@@ -14,7 +14,7 @@
           "type": "string"
         },
         "container": {
-          "description": "Optional. Name of the Pod container to get the logs fro ",
+          "description": "Optional. Name of the Pod container to get the logs from.",
           "type": "string"
         },
         "format": {
@@ -42,7 +42,7 @@
           "type": "string"
         },
         "tail": {
-          "default": "50",
+          "default": 50,
           "description": "Number of lines to retrieve from the end of the logs (Optional, defaults to 50). Cannot exceed 200 lines.",
           "minimum": 1,
           "type": "integer"
@@ -331,12 +331,12 @@
           "type": "string"
         },
         "errorOnly": {
-          "default": "false",
+          "default": false,
           "description": "If true, only consider traces that contain errors. Default false.",
           "type": "boolean"
         },
         "limit": {
-          "default": "10",
+          "default": 10,
           "description": "Maximum number of traces to return. Default 10.",
           "type": "integer"
         },

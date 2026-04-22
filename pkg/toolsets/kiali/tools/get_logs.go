@@ -36,7 +36,7 @@ func InitGetLogs() []api.ServerTool {
 					},
 					"container": {
 						Type:        "string",
-						Description: "Optional. Name of the Pod container to get the logs fro ",
+						Description: "Optional. Name of the Pod container to get the logs from.",
 					},
 					"tail": {
 						Type:        "integer",

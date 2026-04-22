@@ -8,7 +8,7 @@ const (
 	KialiGetMeshStatusEndpoint         = KialiMCPPath + "/get_mesh_status"
 	KialiGetMetricsEndpoint            = KialiMCPPath + "/get_metrics"
 	KialiListOrGetResourcesEndpoint    = KialiMCPPath + "/list_or_get_resources"
-	KialiGetTracesEndpoint             = KialiMCPPath + "/list_traces"
+	KialiListTracesEndpoint            = KialiMCPPath + "/list_traces"
 	KialiGetTraceDetailsEndpoint       = KialiMCPPath + "/get_trace_details"
 	KialiGetLogsEndpoint               = KialiMCPPath + "/get_logs"
 	KialiManageIstioConfigEndpoint     = KialiMCPPath + "/manage_istio_config"
