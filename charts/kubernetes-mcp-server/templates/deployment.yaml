@@ -80,6 +80,8 @@ spec:
             {{- tpl (toYaml .) $ | nindent 12 }}
           {{- end }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: config
               mountPath: {{ .Values.configFilePath | dir }}
           {{- if .Values.tls.enabled }}
@@ -94,6 +96,8 @@ spec:
         {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: config
           configMap:
             name: {{ include "kubernetes-mcp-server.fullname" . }}

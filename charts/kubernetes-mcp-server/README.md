@@ -99,9 +99,9 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | config.port | string | `"{{ .Values.service.port }}"` |  |
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
-| defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
+| defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
 | extraArgs | list | `[]` | Note: For TLS configuration, use the tls section above instead of extraArgs. |
-| extraContainers | list | `[]` | Each container is defined as a complete container spec. |
+| extraContainers | list | `[]` | Note: sidecars do not inherit defaultSecurityContext or the /tmp emptyDir mount; configure them per-container if needed. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
