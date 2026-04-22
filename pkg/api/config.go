@@ -84,6 +84,11 @@ type RequireTLSProvider interface {
 	IsRequireTLS() bool
 }
 
+// RequireOAuthProvider provides access to require_oauth setting.
+type RequireOAuthProvider interface {
+	IsRequireOAuth() bool
+}
+
 type BaseConfig interface {
 	ClusterAuthProvider
 	ClusterProvider
@@ -93,4 +98,5 @@ type BaseConfig interface {
 	StsConfigProvider
 	ValidationEnabledProvider
 	RequireTLSProvider
+	RequireOAuthProvider
 }

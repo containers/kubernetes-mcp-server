@@ -440,6 +440,10 @@ func (c *StaticConfig) IsRequireTLS() bool {
 	return c.RequireTLS
 }
 
+func (c *StaticConfig) IsRequireOAuth() bool {
+	return c.RequireOAuth
+}
+
 // WithProviderStrategies sets the known cluster-provider strategies for
 // validation. Callers that have access to the provider registry should chain
 // this before Validate so that cluster_provider_strategy is checked:

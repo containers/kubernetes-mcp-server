@@ -18,6 +18,7 @@ import (
 	"k8s.io/klog/v2/textlogger"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
 // bearerRoundTripper adds a static Authorization: Bearer header to every
@@ -620,10 +621,11 @@ func (s *AuthorizationSuite) TestAuthorizationExemptEndpointsFromOAuth() {
 	}
 }
 
-func (s *AuthorizationSuite) TestAuthorizationRawPassthrough() {
-	// When require_oauth=false, the server should extract the Authorization header
-	// from the HTTP request and forward it to the Kubernetes backend without any
-	// JWT validation. This is the default behavior — no cluster_auth_mode needed.
+// TestAuthorizationRawPassthroughStreamableHTTP verifies that when
+// require_oauth=false the server forwards the client's Authorization header
+// verbatim to the Kubernetes backend over the StreamableHTTP transport, which
+// propagates the bearer via request headers directly.
+func (s *AuthorizationSuite) TestAuthorizationRawPassthroughStreamableHTTP() {
 	s.MockServer.ResetHandlers()
 	rawK8sToken := "k8s-service-account-token-not-a-jwt"
 
@@ -657,6 +659,108 @@ func (s *AuthorizationSuite) TestAuthorizationRawPassthrough() {
 		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
 		s.Equal("Bearer "+rawK8sToken, got,
 			"Backend must receive the original raw token passed in the Authorization header")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationRawPassthroughSSE is the SSE counterpart to
+// TestAuthorizationRawPassthroughStreamableHTTP. SSE does not propagate HTTP
+// headers into the MCP RequestExtra, so the Authorization header must be
+// extracted by AuthorizationMiddleware (even in the require_oauth=false branch)
+// and bridged into the MCP context via authHeaderPropagationMiddleware.
+// SSE coverage: https://github.com/containers/kubernetes-mcp-server/issues/1043
+func (s *AuthorizationSuite) TestAuthorizationRawPassthroughSSE() {
+	s.MockServer.ResetHandlers()
+	rawK8sToken := "k8s-service-account-token-not-a-jwt"
+
+	var backendAuth atomic.Value
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			backendAuth.Store(auth)
+		}
+	}))
+
+	s.StaticConfig.RequireOAuth = false
+	s.StartServer()
+
+	httpClient := &http.Client{
+		Transport: &bearerRoundTripper{token: rawK8sToken, base: http.DefaultTransport},
+	}
+	sseClient := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1.33.7"}, nil)
+	transport := &mcp.SSEClientTransport{
+		Endpoint:   fmt.Sprintf("http://127.0.0.1:%s/sse", s.StaticConfig.Port),
+		HTTPClient: httpClient,
+	}
+	session, err := sseClient.Connect(s.T().Context(), transport, nil)
+	s.Require().NoError(err, "Expected no error connecting SSE MCP client")
+
+	s.Run("Initialize succeeds without OAuth", func() {
+		s.Require().NotNil(session.InitializeResult(), "Expected initial request to not be nil")
+	})
+	s.Run("Tool call forwards raw token to backend", func() {
+		toolResult, err := session.CallTool(s.T().Context(), &mcp.CallToolParams{
+			Name:      "events_list",
+			Arguments: map[string]any{},
+		})
+		s.Require().NoError(err, "Expected no error calling tool")
+		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
+	})
+	s.Run("Backend receives the raw token", func() {
+		got, _ := backendAuth.Load().(string)
+		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
+		s.Equal("Bearer "+rawK8sToken, got,
+			"Backend must receive the original raw token passed in the Authorization header")
+	})
+
+	s.Require().NoError(session.Close(), "Expected SSE session to close cleanly")
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationClusterAuthModeKubeconfigDropsClientToken verifies that
+// when an operator explicitly opts into cluster_auth_mode="kubeconfig", a
+// client-sent Authorization header is cleared before the request reaches the
+// backend — so the backend authenticates as the kubeconfig principal, not the
+// client. This locks in the stsExchangeTokenInContext clear behavior at the
+// HTTP level (previously only covered by unit tests).
+func (s *AuthorizationSuite) TestAuthorizationClusterAuthModeKubeconfigDropsClientToken() {
+	s.MockServer.ResetHandlers()
+	clientToken := "client-sent-token-must-not-reach-backend"
+
+	var backendAuth atomic.Value
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Store every request's Authorization header (including empty) so we
+		// can assert the client token is never forwarded.
+		backendAuth.Store(r.Header.Get("Authorization"))
+	}))
+
+	s.StaticConfig.RequireOAuth = false
+	s.StaticConfig.ClusterAuthMode = api.ClusterAuthKubeconfig
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + clientToken,
+	})
+
+	s.Run("Initialize succeeds", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for successful connection")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+	s.Run("Tool call succeeds via kubeconfig credentials", func() {
+		toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+			Name:      "events_list",
+			Arguments: map[string]any{},
+		})
+		s.Require().NoError(err, "Expected no error calling tool")
+		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
+	})
+	s.Run("Backend does not receive the client-sent Authorization header", func() {
+		got, _ := backendAuth.Load().(string)
+		s.NotEqual("Bearer "+clientToken, got,
+			"Backend must not receive the client-sent token when cluster_auth_mode=kubeconfig")
 	})
 
 	s.mcpClient.Close()
