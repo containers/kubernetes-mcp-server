@@ -9,13 +9,15 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	kialiToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
 type KialiSuite struct {
 	BaseMcpSuite
-	mockServer *test.MockServer
+	mockServer  *test.MockServer
+	toolsetName string
 }
 
 func (s *KialiSuite) SetupTest() {
@@ -23,11 +25,12 @@ func (s *KialiSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Config().BearerToken = "token-xyz"
 	kubeConfig := s.Cfg.KubeConfig
+	s.toolsetName = (&kialiToolset.Toolset{}).GetName()
 	s.Cfg = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
-		toolsets = ["kiali"]
+		toolsets = ["%s"]
 		[toolset_configs.kiali]
 		url = "%s"
-	`, s.mockServer.Config().Host))))
+	`, s.toolsetName, s.mockServer.Config().Host))))
 	s.Cfg.KubeConfig = kubeConfig
 }
 
@@ -52,7 +55,7 @@ func (s *KialiSuite) TestGetTraces() {
 
 	s.Run("get_trace_details(traceId = 'test-trace-123')", func() {
 		traceId := "test-trace-123"
-		toolResult, err := s.CallTool("kiali_get_trace_details", map[string]interface{}{
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_trace_details", s.toolsetName), map[string]interface{}{
 			"traceId": traceId,
 		})
 		s.Run("no error", func() {
@@ -84,7 +87,7 @@ func (s *KialiSuite) TestGetMeshTrafficGraph() {
 	s.InitMcpClient()
 
 	s.Run("get_mesh_traffic_graph with namespaces", func() {
-		toolResult, err := s.CallTool("kiali_get_mesh_traffic_graph", map[string]interface{}{
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_mesh_traffic_graph", s.toolsetName), map[string]interface{}{
 			"namespaces": "bookinfo",
 		})
 		s.Run("no error", func() {
@@ -110,7 +113,7 @@ func (s *KialiSuite) TestGetMeshStatus() {
 	s.InitMcpClient()
 
 	s.Run("get_mesh_status", func() {
-		toolResult, err := s.CallTool("kiali_get_mesh_status", map[string]interface{}{})
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_mesh_status", s.toolsetName), map[string]interface{}{})
 		s.Run("no error", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(toolResult.IsError, "call tool failed")
