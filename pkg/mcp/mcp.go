@@ -65,15 +65,17 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
-	mu             sync.RWMutex
-	configuration  *Configuration
-	server         *mcp.Server
-	enabledTools   []string
-	enabledPrompts []string
-	p              internalk8s.Provider
-	metrics        *metrics.Metrics // Metrics collection system
-	rateLimitDone  chan struct{}    // Closed to stop the rate limiter reaper goroutine
-	closeOnce      sync.Once
+	mu                       sync.RWMutex
+	configuration            *Configuration
+	server                   *mcp.Server
+	enabledTools             []string
+	enabledPrompts           []string
+	enabledResources         []string
+	enabledResourceTemplates []string
+	p                        internalk8s.Provider
+	metrics                  *metrics.Metrics // Metrics collection system
+	rateLimitDone            chan struct{}    // Closed to stop the rate limiter reaper goroutine
+	closeOnce                sync.Once
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
@@ -88,7 +90,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 			},
 			&mcp.ServerOptions{
 				Capabilities: &mcp.ServerCapabilities{
-					Resources: nil,
+					Resources: &mcp.ResourceCapabilities{ListChanged: !configuration.Stateless},
 					Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
 					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
 					Logging:   &mcp.LoggingCapabilities{},
@@ -147,11 +149,15 @@ func (s *Server) reloadToolsets() error {
 	// Collect applicable items
 	applicableTools := s.collectApplicableTools()
 	applicablePrompts := s.collectApplicablePrompts()
+	applicableResources := s.collectApplicableResources()
+	applicableResourceTemplates := s.collectApplicableResourceTemplates()
 
 	// Read the previous state with read lock - don't hold lock while calling external code
 	s.mu.RLock()
 	previousTools := s.enabledTools
 	previousPrompts := s.enabledPrompts
+	previousResources := s.enabledResources
+	previousResourceTemplates := s.enabledResourceTemplates
 	s.mu.RUnlock()
 
 	// Reload tools (calls s.server.AddTool/RemoveTools - external code, no lock held)
@@ -178,10 +184,36 @@ func (s *Server) reloadToolsets() error {
 		return err
 	}
 
+	// Reload resources
+	newResources, err := reloadItems(
+		previousResources,
+		applicableResources,
+		func(r api.ServerResource) string { return r.Resource.URI },
+		s.server.RemoveResources,
+		s.registerResource,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Reload resource templates
+	newResourceTemplates, err := reloadItems(
+		previousResourceTemplates,
+		applicableResourceTemplates,
+		func(rt api.ServerResourceTemplate) string { return rt.ResourceTemplate.URITemplate },
+		s.server.RemoveResourceTemplates,
+		s.registerResourceTemplate,
+	)
+	if err != nil {
+		return err
+	}
+
 	// Only hold write lock for the final assignment
 	s.mu.Lock()
 	s.enabledTools = newTools
 	s.enabledPrompts = newPrompts
+	s.enabledResources = newResources
+	s.enabledResourceTemplates = newResourceTemplates
 	s.mu.Unlock()
 
 	// Start new watch
@@ -282,6 +314,36 @@ func (s *Server) registerPrompt(prompt api.ServerPrompt) error {
 	return nil
 }
 
+// collectApplicableResources returns resources from all enabled toolsets
+func (s *Server) collectApplicableResources() []api.ServerResource {
+	resources := make([]api.ServerResource, 0)
+	for _, toolset := range s.configuration.Toolsets() {
+		resources = append(resources, toolset.GetResources()...)
+	}
+	return resources
+}
+
+// collectApplicableResourceTemplates returns resource templates from all enabled toolsets
+func (s *Server) collectApplicableResourceTemplates() []api.ServerResourceTemplate {
+	templates := make([]api.ServerResourceTemplate, 0)
+	for _, toolset := range s.configuration.Toolsets() {
+		templates = append(templates, toolset.GetResourceTemplates()...)
+	}
+	return templates
+}
+
+// registerResource registers a resource with the MCP server
+func (s *Server) registerResource(res api.ServerResource) error {
+	addResource(s.server, res)
+	return nil
+}
+
+// registerResourceTemplate registers a resource template with the MCP server
+func (s *Server) registerResourceTemplate(rt api.ServerResourceTemplate) error {
+	addResourceTemplate(s.server, rt)
+	return nil
+}
+
 // metricsMiddleware returns a metrics middleware with access to the server's metrics system
 func (s *Server) metricsMiddleware() func(mcp.MethodHandler) mcp.MethodHandler {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
@@ -356,6 +418,20 @@ func (s *Server) GetEnabledPrompts() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.enabledPrompts
+}
+
+// GetEnabledResources returns the URIs of the currently enabled resources
+func (s *Server) GetEnabledResources() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.enabledResources
+}
+
+// GetEnabledResourceTemplates returns the URI templates of the currently enabled resource templates
+func (s *Server) GetEnabledResourceTemplates() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.enabledResourceTemplates
 }
 
 // ReloadConfiguration reloads the configuration and reinitializes the server.
