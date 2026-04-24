@@ -545,4 +545,3 @@ func (s *TrustProxyHeadersSuite) TestReloadObserved() {
 			"post-reload request must honor X-Forwarded-For (trust_proxy_headers=true)")
 	})
 }
-
