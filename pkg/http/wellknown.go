@@ -331,12 +331,12 @@ func (w *WellKnown) generateProtectedResourceMetadata(request *http.Request) (ma
 // when trust_proxy_headers is explicitly enabled. Otherwise uses request.Host directly.
 func (w *WellKnown) buildResourceURL(request *http.Request) string {
 	cfg := w.cfgState.Load()
-	if cfg != nil && cfg.ServerURL != "" {
+	if cfg.ServerURL != "" {
 		return strings.TrimSuffix(cfg.ServerURL, "/")
 	}
 	scheme := "https"
 	host := request.Host
-	if cfg != nil && cfg.TrustProxyHeaders {
+	if cfg.TrustProxyHeaders {
 		if request.TLS == nil && !strings.HasPrefix(request.Header.Get("X-Forwarded-Proto"), "https") {
 			scheme = "http"
 		}

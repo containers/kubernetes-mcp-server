@@ -104,17 +104,17 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 }
 
 func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticConfigState, oauthState *oauth.State) error {
-	// Read startup-time settings that cannot change at runtime (port, TLS, timeouts).
+	// Only fields read below are startup-only; middleware reloads via cfgState.
 	staticConfig := cfgState.Load()
 	mux := http.NewServeMux()
 
-	wrappedMux := RequestMiddleware(staticConfig.TrustProxyHeaders)(
-		AuthorizationMiddleware(cfgState, oauthState)(
-			MaxBodyMiddleware(staticConfig.HTTP.MaxBodyBytes)(mux),
-		),
+	// Middlewares read config per request from cfgState so SIGHUP reloads
+	// take effect immediately. Listed outermost-first (request flow order).
+	wrappedMux := chain(mux,
+		RequestMiddleware(cfgState),
+		AuthorizationMiddleware(cfgState, oauthState),
+		MaxBodyMiddleware(cfgState),
 	)
-
-	// Wrap with metrics middleware
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
 
 	// Note: WriteTimeout is intentionally omitted - it would kill SSE streams.
