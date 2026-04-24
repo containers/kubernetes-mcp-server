@@ -353,14 +353,16 @@ func (m *MCPServerOptions) Run() error {
 		}
 	}()
 
+	cfgState := config.NewStaticConfigState(m.StaticConfig)
+
 	// Set up SIGHUP handler for configuration reload
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		_ = m.setupSIGHUPHandler(mcpServer, oauthState)
+		_ = m.setupSIGHUPHandler(mcpServer, oauthState, cfgState)
 	}
 
 	if m.StaticConfig.Port != "" {
 		ctx := context.Background()
-		return internalhttp.Serve(ctx, mcpServer, m.StaticConfig, oauthState)
+		return internalhttp.Serve(ctx, mcpServer, cfgState, oauthState)
 	}
 
 	ctx := context.Background()
@@ -374,7 +376,7 @@ func (m *MCPServerOptions) Run() error {
 // setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP.
 // Returns a stop function that should be called to clean up the handler.
 // The stop function waits for the handler goroutine to finish.
-func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState *internaloauth.State) (stop func()) {
+func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState *internaloauth.State, cfgState *config.StaticConfigState) (stop func()) {
 	sigHupCh := make(chan os.Signal, 1)
 	done := make(chan struct{})
 	signal.Notify(sigHupCh, syscall.SIGHUP)
@@ -392,11 +394,14 @@ func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState 
 			}
 
 			// Apply the new configuration to the MCP server first — if this fails,
-			// we skip the OAuth state update to avoid inconsistent state.
+			// we skip the OAuth state and config state updates to avoid inconsistent state.
 			if err := mcpServer.ReloadConfiguration(newConfig); err != nil {
 				klog.Errorf("Failed to apply reloaded configuration: %v", err)
 				continue
 			}
+
+			// Publish the new config so the HTTP auth middleware picks it up.
+			cfgState.Store(newConfig)
 
 			// Check if OAuth-relevant config changed and update the shared state
 			currentSnapshot := oauthState.Load()

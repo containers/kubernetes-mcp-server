@@ -80,7 +80,8 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
 		ConfigDir:  configDir,
 	}
 	oauthState := oauth.NewState(&oauth.Snapshot{})
-	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState)
+	cfgState := config.NewStaticConfigState(cfg)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState, cfgState)
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {

@@ -66,7 +66,9 @@ func (s *BaseHttpSuite) StartServer() {
 	timeoutCtx, s.timeoutCancel = context.WithTimeout(s.T().Context(), 10*time.Second)
 	group, gc := errgroup.WithContext(timeoutCtx)
 	cancelCtx, s.StopServer = context.WithCancel(gc)
-	group.Go(func() error { return Serve(cancelCtx, s.mcpServer, s.StaticConfig, s.OAuthState) })
+	group.Go(func() error {
+		return Serve(cancelCtx, s.mcpServer, config.NewStaticConfigState(s.StaticConfig), s.OAuthState)
+	})
 	s.WaitForShutdown = group.Wait
 	s.Require().NoError(test.WaitForServer(tcpAddr), "HTTP server did not start in time")
 	s.Require().NoError(test.WaitForHealthz(tcpAddr), "HTTP server /healthz endpoint did not respond with non-404 in time")
@@ -133,7 +135,9 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	timeoutCtx, c.timeoutCancel = context.WithTimeout(t.Context(), 10*time.Second)
 	group, gc := errgroup.WithContext(timeoutCtx)
 	cancelCtx, c.StopServer = context.WithCancel(gc)
-	group.Go(func() error { return Serve(cancelCtx, mcpServer, c.StaticConfig, c.OAuthState) })
+	group.Go(func() error {
+		return Serve(cancelCtx, mcpServer, config.NewStaticConfigState(c.StaticConfig), c.OAuthState)
+	})
 	c.WaitForShutdown = group.Wait
 	// Wait for HTTP server to start (using net)
 	for i := 0; i < 10; i++ {
