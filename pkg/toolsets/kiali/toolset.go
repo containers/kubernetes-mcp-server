@@ -23,13 +23,16 @@ func (t *Toolset) GetDescription() string {
 
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
-		kialiTools.InitGetMeshGraph(),
+		kialiTools.InitGetMeshTrafficGraph(),
+		kialiTools.InitGetMeshStatus(),
 		kialiTools.InitManageIstioConfigRead(),
 		kialiTools.InitManageIstioConfig(),
-		kialiTools.InitGetResourceDetails(),
+		kialiTools.InitListOrGetResources(),
+		kialiTools.InitListTraces(),
+		kialiTools.InitGetTraceDetails(),
+		kialiTools.InitGetPodPerformance(),
+		kialiTools.InitGetLogs(),
 		kialiTools.InitGetMetrics(),
-		kialiTools.InitLogs(),
-		kialiTools.InitGetTraces(),
 	)
 }
 

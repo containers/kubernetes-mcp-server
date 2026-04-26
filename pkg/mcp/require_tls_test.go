@@ -59,7 +59,7 @@ func (s *KialiRequireTLSSuite) TestRequireTLS_BlocksHTTPRequests() {
 	s.InitMcpClient()
 
 	s.Run("kiali tool call to HTTP server is blocked", func() {
-		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_traces", s.toolsetName), map[string]interface{}{
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_trace_details", s.toolsetName), map[string]interface{}{
 			"traceId": "test-trace-123",
 		})
 		s.Require().Nilf(err, "MCP protocol error: %v", err)
@@ -80,7 +80,7 @@ func (s *KialiRequireTLSSuite) TestRequireTLS_AllowsHTTPWhenDisabled() {
 	s.InitMcpClient()
 
 	s.Run("kiali tool call to HTTP server succeeds", func() {
-		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_traces", s.toolsetName), map[string]interface{}{
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_trace_details", s.toolsetName), map[string]interface{}{
 			"traceId": "test-trace-456",
 		})
 		s.Nilf(err, "call tool failed: %v", err)

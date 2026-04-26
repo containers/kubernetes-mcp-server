@@ -1,0 +1,15 @@
+kind: Task
+metadata:
+  labels:
+    suite: core
+  name: list-images-for-pods
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    contains: "quay.io/fedora/mysql-80:latest"
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "What images are all pods running in the cluster?"

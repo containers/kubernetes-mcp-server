@@ -1,18 +1,18 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
-  name: "Show topology bookinfo"
-  category: "High-Level Observability & Health"
+  name: "Visualize Namespace Traffic"
+  category: "Traffic Observability"
+  description: "Generates a traffic graph for a specific namespace to visualize service-to-service communication."
   difficulty: easy
-steps:
-  setup:
-      inline: |-
-        #!/usr/bin/env bash
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
   verify:
-    contains: "topology of the **bookinfo**"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash          
+  - llmJudge:
+      contains: "bookinfo"
   prompt:
-    inline: Show me the topology of the bookinfo namespace.
+    inline: "Show me the traffic topology graph for the 'bookinfo' namespace."

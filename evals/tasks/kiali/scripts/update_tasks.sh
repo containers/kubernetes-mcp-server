@@ -141,4 +141,3 @@ awk -v start="$TASKS_START" -v end="$TASKS_END" -v content_file="$TMP_TASKS_CONT
 ' "$README_FILE" > "$README_FILE.tmp"
 mv "$README_FILE.tmp" "$README_FILE"
 echo "Updated tasks section in $README_FILE"
-

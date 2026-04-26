@@ -17,36 +17,50 @@ func InitManageIstioConfigRead() []api.ServerTool {
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        name,
-			Description: "Lists or gets Istio configuration objects (Gateways, VirtualServices, etc.)",
+			Description: "Read-only Istio config: list or get objects. For action 'list', returns an array of objects with {name, namespace, type, validation}. For create, patch, or delete use manage_istio_config.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
 					"action": {
 						Type:        "string",
-						Description: "Action to perform: list or get",
+						Description: "Action to perform (read-only)",
+						Enum:        []any{"list", "get"},
 					},
 					"namespace": {
 						Type:        "string",
-						Description: "Namespace containing the Istio object",
+						Description: "Namespace containing the Istio object. For 'list', if not provided, returns objects across all namespaces. For 'get', required.",
 					},
 					"group": {
 						Type:        "string",
-						Description: "API group of the Istio object (e.g., 'networking.istio.io', 'gateway.networking.k8s.io')",
+						Description: "API group of the Istio object. Required for 'get' action.",
+						Enum:        []any{"networking.istio.io", "security.istio.io"},
 					},
 					"version": {
 						Type:        "string",
-						Description: "API version of the Istio object (e.g., 'v1', 'v1beta1')",
+						Description: "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.",
 					},
 					"kind": {
 						Type:        "string",
-						Description: "Kind of the Istio object (e.g., 'DestinationRule', 'VirtualService', 'HTTPRoute', 'Gateway')",
+						Description: "Kind of the Istio object. Required for 'get' action.",
+						Enum:        []any{"VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication"},
 					},
-					"name": {
+					"object": {
 						Type:        "string",
-						Description: "Name of the Istio object",
+						Description: "Name of the Istio object. Required for 'get' action.",
+					},
+					"clusterName": {
+						Type:        "string",
+						Description: "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
+					},
+					"serviceName": {
+						Type:        "string",
+						Description: "Filter Istio configurations (VirtualServices, DestinationRules, and their referenced Gateways) that affect a specific service. Only applicable for 'list' action",
 					},
 				},
 				Required: []string{"action"},
+				DependentRequired: map[string][]string{
+					"object": {"group", "version", "kind", "namespace"},
+				},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Manage Istio Config: List or Get",
@@ -61,49 +75,11 @@ func InitManageIstioConfigRead() []api.ServerTool {
 }
 
 func istioConfigHandlerRead(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	action, _ := params.GetArguments()["action"].(string)
-	namespace, _ := params.GetArguments()["namespace"].(string)
-	group, _ := params.GetArguments()["group"].(string)
-	version, _ := params.GetArguments()["version"].(string)
-	kind, _ := params.GetArguments()["kind"].(string)
-	name, _ := params.GetArguments()["name"].(string)
-	if err := validateIstioConfigInputRead(action, namespace, group, version, kind, name); err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
-	content, err := kiali.IstioConfig(params.Context, action, namespace, group, version, kind, name, "")
+	arguments := params.GetArguments()
+	content, err := kiali.ExecuteRequest(params.Context, KialiManageIstioConfigReadEndpoint, arguments)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve Istio configuration: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve istio config: %w", err)), nil
 	}
 	return api.NewToolCallResult(content, nil), nil
-}
-
-// validateIstioConfigInputRead centralizes validation rules for the read-only tool.
-// Rules:
-// - If action is "get": namespace, group, version, kind are required
-// - If action is "get": name is required
-func validateIstioConfigInputRead(action, namespace, group, version, kind, name string) error {
-	switch action {
-	case "list", "get":
-		if action == "get" {
-			if name == "" {
-				return fmt.Errorf("name is required for action %q", action)
-			}
-			if namespace == "" {
-				return fmt.Errorf("namespace is required for action %q", action)
-			}
-			if group == "" {
-				return fmt.Errorf("group is required for action %q", action)
-			}
-			if version == "" {
-				return fmt.Errorf("version is required for action %q", action)
-			}
-			if kind == "" {
-				return fmt.Errorf("kind is required for action %q", action)
-			}
-		}
-	default:
-		return fmt.Errorf("invalid action %q: must be one of list, get", action)
-	}
-	return nil
 }

@@ -1,0 +1,15 @@
+kind: Task
+metadata:
+  labels:
+    suite: core
+  name: resize-pvc
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "resize the storage volume to 3Gi for the storage-pod in `resize-pv` namespace"

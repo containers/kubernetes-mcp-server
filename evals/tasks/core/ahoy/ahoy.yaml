@@ -1,0 +1,13 @@
+kind: Task
+metadata:
+  labels:
+    suite: core
+  name: "ahoy"
+  difficulty: easy
+steps:
+  setup:
+  verify:
+    contains: "LLM"
+  cleanup:
+  prompt:
+    inline: "Introduce yourself in a structured format with the following fields: LLM (your model name, e.g. claude-opus), LLM Details (specific model major.minor version, release date, etc.), Provider (e.g. anthropic), Context window (your context window size), and List of available tools from the MCP server you are connected to. Format the output clearly with each field on its own line. The field LLM is mandatory. Also return current kubeconfig summary."

@@ -268,25 +268,25 @@ users:
 			require_oauth = true
 		`)))
 
-		s.Run("with no authorization header returns oauth token required error", func() {
+		s.Run("with no authorization header returns error", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			derived, err := testManager.Derived(s.T().Context())
-			s.Require().Error(err, "expected error for missing oauth token, got nil")
+			s.Require().Error(err, "expected error when no token and RequireOAuth=true")
 			s.ErrorContains(err, "oauth token required")
-			s.Nil(derived, "expected nil derived kubernetes when oauth token required")
+			s.Nil(derived, "expected nil derived kubernetes when no token and RequireOAuth=true")
 		})
 
-		s.Run("with invalid authorization header returns oauth token required error", func() {
+		s.Run("with invalid authorization header returns error", func() {
 			testManager, err := NewKubeconfigManager(testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "invalid-token")
 			derived, err := testManager.Derived(ctx)
-			s.Require().Error(err, "expected error for invalid oauth token, got nil")
+			s.Require().Error(err, "expected error when invalid token and RequireOAuth=true")
 			s.ErrorContains(err, "oauth token required")
-			s.Nil(derived, "expected nil derived kubernetes when oauth token required")
+			s.Nil(derived, "expected nil derived kubernetes when invalid token and RequireOAuth=true")
 		})
 
 		s.Run("with valid bearer token creates derived kubernetes", func() {

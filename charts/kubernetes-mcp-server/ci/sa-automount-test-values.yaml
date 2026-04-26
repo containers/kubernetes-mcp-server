@@ -1,0 +1,11 @@
+# Test values that exercise the serviceAccount.automountToken toggle.
+# Validates that:
+# - Setting automountToken to false renders correctly in both
+#   the Deployment pod spec and the ServiceAccount resource
+
+ingress:
+  host: localhost
+
+serviceAccount:
+  create: true
+  automountToken: false

@@ -28,6 +28,11 @@ spec:
         {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "kubernetes-mcp-server.serviceAccountName" . }}
+      {{- if hasKey .Values.serviceAccount "automountToken" }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      {{- else }}
+      automountServiceAccountToken: true
+      {{- end }}
       securityContext:
         {{- tpl (toYaml (default .Values.defaultPodSecurityContext .Values.podSecurityContext)) . | nindent 8 }}
       {{- with .Values.initContainers }}
@@ -80,6 +85,8 @@ spec:
             {{- tpl (toYaml .) $ | nindent 12 }}
           {{- end }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: config
               mountPath: {{ .Values.configFilePath | dir }}
           {{- if .Values.tls.enabled }}
@@ -94,6 +101,8 @@ spec:
         {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: config
           configMap:
             name: {{ include "kubernetes-mcp-server.fullname" . }}

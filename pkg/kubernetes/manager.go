@@ -167,13 +167,17 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	authorization, ok := ctx.Value(OAuthAuthorizationHeader).(string)
 	hasToken := ok && strings.HasPrefix(authorization, "Bearer ")
 
-	// No token: use kubeconfig credentials, or reject if passthrough requires one.
+	// No token: fall back to kubeconfig credentials, unless require_oauth=true.
 	// In kubeconfig mode, the token exchange layer clears the auth header before we get here,
 	// so this branch handles both "no token sent" and "kubeconfig mode cleared it".
+	// The require_oauth guard is defense-in-depth: the HTTP middleware already rejects
+	// token-less requests with 401, but this protects STDIO / internal paths and
+	// preserves the operator contract that require_oauth=true never falls through to kubeconfig.
 	if !hasToken {
-		if m.config.ResolveClusterAuthMode() == api.ClusterAuthPassthrough {
-			return nil, errors.New("oauth token required for passthrough auth mode")
+		if m.config.IsRequireOAuth() {
+			return nil, errors.New("oauth token required")
 		}
+		klog.V(5).Infof("No bearer token in context, falling back to kubeconfig credentials")
 		return m.kubernetes, nil
 	}
 

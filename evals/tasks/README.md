@@ -10,7 +10,7 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 
 ## Anatomy of a Task
 
-Every subdirectory under `kubernetes/`, `kiali/`, or `kubevirt/` defines a single scenario:
+Every subdirectory under `core/`, `kiali/`, or `kubevirt/` defines a single scenario:
 
 1. `*.yaml` – declarative description consumed by the evaluation harness (prompts, success criteria, required tools).
 2. `setup.sh` / `verify.sh` / `cleanup.sh` – shell hooks (optional) that prime the cluster, assert post-conditions, and reset resources so tasks stay idempotent.

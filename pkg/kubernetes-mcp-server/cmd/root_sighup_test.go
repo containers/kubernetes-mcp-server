@@ -85,7 +85,9 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 		},
 	}
 	oauthState := oauth.NewState(&oauth.Snapshot{})
-	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState)
+
+	cfgState := config.NewStaticConfigState(cfg)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState, cfgState)
 	s.T().Cleanup(func() {
 		if opts.logFileHandle != nil {
 			_ = opts.logFileHandle.Close()

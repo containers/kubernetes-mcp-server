@@ -529,6 +529,49 @@ func (s *ValidateSuite) TestSkipJWTVerification() {
 	})
 }
 
+func (s *ValidateSuite) TestClusterAuthMode() {
+	s.Run("passthrough without require_oauth is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("passthrough with require_oauth is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.SkipJWTVerification = true
+		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("invalid cluster_auth_mode is rejected", func() {
+		cfg := s.validConfig()
+		cfg.ClusterAuthMode = "bogus"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid cluster_auth_mode")
+	})
+
+	s.Run("token_exchange_strategy without require_oauth is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.TokenExchangeStrategy = "rfc8693"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token exchange requires require_oauth=true")
+	})
+
+	s.Run("sts_audience without require_oauth is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.StsAudience = "backend-audience"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token exchange requires require_oauth=true")
+	})
+}
+
 func TestValidate(t *testing.T) {
 	suite.Run(t, new(ValidateSuite))
 }

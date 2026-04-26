@@ -1,0 +1,15 @@
+kind: Task
+metadata:
+  labels:
+    suite: core
+  name: scale-deployment
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Scale up the replicas of deployment 'web-app' in namespace 'scale-test' by 100%"

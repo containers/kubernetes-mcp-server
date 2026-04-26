@@ -84,7 +84,7 @@ func (g *DefaultMetadataGenerator) GenerateProtectedResourceMetadata(oidcConfig 
 
 type WellKnown struct {
 	oauthState        *oauth.State
-	staticConfig      *config.StaticConfig
+	cfgState          *config.StaticConfigState
 	metadataGenerator WellKnownMetadataGenerator
 	// Cache for openid-configuration to avoid repeated fetches (TTL: oidcConfigCacheTTL)
 	oidcConfigCache     map[string]interface{}
@@ -96,19 +96,19 @@ type WellKnown struct {
 
 var _ http.Handler = &WellKnown{}
 
-func WellKnownHandler(staticConfig *config.StaticConfig, oauthState *oauth.State) http.Handler {
-	return WellKnownHandlerWithGenerator(staticConfig, oauthState, &DefaultMetadataGenerator{})
+func WellKnownHandler(cfgState *config.StaticConfigState, oauthState *oauth.State) http.Handler {
+	return WellKnownHandlerWithGenerator(cfgState, oauthState, &DefaultMetadataGenerator{})
 }
 
 // WellKnownHandlerWithGenerator creates a WellKnown handler with a custom metadata generator.
 // This allows customizing how metadata is generated for different OIDC providers.
-func WellKnownHandlerWithGenerator(staticConfig *config.StaticConfig, oauthState *oauth.State, generator WellKnownMetadataGenerator) http.Handler {
+func WellKnownHandlerWithGenerator(cfgState *config.StaticConfigState, oauthState *oauth.State, generator WellKnownMetadataGenerator) http.Handler {
 	if generator == nil {
 		generator = &DefaultMetadataGenerator{}
 	}
 	return &WellKnown{
 		oauthState:        oauthState,
-		staticConfig:      staticConfig,
+		cfgState:          cfgState,
 		metadataGenerator: generator,
 	}
 }
@@ -129,7 +129,7 @@ func (w *WellKnown) wellKnownHTTPClient() *http.Client {
 	if snap != nil && snap.HTTPClient != nil {
 		return snap.HTTPClient
 	}
-	return config.NewTLSEnforcingClient(nil, w.staticConfig.IsRequireTLS)
+	return config.NewTLSEnforcingClient(nil, w.cfgState.Load().IsRequireTLS)
 }
 
 func (w *WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -330,12 +330,13 @@ func (w *WellKnown) generateProtectedResourceMetadata(request *http.Request) (ma
 // Uses server_url from config when set. Falls back to X-Forwarded-* headers only
 // when trust_proxy_headers is explicitly enabled. Otherwise uses request.Host directly.
 func (w *WellKnown) buildResourceURL(request *http.Request) string {
-	if w.staticConfig != nil && w.staticConfig.ServerURL != "" {
-		return strings.TrimSuffix(w.staticConfig.ServerURL, "/")
+	cfg := w.cfgState.Load()
+	if cfg != nil && cfg.ServerURL != "" {
+		return strings.TrimSuffix(cfg.ServerURL, "/")
 	}
 	scheme := "https"
 	host := request.Host
-	if w.staticConfig != nil && w.staticConfig.TrustProxyHeaders {
+	if cfg != nil && cfg.TrustProxyHeaders {
 		if request.TLS == nil && !strings.HasPrefix(request.Header.Get("X-Forwarded-Proto"), "https") {
 			scheme = "http"
 		}

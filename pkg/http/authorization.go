@@ -53,7 +53,7 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - The token is then validated against the OIDC Provider.
 //
 //	         see TestAuthorizationOidcToken
-func AuthorizationMiddleware(staticConfig *config.StaticConfig, oauthState *oauth.State) func(http.Handler) http.Handler {
+func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oauth.State) func(http.Handler) http.Handler {
 	var skipJWTWarningOnce sync.Once
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +67,17 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oauthState *oaut
 				next.ServeHTTP(w, r)
 				return
 			}
+			// Load the latest config snapshot on every request so that
+			// SIGHUP-reloaded auth settings take effect immediately.
+			staticConfig := cfgState.Load()
 			if !staticConfig.RequireOAuth {
+				// Always extract the Authorization header so it can be forwarded
+				// to the cluster, even without OAuth validation.
+				if authHeader := r.Header.Get("Authorization"); authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+					ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 				next.ServeHTTP(w, r)
 				return
 			}

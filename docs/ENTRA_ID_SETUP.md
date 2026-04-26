@@ -112,9 +112,10 @@ Replace:
 - `<CLIENT_ID>` with your Application (client) ID
 - `<TENANT_ID>` with your Directory (tenant) ID
 
-> **Note:** When `cluster_auth_mode` is not set, the server auto-detects:
-> - If `require_oauth = true` → uses `passthrough`
-> - Otherwise → uses `kubeconfig`
+> **Note:** When `cluster_auth_mode` is not set, the server defaults to `passthrough`:
+> the Authorization header is forwarded to the cluster when present, and kubeconfig
+> credentials are used when absent. Set `cluster_auth_mode = "kubeconfig"` to always
+> use kubeconfig credentials regardless of any Authorization header.
 >
 > In `passthrough` mode, if token exchange is configured (`token_exchange_strategy` or `sts_audience`), the token is exchanged before being passed to the cluster.
 

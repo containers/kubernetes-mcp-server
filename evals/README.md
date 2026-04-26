@@ -109,14 +109,14 @@ Uses the built-in OpenAI ACP agent with model configuration.
 
 Tasks are organized into suites using labels. You can filter which tasks to run using the `--label-selector` flag:
 
-### Run only Kubernetes tasks (default)
+### Run only core tasks (default)
 
 ```bash
 # Using OpenAI agent
-mcpchecker check evals/openai-agent/eval.yaml --label-selector suite=kubernetes
+mcpchecker check evals/openai-agent/eval.yaml --label-selector suite=core
 
 # Using Claude Code agent
-mcpchecker check evals/claude-code/eval.yaml --label-selector suite=kubernetes
+mcpchecker check evals/claude-code/eval.yaml --label-selector suite=core
 ```
 
 **Requirements:**

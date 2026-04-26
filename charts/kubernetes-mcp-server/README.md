@@ -99,9 +99,9 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | config.port | string | `"{{ .Values.service.port }}"` |  |
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
-| defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
+| defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
 | extraArgs | list | `[]` | Note: For TLS configuration, use the tls section above instead of extraArgs. |
-| extraContainers | list | `[]` | Each container is defined as a complete container spec. |
+| extraContainers | list | `[]` | Note: sidecars do not inherit defaultSecurityContext or the /tmp emptyDir mount; configure them per-container if needed. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
@@ -153,8 +153,9 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | service.port | int | `8080` | This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports |
 | service.targetPort | string | `"http"` | Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container. |
 | service.type | string | `"ClusterIP"` | This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types |
-| serviceAccount | object | `{"annotations":{},"create":true,"name":""}` | This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/ |
+| serviceAccount | object | `{"annotations":{},"automountToken":true,"create":true,"name":""}` | This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/ |
 | serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
+| serviceAccount.automountToken | bool | `true` | Whether to auto-mount the ServiceAccount token into the pod. Required for in-cluster Kubernetes API access (default). Set to false for OAuth passthrough deployments where the server uses the user's token instead of the ServiceAccount token. |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | If not set and create is true, a name is generated using the fullname template |
 | tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | This is the recommended way to enable TLS instead of using extraArgs. |

@@ -1,0 +1,22 @@
+# Test values that exercise the securityContext default and override paths.
+# Validates that:
+# - The default securityContext includes readOnlyRootFilesystem: true
+# - A custom securityContext override fully replaces the default
+
+ingress:
+  host: localhost
+
+# Test: empty override uses the default securityContext
+# (which includes readOnlyRootFilesystem: true)
+securityContext: {}
+
+# Test: custom override replaces the default securityContext entirely
+# Uncomment the block below (and comment out the empty override above)
+# to verify the default is correctly replaced:
+# securityContext:
+#   allowPrivilegeEscalation: false
+#   readOnlyRootFilesystem: false
+#   capabilities:
+#     drop:
+#     - ALL
+#   runAsNonRoot: true

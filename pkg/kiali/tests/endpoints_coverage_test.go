@@ -10,24 +10,32 @@ import (
 	"testing"
 )
 
-func TestAllKialiEndpointsAreCoveredByBackendContractTests(t *testing.T) {
+// TestAllKialiEndpointsAreCoveredByToolImplementations verifies that every
+// endpoint constant defined in endpoints.go is actually referenced by at least
+// one tool implementation file. This prevents stale/dead endpoint definitions.
+func TestAllKialiEndpointsAreCoveredByToolImplementations(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatalf("unable to locate current test file path via runtime.Caller")
 	}
 	testsDir := filepath.Dir(thisFile)
-	endpointsFile := filepath.Clean(filepath.Join(testsDir, "..", "endpoints.go"))
+	endpointsFile := filepath.Clean(filepath.Join(testsDir, "..", "..", "toolsets", "kiali", "tools", "endpoints.go"))
+	toolsDir := filepath.Dir(endpointsFile)
 
 	endpointNames, err := parseConstNames(endpointsFile)
 	if err != nil {
 		t.Fatalf("failed parsing endpoints from %s: %v", endpointsFile, err)
 	}
+	// KialiMCPPath is a base-path prefix used by other constants, not an endpoint itself.
+	delete(endpointNames, "KialiMCPPath")
+
 	if len(endpointNames) == 0 {
-		t.Fatalf("no endpoints found in %s (unexpected)", endpointsFile)
+		t.Fatalf("no endpoint constants found in %s (unexpected)", endpointsFile)
 	}
-	usedNames, err := parseKialiSelectorUsesInDir(filepath.Join(testsDir, "backend"), filepath.Base(thisFile))
+
+	usedNames, err := parseIdentUsesInDir(toolsDir, "endpoints.go", "endpoints_test.go")
 	if err != nil {
-		t.Fatalf("failed parsing backend tests under %s: %v", testsDir, err)
+		t.Fatalf("failed scanning tool files under %s: %v", toolsDir, err)
 	}
 
 	names := make([]string, 0, len(endpointNames))
@@ -39,8 +47,8 @@ func TestAllKialiEndpointsAreCoveredByBackendContractTests(t *testing.T) {
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			if !usedNames[name] {
-				t.Fatalf("endpoint constant %q is not referenced by any tests under %s (add a test that references kiali.%s)",
-					name, testsDir, name)
+				t.Fatalf("endpoint constant %q defined in endpoints.go is not referenced by any tool implementation in %s",
+					name, toolsDir)
 			}
 		})
 	}
@@ -64,16 +72,9 @@ func parseConstNames(filename string) (map[string]bool, error) {
 			if !ok {
 				continue
 			}
-
-			// Only consider consts that are assigned string literals in endpoints.go.
-			// (This matches the intended contract for API endpoints.)
 			if len(vs.Values) == 0 {
 				continue
 			}
-			if bl, ok := vs.Values[0].(*ast.BasicLit); !ok || bl.Kind != token.STRING {
-				continue
-			}
-
 			for _, n := range vs.Names {
 				if n != nil && n.Name != "" {
 					names[n.Name] = true
@@ -85,53 +86,36 @@ func parseConstNames(filename string) (map[string]bool, error) {
 	return names, nil
 }
 
-func parseKialiSelectorUses(filename string) (map[string]bool, error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	used := map[string]bool{}
-	ast.Inspect(f, func(n ast.Node) bool {
-		sel, ok := n.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		pkg, ok := sel.X.(*ast.Ident)
-		if !ok || pkg.Name != "kiali" {
-			return true
-		}
-		if sel.Sel != nil && sel.Sel.Name != "" {
-			used[sel.Sel.Name] = true
-		}
-		return true
-	})
-
-	return used, nil
-}
-
-func parseKialiSelectorUsesInDir(dir, excludeBase string) (map[string]bool, error) {
+// parseIdentUsesInDir collects all identifier names used in Go files within
+// dir, excluding files whose base names match excludeBases. This is used to
+// verify that endpoint constants (defined in the same package) are referenced.
+func parseIdentUsesInDir(dir string, excludeBases ...string) (map[string]bool, error) {
 	matches, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
 		return nil, err
 	}
-	if len(matches) == 0 {
-		return map[string]bool{}, nil
+
+	exclude := make(map[string]bool, len(excludeBases))
+	for _, b := range excludeBases {
+		exclude[b] = true
 	}
 
 	combined := map[string]bool{}
 	for _, f := range matches {
-		if filepath.Base(f) == excludeBase {
+		if exclude[filepath.Base(f)] {
 			continue
 		}
-		used, err := parseKialiSelectorUses(f)
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, f, nil, 0)
 		if err != nil {
 			return nil, err
 		}
-		for k := range used {
-			combined[k] = true
-		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			if ident, ok := n.(*ast.Ident); ok && ident.Name != "" {
+				combined[ident.Name] = true
+			}
+			return true
+		})
 	}
 
 	return combined, nil

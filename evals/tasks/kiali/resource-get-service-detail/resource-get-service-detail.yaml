@@ -1,18 +1,18 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
-  name: "Get service detail"
+  name: "Inspect Service Details"
   category: "Resource Inspection"
+  description: "Retrieves comprehensive information about a service, including its endpoints, health, and configuration."
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
   verify:
-    contains: "health status"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash          
+  - llmJudge:
+      contains: "health status"
   prompt:
-    inline: Get the full details for the service reviews in the namespace bookinfo.
+    inline: "Get the full configuration details and current health status for the 'reviews' service in the 'bookinfo' namespace."
