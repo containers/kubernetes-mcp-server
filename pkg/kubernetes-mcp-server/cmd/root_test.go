@@ -190,7 +190,7 @@ func (s *CmdSuite) TestConfigDir() {
 			list_output = "yaml"
 			read_only = true
 			disable_destructive = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -203,7 +203,7 @@ func (s *CmdSuite) TestConfigDir() {
 	s.Run("--config-dir path is a file throws error", func() {
 		tempDir := s.T().TempDir()
 		filePath := filepath.Join(tempDir, "not-a-directory.toml")
-		s.Require().NoError(os.WriteFile(filePath, []byte("log_level = 1"), 0644))
+		s.Require().NoError(os.WriteFile(filePath, []byte("log_level = 1"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -226,15 +226,15 @@ func (s *CmdSuite) TestConfigDir() {
 		s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
 			list_output = "table"
 			read_only = false
-		`), 0644))
+		`), 0o644))
 
 		dropInDir := filepath.Join(tempDir, "conf.d")
-		s.Require().NoError(os.Mkdir(dropInDir, 0755))
+		s.Require().NoError(os.Mkdir(dropInDir, 0o755))
 		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-override.toml"), []byte(`
 			read_only = true
 			disable_destructive = true
 			stateless = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -250,11 +250,11 @@ func (s *CmdSuite) TestConfigDir() {
 		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-first.toml"), []byte(`
 			list_output = "yaml"
 			read_only = true
-		`), 0644))
+		`), 0o644))
 		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "20-second.toml"), []byte(`
 			list_output = "table"
 			disable_destructive = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -271,7 +271,7 @@ func (s *CmdSuite) TestConfigDir() {
 			read_only = true
 			disable_destructive = true
 			stateless = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -539,8 +539,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -561,8 +561,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -583,8 +583,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -605,8 +605,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -624,8 +624,7 @@ func TestRequireTLSValidation(t *testing.T) {
 
 func TestLogFile(t *testing.T) {
 	t.Run("http mode writes logs to file instead of stdout", func(t *testing.T) {
-		tempDir := t.TempDir()
-		logPath := filepath.Join(tempDir, "server.log")
+		logPath := filepath.Join(t.TempDir(), "server.log")
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -639,8 +638,7 @@ func TestLogFile(t *testing.T) {
 	})
 
 	t.Run("stdio mode writes logs to file", func(t *testing.T) {
-		tempDir := t.TempDir()
-		logPath := filepath.Join(tempDir, "server.log")
+		logPath := filepath.Join(t.TempDir(), "server.log")
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -654,8 +652,7 @@ func TestLogFile(t *testing.T) {
 	})
 
 	t.Run("log file is created if it does not exist", func(t *testing.T) {
-		tempDir := t.TempDir()
-		logPath := filepath.Join(tempDir, "new-server.log")
+		logPath := filepath.Join(t.TempDir(), "new-server.log")
 
 		_, err := os.Stat(logPath)
 		require.True(t, os.IsNotExist(err), "log file should not exist before the test")
@@ -670,10 +667,9 @@ func TestLogFile(t *testing.T) {
 	})
 
 	t.Run("log file is appended to if it already exists", func(t *testing.T) {
-		tempDir := t.TempDir()
-		logPath := filepath.Join(tempDir, "server.log")
+		logPath := filepath.Join(t.TempDir(), "server.log")
 		existingContent := "existing log line\n"
-		require.NoError(t, os.WriteFile(logPath, []byte(existingContent), 0644))
+		require.NoError(t, os.WriteFile(logPath, []byte(existingContent), 0o600))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -687,20 +683,20 @@ func TestLogFile(t *testing.T) {
 	})
 
 	t.Run("nonexistent parent directory returns error", func(t *testing.T) {
+		logPath := filepath.Join(t.TempDir(), "missing", "server.log")
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
-		rootCmd.SetArgs([]string{"--version", "--log-file", "/nonexistent/dir/server.log"})
+		rootCmd.SetArgs([]string{"--version", "--log-file", logPath})
 		err := rootCmd.Execute()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to open log file")
-		assert.Contains(t, err.Error(), "/nonexistent/dir/server.log")
+		assert.Contains(t, err.Error(), "missing/server.log")
 	})
 
 	t.Run("log_file from TOML config is used", func(t *testing.T) {
-		tempDir := t.TempDir()
-		logPath := filepath.Join(tempDir, "server.log")
-		configPath := filepath.Join(tempDir, "config.toml")
-		require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", logPath)), 0644))
+		logPath := filepath.Join(t.TempDir(), "server.log")
+		configPath := filepath.Join(t.TempDir(), "config.toml")
+		require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", logPath)), 0o600))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -714,11 +710,10 @@ func TestLogFile(t *testing.T) {
 	})
 
 	t.Run("--log-file flag overrides log_file in TOML config", func(t *testing.T) {
-		tempDir := t.TempDir()
-		configLogPath := filepath.Join(tempDir, "config-server.log")
-		flagLogPath := filepath.Join(tempDir, "flag-server.log")
-		configPath := filepath.Join(tempDir, "config.toml")
-		require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", configLogPath)), 0644))
+		configLogPath := filepath.Join(t.TempDir(), "config-server.log")
+		flagLogPath := filepath.Join(t.TempDir(), "flag-server.log")
+		configPath := filepath.Join(t.TempDir(), "config.toml")
+		require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", configLogPath)), 0o600))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -732,13 +727,27 @@ func TestLogFile(t *testing.T) {
 		_, err = os.Stat(configLogPath)
 		require.True(t, os.IsNotExist(err), "config log file should not be created when flag overrides it")
 	})
+
+	t.Run("stderr routes logs to ErrOut without opening a file", func(t *testing.T) {
+		errOut := &bytes.Buffer{}
+		ioStreams := genericiooptions.IOStreams{
+			In:     &bytes.Buffer{},
+			Out:    &bytes.Buffer{},
+			ErrOut: errOut,
+		}
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file=stderr"})
+		require.NoError(t, rootCmd.Execute())
+
+		assert.Contains(t, errOut.String(), "Starting kubernetes-mcp-server", "logs should go to ErrOut")
+	})
 }
 
 func TestTLSValidation(t *testing.T) {
 	t.Run("tls-cert without tls-key returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -751,7 +760,7 @@ func TestTLSValidation(t *testing.T) {
 	t.Run("tls-key without tls-cert returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -764,7 +773,7 @@ func TestTLSValidation(t *testing.T) {
 	t.Run("invalid tls-cert path returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -777,7 +786,7 @@ func TestTLSValidation(t *testing.T) {
 	t.Run("invalid tls-key path returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -791,8 +800,8 @@ func TestTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -805,8 +814,8 @@ func TestTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
