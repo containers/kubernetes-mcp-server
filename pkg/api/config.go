@@ -72,6 +72,7 @@ type StsConfigProvider interface {
 	GetStsAuthStyle() string
 	GetStsClientCertFile() string
 	GetStsClientKeyFile() string
+	GetCertificateAuthority() string
 }
 
 // ValidationEnabledProvider provides access to validation enabled setting.
