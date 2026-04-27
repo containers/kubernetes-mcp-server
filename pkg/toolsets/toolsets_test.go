@@ -50,6 +50,46 @@ func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 	}, "Expected panic on duplicate toolset registration")
 }
 
+func (s *ToolsetsSuite) TestUniqueToolNames() {
+	toolNames := make(map[string]bool)
+	for _, toolset := range Toolsets() {
+		for _, tool := range toolset.GetTools(nil) {
+			s.Falsef(toolNames[tool.Tool.Name], "duplicate tool name: %s", tool.Tool.Name)
+			toolNames[tool.Tool.Name] = true
+		}
+	}
+}
+
+func (s *ToolsetsSuite) TestUniquePromptNames() {
+	promptNames := make(map[string]bool)
+	for _, toolset := range Toolsets() {
+		for _, prompt := range toolset.GetPrompts() {
+			s.Falsef(promptNames[prompt.Prompt.Name], "duplicate prompt name: %s", prompt.Prompt.Name)
+			promptNames[prompt.Prompt.Name] = true
+		}
+	}
+}
+
+func (s *ToolsetsSuite) TestUniqueResourceURIs() {
+	resourceURIs := make(map[string]bool)
+	for _, toolset := range Toolsets() {
+		for _, resource := range toolset.GetResources() {
+			s.Falsef(resourceURIs[resource.Resource.URI], "duplicate resource URI: %s", resource.Resource.URI)
+			resourceURIs[resource.Resource.URI] = true
+		}
+	}
+}
+
+func (s *ToolsetsSuite) TestUniqueResourceTemplateURITemplates() {
+	uriTemplates := make(map[string]bool)
+	for _, toolset := range Toolsets() {
+		for _, template := range toolset.GetResourceTemplates() {
+			s.Falsef(uriTemplates[template.ResourceTemplate.URITemplate], "duplicate resource template URI template: %s", template.ResourceTemplate.URITemplate)
+			uriTemplates[template.ResourceTemplate.URITemplate] = true
+		}
+	}
+}
+
 func (s *ToolsetsSuite) TestToolsetNames() {
 	s.Run("Returns empty list if no toolsets registered", func() {
 		s.Empty(ToolsetNames(), "Expected empty list of toolset names")

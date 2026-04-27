@@ -135,6 +135,50 @@ func main() {
 		toolsetPrompts.String(),
 	)
 
+	// Available Toolset Resources
+	toolsetResources := strings.Builder{}
+	for _, toolset := range toolsetsList {
+		resources := toolset.GetResources()
+		if len(resources) == 0 {
+			continue
+		}
+		toolsetResources.WriteString("<details>\n\n<summary>" + toolset.GetName() + "</summary>\n\n")
+		for _, resource := range resources {
+			fmt.Fprintf(&toolsetResources, "- **%s** - %s\n", resource.Resource.Name, resource.Resource.Description)
+			fmt.Fprintf(&toolsetResources, "  - URI: `%s`\n", resource.Resource.URI)
+			fmt.Fprintf(&toolsetResources, "  - MIME Type: `%s`\n", resource.Resource.MIMEType)
+		}
+		toolsetResources.WriteString("</details>\n\n")
+	}
+	updated = replaceBetweenMarkers(
+		updated,
+		"<!-- AVAILABLE-TOOLSETS-RESOURCES-START -->",
+		"<!-- AVAILABLE-TOOLSETS-RESOURCES-END -->",
+		toolsetResources.String(),
+	)
+
+	// Available Toolset Resource Templates
+	toolsetResourceTemplates := strings.Builder{}
+	for _, toolset := range toolsetsList {
+		templates := toolset.GetResourceTemplates()
+		if len(templates) == 0 {
+			continue
+		}
+		toolsetResourceTemplates.WriteString("<details>\n\n<summary>" + toolset.GetName() + "</summary>\n\n")
+		for _, template := range templates {
+			fmt.Fprintf(&toolsetResourceTemplates, "- **%s** - %s\n", template.ResourceTemplate.Name, template.ResourceTemplate.Description)
+			fmt.Fprintf(&toolsetResourceTemplates, "  - URI Template: `%s`\n", template.ResourceTemplate.URITemplate)
+			fmt.Fprintf(&toolsetResourceTemplates, "  - MIME Type: `%s`\n", template.ResourceTemplate.MIMEType)
+		}
+		toolsetResourceTemplates.WriteString("</details>\n\n")
+	}
+	updated = replaceBetweenMarkers(
+		updated,
+		"<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-START -->",
+		"<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-END -->",
+		toolsetResourceTemplates.String(),
+	)
+
 	if err := os.WriteFile(localReadmePath, []byte(updated), 0o644); err != nil {
 		panic(err)
 	}

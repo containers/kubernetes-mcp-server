@@ -117,8 +117,21 @@ type Resource struct {
 	MIMEType    string
 }
 
+// ResourceContent is the value returned by a resource handler.
+// Exactly one of Text or Blob must be set; both cannot be nil or both non-nil.
+type ResourceContent struct {
+	// MIMEType overrides Resource.MIMEType when set; otherwise Resource.MIMEType is used.
+	MIMEType string
+	// Text is the UTF-8 text content of the resource.
+	Text string
+	// Blob is the binary content of the resource.
+	Blob []byte
+}
+
 // ResourceHandler is called when a client reads a resource.
-type ResourceHandler func(ctx context.Context) (content string, err error)
+// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
+// Handlers should return a ResourceContent with exactly one of Text or Blob set.
+type ResourceHandler func(ctx context.Context) (*ResourceContent, error)
 
 // ServerResource represents a resource that can be registered with the MCP server.
 type ServerResource struct {
@@ -135,7 +148,10 @@ type ResourceTemplate struct {
 }
 
 // ResourceTemplateHandler is called when a client reads a resource matching a template.
-type ResourceTemplateHandler func(ctx context.Context, uri string) (content string, err error)
+// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
+// The uri parameter is the actual resource URI that matches the template.
+// Handlers should return a ResourceContent with exactly one of Text or Blob set.
+type ResourceTemplateHandler func(ctx context.Context, uri string) (*ResourceContent, error)
 
 // ServerResourceTemplate represents a resource template that can be registered with the MCP server.
 type ServerResourceTemplate struct {

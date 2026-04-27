@@ -314,20 +314,36 @@ func (s *Server) registerPrompt(prompt api.ServerPrompt) error {
 	return nil
 }
 
-// collectApplicableResources returns resources from all enabled toolsets
+// collectApplicableResources returns resources from all enabled toolsets after filtering and mutation
 func (s *Server) collectApplicableResources() []api.ServerResource {
+	filter := CompositeResourceFilter()
+	mutator := ComposeResourceMutators()
+
 	resources := make([]api.ServerResource, 0)
 	for _, toolset := range s.configuration.Toolsets() {
-		resources = append(resources, toolset.GetResources()...)
+		for _, resource := range toolset.GetResources() {
+			resource = mutator(resource)
+			if filter(resource) {
+				resources = append(resources, resource)
+			}
+		}
 	}
 	return resources
 }
 
-// collectApplicableResourceTemplates returns resource templates from all enabled toolsets
+// collectApplicableResourceTemplates returns resource templates from all enabled toolsets after filtering and mutation
 func (s *Server) collectApplicableResourceTemplates() []api.ServerResourceTemplate {
+	filter := CompositeResourceTemplateFilter()
+	mutator := ComposeResourceTemplateMutators()
+
 	templates := make([]api.ServerResourceTemplate, 0)
 	for _, toolset := range s.configuration.Toolsets() {
-		templates = append(templates, toolset.GetResourceTemplates()...)
+		for _, template := range toolset.GetResourceTemplates() {
+			template = mutator(template)
+			if filter(template) {
+				templates = append(templates, template)
+			}
+		}
 	}
 	return templates
 }
@@ -564,4 +580,60 @@ func ensureStructuredObject(v any) any {
 		return map[string]any{"items": v}
 	}
 	return v
+}
+
+// ResourceFilter is a function that takes a ServerResource and returns a boolean indicating whether to include it
+type ResourceFilter func(resource api.ServerResource) bool
+
+// CompositeResourceFilter combines multiple resource filters into a single filter using AND logic
+func CompositeResourceFilter(filters ...ResourceFilter) ResourceFilter {
+	return func(resource api.ServerResource) bool {
+		for _, f := range filters {
+			if !f(resource) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// ResourceMutator is a function that transforms a ServerResource
+type ResourceMutator func(resource api.ServerResource) api.ServerResource
+
+// ComposeResourceMutators combines multiple resource mutators into a pipeline
+func ComposeResourceMutators(mutators ...ResourceMutator) ResourceMutator {
+	return func(resource api.ServerResource) api.ServerResource {
+		for _, m := range mutators {
+			resource = m(resource)
+		}
+		return resource
+	}
+}
+
+// ResourceTemplateFilter is a function that takes a ServerResourceTemplate and returns a boolean indicating whether to include it
+type ResourceTemplateFilter func(template api.ServerResourceTemplate) bool
+
+// CompositeResourceTemplateFilter combines multiple resource template filters into a single filter using AND logic
+func CompositeResourceTemplateFilter(filters ...ResourceTemplateFilter) ResourceTemplateFilter {
+	return func(template api.ServerResourceTemplate) bool {
+		for _, f := range filters {
+			if !f(template) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// ResourceTemplateMutator is a function that transforms a ServerResourceTemplate
+type ResourceTemplateMutator func(template api.ServerResourceTemplate) api.ServerResourceTemplate
+
+// ComposeResourceTemplateMutators combines multiple resource template mutators into a pipeline
+func ComposeResourceTemplateMutators(mutators ...ResourceTemplateMutator) ResourceTemplateMutator {
+	return func(template api.ServerResourceTemplate) api.ServerResourceTemplate {
+		for _, m := range mutators {
+			template = m(template)
+		}
+		return template
+	}
 }

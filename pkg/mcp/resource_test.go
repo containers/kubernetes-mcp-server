@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -40,8 +41,8 @@ func (s *ResourceSuite) TestResources() {
 					Description: "First",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context) (string, error) {
-					return txt1, nil
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: txt1}, nil
 				},
 			},
 			{
@@ -51,8 +52,8 @@ func (s *ResourceSuite) TestResources() {
 					Description: "Second",
 					MIMEType:    "application/json",
 				},
-				Handler: func(_ context.Context) (string, error) {
-					return json2, nil
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: json2}, nil
 				},
 			},
 		},
@@ -79,11 +80,13 @@ func (s *ResourceSuite) TestResources() {
 	s.Run("each resource has correct content and mimeType", func() {
 		result1, err := s.ReadResource("test://example/resource1")
 		s.NoError(err)
+		s.Require().Len(result1.Contents, 1)
 		s.Equal(txt1, result1.Contents[0].Text)
 		s.Equal("text/plain", result1.Contents[0].MIMEType)
 
 		result2, err := s.ReadResource("test://example/resource2")
 		s.NoError(err)
+		s.Require().Len(result2.Contents, 1)
 		s.Equal(json2, result2.Contents[0].Text)
 		s.Equal("application/json", result2.Contents[0].MIMEType)
 	})
@@ -102,8 +105,8 @@ func (s *ResourceSuite) TestResourceTemplates() {
 					Description: txtFoo,
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, uri string) (string, error) {
-					return "content for: " + uri, nil
+				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "content for: " + uri}, nil
 				},
 			},
 		},
@@ -128,14 +131,62 @@ func (s *ResourceSuite) TestResourceTemplates() {
 		uri1 := "test://example/foo"
 		result1, err := s.ReadResource(uri1)
 		s.NoError(err)
+		s.Require().Len(result1.Contents, 1)
 		s.Equal(uri1, result1.Contents[0].URI)
 		s.Equal("content for: "+uri1, result1.Contents[0].Text)
 
 		uri2 := "test://example/bar"
 		result2, err := s.ReadResource(uri2)
 		s.NoError(err)
+		s.Require().Len(result2.Contents, 1)
 		s.Equal(uri2, result2.Contents[0].URI)
 		s.Equal("content for: "+uri2, result2.Contents[0].Text)
+	})
+}
+
+func (s *ResourceSuite) TestHandlerErrors() {
+	testToolset := &mockResourceToolset{
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/error",
+					Name:     "Error Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return nil, errors.New("permission denied")
+				},
+			},
+		},
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "test://example/template/{id}",
+					Name:        "Template with Error",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
+					return nil, errors.New("permission denied")
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	s.Cfg.Toolsets = []string{"resource-test"}
+	s.InitMcpClient()
+
+	s.Run("static resource handler error propagates", func() {
+		result, err := s.ReadResource("test://example/error")
+		s.Error(err)
+		s.Nil(result)
+	})
+
+	s.Run("template resource handler error propagates", func() {
+		result, err := s.ReadResource("test://example/template/123")
+		s.Error(err)
+		s.Nil(result)
 	})
 }
 

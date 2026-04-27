@@ -597,6 +597,20 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <!-- AVAILABLE-TOOLSETS-PROMPTS-END -->
 
+### Resources
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-START -->
+
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-END -->
+
+### Resource Templates
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-START -->
+
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-END -->
+
 ## Helm Chart
 
 A [Helm Chart](https://helm.sh) is available to simplify the deployment of the Kubernetes MCP server.

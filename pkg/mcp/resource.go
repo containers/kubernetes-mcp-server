@@ -21,11 +21,16 @@ func addResource(server *mcp.Server, res api.ServerResource) {
 			if err != nil {
 				return nil, err
 			}
+			mimeType := res.Resource.MIMEType
+			if content.MIMEType != "" {
+				mimeType = content.MIMEType
+			}
 			return &mcp.ReadResourceResult{
 				Contents: []*mcp.ResourceContents{{
 					URI:      res.Resource.URI,
-					MIMEType: res.Resource.MIMEType,
-					Text:     content,
+					MIMEType: mimeType,
+					Text:     content.Text,
+					Blob:     content.Blob,
 				}},
 			}, nil
 		},
@@ -46,11 +51,16 @@ func addResourceTemplate(server *mcp.Server, rt api.ServerResourceTemplate) {
 			if err != nil {
 				return nil, err
 			}
+			mimeType := rt.ResourceTemplate.MIMEType
+			if content.MIMEType != "" {
+				mimeType = content.MIMEType
+			}
 			return &mcp.ReadResourceResult{
 				Contents: []*mcp.ResourceContents{{
 					URI:      req.Params.URI,
-					MIMEType: rt.ResourceTemplate.MIMEType,
-					Text:     content,
+					MIMEType: mimeType,
+					Text:     content.Text,
+					Blob:     content.Blob,
 				}},
 			}, nil
 		},
