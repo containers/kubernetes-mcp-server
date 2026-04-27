@@ -424,6 +424,10 @@ func (c *StaticConfig) GetStsClientKeyFile() string {
 	return c.StsClientKeyFile
 }
 
+func (c *StaticConfig) GetCertificateAuthority() string {
+	return c.CertificateAuthority
+}
+
 func (c *StaticConfig) IsValidationEnabled() bool {
 	return c.ValidationEnabled
 }

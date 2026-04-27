@@ -173,6 +173,7 @@ func strategyBasedTokenExchange(
 			AuthStyle:      authStyle,
 			ClientCertFile: baseConfig.GetStsClientCertFile(),
 			ClientKeyFile:  baseConfig.GetStsClientKeyFile(),
+			CAFile:         baseConfig.GetCertificateAuthority(),
 		}
 		if err := cfg.Validate(); err != nil {
 			return ctx, fmt.Errorf("token exchange config validation: %w", err)
