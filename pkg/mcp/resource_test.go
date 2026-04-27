@@ -9,6 +9,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -66,17 +67,25 @@ func (s *ResourceSuite) TestResources() {
 	s.Cfg.Toolsets = []string{"resource-test"}
 	s.InitMcpClient()
 
-	s.Run("all resources appear in list", func() {
+	s.Run("all resources appear in list with correct metadata", func() {
 		result, err := s.ListResources()
 		s.NoError(err)
 		s.Require().Len(result.Resources, 2)
 
-		uris := make(map[string]bool)
+		byURI := make(map[string]*mcp.Resource)
 		for _, r := range result.Resources {
-			uris[r.URI] = true
+			byURI[r.URI] = r
 		}
-		s.True(uris["test://example/resource1"])
-		s.True(uris["test://example/resource2"])
+
+		s.Require().Contains(byURI, "test://example/resource1")
+		s.Equal("Resource One", byURI["test://example/resource1"].Name)
+		s.Equal("First", byURI["test://example/resource1"].Description)
+		s.Equal("text/plain", byURI["test://example/resource1"].MIMEType)
+
+		s.Require().Contains(byURI, "test://example/resource2")
+		s.Equal("Resource Two", byURI["test://example/resource2"].Name)
+		s.Equal("Second", byURI["test://example/resource2"].Description)
+		s.Equal("application/json", byURI["test://example/resource2"].MIMEType)
 	})
 
 	s.Run("each resource has correct content and mimeType", func() {
@@ -340,6 +349,130 @@ func (s *ResourceSuite) TestReloadNotifiesResourceListChanged() {
 	s.NotNil(notification)
 }
 
+func (s *ResourceSuite) TestBlobResource() {
+	blobData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+
+	testToolset := &mockResourceToolset{
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/image",
+					Name:     "Image Resource",
+					MIMEType: "image/png",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Blob: blobData}, nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	s.Cfg.Toolsets = []string{"resource-test"}
+	s.InitMcpClient()
+
+	s.Run("blob content is returned correctly", func() {
+		result, err := s.ReadResource("test://example/image")
+		s.NoError(err)
+		s.Require().Len(result.Contents, 1)
+		s.Equal("image/png", result.Contents[0].MIMEType)
+		s.Equal(blobData, result.Contents[0].Blob)
+		s.Empty(result.Contents[0].Text)
+	})
+}
+
+func (s *ResourceSuite) TestMIMETypeOverride() {
+	testToolset := &mockResourceToolset{
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/override",
+					Name:     "Override Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{
+						Text:     `{"overridden": true}`,
+						MIMEType: "application/json",
+					}, nil
+				},
+			},
+		},
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "test://example/tmpl-override/{id}",
+					Name:        "Override Template",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
+					return &api.ResourceContent{
+						Text:     `{"uri": "` + uri + `"}`,
+						MIMEType: "application/json",
+					}, nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	s.Cfg.Toolsets = []string{"resource-test"}
+	s.InitMcpClient()
+
+	s.Run("handler MIMEType overrides resource-level MIMEType", func() {
+		result, err := s.ReadResource("test://example/override")
+		s.NoError(err)
+		s.Require().Len(result.Contents, 1)
+		s.Equal("application/json", result.Contents[0].MIMEType)
+		s.Equal(`{"overridden": true}`, result.Contents[0].Text)
+	})
+
+	s.Run("handler MIMEType overrides template-level MIMEType", func() {
+		result, err := s.ReadResource("test://example/tmpl-override/42")
+		s.NoError(err)
+		s.Require().Len(result.Contents, 1)
+		s.Equal("application/json", result.Contents[0].MIMEType)
+	})
+}
+
+func (s *ResourceSuite) TestInvalidURIPanics() {
+	badTemplateToolset := &mockResourceToolset{
+		name: "resource-test-bad",
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "{{invalid",
+					Name:        "Bad Template",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "unreachable"}, nil
+				},
+			},
+		},
+	}
+
+	emptyToolset := &mockResourceToolset{name: "resource-test-empty"}
+
+	toolsets.Clear()
+	toolsets.Register(emptyToolset)
+	toolsets.Register(badTemplateToolset)
+	s.Cfg.Toolsets = []string{"resource-test-empty"}
+	s.InitMcpClient()
+
+	s.Run("invalid resource template URI panics", func() {
+		newConfig := config.Default()
+		newConfig.Toolsets = []string{"resource-test-bad"}
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+
+		s.Panics(func() {
+			_ = s.mcpServer.ReloadConfiguration(newConfig)
+		})
+	})
+}
+
 type mockResourceToolset struct {
 	name              string
 	resources         []api.ServerResource
@@ -352,7 +485,7 @@ func (m *mockResourceToolset) GetName() string {
 	}
 	return "resource-test"
 }
-func (m *mockResourceToolset) GetDescription() string { return "Test toolset for resources" }
+func (m *mockResourceToolset) GetDescription() string                    { return "Test toolset for resources" }
 func (m *mockResourceToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
 func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt            { return nil }
 func (m *mockResourceToolset) GetResources() []api.ServerResource        { return m.resources }
