@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/stretchr/testify/suite"
 )
@@ -190,13 +192,167 @@ func (s *ResourceSuite) TestHandlerErrors() {
 	})
 }
 
+func (s *ResourceSuite) TestNilContentReturnsError() {
+	testToolset := &mockResourceToolset{
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/nil-content",
+					Name:     "Nil Content Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return nil, nil
+				},
+			},
+		},
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "test://example/nil-template/{id}",
+					Name:        "Nil Content Template",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+					return nil, nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	s.Cfg.Toolsets = []string{"resource-test"}
+	s.InitMcpClient()
+
+	s.Run("static resource nil content returns error", func() {
+		result, err := s.ReadResource("test://example/nil-content")
+		s.Error(err)
+		s.Nil(result)
+	})
+
+	s.Run("template resource nil content returns error", func() {
+		result, err := s.ReadResource("test://example/nil-template/123")
+		s.Error(err)
+		s.Nil(result)
+	})
+}
+
+func (s *ResourceSuite) TestReloadRemovesResources() {
+	testToolset := &mockResourceToolset{
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/removable",
+					Name:     "Removable",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "will be removed"}, nil
+				},
+			},
+		},
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "test://example/removable/{id}",
+					Name:        "Removable Template",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "template: " + uri}, nil
+				},
+			},
+		},
+	}
+
+	emptyToolset := &mockResourceToolset{name: "resource-test-empty"}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	toolsets.Register(emptyToolset)
+	s.Cfg.Toolsets = []string{"resource-test"}
+	s.InitMcpClient()
+
+	s.Run("resources present before reload", func() {
+		result, err := s.ListResources()
+		s.Require().NoError(err)
+		s.Require().Len(result.Resources, 1)
+		s.Equal("test://example/removable", result.Resources[0].URI)
+
+		tmpl, err := s.ListResourceTemplates()
+		s.Require().NoError(err)
+		s.Require().Len(tmpl.ResourceTemplates, 1)
+	})
+
+	s.Run("resources removed after reload", func() {
+		newConfig := config.Default()
+		newConfig.Toolsets = []string{"resource-test-empty"}
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+
+		err := s.mcpServer.ReloadConfiguration(newConfig)
+		s.Require().NoError(err)
+
+		result, err := s.ListResources()
+		s.Require().NoError(err)
+		s.Empty(result.Resources)
+
+		tmpl, err := s.ListResourceTemplates()
+		s.Require().NoError(err)
+		s.Empty(tmpl.ResourceTemplates)
+	})
+}
+
+func (s *ResourceSuite) TestReloadNotifiesResourceListChanged() {
+	testToolset := &mockResourceToolset{
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/notify",
+					Name:     "Notify Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "notify"}, nil
+				},
+			},
+		},
+	}
+
+	emptyToolset := &mockResourceToolset{name: "resource-test-empty"}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	toolsets.Register(emptyToolset)
+	s.Cfg.Toolsets = []string{"resource-test"}
+	s.InitMcpClient()
+
+	capture := s.StartCapturingNotifications()
+
+	newConfig := config.Default()
+	newConfig.Toolsets = []string{"resource-test-empty"}
+	newConfig.KubeConfig = s.Cfg.KubeConfig
+
+	err := s.mcpServer.ReloadConfiguration(newConfig)
+	s.Require().NoError(err)
+
+	notification := capture.RequireNotification(s.T(), 2*time.Second, "notifications/resources/list_changed")
+	s.NotNil(notification)
+}
+
 type mockResourceToolset struct {
+	name              string
 	resources         []api.ServerResource
 	resourceTemplates []api.ServerResourceTemplate
 }
 
-func (m *mockResourceToolset) GetName() string                           { return "resource-test" }
-func (m *mockResourceToolset) GetDescription() string                    { return "Test toolset for resources" }
+func (m *mockResourceToolset) GetName() string {
+	if m.name != "" {
+		return m.name
+	}
+	return "resource-test"
+}
+func (m *mockResourceToolset) GetDescription() string { return "Test toolset for resources" }
 func (m *mockResourceToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
 func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt            { return nil }
 func (m *mockResourceToolset) GetResources() []api.ServerResource        { return m.resources }

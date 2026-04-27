@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,6 +21,9 @@ func addResource(server *mcp.Server, res api.ServerResource) {
 			content, err := res.Handler(ctx)
 			if err != nil {
 				return nil, err
+			}
+			if content == nil {
+				return nil, errors.New("resource handler cannot be nil")
 			}
 			mimeType := res.Resource.MIMEType
 			if content.MIMEType != "" {
@@ -50,6 +54,9 @@ func addResourceTemplate(server *mcp.Server, rt api.ServerResourceTemplate) {
 			content, err := rt.Handler(ctx, req.Params.URI)
 			if err != nil {
 				return nil, err
+			}
+			if content == nil {
+				return nil, errors.New("resource template handler cannot be nil")
 			}
 			mimeType := rt.ResourceTemplate.MIMEType
 			if content.MIMEType != "" {
