@@ -151,11 +151,48 @@ func (s *ContractTestSuite) requireSuccess(endpoint string, resp *http.Response,
 		"Endpoint %s returned empty response body", endpoint)
 }
 
+// requireValidJSON asserts the response body is valid JSON and returns the raw decoded value.
+func (s *ContractTestSuite) requireValidJSON(endpoint string, body []byte) interface{} {
+	var parsed interface{}
+	err := json.Unmarshal(body, &parsed)
+	s.Require().NoError(err, "Endpoint %s returned invalid JSON: %s", endpoint, string(body))
+	return parsed
+}
+
+// requireJSONObject asserts the response is a JSON object and returns it.
+func (s *ContractTestSuite) requireJSONObject(endpoint string, body []byte) map[string]interface{} {
+	parsed := s.requireValidJSON(endpoint, body)
+	obj, ok := parsed.(map[string]interface{})
+	s.Require().True(ok, "Endpoint %s expected JSON object, got %T", endpoint, parsed)
+	return obj
+}
+
+// requireJSONKeys asserts the JSON object response contains all expected top-level keys.
+func (s *ContractTestSuite) requireJSONKeys(endpoint string, body []byte, keys ...string) map[string]interface{} {
+	obj := s.requireJSONObject(endpoint, body)
+	for _, key := range keys {
+		s.Contains(obj, key, "Endpoint %s response missing expected key %q", endpoint, key)
+	}
+	return obj
+}
+
+// requireJSONString asserts the response is a JSON-encoded string (e.g. markdown text)
+// and returns the decoded string.
+func (s *ContractTestSuite) requireJSONString(endpoint string, body []byte) string {
+	parsed := s.requireValidJSON(endpoint, body)
+	str, ok := parsed.(string)
+	s.Require().True(ok, "Endpoint %s expected JSON string, got %T", endpoint, parsed)
+	s.Require().NotEmpty(str, "Endpoint %s returned empty string", endpoint)
+	return str
+}
+
 func (s *ContractTestSuite) TestGetMeshStatus() {
 	s.Run("returns mesh status with non-empty response", func() {
 		resp, body, err := s.mcpCall(tools.KialiGetMeshStatusEndpoint, nil)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetMeshStatusEndpoint, resp, body)
+		s.requireJSONKeys(tools.KialiGetMeshStatusEndpoint, body,
+			"components", "environment")
 	})
 }
 
@@ -168,6 +205,8 @@ func (s *ContractTestSuite) TestGetMeshTrafficGraph() {
 		resp, body, err := s.mcpCall(tools.KialiGetMeshTrafficGraphEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetMeshTrafficGraphEndpoint, resp, body)
+		s.requireJSONKeys(tools.KialiGetMeshTrafficGraphEndpoint, body,
+			"nodes", "graphType")
 	})
 }
 
@@ -180,6 +219,8 @@ func (s *ContractTestSuite) TestListOrGetResources() {
 		resp, body, err := s.mcpCall(tools.KialiListOrGetResourcesEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiListOrGetResourcesEndpoint, resp, body)
+		obj := s.requireJSONObject(tools.KialiListOrGetResourcesEndpoint, body)
+		s.NotEmpty(obj, "list_or_get_resources response should have at least one cluster key")
 	})
 
 	s.Run("lists workloads in test namespace", func() {
@@ -190,6 +231,8 @@ func (s *ContractTestSuite) TestListOrGetResources() {
 		resp, body, err := s.mcpCall(tools.KialiListOrGetResourcesEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiListOrGetResourcesEndpoint, resp, body)
+		obj := s.requireJSONObject(tools.KialiListOrGetResourcesEndpoint, body)
+		s.NotEmpty(obj, "list_or_get_resources response should have at least one cluster key")
 	})
 }
 
@@ -203,6 +246,8 @@ func (s *ContractTestSuite) TestGetMetrics() {
 		resp, body, err := s.mcpCall(tools.KialiGetMetricsEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetMetricsEndpoint, resp, body)
+		s.requireJSONKeys(tools.KialiGetMetricsEndpoint, body,
+			"overview", "traffic", "throughput", "latency")
 	})
 }
 
@@ -215,6 +260,7 @@ func (s *ContractTestSuite) TestGetLogs() {
 		resp, body, err := s.mcpCall(tools.KialiGetLogsEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetLogsEndpoint, resp, body)
+		s.requireJSONString(tools.KialiGetLogsEndpoint, body)
 	})
 }
 
@@ -227,6 +273,7 @@ func (s *ContractTestSuite) TestGetPodPerformance() {
 		resp, body, err := s.mcpCall(tools.KialiGetPodPerformanceEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetPodPerformanceEndpoint, resp, body)
+		s.requireJSONString(tools.KialiGetPodPerformanceEndpoint, body)
 	})
 }
 
@@ -238,6 +285,7 @@ func (s *ContractTestSuite) TestManageIstioConfigRead() {
 		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
+		s.requireValidJSON(tools.KialiManageIstioConfigReadEndpoint, body)
 	})
 }
 
@@ -277,6 +325,7 @@ func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigEndpoint, resp, body)
+		s.requireValidJSON(tools.KialiManageIstioConfigEndpoint, body)
 	})
 
 	s.Run("deletes the ServiceEntry", func() {
@@ -308,6 +357,8 @@ func (s *ContractTestSuite) TestListTraces() {
 		s.Require().NoError(err)
 		if s.tracingOn {
 			s.requireSuccess(tools.KialiListTracesEndpoint, resp, body)
+			s.requireJSONKeys(tools.KialiListTracesEndpoint, body,
+				"summary", "traces")
 		} else {
 			s.requireNotToolNotFound(tools.KialiListTracesEndpoint, resp, body)
 		}
