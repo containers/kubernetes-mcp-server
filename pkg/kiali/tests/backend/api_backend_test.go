@@ -603,23 +603,6 @@ func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 }
 
 func (s *ContractTestSuite) TestListTraces() {
-
-	s.Run("returns traces or error when tracing disabled", func() {
-		args := map[string]interface{}{
-			"namespace":   s.testNS,
-			"serviceName": "productpage",
-		}
-		resp, body, err := s.mcpCall(tools.KialiListTracesEndpoint, args)
-		s.Require().NoError(err)
-		if s.tracingOn {
-			s.requireSuccess(tools.KialiListTracesEndpoint, resp, body)
-			s.requireJSONKeys(tools.KialiListTracesEndpoint, body,
-				"summary", "traces")
-		} else {
-			s.requireNotToolNotFound(tools.KialiListTracesEndpoint, resp, body)
-		}
-	})
-
 	s.Run("returns a valid trace list or a tracing-disabled error", func() {
 		s.fetchTraceList(s.testService)
 	})
