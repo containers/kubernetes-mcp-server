@@ -152,6 +152,49 @@ func (s *Server) reloadToolsets() error {
 	applicableResources := s.collectApplicableResources()
 	applicableResourceTemplates := s.collectApplicableResourceTemplates()
 
+	// Phase 1: convert all items to SDK types. This validates URIs, URITemplates,
+	// and any per-item conversion before any SDK mutation, so a bad item in any
+	// category aborts the reload before we leave the server in a partially
+	// applied state.
+	convertedTools, err := convertItems(applicableTools,
+		func(t api.ServerTool) string { return t.Tool.Name },
+		func(t api.ServerTool) (*mcp.Tool, mcp.ToolHandler, error) { return ServerToolToGoSdkTool(s, t) },
+		"tool",
+	)
+	if err != nil {
+		return err
+	}
+	convertedPrompts, err := convertItems(applicablePrompts,
+		func(p api.ServerPrompt) string { return p.Prompt.Name },
+		func(p api.ServerPrompt) (*mcp.Prompt, mcp.PromptHandler, error) {
+			return ServerPromptToGoSdkPrompt(s, p)
+		},
+		"prompt",
+	)
+	if err != nil {
+		return err
+	}
+	convertedResources, err := convertItems(applicableResources,
+		func(r api.ServerResource) string { return r.Resource.URI },
+		func(r api.ServerResource) (*mcp.Resource, mcp.ResourceHandler, error) {
+			return ServerResourceToGoSdkResource(s, r)
+		},
+		"resource",
+	)
+	if err != nil {
+		return err
+	}
+	convertedResourceTemplates, err := convertItems(applicableResourceTemplates,
+		func(rt api.ServerResourceTemplate) string { return rt.ResourceTemplate.URITemplate },
+		func(rt api.ServerResourceTemplate) (*mcp.ResourceTemplate, mcp.ResourceHandler, error) {
+			return ServerResourceTemplateToGoSdkResourceTemplate(s, rt)
+		},
+		"resource template",
+	)
+	if err != nil {
+		return err
+	}
+
 	// Read the previous state with read lock - don't hold lock while calling external code
 	s.mu.RLock()
 	previousTools := s.enabledTools
@@ -160,53 +203,12 @@ func (s *Server) reloadToolsets() error {
 	previousResourceTemplates := s.enabledResourceTemplates
 	s.mu.RUnlock()
 
-	// Reload tools (calls s.server.AddTool/RemoveTools - external code, no lock held)
-	newTools, err := reloadItems(
-		previousTools,
-		applicableTools,
-		func(t api.ServerTool) string { return t.Tool.Name },
-		s.server.RemoveTools,
-		s.registerTool,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Reload prompts (calls s.server.AddPrompt/RemovePrompts - external code, no lock held)
-	newPrompts, err := reloadItems(
-		previousPrompts,
-		applicablePrompts,
-		func(p api.ServerPrompt) string { return p.Prompt.Name },
-		s.server.RemovePrompts,
-		s.registerPrompt,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Reload resources
-	newResources, err := reloadItems(
-		previousResources,
-		applicableResources,
-		func(r api.ServerResource) string { return r.Resource.URI },
-		s.server.RemoveResources,
-		s.registerResource,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Reload resource templates
-	newResourceTemplates, err := reloadItems(
-		previousResourceTemplates,
-		applicableResourceTemplates,
-		func(rt api.ServerResourceTemplate) string { return rt.ResourceTemplate.URITemplate },
-		s.server.RemoveResourceTemplates,
-		s.registerResourceTemplate,
-	)
-	if err != nil {
-		return err
-	}
+	// Phase 2: commit. Pre-conversion has succeeded, so SDK mutations below
+	// don't error.
+	newTools := commitItems(previousTools, convertedTools, s.server.RemoveTools, s.server.AddTool)
+	newPrompts := commitItems(previousPrompts, convertedPrompts, s.server.RemovePrompts, s.server.AddPrompt)
+	newResources := commitItems(previousResources, convertedResources, s.server.RemoveResources, s.server.AddResource)
+	newResourceTemplates := commitItems(previousResourceTemplates, convertedResourceTemplates, s.server.RemoveResourceTemplates, s.server.AddResourceTemplate)
 
 	// Only hold write lock for the final assignment
 	s.mu.Lock()
@@ -221,23 +223,47 @@ func (s *Server) reloadToolsets() error {
 	return nil
 }
 
-// reloadItems handles the common pattern of reloading MCP server items.
-// It removes items that are no longer applicable, registers new items,
-// and returns the updated list of enabled item names.
-func reloadItems[T any](
-	previous []string,
+// convertedItem pairs a converted SDK item with its handler and the name used
+// for the enabled-list bookkeeping.
+type convertedItem[M, H any] struct {
+	name    string
+	item    M
+	handler H
+}
+
+// convertItems converts each input item to its SDK form. If any conversion
+// fails, the error is wrapped with the item kind and name and returned without
+// converting the rest. Callers must invoke this before mutating SDK state.
+func convertItems[T, M, H any](
 	items []T,
 	getName func(T) string,
-	remove func(...string),
-	register func(T) error,
-) ([]string, error) {
-	// Build new enabled list
-	enabled := make([]string, 0, len(items))
+	convert func(T) (M, H, error),
+	kind string,
+) ([]convertedItem[M, H], error) {
+	out := make([]convertedItem[M, H], 0, len(items))
 	for _, item := range items {
-		enabled = append(enabled, getName(item))
+		m, h, err := convert(item)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert %s %s: %w", kind, getName(item), err)
+		}
+		out = append(out, convertedItem[M, H]{name: getName(item), item: m, handler: h})
+	}
+	return out, nil
+}
+
+// commitItems removes items no longer in the new enabled set and adds the
+// pre-converted items to the SDK. It returns the new enabled-name list.
+func commitItems[M, H any](
+	previous []string,
+	items []convertedItem[M, H],
+	remove func(...string),
+	add func(M, H),
+) []string {
+	enabled := make([]string, 0, len(items))
+	for _, c := range items {
+		enabled = append(enabled, c.name)
 	}
 
-	// Remove items that are no longer applicable
 	toRemove := make([]string, 0)
 	for _, old := range previous {
 		if !slices.Contains(enabled, old) {
@@ -246,14 +272,11 @@ func reloadItems[T any](
 	}
 	remove(toRemove...)
 
-	// Register all items
-	for _, item := range items {
-		if err := register(item); err != nil {
-			return nil, err
-		}
+	for _, c := range items {
+		add(c.item, c.handler)
 	}
 
-	return enabled, nil
+	return enabled
 }
 
 // collectApplicableTools returns tools after applying filtering and mutation
@@ -294,26 +317,6 @@ func (s *Server) collectApplicablePrompts() []api.ServerPrompt {
 	return prompts.MergePrompts(toolsetPrompts, configPrompts)
 }
 
-// registerTool converts and registers a tool with the MCP server
-func (s *Server) registerTool(tool api.ServerTool) error {
-	goSdkTool, goSdkToolHandler, err := ServerToolToGoSdkTool(s, tool)
-	if err != nil {
-		return fmt.Errorf("failed to convert tool %s: %w", tool.Tool.Name, err)
-	}
-	s.server.AddTool(goSdkTool, goSdkToolHandler)
-	return nil
-}
-
-// registerPrompt converts and registers a prompt with the MCP server
-func (s *Server) registerPrompt(prompt api.ServerPrompt) error {
-	mcpPrompt, promptHandler, err := ServerPromptToGoSdkPrompt(s, prompt)
-	if err != nil {
-		return fmt.Errorf("failed to convert prompt %s: %w", prompt.Prompt.Name, err)
-	}
-	s.server.AddPrompt(mcpPrompt, promptHandler)
-	return nil
-}
-
 // collectApplicableResources returns resources from all enabled toolsets after filtering and mutation
 func (s *Server) collectApplicableResources() []api.ServerResource {
 	filter := CompositeResourceFilter()
@@ -346,18 +349,6 @@ func (s *Server) collectApplicableResourceTemplates() []api.ServerResourceTempla
 		}
 	}
 	return templates
-}
-
-// registerResource registers a resource with the MCP server
-func (s *Server) registerResource(res api.ServerResource) error {
-	addResource(s.server, res)
-	return nil
-}
-
-// registerResourceTemplate registers a resource template with the MCP server
-func (s *Server) registerResourceTemplate(rt api.ServerResourceTemplate) error {
-	addResourceTemplate(s.server, rt)
-	return nil
 }
 
 // metricsMiddleware returns a metrics middleware with access to the server's metrics system
