@@ -28,7 +28,9 @@ type ContractTestSuite struct {
 	kialiToken string
 	httpClient *http.Client
 	testNS     string
-	tracingOn  bool
+	testService  string
+	testWorkload string
+	testTraceID  string
 }
 
 func (s *ContractTestSuite) SetupSuite() {
@@ -42,40 +44,19 @@ func (s *ContractTestSuite) SetupSuite() {
 	if s.testNS == "" {
 		s.testNS = "bookinfo"
 	}
+	s.testService = os.Getenv("TEST_SERVICE")
+	if s.testService == "" {
+		s.testService = "productpage"
+	}
+	s.testWorkload = os.Getenv("TEST_WORKLOAD")
+	if s.testWorkload == "" {
+		s.testWorkload = "productpage-v1"
+	}
+	s.testTraceID = os.Getenv("TEST_TRACE_ID")
 
 	s.httpClient = &http.Client{
 		Timeout: 30 * time.Second,
 	}
-
-	s.tracingOn = s.detectTracing()
-}
-
-// detectTracing queries Kiali's /api/tracing endpoint to determine whether
-// distributed tracing (Jaeger/Tempo) is enabled.
-func (s *ContractTestSuite) detectTracing() bool {
-	req, err := http.NewRequest(http.MethodGet, s.kialiURL+"/api/tracing", nil)
-	if err != nil {
-		return false
-	}
-	if s.kialiToken != "" {
-		req.Header.Set("Authorization", "Bearer "+s.kialiToken)
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
-	var info struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := json.Unmarshal(body, &info); err != nil {
-		return false
-	}
-	return info.Enabled
 }
 
 // mcpCall POSTs a JSON body to a Kiali MCP tool endpoint and returns the response.
@@ -141,6 +122,31 @@ func (s *ContractTestSuite) requireNotToolNotFound(endpoint string, resp *http.R
 	}
 }
 
+// requireToolError asserts a JSON error response with the expected status and
+// at least one distinguishing substring in the error message.
+func (s *ContractTestSuite) requireToolError(endpoint string, resp *http.Response, body []byte, expectedStatus int, expectedSubstrings ...string) {
+	s.Require().Equal(expectedStatus, resp.StatusCode,
+		"Endpoint %s returned status %d, expected %d", endpoint, resp.StatusCode, expectedStatus)
+	s.requireNotToolNotFound(endpoint, resp, body)
+
+	var payload struct {
+		Error string `json:"error"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &payload),
+		"Endpoint %s returned a non-JSON error payload: %s", endpoint, string(body))
+	s.Require().NotEmpty(payload.Error,
+		"Endpoint %s returned an empty error message", endpoint)
+
+	errorText := strings.ToLower(payload.Error)
+	for _, expected := range expectedSubstrings {
+		if strings.Contains(errorText, strings.ToLower(expected)) {
+			return
+		}
+	}
+
+	s.FailNow(fmt.Sprintf("Endpoint %s returned unexpected error: %s", endpoint, payload.Error))
+}
+
 // requireSuccess asserts a 2xx status and non-empty response body.
 func (s *ContractTestSuite) requireSuccess(endpoint string, resp *http.Response, body []byte) {
 	s.Require().GreaterOrEqual(resp.StatusCode, 200,
@@ -185,6 +191,109 @@ func (s *ContractTestSuite) requireJSONString(endpoint string, body []byte) stri
 	s.Require().NotEmpty(str, "Endpoint %s returned empty string", endpoint)
 	return str
 }
+func (s *ContractTestSuite) requireJSONMessage(endpoint string, body []byte) string {
+	var message string
+	s.Require().NoError(json.Unmarshal(body, &message),
+		"Endpoint %s returned an unexpected non-string payload: %s", endpoint, string(body))
+	s.Require().NotEmpty(message,
+		"Endpoint %s returned an empty message payload", endpoint)
+	return message
+}
+
+type traceListPayload struct {
+	Summary struct {
+		Namespace    string  `json:"namespace"`
+		Service      string  `json:"service"`
+		TotalFound   int     `json:"total_found"`
+		AvgDurationM float64 `json:"avg_duration_ms"`
+	} `json:"summary"`
+	Traces []struct {
+		ID string `json:"id"`
+	} `json:"traces"`
+}
+
+func (s *ContractTestSuite) fetchTraceList(serviceName string) (*traceListPayload, bool) {
+	args := map[string]interface{}{
+		"namespace":   s.testNS,
+		"serviceName": serviceName,
+	}
+	resp, body, err := s.mcpCall(tools.KialiListTracesEndpoint, args)
+	s.Require().NoError(err)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		s.requireSuccess(tools.KialiListTracesEndpoint, resp, body)
+
+		var payload traceListPayload
+		s.Require().NoError(json.Unmarshal(body, &payload))
+		s.Equal(s.testNS, payload.Summary.Namespace)
+		s.Equal(serviceName, payload.Summary.Service)
+		if payload.Summary.TotalFound > 0 {
+			s.Require().NotEmpty(payload.Traces,
+				"list_traces reported %d traces but returned an empty trace list", payload.Summary.TotalFound)
+			s.NotEmpty(payload.Traces[0].ID,
+				"list_traces should return a trace id when traces are present")
+		}
+
+		return &payload, true
+
+	case http.StatusNotFound:
+		s.requireToolError(tools.KialiListTracesEndpoint, resp, body, http.StatusNotFound, "tracing")
+		return nil, false
+
+	default:
+		s.FailNow(fmt.Sprintf("list_traces returned unexpected status %d", resp.StatusCode))
+		return nil, false
+	}
+}
+
+func (s *ContractTestSuite) requireServiceEntryHost(name, expectedHost string) {
+	args := map[string]interface{}{
+		"action":    "get",
+		"namespace": s.testNS,
+		"group":     "networking.istio.io",
+		"version":   "v1",
+		"kind":      "ServiceEntry",
+		"object":    name,
+	}
+	resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
+	s.Require().NoError(err)
+	s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
+
+	var payload struct {
+		Resource struct {
+			Metadata struct {
+				Name      string `json:"name"`
+				Namespace string `json:"namespace"`
+			} `json:"metadata"`
+			Spec struct {
+				Hosts []string `json:"hosts"`
+			} `json:"spec"`
+		} `json:"resource"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &payload))
+	s.Equal(name, payload.Resource.Metadata.Name)
+	s.Equal(s.testNS, payload.Resource.Metadata.Namespace)
+	s.Contains(payload.Resource.Spec.Hosts, expectedHost)
+}
+
+func (s *ContractTestSuite) requireServiceEntryMissing(name string) {
+	args := map[string]interface{}{
+		"action":    "get",
+		"namespace": s.testNS,
+		"group":     "networking.istio.io",
+		"version":   "v1",
+		"kind":      "ServiceEntry",
+		"object":    name,
+	}
+	resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
+	s.Require().NoError(err)
+	s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
+
+	message := s.requireJSONMessage(tools.KialiManageIstioConfigReadEndpoint, body)
+	s.Contains(message, "does not exist")
+	s.Contains(message, name)
+}
 
 func (s *ContractTestSuite) TestGetMeshStatus() {
 	s.Run("returns mesh status with non-empty response", func() {
@@ -219,8 +328,45 @@ func (s *ContractTestSuite) TestListOrGetResources() {
 		resp, body, err := s.mcpCall(tools.KialiListOrGetResourcesEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiListOrGetResourcesEndpoint, resp, body)
-		obj := s.requireJSONObject(tools.KialiListOrGetResourcesEndpoint, body)
-		s.NotEmpty(obj, "list_or_get_resources response should have at least one cluster key")
+
+		// Token-efficiency check: service listing should return a compact summary structure
+		// (cluster -> []{name, namespace, health, configuration, details, labels}) rather than
+		// raw Kiali /api/services payload (which includes large validations/istioReferences blocks).
+		type serviceSummary struct {
+			Name          string `json:"name"`
+			Namespace     string `json:"namespace"`
+			Health        string `json:"health"`
+			Configuration string `json:"configuration"`
+			Details       string `json:"details"`
+			Labels        string `json:"labels"`
+		}
+		var payload map[string][]serviceSummary
+		s.Require().NoError(json.Unmarshal(body, &payload),
+			"list_or_get_resources(service) returned unexpected JSON: %s", string(body))
+		s.Require().NotEmpty(payload, "expected at least one cluster key in response")
+
+		seenAtLeastOne := false
+		for cluster, services := range payload {
+			s.NotEmpty(cluster, "cluster key must be non-empty")
+			if len(services) == 0 {
+				continue
+			}
+			seenAtLeastOne = true
+			for _, svc := range services {
+				s.NotEmpty(svc.Name, "service name should not be empty")
+				s.NotEmpty(svc.Namespace, "service namespace should not be empty")
+				s.NotEmpty(svc.Configuration, "configuration summary should not be empty")
+				s.NotEmpty(svc.Labels, "labels summary should not be empty (use 'None' if no labels)")
+				// Health/details may be empty depending on telemetry and Istio references.
+				_ = svc.Health
+				_ = svc.Details
+			}
+		}
+		s.Require().True(seenAtLeastOne, "expected at least one service in response")
+
+		// Heuristic: compact output should not contain raw payload top-level blocks.
+		s.NotContains(string(body), `"validations"`, "response should not include raw validations block")
+		s.NotContains(string(body), `"istioReferences"`, "response should not include raw istioReferences block")
 	})
 
 	s.Run("lists workloads in test namespace", func() {
@@ -241,7 +387,7 @@ func (s *ContractTestSuite) TestGetMetrics() {
 		args := map[string]interface{}{
 			"resourceType": "service",
 			"namespace":    s.testNS,
-			"resourceName": "productpage",
+			"resourceName": s.testService,
 		}
 		resp, body, err := s.mcpCall(tools.KialiGetMetricsEndpoint, args)
 		s.Require().NoError(err)
@@ -255,7 +401,7 @@ func (s *ContractTestSuite) TestGetLogs() {
 	s.Run("returns logs for a workload", func() {
 		args := map[string]interface{}{
 			"namespace": s.testNS,
-			"name":      "productpage-v1",
+			"name":      s.testWorkload,
 		}
 		resp, body, err := s.mcpCall(tools.KialiGetLogsEndpoint, args)
 		s.Require().NoError(err)
@@ -268,7 +414,7 @@ func (s *ContractTestSuite) TestGetPodPerformance() {
 	s.Run("returns pod performance for a workload", func() {
 		args := map[string]interface{}{
 			"namespace":    s.testNS,
-			"workloadName": "productpage-v1",
+			"workloadName": s.testWorkload,
 		}
 		resp, body, err := s.mcpCall(tools.KialiGetPodPerformanceEndpoint, args)
 		s.Require().NoError(err)
@@ -291,6 +437,8 @@ func (s *ContractTestSuite) TestManageIstioConfigRead() {
 
 func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 	var createdName string
+	originalHost := "contract-test.example.com"
+	updatedHost := "contract-test-updated.example.com"
 
 	s.Run("creates a ServiceEntry", func() {
 		createdName = fmt.Sprintf("contract-test-%d", time.Now().UnixMilli())
@@ -307,7 +455,7 @@ func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 				"ports": []map[string]interface{}{
 					{"name": "http", "protocol": "HTTP", "number": 80},
 				},
-				"hosts": []string{"contract-test.example.com"},
+				"hosts": []string{originalHost},
 			},
 		}
 		dataBytes, err := json.Marshal(seData)
@@ -326,9 +474,72 @@ func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigEndpoint, resp, body)
 		s.requireValidJSON(tools.KialiManageIstioConfigEndpoint, body)
+
+		message := s.requireJSONMessage(tools.KialiManageIstioConfigEndpoint, body)
+		s.Contains(message, "Successfully created ServiceEntry")
+		s.Contains(message, createdName)
 	})
 
-	s.Run("deletes the ServiceEntry", func() {
+	s.Run("reads back the created ServiceEntry", func() {
+		if createdName == "" {
+			s.T().Skip("create step did not produce a resource name")
+			return
+		}
+		s.requireServiceEntryHost(createdName, originalHost)
+	})
+
+	s.Run("patches the ServiceEntry", func() {
+		if createdName == "" {
+			s.T().Skip("create step did not produce a resource name")
+			return
+		}
+
+		seData := map[string]interface{}{
+			"apiVersion": "networking.istio.io/v1",
+			"kind":       "ServiceEntry",
+			"metadata": map[string]interface{}{
+				"name":      createdName,
+				"namespace": s.testNS,
+			},
+			"spec": map[string]interface{}{
+				"location":   "MESH_EXTERNAL",
+				"resolution": "NONE",
+				"ports": []map[string]interface{}{
+					{"name": "http", "protocol": "HTTP", "number": 80},
+				},
+				"hosts": []string{updatedHost},
+			},
+		}
+		dataBytes, err := json.Marshal(seData)
+		s.Require().NoError(err)
+
+		args := map[string]interface{}{
+			"action":    "patch",
+			"namespace": s.testNS,
+			"group":     "networking.istio.io",
+			"version":   "v1",
+			"kind":      "ServiceEntry",
+			"object":    createdName,
+			"data":      string(dataBytes),
+		}
+		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigEndpoint, args)
+		s.Require().NoError(err)
+		s.requireSuccess(tools.KialiManageIstioConfigEndpoint, resp, body)
+
+		message := s.requireJSONMessage(tools.KialiManageIstioConfigEndpoint, body)
+		s.Contains(message, "Successfully patched ServiceEntry")
+		s.Contains(message, createdName)
+	})
+
+	s.Run("reads back the patched ServiceEntry", func() {
+		if createdName == "" {
+			s.T().Skip("create step did not produce a resource name")
+			return
+		}
+		s.requireServiceEntryHost(createdName, updatedHost)
+	})
+
+	s.Run("previews delete for the ServiceEntry", func() {
 		if createdName == "" {
 			s.T().Skip("create step did not produce a resource name")
 			return
@@ -344,10 +555,55 @@ func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigEndpoint, resp, body)
+
+		var payload struct {
+			Result  string `json:"result"`
+			Actions []struct {
+				Operation string `json:"operation"`
+				Object    string `json:"object"`
+			} `json:"actions"`
+		}
+		s.Require().NoError(json.Unmarshal(body, &payload))
+		s.Contains(payload.Result, "PREVIEW READY")
+		s.Require().NotEmpty(payload.Actions)
+		s.Equal("delete", payload.Actions[0].Operation)
+		s.Equal(createdName, payload.Actions[0].Object)
+	})
+
+	s.Run("deletes the ServiceEntry after confirmation", func() {
+		if createdName == "" {
+			s.T().Skip("create step did not produce a resource name")
+			return
+		}
+		args := map[string]interface{}{
+			"action":    "delete",
+			"namespace": s.testNS,
+			"group":     "networking.istio.io",
+			"version":   "v1",
+			"kind":      "ServiceEntry",
+			"object":    createdName,
+			"confirmed": true,
+		}
+		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigEndpoint, args)
+		s.Require().NoError(err)
+		s.requireSuccess(tools.KialiManageIstioConfigEndpoint, resp, body)
+
+		message := s.requireJSONMessage(tools.KialiManageIstioConfigEndpoint, body)
+		s.Contains(message, "Successfully deleted ServiceEntry")
+		s.Contains(message, createdName)
+	})
+
+	s.Run("confirms the ServiceEntry is gone", func() {
+		if createdName == "" {
+			s.T().Skip("create step did not produce a resource name")
+			return
+		}
+		s.requireServiceEntryMissing(createdName)
 	})
 }
 
 func (s *ContractTestSuite) TestListTraces() {
+
 	s.Run("returns traces or error when tracing disabled", func() {
 		args := map[string]interface{}{
 			"namespace":   s.testNS,
@@ -363,25 +619,46 @@ func (s *ContractTestSuite) TestListTraces() {
 			s.requireNotToolNotFound(tools.KialiListTracesEndpoint, resp, body)
 		}
 	})
+
+	s.Run("returns a valid trace list or a tracing-disabled error", func() {
+		s.fetchTraceList(s.testService)
+	})
 }
 
 func (s *ContractTestSuite) TestGetTraceDetails() {
-	s.Run("returns trace details or expected error", func() {
+	s.Run("returns a real trace when available, otherwise a precise error", func() {
+		traceList, tracingAvailable := s.fetchTraceList(s.testService)
+
+		traceID := "0000000000000001"
+		expectSuccess := false
+		if s.testTraceID != "" {
+			traceID = s.testTraceID
+			expectSuccess = true
+		} else if tracingAvailable && traceList != nil && len(traceList.Traces) > 0 {
+			traceID = traceList.Traces[0].ID
+			expectSuccess = true
+		}
+
 		args := map[string]interface{}{
-			"traceId":   "0000000000000001",
-			"namespace": s.testNS,
+			"traceId": traceID,
 		}
 		resp, body, err := s.mcpCall(tools.KialiGetTraceDetailsEndpoint, args)
 		s.Require().NoError(err)
 
-		// A fake trace ID legitimately returns 404 "Trace not found" from the tool.
-		// Ensure it's not the handler-level "Tool 'xxx' not found" 404.
-		if resp.StatusCode == http.StatusNotFound {
-			s.requireNotToolNotFound(tools.KialiGetTraceDetailsEndpoint, resp, body)
-		} else {
-			s.True(resp.StatusCode >= 200 && resp.StatusCode < 300,
-				"get_trace_details should return 200 or 404, got %d", resp.StatusCode)
+		if expectSuccess {
+			s.requireSuccess(tools.KialiGetTraceDetailsEndpoint, resp, body)
+
+			var payload struct {
+				TraceID string  `json:"trace_id"`
+				TotalMS float64 `json:"total_ms"`
+			}
+			s.Require().NoError(json.Unmarshal(body, &payload))
+			s.Equal(traceID, payload.TraceID)
+			s.Greater(payload.TotalMS, float64(0))
+			return
 		}
+
+		s.requireToolError(tools.KialiGetTraceDetailsEndpoint, resp, body, http.StatusNotFound, "trace not found", "tracing")
 	})
 }
 
