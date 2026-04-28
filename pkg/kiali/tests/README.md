@@ -16,7 +16,7 @@ Contract tests ensure that:
 
 ## Prerequisites
 
-- A running Kiali instance (with bookinfo demo app deployed)
+- A running Kiali instance
 - Go 1.24 or later
 
 ## Configuration
@@ -31,6 +31,9 @@ Tests are configured via environment variables:
 
 - `KIALI_TOKEN` - Bearer token for authentication (if required)
 - `TEST_NAMESPACE` - Namespace to use for tests (default: `bookinfo`)
+- `TEST_SERVICE` - Service name used by metrics and tracing tests (default: `productpage`)
+- `TEST_WORKLOAD` - Workload name used by logs and pod performance tests (default: `productpage-v1`)
+- `TEST_TRACE_ID` - Optional known trace ID for `get_trace_details`; useful when the test environment does not guarantee fresh traces for `TEST_SERVICE`
 
 ## Running Tests
 
@@ -53,6 +56,7 @@ Tests are organized using the `testify/suite` pattern:
 
 - **ContractTestSuite** - Main test suite that POSTs to each `/api/chat/mcp/<tool>` endpoint
 - Each test method validates a specific MCP tool endpoint using the constants from `pkg/toolsets/kiali/tools/endpoints.go`
+- Resource-specific tests are driven by `TEST_NAMESPACE`, `TEST_SERVICE`, `TEST_WORKLOAD`, and optionally `TEST_TRACE_ID` so CI can target its own fixture data
 
 ### Endpoint Coverage
 
