@@ -311,6 +311,20 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 toolsets = ["core", "config", "helm", "kubevirt"]
 ```
 
+**Available Resources:**
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-START -->
+
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-END -->
+
+**Available Resource Templates:**
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-START -->
+
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-END -->
+
 ### Tool Filtering
 
 Fine-grained control over individual tools within enabled toolsets.
@@ -467,6 +481,7 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. |
 | `oauth_audience` | string | `""` | Valid audience for OAuth tokens (for offline JWT claim validation). |
 | `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
+| `skip_jwt_verification` | boolean | `false` | When `true`, allows JWTs without cryptographic signature verification when `require_oauth` is enabled but no `authorization_url` is configured. Only use behind a trusted reverse proxy that already verifies tokens. When `false` (default), the server refuses to start in this configuration. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
 | `sts_client_id` | string | `""` | OAuth client ID for backend token exchange. |
@@ -477,7 +492,7 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `sts_auth_style` | string | `"params"` | How client credentials are sent: `params` (body), `header` (Basic Auth), or `assertion` (JWT). |
 | `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
 | `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
-| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (use OAuth token) or `kubeconfig` (use kubeconfig credentials). |
+| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
 

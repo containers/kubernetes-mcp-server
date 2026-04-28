@@ -23,18 +23,29 @@ func (t *Toolset) GetDescription() string {
 
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
-		kialiTools.InitGetMeshGraph(),
+		kialiTools.InitGetMeshTrafficGraph(),
+		kialiTools.InitGetMeshStatus(),
 		kialiTools.InitManageIstioConfigRead(),
 		kialiTools.InitManageIstioConfig(),
-		kialiTools.InitGetResourceDetails(),
+		kialiTools.InitListOrGetResources(),
+		kialiTools.InitListTraces(),
+		kialiTools.InitGetTraceDetails(),
+		kialiTools.InitGetPodPerformance(),
+		kialiTools.InitGetLogs(),
 		kialiTools.InitGetMetrics(),
-		kialiTools.InitLogs(),
-		kialiTools.InitGetTraces(),
 	)
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	// Kiali toolset does not provide prompts
+	return nil
+}
+
+func (t *Toolset) GetResources() []api.ServerResource {
+	return nil
+}
+
+func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
 	return nil
 }
 

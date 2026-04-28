@@ -15,12 +15,36 @@
 
 ## Installing the Chart
 
-The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified.
+The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified unless you disable Ingress and use another exposure mechanism (for example Gateway API; see below).
 
 Install the Chart using the following command from the root of this directory: 
 
 ```shell
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
+```
+
+### Gateway API (HTTPRoute)
+
+If your platform uses [Gateway API](https://gateway.networking.k8s.io/) instead of classic Ingress, set `ingress.enabled` to `false` and enable `httpRoute` with `parentRefs`, `rules` (optional `matches`, `filters`, and `timeouts` are passed through), and optionally `hostnames`. The chart adds `backendRefs` pointing at the release `Service` and `service.port`. `parentRefs` and `hostnames` are rendered with `tpl` on their YAML so you can reference `Release` metadata in values. `httpRoute.parentRefs` is required when `httpRoute.enabled=true`; leaving it empty fails at `helm template` / `helm install` time.
+
+```yaml
+ingress:
+  enabled: false
+httpRoute:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: my-gateway
+      namespace: gateway-system
+      sectionName: http
+  hostnames:
+    - mcp.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
 ```
 
 ### Optimized OpenShift Deployment

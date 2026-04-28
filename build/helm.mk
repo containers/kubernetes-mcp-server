@@ -67,6 +67,9 @@ helm-validate: kubeconform ## Validate Helm chart manifests with kubeconform
 	@echo "Validating with configmap-numeric-test values..."
 	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""
+	@echo "Validating with Gateway API HTTPRoute values..."
+	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/httproute-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@echo ""
 	@echo "Testing ConfigMap numeric .0 cleanup..."
 	@output=$$(helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml 2>&1); \
 	failed=0; \

@@ -20,101 +20,87 @@ The `update_tasks` target runs `scripts/update_tasks.sh`, which parses every sce
 
 ## Tasks defined
 <!-- TASKS-START -->
-- High-Level Observability & Health
-  - [easy] obs-unhealthy-namespaces (Unhealthy Namespaces)
-        **Prompt:** *Are there any degraded namespaces in my mesh right now?*
-  - [easy] show-topology (Show topology bookinfo)
-        **Prompt:** *Show me the topology of the bookinfo namespace.*
-  - [easy] status-kiali-istio (Status Kiali and Istio)
-        **Prompt:** *Give me a status report on the interaction between Kiali and Istio components*
-  - [easy] topology-mesh-namespaces (Show topology for multiple namespaces)
-        **Prompt:** *Show me the topology for the bookinfo and default namespaces together.*
-  - [easy] topology-workload-graph (Show workload-level topology)
-        **Prompt:** *Show me the workload-level graph for the bookinfo namespace.*
-- Istio Configuration & Management
-  - [easy] istio-list (List all VS in bookinfo namespace)
-        **Prompt:** *List all VirtualServices in the bookinfo namespace and check if they have any validation errors*
-  - [easy] istio-list-destination-rules (List DestinationRules in namespace)
-        **Prompt:** *List all DestinationRules in the bookinfo namespace and report any validation errors.*
-  - [medium] istio-create (Create a gateway)
-        **Prompt:** *Create a Gateway named my-gateway in the istio-system namespace.*
-  - [medium] istio-delete (Remove fault Injection)
-        **Prompt:** *Fix my namespace bookinfo to remove the fault injection.*
-  - [medium] istio-patch (Patch my traffic)
-        **Prompt:** *I need to shift 50% of traffic to v2 of the reviews service. Apply a patch to the VirtualService with name reviews. Not confirm the patch, just apply it.*
+- Configuration Management
+  - [easy] istio-list (List and Validate VirtualServices)
+        **Prompt:** *|*
+  - [easy] istio-list-destination-rules (List and Validate DestinationRules)
+        **Prompt:** *"List all DestinationRules in the 'bookinfo' namespace and report if any of them have validation errors."*
+  - [medium] istio-create (Create Istio Gateway)
+        **Prompt:** *"Create a new Istio Gateway named 'my-gateway' in the 'istio-system' namespace."*
+  - [medium] istio-delete (Remove Fault Injection)
+        **Prompt:** *"The 'bookinfo' namespace seems to have some fault injection configured that's causing issues. Please identify and remove any fault injection from the 'ratings' VirtualService."*
+  - [medium] istio-patch (Update Traffic Shifting)
+        **Prompt:** *"I need to implement a 50/50 traffic split between versions for the 'reviews' service in the 'bookinfo' namespace. Apply the necessary patch to the 'reviews' VirtualService without asking for confirmation."*
+- Mesh Health & Status
+  - [easy] obs-unhealthy-namespaces (Identify Degraded Namespaces)
+        **Prompt:** *"Check the health of my mesh and let me know if there are any unhealthy namespaces right now."*
+  - [easy] resource-mesh-status (Comprehensive Mesh Health Audit)
+        **Prompt:** *|*
+  - [easy] status-kiali-istio (Audit Control Plane Connectivity)
+        **Prompt:** *"Report on the current status and connectivity between Kiali and the Istio control plane components."*
+- Performance Analysis
+  - [easy] metrics-service-request-rate (Analyze Service Traffic Volume)
+        **Prompt:** *|*
+  - [easy] metrics-workload-latency (Analyze Workload Response Times)
+        **Prompt:** *|*
 - Resource Inspection
-  - [easy] metrics-service-request-rate (Metrics for service (request rate))
-        **Prompt:** *Show me the request rate and error rate metrics for the productpage service in the bookinfo namespace over the last 10 minutes.*
-  - [easy] metrics-workload-latency (Metrics for workload (latency))
-        **Prompt:** *What are the latency metrics (p50, p95, p99) for the reviews workload in the bookinfo namespace? Use a 5-minute rate interval.*
-  - [easy] resource-get-namespaces (Get mesh namespaces)
-        **Prompt:** *Check namespaces in my mesh.*
-  - [easy] resource-get-service-detail (Get service detail)
-        **Prompt:** *Get the full details for the service reviews in the namespace bookinfo.*
-  - [easy] resource-get-workload-detail (Get workload detail)
-        **Prompt:** *Get the full details and health status for the reviews-v1 workload in the bookinfo namespace.*
-  - [easy] resource-list-services (List services in namespace)
-        **Prompt:** *List all services in the bookinfo namespace.*
-  - [easy] resource-list-workloads (List workloads without sidecar)
-        **Prompt:** *List all workloads in the bookinfo namespace that have missing sidecars.*
-  - [easy] resource-mesh-status (Status of my mesh)
-        **Prompt:** *Check my mesh.*
-- Troubleshooting & Debugging
-  - [easy] troubleshooting-latency-traces (Get latency workload)
-        **Prompt:** *Analyze the latency for the reviews workload over the last 30 minutes?*
-  - [easy] troubleshooting-log (Get log productpage due 500)
-        **Prompt:** *Why is the productpage service returning 500 errors?*
-  - [easy] troubleshooting-trace-lagging (Check traces for a service)
-        **Prompt:** *I see a spike in duration for ratings. Can you check the traces to see which span is lagging?*
-  - [easy] troubleshooting-traces-by-app (Get traces for an app)
-        **Prompt:** *Get the latest traces for the productpage app in the bookinfo namespace.*
-  - [easy] troubleshooting-workload-logs (Get workload logs)
-        **Prompt:** *Show me the last 20 log lines for the productpage-v1 workload in the bookinfo namespace.*
-- Uncategorized
-  - [easy] get-namespaces (get-namespaces)
-        **Prompt:** *Check namespaces in my mesh.*
-  - [easy] get-service-detail (get-service-detail)
-        **Prompt:** *Give me information about my service details in the namespace bookinfo.*
-  - [easy] mesh-status (mesh-status)
-        **Prompt:** *Check my mesh.*
+  - [easy] resource-get-namespaces (List Mesh-Enabled Namespaces)
+        **Prompt:** *"Provide a list of all namespaces currently included in my Istio service mesh."*
+  - [easy] resource-get-service-detail (Inspect Service Details)
+        **Prompt:** *"Get the full configuration details and current health status for the 'reviews' service in the 'bookinfo' namespace."*
+  - [easy] resource-get-workload-detail (Inspect Workload Details)
+        **Prompt:** *"Inspect the 'reviews-v1' workload in the 'bookinfo' namespace and provide its detailed status and health information."*
+  - [easy] resource-list-services (Inventory Namespace Services)
+        **Prompt:** *"List all services available in the 'bookinfo' namespace."*
+  - [easy] resource-list-workloads (Inventory Workloads with Sidecar Status)
+        **Prompt:** *"Identify any workloads in the 'bookinfo' namespace that are missing the Istio sidecar proxy."*
+- Traffic Observability
+  - [easy] show-topology (Visualize Namespace Traffic)
+        **Prompt:** *"Show me the traffic topology graph for the 'bookinfo' namespace."*
+  - [easy] topology-mesh-namespaces (Visualize Cross-Namespace Traffic)
+        **Prompt:** *|*
+  - [easy] topology-workload-graph (Visualize Workload-Level Topology)
+        **Prompt:** *|*
+- Troubleshooting & Diagnostics
+  - [easy] troubleshooting-log (Debug Service Errors via Logs)
+        **Prompt:** *|*
+  - [easy] troubleshooting-trace-lagging (Analyze Latency with Distributed Tracing)
+        **Prompt:** *|*
+  - [easy] troubleshooting-workload-logs (Retrieve Recent Workload Logs)
+        **Prompt:** *"Retrieve the last 20 log lines for the 'productpage-v1' workload in the 'bookinfo' namespace."*
 <!-- TASKS-END -->
 
 
 <!-- SUMMARY-OUTPUT-START -->
 === Evaluation Summary ===
 
-  ✓ get-namespaces (assertions: 3/3)
-  ✓ get-service-detail (assertions: 3/3)
-  ✓ Create a gateway (assertions: 3/3)
-  ✓ Remove fault Injection (assertions: 3/3)
-  ✓ List all VS in bookinfo namespace (assertions: 3/3)
-  ✓ List DestinationRules in namespace (assertions: 3/3)
-  ✓ Patch my traffic (assertions: 3/3)
-  ✓ mesh-status (assertions: 3/3)
-  ✓ Metrics for service (request rate) (assertions: 3/3)
-  ✓ Metrics for workload (latency) (assertions: 3/3)
-  ✓ Unhealthy Namespaces (assertions: 3/3)
-  ✓ Get mesh namespaces (assertions: 3/3)
-  ✓ Get service detail (assertions: 3/3)
-  ✓ Get workload detail (assertions: 3/3)
-  ✓ List services in namespace (assertions: 3/3)
-  ✓ List workloads without sidecar (assertions: 3/3)
-  ✓ Status of my mesh (assertions: 3/3)
-  ✓ Show topology bookinfo (assertions: 3/3)
-  ✓ Status Kiali and Istio (assertions: 3/3)
-  ✓ Show topology for multiple namespaces (assertions: 3/3)
-  ✓ Show workload-level topology (assertions: 3/3)
-  ✓ Get latency workload (assertions: 3/3)
-  ✓ Get log productpage due 500 (assertions: 3/3)
-  ✓ Check traces for a service (assertions: 3/3)
-  ✓ Get traces for an app (assertions: 3/3)
-  ✓ Get workload logs (assertions: 3/3)
+  ✓ Create Istio Gateway (assertions: 3/3)
+  ✓ Remove Fault Injection (assertions: 3/3)
+  ✓ List and Validate VirtualServices (assertions: 3/3)
+  ✓ List and Validate DestinationRules (assertions: 3/3)
+  ✓ Update Traffic Shifting (assertions: 3/3)
+  ✓ Analyze Service Traffic Volume (assertions: 3/3)
+  ✓ Analyze Workload Response Times (assertions: 3/3)
+  ✓ Identify Degraded Namespaces (assertions: 3/3)
+  ✓ List Mesh-Enabled Namespaces (assertions: 3/3)
+  ✓ Inspect Service Details (assertions: 3/3)
+  ✓ Inspect Workload Details (assertions: 3/3)
+  ✓ Inventory Namespace Services (assertions: 3/3)
+  ✓ Inventory Workloads with Sidecar Status (assertions: 3/3)
+  ✓ Comprehensive Mesh Health Audit (assertions: 3/3)
+  ✓ Visualize Namespace Traffic (assertions: 3/3)
+  ✓ Audit Control Plane Connectivity (assertions: 3/3)
+  ✓ Visualize Cross-Namespace Traffic (assertions: 3/3)
+  ✓ Visualize Workload-Level Topology (assertions: 3/3)
+  ✓ Debug Service Errors via Logs (assertions: 3/3)
+  ✓ Analyze Latency with Distributed Tracing (assertions: 3/3)
+  ✓ Retrieve Recent Workload Logs (assertions: 3/3)
 
-Tasks:      26/26 passed (100.00%)
-Assertions: 78/78 passed (100.00%)
-Tokens:     ~126394 (incomplete - some counts failed)
-MCP schemas: ~43628 (included in token total)
+Tasks: 21/21 passed (100.00%)
+Assertions: 63/63 passed (100.00%)
+Tokens: ~82147 (incomplete - some counts failed)
+MCP schemas: ~59787 (included in token total)
 Judge used tokens:
-  Input:  22348 tokens
-  Output: 1479 tokens
+Input: 98980 tokens
+Output: 3199 tokens
 <!-- SUMMARY-OUTPUT-END -->

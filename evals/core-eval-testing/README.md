@@ -1,10 +1,10 @@
 # Core Eval Testing
 
-Eval configurations for running **core** task suites (kubernetes, config, helm) across different LLM providers and agent types.
+Eval configurations for running **core** task suites (core, config, helm) across different LLM providers and agent types.
 
 ## Naming
 
-"Core" refers to the three foundational task suites: `kubernetes`, `config`, and `helm`. Each subdirectory contains eval configs for all three suites using a specific provider/agent combination.
+"Core" refers to the three foundational task suites: `core`, `config`, and `helm`. Each subdirectory contains eval configs for all three suites using a specific provider/agent combination.
 
 ## Directory structure
 
@@ -15,7 +15,7 @@ Each subdirectory follows the pattern `<agent-type>-<provider>/`:
 
 Each contains:
 - `agent.yaml` — agent configuration (model, type)
-- `eval-kubernetes.yaml` — eval config for the `kubernetes` task suite
+- `eval-core.yaml` — eval config for the `core` task suite
 - `eval-config.yaml` — eval config for the `config` task suite
 - `eval-helm.yaml` — eval config for the `helm` task suite
 

@@ -28,6 +28,11 @@ serviceAccount:
   # -- The name of the service account to use.
   # -- If not set and create is true, a name is generated using the fullname template
   name: ""
+  # -- Whether to auto-mount the ServiceAccount token into the pod.
+  # Required for in-cluster Kubernetes API access (default).
+  # Set to false for OAuth passthrough deployments where the server
+  # uses the user's token instead of the ServiceAccount token.
+  automountToken: true
 
 # -- RBAC configuration for the MCP server.
 # -- Use these lists to add custom RBAC resources without modifying templates.
@@ -104,6 +109,7 @@ podSecurityContext: {}
 # -- Default Security Context for the Container when one is not provided
 defaultSecurityContext:
   allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
   capabilities:
       drop:
       - ALL
@@ -135,6 +141,28 @@ ingress:
   hosts:
   tls:
     #secretName: ""
+
+# -- Gateway API HTTPRoute ([gateway.networking.k8s.io/v1](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute)).
+# -- Disabled by default. When enabled, set `parentRefs`, `rules` (with `matches` / optional `filters` / `timeouts`), and optionally `hostnames`; the chart appends `backendRefs` to the release Service.
+httpRoute:
+  enabled: false
+  annotations: {}
+  labels: {}
+  parentRefs: []
+  # parentRefs:
+  #   - group: gateway.networking.k8s.io
+  #     kind: Gateway
+  #     name: my-gateway
+  #     namespace: gateway-system
+  #     sectionName: http
+  hostnames: []
+  # hostnames:
+  #   - mcp.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
 
 # -- Resource requests and limits for the container.
 resources:
@@ -200,6 +228,7 @@ extraArgs: []
 
 # -- Additional containers to add to the pod (sidecars).
 # -- Each container is defined as a complete container spec.
+# -- Note: sidecars do not inherit defaultSecurityContext or the /tmp emptyDir mount; configure them per-container if needed.
 extraContainers: []
 # - name: sidecar-example
 #   image: quay.io/prometheus/busybox:latest

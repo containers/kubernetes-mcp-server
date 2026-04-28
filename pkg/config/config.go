@@ -66,6 +66,12 @@ type StaticConfig struct {
 	// AuthorizationURL is the URL of the OIDC authorization server.
 	// It is used for token validation and for STS token exchange.
 	AuthorizationURL string `toml:"authorization_url,omitempty"`
+	// SkipJWTVerification allows the server to accept JWTs without cryptographic
+	// signature verification when require_oauth is enabled but no authorization_url
+	// is configured (offline-only validation). Only use behind a trusted reverse proxy
+	// that performs token verification. When false (default), the server refuses to
+	// start if require_oauth is true and authorization_url is empty.
+	SkipJWTVerification bool `toml:"skip_jwt_verification,omitempty"`
 	// DisableDynamicClientRegistration indicates whether dynamic client registration is disabled.
 	// If true, the .well-known endpoints will not expose the registration endpoint.
 	DisableDynamicClientRegistration bool `toml:"disable_dynamic_client_registration,omitempty"`
@@ -92,8 +98,8 @@ type StaticConfig struct {
 	// StsClientKeyFile is the path to the client private key PEM file for JWT assertion auth
 	StsClientKeyFile string `toml:"sts_client_key_file,omitempty"`
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
-	// Valid values: "passthrough" (use OAuth token, with optional exchange), "kubeconfig" (use kubeconfig credentials).
-	// If empty, auto-detects: passthrough when require_oauth=true, otherwise kubeconfig.
+	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
+	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
 	ClusterAuthMode      string `toml:"cluster_auth_mode,omitempty"`
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
 	ServerURL            string `toml:"server_url,omitempty"`
@@ -418,6 +424,10 @@ func (c *StaticConfig) GetStsClientKeyFile() string {
 	return c.StsClientKeyFile
 }
 
+func (c *StaticConfig) GetCertificateAuthority() string {
+	return c.CertificateAuthority
+}
+
 func (c *StaticConfig) IsValidationEnabled() bool {
 	return c.ValidationEnabled
 }
@@ -432,6 +442,10 @@ func (c *StaticConfig) GetConfirmationFallback() string {
 
 func (c *StaticConfig) IsRequireTLS() bool {
 	return c.RequireTLS
+}
+
+func (c *StaticConfig) IsRequireOAuth() bool {
+	return c.RequireOAuth
 }
 
 // WithProviderStrategies sets the known cluster-provider strategies for
@@ -490,6 +504,9 @@ func (c *StaticConfig) Validate() error {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
 		}
 	}
+	if err := c.validateSkipJWTVerification(); err != nil {
+		return err
+	}
 	if c.CertificateAuthority != "" {
 		if _, err := os.Stat(c.CertificateAuthority); err != nil {
 			return fmt.Errorf("certificate-authority must be a valid file path: %w", err)
@@ -546,6 +563,24 @@ func (c *StaticConfig) validateConfirmation() error {
 	return nil
 }
 
+// validateSkipJWTVerification checks that the user has explicitly opted in to
+// skipping JWT signature verification when require_oauth is enabled but no
+// authorization_url is configured.
+func (c *StaticConfig) validateSkipJWTVerification() error {
+	if !c.RequireOAuth || c.AuthorizationURL != "" {
+		return nil
+	}
+	if c.SkipJWTVerification {
+		klog.Warningf("skip_jwt_verification is enabled: JWTs will be accepted without cryptographic signature verification. " +
+			"Only use this behind a trusted reverse proxy that performs token verification.")
+		return nil
+	}
+	return fmt.Errorf("require_oauth is enabled but authorization_url is not configured: " +
+		"JWTs cannot be cryptographically verified without an OIDC provider. " +
+		"Set authorization_url to an OIDC issuer, or set skip_jwt_verification=true " +
+		"if the server is behind a trusted reverse proxy that verifies tokens")
+}
+
 // validateTokenExchange validates token-exchange-related fields:
 //   - token_exchange_strategy must be a known strategy (when registry is provided)
 //   - sts_auth_style must be one of "params", "header", "assertion"
@@ -597,16 +632,14 @@ func (c *StaticConfig) GetClusterAuthMode() string {
 }
 
 // ResolveClusterAuthMode returns the effective cluster auth mode.
-// If explicitly set, returns that value. Otherwise auto-detects:
-// passthrough when require_oauth is true, kubeconfig otherwise.
+// If explicitly set, returns that value. Otherwise defaults to passthrough,
+// which forwards the Authorization header to the cluster when present
+// and falls back to kubeconfig credentials when absent.
 func (c *StaticConfig) ResolveClusterAuthMode() string {
 	if c.ClusterAuthMode != "" {
 		return c.ClusterAuthMode
 	}
-	if c.RequireOAuth {
-		return api.ClusterAuthPassthrough
-	}
-	return api.ClusterAuthKubeconfig
+	return api.ClusterAuthPassthrough
 }
 
 // ValidateClusterAuthMode validates cluster_auth_mode and its interaction with
@@ -616,14 +649,11 @@ func (c *StaticConfig) ValidateClusterAuthMode() error {
 		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", c.ClusterAuthMode, api.ClusterAuthPassthrough, api.ClusterAuthKubeconfig)
 	}
 	hasTokenExchange := c.TokenExchangeStrategy != "" || c.StsAudience != ""
-	if c.ClusterAuthMode == api.ClusterAuthPassthrough && !c.RequireOAuth {
-		return fmt.Errorf("cluster_auth_mode %q requires require_oauth=true (no token to pass through without OAuth)", api.ClusterAuthPassthrough)
-	}
 	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && hasTokenExchange {
 		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) are incompatible with cluster_auth_mode %q (exchanged token would be unused)", api.ClusterAuthKubeconfig)
 	}
 	if !c.RequireOAuth && hasTokenExchange {
-		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) require require_oauth=true (no token to exchange without OAuth)")
+		return fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)")
 	}
 	return nil
 }

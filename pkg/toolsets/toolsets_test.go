@@ -1,6 +1,7 @@
 package toolsets
 
 import (
+	"context"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -37,13 +38,61 @@ func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
 
 func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
+func (t *TestToolset) GetResources() []api.ServerResource { return nil }
+
+func (t *TestToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
+
 var _ api.Toolset = (*TestToolset)(nil)
+
+type fakeOpenshift struct{}
+
+func (f *fakeOpenshift) IsOpenShift(context.Context) bool { return false }
 
 func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 	Register(&TestToolset{name: "duplicate"})
 	s.Panics(func() {
 		Register(&TestToolset{name: "duplicate"})
 	}, "Expected panic on duplicate toolset registration")
+}
+
+func (s *ToolsetsSuite) TestUniqueToolNames() {
+	toolNames := make(map[string]bool)
+	for _, toolset := range s.originalToolsets {
+		for _, tool := range toolset.GetTools(&fakeOpenshift{}) {
+			s.Falsef(toolNames[tool.Tool.Name], "duplicate tool name: %s", tool.Tool.Name)
+			toolNames[tool.Tool.Name] = true
+		}
+	}
+}
+
+func (s *ToolsetsSuite) TestUniquePromptNames() {
+	promptNames := make(map[string]bool)
+	for _, toolset := range s.originalToolsets {
+		for _, prompt := range toolset.GetPrompts() {
+			s.Falsef(promptNames[prompt.Prompt.Name], "duplicate prompt name: %s", prompt.Prompt.Name)
+			promptNames[prompt.Prompt.Name] = true
+		}
+	}
+}
+
+func (s *ToolsetsSuite) TestUniqueResourceURIs() {
+	resourceURIs := make(map[string]bool)
+	for _, toolset := range s.originalToolsets {
+		for _, resource := range toolset.GetResources() {
+			s.Falsef(resourceURIs[resource.Resource.URI], "duplicate resource URI: %s", resource.Resource.URI)
+			resourceURIs[resource.Resource.URI] = true
+		}
+	}
+}
+
+func (s *ToolsetsSuite) TestUniqueResourceTemplateURITemplates() {
+	uriTemplates := make(map[string]bool)
+	for _, toolset := range s.originalToolsets {
+		for _, template := range toolset.GetResourceTemplates() {
+			s.Falsef(uriTemplates[template.ResourceTemplate.URITemplate], "duplicate resource template URI template: %s", template.ResourceTemplate.URITemplate)
+			uriTemplates[template.ResourceTemplate.URITemplate] = true
+		}
+	}
 }
 
 func (s *ToolsetsSuite) TestToolsetNames() {

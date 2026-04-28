@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -157,16 +158,23 @@ func (k *Kiali) authorizationHeader() string {
 const maxResponseBodySize = 512 << 10 // 512 KiB
 
 // executeRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
-func (k *Kiali) executeRequest(ctx context.Context, method, endpoint, contentType string, body io.Reader) (string, error) {
-	if method == "" {
-		method = http.MethodGet
-	}
+func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
 	ApiCallURL, err := k.validateAndGetURL(endpoint)
 	if err != nil {
 		return "", err
 	}
-	klog.V(0).Infof("kiali API call: %s %s", method, ApiCallURL)
-	req, err := http.NewRequestWithContext(ctx, method, ApiCallURL, body)
+
+	if arguments == nil {
+		arguments = make(map[string]any)
+	}
+	arguments["mcp_mode"] = "true"
+
+	jsonData, err := json.Marshal(arguments)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal arguments: %w", err)
+	}
+	klog.V(0).Infof("kiali API call: %s", ApiCallURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ApiCallURL, strings.NewReader(string(jsonData)))
 	if err != nil {
 		return "", err
 	}
@@ -174,9 +182,8 @@ func (k *Kiali) executeRequest(ctx context.Context, method, endpoint, contentTyp
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Kubernetes-MCP-Server", "true")
 	client := k.createHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {

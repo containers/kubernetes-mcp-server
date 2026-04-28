@@ -1,18 +1,20 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
-  name: "Show workload-level topology"
-  category: "High-Level Observability & Health"
+  name: "Visualize Workload-Level Topology"
+  category: "Traffic Observability"
+  description: "Generates a detailed workload-level traffic graph to see individual pod-to-pod communication patterns."
   difficulty: easy
-steps:
-  setup:
-    inline: |-
-      #!/usr/bin/env bash
-  verify:
-    contains: "bookinfo"
-  cleanup:
-    inline: |-
-      #!/usr/bin/env bash
+spec:
   prompt:
-    inline: Show me the workload-level graph for the bookinfo namespace.
+    inline: |
+      Show me a detailed workload-level traffic graph for the 'bookinfo' namespace.
+      In your answer, include the word bookinfo at least once when describing the graph or namespace.
+  requires:
+  - extension: kubernetes
+    as: k8s
+  verify:
+  - llmJudge:
+      contains: "bookinfo"

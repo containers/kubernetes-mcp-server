@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
@@ -38,9 +39,11 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //
 //	 2. requireOAuth is set to true, server is protected:
 //
-//	    2.1. Raw Token Validation (oidcProvider is nil):
+//	    2.1. Raw Token Validation (oidcProvider is nil, SkipJWTVerification is true):
+//	         - Requires skip_jwt_verification=true; otherwise the request is rejected with 500.
 //	         - The token is validated offline for basic sanity checks (expiration).
 //	         - If OAuthAudience is set, the token is validated against the audience.
+//	         - No cryptographic signature verification is performed.
 //
 //	         see TestAuthorizationRawToken
 //
@@ -50,7 +53,8 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - The token is then validated against the OIDC Provider.
 //
 //	         see TestAuthorizationOidcToken
-func AuthorizationMiddleware(staticConfig *config.StaticConfig, oauthState *oauth.State) func(http.Handler) http.Handler {
+func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oauth.State) func(http.Handler) http.Handler {
+	var skipJWTWarningOnce sync.Once
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip auth for infrastructure endpoints (health, metrics) and well-known endpoints
@@ -63,7 +67,17 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oauthState *oaut
 				next.ServeHTTP(w, r)
 				return
 			}
+			// Load the latest config snapshot on every request so that
+			// SIGHUP-reloaded auth settings take effect immediately.
+			staticConfig := cfgState.Load()
 			if !staticConfig.RequireOAuth {
+				// Always extract the Authorization header so it can be forwarded
+				// to the cluster, even without OAuth validation.
+				if authHeader := r.Header.Get("Authorization"); authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+					ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -101,7 +115,15 @@ func AuthorizationMiddleware(staticConfig *config.StaticConfig, oauthState *oaut
 						write401(w, wwwAuthenticateHeader, "temporarily_unavailable", "OIDC provider is not available")
 						return
 					}
-					// No provider configured — offline validation only
+					// No provider configured - require explicit opt-in via skip_jwt_verification
+					if !staticConfig.SkipJWTVerification {
+						klog.V(1).Infof("Authentication rejected - JWT verification not configured: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+						http.Error(w, "JWT verification not configured - set authorization_url or skip_jwt_verification", http.StatusInternalServerError)
+						return
+					}
+					skipJWTWarningOnce.Do(func() {
+						klog.Warningf("JWT accepted without signature verification - set authorization_url for secure validation")
+					})
 				} else {
 					err = claims.ValidateWithProvider(r.Context(), staticConfig.OAuthAudience, snapshot.OIDCProvider)
 				}

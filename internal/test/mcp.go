@@ -327,6 +327,21 @@ func (m *McpClient) ListPrompts() (*mcp.ListPromptsResult, error) {
 	return m.Session.ListPrompts(m.ctx, &mcp.ListPromptsParams{})
 }
 
+// ListResources helper function to list available resources
+func (m *McpClient) ListResources() (*mcp.ListResourcesResult, error) {
+	return m.Session.ListResources(m.ctx, &mcp.ListResourcesParams{})
+}
+
+// ReadResource helper function to read a resource by URI
+func (m *McpClient) ReadResource(uri string) (*mcp.ReadResourceResult, error) {
+	return m.Session.ReadResource(m.ctx, &mcp.ReadResourceParams{URI: uri})
+}
+
+// ListResourceTemplates helper function to list available resource templates
+func (m *McpClient) ListResourceTemplates() (*mcp.ListResourceTemplatesResult, error) {
+	return m.Session.ListResourceTemplates(m.ctx, &mcp.ListResourceTemplatesParams{})
+}
+
 // GetPrompt helper function to get a prompt by name
 func (m *McpClient) GetPrompt(name string, arguments map[string]string) (*mcp.GetPromptResult, error) {
 	return m.Session.GetPrompt(m.ctx, &mcp.GetPromptParams{

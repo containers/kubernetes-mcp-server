@@ -140,6 +140,7 @@ func (s *ValidateSuite) TestCertificateAuthority() {
 	s.Run("non-existent file is rejected", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
 		cfg.CertificateAuthority = "/nonexistent/path/ca.crt"
 		err := cfg.Validate()
 		s.Require().Error(err)
@@ -153,6 +154,7 @@ func (s *ValidateSuite) TestCertificateAuthority() {
 
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
 		cfg.CertificateAuthority = caPath
 		s.NoError(cfg.Validate())
 	})
@@ -245,6 +247,7 @@ func (s *ValidateSuite) TestTokenExchangeStrategy() {
 	s.Run("unknown strategy is skipped without WithTokenExchangeStrategies", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
 		cfg.TokenExchangeStrategy = "nonexistent-strategy"
 		s.NoError(cfg.Validate())
 	})
@@ -252,6 +255,7 @@ func (s *ValidateSuite) TestTokenExchangeStrategy() {
 	s.Run("unknown strategy is rejected with WithTokenExchangeStrategies", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
 		cfg.TokenExchangeStrategy = "nonexistent-strategy"
 		err := cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate()
 		s.Require().Error(err)
@@ -262,6 +266,7 @@ func (s *ValidateSuite) TestTokenExchangeStrategy() {
 	s.Run("valid strategy is accepted with WithTokenExchangeStrategies", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
 		cfg.TokenExchangeStrategy = "rfc8693"
 		s.NoError(cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate())
 	})
@@ -480,6 +485,90 @@ func (s *ValidateSuite) TestConfirmationRules() {
 		s.Require().Error(err)
 		s.Contains(err.Error(), "confirmation_rules[0]")
 		s.Contains(err.Error(), "confirmation_rules[1]")
+	})
+}
+
+func (s *ValidateSuite) TestSkipJWTVerification() {
+	s.Run("require_oauth with authorization_url set is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("require_oauth without authorization_url and skip_jwt_verification=false is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = ""
+		cfg.SkipJWTVerification = false
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "require_oauth is enabled but authorization_url is not configured")
+		s.Contains(err.Error(), "skip_jwt_verification=true")
+	})
+
+	s.Run("require_oauth without authorization_url and skip_jwt_verification=true is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = ""
+		cfg.SkipJWTVerification = true
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("require_oauth=false with skip_jwt_verification=true is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.SkipJWTVerification = true
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("require_oauth=false is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		s.NoError(cfg.Validate())
+	})
+}
+
+func (s *ValidateSuite) TestClusterAuthMode() {
+	s.Run("passthrough without require_oauth is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("passthrough with require_oauth is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.SkipJWTVerification = true
+		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("invalid cluster_auth_mode is rejected", func() {
+		cfg := s.validConfig()
+		cfg.ClusterAuthMode = "bogus"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid cluster_auth_mode")
+	})
+
+	s.Run("token_exchange_strategy without require_oauth is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.TokenExchangeStrategy = "rfc8693"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token exchange requires require_oauth=true")
+	})
+
+	s.Run("sts_audience without require_oauth is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.StsAudience = "backend-audience"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token exchange requires require_oauth=true")
 	})
 }
 

@@ -1,20 +1,34 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
-  name: "List workloads without sidecar"
+  name: "Inventory Workloads with Sidecar Status"
   category: "Resource Inspection"
+  description: "Lists workloads in a namespace and identifies those missing the Istio sidecar proxy."
   difficulty: easy
-steps:
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
   setup:
-      inline: |-
+  - script:
+      file: ./setup.sh
+      timeout: 60s
+  - script:
+      inline: |
         #!/usr/bin/env bash
-        kubectl patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "false"}}}}}'
+        sleep 20
   verify:
-    contains: "details-v1"
+  - llmJudge:
+      contains: "details-v1"
   cleanup:
-    inline: |-
-      #!/usr/bin/env bash   
-      kubectl patch deployment details-v1 -n bookinfo -p '{"spec": {"template": {"metadata": {"annotations": {"sidecar.istio.io/inject": "true"}}}}}'
+  - script:
+      file: ./cleanup.sh
+      timeout: 60s
+  - script:
+      inline: |
+        #!/usr/bin/env bash
+        sleep 20
   prompt:
-    inline: List all workloads in the bookinfo namespace that have missing sidecars.
+    inline: "Identify any workloads in the 'bookinfo' namespace that are missing the Istio sidecar proxy."

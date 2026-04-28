@@ -90,6 +90,7 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 		AuthStyle:      authStyle,
 		ClientCertFile: p.baseConfig.GetStsClientCertFile(),
 		ClientKeyFile:  p.baseConfig.GetStsClientKeyFile(),
+		CAFile:         p.baseConfig.GetCertificateAuthority(),
 	}
 	if err := cfg.Validate(); err != nil {
 		klog.Warningf("STS config validation failed, token exchange will be attempted per-request but will likely fail with the same error: %v", err)

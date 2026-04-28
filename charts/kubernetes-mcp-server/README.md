@@ -15,12 +15,36 @@ Helm Chart for the Kubernetes MCP Server
 
 ## Installing the Chart
 
-The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified.
+The Chart can be installed quickly and easily to a Kubernetes cluster. Since an _Ingress_ is added as part of the default install of the Chart, the `ingress.host` Value must be specified unless you disable Ingress and use another exposure mechanism (for example Gateway API; see below).
 
 Install the Chart using the following command from the root of this directory:
 
 ```shell
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
+```
+
+### Gateway API (HTTPRoute)
+
+If your platform uses [Gateway API](https://gateway.networking.k8s.io/) instead of classic Ingress, set `ingress.enabled` to `false` and enable `httpRoute` with `parentRefs`, `rules` (optional `matches`, `filters`, and `timeouts` are passed through), and optionally `hostnames`. The chart adds `backendRefs` pointing at the release `Service` and `service.port`. `parentRefs` and `hostnames` are rendered with `tpl` on their YAML so you can reference `Release` metadata in values. `httpRoute.parentRefs` is required when `httpRoute.enabled=true`; leaving it empty fails at `helm template` / `helm install` time.
+
+```yaml
+ingress:
+  enabled: false
+httpRoute:
+  enabled: true
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: my-gateway
+      namespace: gateway-system
+      sectionName: http
+  hostnames:
+    - mcp.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
 ```
 
 ### Optimized OpenShift Deployment
@@ -75,12 +99,13 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | config.port | string | `"{{ .Values.service.port }}"` |  |
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
-| defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
+| defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
 | extraArgs | list | `[]` | Note: For TLS configuration, use the tls section above instead of extraArgs. |
-| extraContainers | list | `[]` | Each container is defined as a complete container spec. |
+| extraContainers | list | `[]` | Note: sidecars do not inherit defaultSecurityContext or the /tmp emptyDir mount; configure them per-container if needed. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
+| httpRoute | object | `{"annotations":{},"enabled":false,"hostnames":[],"labels":{},"parentRefs":[],"rules":[{"matches":[{"path":{"type":"PathPrefix","value":"/"}}]}]}` | Disabled by default. When enabled, set `parentRefs`, `rules` (with `matches` / optional `filters` / `timeouts`), and optionally `hostnames`; the chart appends `backendRefs` to the release Service. |
 | image | object | `{"pullPolicy":"IfNotPresent","registry":"quay.io","repository":"containers/kubernetes_mcp_server","version":"latest"}` | This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/ |
 | image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. |
 | image.version | string | `"latest"` | This sets the tag or sha digest for the image. |
@@ -128,8 +153,9 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | service.port | int | `8080` | This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports |
 | service.targetPort | string | `"http"` | Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container. |
 | service.type | string | `"ClusterIP"` | This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types |
-| serviceAccount | object | `{"annotations":{},"create":true,"name":""}` | This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/ |
+| serviceAccount | object | `{"annotations":{},"automountToken":true,"create":true,"name":""}` | This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/ |
 | serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
+| serviceAccount.automountToken | bool | `true` | Whether to auto-mount the ServiceAccount token into the pod. Required for in-cluster Kubernetes API access (default). Set to false for OAuth passthrough deployments where the server uses the user's token instead of the ServiceAccount token. |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | If not set and create is true, a name is generated using the fullname template |
 | tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | This is the recommended way to enable TLS instead of using extraArgs. |

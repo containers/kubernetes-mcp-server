@@ -103,16 +103,18 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 	}
 }
 
-func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.StaticConfig, oauthState *oauth.State) error {
+func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticConfigState, oauthState *oauth.State) error {
+	// Only fields read below are startup-only; middleware reloads via cfgState.
+	staticConfig := cfgState.Load()
 	mux := http.NewServeMux()
 
-	wrappedMux := RequestMiddleware(staticConfig.TrustProxyHeaders)(
-		AuthorizationMiddleware(staticConfig, oauthState)(
-			MaxBodyMiddleware(staticConfig.HTTP.MaxBodyBytes)(mux),
-		),
+	// Middlewares read config per request from cfgState so SIGHUP reloads
+	// take effect immediately. Listed outermost-first (request flow order).
+	wrappedMux := chain(mux,
+		RequestMiddleware(cfgState),
+		AuthorizationMiddleware(cfgState, oauthState),
+		MaxBodyMiddleware(cfgState),
 	)
-
-	// Wrap with metrics middleware
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
 
 	// Note: WriteTimeout is intentionally omitted - it would kill SSE streams.
@@ -143,7 +145,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	})
 	mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
 	mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
-	mux.Handle("/.well-known/", WellKnownHandler(staticConfig, oauthState))
+	mux.Handle("/.well-known/", WellKnownHandler(cfgState, oauthState))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

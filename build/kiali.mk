@@ -3,7 +3,7 @@
 ISTIOCTL = $(shell pwd)/_output/tools/bin/istioctl
 ISTIO_ADDONS_DIR = $(shell pwd)/_output/istio-addons
 ISTIO_VERSION = 1.28.0
-KIALI_VERSION = v2.22.0
+KIALI_VERSION = v2.25.0
 # Release version without patch (e.g. 1.28.0 -> 1.28)
 
 # Download and install istioctl (also copies samples/addons for install-istio)

@@ -15,21 +15,21 @@ spec:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-delete
         ignoreNotFound: true
     - k8s.create:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-delete
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
         metadata:
           name: deleted-vm
-          namespace: vm-test
+          namespace: vm-test-delete
         spec:
-          runStrategy: Always
+          runStrategy: Halted
           template:
             spec:
               domain:
@@ -38,36 +38,27 @@ spec:
                     - name: containerdisk
                       disk:
                         bus: virtio
-                resources:
-                  requests:
-                    memory: 2Gi
+                memory:
+                  guest: 2Gi
               terminationGracePeriodSeconds: 0
               volumes:
                 - name: containerdisk
                   containerDisk:
-                    image: quay.io/containerdisks/opensuse-leap:15.6
-    - k8s.wait:
-        apiVersion: kubevirt.io/v1
-        kind: VirtualMachine
-        metadata:
-          name: deleted-vm
-          namespace: vm-test
-        condition: Ready
-        timeout: 30s
+                    image: quay.io/containerdisks/fedora:latest
   verify:
     # kubectl wait --for=delete is not a condition-based wait,
     # so it must remain as a script step
     - script:
         inline: |-
           #!/usr/bin/env bash
-          kubectl wait --for=delete vm/deleted-vm -n vm-test --timeout 30s || exit 1
+          kubectl wait --for=delete vm/deleted-vm -n vm-test-delete --timeout 30s || exit 1
   cleanup:
     - k8s.delete:
         apiVersion: v1
         kind: Namespace
         metadata:
-          name: vm-test
+          name: vm-test-delete
         ignoreNotFound: true
   prompt:
     inline: |
-      Please delete the virtual machine named deleted-vm in the vm-test namespace.
+      Please delete the virtual machine named deleted-vm in the vm-test-delete namespace.
