@@ -313,6 +313,20 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 toolsets = ["core", "config", "helm", "kubevirt"]
 ```
 
+**Available Resources:**
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-START -->
+
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-END -->
+
+**Available Resource Templates:**
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-START -->
+
+
+<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-END -->
+
 ### Tool Filtering
 
 Fine-grained control over individual tools within enabled toolsets.

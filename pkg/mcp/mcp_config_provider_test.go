@@ -217,10 +217,12 @@ type configProviderToolset struct {
 	prompts []api.ServerPrompt
 }
 
-func (t *configProviderToolset) GetName() string                           { return t.name }
-func (t *configProviderToolset) GetDescription() string                    { return "Test toolset for ConfigProvider" }
-func (t *configProviderToolset) GetTools(_ api.Openshift) []api.ServerTool { return t.tools }
-func (t *configProviderToolset) GetPrompts() []api.ServerPrompt            { return t.prompts }
+func (t *configProviderToolset) GetName() string                                    { return t.name }
+func (t *configProviderToolset) GetDescription() string                             { return "Test toolset for ConfigProvider" }
+func (t *configProviderToolset) GetTools(_ api.Openshift) []api.ServerTool          { return t.tools }
+func (t *configProviderToolset) GetPrompts() []api.ServerPrompt                     { return t.prompts }
+func (t *configProviderToolset) GetResources() []api.ServerResource                 { return nil }
+func (t *configProviderToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
 
 func TestMcpConfigProvider(t *testing.T) {
 	suite.Run(t, new(McpConfigProviderSuite))

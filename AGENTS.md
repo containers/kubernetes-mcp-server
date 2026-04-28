@@ -318,8 +318,13 @@ The `docs/specs/` directory contains feature specifications (living documentatio
 ### Documentation conventions
 
 - Use **lowercase filenames** for new documentation files (e.g., `configuration.md`, `prompts.md`)
-- The toolsets table in `README.md` and `docs/configuration.md` is **auto-generated** - use `make update-readme-tools` to update it
-- Both files use markers (`<!-- AVAILABLE-TOOLSETS-START -->` / `<!-- AVAILABLE-TOOLSETS-END -->`) for the generated content
+- The toolsets table, tools, prompts, resources, and resource templates in `README.md` and `docs/configuration.md` are **auto-generated** - use `make update-readme-tools` to update them after modifying toolsets
+- Both files use marker pairs for the generated content:
+  - `<!-- AVAILABLE-TOOLSETS-START -->` / `<!-- AVAILABLE-TOOLSETS-END -->` (toolset summary table)
+  - `<!-- AVAILABLE-TOOLSETS-TOOLS-START -->` / `<!-- AVAILABLE-TOOLSETS-TOOLS-END -->` (tool details)
+  - `<!-- AVAILABLE-TOOLSETS-PROMPTS-START -->` / `<!-- AVAILABLE-TOOLSETS-PROMPTS-END -->` (prompt details)
+  - `<!-- AVAILABLE-TOOLSETS-RESOURCES-START -->` / `<!-- AVAILABLE-TOOLSETS-RESOURCES-END -->` (resource details)
+  - `<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-START -->` / `<!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-END -->` (resource template details)
 
 ## Distribution Methods
 

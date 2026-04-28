@@ -47,6 +47,12 @@ type Toolset interface {
 	// GetPrompts returns the prompts provided by this toolset.
 	// Returns nil if the toolset doesn't provide any prompts.
 	GetPrompts() []ServerPrompt
+	// GetResources returns the resources provided by this toolset.
+	// Returns nil if the toolset doesn't provide any resources.
+	GetResources() []ServerResource
+	// GetResourceTemplates returns the resource templates provided by this toolset.
+	// Returns nil if the toolset doesn't provide any resource templates.
+	GetResourceTemplates() []ServerResourceTemplate
 }
 
 type ToolCallRequest interface {
@@ -101,6 +107,56 @@ func NewToolCallResultStructured(structured any, err error) *ToolCallResult {
 		}
 	}
 	return NewToolCallResultFull(content, structured, err)
+}
+
+// Resource represents the metadata of an MCP resource.
+type Resource struct {
+	URI         string
+	Name        string
+	Description string
+	MIMEType    string
+}
+
+// ResourceContent is the value returned by a resource handler.
+// Exactly one of Text or Blob must be set; both cannot be nil or both non-nil.
+type ResourceContent struct {
+	// MIMEType overrides Resource.MIMEType when set; otherwise Resource.MIMEType is used.
+	MIMEType string
+	// Text is the UTF-8 text content of the resource.
+	Text string
+	// Blob is the binary content of the resource.
+	Blob []byte
+}
+
+// ResourceHandler is called when a client reads a resource.
+// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
+// Handlers should return a ResourceContent with exactly one of Text or Blob set.
+type ResourceHandler func(ctx context.Context) (*ResourceContent, error)
+
+// ServerResource represents a resource that can be registered with the MCP server.
+type ServerResource struct {
+	Resource Resource
+	Handler  ResourceHandler
+}
+
+// ResourceTemplate represents the metadata of an MCP resource template.
+type ResourceTemplate struct {
+	URITemplate string
+	Name        string
+	Description string
+	MIMEType    string
+}
+
+// ResourceTemplateHandler is called when a client reads a resource matching a template.
+// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
+// The uri parameter is the actual resource URI that matches the template.
+// Handlers should return a ResourceContent with exactly one of Text or Blob set.
+type ResourceTemplateHandler func(ctx context.Context, uri string) (*ResourceContent, error)
+
+// ServerResourceTemplate represents a resource template that can be registered with the MCP server.
+type ServerResourceTemplate struct {
+	ResourceTemplate ResourceTemplate
+	Handler          ResourceTemplateHandler
 }
 
 type ToolHandlerParams struct {

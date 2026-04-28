@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel"
@@ -17,6 +18,18 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// cfgStateWithTrustProxy returns a *config.StaticConfigState initialized with
+// only TrustProxyHeaders set — used by tests that drive RequestMiddleware.
+func cfgStateWithTrustProxy(trustProxy bool) *config.StaticConfigState {
+	return config.NewStaticConfigState(&config.StaticConfig{TrustProxyHeaders: trustProxy})
+}
+
+// cfgStateWithMaxBody returns a *config.StaticConfigState initialized with
+// only HTTP.MaxBodyBytes set — used by tests that drive MaxBodyMiddleware.
+func cfgStateWithMaxBody(maxBytes int64) *config.StaticConfigState {
+	return config.NewStaticConfigState(&config.StaticConfig{HTTP: config.HTTPConfig{MaxBodyBytes: maxBytes}})
+}
 
 type HTTPTraceContextPropagationSuite struct {
 	suite.Suite
@@ -54,7 +67,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(false)(handler)
+		middleware := RequestMiddleware(cfgStateWithTrustProxy(false))(handler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -81,7 +94,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(false)(handler)
+		middleware := RequestMiddleware(cfgStateWithTrustProxy(false))(handler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		rr := httptest.NewRecorder()
@@ -98,7 +111,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			w.WriteHeader(http.StatusOK)
 		})
 
-		middleware := RequestMiddleware(false)(handler)
+		middleware := RequestMiddleware(cfgStateWithTrustProxy(false))(handler)
 
 		req := httptest.NewRequest("GET", "/healthz", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -125,7 +138,7 @@ func (s *HTTPTraceContextPropagationSuite) TestRequestMiddlewareExtractsTraceCon
 			innerHandler.ServeHTTP(w, r)
 		})
 
-		middleware := RequestMiddleware(false)(intermediateHandler)
+		middleware := RequestMiddleware(cfgStateWithTrustProxy(false))(intermediateHandler)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
@@ -150,7 +163,7 @@ type MaxBodyMiddlewareSuite struct {
 
 func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 	s.Run("allows requests under limit", func() {
-		handler := MaxBodyMiddleware(100)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(100))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			s.Require().NoError(err)
 			s.Equal("small body", string(body))
@@ -166,7 +179,7 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 
 	s.Run("rejects requests exceeding limit", func() {
 		handlerCalled := false
-		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(10))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCalled = true
 			// Attempt to read the body - this should fail
 			_, err := io.ReadAll(r.Body)
@@ -188,7 +201,7 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 
 	s.Run("skips GET requests", func() {
 		handlerCalled := false
-		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(10))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCalled = true
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -203,7 +216,7 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 
 	s.Run("skips HEAD requests", func() {
 		handlerCalled := false
-		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(10))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCalled = true
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -218,7 +231,7 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 
 	s.Run("skips OPTIONS requests", func() {
 		handlerCalled := false
-		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(10))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCalled = true
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -232,7 +245,7 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 	})
 
 	s.Run("skips when maxBytes is zero", func() {
-		handler := MaxBodyMiddleware(0)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(0))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			s.Require().NoError(err)
 			s.Equal("large body that would exceed any limit", string(body))
@@ -247,7 +260,7 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 	})
 
 	s.Run("applies to PUT requests", func() {
-		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(10))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := io.ReadAll(r.Body)
 			if err != nil {
 				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
@@ -265,7 +278,7 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 	})
 
 	s.Run("applies to PATCH requests", func() {
-		handler := MaxBodyMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := MaxBodyMiddleware(cfgStateWithMaxBody(10))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := io.ReadAll(r.Body)
 			if err != nil {
 				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
@@ -280,6 +293,34 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 		handler.ServeHTTP(rr, req)
 
 		s.Equal(http.StatusRequestEntityTooLarge, rr.Code)
+	})
+
+	// Regression for issue #1106: changes stored in cfgState must be observed
+	// on the NEXT request without rebuilding the middleware.
+	s.Run("picks up max_body_bytes change via cfgState.Store", func() {
+		cfgState := config.NewStaticConfigState(&config.StaticConfig{HTTP: config.HTTPConfig{MaxBodyBytes: 0}})
+
+		handler := MaxBodyMiddleware(cfgState)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req1 := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(strings.Repeat("x", 100)))
+		rr1 := httptest.NewRecorder()
+		handler.ServeHTTP(rr1, req1)
+		s.Equal(http.StatusOK, rr1.Code, "pre-reload: max_body_bytes=0 must allow any body size")
+
+		cfgState.Store(&config.StaticConfig{HTTP: config.HTTPConfig{MaxBodyBytes: 10}})
+
+		req2 := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(strings.Repeat("x", 100)))
+		rr2 := httptest.NewRecorder()
+		handler.ServeHTTP(rr2, req2)
+		s.Equal(http.StatusRequestEntityTooLarge, rr2.Code,
+			"post-reload: max_body_bytes=10 must reject oversized body")
 	})
 }
 
@@ -338,7 +379,7 @@ func (s *TrustProxyHeadersSuite) runRequest(trustProxy bool, mutate func(*http.R
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	middleware := RequestMiddleware(trustProxy)(handler)
+	middleware := RequestMiddleware(cfgStateWithTrustProxy(trustProxy))(handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	req.RemoteAddr = "192.168.1.1:443"
@@ -454,4 +495,53 @@ func (s *TrustProxyHeadersSuite) TestURLScheme() {
 
 func TestTrustProxyHeaders(t *testing.T) {
 	suite.Run(t, new(TrustProxyHeadersSuite))
+}
+
+// TestReloadObserved verifies the middleware observes config changes on the
+// NEXT request after cfgState.Store — no wiring rebuild required. This is
+// the regression lock for issue #1106: RequestMiddleware and MaxBodyMiddleware
+// must read from *StaticConfigState per request so SIGHUP-reloaded values
+// (trust_proxy_headers, max_body_bytes) take effect without a restart.
+func (s *TrustProxyHeadersSuite) TestReloadObserved() {
+	s.Run("RequestMiddleware picks up trust_proxy_headers flip via cfgState.Store", func() {
+		s.spanRecorder.Reset()
+		cfgState := config.NewStaticConfigState(&config.StaticConfig{TrustProxyHeaders: false})
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		middleware := RequestMiddleware(cfgState)(handler)
+
+		// First request — trust_proxy=false: X-Forwarded-For must be ignored.
+		req1 := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+		req1.RemoteAddr = "192.168.1.1:443"
+		req1.Header.Set("X-Forwarded-For", "10.0.0.1")
+		middleware.ServeHTTP(httptest.NewRecorder(), req1)
+
+		// Flip config — simulates a SIGHUP reload.
+		cfgState.Store(&config.StaticConfig{TrustProxyHeaders: true})
+
+		// Second request — trust_proxy=true: X-Forwarded-For must now be honored.
+		req2 := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+		req2.RemoteAddr = "192.168.1.1:443"
+		req2.Header.Set("X-Forwarded-For", "10.0.0.1")
+		middleware.ServeHTTP(httptest.NewRecorder(), req2)
+
+		ended := s.spanRecorder.Ended()
+		s.Require().Len(ended, 2, "expected two spans")
+
+		firstAttrs := make(map[string]attribute.Value, len(ended[0].Attributes()))
+		for _, kv := range ended[0].Attributes() {
+			firstAttrs[string(kv.Key)] = kv.Value
+		}
+		secondAttrs := make(map[string]attribute.Value, len(ended[1].Attributes()))
+		for _, kv := range ended[1].Attributes() {
+			secondAttrs[string(kv.Key)] = kv.Value
+		}
+
+		s.Equal("192.168.1.1", firstAttrs["client.address"].AsString(),
+			"pre-reload request must ignore X-Forwarded-For (trust_proxy_headers=false)")
+		s.Equal("10.0.0.1", secondAttrs["client.address"].AsString(),
+			"post-reload request must honor X-Forwarded-For (trust_proxy_headers=true)")
+	})
 }

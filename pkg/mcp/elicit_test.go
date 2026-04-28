@@ -281,6 +281,14 @@ func (m *mockElicitToolset) GetPrompts() []api.ServerPrompt {
 	return nil
 }
 
+func (m *mockElicitToolset) GetResources() []api.ServerResource {
+	return nil
+}
+
+func (m *mockElicitToolset) GetResourceTemplates() []api.ServerResourceTemplate {
+	return nil
+}
+
 func TestElicitationSuite(t *testing.T) {
 	suite.Run(t, new(ElicitationSuite))
 }
