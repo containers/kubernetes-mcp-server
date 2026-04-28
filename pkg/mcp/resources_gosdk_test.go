@@ -515,6 +515,68 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 	})
 }
 
+func (s *ResourceSuite) TestInvalidResourceURIReturnsError() {
+	goodToolset := &mockResourceToolset{
+		name: "resource-test-good",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/good",
+					Name:     "Good Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "still up"}, nil
+				},
+			},
+		},
+	}
+
+	badURIToolset := &mockResourceToolset{
+		name: "resource-test-bad-uri",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					// Invalid percent-escape: triggers url.Parse error.
+					URI:      "test://%zz",
+					Name:     "Bad URI Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "unreachable"}, nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(goodToolset)
+	toolsets.Register(badURIToolset)
+	s.Cfg.Toolsets = []string{"resource-test-good"}
+	s.InitMcpClient()
+
+	s.Run("invalid resource URI returns error without panic", func() {
+		newConfig := config.Default()
+		newConfig.Toolsets = []string{"resource-test-bad-uri"}
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+
+		s.NotPanics(func() {
+			err := s.mcpServer.ReloadConfiguration(newConfig)
+			s.Require().Error(err)
+			s.Contains(err.Error(), "%zz")
+		})
+	})
+
+	s.Run("previously registered resource still served after failed reload", func() {
+		// Reload aborted in the convert phase, so SDK state must be unchanged
+		// from the pre-reload snapshot — the good resource is still readable.
+		result, err := s.ReadResource("test://example/good")
+		s.Require().NoError(err)
+		s.Require().Len(result.Contents, 1)
+		s.Equal("still up", result.Contents[0].Text)
+	})
+}
+
 func (s *ResourceSuite) TestResourceContentInvariant() {
 	bothEmptyToolset := &mockResourceToolset{
 		name: "resource-test-both-empty",
