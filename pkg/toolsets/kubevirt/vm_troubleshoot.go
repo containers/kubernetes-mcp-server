@@ -13,6 +13,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
 )
 
 // initVMTroubleshoot initializes the VM troubleshooting prompt
@@ -21,8 +22,8 @@ func initVMTroubleshoot() []api.ServerPrompt {
 		{
 			Prompt: api.Prompt{
 				Name:        "vm-troubleshoot",
-				Title:       "VirtualMachine Troubleshoot",
-				Description: "Generate a step-by-step troubleshooting guide for diagnosing VirtualMachine issues",
+				Title:       fmt.Sprintf("%s VirtualMachine Troubleshoot", defaults.ProductName()),
+				Description: fmt.Sprintf("Generate a step-by-step troubleshooting guide for diagnosing %s VirtualMachine issues", defaults.ProductName()),
 				Arguments: []api.PromptArgument{
 					{
 						Name:        "namespace",
@@ -70,11 +71,11 @@ func vmTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCallResul
 	eventsYaml := fetchEvents(ctx, params.KubernetesClient, namespace, name)
 
 	// Build the troubleshooting guide message with embedded resource data
-	guideText := fmt.Sprintf(`# VirtualMachine Troubleshooting Guide
+	guideText := fmt.Sprintf(`# %s VirtualMachine Troubleshooting Guide
 
 ## VM: %s (namespace: %s)
 
-Use this guide to diagnose issues with the VirtualMachine. The relevant resource data has been collected below.
+Use this guide to diagnose issues with the %s VirtualMachine. The relevant resource data has been collected below.
 
 ---
 
@@ -184,7 +185,7 @@ After completing troubleshooting and attempting fixes, report:
 - **Root Cause:** Description or "None found"
 - **Action Taken:** What was done to fix the issue (or "None" if no fix was needed/possible)
 - **Result:** Whether the fix was successful or further action is needed
-`, name, namespace, vmYaml, vmiYaml, volumesYaml, podYaml, podLogsText, eventsYaml)
+`, defaults.ProductName(), name, namespace, defaults.ProductName(), vmYaml, vmiYaml, volumesYaml, podYaml, podLogsText, eventsYaml)
 
 	return api.NewPromptCallResult(
 		"VirtualMachine troubleshooting guide generated",

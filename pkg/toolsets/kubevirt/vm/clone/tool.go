@@ -6,6 +6,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
@@ -16,7 +17,7 @@ func Tools() []api.ServerTool {
 		{
 			Tool: api.Tool{
 				Name:        "vm_clone",
-				Description: "Clone a KubeVirt VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API",
+				Description: fmt.Sprintf("Clone a %s VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the %s Clone API", defaults.ProductName(), defaults.ProductName()),
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{

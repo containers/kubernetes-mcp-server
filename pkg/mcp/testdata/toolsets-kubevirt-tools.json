@@ -39,7 +39,7 @@
       "openWorldHint": false,
       "title": "Virtual Machine: Create"
     },
-    "description": "Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
+    "description": "Create a KubeVirt VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
     "inputSchema": {
       "properties": {
         "autostart": {
@@ -162,7 +162,7 @@
       "openWorldHint": false,
       "title": "Virtual Machine: Lifecycle"
     },
-    "description": "Manage VirtualMachine lifecycle: start, stop, or restart a VM",
+    "description": "Manage KubeVirt VirtualMachine lifecycle: start, stop, or restart a VM",
     "inputSchema": {
       "properties": {
         "action": {
