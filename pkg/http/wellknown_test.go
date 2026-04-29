@@ -398,6 +398,53 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 		s.Contains(string(body), `"scopes_supported":`, "Expected scopes_supported from openid-configuration")
 	})
 
+	s.Run("falls back to openid-configuration when upstream returns 200 with empty body", func() {
+		// Entra ID returns HTTP 200 with content-length: 0 for unsupported well-known paths
+		s.TestServer.Close()
+		s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.EscapedPath() {
+			case "/.well-known/openid-configuration":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"issuer": "https://login.microsoftonline.com/tenant/v2.0",
+					"authorization_endpoint": "https://login.microsoftonline.com/tenant/oauth2/v2.0/authorize",
+					"token_endpoint": "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+					"scopes_supported": ["openid", "profile", "email"]
+				}`))
+			default:
+				w.Header().Set("Content-Length", "0")
+				w.WriteHeader(http.StatusOK)
+			}
+		}))
+		s.StaticConfig.AuthorizationURL = s.TestServer.URL
+		s.StaticConfig.RequireOAuth = true
+		s.StartServer()
+
+		s.Run("oauth-authorization-server", func() {
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+			s.Require().NoError(err)
+			s.T().Cleanup(func() { _ = resp.Body.Close() })
+
+			s.Equal(http.StatusOK, resp.StatusCode, "Expected fallback to succeed")
+
+			body, err := io.ReadAll(resp.Body)
+			s.Require().NoError(err)
+			s.Contains(string(body), "login.microsoftonline.com", "Expected Entra ID issuer in response")
+		})
+
+		s.Run("oauth-protected-resource", func() {
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource", s.StaticConfig.Port))
+			s.Require().NoError(err)
+			s.T().Cleanup(func() { _ = resp.Body.Close() })
+
+			s.Equal(http.StatusOK, resp.StatusCode, "Expected fallback to succeed")
+
+			body, err := io.ReadAll(resp.Body)
+			s.Require().NoError(err)
+			s.Contains(string(body), `"authorization_servers":`, "Expected authorization_servers in response")
+		})
+	})
+
 	s.Run("returns 404 when both oauth-authorization-server and openid-configuration return 404", func() {
 		s.TestServer.Close()
 		s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
