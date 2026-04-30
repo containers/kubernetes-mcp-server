@@ -545,6 +545,23 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 		s.NoError(cfg.Validate())
 	})
 
+	s.Run("kubeconfig with require_oauth is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.SkipJWTVerification = true
+		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "is not compatible with require_oauth=true")
+	})
+
+	s.Run("kubeconfig without require_oauth is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
+		s.NoError(cfg.Validate())
+	})
+
 	s.Run("invalid cluster_auth_mode is rejected", func() {
 		cfg := s.validConfig()
 		cfg.ClusterAuthMode = "bogus"
