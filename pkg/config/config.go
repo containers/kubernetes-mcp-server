@@ -648,6 +648,9 @@ func (c *StaticConfig) ValidateClusterAuthMode() error {
 	if c.ClusterAuthMode != "" && c.ClusterAuthMode != api.ClusterAuthPassthrough && c.ClusterAuthMode != api.ClusterAuthKubeconfig {
 		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", c.ClusterAuthMode, api.ClusterAuthPassthrough, api.ClusterAuthKubeconfig)
 	}
+	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && c.RequireOAuth {
+		return fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", api.ClusterAuthKubeconfig)
+	}
 	hasTokenExchange := c.TokenExchangeStrategy != "" || c.StsAudience != ""
 	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && hasTokenExchange {
 		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) are incompatible with cluster_auth_mode %q (exchanged token would be unused)", api.ClusterAuthKubeconfig)
