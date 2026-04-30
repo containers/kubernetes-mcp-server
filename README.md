@@ -415,6 +415,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - Name of the Helm release to uninstall
   - `namespace` (`string`) - Namespace to uninstall the Helm release from (Optional, current namespace if not provided)
 
+- **helm_history** - Get the revision history for a Helm release showing all deployed revisions
+  - `max` (`integer`) - Maximum number of revisions to return (Optional, default: 10)
+  - `name` (`string`) **(required)** - Name of the Helm release to get history for
+  - `namespace` (`string`) - Namespace of the Helm release (Optional, current namespace if not provided)
+
 </details>
 
 <details>
