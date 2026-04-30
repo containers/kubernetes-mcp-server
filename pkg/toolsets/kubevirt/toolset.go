@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	vm_clone "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/clone"
 	vm_create "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/create"
+	vm_guestagent "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/guestagent"
 	vm_lifecycle "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/lifecycle"
 )
 
@@ -26,12 +27,15 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
 		vm_clone.Tools(),
 		vm_create.Tools(),
+		vm_guestagent.Tools(),
 		vm_lifecycle.Tools(),
 	)
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
-	return initVMTroubleshoot()
+	return slices.Concat(
+		initVMTroubleshoot(),
+	)
 }
 
 func (t *Toolset) GetResources() []api.ServerResource {
