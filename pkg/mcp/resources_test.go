@@ -564,6 +564,67 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 			s.Falsef(hasStatus, "status should not be present on the persisted resource")
 		})
 	})
+
+	s.Run("resources_create_or_update with namespace override and no namespace in resource", func() {
+		// Resource YAML has no namespace in metadata — namespace override should be applied
+		configMapYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-ns-override\ndata:\n  key: value\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":  configMapYaml,
+			"namespace": "default",
+		})
+		s.Run("returns success", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool should not fail, got: %v", result.Content)
+		})
+		s.Run("creates ConfigMap in the overridden namespace", func() {
+			cm, cmErr := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-cm-ns-override", metav1.GetOptions{})
+			s.Require().Nilf(cmErr, "ConfigMap not found in overridden namespace")
+			s.Equalf("default", cm.Namespace, "ConfigMap should be in the overridden namespace")
+		})
+	})
+
+	s.Run("resources_create_or_update with namespace override takes precedence over namespace in resource", func() {
+		// Resource YAML has namespace: default but override should win
+		configMapYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-ns-override-wins\n  namespace: default\ndata:\n  key: value\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":  configMapYaml,
+			"namespace": "kube-public",
+		})
+		s.Run("returns success", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool should not fail, got: %v", result.Content)
+		})
+		s.Run("creates ConfigMap in the overridden namespace not the one in the resource", func() {
+			cm, cmErr := client.CoreV1().ConfigMaps("kube-public").Get(s.T().Context(), "a-cm-ns-override-wins", metav1.GetOptions{})
+			s.Require().Nilf(cmErr, "ConfigMap not found in overridden namespace")
+			s.Equalf("kube-public", cm.Namespace, "ConfigMap should be in the overridden namespace, not the one in the resource metadata")
+		})
+		s.Run("does not create ConfigMap in the namespace from the resource metadata", func() {
+			_, cmErr := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-cm-ns-override-wins", metav1.GetOptions{})
+			s.Errorf(cmErr, "ConfigMap should not exist in the namespace from the resource metadata")
+		})
+	})
+
+	s.Run("resources_create_or_update with namespace override applies to all resources in multi-document YAML", func() {
+		multiDocYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-multi-1\ndata:\n  key: value1\n\n---\n\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-multi-2\ndata:\n  key: value2\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":  multiDocYaml,
+			"namespace": "default",
+		})
+		s.Run("returns success", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool should not fail, got: %v", result.Content)
+		})
+		s.Run("creates all ConfigMaps in the overridden namespace", func() {
+			cm1, cm1Err := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-cm-multi-1", metav1.GetOptions{})
+			s.Require().Nilf(cm1Err, "first ConfigMap not found in overridden namespace")
+			s.Equalf("default", cm1.Namespace, "first ConfigMap should be in the overridden namespace")
+
+			cm2, cm2Err := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-cm-multi-2", metav1.GetOptions{})
+			s.Require().Nilf(cm2Err, "second ConfigMap not found in overridden namespace")
+			s.Equalf("default", cm2.Namespace, "second ConfigMap should be in the overridden namespace")
+		})
+	})
 }
 
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateForcesSSA() {
