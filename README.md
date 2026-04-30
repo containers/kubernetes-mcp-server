@@ -519,7 +519,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) **(required)** - The namespace of the source virtual machine
   - `targetName` (`string`) **(required)** - The name for the new cloned virtual machine
 
-- **vm_create** - Create a VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.
+- **vm_create** - Create a KubeVirt VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.
   - `autostart` (`boolean`) - Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.
   - `instancetype` (`string`) - Optional instance type name for the VM (e.g., 'u1.small', 'u1.medium', 'u1.large')
   - `name` (`string`) **(required)** - The name of the virtual machine
@@ -531,7 +531,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `storage` (`string`) - Optional storage size for the VM's root disk when using DataSources (e.g., '30Gi', '50Gi', '100Gi'). Defaults to 30Gi. Ignored when using container disks.
   - `workload` (`string`) - The workload for the VM. Accepts OS names (e.g., 'fedora' (default), 'ubuntu', 'centos', 'centos-stream', 'debian', 'rhel', 'opensuse', 'opensuse-tumbleweed', 'opensuse-leap') or full container disk image URLs
 
-- **vm_lifecycle** - Manage VirtualMachine lifecycle: start, stop, or restart a VM
+- **vm_lifecycle** - Manage KubeVirt VirtualMachine lifecycle: start, stop, or restart a VM
   - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
@@ -588,7 +588,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kubevirt</summary>
 
-- **vm-troubleshoot** - Generate a step-by-step troubleshooting guide for diagnosing VirtualMachine issues
+- **vm-troubleshoot** - Generate a step-by-step troubleshooting guide for diagnosing KubeVirt VirtualMachine issues
   - `namespace` (`string`) **(required)** - The namespace of the VirtualMachine to troubleshoot
   - `name` (`string`) **(required)** - The name of the VirtualMachine to troubleshoot
 

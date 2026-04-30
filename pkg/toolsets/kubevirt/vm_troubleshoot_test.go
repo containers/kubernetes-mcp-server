@@ -2,6 +2,7 @@ package kubevirt
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -32,7 +33,7 @@ func (s *VMTroubleshootSuite) TestVMTroubleshootPrompt() {
 		prompts := initVMTroubleshoot()
 		s.Require().Len(prompts, 1, "Expected 1 prompt")
 		s.Equal("vm-troubleshoot", prompts[0].Prompt.Name)
-		s.Equal("VirtualMachine Troubleshoot", prompts[0].Prompt.Title)
+		s.Equal(fmt.Sprintf("%s VirtualMachine Troubleshoot", ProductName()), prompts[0].Prompt.Title)
 		s.Len(prompts[0].Prompt.Arguments, 2, "Expected 2 arguments")
 	})
 
@@ -370,6 +371,16 @@ func (s *VMTroubleshootSuite) TestFetchVirtLauncherPodLogs() {
 
 		s.Contains(result, "*No virt-launcher pod found - no logs available*")
 	})
+}
+
+func TestProductName(t *testing.T) {
+	// ProductName should return the configured product name (default or override)
+	productName := ProductName()
+	if productName == "" {
+		t.Error("ProductName returned empty string")
+	}
+	// In upstream, this should be "KubeVirt", but downstream forks may override it
+	// The test validates the function works without asserting a specific value
 }
 
 func TestVMTroubleshoot(t *testing.T) {

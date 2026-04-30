@@ -8,6 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	kubevirttesting "github.com/containers/kubernetes-mcp-server/pkg/kubevirt/testing"
+	kubevirttoolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
@@ -756,7 +757,7 @@ func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 
 			textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
 			s.Require().True(ok, "expected TextContent")
-			s.Contains(textContent.Text, "# VirtualMachine Troubleshooting Guide")
+			s.Contains(textContent.Text, fmt.Sprintf("# %s VirtualMachine Troubleshooting Guide", kubevirttoolset.ProductName()))
 			s.Contains(textContent.Text, "test-vm")
 			s.Contains(textContent.Text, "default")
 		})
