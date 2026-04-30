@@ -72,6 +72,12 @@ type StaticConfig struct {
 	// that performs token verification. When false (default), the server refuses to
 	// start if require_oauth is true and authorization_url is empty.
 	SkipJWTVerification bool `toml:"skip_jwt_verification,omitempty"`
+	// AcceptOpaqueTokens allows the server to accept non-JWT bearer tokens
+	// (e.g., OpenShift OAuth tokens like "sha256~...") when require_oauth is enabled.
+	// Opaque tokens are not validated by the MCP server — they are passed through
+	// to the Kubernetes API server which validates them directly.
+	// This enables passthrough of OpenShift OAuth tokens for per-user RBAC.
+	AcceptOpaqueTokens bool `toml:"accept_opaque_tokens,omitempty"`
 	// DisableDynamicClientRegistration indicates whether dynamic client registration is disabled.
 	// If true, the .well-known endpoints will not expose the registration endpoint.
 	DisableDynamicClientRegistration bool `toml:"disable_dynamic_client_registration,omitempty"`
@@ -570,6 +576,11 @@ func (c *StaticConfig) validateSkipJWTVerification() error {
 	if !c.RequireOAuth || c.AuthorizationURL != "" {
 		return nil
 	}
+	if c.AcceptOpaqueTokens {
+		klog.Warningf("accept_opaque_tokens is enabled: non-JWT bearer tokens (e.g., OpenShift OAuth) will be accepted " +
+			"without server-side validation and passed through to the Kubernetes API for validation.")
+		return nil
+	}
 	if c.SkipJWTVerification {
 		klog.Warningf("skip_jwt_verification is enabled: JWTs will be accepted without cryptographic signature verification. " +
 			"Only use this behind a trusted reverse proxy that performs token verification.")
@@ -578,7 +589,8 @@ func (c *StaticConfig) validateSkipJWTVerification() error {
 	return fmt.Errorf("require_oauth is enabled but authorization_url is not configured: " +
 		"JWTs cannot be cryptographically verified without an OIDC provider. " +
 		"Set authorization_url to an OIDC issuer, or set skip_jwt_verification=true " +
-		"if the server is behind a trusted reverse proxy that verifies tokens")
+		"if the server is behind a trusted reverse proxy that verifies tokens, " +
+		"or set accept_opaque_tokens=true to accept non-JWT tokens (e.g., OpenShift OAuth)")
 }
 
 // validateTokenExchange validates token-exchange-related fields:

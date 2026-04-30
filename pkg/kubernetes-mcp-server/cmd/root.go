@@ -79,6 +79,7 @@ const (
 	flagOAuthAudience        = "oauth-audience"
 	flagAuthorizationURL     = "authorization-url"
 	flagSkipJWTVerification  = "skip-jwt-verification"
+	flagAcceptOpaqueTokens   = "accept-opaque-tokens"
 	flagServerUrl            = "server-url"
 	flagCertificateAuthority = "certificate-authority"
 	flagDisableMultiCluster  = "disable-multi-cluster"
@@ -103,6 +104,7 @@ type MCPServerOptions struct {
 	OAuthAudience        string
 	AuthorizationURL     string
 	SkipJWTVerification  bool
+	AcceptOpaqueTokens   bool
 	CertificateAuthority string
 	ServerURL            string
 	DisableMultiCluster  bool
@@ -167,6 +169,8 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	_ = cmd.Flags().MarkHidden(flagAuthorizationURL)
 	cmd.Flags().BoolVar(&o.SkipJWTVerification, flagSkipJWTVerification, o.SkipJWTVerification, "Skip JWT cryptographic signature verification when require-oauth is enabled but no authorization-url is configured. Only use behind a trusted reverse proxy that verifies tokens.")
 	_ = cmd.Flags().MarkHidden(flagSkipJWTVerification)
+	cmd.Flags().BoolVar(&o.AcceptOpaqueTokens, flagAcceptOpaqueTokens, o.AcceptOpaqueTokens, "Accept non-JWT bearer tokens (e.g., OpenShift OAuth tokens) and pass them through to the Kubernetes API for validation. Use with cluster_auth_mode=passthrough for per-user RBAC with OpenShift OAuth.")
+	_ = cmd.Flags().MarkHidden(flagAcceptOpaqueTokens)
 	cmd.Flags().StringVar(&o.ServerURL, flagServerUrl, o.ServerURL, "Server URL of this application. Optional. If set, this url will be served in protected resource metadata endpoint and tokens will be validated with this audience. If not set, expected audience is kubernetes-mcp-server. Only valid if require-oauth is enabled.")
 	_ = cmd.Flags().MarkHidden(flagServerUrl)
 	cmd.Flags().StringVar(&o.CertificateAuthority, flagCertificateAuthority, o.CertificateAuthority, "Certificate authority path to verify certificates. Optional. Only valid if require-oauth is enabled.")
@@ -240,6 +244,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagSkipJWTVerification).Changed {
 		m.StaticConfig.SkipJWTVerification = m.SkipJWTVerification
+	}
+	if cmd.Flag(flagAcceptOpaqueTokens).Changed {
+		m.StaticConfig.AcceptOpaqueTokens = m.AcceptOpaqueTokens
 	}
 	if cmd.Flag(flagServerUrl).Changed {
 		m.StaticConfig.ServerURL = m.ServerURL

@@ -529,6 +529,31 @@ func (s *ValidateSuite) TestSkipJWTVerification() {
 	})
 }
 
+func (s *ValidateSuite) TestAcceptOpaqueTokens() {
+	s.Run("require_oauth with accept_opaque_tokens=true and no authorization_url is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = ""
+		cfg.AcceptOpaqueTokens = true
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("require_oauth with accept_opaque_tokens=true and authorization_url is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		cfg.AcceptOpaqueTokens = true
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("require_oauth=false with accept_opaque_tokens=true is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.AcceptOpaqueTokens = true
+		s.NoError(cfg.Validate())
+	})
+}
+
 func (s *ValidateSuite) TestClusterAuthMode() {
 	s.Run("passthrough without require_oauth is accepted", func() {
 		cfg := s.validConfig()

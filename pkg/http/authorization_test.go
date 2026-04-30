@@ -156,6 +156,44 @@ func TestJWTTokenValidateOffline(t *testing.T) {
 	})
 }
 
+func TestIsJWT(t *testing.T) {
+	t.Run("valid JWT format (3 dot-separated parts)", func(t *testing.T) {
+		if !isJWT(tokenBasicNotExpired) {
+			t.Error("expected tokenBasicNotExpired to be detected as JWT")
+		}
+	})
+	t.Run("valid JWT format (expired)", func(t *testing.T) {
+		if !isJWT(tokenBasicExpired) {
+			t.Error("expected tokenBasicExpired to be detected as JWT")
+		}
+	})
+	t.Run("OpenShift opaque token (sha256~...)", func(t *testing.T) {
+		if isJWT("sha256~ZxZCA-JzcWmicNGnISqK1SNwk3FgBz9rVpDmAxkZbeQ") {
+			t.Error("expected OpenShift opaque token to NOT be detected as JWT")
+		}
+	})
+	t.Run("random opaque token (no dots)", func(t *testing.T) {
+		if isJWT("abc123def456ghi789") {
+			t.Error("expected random token to NOT be detected as JWT")
+		}
+	})
+	t.Run("empty string", func(t *testing.T) {
+		if isJWT("") {
+			t.Error("expected empty string to NOT be detected as JWT")
+		}
+	})
+	t.Run("single dot (not JWT)", func(t *testing.T) {
+		if isJWT("part1.part2") {
+			t.Error("expected token with 1 dot to NOT be detected as JWT")
+		}
+	})
+	t.Run("three dots (not JWT)", func(t *testing.T) {
+		if isJWT("part1.part2.part3.part4") {
+			t.Error("expected token with 3 dots to NOT be detected as JWT")
+		}
+	})
+}
+
 func TestJWTClaimsGetScopes(t *testing.T) {
 	t.Run("no scopes", func(t *testing.T) {
 		claims, err := ParseJWTClaims(tokenBasicExpired)
