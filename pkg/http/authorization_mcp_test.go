@@ -769,6 +769,138 @@ func (s *AuthorizationSuite) TestAuthorizationClusterAuthModeKubeconfigDropsClie
 	s.Require().NoError(s.WaitForShutdown())
 }
 
+func (s *AuthorizationSuite) TestAuthorizationOpaqueTokenAccepted() {
+	// When accept_opaque_tokens=true, non-JWT tokens (e.g., OpenShift "sha256~...")
+	// should be accepted and passed through without validation.
+	s.MockServer.ResetHandlers()
+	s.StaticConfig.AcceptOpaqueTokens = true
+	s.StaticConfig.AuthorizationURL = ""
+	s.logBuffer.Reset()
+	s.StartServer()
+
+	opaqueToken := "sha256~ZxZCA-JzcWmicNGnISqK1SNwk3FgBz9rVpDmAxkZbeQ"
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + opaqueToken,
+	})
+
+	s.Run("MCP session is established with opaque token", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for opaque token authentication")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+
+	s.Run("HTTP request returns 200 for opaque token", func() {
+		resp := s.HttpGet("Bearer " + opaqueToken)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+		s.NotEqual(http.StatusUnauthorized, resp.StatusCode, "Expected non-401 status for opaque token")
+	})
+
+	s.Run("logs acceptance of opaque token", func() {
+		s.Contains(s.logBuffer.String(), "Accepting opaque (non-JWT) bearer token",
+			"Expected log entry for opaque token acceptance")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+func (s *AuthorizationSuite) TestAuthorizationOpaqueTokenRejectedWithoutFlag() {
+	// When accept_opaque_tokens=false (default), non-JWT tokens should be rejected.
+	s.MockServer.ResetHandlers()
+	s.StaticConfig.AcceptOpaqueTokens = false
+	s.StaticConfig.SkipJWTVerification = true // Allow server to start without authorization_url
+	s.StaticConfig.AuthorizationURL = ""
+	s.logBuffer.Reset()
+	s.StartServer()
+
+	opaqueToken := "sha256~ZxZCA-JzcWmicNGnISqK1SNwk3FgBz9rVpDmAxkZbeQ"
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + opaqueToken,
+	})
+
+	s.Run("MCP session is rejected for opaque token without flag", func() {
+		s.Nil(s.mcpClient.Session, "Expected no session when accept_opaque_tokens is false")
+	})
+
+	s.Run("HTTP request returns 401 for opaque token", func() {
+		resp := s.HttpGet("Bearer " + opaqueToken)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+		s.Equal(http.StatusUnauthorized, resp.StatusCode, "Expected HTTP 401 for opaque token without flag")
+	})
+
+	s.Run("logs rejection of opaque token", func() {
+		s.Contains(s.logBuffer.String(), "opaque token rejected",
+			"Expected log entry for opaque token rejection")
+	})
+
+	if s.mcpClient != nil {
+		s.mcpClient.Close()
+		s.mcpClient = nil
+	}
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+func (s *AuthorizationSuite) TestAuthorizationJWTStillWorksWithOpaqueTokenFlag() {
+	// When accept_opaque_tokens=true, JWT tokens should still be validated normally.
+	s.MockServer.ResetHandlers()
+	s.StaticConfig.AcceptOpaqueTokens = true
+	s.StaticConfig.SkipJWTVerification = true
+	s.StaticConfig.AuthorizationURL = ""
+	s.logBuffer.Reset()
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + tokenBasicNotExpired,
+	})
+
+	s.Run("JWT token is still accepted alongside opaque token support", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for JWT token")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+func (s *AuthorizationSuite) TestAuthorizationJWTRejectedWithOpaqueOnlyConfig() {
+	// When accept_opaque_tokens=true but skip_jwt_verification=false and no
+	// authorization_url, JWT tokens should get a 401 (not 500).
+	s.MockServer.ResetHandlers()
+	s.StaticConfig.AcceptOpaqueTokens = true
+	s.StaticConfig.SkipJWTVerification = false
+	s.StaticConfig.AuthorizationURL = ""
+	s.logBuffer.Reset()
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + tokenBasicNotExpired,
+	})
+
+	s.Run("MCP session is rejected for JWT in opaque-only config", func() {
+		s.Nil(s.mcpClient.Session, "Expected nil session for JWT in opaque-only config")
+	})
+
+	s.Run("HTTP request returns 401 (not 500) for JWT", func() {
+		resp := s.HttpGet("Bearer " + tokenBasicNotExpired)
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+		s.Equal(http.StatusUnauthorized, resp.StatusCode, "Expected HTTP 401, not 500, for JWT in opaque-only config")
+	})
+
+	s.Run("logs that only opaque tokens are supported", func() {
+		s.Contains(s.logBuffer.String(), "JWT received but only opaque tokens are supported",
+			"Expected log entry explaining JWT rejection in opaque-only config")
+	})
+
+	if s.mcpClient != nil {
+		s.mcpClient.Close()
+		s.mcpClient = nil
+	}
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
 func TestAuthorization(t *testing.T) {
 	suite.Run(t, new(AuthorizationSuite))
 }

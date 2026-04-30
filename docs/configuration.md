@@ -482,6 +482,7 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `oauth_audience` | string | `""` | Valid audience for OAuth tokens (for offline JWT claim validation). |
 | `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
 | `skip_jwt_verification` | boolean | `false` | When `true`, allows JWTs without cryptographic signature verification when `require_oauth` is enabled but no `authorization_url` is configured. Only use behind a trusted reverse proxy that already verifies tokens. When `false` (default), the server refuses to start in this configuration. |
+| `accept_opaque_tokens` | boolean | `false` | When `true`, accepts non-JWT bearer tokens (e.g., OpenShift OAuth `sha256~...` tokens) and passes them through to the Kubernetes API server for validation. Use with `cluster_auth_mode = "passthrough"` for per-user RBAC with OpenShift OAuth or similar non-JWT token providers. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
 | `sts_client_id` | string | `""` | OAuth client ID for backend token exchange. |

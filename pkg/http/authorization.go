@@ -96,6 +96,22 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
+			// Opaque token support (e.g., OpenShift OAuth tokens: "sha256~...")
+			// When accept_opaque_tokens is enabled and the token is not a JWT,
+			// pass it through without validation — the downstream Kubernetes API
+			// server will validate it directly.
+			if !isJWT(token) {
+				if staticConfig.AcceptOpaqueTokens {
+					klog.V(2).Infof("Accepting opaque (non-JWT) bearer token for passthrough: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+					ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				klog.V(1).Infof("Authentication failed - opaque token rejected (accept_opaque_tokens not enabled): %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+				write401(w, wwwAuthenticateHeader, "invalid_token", "Unauthorized: Token format not supported")
+				return
+			}
+
 			claims, err := ParseJWTClaims(token)
 			if err == nil && claims == nil {
 				// Impossible case, but just in case
@@ -117,6 +133,14 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 					}
 					// No provider configured - require explicit opt-in via skip_jwt_verification
 					if !staticConfig.SkipJWTVerification {
+						// When accept_opaque_tokens is enabled, the server may legitimately
+						// start without an OIDC provider. JWTs arriving in this config are
+						// a client error (wrong token type), not a server misconfiguration.
+						if staticConfig.AcceptOpaqueTokens {
+							klog.V(1).Infof("Authentication rejected - JWT received but only opaque tokens are supported in this configuration: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+							write401(w, wwwAuthenticateHeader, "invalid_token", "Unauthorized: Invalid token")
+							return
+						}
 						klog.V(1).Infof("Authentication rejected - JWT verification not configured: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 						http.Error(w, "JWT verification not configured - set authorization_url or skip_jwt_verification", http.StatusInternalServerError)
 						return
@@ -195,6 +219,11 @@ func (c *JWTClaims) ValidateWithProvider(ctx context.Context, audience string, p
 		}
 	}
 	return nil
+}
+
+// isJWT checks if a token looks like a JWT (three dot-separated base64 parts).
+func isJWT(token string) bool {
+	return strings.Count(token, ".") == 2
 }
 
 func ParseJWTClaims(token string) (*JWTClaims, error) {
