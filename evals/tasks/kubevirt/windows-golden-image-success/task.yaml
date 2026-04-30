@@ -1,0 +1,77 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt,tekton
+  name: "windows-golden-image-success"
+  difficulty: hard
+  description: "Use the windows-golden-image prompt to generate a Windows golden image creation guide"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: windows-golden-image-success
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: windows-golden-image-success
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          NS="windows-golden-image-success"
+
+          PIPELINERUN_COUNT=$(kubectl get pipelinerun -n "$NS" 2>/dev/null | grep -c "windows" || true)
+          if [ "$PIPELINERUN_COUNT" -lt "1" ]; then
+            echo "✗ No PipelineRun created — agent must create one after EULA acceptance"
+            exit 1
+          fi
+
+          PR=$(kubectl get pipelinerun -n "$NS" -o name | grep "windows" | head -1)
+          echo "✓ PipelineRun created: $PR"
+
+          get() { kubectl get "$PR" -n "$NS" -o "jsonpath=$1" 2>/dev/null || true; }
+          check() { local v; v=$(get "$2"); [[ "$v" == "$3" ]] || { echo "✗ $1: expected '$3', got '$v'"; exit 1; }; echo "  ✓ $1: $v"; }
+
+          [[ -n "$(get '{.spec.params[?(@.name=="winImageDownloadURL")].value}')" ]] \
+            || { echo "✗ winImageDownloadURL param missing"; exit 1; }
+
+          check "acceptEula"    '{.spec.params[?(@.name=="acceptEula")].value}'             "true"
+          check "resolver"      '{.spec.pipelineRef.resolver}'                              "hub"
+          check "pipeline name" '{.spec.pipelineRef.params[?(@.name=="name")].value}'      "windows-efi-installer"
+          check "catalog"       '{.spec.pipelineRef.params[?(@.name=="catalog")].value}'   "kubevirt-tekton-pipelines"
+
+          VERSION=$(get '{.spec.pipelineRef.params[?(@.name=="version")].value}')
+          if [[ -n "$VERSION" ]] && ! [[ "$VERSION" =~ ^0\.[0-9]+\.[0-9]+$ ]]; then
+            echo "✗ version '$VERSION' does not match expected format (0.xx.0)"; exit 1
+          fi
+          echo "  ✓ version: ${VERSION:-latest}"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete pipelinerun --all -n windows-golden-image-success --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: windows-golden-image-success
+        ignoreNotFound: true
+  prompt:
+    inline: |-
+      Use the windows-golden-image prompt to create a Windows Server 2022 golden image.
+      Use this ISO URL:
+      https://example.com/windows-server-2022.iso
+
+      Use namespace: windows-golden-image-success.
+
+      I accept the Microsoft EULA.

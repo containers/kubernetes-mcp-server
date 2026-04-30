@@ -592,6 +592,12 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) **(required)** - The namespace of the VirtualMachine to troubleshoot
   - `name` (`string`) **(required)** - The name of the VirtualMachine to troubleshoot
 
+- **windows-golden-image** - Guides creation of a Windows golden image via the windows-efi-installer Tekton pipeline
+  - `winImageDownloadURL` (`string`) **(required)** - Microsoft Windows ISO download URL
+  - `namespace` (`string`) - Target namespace for the PipelineRun
+  - `windowsVersion` (`string`) - Windows version: 10, 11, 2k22 (default), or 2k25
+  - `pipelineVersion` (`string`) - Pipeline version (default: latest). Use specific version like 0.25.0 if needed
+
 </details>
 
 

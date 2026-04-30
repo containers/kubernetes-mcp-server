@@ -63,3 +63,38 @@ Generate a step-by-step troubleshooting guide for diagnosing VirtualMachine issu
 6. Related Kubernetes events
 
 Usage requires the `namespace` and `name` of the VirtualMachine to troubleshoot.
+
+#### `windows-golden-image`
+
+Create a Windows golden image by running the `windows-efi-installer` Tekton pipeline
+from the [KubeVirt Tekton Pipelines catalog](https://artifacthub.io/packages/tekton-pipeline/kubevirt-tekton-pipelines/windows-efi-installer).
+The pipeline downloads a Windows ISO, modifies it for EFI automated installation,
+creates a VM, installs Windows, and produces a bootable DataSource/DataVolume suitable
+as a golden image for Windows VirtualMachines.
+
+**How it works:**
+The prompt dynamically fetches the latest PipelineRun template from Artifact Hub, ensuring
+compatibility with the specified pipeline version. This means the generated YAML will always
+match the format expected by the pipeline, even when new versions introduce changes.
+
+**Prerequisites:**
+- KubeVirt
+- Tekton Pipelines
+- Both `kubevirt` and `tekton` toolsets must be enabled
+
+**Arguments:**
+- `winImageDownloadURL` (required): Microsoft Windows ISO download URL
+- `namespace` (optional): Target namespace for the PipelineRun
+- `windowsVersion` (optional): Windows version — `10`, `11`, `2k22` (default), or `2k25`
+- `pipelineVersion` (optional): Pipeline version to use (default: latest). Specify a version like `0.25.0` if needed
+
+**EULA Notice:**
+The prompt instructs the AI agent to ask for explicit user acceptance of the Microsoft
+EULA before creating the PipelineRun. The `acceptEula` parameter is only set to `true`
+after the user confirms agreement.
+
+**Usage:**
+Requires both `kubevirt` and `tekton` toolsets enabled:
+```shell
+kubernetes-mcp-server --toolsets core,kubevirt,tekton
+```

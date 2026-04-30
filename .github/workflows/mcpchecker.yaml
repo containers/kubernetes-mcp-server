@@ -136,7 +136,7 @@ jobs:
               ;;
             kubevirt)
               echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
-              echo "toolsets=core,config,kubevirt" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config,kubevirt,tekton" >> $GITHUB_OUTPUT
               ;;
             kiali)
               echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT

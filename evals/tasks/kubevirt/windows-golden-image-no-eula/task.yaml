@@ -1,0 +1,67 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt,tekton
+  name: "windows-golden-image-no-eula"
+  difficulty: medium
+  description: "Test the windows-golden-image prompt output and EULA handling"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: windows-golden-image-no-eula
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: windows-golden-image-no-eula
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          NS="windows-golden-image-no-eula"
+
+          echo "=== Verification: Windows Golden Image Prompt Output ==="
+
+          # The task explicitly says "I do not accept the Microsoft EULA.".
+          # A PipelineRun being present means the agent ignored that instruction.
+          PIPELINERUN_COUNT=$(kubectl get pipelinerun -n "$NS" 2>/dev/null | grep -c "windows" || true)
+
+          if [ "$PIPELINERUN_COUNT" -gt "0" ]; then
+            echo "✗ PipelineRun was created despite EULA not being accepted — agent disobeyed instructions"
+            exit 1
+          fi
+
+          echo "✓ No PipelineRun created (correct — EULA was not accepted)"
+          echo ""
+          echo "=== Prompt Output Verification Complete ==="
+          exit 0
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete pipelinerun --all -n windows-golden-image-no-eula --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: windows-golden-image-no-eula
+        ignoreNotFound: true
+  prompt:
+    inline: |-
+      Use the windows-golden-image prompt to create a Windows 11 golden image.
+
+      Use this ISO URL: https://example.com/windows11.iso
+
+      Use namespace: windows-golden-image-no-eula.
+
+      I do not accept the Microsoft EULA.
