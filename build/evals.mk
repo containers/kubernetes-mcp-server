@@ -7,6 +7,9 @@ MCP_CONFIG_DIR ?= dev/config/mcp-configs
 
 MCPCHECKER = $(shell pwd)/_output/tools/bin/mcpchecker
 MCPCHECKER_VERSION ?= latest
+CLAUDE_AGENT_ACP = $(shell pwd)/_output/tools/bin/claude-agent-acp
+CLAUDE_AGENT_ACP_VERSION ?= latest
+
 EVAL_CONFIG ?= evals/openai-agent/eval.yaml
 EVAL_LABEL_SELECTOR ?= suite=kubernetes
 EVAL_TASK_FILTER ?=
@@ -14,12 +17,21 @@ EVAL_VERBOSE ?= false
 
 # Download and install mcpchecker if not already installed
 .PHONY: mcpchecker
-mcpchecker:
+mcpchecker: claude-agent-acp
 	@[ -f $(MCPCHECKER) ] || { \
 		set -e ;\
 		echo "Installing mcpchecker $(MCPCHECKER_VERSION) to $(MCPCHECKER)..." ;\
 		mkdir -p $(shell dirname $(MCPCHECKER)) ;\
 		GOBIN=$(shell dirname $(MCPCHECKER)) go install github.com/mcpchecker/mcpchecker/cmd/mcpchecker@$(MCPCHECKER_VERSION) ;\
+	}
+
+.PHONY: claude-agent-acp
+claude-agent-acp:
+	@[ -f $(CLAUDE_AGENT_ACP) ] || { \
+		set -e ;\
+		echo "Installing claude-agent-acp $(CLAUDE_AGENT_ACP_VERSION) to $(CLAUDE_AGENT_ACP)..." ;\
+		mkdir -p $(shell dirname $(CLAUDE_AGENT_ACP)) ;\
+		GOBIN=$(shell dirname $(CLAUDE_AGENT_ACP)) go install github.com/mcpchecker/claude-agent-acp/cmd/claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) ;\
 	}
 
 ##@ Evals
