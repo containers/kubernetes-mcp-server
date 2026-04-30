@@ -101,6 +101,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 						Type:        "string",
 						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
 					},
+					"dryRun": {
+						Type:        "boolean",
+						Description: "If true, only validate the resource without actually creating or updating it. The server will perform validation but won't persist the changes",
+					},
 				},
 				Required: []string{"resource"},
 			},
@@ -172,6 +176,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 					"scale": {
 						Type:        "integer",
 						Description: "Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it",
+					},
+					"dryRun": {
+						Type:        "boolean",
+						Description: "If true, only validate the scale operation without actually applying it. The server will perform validation but won't persist the changes",
 					},
 				},
 				Required: []string{"apiVersion", "kind", "name"},
@@ -270,15 +278,32 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r)
+	p := api.WrapParams(params)
+	dryRun := p.OptionalBool("dryRun", false)
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
+	}
+
+	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r, dryRun)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
 	}
+
+	var result string
 	marshalledYaml, err := output.MarshalYaml(resources)
-	if err != nil {
-		err = fmt.Errorf("failed to create or update resources: %w", err)
+	if dryRun {
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to validate resources: %w", err)), nil
+		}
+		result = "# The following resources (YAML) passed validation (dry run mode)\n" + marshalledYaml
+	} else {
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
+		}
+		result = "# The following resources (YAML) have been created or updated successfully\n" + marshalledYaml
 	}
-	return api.NewToolCallResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
+
+	return api.NewToolCallResult(result, nil), nil
 }
 
 func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -356,7 +381,13 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 	}
 
-	scale, err := kubernetes.NewCore(params).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
+	p := api.WrapParams(params)
+	dryRun := p.OptionalBool("dryRun", false)
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
+	}
+
+	scale, err := kubernetes.NewCore(params).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale, dryRun)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
 	}
@@ -366,7 +397,14 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to marshall scale to yaml format: %v", scale)), nil
 	}
 
-	return api.NewToolCallResult("# Current resource scale (YAML) is below\n"+marshalled, err), nil
+	var result string
+	if dryRun && shouldScale {
+		result = "# Scale operation validated (dry run mode). Current resource scale (YAML) is below\n" + marshalled
+	} else {
+		result = "# Current resource scale (YAML) is below\n" + marshalled
+	}
+
+	return api.NewToolCallResult(result, err), nil
 }
 
 func parseScaleValue(desiredScale interface{}) (int64, error) {
