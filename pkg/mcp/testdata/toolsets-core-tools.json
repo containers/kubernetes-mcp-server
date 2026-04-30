@@ -449,11 +449,15 @@
       "readOnlyHint": true,
       "title": "Resources: Get"
     },
-    "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name. Use the optional gotemplate parameter to extract specific fields instead of returning full YAML (same syntax as oc get -o go-template).\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "gotemplate": {
+          "description": "Optional Go template to extract specific fields instead of returning full YAML (e.g. {{.spec.source.repoURL}}, {{.status.phase}})",
           "type": "string"
         },
         "kind": {
@@ -486,7 +490,7 @@
       "readOnlyHint": true,
       "title": "Resources: List"
     },
-    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector. Use the optional gotemplate parameter to extract specific fields instead of returning full YAML (same syntax as oc get -o go-template).\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "properties": {
         "apiVersion": {
@@ -496,6 +500,10 @@
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
           "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
+          "type": "string"
+        },
+        "gotemplate": {
+          "description": "Optional Go template to extract specific fields instead of returning full YAML (e.g. {{range .items}}{{.metadata.name}}\\n{{end}}, {{.spec.source.repoURL}})",
           "type": "string"
         },
         "kind": {

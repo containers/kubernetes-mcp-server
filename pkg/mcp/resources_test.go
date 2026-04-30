@@ -1029,6 +1029,113 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesListGoTemplate() {
+	s.InitMcpClient()
+	s.Run("resources_list with gotemplate extracts names", func() {
+		result, err := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"namespace":  "default",
+			"gotemplate": "{{range .items}}{{.metadata.name}}\n{{end}}",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		content := result.Content[0].(*mcp.TextContent).Text
+		s.Contains(content, "a-pod-in-default")
+	})
+	s.Run("resources_list with gotemplate extracts namespace and name", func() {
+		result, err := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"namespace":  "default",
+			"gotemplate": "{{range .items}}{{.metadata.namespace}}/{{.metadata.name}}\n{{end}}",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		content := result.Content[0].(*mcp.TextContent).Text
+		s.Contains(content, "default/a-pod-in-default")
+	})
+	s.Run("resources_list with invalid gotemplate returns error", func() {
+		result, _ := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"namespace":  "default",
+			"gotemplate": "{{invalid",
+		})
+		s.Truef(result.IsError, "call tool should fail for invalid template")
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "invalid go template expression")
+	})
+	s.Run("resources_list with gotemplate on empty list returns no output", func() {
+		result, err := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion":    "v1",
+			"kind":          "Pod",
+			"namespace":     "default",
+			"labelSelector": "nonexistent-label=nonexistent-value",
+			"gotemplate":    "{{range .items}}{{.metadata.name}}\n{{end}}",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool should not fail: %v", result.Content)
+		content := result.Content[0].(*mcp.TextContent).Text
+		s.Equal("(no output from go template)", content)
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesListGoTemplateInTableMode() {
+	s.Cfg.ListOutput = "table"
+	s.InitMcpClient()
+	s.Run("resources_list with gotemplate works even when list output is table", func() {
+		result, err := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"namespace":  "default",
+			"gotemplate": "{{range .items}}{{.metadata.name}}\n{{end}}",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		content := result.Content[0].(*mcp.TextContent).Text
+		s.Contains(content, "a-pod-in-default")
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesGetGoTemplate() {
+	s.InitMcpClient()
+	s.Run("resources_get with gotemplate extracts specific field", func() {
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"name":       "default",
+			"gotemplate": "{{.metadata.name}}",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		content := result.Content[0].(*mcp.TextContent).Text
+		s.Equal("default", content)
+	})
+	s.Run("resources_get with gotemplate extracts nested fields", func() {
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"namespace":  "default",
+			"name":       "a-pod-in-default",
+			"gotemplate": "{{.kind}}/{{.metadata.name}}",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		content := result.Content[0].(*mcp.TextContent).Text
+		s.Equal("Pod/a-pod-in-default", content)
+	})
+	s.Run("resources_get with invalid gotemplate returns error", func() {
+		result, _ := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"name":       "default",
+			"gotemplate": "{{invalid",
+		})
+		s.Truef(result.IsError, "call tool should fail for invalid template")
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "invalid go template expression")
+	})
+}
+
 func TestResources(t *testing.T) {
 	suite.Run(t, new(ResourcesSuite))
 }
