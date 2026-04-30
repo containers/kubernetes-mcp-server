@@ -69,7 +69,7 @@ func (s *ResourceSuite) TestResources() {
 
 	s.Run("all resources appear in list with correct metadata", func() {
 		result, err := s.ListResources()
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result.Resources, 2)
 
 		byURI := make(map[string]*mcp.Resource)
@@ -90,15 +90,17 @@ func (s *ResourceSuite) TestResources() {
 
 	s.Run("each resource has correct content and mimeType", func() {
 		result1, err := s.ReadResource("test://example/resource1")
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result1.Contents, 1)
 		s.Equal(txt1, result1.Contents[0].Text)
+		s.Empty(result1.Contents[0].Blob)
 		s.Equal("text/plain", result1.Contents[0].MIMEType)
 
 		result2, err := s.ReadResource("test://example/resource2")
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result2.Contents, 1)
 		s.Equal(json2, result2.Contents[0].Text)
+		s.Empty(result2.Contents[0].Blob)
 		s.Equal("application/json", result2.Contents[0].MIMEType)
 	})
 }
@@ -130,7 +132,7 @@ func (s *ResourceSuite) TestResourceTemplates() {
 
 	s.Run("template appears in list", func() {
 		result, err := s.ListResourceTemplates()
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result.ResourceTemplates, 1)
 		s.Equal(uriTempl, result.ResourceTemplates[0].URITemplate)
 		s.Equal(txtFoo, result.ResourceTemplates[0].Name)
@@ -141,17 +143,19 @@ func (s *ResourceSuite) TestResourceTemplates() {
 	s.Run("handler receives correct URI for different URIs", func() {
 		uri1 := "test://example/foo"
 		result1, err := s.ReadResource(uri1)
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result1.Contents, 1)
 		s.Equal(uri1, result1.Contents[0].URI)
 		s.Equal("content for: "+uri1, result1.Contents[0].Text)
+		s.Empty(result1.Contents[0].Blob)
 
 		uri2 := "test://example/bar"
 		result2, err := s.ReadResource(uri2)
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result2.Contents, 1)
 		s.Equal(uri2, result2.Contents[0].URI)
 		s.Equal("content for: "+uri2, result2.Contents[0].Text)
+		s.Empty(result2.Contents[0].Blob)
 	})
 }
 
@@ -374,7 +378,7 @@ func (s *ResourceSuite) TestBlobResource() {
 
 	s.Run("blob content is returned correctly", func() {
 		result, err := s.ReadResource("test://example/image")
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result.Contents, 1)
 		s.Equal("image/png", result.Contents[0].MIMEType)
 		s.Equal(blobData, result.Contents[0].Blob)
@@ -423,7 +427,7 @@ func (s *ResourceSuite) TestMIMETypeOverride() {
 
 	s.Run("handler MIMEType overrides resource-level MIMEType", func() {
 		result, err := s.ReadResource("test://example/override")
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result.Contents, 1)
 		s.Equal("application/json", result.Contents[0].MIMEType)
 		s.Equal(`{"overridden": true}`, result.Contents[0].Text)
@@ -431,13 +435,29 @@ func (s *ResourceSuite) TestMIMETypeOverride() {
 
 	s.Run("handler MIMEType overrides template-level MIMEType", func() {
 		result, err := s.ReadResource("test://example/tmpl-override/42")
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Require().Len(result.Contents, 1)
 		s.Equal("application/json", result.Contents[0].MIMEType)
 	})
 }
 
-func (s *ResourceSuite) TestInvalidURIPanics() {
+func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
+	goodToolset := &mockResourceToolset{
+		name: "resource-test-good",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/good",
+					Name:     "Good Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "still up"}, nil
+				},
+			},
+		},
+	}
+
 	badTemplateToolset := &mockResourceToolset{
 		name: "resource-test-bad",
 		resourceTemplates: []api.ServerResourceTemplate{
@@ -454,22 +474,194 @@ func (s *ResourceSuite) TestInvalidURIPanics() {
 		},
 	}
 
-	emptyToolset := &mockResourceToolset{name: "resource-test-empty"}
-
 	toolsets.Clear()
-	toolsets.Register(emptyToolset)
+	toolsets.Register(goodToolset)
 	toolsets.Register(badTemplateToolset)
-	s.Cfg.Toolsets = []string{"resource-test-empty"}
+	s.Cfg.Toolsets = []string{"resource-test-good"}
 	s.InitMcpClient()
 
-	s.Run("invalid resource template URI panics", func() {
+	s.Run("invalid resource template URI returns error without panic", func() {
 		newConfig := config.Default()
 		newConfig.Toolsets = []string{"resource-test-bad"}
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 
-		s.Panics(func() {
-			_ = s.mcpServer.ReloadConfiguration(newConfig)
+		s.NotPanics(func() {
+			err := s.mcpServer.ReloadConfiguration(newConfig)
+			s.Require().Error(err)
+			s.Contains(err.Error(), "{{invalid")
 		})
+	})
+
+	s.Run("previously registered resource still served after failed reload", func() {
+		// Reload aborted in the convert phase, so SDK state must be unchanged
+		// from the pre-reload snapshot — the good resource is still readable.
+		result, err := s.ReadResource("test://example/good")
+		s.Require().NoError(err)
+		s.Require().Len(result.Contents, 1)
+		s.Equal("still up", result.Contents[0].Text)
+	})
+
+	s.Run("server accepts a subsequent valid reload", func() {
+		recoveryConfig := config.Default()
+		recoveryConfig.Toolsets = []string{"resource-test-good"}
+		recoveryConfig.KubeConfig = s.Cfg.KubeConfig
+
+		s.Require().NoError(s.mcpServer.ReloadConfiguration(recoveryConfig))
+
+		result, err := s.ReadResource("test://example/good")
+		s.Require().NoError(err)
+		s.Require().Len(result.Contents, 1)
+		s.Equal("still up", result.Contents[0].Text)
+	})
+}
+
+func (s *ResourceSuite) TestInvalidResourceURIReturnsError() {
+	goodToolset := &mockResourceToolset{
+		name: "resource-test-good",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/good",
+					Name:     "Good Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "still up"}, nil
+				},
+			},
+		},
+	}
+
+	badURIToolset := &mockResourceToolset{
+		name: "resource-test-bad-uri",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					// Invalid percent-escape: triggers url.Parse error.
+					URI:      "test://%zz",
+					Name:     "Bad URI Resource",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "unreachable"}, nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(goodToolset)
+	toolsets.Register(badURIToolset)
+	s.Cfg.Toolsets = []string{"resource-test-good"}
+	s.InitMcpClient()
+
+	s.Run("invalid resource URI returns error without panic", func() {
+		newConfig := config.Default()
+		newConfig.Toolsets = []string{"resource-test-bad-uri"}
+		newConfig.KubeConfig = s.Cfg.KubeConfig
+
+		s.NotPanics(func() {
+			err := s.mcpServer.ReloadConfiguration(newConfig)
+			s.Require().Error(err)
+			s.Contains(err.Error(), "%zz")
+		})
+	})
+
+	s.Run("previously registered resource still served after failed reload", func() {
+		// Reload aborted in the convert phase, so SDK state must be unchanged
+		// from the pre-reload snapshot — the good resource is still readable.
+		result, err := s.ReadResource("test://example/good")
+		s.Require().NoError(err)
+		s.Require().Len(result.Contents, 1)
+		s.Equal("still up", result.Contents[0].Text)
+	})
+}
+
+func (s *ResourceSuite) TestResourceContentInvariant() {
+	bothEmptyToolset := &mockResourceToolset{
+		name: "resource-test-both-empty",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/both-empty",
+					Name:     "Both Empty",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{}, nil
+				},
+			},
+		},
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "test://example/tmpl-both-empty/{id}",
+					Name:        "Tmpl Both Empty",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+					return &api.ResourceContent{}, nil
+				},
+			},
+		},
+	}
+
+	bothSetToolset := &mockResourceToolset{
+		name: "resource-test-both-set",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "test://example/both-set",
+					Name:     "Both Set",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "x", Blob: []byte{0x01}}, nil
+				},
+			},
+		},
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "test://example/tmpl-both-set/{id}",
+					Name:        "Tmpl Both Set",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "x", Blob: []byte{0x01}}, nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(bothEmptyToolset)
+	toolsets.Register(bothSetToolset)
+	s.Cfg.Toolsets = []string{"resource-test-both-empty", "resource-test-both-set"}
+	s.InitMcpClient()
+
+	s.Run("static resource with both Text and Blob empty returns error", func() {
+		result, err := s.ReadResource("test://example/both-empty")
+		s.Error(err)
+		s.Nil(result)
+	})
+
+	s.Run("template resource with both Text and Blob empty returns error", func() {
+		result, err := s.ReadResource("test://example/tmpl-both-empty/123")
+		s.Error(err)
+		s.Nil(result)
+	})
+
+	s.Run("static resource with both Text and Blob set returns error", func() {
+		result, err := s.ReadResource("test://example/both-set")
+		s.Error(err)
+		s.Nil(result)
+	})
+
+	s.Run("template resource with both Text and Blob set returns error", func() {
+		result, err := s.ReadResource("test://example/tmpl-both-set/123")
+		s.Error(err)
+		s.Nil(result)
 	})
 }
 
