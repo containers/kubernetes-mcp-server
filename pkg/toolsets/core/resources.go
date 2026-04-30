@@ -225,7 +225,19 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	content, err := params.ListOutput.PrintObj(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
+	}
+	structured := ret.UnstructuredContent()
+	if params.ListOutput.AsTable() {
+		structuredOptions := resourceListOptions
+		structuredOptions.AsTable = false
+		if structuredRet, sErr := kubernetes.NewCore(params).ResourcesList(params, gvk, ns, structuredOptions); sErr == nil {
+			structured = structuredRet.UnstructuredContent()
+		}
+	}
+	return &api.ToolCallResult{Content: content, StructuredContent: output.PruneForStructuredOutput(structured)}, nil
 }
 
 func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -256,7 +268,11 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
 	}
-	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
+	marshalledYaml, err := output.MarshalYaml(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
+	}
+	return &api.ToolCallResult{Content: marshalledYaml, StructuredContent: output.PruneForStructuredOutput(ret.Object)}, nil
 }
 
 func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -276,9 +292,16 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 	}
 	marshalledYaml, err := output.MarshalYaml(resources)
 	if err != nil {
-		err = fmt.Errorf("failed to create or update resources: %w", err)
+		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
 	}
-	return api.NewToolCallResult("# The following resources (YAML) have been created or updated successfully\n"+marshalledYaml, err), nil
+	structured := make([]map[string]interface{}, len(resources))
+	for i, r := range resources {
+		structured[i] = r.Object
+	}
+	return &api.ToolCallResult{
+		Content:           "# The following resources (YAML) have been created or updated successfully\n" + marshalledYaml,
+		StructuredContent: output.PruneForStructuredOutput(structured),
+	}, nil
 }
 
 func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -318,7 +341,16 @@ func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %w", err)), nil
 	}
-	return api.NewToolCallResult("Resource deleted successfully", err), nil
+	return &api.ToolCallResult{
+		Content: "Resource deleted successfully",
+		StructuredContent: map[string]any{
+			"status":     "deleted",
+			"apiVersion": gvk.GroupVersion().String(),
+			"kind":       gvk.Kind,
+			"namespace":  ns,
+			"name":       n,
+		},
+	}, nil
 }
 
 func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -366,7 +398,10 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to marshall scale to yaml format: %v", scale)), nil
 	}
 
-	return api.NewToolCallResult("# Current resource scale (YAML) is below\n"+marshalled, err), nil
+	return &api.ToolCallResult{
+		Content:           "# Current resource scale (YAML) is below\n" + marshalled,
+		StructuredContent: output.PruneForStructuredOutput(scale.Object),
+	}, nil
 }
 
 func parseScaleValue(desiredScale interface{}) (int64, error) {
