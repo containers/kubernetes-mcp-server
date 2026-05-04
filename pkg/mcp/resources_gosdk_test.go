@@ -506,7 +506,7 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 		// must mirror that — otherwise downstream reads (rate limit, list
 		// output, confirmation rules, ...) would see a config that disagrees
 		// with what the SDK is actually serving.
-		s.Equal([]string{"resource-test-good"}, s.mcpServer.configuration.StaticConfig.Toolsets)
+		s.Equal([]string{"resource-test-good"}, s.mcpServer.configuration.Load().StaticConfig.Toolsets)
 	})
 
 	s.Run("server accepts a subsequent valid reload", func() {

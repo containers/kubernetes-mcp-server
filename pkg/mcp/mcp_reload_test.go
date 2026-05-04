@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 
@@ -68,9 +71,9 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 	s.server = server
 
 	s.Run("initial configuration loaded correctly", func() {
-		s.Equal(s.Cfg.LogLevel, server.configuration.LogLevel)
-		s.Equal(s.Cfg.ListOutput, server.configuration.StaticConfig.ListOutput)
-		s.Equal(s.Cfg.Toolsets, server.configuration.StaticConfig.Toolsets)
+		s.Equal(s.Cfg.LogLevel, server.configuration.Load().LogLevel)
+		s.Equal(s.Cfg.ListOutput, server.configuration.Load().StaticConfig.ListOutput)
+		s.Equal(s.Cfg.Toolsets, server.configuration.Load().StaticConfig.Toolsets)
 	})
 
 	s.Run("reload with new log level", func() {
@@ -83,9 +86,9 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 		err = server.ReloadConfiguration(newConfig)
 		s.Require().NoError(err)
 
-		s.Equal(5, server.configuration.LogLevel)
-		s.Equal("yaml", server.configuration.StaticConfig.ListOutput)
-		s.Equal([]string{"core", "config"}, server.configuration.StaticConfig.Toolsets)
+		s.Equal(5, server.configuration.Load().LogLevel)
+		s.Equal("yaml", server.configuration.Load().StaticConfig.ListOutput)
+		s.Equal([]string{"core", "config"}, server.configuration.Load().StaticConfig.Toolsets)
 	})
 
 	s.Run("reload with additional toolsets", func() {
@@ -98,9 +101,9 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 		err = server.ReloadConfiguration(newConfig)
 		s.Require().NoError(err)
 
-		s.Equal(5, server.configuration.LogLevel)
-		s.Equal("yaml", server.configuration.StaticConfig.ListOutput)
-		s.Equal([]string{"core", "config", "helm"}, server.configuration.StaticConfig.Toolsets)
+		s.Equal(5, server.configuration.Load().LogLevel)
+		s.Equal("yaml", server.configuration.Load().StaticConfig.ListOutput)
+		s.Equal([]string{"core", "config", "helm"}, server.configuration.Load().StaticConfig.Toolsets)
 	})
 
 	s.Run("reload with partial changes", func() {
@@ -113,9 +116,9 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 		err = server.ReloadConfiguration(newConfig)
 		s.Require().NoError(err)
 
-		s.Equal(7, server.configuration.LogLevel)
-		s.Equal("yaml", server.configuration.StaticConfig.ListOutput)
-		s.Equal([]string{"core", "config", "helm"}, server.configuration.StaticConfig.Toolsets)
+		s.Equal(7, server.configuration.Load().LogLevel)
+		s.Equal("yaml", server.configuration.Load().StaticConfig.ListOutput)
+		s.Equal([]string{"core", "config", "helm"}, server.configuration.Load().StaticConfig.Toolsets)
 	})
 
 	s.Run("reload back to defaults", func() {
@@ -128,9 +131,9 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 		err = server.ReloadConfiguration(newConfig)
 		s.Require().NoError(err)
 
-		s.Equal(0, server.configuration.LogLevel)
-		s.Equal("table", server.configuration.StaticConfig.ListOutput)
-		s.Equal([]string{"core", "config"}, server.configuration.StaticConfig.Toolsets)
+		s.Equal(0, server.configuration.Load().LogLevel)
+		s.Equal("table", server.configuration.Load().StaticConfig.ListOutput)
+		s.Equal([]string{"core", "config"}, server.configuration.Load().StaticConfig.Toolsets)
 	})
 }
 
@@ -145,7 +148,7 @@ func (s *ConfigReloadSuite) TestConfigurationValues() {
 
 	s.Run("reload updates configuration values", func() {
 		// Verify initial values
-		initialLogLevel := server.configuration.LogLevel
+		initialLogLevel := server.configuration.Load().LogLevel
 
 		newConfig := config.Default()
 		newConfig.LogLevel = 9
@@ -157,10 +160,10 @@ func (s *ConfigReloadSuite) TestConfigurationValues() {
 		s.Require().NoError(err)
 
 		// Verify configuration was updated
-		s.NotEqual(initialLogLevel, server.configuration.LogLevel)
-		s.Equal(9, server.configuration.LogLevel)
-		s.Equal([]string{"core", "config", "helm"}, server.configuration.StaticConfig.Toolsets)
-		s.Equal("yaml", server.configuration.StaticConfig.ListOutput)
+		s.NotEqual(initialLogLevel, server.configuration.Load().LogLevel)
+		s.Equal(9, server.configuration.Load().LogLevel)
+		s.Equal([]string{"core", "config", "helm"}, server.configuration.Load().StaticConfig.Toolsets)
+		s.Equal("yaml", server.configuration.Load().StaticConfig.ListOutput)
 	})
 }
 
@@ -181,7 +184,7 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 		cfg1.Toolsets = []string{"core"}
 		err = server.ReloadConfiguration(cfg1)
 		s.Require().NoError(err)
-		s.Equal(3, server.configuration.LogLevel)
+		s.Equal(3, server.configuration.Load().LogLevel)
 
 		// Second reload
 		cfg2 := config.Default()
@@ -190,7 +193,7 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 		cfg2.Toolsets = []string{"core", "config"}
 		err = server.ReloadConfiguration(cfg2)
 		s.Require().NoError(err)
-		s.Equal(6, server.configuration.LogLevel)
+		s.Equal(6, server.configuration.Load().LogLevel)
 
 		// Third reload
 		cfg3 := config.Default()
@@ -199,7 +202,7 @@ func (s *ConfigReloadSuite) TestMultipleReloads() {
 		cfg3.Toolsets = []string{"core", "config", "helm"}
 		err = server.ReloadConfiguration(cfg3)
 		s.Require().NoError(err)
-		s.Equal(9, server.configuration.LogLevel)
+		s.Equal(9, server.configuration.Load().LogLevel)
 	})
 }
 
@@ -393,7 +396,7 @@ func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
 	s.Require().NoError(err)
 	s.server = server
 
-	prevConfig := server.configuration
+	prevConfig := server.configuration.Load()
 	prevEnabledTools := server.GetEnabledTools()
 	prevEnabledPrompts := server.GetEnabledPrompts()
 	prevEnabledResources := server.GetEnabledResources()
@@ -414,7 +417,7 @@ func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
 		err := server.reloadToolsets(candidate)
 		s.Require().Error(err, "reload must fail when a tool has a nil input schema")
 
-		s.Same(prevConfig, server.configuration,
+		s.Same(prevConfig, server.configuration.Load(),
 			"s.configuration pointer must be unchanged after a rejected reload")
 		s.Equal(prevEnabledTools, server.GetEnabledTools(),
 			"enabledTools must be unchanged after a rejected reload")
@@ -432,6 +435,66 @@ func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
 		s.Require().NoError(server.refreshToolsets())
 		s.Equal(prevEnabledTools, server.GetEnabledTools())
 	})
+}
+
+// TestConcurrentReadsDuringReload runs many reader goroutines that exercise
+// the same s.configuration access pattern handlers use (Load() + read fields
+// off the snapshot), in parallel with a writer goroutine that calls
+// ReloadConfiguration repeatedly. With the field stored as a plain pointer
+// guarded only by the now-unused-by-handlers s.mu, `go test -race` would
+// report a data race on the field. With atomic.Pointer it is race-free.
+func (s *ConfigReloadSuite) TestConcurrentReadsDuringReload() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
+	server, err := NewServer(Configuration{
+		StaticConfig: s.Cfg,
+	}, provider)
+	s.Require().NoError(err)
+	s.server = server
+
+	stop := make(chan struct{})
+	var observedReads atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				cfg := server.configuration.Load()
+				_ = cfg.HTTP.RateLimitRPS
+				_ = cfg.Stateless
+				_ = cfg.LogLevel
+				observedReads.Add(1)
+			}
+		}()
+	}
+
+	deadline := time.After(500 * time.Millisecond)
+	toggle := false
+	for {
+		select {
+		case <-deadline:
+			close(stop)
+			wg.Wait()
+			s.Greater(observedReads.Load(), int64(0), "readers must have run")
+			return
+		default:
+		}
+		newCfg := config.Default()
+		newCfg.KubeConfig = s.Cfg.KubeConfig
+		if toggle {
+			newCfg.LogLevel = 9
+		} else {
+			newCfg.LogLevel = 1
+		}
+		toggle = !toggle
+		s.Require().NoError(server.ReloadConfiguration(newCfg))
+	}
 }
 
 func (s *ConfigReloadSuite) TestServerLifecycle() {

@@ -49,9 +49,12 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		if err != nil {
 			return nil, fmt.Errorf("%v for tool %s", err, tool.Tool.Name)
 		}
+		// Snapshot the live configuration once so a concurrent reload
+		// can't split BaseConfig and ListOutput across two configs.
+		cfg := s.configuration.Load()
 		// Check confirmation rules before executing the tool
 		if confirmErr := confirmation.CheckToolRules(
-			ctx, s.configuration, &sessionElicitor{},
+			ctx, cfg, &sessionElicitor{},
 			tool.Tool.Name, tool.Tool.Annotations.DestructiveHint,
 		); confirmErr != nil {
 			return NewTextResult("", confirmErr), nil
@@ -66,10 +69,10 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 
 		result, err := tool.Handler(api.ToolHandlerParams{
 			Context:          ctx,
-			BaseConfig:       s.configuration,
+			BaseConfig:       cfg,
 			KubernetesClient: k,
 			ToolCallRequest:  toolCallRequest,
-			ListOutput:       s.configuration.ListOutput(),
+			ListOutput:       cfg.ListOutput(),
 			Elicitor:         &sessionElicitor{},
 		})
 		if err != nil {

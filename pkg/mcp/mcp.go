@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -65,14 +66,24 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
+	// mu protects the enabledX bookkeeping. The configuration is held in
+	// an atomic.Pointer (see below) and does NOT require mu for reads.
 	mu sync.RWMutex
 	// reloadMu serializes reloadToolsets calls. WatchTargets (kubeconfig +
 	// cluster-state watchers) and ReloadConfiguration can all fire reloads
 	// concurrently; without this lock, two reloads can interleave their SDK
 	// Add/Remove operations and their enabledX writes, leaving the SDK and
 	// the bookkeeping divergent.
-	reloadMu                 sync.Mutex
-	configuration            *Configuration
+	reloadMu sync.Mutex
+	// configuration is the live server configuration. It's an
+	// atomic.Pointer so that handlers (which read s.configuration on every
+	// tool/prompt invocation, on hot paths) can do so without acquiring a
+	// lock, and so that a reload's swap publishes the new *Configuration
+	// in one indivisible step. Each handler should snapshot the pointer
+	// once at the top of its critical section and read all fields off that
+	// snapshot — otherwise a mid-handler reload could split fields across
+	// two configs.
+	configuration            atomic.Pointer[Configuration]
 	server                   *mcp.Server
 	enabledTools             []string
 	enabledPrompts           []string
@@ -86,7 +97,6 @@ type Server struct {
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
 	s := &Server{
-		configuration: &configuration,
 		server: mcp.NewServer(
 			&mcp.Implementation{
 				Name:       version.BinaryName,
@@ -105,6 +115,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 			}),
 		p: targetProvider,
 	}
+	s.configuration.Store(&configuration)
 
 	// Initialize metrics system
 	metricsInstance, err := metrics.New(metrics.Config{
@@ -123,10 +134,9 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.rateLimitDone = make(chan struct{})
 	s.server.AddReceivingMiddleware(
 		rateLimitingMiddleware(s.rateLimitDone, func() (rate.Limit, int) {
-			s.mu.RLock()
-			rps := s.configuration.HTTP.RateLimitRPS
-			burst := s.configuration.HTTP.RateLimitBurst
-			s.mu.RUnlock()
+			cfg := s.configuration.Load()
+			rps := cfg.HTTP.RateLimitRPS
+			burst := cfg.HTTP.RateLimitBurst
 			if burst == 0 {
 				burst = config.DefaultRateLimitBurst
 			}
@@ -139,7 +149,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
 
-	err = s.reloadToolsets(s.configuration)
+	err = s.reloadToolsets(s.configuration.Load())
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +196,9 @@ func (s *Server) reloadToolsets(cfg *Configuration) error {
 	// If the caller didn't pin a candidate cfg, refresh against whatever is
 	// currently installed. Reading inside the reloadMu critical section
 	// guarantees we observe the latest committed cfg, even if a concurrent
-	// ReloadConfiguration just committed one while we were blocked above.
+	// ReloadConfiguration just stored one while we were blocked above.
 	if cfg == nil {
-		s.mu.RLock()
-		cfg = s.configuration
-		s.mu.RUnlock()
+		cfg = s.configuration.Load()
 	}
 
 	// Collect applicable items against cfg (NOT s.configuration) so that a
@@ -259,14 +267,16 @@ func (s *Server) reloadToolsets(cfg *Configuration) error {
 	newResources := commitItems(previousResources, convertedResources, s.server.RemoveResources, s.server.AddResource)
 	newResourceTemplates := commitItems(previousResourceTemplates, convertedResourceTemplates, s.server.RemoveResourceTemplates, s.server.AddResourceTemplate)
 
-	// Install cfg alongside the new bookkeeping. The SDK already reflects cfg
-	// (commit phase above). Readers that take s.mu.RLock — the rate-limit
-	// closure, GetEnabledX getters, the next reloadToolsets refresh path —
-	// observe a consistent (cfg, enabledX) pair. (Tool/prompt handlers read
-	// s.configuration without taking s.mu, a pre-existing relaxation; this
-	// refactor neither introduces nor fixes that.)
+	// Publish cfg to readers (handlers, rate-limit closure, ServeHTTP, the
+	// next refresh) via an atomic store. The SDK already reflects cfg from
+	// the commit phase above; the store makes the new *Configuration
+	// observable to lock-free readers in one indivisible step.
+	s.configuration.Store(cfg)
+	// Update the enabledX bookkeeping under mu. Reader of these fields
+	// (GetEnabledX) only reads enabledX, never combined with cfg, so there
+	// is no need to keep the cfg store and the enabledX writes inside the
+	// same critical section.
 	s.mu.Lock()
-	s.configuration = cfg
 	s.enabledTools = newTools
 	s.enabledPrompts = newPrompts
 	s.enabledResources = newResources
@@ -457,7 +467,7 @@ func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
 		// balancing, and serverless environments where maintaining client state
 		// is not desired or possible.
 		// https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#listening-for-messages-from-the-server
-		Stateless: s.configuration.Stateless,
+		Stateless: s.configuration.Load().Stateless,
 	})
 }
 
