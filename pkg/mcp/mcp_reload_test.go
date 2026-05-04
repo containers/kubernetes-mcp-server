@@ -3,11 +3,35 @@ package mcp
 import (
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
+
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
 )
+
+// brokenToolset is a fake api.Toolset whose single tool has a non-object
+// input schema. ServerToolToGoSdkTool rejects this in the convert phase
+// ("input schema must have type \"object\""), which is the only failure
+// mode that exercises reloadToolsets's transactional swap path —
+// config-level errors fail earlier, in Validate. We can't simply use
+// InputSchema: nil because the WithTargetParameter mutator initializes a
+// nil schema to type=object for cluster-aware tools.
+type brokenToolset struct{}
+
+func (brokenToolset) GetName() string        { return "broken-test-toolset" }
+func (brokenToolset) GetDescription() string { return "test-only toolset that fails convert phase" }
+func (brokenToolset) GetTools(api.Openshift) []api.ServerTool {
+	return []api.ServerTool{{Tool: api.Tool{
+		Name:        "broken-tool",
+		InputSchema: &jsonschema.Schema{Type: "string"},
+	}}}
+}
+func (brokenToolset) GetPrompts() []api.ServerPrompt                     { return nil }
+func (brokenToolset) GetResources() []api.ServerResource                 { return nil }
+func (brokenToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
 
 type ConfigReloadSuite struct {
 	BaseMcpSuite
@@ -351,6 +375,62 @@ func (s *ConfigReloadSuite) TestReloadRejectsInvalidConfig() {
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 		err := server.ReloadConfiguration(newConfig)
 		s.NoError(err)
+	})
+}
+
+// TestReloadFailureLeavesConfigurationIntact is the regression for issue
+// #1128: a reload whose convert phase fails must leave s.configuration, the
+// SDK surface, and the enabled-X bookkeeping all at their pre-reload values.
+// We trigger the failure via brokenToolset (a tool with nil input schema is
+// rejected by ServerToolToGoSdkTool) and call reloadToolsets directly so we
+// exercise the transactional swap rather than the Validate fast-path.
+func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
+	server, err := NewServer(Configuration{
+		StaticConfig: s.Cfg,
+	}, provider)
+	s.Require().NoError(err)
+	s.server = server
+
+	prevConfig := server.configuration
+	prevEnabledTools := server.GetEnabledTools()
+	prevEnabledPrompts := server.GetEnabledPrompts()
+	prevEnabledResources := server.GetEnabledResources()
+	prevEnabledResourceTemplates := server.GetEnabledResourceTemplates()
+	s.Require().NotEmpty(prevEnabledTools, "baseline must have some enabled tools to be a meaningful regression target")
+
+	// Build a candidate Configuration that bypasses the StaticConfig.Toolsets
+	// resolver and goes straight to the broken toolset, so collectApplicable*
+	// returns the bad tool and the convert phase fails.
+	candidateStatic := config.Default()
+	candidateStatic.KubeConfig = s.Cfg.KubeConfig
+	candidate := &Configuration{
+		StaticConfig: candidateStatic,
+		toolsets:     []api.Toolset{brokenToolset{}},
+	}
+
+	s.Run("convert-phase failure does not mutate s.configuration", func() {
+		err := server.reloadToolsets(candidate)
+		s.Require().Error(err, "reload must fail when a tool has a nil input schema")
+
+		s.Same(prevConfig, server.configuration,
+			"s.configuration pointer must be unchanged after a rejected reload")
+		s.Equal(prevEnabledTools, server.GetEnabledTools(),
+			"enabledTools must be unchanged after a rejected reload")
+		s.Equal(prevEnabledPrompts, server.GetEnabledPrompts(),
+			"enabledPrompts must be unchanged after a rejected reload")
+		s.Equal(prevEnabledResources, server.GetEnabledResources(),
+			"enabledResources must be unchanged after a rejected reload")
+		s.Equal(prevEnabledResourceTemplates, server.GetEnabledResourceTemplates(),
+			"enabledResourceTemplates must be unchanged after a rejected reload")
+	})
+
+	s.Run("a subsequent successful refresh still works", func() {
+		// Confirms the failed swap didn't leave reloadMu/mu in a bad state
+		// or corrupt the existing SDK surface.
+		s.Require().NoError(server.refreshToolsets())
+		s.Equal(prevEnabledTools, server.GetEnabledTools())
 	})
 }
 
