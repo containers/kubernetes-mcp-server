@@ -501,6 +501,14 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 		s.Equal("still up", result.Contents[0].Text)
 	})
 
+	s.Run("configuration rolled back after failed reload", func() {
+		// SDK state is unchanged after the failed reload, so s.configuration
+		// must mirror that — otherwise downstream reads (rate limit, list
+		// output, confirmation rules, ...) would see a config that disagrees
+		// with what the SDK is actually serving.
+		s.Equal([]string{"resource-test-good"}, s.mcpServer.configuration.StaticConfig.Toolsets)
+	})
+
 	s.Run("server accepts a subsequent valid reload", func() {
 		recoveryConfig := config.Default()
 		recoveryConfig.Toolsets = []string{"resource-test-good"}

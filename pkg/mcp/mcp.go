@@ -457,7 +457,13 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 
 	// Update the configuration (protected by mu so concurrent readers see a
 	// consistent snapshot, e.g. the rate-limit configFn closure).
+	// TODO(#1128): refactor reloadToolsets to compute against newConfig
+	// without mutating s.configuration (transactional reload), removing
+	// the need for the rollback path below.
 	s.mu.Lock()
+	previousConfig := s.configuration.StaticConfig
+	previousListOutput := s.configuration.listOutput
+	previousToolsets := s.configuration.toolsets
 	s.configuration.StaticConfig = newConfig
 	// Clear cached values so they get recomputed
 	s.configuration.listOutput = nil
@@ -466,6 +472,15 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 
 	// Reload the Kubernetes provider (this will also rebuild tools)
 	if err := s.reloadToolsets(); err != nil {
+		// reloadToolsets is transactional — SDK state is unchanged on error.
+		// Roll back the configuration so subsequent reads (rate limiter,
+		// confirmation rules, list output, ...) stay consistent with what
+		// the SDK is actually serving.
+		s.mu.Lock()
+		s.configuration.StaticConfig = previousConfig
+		s.configuration.listOutput = previousListOutput
+		s.configuration.toolsets = previousToolsets
+		s.mu.Unlock()
 		return fmt.Errorf("failed to reload toolsets: %w", err)
 	}
 

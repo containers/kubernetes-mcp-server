@@ -97,8 +97,11 @@ func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResou
 func validateResourceContent(content *api.ResourceContent) error {
 	hasText := content.Text != ""
 	hasBlob := len(content.Blob) > 0
-	if hasText == hasBlob {
-		return errors.New("resource content must have exactly one of Text or Blob set")
+	if !hasText && !hasBlob {
+		return errors.New("resource content must have either Text or Blob set, both are empty")
+	}
+	if hasText && hasBlob {
+		return errors.New("resource content must have only one of Text or Blob set, both are set")
 	}
 	return nil
 }
