@@ -16,7 +16,7 @@ import (
 
 func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolHandler, error) {
 	// Validate the input schema upfront to mirror the SDK's AddTool panic
-	// surface. This keeps reloadToolsets' two-phase model panic-free at commit
+	// surface. This keeps applyToolsets' two-phase model panic-free at commit
 	// time even if a misconfigured tool slips through the toolset boundary.
 	inputSchema := tool.Tool.InputSchema
 	if inputSchema == nil {

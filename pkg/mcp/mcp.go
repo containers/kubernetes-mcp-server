@@ -49,6 +49,17 @@ func (c *Configuration) ListOutput() output.Output {
 	return c.listOutput
 }
 
+// warmCaches forces every lazy cache field on Configuration to be populated.
+// Callers about to publish a *Configuration to lock-free readers MUST call
+// this first; otherwise the first concurrent readers race on the lazy
+// initialization. Keep this in sync with every lazy field on Configuration —
+// adding a new lazy field without extending warmCaches re-introduces the
+// race.
+func (c *Configuration) warmCaches() {
+	c.ListOutput()
+	c.Toolsets()
+}
+
 func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 	if c.ReadOnly && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
 		return false
@@ -69,7 +80,7 @@ type Server struct {
 	// mu protects the enabledX bookkeeping. The configuration is held in
 	// an atomic.Pointer (see below) and does NOT require mu for reads.
 	mu sync.RWMutex
-	// reloadMu serializes reloadToolsets calls. WatchTargets (kubeconfig +
+	// reloadMu serializes applyToolsets calls. WatchTargets (kubeconfig +
 	// cluster-state watchers) and ReloadConfiguration can all fire reloads
 	// concurrently; without this lock, two reloads can interleave their SDK
 	// Add/Remove operations and their enabledX writes, leaving the SDK and
@@ -149,33 +160,32 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
 
-	err = s.reloadToolsets(s.configuration.Load())
+	err = s.applyToolsets(s.configuration.Load())
 	if err != nil {
 		return nil, err
 	}
-	s.p.WatchTargets(s.refreshToolsets)
+	s.p.WatchTargets(s.reapplyToolsets)
 
 	return s, nil
 }
 
-// refreshToolsets re-runs reloadToolsets against whatever configuration is
-// currently installed. Used by the provider's WatchTargets callback (signature
-// func() error) when cluster state changes but the configuration itself has
-// not. Passing nil cfg makes reloadToolsets re-read s.configuration *inside*
-// the reloadMu critical section, which avoids a TOCTOU race where capturing
-// the cfg here would let a concurrent ReloadConfiguration commit a new cfg
-// while we were blocked on reloadMu — we'd then silently roll it back by
-// re-installing the stale snapshot.
-func (s *Server) refreshToolsets() error {
-	return s.reloadToolsets(nil)
+// reapplyToolsets is the provider's WatchTargets callback (signature
+// func() error). It re-applies the currently-installed configuration when
+// cluster state changes. The nil arg tells applyToolsets to re-read
+// s.configuration *inside* the reloadMu critical section, avoiding a TOCTOU
+// where capturing cfg here could let a concurrent ReloadConfiguration commit
+// a new cfg while we're blocked on reloadMu — we'd then silently roll it
+// back by re-installing the stale snapshot.
+func (s *Server) reapplyToolsets() error {
+	return s.applyToolsets(nil)
 }
 
-// reloadToolsets recomputes the SDK's tool/prompt/resource/template surface
+// applyToolsets recomputes the SDK's tool/prompt/resource/template surface
 // against cfg and, on success, atomically installs cfg as the live
 // configuration alongside the SDK changes. cfg may be:
 //   - a freshly-built *Configuration (configuration reload path), in which
 //     case s.configuration is only mutated once the convert phase succeeds;
-//   - nil (refresh path, e.g. cluster-state change), in which case the
+//   - nil (re-apply path, e.g. cluster-state change), in which case the
 //     currently-installed configuration is re-read under reloadMu and
 //     reused. nil — instead of "callers pass s.configuration" — is required
 //     to avoid the caller capturing a stale cfg before reloadMu serializes
@@ -183,7 +193,7 @@ func (s *Server) refreshToolsets() error {
 //
 // On error s.configuration, the SDK, and the enabled-X bookkeeping all stay
 // at their prior consistent values.
-func (s *Server) reloadToolsets(cfg *Configuration) error {
+func (s *Server) applyToolsets(cfg *Configuration) error {
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(tools...)
 
@@ -193,7 +203,7 @@ func (s *Server) reloadToolsets(cfg *Configuration) error {
 	s.reloadMu.Lock()
 	defer s.reloadMu.Unlock()
 
-	// If the caller didn't pin a candidate cfg, refresh against whatever is
+	// If the caller didn't pin a candidate cfg, re-apply whatever is
 	// currently installed. Reading inside the reloadMu critical section
 	// guarantees we observe the latest committed cfg, even if a concurrent
 	// ReloadConfiguration just stored one while we were blocked above.
@@ -267,24 +277,19 @@ func (s *Server) reloadToolsets(cfg *Configuration) error {
 	newResources := commitItems(previousResources, convertedResources, s.server.RemoveResources, s.server.AddResource)
 	newResourceTemplates := commitItems(previousResourceTemplates, convertedResourceTemplates, s.server.RemoveResourceTemplates, s.server.AddResourceTemplate)
 
-	// Pre-warm the lazy caches so concurrent first-readers (handlers reading
-	// cfg.ListOutput()) don't race on the cache's lazy initialization. The
-	// collectApplicable* calls above already populated cfg.toolsets, so
-	// only listOutput needs explicit warming here; warming both keeps the
-	// invariant (every cache field is populated before publish) easy to
-	// state and survive future caches without re-introducing the race.
-	cfg.ListOutput()
-	cfg.Toolsets()
+	// Pre-warm cfg's lazy caches so concurrent first-readers (handlers
+	// reading cfg.ListOutput() etc.) don't race on the lazy initialization.
+	// MUST happen before the atomic store below, otherwise lock-free readers
+	// can observe cfg with un-warmed caches.
+	cfg.warmCaches()
 
 	// Publish cfg to readers (handlers, rate-limit closure, ServeHTTP, the
-	// next refresh) via an atomic store. The SDK already reflects cfg from
+	// next re-apply) via an atomic store. The SDK already reflects cfg from
 	// the commit phase above; the store makes the new *Configuration
-	// observable to lock-free readers in one indivisible step. Pre-warming
-	// the caches above ensures lock-free readers find them already
-	// populated and never write to them concurrently.
+	// observable to lock-free readers in one indivisible step.
 	s.configuration.Store(cfg)
-	// Update the enabledX bookkeeping under mu. Reader of these fields
-	// (GetEnabledX) only reads enabledX, never combined with cfg, so there
+	// Update the enabledX bookkeeping under mu. Readers of these fields
+	// (GetEnabledX) only read enabledX, never combined with cfg, so there
 	// is no need to keep the cfg store and the enabledX writes inside the
 	// same critical section.
 	s.mu.Lock()
@@ -295,7 +300,7 @@ func (s *Server) reloadToolsets(cfg *Configuration) error {
 	s.mu.Unlock()
 
 	// Start new watch
-	s.p.WatchTargets(s.refreshToolsets)
+	s.p.WatchTargets(s.reapplyToolsets)
 	return nil
 }
 
@@ -522,7 +527,7 @@ func (s *Server) GetEnabledResourceTemplates() []string {
 // configuration changes are detected.
 //
 // The reload is fully transactional: s.configuration is not mutated until
-// reloadToolsets has successfully recomputed and committed the SDK surface
+// applyToolsets has successfully recomputed and committed the SDK surface
 // against the candidate config. A rejected reload leaves s.configuration, the
 // SDK, and the enabled-X bookkeeping at their previous consistent values, so
 // concurrent readers (rate-limit closure, confirmation rules, list output...)
@@ -538,11 +543,11 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 		return fmt.Errorf("configuration reload rejected: %w", err)
 	}
 
-	// Build a candidate Configuration view. reloadToolsets will install it
+	// Build a candidate Configuration view. applyToolsets will install it
 	// atomically only if the convert phase succeeds.
 	candidate := &Configuration{StaticConfig: newConfig}
 
-	if err := s.reloadToolsets(candidate); err != nil {
+	if err := s.applyToolsets(candidate); err != nil {
 		return fmt.Errorf("failed to reload toolsets: %w", err)
 	}
 

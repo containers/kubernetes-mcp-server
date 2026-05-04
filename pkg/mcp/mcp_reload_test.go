@@ -18,7 +18,7 @@ import (
 // brokenToolset is a fake api.Toolset whose single tool has a non-object
 // input schema. ServerToolToGoSdkTool rejects this in the convert phase
 // ("input schema must have type \"object\""), which is the only failure
-// mode that exercises reloadToolsets's transactional swap path —
+// mode that exercises applyToolsets's transactional swap path —
 // config-level errors fail earlier, in Validate. We can't simply use
 // InputSchema: nil because the WithTargetParameter mutator initializes a
 // nil schema to type=object for cluster-aware tools.
@@ -384,9 +384,10 @@ func (s *ConfigReloadSuite) TestReloadRejectsInvalidConfig() {
 // TestReloadFailureLeavesConfigurationIntact is the regression for issue
 // #1128: a reload whose convert phase fails must leave s.configuration, the
 // SDK surface, and the enabled-X bookkeeping all at their pre-reload values.
-// We trigger the failure via brokenToolset (a tool with nil input schema is
-// rejected by ServerToolToGoSdkTool) and call reloadToolsets directly so we
-// exercise the transactional swap rather than the Validate fast-path.
+// We trigger the failure via brokenToolset (a tool with a non-object input
+// schema is rejected by ServerToolToGoSdkTool) and call applyToolsets
+// directly so we exercise the transactional swap rather than the Validate
+// fast-path.
 func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
 	provider, err := kubernetes.NewProvider(s.Cfg)
 	s.Require().NoError(err)
@@ -414,8 +415,8 @@ func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
 	}
 
 	s.Run("convert-phase failure does not mutate s.configuration", func() {
-		err := server.reloadToolsets(candidate)
-		s.Require().Error(err, "reload must fail when a tool has a nil input schema")
+		err := server.applyToolsets(candidate)
+		s.Require().Error(err, "reload must fail when a tool has a non-object input schema")
 
 		s.Same(prevConfig, server.configuration.Load(),
 			"s.configuration pointer must be unchanged after a rejected reload")
@@ -429,10 +430,10 @@ func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
 			"enabledResourceTemplates must be unchanged after a rejected reload")
 	})
 
-	s.Run("a subsequent successful refresh still works", func() {
+	s.Run("a subsequent successful re-apply still works", func() {
 		// Confirms the failed swap didn't leave reloadMu/mu in a bad state
 		// or corrupt the existing SDK surface.
-		s.Require().NoError(server.refreshToolsets())
+		s.Require().NoError(server.reapplyToolsets())
 		s.Equal(prevEnabledTools, server.GetEnabledTools())
 	})
 }
@@ -500,8 +501,9 @@ func (s *ConfigReloadSuite) TestConcurrentReadsDuringReload() {
 // TestConcurrentListOutputAfterReload exercises the lazy ListOutput cache
 // race: after a successful reload, several handlers reading
 // cfg.ListOutput() concurrently for the first time would each write the
-// cache field unsynchronized. With the cache pre-warmed in reloadToolsets
-// before publish, the first-read writes are gone and `-race` stays clean.
+// cache field unsynchronized. With the cache pre-warmed by warmCaches in
+// applyToolsets before publish, the first-read writes are gone and
+// `-race` stays clean.
 func (s *ConfigReloadSuite) TestConcurrentListOutputAfterReload() {
 	provider, err := kubernetes.NewProvider(s.Cfg)
 	s.Require().NoError(err)
