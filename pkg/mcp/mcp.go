@@ -65,7 +65,13 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 }
 
 type Server struct {
-	mu                       sync.RWMutex
+	mu sync.RWMutex
+	// reloadMu serializes reloadToolsets calls. WatchTargets (kubeconfig +
+	// cluster-state watchers) and ReloadConfiguration can all fire reloads
+	// concurrently; without this lock, two reloads can interleave their SDK
+	// Add/Remove operations and their enabledX writes, leaving the SDK and
+	// the bookkeeping divergent.
+	reloadMu                 sync.Mutex
 	configuration            *Configuration
 	server                   *mcp.Server
 	enabledTools             []string
@@ -145,6 +151,12 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 func (s *Server) reloadToolsets() error {
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(tools...)
+
+	// Serialize reloads: WatchTargets and ReloadConfiguration can both fire
+	// concurrently, and their SDK Add/Remove operations would otherwise
+	// interleave and leave SDK state divergent from enabledX.
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
 
 	// Collect applicable items
 	applicableTools := s.collectApplicableTools()
