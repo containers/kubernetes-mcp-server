@@ -267,10 +267,21 @@ func (s *Server) reloadToolsets(cfg *Configuration) error {
 	newResources := commitItems(previousResources, convertedResources, s.server.RemoveResources, s.server.AddResource)
 	newResourceTemplates := commitItems(previousResourceTemplates, convertedResourceTemplates, s.server.RemoveResourceTemplates, s.server.AddResourceTemplate)
 
+	// Pre-warm the lazy caches so concurrent first-readers (handlers reading
+	// cfg.ListOutput()) don't race on the cache's lazy initialization. The
+	// collectApplicable* calls above already populated cfg.toolsets, so
+	// only listOutput needs explicit warming here; warming both keeps the
+	// invariant (every cache field is populated before publish) easy to
+	// state and survive future caches without re-introducing the race.
+	cfg.ListOutput()
+	cfg.Toolsets()
+
 	// Publish cfg to readers (handlers, rate-limit closure, ServeHTTP, the
 	// next refresh) via an atomic store. The SDK already reflects cfg from
 	// the commit phase above; the store makes the new *Configuration
-	// observable to lock-free readers in one indivisible step.
+	// observable to lock-free readers in one indivisible step. Pre-warming
+	// the caches above ensures lock-free readers find them already
+	// populated and never write to them concurrently.
 	s.configuration.Store(cfg)
 	// Update the enabledX bookkeeping under mu. Reader of these fields
 	// (GetEnabledX) only reads enabledX, never combined with cfg, so there

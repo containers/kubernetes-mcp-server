@@ -497,6 +497,44 @@ func (s *ConfigReloadSuite) TestConcurrentReadsDuringReload() {
 	}
 }
 
+// TestConcurrentListOutputAfterReload exercises the lazy ListOutput cache
+// race: after a successful reload, several handlers reading
+// cfg.ListOutput() concurrently for the first time would each write the
+// cache field unsynchronized. With the cache pre-warmed in reloadToolsets
+// before publish, the first-read writes are gone and `-race` stays clean.
+func (s *ConfigReloadSuite) TestConcurrentListOutputAfterReload() {
+	provider, err := kubernetes.NewProvider(s.Cfg)
+	s.Require().NoError(err)
+	server, err := NewServer(Configuration{
+		StaticConfig: s.Cfg,
+	}, provider)
+	s.Require().NoError(err)
+	s.server = server
+
+	for iter := 0; iter < 5; iter++ {
+		newCfg := config.Default()
+		newCfg.KubeConfig = s.Cfg.KubeConfig
+		if iter%2 == 0 {
+			newCfg.ListOutput = "yaml"
+		} else {
+			newCfg.ListOutput = "table"
+		}
+		s.Require().NoError(server.ReloadConfiguration(newCfg))
+
+		var wg sync.WaitGroup
+		for r := 0; r < 16; r++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				cfg := server.configuration.Load()
+				_ = cfg.ListOutput()
+				_ = cfg.Toolsets()
+			}()
+		}
+		wg.Wait()
+	}
+}
+
 func (s *ConfigReloadSuite) TestServerLifecycle() {
 	provider, err := kubernetes.NewProvider(s.Cfg)
 	s.Require().NoError(err)
