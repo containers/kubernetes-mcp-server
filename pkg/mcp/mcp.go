@@ -30,6 +30,10 @@ import (
 
 type Configuration struct {
 	*config.StaticConfig
+	// SDKLogger is the slog.Logger handed to the underlying MCP SDK for its
+	// server-activity logs. When nil (e.g. in tests) it falls back to a
+	// klog-backed logger.
+	SDKLogger  *slog.Logger
 	listOutput output.Output
 	toolsets   []api.Toolset
 }
@@ -108,6 +112,10 @@ type Server struct {
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
+	sdkLogger := configuration.SDKLogger
+	if sdkLogger == nil {
+		sdkLogger = slog.New(logr.ToSlogHandler(klog.Background()))
+	}
 	s := &Server{
 		server: mcp.NewServer(
 			&mcp.Implementation{
@@ -124,7 +132,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 					Logging:   &mcp.LoggingCapabilities{},
 				},
 				Instructions: configuration.ServerInstructions,
-				Logger:       slog.New(logr.ToSlogHandler(klog.Background())),
+				Logger:       sdkLogger,
 			}),
 		p: targetProvider,
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/logging"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/stretchr/testify/suite"
@@ -88,11 +89,6 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 
 	cfgState := config.NewStaticConfigState(cfg)
 	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState, cfgState)
-	s.T().Cleanup(func() {
-		if opts.logFileHandle != nil {
-			_ = opts.logFileHandle.Close()
-		}
-	})
 	return opts
 }
 
@@ -270,151 +266,99 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
-func (s *SIGHUPSuite) TestSIGHUPRedirectsLogsToNewFile() {
-	// Start with log_file pointing to file A
-	logFileA := filepath.Join(s.tempDir, "a.log")
-	logFileB := filepath.Join(s.tempDir, "b.log")
-	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		log_file = "`+logFileA+`"
-	`), 0o644))
+// TestSIGHUPInvokesLogSinkReload is the wiring smoke test for the
+// SIGHUP-handler → sink.Reload call path. The Sink's own behavior is
+// covered exhaustively in pkg/logging; this test exists only to ensure
+// that if someone deletes m.logSink.Reload(newConfig) from
+// setupSIGHUPHandler, at least one test fails. End-to-end behavior
+// (rotation, stderr, etc.) is verified at the Sink layer.
+//
+// Unlike the other SIGHUPSuite tests, this one does not use InitServer:
+// production order is logging.New (mutates klog) -> setupSIGHUPHandler
+// (spawns goroutine), and reversing the order in tests would race against
+// the goroutine's klog.V reads. Mirror production order here.
+func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
+	klogState := klog.CaptureState()
+	t.Cleanup(klogState.Restore)
+	logBuffer := &test.SyncBuffer{}
 
-	opts := s.InitServer(configPath, "")
+	tempDir := t.TempDir()
+	pathA := filepath.Join(tempDir, "a.log")
+	pathB := filepath.Join(tempDir, "b.log")
+	configPath := filepath.Join(tempDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(
+		`log_file = "`+pathA+`"`+"\n"+`log_level = 1`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	s.Run("initial log file handle is nil before initializeLogging", func() {
-		// InitServer does NOT call initializeLogging, so logFileHandle
-		// is nil initially.
-		s.Nil(opts.logFileHandle)
-	})
+	mockServer := test.NewMockServer()
+	mockServer.Handle(test.NewDiscoveryClientHandler())
+	t.Cleanup(mockServer.Close)
 
-	// Update config to redirect logs to file B
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		log_file = "`+logFileB+`"
-	`), 0o644))
+	cfg, err := config.Read(configPath, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.KubeConfig = mockServer.KubeconfigFile(t)
 
-	// Send SIGHUP
-	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+	// Install Sink BEFORE any goroutine that will read klog state
+	// (kubernetes watchers spawned by mcp.NewServer, the SIGHUP handler).
+	// Goroutine-creation is a happens-before edge for the race detector;
+	// touching klog after a goroutine is spawned is what races. This
+	// mirrors production order: cmd.Complete (sink) -> cmd.Run (server).
+	sink, err := logging.New(cfg, logBuffer, logBuffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sink.Close() })
 
-	s.Run("log file handle points to new file after SIGHUP", func() {
-		s.Require().Eventually(func() bool {
-			return opts.logFileHandle != nil && opts.logFileHandle.Name() == logFileB
-		}, 2*time.Second, 50*time.Millisecond)
-	})
+	provider, err := kubernetes.NewProvider(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: cfg, SDKLogger: sink.SDKLogger()}, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(mcpServer.Close)
 
-	s.Run("new log file exists", func() {
-		_, err := os.Stat(logFileB)
-		s.NoError(err)
-	})
-}
+	opts := &MCPServerOptions{
+		ConfigPath: configPath,
+		IOStreams: genericiooptions.IOStreams{
+			Out:    logBuffer,
+			ErrOut: logBuffer,
+		},
+		logSink: sink,
+	}
+	cfgState := config.NewStaticConfigState(cfg)
+	stop := opts.setupSIGHUPHandler(mcpServer, oauth.NewState(&oauth.Snapshot{}), cfgState)
+	t.Cleanup(stop)
 
-func (s *SIGHUPSuite) TestSIGHUPReopensLogFileAfterRotation() {
-	// Simulate the real log rotation sequence:
-	//   1. Server writes to server.log (inode A)
-	//   2. logrotate renames server.log -> server.log.1 (inode A)
-	//   3. SIGHUP -> reloadLogFile reopens server.log (creates inode B)
-	//   4. Subsequent writes land in inode B, not the old inode A
-	logFile := filepath.Join(s.tempDir, "server.log")
-	rotatedFile := logFile + ".1"
-	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		log_file = "`+logFile+`"
-	`), 0o644))
+	if err := os.WriteFile(configPath, []byte(
+		`log_file = "`+pathB+`"`+"\n"+`log_level = 1`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
 
-	opts := s.InitServer(configPath, "")
-
-	// Simulate initializeLogging having opened the file
-	initialHandle, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	s.Require().NoError(err)
-	opts.logFileHandle = initialHandle
-
-	// Step 2: logrotate renames the file
-	s.Require().NoError(os.Rename(logFile, rotatedFile))
-
-	// Step 3: send SIGHUP - reloadLogFile should create a new file at the original path
-	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
-
-	s.Run("reopen creates a new file at the original path with a different inode", func() {
-		// Wait for the new file to appear on disk (proves the reopen happened).
-		s.Require().Eventually(func() bool {
-			_, err := os.Stat(logFile)
-			return err == nil
-		}, 2*time.Second, 50*time.Millisecond)
-
-		newInfo, err := os.Stat(logFile)
-		s.Require().NoError(err)
-		rotatedInfo, err := os.Stat(rotatedFile)
-		s.Require().NoError(err)
-		s.False(os.SameFile(newInfo, rotatedInfo), "new log file should be a different inode than the rotated file")
-	})
-}
-
-func (s *SIGHUPSuite) TestSIGHUPKeepsOldLogOnInvalidPath() {
-	// Start with a valid log file
-	logFileA := filepath.Join(s.tempDir, "valid.log")
-	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		log_file = "`+logFileA+`"
-	`), 0o644))
-
-	opts := s.InitServer(configPath, "")
-
-	// Manually set up a log file handle to simulate the initial state
-	initialHandle, err := os.OpenFile(logFileA, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	s.Require().NoError(err)
-	opts.logFileHandle = initialHandle
-
-	// Update config to point to an invalid path (directory that doesn't exist)
-	invalidPath := filepath.Join(s.tempDir, "missing", "server.log")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		log_file = "`+invalidPath+`"
-	`), 0o644))
-
-	// Send SIGHUP
-	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
-
-	s.Run("logs error about failed reopen", func() {
-		s.Require().Eventually(func() bool {
-			return strings.Contains(s.logBuffer.String(), "Failed to reopen log file")
-		}, 2*time.Second, 50*time.Millisecond)
-	})
-
-	s.Run("old log file handle is preserved", func() {
-		s.Equal(logFileA, opts.logFileHandle.Name())
-	})
-}
-
-func (s *SIGHUPSuite) TestSIGHUPLogsWSwitchesToStderr() {
-	logFileA := filepath.Join(s.tempDir, "file.log")
-	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		log_file = "`+logFileA+`"
-		log_level = 1
-	`), 0o644))
-
-	opts := s.InitServer(configPath, "")
-
-	// Simulate initializeLogging having opened the file
-	initialHandle, err := os.OpenFile(logFileA, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	s.Require().NoError(err)
-	opts.logFileHandle = initialHandle
-
-	// Switch to stderr via config update + SIGHUP
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		log_file = "stderr"
-		log_level = 1
-	`), 0o644))
-	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
-
-	s.Run("log file handle is cleared after switching to stderr", func() {
-		s.Require().Eventually(func() bool {
-			return opts.logFileHandle == nil
-		}, 2*time.Second, 50*time.Millisecond)
-	})
-
-	s.Run("old file handle is closed", func() {
-		_, writeErr := initialHandle.Write([]byte("test"))
-		s.Error(writeErr)
-	})
+	// The handler emits "Configuration reloaded successfully via SIGHUP"
+	// after sink.Reload returns. If the wiring is correct, that line lands
+	// in pathB; if someone removed the Reload call, it would land in pathA.
+	deadline := time.After(2 * time.Second)
+	tick := time.Tick(50 * time.Millisecond)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("expected SIGHUP to invoke sink.Reload, redirecting logs to %s", pathB)
+		case <-tick:
+			klog.Flush()
+			content, err := os.ReadFile(pathB)
+			if err == nil && strings.Contains(string(content), "Configuration reloaded successfully") {
+				return
+			}
+		}
+	}
 }
 
 func TestSIGHUP(t *testing.T) {
