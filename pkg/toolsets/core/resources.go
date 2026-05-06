@@ -127,7 +127,7 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 				Properties: map[string]*jsonschema.Schema{
 					"resource": {
 						Type:        "string",
-						Description: "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec.",
+						Description: "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec. For namespaced resources, include metadata.namespace to specify the target namespace; if omitted, the configured default namespace is used",
 					},
 				},
 				Required: []string{"resource"},
