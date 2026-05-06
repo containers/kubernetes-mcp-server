@@ -234,12 +234,54 @@ func FieldString(obj *unstructured.Unstructured, path string) string {
 }
 ```
 
+#### Test Configuration and Downstream Compatibility
+
+This project supports downstream builds that override default configuration via `pkg/config/config_default_overrides.go` (e.g., `ReadOnly`, `Toolsets`, `ToolOverrides`). Tests must work correctly regardless of what downstream overrides are active.
+
+- **`BaseMcpSuite.SetupTest()` uses `config.BaseDefault()`** (not `config.Default()`) as the starting point for `s.Cfg`, so the suite config reflects pure upstream defaults without downstream overrides
+- **When creating a secondary config** (e.g., for reload tests), inherit runtime-sensitive fields from `s.Cfg` instead of relying on `config.Default()`:
+
+```go
+candidateStatic := config.Default()
+candidateStatic.KubeConfig = s.Cfg.KubeConfig
+candidateStatic.ReadOnly = s.Cfg.ReadOnly
+```
+
+- **Append to `s.Cfg.Toolsets`** rather than hardcoding toolset lists, so additional default toolsets from downstream are preserved:
+
+```go
+// Good - preserves whatever the suite already has
+s.Cfg.Toolsets = append(s.Cfg.Toolsets, "helm")
+
+// Bad - assumes upstream defaults
+s.Cfg.Toolsets = []string{"core", "config", "helm"}
+```
+
+- **When parsing TOML into a new config**, preserve suite fields that the TOML doesn't intend to override (see `confirmation_test.go:cfgFromTOML` for a helper pattern):
+
+```go
+kubeConfig := s.Cfg.KubeConfig
+listOutput := s.Cfg.ListOutput
+readOnly := s.Cfg.ReadOnly
+cfg, err := config.ReadToml([]byte(tomlStr))
+s.Cfg = cfg
+s.Cfg.KubeConfig = kubeConfig
+s.Cfg.ListOutput = listOutput
+s.Cfg.ReadOnly = readOnly
+```
+
+- **Never hardcode assumptions** about default values for fields that downstream may override (`ReadOnly`, `Toolsets`, `ToolOverrides`, `ListOutput`)
+
 #### Examples from the Codebase
 
 Good examples of these patterns can be found in:
 - `internal/test/unstructured_test.go` - demonstrates proper use of testify/suite, nested subtests, and edge case testing
 - `pkg/mcp/kubevirt_test.go` - shows behavior-based testing of the MCP layer
 - `pkg/kubernetes/manager_test.go` - illustrates testing with proper setup/teardown and subtests
+- `pkg/mcp/confirmation_test.go` - shows the `cfgFromTOML` helper pattern for preserving suite config across TOML reloads
+- `pkg/mcp/mcp_config_provider_test.go` - demonstrates inheriting `ReadOnly` from suite config
+- `pkg/mcp/toolsets_test.go` - uses `BaseDefault()` in `ToolsetsSuite.SetupTest()` to avoid downstream config leaking
+- `pkg/mcp/mcp_reload_test.go` - inherits `ReadOnly` from `s.Cfg` when building candidate configs for reload tests
 
 ## Linting
 
