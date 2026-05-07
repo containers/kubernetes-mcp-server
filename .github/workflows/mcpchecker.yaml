@@ -239,8 +239,8 @@ jobs:
           git fetch origin main --depth=1
           git show "origin/main:evals/results/${AGENT_NAME}-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
 
-      - name: Run mcpchecker diff
-        id: mcpchecker-diff
+      - name: Check diff prerequisites
+        id: diff-check
         if: needs.check-trigger.outputs.is-pr == 'true'
         run: |
           RESULTS_FILE=$(ls -t mcpchecker-*-out.json 2>/dev/null | head -1)
@@ -254,21 +254,23 @@ jobs:
             echo "has-diff=false" >> $GITHUB_OUTPUT
             exit 0
           fi
+          echo "has-diff=true" >> $GITHUB_OUTPUT
+          echo "results-file=$RESULTS_FILE" >> $GITHUB_OUTPUT
 
-          make mcpchecker
-          MCPCHECKER=$(pwd)/_output/tools/bin/mcpchecker
-
-          mkdir -p eval-context
-          if $MCPCHECKER diff --base /tmp/baseline-results.json --current "$RESULTS_FILE" --output markdown > eval-context/diff-output.txt; then
-            echo "has-diff=true" >> $GITHUB_OUTPUT
-          else
-            echo "mcpchecker diff exited with non-zero status, output may still be useful"
-            echo "has-diff=true" >> $GITHUB_OUTPUT
-          fi
+      - name: Run mcpchecker diff
+        id: mcpchecker-diff
+        if: needs.check-trigger.outputs.is-pr == 'true' && steps.diff-check.outputs.has-diff == 'true'
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@v0.0.18
+        with:
+          base-results: /tmp/baseline-results.json
+          current-results: ${{ steps.diff-check.outputs.results-file }}
+          mcpchecker-version: 'latest'
 
       # Save context and results for the reporting workflow
       - name: Save evaluation context
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
+        env:
+          DIFF_OUTPUT: ${{ steps.mcpchecker-diff.outputs.diff-output }}
         run: |
           mkdir -p eval-context
           cat > eval-context/context.json << EOF
@@ -281,9 +283,12 @@ jobs:
             "assertions_passed": "${{ steps.mcpchecker.outputs.assertions-passed }}",
             "assertions_total": "${{ steps.mcpchecker.outputs.assertions-total }}",
             "passed": "${{ steps.mcpchecker.outputs.passed }}",
-            "has_diff": "${{ steps.mcpchecker-diff.outputs.has-diff || 'false' }}"
+            "has_diff": "${{ steps.diff-check.outputs.has-diff || 'false' }}"
           }
           EOF
+          if [ -n "$DIFF_OUTPUT" ]; then
+            echo "$DIFF_OUTPUT" > eval-context/diff-output.txt
+          fi
 
       - name: Upload PR context
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
