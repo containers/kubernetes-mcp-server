@@ -3,12 +3,9 @@ package cmd
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -17,7 +14,6 @@ import (
 
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/klog/v2"
-	"k8s.io/klog/v2/textlogger"
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
 
@@ -25,6 +21,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/logging"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	internaloauth "github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -118,7 +115,7 @@ type MCPServerOptions struct {
 	ConfigDir    string
 	StaticConfig *config.StaticConfig
 
-	logFileHandle *os.File
+	logSink *logging.Sink
 	genericiooptions.IOStreams
 }
 
@@ -140,6 +137,16 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 			if err := o.Complete(c); err != nil {
 				return err
 			}
+			// Close the log sink whatever happens next: Validate may fail, Run
+			// may panic, the version short-circuit may exit early. The sink is
+			// the only thing that holds an open fd between Complete and now.
+			defer func() {
+				if o.logSink != nil {
+					if err := o.logSink.Close(); err != nil {
+						klog.Errorf("failed to close log sink: %v", err)
+					}
+				}
+			}()
 			if err := o.Validate(); err != nil {
 				return err
 			}
@@ -196,9 +203,11 @@ func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
 
 	m.loadFlags(cmd)
 
-	if err := m.initializeLogging(); err != nil {
+	sink, err := logging.New(m.StaticConfig, m.Out, m.ErrOut)
+	if err != nil {
 		return err
 	}
+	m.logSink = sink
 
 	if m.StaticConfig.RequireOAuth && m.StaticConfig.Port == "" {
 		// RequireOAuth is not relevant flow for STDIO transport
@@ -274,95 +283,6 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 }
 
-// openLogOutput resolves the log output writer for the given configuration.
-// It returns the writer, an *os.File if a log file was opened (nil otherwise),
-// and any error from opening the file.
-func (m *MCPServerOptions) openLogOutput(cfg *config.StaticConfig) (io.Writer, *os.File, error) {
-	// Default: stdout for HTTP mode, discard for stdio mode (stdout is the protocol channel).
-	logOut := io.Discard
-	if cfg.Port != "" {
-		logOut = m.Out
-	}
-
-	// A configured log file overrides the default for both stdio and HTTP modes.
-	// The special value "stderr" routes logs to os.Stderr without opening a file.
-	switch cfg.LogFile {
-	case "":
-		// no override; keep the default logOut
-		return logOut, nil, nil
-	case "stderr":
-		return m.ErrOut, nil, nil
-	default:
-		f, err := os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open log file %q: %w", cfg.LogFile, err)
-		}
-		return f, f, nil
-	}
-}
-
-func (m *MCPServerOptions) initializeLogging() error {
-	flagSet := flag.NewFlagSet("klog", flag.ContinueOnError)
-	klog.InitFlags(flagSet)
-
-	logOut, fileHandle, err := m.openLogOutput(m.StaticConfig)
-	if err != nil {
-		return err
-	}
-	m.logFileHandle = fileHandle
-
-	if logOut == io.Discard {
-		// In stdio mode, without a log file, silence klog entirely - stdout is the MCP protocol channel.
-		_ = flagSet.Parse([]string{"-logtostderr=false", "-alsologtostderr=false", "-stderrthreshold=FATAL"})
-		return nil
-	}
-
-	loggerOptions := []textlogger.ConfigOption{textlogger.Output(logOut)}
-	if m.StaticConfig.LogLevel >= 0 {
-		loggerOptions = append(loggerOptions, textlogger.Verbosity(m.StaticConfig.LogLevel))
-		_ = flagSet.Parse([]string{"-v", strconv.Itoa(m.StaticConfig.LogLevel)})
-	}
-	klog.SetLoggerWithOptions(textlogger.NewLogger(textlogger.NewConfig(loggerOptions...)))
-	return nil
-}
-
-// reloadLogFile reopens the log file based on the provided configuration.
-// It is safe to call on SIGHUP: if the new file cannot be opened, the error
-// is logged and the previous log destination is kept so the server never
-// ends up with no log sink.
-func (m *MCPServerOptions) reloadLogFile(newConfig *config.StaticConfig) {
-	logOut, newHandle, err := m.openLogOutput(newConfig)
-	if err != nil {
-		klog.Errorf("Failed to reopen log file during reload, keeping current log destination: %v", err)
-		return
-	}
-
-	// Reconfigure klog with the new output.
-	if logOut == io.Discard {
-		// In stdio mode, without a log file, silence klog entirely - stdout is the MCP protocol channel.
-		flagSet := flag.NewFlagSet("klog", flag.ContinueOnError)
-		klog.InitFlags(flagSet)
-		_ = flagSet.Parse([]string{"-logtostderr=false", "-alsologtostderr=false", "-stderrthreshold=FATAL"})
-	} else {
-		loggerOptions := []textlogger.ConfigOption{textlogger.Output(logOut)}
-		if newConfig.LogLevel >= 0 {
-			loggerOptions = append(loggerOptions, textlogger.Verbosity(newConfig.LogLevel))
-		}
-		klog.SetLoggerWithOptions(textlogger.NewLogger(textlogger.NewConfig(loggerOptions...)))
-	}
-
-	// Close the old file handle only after the new logger is in place.
-	oldHandle := m.logFileHandle
-	m.logFileHandle = newHandle
-	if oldHandle != nil {
-		if err := oldHandle.Close(); err != nil {
-			klog.Errorf("Failed to close previous log file: %v", err)
-		}
-	}
-
-	klog.V(1).Infof("Log output reloaded (log_file=%q)", newConfig.LogFile)
-}
-
 func (m *MCPServerOptions) Validate() error {
 	// Config-level validations (shared with SIGHUP reload)
 	if err := m.StaticConfig.
@@ -384,14 +304,6 @@ func (m *MCPServerOptions) Validate() error {
 }
 
 func (m *MCPServerOptions) Run() error {
-	defer func() {
-		if m.logFileHandle != nil {
-			if err := m.logFileHandle.Close(); err != nil {
-				klog.Errorf("failed to close log file: %v", err)
-			}
-		}
-	}()
-
 	// Initialize OpenTelemetry tracing with config (env vars take precedence)
 	cleanup, _ := telemetry.InitTracerWithConfig(&m.StaticConfig.Telemetry, version.BinaryName, version.Version)
 	defer cleanup()
@@ -430,6 +342,7 @@ func (m *MCPServerOptions) Run() error {
 
 	mcpServer, err := mcp.NewServer(mcp.Configuration{
 		StaticConfig: m.StaticConfig,
+		SDKLogger:    m.logSink.SDKLogger(),
 	}, provider)
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
@@ -444,9 +357,13 @@ func (m *MCPServerOptions) Run() error {
 
 	cfgState := config.NewStaticConfigState(m.StaticConfig)
 
-	// Set up SIGHUP handler for configuration reload
+	// Set up SIGHUP handler for configuration reload. The returned stop
+	// function unregisters the signal handler and waits for the goroutine
+	// to drain — important because the goroutine accesses m.logSink, which
+	// the deferred Close in NewMCPServer's RunE would otherwise race with.
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		_ = m.setupSIGHUPHandler(mcpServer, oauthState, cfgState)
+		stopSIGHUP := m.setupSIGHUPHandler(mcpServer, oauthState, cfgState)
+		defer stopSIGHUP()
 	}
 
 	if m.StaticConfig.Port != "" {
@@ -489,9 +406,15 @@ func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState 
 				continue
 			}
 
-			// Reopen log file so that log_file changes or file rotations
-			// are handled correctly.
-			m.reloadLogFile(newConfig)
+			// Re-apply the log destination so log_file changes and file
+			// rotations are handled correctly. Failures are logged but never
+			// fatal — the previous destination is preserved. logSink can be
+			// nil in tests that exercise the SIGHUP handler in isolation.
+			if m.logSink != nil {
+				if err := m.logSink.Reload(newConfig); err != nil {
+					klog.Errorf("Failed to reload log destination, keeping previous one: %v", err)
+				}
+			}
 			// Publish the new config so the HTTP auth middleware picks it up.
 			cfgState.Store(newConfig)
 

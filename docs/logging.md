@@ -24,7 +24,7 @@ kubernetes-mcp-server --log-file /var/log/kubernetes-mcp-server.log --log-level 
 | `log_file` | Path to the log file. Created if it does not exist; opened in append mode (`O_APPEND`). Use the special value `stderr` to route logs to stderr without opening a file. |
 | `log_level` | Verbosity level 0-9 (default `0`). Higher values produce more output. See the verbosity reference below for details. |
 
-**Note for stdio mode:** `log_file` is the *only* way to get server-side diagnostic logs when using the STDIO transport, because stdout is the MCP protocol channel. Protocol allows logging to stderr in stdio mode.
+**Note for stdio mode:** server-side diagnostic logs are silenced by default under the STDIO transport because stdout is the MCP protocol channel. Set `log_file` to a path on disk, or to the special value `stderr` (the [MCP spec](https://modelcontextprotocol.io/specification/draft/basic/transports#stdio) permits stderr in stdio mode), to recover them.
 
 ### Verbosity Reference
 

@@ -28,13 +28,22 @@ import (
 func protocolLoggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		rawParams := req.GetParams()
-		klog.V(6).Infof("-> recv: %s params=%s", method, jsonCompact(rawParams))
+		// Gate the JSON marshal explicitly: Infof's args are evaluated
+		// before the V(6) check, so an unguarded jsonCompact(rawParams)
+		// would marshal every request even at the default log_level=0.
+		if klog.V(6).Enabled() {
+			klog.V(6).Infof("-> recv: %s params=%s", method, jsonCompact(rawParams))
+		}
 		if params, ok := rawParams.(*mcp.CallToolParamsRaw); ok {
-			toolCallRequest, err := GoSdkToolCallParamsToToolCallRequest(params)
-			if err == nil {
-				klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, toolCallRequest.GetArguments())
+			// Same gating rationale as the V(6) block above: the per-tool
+			// conversion and the per-header buffer build run before the
+			// V() check unless we short-circuit explicitly.
+			if klog.V(5).Enabled() {
+				if toolCallRequest, err := GoSdkToolCallParamsToToolCallRequest(params); err == nil {
+					klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, toolCallRequest.GetArguments())
+				}
 			}
-			if req.GetExtra() != nil && req.GetExtra().Header != nil {
+			if klog.V(7).Enabled() && req.GetExtra() != nil && req.GetExtra().Header != nil {
 				buffer := bytes.NewBuffer(make([]byte, 0))
 				if err := req.GetExtra().Header.WriteSubset(buffer, map[string]bool{"Authorization": true, "authorization": true}); err == nil {
 					klog.V(7).Infof("mcp tool call headers: %s", buffer)
@@ -44,7 +53,7 @@ func protocolLoggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		result, err := next(ctx, method, req)
 		if err != nil {
 			klog.V(6).Infof("<- send: %s error=%v", method, err)
-		} else {
+		} else if klog.V(6).Enabled() {
 			klog.V(6).Infof("<- send: %s result=%s", method, jsonCompact(result))
 		}
 		return result, err
