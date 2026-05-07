@@ -15,17 +15,19 @@ type ConfirmationRulesSuite struct {
 	BaseMcpSuite
 }
 
-// cfgFromTOML parses a TOML config string and preserves the KubeConfig and ListOutput
-// from the base test setup so that the test environment remains functional.
+// cfgFromTOML parses a TOML config string and preserves the KubeConfig, ListOutput,
+// and ReadOnly from the base test setup so that the test environment remains functional.
 func (s *ConfirmationRulesSuite) cfgFromTOML(tomlStr string) {
 	s.T().Helper()
 	kubeConfig := s.Cfg.KubeConfig
 	listOutput := s.Cfg.ListOutput
+	readOnly := s.Cfg.ReadOnly
 	cfg, err := config.ReadToml([]byte(tomlStr))
 	s.Require().NoError(err, "failed to parse TOML config")
 	s.Cfg = cfg
 	s.Cfg.KubeConfig = kubeConfig
 	s.Cfg.ListOutput = listOutput
+	s.Cfg.ReadOnly = readOnly
 }
 
 func (s *ConfirmationRulesSuite) TestNoRulesConfigured() {
