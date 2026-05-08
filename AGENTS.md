@@ -18,6 +18,7 @@ This MCP server enables AI assistants (like Claude, Gemini, Cursor, and others) 
     - `kubernetes/` - Kubernetes client management, authentication, and access control.
     - `mcp/` - Model Context Protocol (MCP) server implementation with tool registration and STDIO/HTTP support.
     - `output/` - output formatting and rendering.
+    - `features/` - Feature gate definitions and lifecycle management.
     - `toolsets/` - Toolset registration and management for MCP tools.
     - `version/` - Version information management.
 - `.github/` – GitHub-related configuration (Actions workflows, issue templates...).
@@ -47,6 +48,85 @@ When adding a new tool:
 2. Create a `ServerTool` struct with the tool definition and handler.
 3. Add the tool to an appropriate toolset (or create a new toolset if needed).
 4. Register the toolset in `pkg/toolsets/` if it's a new toolset.
+
+### Feature gates
+
+The project uses a feature gate framework based on `k8s.io/component-base/featuregate` to control the availability of features based on their maturity level (Alpha, Beta, GA, Deprecated). Feature gates live in `pkg/features/`.
+
+#### Defining a new feature gate
+
+1. Add a `featuregate.Feature` constant in `pkg/features/features.go` with a comment summarizing the feature:
+    ```go
+    const (
+        // MyFeature enables the new behavior for XYZ, improving
+        // performance when handling large-scale resources.
+        MyFeature featuregate.Feature = "MyFeature"
+    )
+    ```
+
+2. Add its versioned lifecycle to `defaultFeatureGates` in the same file:
+    ```go
+    var defaultFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{
+        MyFeature: {
+            {Version: version.MajorMinor(0, 1), Default: false, PreRelease: featuregate.Alpha},
+            {Version: version.MajorMinor(0, 5), Default: true, PreRelease: featuregate.Beta},
+            {Version: version.MajorMinor(1, 0), Default: true, PreRelease: featuregate.GA, LockToDefault: true},
+        },
+    }
+    ```
+    Features registered in `init()` via `DefaultMutableFeatureGate.AddVersioned()` are automatically available to the CLI flag, TOML config, and SIGHUP reload.
+
+#### Checking a feature gate
+
+Use the package-level helper anywhere in the codebase:
+```go
+import "github.com/containers/kubernetes-mcp-server/pkg/features"
+
+if features.Enabled(features.MyFeature) {
+    // feature-gated code
+}
+```
+
+#### Configuring feature gates
+
+Feature gates can be set via:
+
+* **CLI flag:** `--feature-gates MyFeature=true,OtherFeature=false`
+* **TOML config file** (supports SIGHUP reload):
+    ```toml
+    [feature_gates]
+    MyFeature = true
+    ```
+
+CLI flags override config file values.
+
+#### Testing with feature gates
+
+Use `k8s.io/component-base/featuregate/testing` for safe, per-test overrides with automatic cleanup:
+```go
+import (
+    featuregatetesting "k8s.io/component-base/featuregate/testing"
+    "github.com/containers/kubernetes-mcp-server/pkg/features"
+)
+
+func (s *MySuite) TestWithFeature() {
+    featuregatetesting.SetFeatureGateDuringTest(s.T(), features.DefaultMutableFeatureGate, features.MyFeature, true)
+    // test code that depends on MyFeature being enabled
+}
+```
+
+#### Maturity Lifecycle
+
+| Stage | Default | User can override | Notes |
+|-------|---------|-------------------|-------|
+| Alpha | `false` | Yes | Opt-in, may be incomplete |
+| Beta | `true` | Yes | Enabled by default, well-tested |
+| GA | `true` | No (`LockToDefault: true`) | Permanently enabled |
+| Deprecated | `false` | No (`LockToDefault: true`) | Permanently disabled, pending removal |
+
+#### Thread safety
+
+`features.Enabled()` is lock-free (reads from `atomic.Value`). `features.ApplyFeatureGates()` (used during config reload) acquires an internal mutex and publishes via `atomic.Store`, so concurrent reads never see partial state. SIGHUP reloads are further serialized by the server's `reloadMu`.
 
 ## Building
 

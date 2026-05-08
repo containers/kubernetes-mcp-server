@@ -281,6 +281,27 @@ read_only = true
 disable_destructive = true
 ```
 
+### Feature Gates
+
+Feature gates control the availability of features based on their maturity level (Alpha, Beta, GA). They allow new or experimental features to be introduced behind a gate that users can opt into before the feature is enabled by default.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `feature_gates` | map of string -> bool | Enable or disable individual feature gates. |
+
+Feature gates can also be set via the `--feature-gates` CLI flag (format: `Feature1=true,Feature2=false`). CLI flags override config file values.
+
+**Example:**
+```toml
+[feature_gates]
+MyFeature = true
+AnotherFeature = false
+```
+
+Feature gates support dynamic reload via SIGHUP - changes to the `[feature_gates]` section take effect without restarting the server.
+
+Run `kubernetes-mcp-server --help` to see the list of available feature gates and their default states in the `--feature-gates` flag description.
+
 ### Toolsets
 
 Toolsets group related tools together. Enable only the toolsets you need to reduce context size and improve LLM tool selection accuracy.
