@@ -23,16 +23,41 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// protocolLoggingMiddleware logs incoming/outgoing MCP method calls (at V(6))
-// and tool call details (at V(5)/V(7)). It works uniformly in both stdio and HTTP modes.
-func protocolLoggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+// redactedHeaders lists the request header names that protocolReceivingMiddleware
+// must exclude from V(7) dumps. Header.WriteSubset treats true as "exclude",
+// so any name set here is redacted; everything else is logged verbatim.
+//
+// SECURITY: This is a denylist, not an allowlist — uncommon auth schemes
+// (e.g. a vendor-specific X-Foo-Auth header) will leak. Operators enabling
+// log_level >= 7 should treat the log file as a credential.
+var redactedHeaders = map[string]bool{
+	// Standard HTTP authentication channels.
+	"Authorization":       true,
+	"authorization":       true,
+	"Proxy-Authorization": true,
+	"proxy-authorization": true,
+	"Cookie":              true,
+	"cookie":              true,
+	// Common API gateway / token-auth conventions.
+	"X-Api-Key":    true,
+	"x-api-key":    true,
+	"X-Auth-Token": true,
+	"x-auth-token": true,
+	// Project-specific kubernetes auth header forwarded by HTTP middleware.
+	string(internalk8s.CustomAuthorizationHeader): true,
+}
+
+// protocolReceivingMiddleware logs inbound MCP method calls (client → server)
+// at V(6) and tool-call details at V(5)/V(7). It is the receiving half of
+// the protocol-logging pair; protocolSendingMiddleware handles outbound.
+func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		rawParams := req.GetParams()
 		// Gate the JSON marshal explicitly: Infof's args are evaluated
 		// before the V(6) check, so an unguarded jsonCompact(rawParams)
 		// would marshal every request even at the default log_level=0.
 		if klog.V(6).Enabled() {
-			klog.V(6).Infof("-> recv: %s params=%s", method, jsonCompact(rawParams))
+			klog.V(6).Infof("mcp protocol: client→server %s params=%s", method, jsonCompact(rawParams))
 		}
 		if params, ok := rawParams.(*mcp.CallToolParamsRaw); ok {
 			// Same gating rationale as the V(6) block above: the per-tool
@@ -45,16 +70,38 @@ func protocolLoggingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			}
 			if klog.V(7).Enabled() && req.GetExtra() != nil && req.GetExtra().Header != nil {
 				buffer := bytes.NewBuffer(make([]byte, 0))
-				if err := req.GetExtra().Header.WriteSubset(buffer, map[string]bool{"Authorization": true, "authorization": true}); err == nil {
+				if err := req.GetExtra().Header.WriteSubset(buffer, redactedHeaders); err == nil {
 					klog.V(7).Infof("mcp tool call headers: %s", buffer)
 				}
 			}
 		}
 		result, err := next(ctx, method, req)
 		if err != nil {
-			klog.V(6).Infof("<- send: %s error=%v", method, err)
+			klog.V(6).Infof("mcp protocol: server→client %s error=%v", method, err)
 		} else if klog.V(6).Enabled() {
-			klog.V(6).Infof("<- send: %s result=%s", method, jsonCompact(result))
+			klog.V(6).Infof("mcp protocol: server→client %s result=%s", method, jsonCompact(result))
+		}
+		return result, err
+	}
+}
+
+// protocolSendingMiddleware logs outbound MCP traffic (server → client) at
+// V(6). It is the counterpart to protocolReceivingMiddleware and exists
+// because server-initiated frames (logging notifications, list_changed
+// notifications, progress, server-side pings) bypass the receiving path
+// entirely. Without it, only the request half of every exchange would be
+// visible — which is exactly the gap stdio-mode debugging hits.
+func protocolSendingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		if klog.V(6).Enabled() {
+			klog.V(6).Infof("mcp protocol: server→client %s params=%s", method, jsonCompact(req.GetParams()))
+		}
+		result, err := next(ctx, method, req)
+		if err != nil {
+			klog.V(6).Infof("mcp protocol: client→server %s error=%v", method, err)
+		} else if result != nil && klog.V(6).Enabled() {
+			// Notifications return nil result; only requests have one.
+			klog.V(6).Infof("mcp protocol: client→server %s result=%s", method, jsonCompact(result))
 		}
 		return result, err
 	}

@@ -346,15 +346,23 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	// after sink.Reload returns. If the wiring is correct, that line lands
 	// in pathB; if someone removed the Reload call, it would land in pathA.
 	deadline := time.After(2 * time.Second)
-	tick := time.Tick(50 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-deadline:
 			t.Fatalf("expected SIGHUP to invoke sink.Reload, redirecting logs to %s", pathB)
-		case <-tick:
+		case <-ticker.C:
 			klog.Flush()
 			content, err := os.ReadFile(pathB)
 			if err == nil && strings.Contains(string(content), "Configuration reloaded successfully") {
+				// Also pin the negative: a regression that wrote to both
+				// the old and the new destinations would have passed the
+				// success check above. Assert pathA did not receive the
+				// post-reload line.
+				if oldContent, _ := os.ReadFile(pathA); strings.Contains(string(oldContent), "Configuration reloaded successfully") {
+					t.Fatalf("expected the post-reload line to land only in %s, but it also appeared in %s", pathB, pathA)
+				}
 				return
 			}
 		}

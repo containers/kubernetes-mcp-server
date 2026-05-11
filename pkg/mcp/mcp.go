@@ -167,8 +167,12 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
-	s.server.AddReceivingMiddleware(protocolLoggingMiddleware)
+	s.server.AddReceivingMiddleware(protocolReceivingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
+	// Outbound (server-initiated) frames — log notifications, list_changed
+	// notifications, progress, server-side pings — bypass the receiving
+	// path entirely; protocolSendingMiddleware makes them visible at V(6).
+	s.server.AddSendingMiddleware(protocolSendingMiddleware)
 
 	err = s.applyToolsets(s.configuration.Load())
 	if err != nil {

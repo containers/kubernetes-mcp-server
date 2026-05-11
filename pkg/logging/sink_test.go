@@ -141,6 +141,13 @@ func (s *SinkSuite) TestReloadAfterRotationCreatesNewInode() {
 	//   2. logrotate renames server.log -> server.log.1
 	//   3. SIGHUP -> Reload reopens server.log (a fresh inode)
 	//   4. subsequent writes land in the new inode, not the rotated one
+	//
+	// Windows refuses to rename a file that is currently open for writing,
+	// so the rename-while-open step is Unix-only. logrotate is itself a
+	// Unix tool, so the behavior under test does not apply on Windows.
+	if runtime.GOOS == "windows" {
+		s.T().Skip("rename-while-open is not supported on Windows; logrotate flow is Unix-only")
+	}
 	logFile := filepath.Join(s.tempDir, "server.log")
 	rotated := logFile + ".1"
 	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: logFile})

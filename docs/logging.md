@@ -39,6 +39,25 @@ kubernetes-mcp-server --log-file /var/log/kubernetes-mcp-server.log --log-level 
 | `6` | **Level 6** - MCP protocol logging (incoming/outgoing method calls, parameters, results, errors), trace context extraction. |
 | `7` | **Level 7** - MCP tool call headers, GetMeta() panic recovery. |
 
+> [!WARNING]
+> **Treat `log_file` as a credential when `log_level >= 6`.** Level 6 dumps
+> full MCP request/response parameters and results, and level 7 dumps tool-call
+> request headers. Tools that accept manifests (`resources_create_or_update`,
+> `helm_install`, `apply_resource`, etc.) routinely carry `Secret` contents,
+> kubeconfig bytes, OIDC bearer tokens, and OAuth refresh tokens — all of
+> which land in the log file in cleartext at these levels.
+>
+> Header dumps redact a fixed set of authentication-related fields
+> (`Authorization`, `Proxy-Authorization`, `Cookie`, `X-Api-Key`,
+> `X-Auth-Token`, `Kubernetes-Authorization`) but the redaction list is a
+> denylist; any other custom header is logged verbatim. Parameter and result
+> bodies are **not** redacted.
+>
+> Recommended posture: leave `log_level` at `0`–`5` for production, store
+> `log_file` on a filesystem with the same access-control posture as your
+> kubeconfig, and avoid sharing rotated log files outside of trusted
+> incident-response channels.
+
 ## For Clients
 
 Clients can control log verbosity by sending a `logging/setLevel` request:
