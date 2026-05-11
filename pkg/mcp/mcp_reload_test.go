@@ -409,6 +409,7 @@ func (s *ConfigReloadSuite) TestReloadFailureLeavesConfigurationIntact() {
 	// returns the bad tool and the convert phase fails.
 	candidateStatic := config.Default()
 	candidateStatic.KubeConfig = s.Cfg.KubeConfig
+	candidateStatic.ReadOnly = s.Cfg.ReadOnly
 	candidate := &Configuration{
 		StaticConfig: candidateStatic,
 		toolsets:     []api.Toolset{brokenToolset{}},

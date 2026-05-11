@@ -66,7 +66,7 @@ build-all-platforms: clean tidy format lint ## Build the project for all platfor
 
 .PHONY: test
 test: ## Run the tests
-	go test -count=1 -v ./...
+	go test -race -count=1 -v ./...
 
 .PHONY: test-update-snapshots
 test-update-snapshots: ## Update test snapshots for toolset tests

@@ -234,12 +234,143 @@ func FieldString(obj *unstructured.Unstructured, path string) string {
 }
 ```
 
+#### Test Configuration and Downstream Compatibility
+
+Downstream builds may override defaults at two layers, and tests must work
+regardless of which overrides are active:
+
+1. **Static config overrides** — `pkg/config/config_default_overrides.go`
+   exposes a stub `defaultOverrides()` that downstream forks populate to
+   change defaults such as `ReadOnly`, `Toolsets`, or `ToolOverrides`.
+2. **Per-toolset overrides** — toolsets like `kiali` and `kubevirt` carry an
+   `internal/defaults/defaults_override.go` stub that downstream uses to
+   rebrand the toolset name and description (e.g. `kiali` → `ossm`).
+
+The rules below keep the test suite portable across both layers.
+
+##### Start from `BaseDefault()`, not `Default()`
+
+`BaseMcpSuite.SetupTest()` initializes `s.Cfg` from `config.BaseDefault()`
+(pure upstream defaults), then layers test-specific tweaks like
+`ListOutput = "yaml"` on top. Any custom suite (`ToolsetsSuite`, etc.) must
+do the same — using `config.Default()` would let downstream overrides leak
+into the test environment.
+
+##### Prefer merging TOML into `s.Cfg`
+
+The dominant pattern across the test suite is to unmarshal TOML directly
+into the existing `s.Cfg`. This keeps the configuration visible inline
+(matching how a real config file looks) and automatically preserves the
+runtime fields the suite already set (`KubeConfig`, `ListOutput`,
+`ReadOnly`, etc.):
+
+```go
+s.Require().NoError(toml.Unmarshal([]byte(`
+    toolsets = [ "kubevirt" ]
+`), s.Cfg), "Expected to parse toolsets config")
+```
+
+See `pkg/mcp/kubevirt_test.go`, `pkg/mcp/pods_exec_test.go`, and
+`pkg/mcp/helm_test.go` for representative examples.
+
+##### When `config.ReadToml` is required
+
+`toml.Unmarshal` only does a single decode pass. Fields like
+`toolset_configs` and `cluster_provider_configs` are typed as
+`map[string]toml.Primitive` and need a second parse phase that uses the
+TOML metadata returned by `config.ReadToml`. If your TOML uses one of those
+sections, `toml.Unmarshal` will leave them unparsed and `GetToolsetConfig`
+/ `GetProviderConfig` will return nothing.
+
+In that case, use `ReadToml` and restore the runtime fields explicitly:
+
+```go
+kubeConfig := s.Cfg.KubeConfig
+listOutput := s.Cfg.ListOutput
+readOnly := s.Cfg.ReadOnly
+cfg, err := config.ReadToml([]byte(tomlStr))
+s.Require().NoError(err)
+s.Cfg = cfg
+s.Cfg.KubeConfig = kubeConfig
+s.Cfg.ListOutput = listOutput
+s.Cfg.ReadOnly = readOnly
+```
+
+`pkg/mcp/kiali_test.go` and the `TestToolHandlerReceivesToolsetConfig`
+case in `pkg/mcp/mcp_config_provider_test.go` follow this pattern.
+
+Note that the **TOML key under `[toolset_configs.<key>]` is the literal
+name the toolset registers its parser under, not the toolset's exposed
+name**. The Kiali toolset registers its parser as `"kiali"`
+(see `pkg/kiali/config.go`), so even when downstream rebrands the
+toolset to `ossm`, the section is still `[toolset_configs.kiali]`
+and `params.GetToolsetConfig("kiali")` is the correct lookup. Resolve
+the *toolset name* dynamically via `GetName()` (see below), but keep
+the *toolset_configs key* hardcoded — using the dynamic name there will
+silently produce `(nil, false)`.
+
+##### Inherit runtime fields when building secondary configs
+
+Reload tests sometimes need a separate `*StaticConfig` derived from
+`config.Default()`. This is the deliberate exception to the "start from
+`BaseDefault()`" rule above: a reload simulates the SIGHUP path the
+running server takes, which goes through `Default()` and therefore sees
+any downstream overrides. Carry across the runtime fields from `s.Cfg`
+so the candidate config still points at the test kubeconfig and respects
+the suite's `ReadOnly` value (see `pkg/mcp/mcp_reload_test.go`):
+
+```go
+candidateStatic := config.Default()
+candidateStatic.KubeConfig = s.Cfg.KubeConfig
+candidateStatic.ReadOnly = s.Cfg.ReadOnly
+```
+
+##### Append to `s.Cfg.Toolsets`, never reset it
+
+Hardcoding the toolset list assumes upstream defaults and breaks downstream
+builds that ship a different default set:
+
+```go
+// Good - preserves whatever the suite already has
+s.Cfg.Toolsets = append(s.Cfg.Toolsets, "helm")
+
+// Bad - assumes upstream defaults
+s.Cfg.Toolsets = []string{"core", "config", "helm"}
+```
+
+##### Resolve toolset names through the toolset's `GetName()`
+
+When a test invokes a tool from a rebrandable toolset, ask the toolset for
+its current name rather than hardcoding the upstream string. `kiali_test.go`
+does this so the same test works whether the toolset is exposed as `kiali`
+upstream or `ossm` downstream:
+
+```go
+s.toolsetName = (&kialiToolset.Toolset{}).GetName()
+// ...
+s.CallTool(fmt.Sprintf("%s_get_trace_details", s.toolsetName), …)
+```
+
+##### Never hardcode override-prone defaults
+
+`ReadOnly`, `Toolsets`, `ToolOverrides`, `ListOutput`, and toolset names
+are all subject to downstream override. Read them from `s.Cfg` or resolve
+them at runtime — never assume the upstream value.
+
 #### Examples from the Codebase
 
 Good examples of these patterns can be found in:
 - `internal/test/unstructured_test.go` - demonstrates proper use of testify/suite, nested subtests, and edge case testing
-- `pkg/mcp/kubevirt_test.go` - shows behavior-based testing of the MCP layer
+- `pkg/mcp/kubevirt_test.go` - merges TOML into `s.Cfg` for toolset selection; behavior-based MCP-layer testing
 - `pkg/kubernetes/manager_test.go` - illustrates testing with proper setup/teardown and subtests
+- `pkg/mcp/pods_exec_test.go` - inline TOML for `denied_resources` configuration
+- `pkg/mcp/confirmation_test.go` - inline TOML for `confirmation_rules` and `confirmation_fallback`
+- `pkg/mcp/helm_test.go` - appends to `s.Cfg.Toolsets` instead of resetting it
+- `pkg/mcp/kiali_test.go` - resolves the toolset name dynamically via `GetName()` and uses `ReadToml` for `toolset_configs`
+- `pkg/mcp/toolsets_test.go` - uses `BaseDefault()` in `ToolsetsSuite.SetupTest()` to avoid downstream config leaking
+- `pkg/mcp/mcp_reload_test.go` - inherits `ReadOnly` from `s.Cfg` when building candidate configs for reload tests
+- `pkg/mcp/mcp_config_provider_test.go` - demonstrates inheriting `ReadOnly` from suite config when `toolset_configs` requires `ReadToml`
+- `pkg/mcp/require_tls_test.go` - shows both patterns side by side: `CoreRequireTLSSuite` merges plain `require_tls` into `s.Cfg`, while `KialiRequireTLSSuite` keeps `ReadToml` for `[toolset_configs.kiali]`
 
 ## Linting
 

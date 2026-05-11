@@ -24,14 +24,22 @@ func (s *KialiSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Config().BearerToken = "token-xyz"
-	kubeConfig := s.Cfg.KubeConfig
 	s.toolsetName = (&kialiToolset.Toolset{}).GetName()
-	s.Cfg = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
+	// toolset_configs requires the two-phase parsing performed by config.ReadToml,
+	// so we replace s.Cfg and restore the runtime fields the suite already set.
+	kubeConfig := s.Cfg.KubeConfig
+	listOutput := s.Cfg.ListOutput
+	readOnly := s.Cfg.ReadOnly
+	cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
 		toolsets = ["%s"]
 		[toolset_configs.kiali]
 		url = "%s"
-	`, s.toolsetName, s.mockServer.Config().Host))))
+	`, s.toolsetName, s.mockServer.Config().Host)))
+	s.Require().NoError(err, "failed to parse kiali toolset config")
+	s.Cfg = cfg
 	s.Cfg.KubeConfig = kubeConfig
+	s.Cfg.ListOutput = listOutput
+	s.Cfg.ReadOnly = readOnly
 }
 
 func (s *KialiSuite) TearDownTest() {

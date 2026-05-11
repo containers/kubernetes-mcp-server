@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"k8s.io/klog/v2"
 )
 
 func captureOutput(f func() error) (string, error) {
@@ -176,11 +177,24 @@ func TestConfig(t *testing.T) {
 type CmdSuite struct {
 	suite.Suite
 	testDataDir string
+	klogState   klog.State
 }
 
 func (s *CmdSuite) SetupSuite() {
 	_, file, _, _ := runtime.Caller(0)
 	s.testDataDir = filepath.Join(filepath.Dir(file), "testdata")
+}
+
+// SetupTest captures klog's package-level state before each test so that
+// each test method starts from a clean slate. The tests run rootCmd.Execute,
+// which constructs a logging.Sink and mutates klog globals; without this,
+// per-method state would bleed and (under -race) could surface as flakes.
+func (s *CmdSuite) SetupTest() {
+	s.klogState = klog.CaptureState()
+}
+
+func (s *CmdSuite) TearDownTest() {
+	s.klogState.Restore()
 }
 
 func (s *CmdSuite) TestConfigDir() {
@@ -190,7 +204,7 @@ func (s *CmdSuite) TestConfigDir() {
 			list_output = "yaml"
 			read_only = true
 			disable_destructive = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -203,7 +217,7 @@ func (s *CmdSuite) TestConfigDir() {
 	s.Run("--config-dir path is a file throws error", func() {
 		tempDir := s.T().TempDir()
 		filePath := filepath.Join(tempDir, "not-a-directory.toml")
-		s.Require().NoError(os.WriteFile(filePath, []byte("log_level = 1"), 0644))
+		s.Require().NoError(os.WriteFile(filePath, []byte("log_level = 1"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -226,15 +240,15 @@ func (s *CmdSuite) TestConfigDir() {
 		s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
 			list_output = "table"
 			read_only = false
-		`), 0644))
+		`), 0o644))
 
 		dropInDir := filepath.Join(tempDir, "conf.d")
-		s.Require().NoError(os.Mkdir(dropInDir, 0755))
+		s.Require().NoError(os.Mkdir(dropInDir, 0o755))
 		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-override.toml"), []byte(`
 			read_only = true
 			disable_destructive = true
 			stateless = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -250,11 +264,11 @@ func (s *CmdSuite) TestConfigDir() {
 		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "10-first.toml"), []byte(`
 			list_output = "yaml"
 			read_only = true
-		`), 0644))
+		`), 0o644))
 		s.Require().NoError(os.WriteFile(filepath.Join(dropInDir, "20-second.toml"), []byte(`
 			list_output = "table"
 			disable_destructive = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -271,7 +285,7 @@ func (s *CmdSuite) TestConfigDir() {
 			read_only = true
 			disable_destructive = true
 			stateless = true
-		`), 0644))
+		`), 0o644))
 
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -539,8 +553,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -561,8 +575,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -583,8 +597,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -605,8 +619,8 @@ func TestRequireTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -622,11 +636,132 @@ func TestRequireTLSValidation(t *testing.T) {
 	})
 }
 
+func (s *CmdSuite) TestLogFile() {
+	s.Run("http mode writes logs to file instead of stdout", func() {
+		logPath := filepath.Join(s.T().TempDir(), "server.log")
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--log-file", logPath})
+		s.Require().NoError(rootCmd.Execute())
+
+		s.Equal("0.0.0\n", out.String(), "stdout should contain only version output, not logs")
+		logContent, err := os.ReadFile(logPath)
+		s.Require().NoError(err)
+		s.Contains(string(logContent), "Starting kubernetes-mcp-server")
+	})
+
+	s.Run("stdio mode writes logs to file", func() {
+		logPath := filepath.Join(s.T().TempDir(), "server.log")
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file", logPath})
+		s.Require().NoError(rootCmd.Execute())
+
+		s.Equal("0.0.0\n", out.String(), "stdout should contain only version output in stdio mode")
+		logContent, err := os.ReadFile(logPath)
+		s.Require().NoError(err)
+		s.Contains(string(logContent), "Starting kubernetes-mcp-server")
+	})
+
+	s.Run("log file is created if it does not exist", func() {
+		logPath := filepath.Join(s.T().TempDir(), "new-server.log")
+
+		_, err := os.Stat(logPath)
+		s.Require().True(os.IsNotExist(err), "log file should not exist before the test")
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file", logPath})
+		s.Require().NoError(rootCmd.Execute())
+
+		_, err = os.Stat(logPath)
+		s.Require().NoError(err, "log file should have been created")
+	})
+
+	s.Run("log file is appended to if it already exists", func() {
+		logPath := filepath.Join(s.T().TempDir(), "server.log")
+		existingContent := "existing log line\n"
+		s.Require().NoError(os.WriteFile(logPath, []byte(existingContent), 0o600))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file", logPath})
+		s.Require().NoError(rootCmd.Execute())
+
+		logContent, err := os.ReadFile(logPath)
+		s.Require().NoError(err)
+		s.True(strings.HasPrefix(string(logContent), existingContent), "existing content should be preserved at the start")
+		s.Greater(len(logContent), len(existingContent), "new content should be appended after existing content")
+	})
+
+	s.Run("nonexistent parent directory returns error", func() {
+		logPath := filepath.Join(s.T().TempDir(), "missing", "server.log")
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-file", logPath})
+		err := rootCmd.Execute()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "failed to open log file")
+		s.Contains(err.Error(), logPath)
+	})
+
+	s.Run("log_file from TOML config is used", func() {
+		logPath := filepath.Join(s.T().TempDir(), "server.log")
+		configPath := filepath.Join(s.T().TempDir(), "config.toml")
+		s.Require().NoError(os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", logPath)), 0o600))
+
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--config", configPath})
+		s.Require().NoError(rootCmd.Execute())
+
+		s.Equal("0.0.0\n", out.String(), "stdout should not contain log output when log_file is set")
+		logContent, err := os.ReadFile(logPath)
+		s.Require().NoError(err)
+		s.Contains(string(logContent), "Starting kubernetes-mcp-server")
+	})
+
+	s.Run("--log-file flag overrides log_file in TOML config", func() {
+		configLogPath := filepath.Join(s.T().TempDir(), "config-server.log")
+		flagLogPath := filepath.Join(s.T().TempDir(), "flag-server.log")
+		configPath := filepath.Join(s.T().TempDir(), "config.toml")
+		s.Require().NoError(os.WriteFile(configPath, []byte(fmt.Sprintf("log_level = 1\nlog_file = %q\n", configLogPath)), 0o600))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--port=1337", "--config", configPath, "--log-file", flagLogPath})
+		s.Require().NoError(rootCmd.Execute())
+
+		flagContent, err := os.ReadFile(flagLogPath)
+		s.Require().NoError(err)
+		s.Contains(string(flagContent), "Starting kubernetes-mcp-server", "flag log path should receive logs")
+
+		_, err = os.Stat(configLogPath)
+		s.Require().True(os.IsNotExist(err), "config log file should not be created when flag overrides it")
+	})
+
+	s.Run("stderr routes logs to ErrOut without opening a file", func() {
+		errOut := &bytes.Buffer{}
+		ioStreams := genericiooptions.IOStreams{
+			In:     &bytes.Buffer{},
+			Out:    &bytes.Buffer{},
+			ErrOut: errOut,
+		}
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--log-level=1", "--log-file=stderr"})
+		s.Require().NoError(rootCmd.Execute())
+
+		s.Contains(errOut.String(), "Starting kubernetes-mcp-server", "logs should go to ErrOut")
+	})
+}
+
 func TestTLSValidation(t *testing.T) {
 	t.Run("tls-cert without tls-key returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -639,7 +774,7 @@ func TestTLSValidation(t *testing.T) {
 	t.Run("tls-key without tls-cert returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -652,7 +787,7 @@ func TestTLSValidation(t *testing.T) {
 	t.Run("invalid tls-cert path returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -665,7 +800,7 @@ func TestTLSValidation(t *testing.T) {
 	t.Run("invalid tls-key path returns error", func(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -679,8 +814,8 @@ func TestTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
@@ -693,8 +828,8 @@ func TestTLSValidation(t *testing.T) {
 		tempDir := t.TempDir()
 		certPath := filepath.Join(tempDir, "cert.pem")
 		keyPath := filepath.Join(tempDir, "key.pem")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)
