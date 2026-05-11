@@ -3,14 +3,15 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"os"
 	"reflect"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/time/rate"
 	"k8s.io/klog/v2"
@@ -30,6 +31,10 @@ import (
 
 type Configuration struct {
 	*config.StaticConfig
+	// SDKLogger is the slog.Logger handed to the underlying MCP SDK for its
+	// server-activity logs. When nil (e.g. in tests) it falls back to a
+	// klog-backed logger.
+	SDKLogger  *slog.Logger
 	listOutput output.Output
 	toolsets   []api.Toolset
 }
@@ -108,6 +113,10 @@ type Server struct {
 }
 
 func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
+	sdkLogger := configuration.SDKLogger
+	if sdkLogger == nil {
+		sdkLogger = slog.New(logr.ToSlogHandler(klog.Background()))
+	}
 	s := &Server{
 		server: mcp.NewServer(
 			&mcp.Implementation{
@@ -124,6 +133,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 					Logging:   &mcp.LoggingCapabilities{},
 				},
 				Instructions: configuration.ServerInstructions,
+				Logger:       sdkLogger,
 			}),
 		p: targetProvider,
 	}
@@ -158,8 +168,12 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
-	s.server.AddReceivingMiddleware(toolCallLoggingMiddleware)
+	s.server.AddReceivingMiddleware(protocolReceivingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
+	// Outbound (server-initiated) frames — log notifications, list_changed
+	// notifications, progress, server-side pings — bypass the receiving
+	// path entirely; protocolSendingMiddleware makes them visible at V(6).
+	s.server.AddSendingMiddleware(protocolSendingMiddleware)
 
 	err = s.applyToolsets(s.configuration.Load())
 	if err != nil {
@@ -464,7 +478,7 @@ func (s *Server) GetMetrics() *metrics.Metrics {
 }
 
 func (s *Server) ServeStdio(ctx context.Context) error {
-	return s.server.Run(ctx, &mcp.LoggingTransport{Transport: &mcp.StdioTransport{}, Writer: os.Stderr})
+	return s.server.Run(ctx, &mcp.StdioTransport{})
 }
 
 func (s *Server) ServeSse() *mcp.SSEHandler {
