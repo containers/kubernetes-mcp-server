@@ -108,7 +108,16 @@ var (
 	}
 )
 
-func sanitizeMessage(msg string) string {
+// Sanitize redacts secret-shaped substrings (Bearer/Basic credentials, JWTs,
+// JSON "token"/"secret"/"password"/... fields, AWS/GitHub/Anthropic keys,
+// private-key PEM blocks, DB connection strings) from msg. It is intended
+// for log messages that may inline user-supplied or tool-supplied payloads.
+//
+// This is best-effort: the patterns are a denylist, and content that doesn't
+// match a known shape (e.g. arbitrary YAML kubeconfig fields) passes through
+// unchanged. Callers handling structured credentials should still avoid
+// logging them in the first place.
+func Sanitize(msg string) string {
 	// JSON/YAML field patterns (indices 0-6) - preserve field name
 	for i := 0; i < 7 && i < len(sensitivePatterns); i++ {
 		msg = sensitivePatterns[i].ReplaceAllString(msg, `$1"[REDACTED]"`)
@@ -155,7 +164,7 @@ func SendMCPLog(ctx context.Context, level Level, message string) {
 		return
 	}
 
-	message = sanitizeMessage(message)
+	message = Sanitize(message)
 
 	if err := session.Log(ctx, &mcp.LoggingMessageParams{
 		Level:  mcp.LoggingLevel(level.String()),

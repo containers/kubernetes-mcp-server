@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"flag"
+	"fmt"
 	"regexp"
 	"strconv"
 	"testing"
@@ -87,6 +88,53 @@ func (s *McpLoggingSuite) TestLogsToolCallHeaders() {
 	})
 	s.Run("Does not log sensitive header values", func() {
 		s.NotContains(s.logBuffer.String(), "should-not-be-logged", "Log should not contain sensitive header value")
+	})
+}
+
+// TestLogsRedactsSensitiveParams asserts that the V(6) protocol-receiving
+// middleware runs payloads through mcplog.Sanitize, so inline tokens / JWTs
+// embedded in tool arguments do not land in the log file in cleartext. The
+// raw JSON path is exercised via CallToolRaw — the go-sdk client would
+// otherwise strip unknown fields before they reach the wire.
+func (s *McpLoggingSuite) TestLogsRedactsSensitiveParams() {
+	s.SetLogLevel(6)
+	s.InitMcpClient()
+
+	jwt := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NSJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	rawParams := fmt.Sprintf(`{"name":"configuration_view","arguments":{"minified":false,"token":%q}}`, jwt)
+	resp := s.CallToolRaw(s.T(), rawParams)
+	s.Require().NotNil(resp, "expected raw tools/call to produce a response")
+	_ = resp.Body.Close()
+
+	s.Run("redacts JWT-shaped token in V(6) params dump", func() {
+		s.NotContains(s.logBuffer.String(), jwt, "raw JWT must not appear in protocol log")
+		// textlogger wraps the formatted message in quotes and escapes any
+		// inner quotes, so the JSON `"token":"[REDACTED]"` lands in the
+		// buffer as the literal `\"token\":\"[REDACTED]\"`.
+		s.Contains(s.logBuffer.String(), `\"token\":\"[REDACTED]\"`, `expected the "token" JSON field to be redacted`)
+	})
+}
+
+// TestLogsRedactsCustomAuthHeader asserts that a non-denylisted custom header
+// carrying a Bearer-shaped value still has the token value sanitized at V(7).
+// The header name itself is preserved (the denylist is a fast first cut; the
+// regex sweep is the safety net for vendor-specific schemes).
+func (s *McpLoggingSuite) TestLogsRedactsCustomAuthHeader() {
+	s.SetLogLevel(7)
+	bearerValue := "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature-bytes-here"
+	s.InitMcpClient(test.WithHTTPHeaders(map[string]string{
+		// Not in redactedHeaders, so the name flows through Header.WriteSubset.
+		"X-Custom-Auth": bearerValue,
+	}))
+	_, err := s.CallTool("configuration_view", map[string]any{"minified": false})
+	s.Require().NoError(err, "call to tool configuration_view failed")
+
+	s.Run("header name is logged", func() {
+		s.Contains(s.logBuffer.String(), "X-Custom-Auth:", "expected the non-denylisted header name to be visible")
+	})
+	s.Run("Bearer token value is redacted", func() {
+		s.NotContains(s.logBuffer.String(), "signature-bytes-here", "raw token must not appear in header log")
+		s.Contains(s.logBuffer.String(), "Bearer [REDACTED]", `expected "Bearer <token>" to be redacted by Sanitize`)
 	})
 }
 

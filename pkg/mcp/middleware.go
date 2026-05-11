@@ -50,6 +50,11 @@ var redactedHeaders = map[string]bool{
 // protocolReceivingMiddleware logs inbound MCP method calls (client → server)
 // at V(6) and tool-call details at V(5)/V(7). It is the receiving half of
 // the protocol-logging pair; protocolSendingMiddleware handles outbound.
+//
+// Every payload, header buffer, and error string is passed through
+// mcplog.Sanitize before reaching klog so that inline Bearer tokens, JWTs,
+// JSON "token"/"secret"/"password" fields, and other secret-shaped strings
+// are redacted. This is best-effort (denylist + regex) — see docs/logging.md.
 func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		rawParams := req.GetParams()
@@ -57,7 +62,7 @@ func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		// before the V(6) check, so an unguarded jsonCompact(rawParams)
 		// would marshal every request even at the default log_level=0.
 		if klog.V(6).Enabled() {
-			klog.V(6).Infof("mcp protocol: client→server %s params=%s", method, jsonCompact(rawParams))
+			klog.V(6).Infof("mcp protocol: client→server %s params=%s", method, mcplog.Sanitize(jsonCompact(rawParams)))
 		}
 		if params, ok := rawParams.(*mcp.CallToolParamsRaw); ok {
 			// Same gating rationale as the V(6) block above: the per-tool
@@ -65,21 +70,21 @@ func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			// V() check unless we short-circuit explicitly.
 			if klog.V(5).Enabled() {
 				if toolCallRequest, err := GoSdkToolCallParamsToToolCallRequest(params); err == nil {
-					klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, toolCallRequest.GetArguments())
+					klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, mcplog.Sanitize(fmt.Sprintf("%v", toolCallRequest.GetArguments())))
 				}
 			}
 			if klog.V(7).Enabled() && req.GetExtra() != nil && req.GetExtra().Header != nil {
 				buffer := bytes.NewBuffer(make([]byte, 0))
 				if err := req.GetExtra().Header.WriteSubset(buffer, redactedHeaders); err == nil {
-					klog.V(7).Infof("mcp tool call headers: %s", buffer)
+					klog.V(7).Infof("mcp tool call headers: %s", mcplog.Sanitize(buffer.String()))
 				}
 			}
 		}
 		result, err := next(ctx, method, req)
 		if err != nil {
-			klog.V(6).Infof("mcp protocol: server→client %s error=%v", method, err)
+			klog.V(6).Infof("mcp protocol: server→client %s error=%s", method, mcplog.Sanitize(fmt.Sprintf("%v", err)))
 		} else if klog.V(6).Enabled() {
-			klog.V(6).Infof("mcp protocol: server→client %s result=%s", method, jsonCompact(result))
+			klog.V(6).Infof("mcp protocol: server→client %s result=%s", method, mcplog.Sanitize(jsonCompact(result)))
 		}
 		return result, err
 	}
@@ -91,17 +96,19 @@ func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 // notifications, progress, server-side pings) bypass the receiving path
 // entirely. Without it, only the request half of every exchange would be
 // visible — which is exactly the gap stdio-mode debugging hits.
+//
+// Sanitization is applied identically to the receiving path.
 func protocolSendingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		if klog.V(6).Enabled() {
-			klog.V(6).Infof("mcp protocol: server→client %s params=%s", method, jsonCompact(req.GetParams()))
+			klog.V(6).Infof("mcp protocol: server→client %s params=%s", method, mcplog.Sanitize(jsonCompact(req.GetParams())))
 		}
 		result, err := next(ctx, method, req)
 		if err != nil {
-			klog.V(6).Infof("mcp protocol: client→server %s error=%v", method, err)
+			klog.V(6).Infof("mcp protocol: client→server %s error=%s", method, mcplog.Sanitize(fmt.Sprintf("%v", err)))
 		} else if result != nil && klog.V(6).Enabled() {
 			// Notifications return nil result; only requests have one.
-			klog.V(6).Infof("mcp protocol: client→server %s result=%s", method, jsonCompact(result))
+			klog.V(6).Infof("mcp protocol: client→server %s result=%s", method, mcplog.Sanitize(jsonCompact(result)))
 		}
 		return result, err
 	}

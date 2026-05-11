@@ -41,17 +41,27 @@ kubernetes-mcp-server --log-file /var/log/kubernetes-mcp-server.log --log-level 
 
 > [!WARNING]
 > **Treat `log_file` as a credential when `log_level >= 6`.** Level 6 dumps
-> full MCP request/response parameters and results, and level 7 dumps tool-call
-> request headers. Tools that accept manifests (`resources_create_or_update`,
-> `helm_install`, `apply_resource`, etc.) routinely carry `Secret` contents,
-> kubeconfig bytes, OIDC bearer tokens, and OAuth refresh tokens — all of
-> which land in the log file in cleartext at these levels.
+> full MCP request/response parameters and results, and level 7 dumps
+> tool-call request headers. Tools that accept manifests
+> (`resources_create_or_update`, `helm_install`, `apply_resource`, etc.)
+> routinely carry `Secret` contents, kubeconfig bytes, OIDC bearer tokens,
+> and OAuth refresh tokens — anything that lands in these payloads.
 >
-> Header dumps redact a fixed set of authentication-related fields
-> (`Authorization`, `Proxy-Authorization`, `Cookie`, `X-Api-Key`,
-> `X-Auth-Token`, `Kubernetes-Authorization`) but the redaction list is a
-> denylist; any other custom header is logged verbatim. Parameter and result
-> bodies are **not** redacted.
+> The server applies two layers of redaction before writing:
+>
+> 1. **Header name denylist** — `Authorization`, `Proxy-Authorization`,
+>    `Cookie`, `X-Api-Key`, `X-Auth-Token`, and `Kubernetes-Authorization`
+>    are dropped entirely at V(7).
+> 2. **Content sanitization** — every V(6) param/result dump and the V(7)
+>    header buffer pass through a regex pass that redacts inline
+>    `Bearer`/`Basic` credentials, JWTs, JSON `"token"`/`"secret"`/
+>    `"password"`/`"api_key"` fields, AWS/GitHub/GitLab/GCP/Azure/OpenAI/
+>    Anthropic key shapes, PEM private-key blocks, and DB connection
+>    strings (postgres/mysql/mongodb).
+>
+> Both layers are **best-effort denylists**. Secret material that doesn't
+> match a known shape — for example, raw YAML keys in a kubeconfig manifest
+> argument, or a custom vendor token format — will pass through unchanged.
 >
 > Recommended posture: leave `log_level` at `0`–`5` for production, store
 > `log_file` on a filesystem with the same access-control posture as your
