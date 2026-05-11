@@ -3,11 +3,11 @@ package mcp
 import (
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
@@ -247,7 +247,7 @@ func (s *McpToolsetPromptsSuite) TestConfigPromptsOverrideToolsetPrompts() {
 	toolsets.Register(testToolset)
 
 	// Add config prompt with same name
-	cfg, err := config.ReadToml([]byte(`
+	s.Require().NoError(toml.Unmarshal([]byte(`
 toolsets = ["test-toolset"]
 
 [[prompts]]
@@ -257,11 +257,7 @@ description = "Config version"
 [[prompts.messages]]
 role = "user"
 content = "From config"
-	`))
-	s.Require().NoError(err)
-	// Preserve kubeconfig from SetupTest
-	cfg.KubeConfig = s.Cfg.KubeConfig
-	s.Cfg = cfg
+	`), s.Cfg), "Expected to parse config")
 
 	s.InitMcpClient()
 

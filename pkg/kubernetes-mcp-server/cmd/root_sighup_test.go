@@ -14,9 +14,11 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/logging"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
 )
@@ -38,7 +40,7 @@ func (s *SIGHUPSuite) SetupTest() {
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
 	s.tempDir = s.T().TempDir()
 	s.dropInConfigDir = filepath.Join(s.tempDir, "conf.d")
-	s.Require().NoError(os.Mkdir(s.dropInConfigDir, 0755))
+	s.Require().NoError(os.Mkdir(s.dropInConfigDir, 0o755))
 
 	// Capture klog state so we can restore it after the test
 	s.klogState = klog.CaptureState()
@@ -63,7 +65,7 @@ func (s *SIGHUPSuite) TearDownTest() {
 	s.klogState.Restore()
 }
 
-func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
+func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions {
 	cfg, err := config.Read(configPath, configDir)
 	s.Require().NoError(err)
 	cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
@@ -74,14 +76,20 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) {
 		StaticConfig: cfg,
 	}, provider)
 	s.Require().NoError(err)
-	// Set up SIGHUP handler
+
 	opts := &MCPServerOptions{
 		ConfigPath: configPath,
 		ConfigDir:  configDir,
+		IOStreams: genericiooptions.IOStreams{
+			Out:    s.logBuffer,
+			ErrOut: s.logBuffer,
+		},
 	}
 	oauthState := oauth.NewState(&oauth.Snapshot{})
+
 	cfgState := config.NewStaticConfigState(cfg)
 	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState, cfgState)
+	return opts
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
@@ -89,8 +97,8 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
 		toolsets = ["core", "config"]
-	`), 0644))
-	s.InitServer(configPath, "")
+	`), 0o644))
+	_ = s.InitServer(configPath, "")
 
 	s.Run("helm tools are not initially available", func() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
@@ -99,7 +107,7 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 	// Modify the config file to add helm toolset
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
 		toolsets = ["core", "config", "helm"]
-	`), 0644))
+	`), 0o644))
 
 	// Send SIGHUP to current process
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -116,15 +124,15 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsFromDropInDirectory() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
 		toolsets = ["core", "config", "helm"]
-	`), 0644))
+	`), 0o644))
 
 	// Create initial drop-in file that removes helm
 	dropInPath := filepath.Join(s.dropInConfigDir, "10-override.toml")
 	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
 		toolsets = ["core", "config"]
-	`), 0644))
+	`), 0o644))
 
-	s.InitServer(configPath, "")
+	_ = s.InitServer(configPath, "")
 
 	s.Run("drop-in override removes helm from initial config", func() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
@@ -133,7 +141,7 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsFromDropInDirectory() {
 	// Update drop-in file to add helm back
 	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
 		toolsets = ["core", "config", "helm"]
-	`), 0644))
+	`), 0o644))
 
 	// Send SIGHUP
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -150,8 +158,8 @@ func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigContinues() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
 		toolsets = ["core", "config"]
-	`), 0644))
-	s.InitServer(configPath, "")
+	`), 0o644))
+	_ = s.InitServer(configPath, "")
 
 	s.Run("helm tools are not initially available", func() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
@@ -160,7 +168,7 @@ func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigContinues() {
 	// Write invalid TOML to config file
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
 		toolsets = "not a valid array
-	`), 0644))
+	`), 0o644))
 
 	// Send SIGHUP - should not panic, should continue with old config
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -179,7 +187,7 @@ func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigContinues() {
 	// Now fix the config and add helm
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
 		toolsets = ["core", "config", "helm"]
-	`), 0644))
+	`), 0o644))
 
 	// Send another SIGHUP
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -196,9 +204,9 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 	dropInPath := filepath.Join(s.dropInConfigDir, "10-settings.toml")
 	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
 		toolsets = ["core", "config"]
-	`), 0644))
+	`), 0o644))
 
-	s.InitServer("", s.dropInConfigDir)
+	_ = s.InitServer("", s.dropInConfigDir)
 
 	s.Run("helm tools are not initially available", func() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
@@ -207,7 +215,7 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 	// Update drop-in file to add helm
 	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
 		toolsets = ["core", "config", "helm"]
-	`), 0644))
+	`), 0o644))
 
 	// Send SIGHUP
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -230,8 +238,8 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
         [[prompts.messages]]
         role = "user"
         content = "Initial message"
-    `), 0644))
-	s.InitServer(configPath, "")
+    `), 0o644))
+	_ = s.InitServer(configPath, "")
 
 	enabledPrompts := s.server.GetEnabledPrompts()
 	s.GreaterOrEqual(len(enabledPrompts), 1)
@@ -246,7 +254,7 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
         [[prompts.messages]]
         role = "user"
         content = "Updated message"
-    `), 0644))
+    `), 0o644))
 
 	// Send SIGHUP
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -256,6 +264,109 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
 		enabledPrompts = s.server.GetEnabledPrompts()
 		return len(enabledPrompts) >= 1 && slices.Contains(enabledPrompts, "updated-prompt") && !slices.Contains(enabledPrompts, "initial-prompt")
 	}, 2*time.Second, 50*time.Millisecond)
+}
+
+// TestSIGHUPInvokesLogSinkReload is the wiring smoke test for the
+// SIGHUP-handler → sink.Reload call path. The Sink's own behavior is
+// covered exhaustively in pkg/logging; this test exists only to ensure
+// that if someone deletes m.logSink.Reload(newConfig) from
+// setupSIGHUPHandler, at least one test fails. End-to-end behavior
+// (rotation, stderr, etc.) is verified at the Sink layer.
+//
+// Unlike the other SIGHUPSuite tests, this one does not use InitServer:
+// production order is logging.New (mutates klog) -> setupSIGHUPHandler
+// (spawns goroutine), and reversing the order in tests would race against
+// the goroutine's klog.V reads. Mirror production order here.
+func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
+	klogState := klog.CaptureState()
+	t.Cleanup(klogState.Restore)
+	logBuffer := &test.SyncBuffer{}
+
+	tempDir := t.TempDir()
+	pathA := filepath.Join(tempDir, "a.log")
+	pathB := filepath.Join(tempDir, "b.log")
+	configPath := filepath.Join(tempDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(
+		`log_file = "`+pathA+`"`+"\n"+`log_level = 1`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mockServer := test.NewMockServer()
+	mockServer.Handle(test.NewDiscoveryClientHandler())
+	t.Cleanup(mockServer.Close)
+
+	cfg, err := config.Read(configPath, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.KubeConfig = mockServer.KubeconfigFile(t)
+
+	// Install Sink BEFORE any goroutine that will read klog state
+	// (kubernetes watchers spawned by mcp.NewServer, the SIGHUP handler).
+	// Goroutine-creation is a happens-before edge for the race detector;
+	// touching klog after a goroutine is spawned is what races. This
+	// mirrors production order: cmd.Complete (sink) -> cmd.Run (server).
+	sink, err := logging.New(cfg, logBuffer, logBuffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sink.Close() })
+
+	provider, err := kubernetes.NewProvider(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: cfg, SDKLogger: sink.SDKLogger()}, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(mcpServer.Close)
+
+	opts := &MCPServerOptions{
+		ConfigPath: configPath,
+		IOStreams: genericiooptions.IOStreams{
+			Out:    logBuffer,
+			ErrOut: logBuffer,
+		},
+		logSink: sink,
+	}
+	cfgState := config.NewStaticConfigState(cfg)
+	stop := opts.setupSIGHUPHandler(mcpServer, oauth.NewState(&oauth.Snapshot{}), cfgState)
+	t.Cleanup(stop)
+
+	if err := os.WriteFile(configPath, []byte(
+		`log_file = "`+pathB+`"`+"\n"+`log_level = 1`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+
+	// The handler emits "Configuration reloaded successfully via SIGHUP"
+	// after sink.Reload returns. If the wiring is correct, that line lands
+	// in pathB; if someone removed the Reload call, it would land in pathA.
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("expected SIGHUP to invoke sink.Reload, redirecting logs to %s", pathB)
+		case <-ticker.C:
+			klog.Flush()
+			content, err := os.ReadFile(pathB)
+			if err == nil && strings.Contains(string(content), "Configuration reloaded successfully") {
+				// Also pin the negative: a regression that wrote to both
+				// the old and the new destinations would have passed the
+				// success check above. Assert pathA did not receive the
+				// post-reload line.
+				if oldContent, _ := os.ReadFile(pathA); strings.Contains(string(oldContent), "Configuration reloaded successfully") {
+					t.Fatalf("expected the post-reload line to land only in %s, but it also appeared in %s", pathB, pathA)
+				}
+				return
+			}
+		}
+	}
 }
 
 func TestSIGHUP(t *testing.T) {

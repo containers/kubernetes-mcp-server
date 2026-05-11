@@ -90,15 +90,21 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 	toolsets.Clear()
 	toolsets.Register(testToolset)
 
+	// toolset_configs requires the two-phase parsing performed by config.ReadToml,
+	// so we replace s.Cfg and restore the runtime fields the suite already set.
+	kubeConfig := s.Cfg.KubeConfig
+	listOutput := s.Cfg.ListOutput
+	readOnly := s.Cfg.ReadOnly
 	cfg, err := config.ReadToml([]byte(`
 		toolsets = ["config-provider-test"]
 		[toolset_configs.kiali]
 		url = "http://kiali.example/"
 	`))
-	s.Require().NoError(err)
-	cfg.KubeConfig = s.Cfg.KubeConfig
-	cfg.ReadOnly = s.Cfg.ReadOnly
+	s.Require().NoError(err, "Expected to parse config")
 	s.Cfg = cfg
+	s.Cfg.KubeConfig = kubeConfig
+	s.Cfg.ListOutput = listOutput
+	s.Cfg.ReadOnly = readOnly
 
 	s.InitMcpClient()
 

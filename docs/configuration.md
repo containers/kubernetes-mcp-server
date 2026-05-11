@@ -131,6 +131,7 @@ The server will:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `log_level` | integer | `0` | Logging verbosity level (0-9). Higher values produce more verbose output. Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
+| `log_file` | string | `""` | Path to a server log file. Required for logging in stdio mode (where stdout is reserved for the MCP protocol); replaces stdout logging in HTTP mode. The file is created if it does not exist and opened in append mode (`O_APPEND`, `0o600`). Use the special value `stderr` to route logs to stderr without opening a file. |
 | `port` | string | `""` | When set, starts the MCP server in HTTP mode (Streamable HTTP at `/mcp`, SSE at `/sse`) on the specified port. |
 | `sse_base_url` | string | `""` | Base URL for Server-Sent Events (SSE) connections. Used when the server is behind a reverse proxy. |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
@@ -142,6 +143,7 @@ The server will:
 **Example:**
 ```toml
 log_level = 2
+log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
 list_output = "yaml"
 stateless = true
@@ -693,6 +695,7 @@ The following options can be set via command-line arguments. CLI arguments overr
 |--------|-------------|
 | `--port` | Start in HTTP mode on the specified port |
 | `--log-level` | Logging verbosity (0-9) |
+| `--log-file` | Path to a server log file. Required for logging in stdio mode; replaces stdout logging in HTTP mode. Use `stderr` to log to the standard error stream. |
 | `--config` | Path to main TOML configuration file |
 | `--config-dir` | Path to drop-in configuration directory |
 | `--kubeconfig` | Path to Kubernetes configuration file |
@@ -714,6 +717,7 @@ A comprehensive configuration file demonstrating all major options:
 ```toml
 # Server settings
 log_level = 2
+log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
 list_output = "table"
 stateless = false

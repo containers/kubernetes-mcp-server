@@ -35,6 +35,7 @@ type StaticConfig struct {
 	DeniedResources []api.GroupVersionKind `toml:"denied_resources"`
 
 	LogLevel   int    `toml:"log_level,omitzero"`
+	LogFile    string `toml:"log_file,omitempty"`
 	Port       string `toml:"port,omitempty"`
 	SSEBaseURL string `toml:"sse_base_url,omitempty"`
 	KubeConfig string `toml:"kubeconfig,omitempty"`
@@ -647,6 +648,9 @@ func (c *StaticConfig) ResolveClusterAuthMode() string {
 func (c *StaticConfig) ValidateClusterAuthMode() error {
 	if c.ClusterAuthMode != "" && c.ClusterAuthMode != api.ClusterAuthPassthrough && c.ClusterAuthMode != api.ClusterAuthKubeconfig {
 		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", c.ClusterAuthMode, api.ClusterAuthPassthrough, api.ClusterAuthKubeconfig)
+	}
+	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && c.RequireOAuth {
+		return fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", api.ClusterAuthKubeconfig)
 	}
 	hasTokenExchange := c.TokenExchangeStrategy != "" || c.StsAudience != ""
 	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && hasTokenExchange {

@@ -15,10 +15,19 @@ import (
 )
 
 func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolHandler, error) {
+	// Validate the input schema upfront to mirror the SDK's AddTool panic
+	// surface. This keeps applyToolsets' two-phase model panic-free at commit
+	// time even if a misconfigured tool slips through the toolset boundary.
+	inputSchema := tool.Tool.InputSchema
+	if inputSchema == nil {
+		return nil, nil, fmt.Errorf("tool %q: missing input schema", tool.Tool.Name)
+	}
+	if inputSchema.Type != "object" {
+		return nil, nil, fmt.Errorf("tool %q: input schema must have type %q (got %q)", tool.Tool.Name, "object", inputSchema.Type)
+	}
 	// Ensure InputSchema.Properties is initialized for OpenAI API compatibility
 	// https://github.com/containers/kubernetes-mcp-server/issues/717
-	inputSchema := tool.Tool.InputSchema
-	if inputSchema != nil && inputSchema.Properties == nil {
+	if inputSchema.Properties == nil {
 		inputSchema.Properties = make(map[string]*jsonschema.Schema)
 	}
 	goSdkTool := &mcp.Tool{
@@ -40,9 +49,12 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		if err != nil {
 			return nil, fmt.Errorf("%v for tool %s", err, tool.Tool.Name)
 		}
+		// Snapshot the live configuration once so a concurrent reload
+		// can't split BaseConfig and ListOutput across two configs.
+		cfg := s.configuration.Load()
 		// Check confirmation rules before executing the tool
 		if confirmErr := confirmation.CheckToolRules(
-			ctx, s.configuration, &sessionElicitor{},
+			ctx, cfg, &sessionElicitor{},
 			tool.Tool.Name, tool.Tool.Annotations.DestructiveHint,
 		); confirmErr != nil {
 			return NewTextResult("", confirmErr), nil
@@ -57,10 +69,10 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 
 		result, err := tool.Handler(api.ToolHandlerParams{
 			Context:          ctx,
-			BaseConfig:       s.configuration,
+			BaseConfig:       cfg,
 			KubernetesClient: k,
 			ToolCallRequest:  toolCallRequest,
-			ListOutput:       s.configuration.ListOutput(),
+			ListOutput:       cfg.ListOutput(),
 			Elicitor:         &sessionElicitor{},
 		})
 		if err != nil {

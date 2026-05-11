@@ -40,7 +40,7 @@ type ToolsetsSuite struct {
 func (s *ToolsetsSuite) SetupTest() {
 	s.originalToolsets = toolsets.Toolsets()
 	s.MockServer = test.NewMockServer()
-	s.Cfg = configuration.Default()
+	s.Cfg = configuration.BaseDefault()
 	s.Cfg.KubeConfig = s.KubeconfigFile(s.T())
 	s.updateJson = os.Getenv(updateJsonEnvVar) != ""
 }

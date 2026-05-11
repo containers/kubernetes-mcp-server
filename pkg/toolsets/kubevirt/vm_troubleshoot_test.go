@@ -2,10 +2,12 @@ package kubevirt
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
+	kubevirtdefaults "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -32,7 +34,7 @@ func (s *VMTroubleshootSuite) TestVMTroubleshootPrompt() {
 		prompts := initVMTroubleshoot()
 		s.Require().Len(prompts, 1, "Expected 1 prompt")
 		s.Equal("vm-troubleshoot", prompts[0].Prompt.Name)
-		s.Equal("VirtualMachine Troubleshoot", prompts[0].Prompt.Title)
+		s.Equal(fmt.Sprintf("%s VirtualMachine Troubleshoot", kubevirtdefaults.ProductName()), prompts[0].Prompt.Title)
 		s.Len(prompts[0].Prompt.Arguments, 2, "Expected 2 arguments")
 	})
 
