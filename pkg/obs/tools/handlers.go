@@ -32,6 +32,20 @@ func GetString(params map[string]any, key, defaultValue string) string {
 	return defaultValue
 }
 
+// GetInt is a helper to extract an integer parameter with a default value.
+// JSON numbers arrive as float64, so this handles the float64-to-int conversion.
+func GetInt(params map[string]any, key string, defaultValue int) int {
+	if val, ok := params[key]; ok {
+		switch v := val.(type) {
+		case float64:
+			return int(v)
+		case int:
+			return v
+		}
+	}
+	return defaultValue
+}
+
 // GetBoolPtr is a helper to extract an optional boolean parameter as a pointer
 func GetBoolPtr(params map[string]any, key string) *bool {
 	if val, ok := params[key]; ok {
