@@ -54,6 +54,22 @@ func (s *ConfigurationSuite) TestContextsList() {
 			s.Regexpf(`^Available Kubernetes contexts \(\d+ total, default: fake-context\)`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Regexpf(`(?m)^\*fake-context -> http:\/\/127\.0\.0\.1:\d*$`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
+		s.Run("returns structured contexts", func() {
+			structured, ok := toolResult.StructuredContent.(map[string]interface{})
+			s.Require().True(ok, "expected structured context result")
+			s.Equal("fake-context", structured["defaultContext"])
+			items, ok := structured["contexts"].([]interface{})
+			s.Require().True(ok, "expected contexts array")
+			s.Len(items, 11)
+			first, ok := items[0].(map[string]interface{})
+			s.Require().True(ok, "expected context entry object")
+			s.Equal("cluster-0", first["name"])
+			s.Equal(false, first["default"])
+			last, ok := items[10].(map[string]interface{})
+			s.Require().True(ok, "expected context entry object")
+			s.Equal("fake-context", last["name"])
+			s.Equal(true, last["default"])
+		})
 	})
 }
 

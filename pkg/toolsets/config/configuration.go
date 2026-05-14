@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
@@ -10,6 +11,17 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
+
+type contextInfo struct {
+	Name    string `json:"name"`
+	Server  string `json:"server"`
+	Default bool   `json:"default"`
+}
+
+type contextsListResult struct {
+	DefaultContext string        `json:"defaultContext"`
+	Contexts       []contextInfo `json:"contexts"`
+}
 
 func initConfiguration() []api.ServerTool {
 	tools := []api.ServerTool{
@@ -105,20 +117,35 @@ func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	result += "Format: [*] CONTEXT_NAME -> SERVER_URL\n"
 	result += " (* indicates the default context used in tools if context is not set)\n\n"
 	result += "Contexts:\n---------\n"
-	for context, server := range contexts {
+	contextNames := make([]string, 0, len(contexts))
+	for context := range contexts {
+		contextNames = append(contextNames, context)
+	}
+	sort.Strings(contextNames)
+
+	structured := contextsListResult{
+		DefaultContext: defaultContext,
+		Contexts:       make([]contextInfo, 0, len(contexts)),
+	}
+	for _, context := range contextNames {
+		server := contexts[context]
 		marker := " "
 		if context == defaultContext {
 			marker = "*"
 		}
 
 		result += fmt.Sprintf("%s%s -> %s\n", marker, context, server)
+		structured.Contexts = append(structured.Contexts, contextInfo{
+			Name:    context,
+			Server:  server,
+			Default: context == defaultContext,
+		})
 	}
 	result += "---------\n\n"
 
 	result += "To use a specific context with any tool, set the 'context' parameter in the tool call arguments"
 
-	// TODO: Review output format, current is not parseable and might not be ideal for LLM consumption
-	return api.NewToolCallResult(result, nil), nil
+	return api.NewToolCallResultFull(result, structured, nil), nil
 }
 
 func configurationView(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
