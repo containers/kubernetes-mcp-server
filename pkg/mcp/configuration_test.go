@@ -25,9 +25,11 @@ func (s *ConfigurationSuite) SetupTest() {
 	mockServer := test.NewMockServer()
 	s.T().Cleanup(mockServer.Close)
 	kubeconfig := mockServer.Kubeconfig()
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 11; i++ {
 		// Add multiple fake contexts to force configuration_contexts_list tool to appear
-		// and test minification in configuration_view tool
+		// and test minification in configuration_view tool. cluster-10 is included
+		// so TestContextsList can assert the lexicographic ordering contract
+		// (cluster-10 sorts before cluster-2).
 		name := fmt.Sprintf("cluster-%d", i)
 		kubeconfig.Contexts[name] = clientcmdapi.NewContext()
 		kubeconfig.Clusters[name+"-cluster"] = clientcmdapi.NewCluster()
@@ -48,7 +50,7 @@ func (s *ConfigurationSuite) TestContextsList() {
 		s.Require().NotNil(toolResult, "Expected tool result from call")
 		s.Lenf(toolResult.Content, 1, "invalid tool result content length %v", len(toolResult.Content))
 		s.Run("contains context count", func() {
-			s.Regexpf(`^Available Kubernetes contexts \(11 total`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool count result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
+			s.Regexpf(`^Available Kubernetes contexts \(12 total`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool count result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 		s.Run("contains default context name", func() {
 			s.Regexpf(`^Available Kubernetes contexts \(\d+ total, default: fake-context\)`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
@@ -60,15 +62,26 @@ func (s *ConfigurationSuite) TestContextsList() {
 			s.Equal("fake-context", structured["defaultContext"])
 			items, ok := structured["contexts"].([]interface{})
 			s.Require().True(ok, "expected contexts array")
-			s.Len(items, 11)
+			s.Len(items, 12)
 			first, ok := items[0].(map[string]interface{})
 			s.Require().True(ok, "expected context entry object")
 			s.Equal("cluster-0", first["name"])
 			s.Equal(false, first["default"])
-			last, ok := items[10].(map[string]interface{})
+			s.Equal("unknown", first["server"], "cluster-0 has no server, expected the unknown placeholder")
+			// Lock lexicographic ordering: cluster-10 sorts between cluster-1
+			// and cluster-2, so items[2] must be "cluster-10". This catches
+			// off-by-one or duplicate-skip bugs in the sort/append loop that a
+			// length-only assertion would miss.
+			middle, ok := items[2].(map[string]interface{})
+			s.Require().True(ok, "expected context entry object")
+			s.Equal("cluster-10", middle["name"], "expected lexicographic ordering: items[2] should be cluster-10 (cluster-10 < cluster-2 lexicographically)")
+			last, ok := items[11].(map[string]interface{})
 			s.Require().True(ok, "expected context entry object")
 			s.Equal("fake-context", last["name"])
 			s.Equal(true, last["default"])
+			lastServer, ok := last["server"].(string)
+			s.Require().True(ok, "expected server string")
+			s.Regexp(`^https?://(127\.0\.0\.1|localhost):\d{1,5}$`, lastServer, "expected real server URL for fake-context, got %v", lastServer)
 		})
 	})
 }
@@ -127,23 +140,23 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 			s.Nilf(err, "invalid tool result content %v", err)
 		})
 		s.Run("returns additional context info", func() {
-			s.Lenf(decoded.Contexts, 11, "invalid context count, expected 12, got %v", len(decoded.Contexts))
+			s.Lenf(decoded.Contexts, 12, "invalid context count, expected 12, got %v", len(decoded.Contexts))
 			s.Equalf("cluster-0", decoded.Contexts[0].Name, "cluster-0 not found: %v", decoded.Contexts)
 			s.Equalf("cluster-0-cluster", decoded.Contexts[0].Context.Cluster, "cluster-0-cluster not found: %v", decoded.Contexts)
 			s.Equalf("cluster-0-auth", decoded.Contexts[0].Context.AuthInfo, "cluster-0-auth not found: %v", decoded.Contexts)
-			s.Equalf("fake", decoded.Contexts[10].Context.Cluster, "fake not found: %v", decoded.Contexts)
-			s.Equalf("fake", decoded.Contexts[10].Context.AuthInfo, "fake not found: %v", decoded.Contexts)
-			s.Equalf("fake-context", decoded.Contexts[10].Name, "fake-context not found: %v", decoded.Contexts)
+			s.Equalf("fake", decoded.Contexts[11].Context.Cluster, "fake not found: %v", decoded.Contexts)
+			s.Equalf("fake", decoded.Contexts[11].Context.AuthInfo, "fake not found: %v", decoded.Contexts)
+			s.Equalf("fake-context", decoded.Contexts[11].Name, "fake-context not found: %v", decoded.Contexts)
 		})
 		s.Run("returns cluster info", func() {
-			s.Lenf(decoded.Clusters, 11, "invalid cluster count, expected 2, got %v", len(decoded.Clusters))
+			s.Lenf(decoded.Clusters, 12, "invalid cluster count, expected 12, got %v", len(decoded.Clusters))
 			s.Equalf("cluster-0-cluster", decoded.Clusters[0].Name, "cluster-0-cluster not found: %v", decoded.Clusters)
-			s.Equalf("fake", decoded.Clusters[10].Name, "fake not found: %v", decoded.Clusters)
+			s.Equalf("fake", decoded.Clusters[11].Name, "fake not found: %v", decoded.Clusters)
 		})
 		s.Run("configuration_view with minified=false returns auth info", func() {
-			s.Lenf(decoded.AuthInfos, 11, "invalid auth info count, expected 2, got %v", len(decoded.AuthInfos))
+			s.Lenf(decoded.AuthInfos, 12, "invalid auth info count, expected 12, got %v", len(decoded.AuthInfos))
 			s.Equalf("cluster-0-auth", decoded.AuthInfos[0].Name, "cluster-0-auth not found: %v", decoded.AuthInfos)
-			s.Equalf("fake", decoded.AuthInfos[10].Name, "fake not found: %v", decoded.AuthInfos)
+			s.Equalf("fake", decoded.AuthInfos[11].Name, "fake not found: %v", decoded.AuthInfos)
 		})
 	})
 }
