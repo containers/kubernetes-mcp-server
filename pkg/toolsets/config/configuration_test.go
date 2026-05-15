@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
+
+var errEmptyClientConfigStub = errors.New("emptyClientConfig: method not implemented (unreachable on the empty-contexts branch)")
 
 // The MCP-level integration suite (pkg/mcp/configuration_test.go) cannot
 // exercise the empty-kubeconfig branch of contextsList:
@@ -69,8 +72,12 @@ func (emptyClientConfig) RawConfig() (clientcmdapi.Config, error) {
 	return *clientcmdapi.NewConfig(), nil
 }
 
-func (emptyClientConfig) ClientConfig() (*rest.Config, error) { return nil, nil }
+func (emptyClientConfig) ClientConfig() (*rest.Config, error) {
+	return nil, errEmptyClientConfigStub
+}
 
-func (emptyClientConfig) Namespace() (string, bool, error) { return "", false, nil }
+func (emptyClientConfig) Namespace() (string, bool, error) {
+	return "", false, errEmptyClientConfigStub
+}
 
 func (emptyClientConfig) ConfigAccess() clientcmd.ConfigAccess { return nil }

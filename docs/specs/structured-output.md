@@ -80,8 +80,11 @@ the cleaned-up object or list of objects. No tool-specific extractor is
 required.
 
 > **Status:** the recipe is the intended pattern but has no in-tree adopter
-> yet. The first converted list tool (tracked in #920) will become the
-> canonical reference. Until then, mirror the snippet above.
+> yet. The first converted list tool — tracked in #920 (MCP Apps), which
+> retrofits several core tools with this pattern — will become the canonical
+> reference. If that conversion uncovers a wrinkle (error-wrap style, params
+> plumbing, a dedicated helper, etc.), please thread the change back into
+> this section so the snippet doesn't quietly diverge from the live code.
 
 ### Recipe 2 — Bespoke / non-Kubernetes data
 

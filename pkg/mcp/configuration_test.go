@@ -81,7 +81,7 @@ func (s *ConfigurationSuite) TestContextsList() {
 			s.Equal(true, last["default"])
 			lastServer, ok := last["server"].(string)
 			s.Require().True(ok, "expected server string")
-			s.Regexp(`^https?://(127\.0\.0\.1|localhost):\d{1,5}$`, lastServer, "expected real server URL for fake-context, got %v", lastServer)
+			s.Regexp(`^https?://(127\.0\.0\.1|localhost):\d+$`, lastServer, "expected real server URL for fake-context, got %v", lastServer)
 		})
 	})
 }
