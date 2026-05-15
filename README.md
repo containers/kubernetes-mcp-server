@@ -462,7 +462,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `clusterName` (`string`) - Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig
   - `namespaces` (`string`) - Comma-separated list of namespaces to query (e.g., 'bookinfo' or 'bookinfo,default'). If not provided, it will query across all accessible namespaces.
   - `resourceName` (`string`) - Optional. The specific name of the resource. If left empty, the tool returns a list of all resources of the specified type. If provided, the tool returns deep details for this specific resource.
-  - `resourceType` (`string`) **(required)** - The type of resource to query.
+  - `resourceType` (`string`) **(required)** - The type of resource to query. Use 'app' for Kiali applications (grouped by the Kubernetes 'app' label). Use 'argoapp' for ArgoCD Application CRDs (requires ArgoCD installed and the Kiali service account must have read permissions on applications.argoproj.io).
 
 - **kiali_list_traces** - Lists distributed traces for a service in a namespace. Returns a summary (namespace, service, total_found, avg_duration_ms) and a list of traces with id, duration_ms, spans_count, root_op, slowest_service, has_errors. Use get_trace_details with a trace id to get full hierarchy.
   - `clusterName` (`string`) - Optional cluster name. Defaults to the cluster name in the Kiali configuration.
