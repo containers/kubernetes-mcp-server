@@ -647,3 +647,118 @@ npx @modelcontextprotocol/inspector@latest $(pwd)/kubernetes-mcp-server
 ---
 
 mcp-name: io.github.containers/kubernetes-mcp-server
+
+## FAQ
+
+### What is Kubernetes MCP Server?
+
+Kubernetes MCP Server is a powerful and flexible Kubernetes [Model Context Protocol (MCP)](https://blog.marcnuri.com/model-context-protocol-mcp-introduction) server implementation with support for **Kubernetes** and **OpenShift**. It is a **Go-based native implementation** that interacts directly with the Kubernetes API server, not a wrapper around `kubectl` or `helm`.
+
+### How does Kubernetes MCP Server compare to other MCP servers?
+
+- **Kubernetes MCP Server**: Go-based native implementation, directly interacts with Kubernetes API, no external dependencies needed
+- **kubectl-based MCP servers**: Wrapper around kubectl/helm CLI tools, requires external tools installed
+- **Other Kubernetes MCP implementations**: Typically require Node.js or Python runtime
+
+Kubernetes MCP Server is lightweight, high-performance, and cross-platform.
+
+### What are the key features?
+
+- **Configuration**: Auto-detect changes in Kubernetes config, view and manage kubeconfig
+- **Generic Kubernetes Resources**: CRUD operations on any Kubernetes/OpenShift resource
+- **Pods**: List, Get, Delete, Logs, Top (metrics), Exec, Run container
+- **Namespaces**: List namespaces
+- **Events**: View events in all namespaces or specific namespace
+- **Projects**: List OpenShift Projects
+- **Helm**: Install, List, Uninstall Helm charts
+- **Tekton**: Pipeline, PipelineRun, Task, TaskRun operations
+- **Observability**: OpenTelemetry distributed tracing and metrics
+
+### How do I get started?
+
+**Claude Desktop** (using npx):
+```json
+{
+  "mcpServers": {
+    "kubernetes": {
+      "command": "npx",
+      "args": ["-y", "kubernetes-mcp-server@latest"]
+    }
+  }
+}
+```
+
+**VS Code**:
+```shell
+code --add-mcp '{"name":"kubernetes","command":"npx","args":["kubernetes-mcp-server@latest"]}'
+```
+
+**Cursor**:
+```json
+{
+  "mcpServers": {
+    "kubernetes-mcp-server": {
+      "command": "npx",
+      "args": ["-y", "kubernetes-mcp-server@latest"]
+    }
+  }
+}
+```
+
+**Goose CLI**:
+```yaml
+extensions:
+  kubernetes:
+    command: npx
+    args:
+      - -y
+      - kubernetes-mcp-server@latest
+```
+
+### What platforms are supported?
+
+- **Native binaries**: Linux, macOS, Windows (no Node/Python required)
+- **npm package**: `kubernetes-mcp-server`
+- **Python package**: `kubernetes-mcp-server` (PyPI)
+- **Docker image**: Container deployment
+
+### What configuration options are available?
+
+| Option | Description |
+|--------|-------------|
+| `--port` | Starts MCP server in HTTP/SSE mode |
+| `--log-level` | Sets logging level (0-9) |
+| `--config` | Path to TOML configuration file |
+| `--kubeconfig` | Path to Kubernetes config file |
+| `--read-only` | Disables write operations (create, update, delete) |
+| `--disable-destructive` | Disables destructive operations |
+| `--stateless` | Disables tool/prompt change notifications |
+| `--toolsets` | Comma-separated list of toolsets to enable |
+| `--disable-multi-cluster` | Restricts to single cluster |
+
+### Does it support multi-cluster?
+
+Yes! Kubernetes MCP Server can interact with multiple Kubernetes clusters simultaneously (as defined in your kubeconfig files). Use `--disable-multi-cluster` to restrict to a single cluster.
+
+### How do I run it in read-only mode?
+
+Use the `--read-only` flag to prevent any write operations (create, update, delete) on the Kubernetes cluster:
+
+```shell
+npx kubernetes-mcp-server@latest --read-only
+```
+
+### What observability features are available?
+
+- OpenTelemetry distributed tracing and metrics
+- Custom sampling rates
+- `/stats` endpoint for real-time statistics
+- See [OTEL.md](docs/OTEL.md) for details
+
+### Where can I find help?
+
+- [User Documentation](docs/)
+- [Claude Code Guide](docs/getting-started-claude-code.md)
+- [Kubernetes Setup Guide](docs/getting-started-kubernetes.md)
+- [Configuration Reference](docs/configuration.md)
+- [GitHub Issues](https://github.com/containers/kubernetes-mcp-server/issues)
