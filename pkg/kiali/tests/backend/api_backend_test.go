@@ -60,10 +60,13 @@ func (s *ContractTestSuite) SetupSuite() {
 }
 
 // mcpCall POSTs a JSON body to a Kiali MCP tool endpoint and returns the response.
+// Mirrors the real kubernetes-mcp-server client (pkg/kiali/kiali.go ExecuteRequest):
+// injects mcp_mode into the payload and sets X-Kubernetes-MCP-Server header.
 func (s *ContractTestSuite) mcpCall(endpoint string, args map[string]interface{}) (*http.Response, []byte, error) {
 	if args == nil {
 		args = map[string]interface{}{}
 	}
+	args["mcp_mode"] = "true"
 	body, err := json.Marshal(args)
 	if err != nil {
 		return nil, nil, err
@@ -79,6 +82,7 @@ func (s *ContractTestSuite) mcpCall(endpoint string, args map[string]interface{}
 		req.Header.Set("Authorization", "Bearer "+s.kialiToken)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Kubernetes-MCP-Server", "true")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -247,6 +251,8 @@ func (s *ContractTestSuite) fetchTraceList(serviceName string) (*traceListPayloa
 	}
 }
 
+// requireServiceEntryHost polls until the ServiceEntry is visible with the expected host,
+// retrying up to 15 times with 1s intervals to account for Kiali's istio-config cache lag.
 func (s *ContractTestSuite) requireServiceEntryHost(name, expectedHost string) {
 	args := map[string]interface{}{
 		"action":    "get",
@@ -256,25 +262,47 @@ func (s *ContractTestSuite) requireServiceEntryHost(name, expectedHost string) {
 		"kind":      "ServiceEntry",
 		"object":    name,
 	}
-	resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
-	s.Require().NoError(err)
-	s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
 
-	var payload struct {
-		Resource struct {
-			Metadata struct {
-				Name      string `json:"name"`
-				Namespace string `json:"namespace"`
-			} `json:"metadata"`
-			Spec struct {
-				Hosts []string `json:"hosts"`
-			} `json:"spec"`
-		} `json:"resource"`
+	var lastErr string
+	for attempt := 0; attempt < 15; attempt++ {
+		if attempt > 0 {
+			time.Sleep(1 * time.Second)
+		}
+		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
+		if err != nil {
+			lastErr = fmt.Sprintf("request error: %v", err)
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			lastErr = fmt.Sprintf("status %d: %s", resp.StatusCode, string(body))
+			continue
+		}
+
+		var payload struct {
+			Resource struct {
+				Metadata struct {
+					Name      string `json:"name"`
+					Namespace string `json:"namespace"`
+				} `json:"metadata"`
+				Spec struct {
+					Hosts []string `json:"hosts"`
+				} `json:"spec"`
+			} `json:"resource"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			lastErr = fmt.Sprintf("unmarshal error: %v", err)
+			continue
+		}
+		for _, h := range payload.Resource.Spec.Hosts {
+			if h == expectedHost {
+				s.Equal(name, payload.Resource.Metadata.Name)
+				s.Equal(s.testNS, payload.Resource.Metadata.Namespace)
+				return
+			}
+		}
+		lastErr = fmt.Sprintf("hosts=%v, expected %q", payload.Resource.Spec.Hosts, expectedHost)
 	}
-	s.Require().NoError(json.Unmarshal(body, &payload))
-	s.Equal(name, payload.Resource.Metadata.Name)
-	s.Equal(s.testNS, payload.Resource.Metadata.Namespace)
-	s.Contains(payload.Resource.Spec.Hosts, expectedHost)
+	s.FailNow(fmt.Sprintf("ServiceEntry %q never showed host %q after 15 attempts: %s", name, expectedHost, lastErr))
 }
 
 func (s *ContractTestSuite) requireServiceEntryMissing(name string) {
@@ -377,8 +405,35 @@ func (s *ContractTestSuite) TestListOrGetResources() {
 		resp, body, err := s.mcpCall(tools.KialiListOrGetResourcesEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiListOrGetResourcesEndpoint, resp, body)
-		obj := s.requireJSONObject(tools.KialiListOrGetResourcesEndpoint, body)
-		s.NotEmpty(obj, "list_or_get_resources response should have at least one cluster key")
+
+		type workloadSummary struct {
+			Name          string `json:"name"`
+			Namespace     string `json:"namespace"`
+			Health        string `json:"health"`
+			Configuration string `json:"configuration"`
+			Details       string `json:"details"`
+			Labels        string `json:"labels"`
+		}
+		var payload map[string][]workloadSummary
+		s.Require().NoError(json.Unmarshal(body, &payload),
+			"list_or_get_resources(workload) returned unexpected JSON: %s", string(body))
+		s.Require().NotEmpty(payload, "expected at least one cluster key in response")
+
+		seenAtLeastOne := false
+		for cluster, workloads := range payload {
+			s.NotEmpty(cluster, "cluster key must be non-empty")
+			if len(workloads) == 0 {
+				continue
+			}
+			seenAtLeastOne = true
+			for _, wl := range workloads {
+				s.NotEmpty(wl.Name, "workload name should not be empty")
+				s.NotEmpty(wl.Namespace, "workload namespace should not be empty")
+			}
+		}
+		s.Require().True(seenAtLeastOne, "expected at least one workload in response")
+
+		s.NotContains(string(body), `"validations"`, "response should not include raw validations block")
 	})
 }
 
@@ -406,7 +461,11 @@ func (s *ContractTestSuite) TestGetLogs() {
 		resp, body, err := s.mcpCall(tools.KialiGetLogsEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetLogsEndpoint, resp, body)
-		s.requireJSONString(tools.KialiGetLogsEndpoint, body)
+		logStr := s.requireJSONString(tools.KialiGetLogsEndpoint, body)
+		s.Require().Greater(len(logStr), 10,
+			"get_logs should return meaningful log content, not a stub")
+		s.True(strings.Contains(logStr, "\n") || strings.Contains(logStr, "~~~"),
+			"get_logs output should contain newlines or code-block markers")
 	})
 }
 
@@ -419,7 +478,14 @@ func (s *ContractTestSuite) TestGetPodPerformance() {
 		resp, body, err := s.mcpCall(tools.KialiGetPodPerformanceEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetPodPerformanceEndpoint, resp, body)
-		s.requireJSONString(tools.KialiGetPodPerformanceEndpoint, body)
+		perfStr := s.requireJSONString(tools.KialiGetPodPerformanceEndpoint, body)
+		s.Require().Greater(len(perfStr), 10,
+			"get_pod_performance should return meaningful content, not a stub")
+		s.True(strings.Contains(strings.ToLower(perfStr), "pod") ||
+			strings.Contains(strings.ToLower(perfStr), "cpu") ||
+			strings.Contains(strings.ToLower(perfStr), "memory") ||
+			strings.Contains(strings.ToLower(perfStr), "container"),
+			"get_pod_performance output should mention pod/cpu/memory/container keywords")
 	})
 }
 
@@ -431,8 +497,26 @@ func (s *ContractTestSuite) TestManageIstioConfigRead() {
 		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
-		s.requireValidJSON(tools.KialiManageIstioConfigReadEndpoint, body)
+		obj := s.requireJSONObject(tools.KialiManageIstioConfigReadEndpoint, body)
+		s.Contains(obj, "resources",
+			"manage_istio_config_read list response should contain a 'resources' key")
 	})
+}
+
+func (s *ContractTestSuite) bestEffortDeleteServiceEntry(name string) {
+	if name == "" {
+		return
+	}
+	args := map[string]interface{}{
+		"action":    "delete",
+		"namespace": s.testNS,
+		"group":     "networking.istio.io",
+		"version":   "v1",
+		"kind":      "ServiceEntry",
+		"object":    name,
+		"confirmed": true,
+	}
+	_, _, _ = s.mcpCall(tools.KialiManageIstioConfigEndpoint, args)
 }
 
 func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
@@ -442,6 +526,7 @@ func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 
 	s.Run("creates a ServiceEntry", func() {
 		createdName = fmt.Sprintf("contract-test-%d", time.Now().UnixMilli())
+		s.T().Cleanup(func() { s.bestEffortDeleteServiceEntry(createdName) })
 		seData := map[string]interface{}{
 			"apiVersion": "networking.istio.io/v1",
 			"kind":       "ServiceEntry",
