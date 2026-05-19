@@ -14,8 +14,8 @@ func InitListAlertSilences() []api.ServerTool {
 	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name: name,
-			Description: "Lists Alertmanager silences via the NetObserv plugin proxy. " +
-				"Requires Alertmanager URL to be configured on the plugin backend.",
+			Description: "Lists Alertmanager silences for NetObserv alerts. " +
+				"Uses the console plugin proxy when available; on OpenShift (or when configured with alertmanager_url) falls back to cluster Alertmanager directly.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -33,7 +33,7 @@ func InitListAlertSilences() []api.ServerTool {
 
 func listAlertSilencesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	client := netobservclient.NewNetObserv(params, params.KubernetesClient)
-	content, err := client.ExecuteGet(params.Context, NetObservAlertSilencesEndpoint, params.GetArguments())
+	content, err := client.ExecuteGetAlertSilences(params.Context, params.GetArguments())
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list alert silences: %w", err)), nil
 	}

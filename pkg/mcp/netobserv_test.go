@@ -98,6 +98,47 @@ func (s *NetObservSuite) TestListNamespaces() {
 	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "openshift-netobserv")
 }
 
+func (s *NetObservSuite) TestListAlerts_fallsBackToPrometheus() {
+	prom := test.NewMockServer()
+	s.T().Cleanup(prom.Close)
+	prom.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Equal("/api/v1/rules", r.URL.Path)
+		_, _ = w.Write([]byte(`{"status":"success","data":{"groups":[]}}`))
+	}))
+
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/prometheus/api/v1/rules" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+
+	kubeConfig := s.Cfg.KubeConfig
+	listOutput := s.Cfg.ListOutput
+	readOnly := s.Cfg.ReadOnly
+	cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+		toolsets = ["%s"]
+		[toolset_configs.netobserv]
+		url = "%s"
+		prometheus_url = "%s"
+		insecure = true
+	`, s.toolsetName, s.mockServer.Config().Host, prom.Config().Host)))
+	s.Require().NoError(err)
+	s.Cfg = cfg
+	s.Cfg.KubeConfig = kubeConfig
+	s.Cfg.ListOutput = listOutput
+	s.Cfg.ReadOnly = readOnly
+	s.InitMcpClient()
+
+	toolResult, err := s.CallTool(fmt.Sprintf("%s_list_alerts", s.toolsetName), map[string]interface{}{
+		"type": "alert",
+	})
+	s.Nilf(err, "call tool failed %v", err)
+	s.Falsef(toolResult.IsError, "call tool failed")
+	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, `"groups"`)
+}
+
 func (s *NetObservSuite) TestListNames() {
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.Equal("/api/resources/names", r.URL.Path)

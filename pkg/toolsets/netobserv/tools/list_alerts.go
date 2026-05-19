@@ -14,8 +14,8 @@ func InitListAlerts() []api.ServerTool {
 	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name: name,
-			Description: "Lists Prometheus alerting or recording rules exposed by the NetObserv plugin. " +
-				"Requires the plugin to proxy Prometheus (standalone deployment with AlertManager URL configured).",
+			Description: "Lists Prometheus alerting or recording rules for NetObserv. " +
+				"Uses the console plugin proxy when available; on OpenShift (or when configured with prometheus_url) falls back to cluster monitoring (Thanos) directly.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -47,7 +47,7 @@ func listAlertsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error
 		args["type"] = "alert"
 	}
 	client := netobservclient.NewNetObserv(params, params.KubernetesClient)
-	content, err := client.ExecuteGet(params.Context, NetObservAlertRulesEndpoint, args)
+	content, err := client.ExecuteGetAlertRules(params.Context, args)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list alert rules: %w", err)), nil
 	}
