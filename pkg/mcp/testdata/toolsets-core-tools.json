@@ -11,7 +11,7 @@
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter events by field values (e.g. 'type=Warning', 'involvedObject.name=my-pod'). Supported fields: involvedObject.kind, involvedObject.name, involvedObject.namespace, involvedObject.uid, involvedObject.apiVersion, involvedObject.resourceVersion, involvedObject.fieldPath, reason, reportingComponent, source, type. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
+          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
           "type": "string"
         },
         "namespace": {
@@ -36,7 +36,7 @@
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
+          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
           "type": "string"
         }
       },
@@ -232,7 +232,7 @@
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
+          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
           "type": "string"
         },
         "labelSelector": {
@@ -258,7 +258,7 @@
       "properties": {
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
+          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
           "type": "string"
         },
         "labelSelector": {
@@ -506,7 +506,7 @@
         },
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[.\\-A-Za-z0-9]+)+$",
+          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
           "type": "string"
         },
         "kind": {

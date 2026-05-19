@@ -38,6 +38,8 @@ var validFieldSelectors = []struct{ selector string }{
 	{"status.phase=Running"},
 	{"metadata.namespace!=default"},
 	{"metadata.name=my-service"},
+	{"involvedObject.apiVersion=apps/v1"},
+	{"status.phase=Running,metadata.name=my-pod"},
 }
 
 func Test_FieldSelectorRegex_is_valid(t *testing.T) {
@@ -45,6 +47,27 @@ func Test_FieldSelectorRegex_is_valid(t *testing.T) {
 		t.Run(fmt.Sprint("Selector should be valid: ", tc.selector), func(t *testing.T) {
 			if match, _ := regexp.MatchString(core.REGEX_FIELDSELECTOR, tc.selector); !match {
 				t.Errorf("Pattern %s did not match valid selector: %s", core.REGEX_FIELDSELECTOR, tc.selector)
+			}
+		})
+	}
+}
+
+var invalidFieldSelectors = []struct{ selector string }{
+	{""},
+	{" "},
+	{"metadata.name"},
+	{"=my-service"},
+	{"metadata.name =my-service"},
+	{"metadata.name= my-service"},
+	{"metadata.name=my service"},
+	{"!!!"},
+}
+
+func Test_FieldSelectorRegex_is_invalid(t *testing.T) {
+	for _, tc := range invalidFieldSelectors {
+		t.Run(fmt.Sprint("Selector should be invalid: ", tc.selector), func(t *testing.T) {
+			if match, _ := regexp.MatchString(core.REGEX_FIELDSELECTOR, tc.selector); match {
+				t.Errorf("Pattern %s should not match invalid selector: %s", core.REGEX_FIELDSELECTOR, tc.selector)
 			}
 		})
 	}
