@@ -177,6 +177,14 @@ func (s *ContractTestSuite) requireJSONObject(endpoint string, body []byte) map[
 	return obj
 }
 
+// requireJSONArray asserts the response is a JSON array and returns it.
+func (s *ContractTestSuite) requireJSONArray(endpoint string, body []byte) []interface{} {
+	parsed := s.requireValidJSON(endpoint, body)
+	arr, ok := parsed.([]interface{})
+	s.Require().True(ok, "Endpoint %s expected JSON array, got %T", endpoint, parsed)
+	return arr
+}
+
 // requireJSONKeys asserts the JSON object response contains all expected top-level keys.
 func (s *ContractTestSuite) requireJSONKeys(endpoint string, body []byte, keys ...string) map[string]interface{} {
 	obj := s.requireJSONObject(endpoint, body)
@@ -275,6 +283,12 @@ func (s *ContractTestSuite) requireServiceEntryHost(name, expectedHost string) {
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			lastErr = fmt.Sprintf("status %d: %s", resp.StatusCode, string(body))
+			continue
+		}
+
+		var message string
+		if err := json.Unmarshal(body, &message); err == nil && message != "" {
+			lastErr = message
 			continue
 		}
 
@@ -492,14 +506,23 @@ func (s *ContractTestSuite) TestGetPodPerformance() {
 func (s *ContractTestSuite) TestManageIstioConfigRead() {
 	s.Run("lists istio config", func() {
 		args := map[string]interface{}{
-			"action": "list",
+			"action":    "list",
+			"namespace": s.testNS,
 		}
 		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
-		obj := s.requireJSONObject(tools.KialiManageIstioConfigReadEndpoint, body)
-		s.Contains(obj, "resources",
-			"manage_istio_config_read list response should contain a 'resources' key")
+		items := s.requireJSONArray(tools.KialiManageIstioConfigReadEndpoint, body)
+		s.Require().NotEmpty(items,
+			"manage_istio_config_read list response should return at least one item for namespace %q", s.testNS)
+
+		first, ok := items[0].(map[string]interface{})
+		s.Require().True(ok,
+			"manage_istio_config_read list items should be JSON objects, got %T", items[0])
+		s.Contains(first, "name")
+		s.Contains(first, "namespace")
+		s.Contains(first, "kind")
+		s.Contains(first, "validation")
 	})
 }
 
@@ -523,10 +546,12 @@ func (s *ContractTestSuite) TestManageIstioConfigCRUD() {
 	var createdName string
 	originalHost := "contract-test.example.com"
 	updatedHost := "contract-test-updated.example.com"
+	// Register cleanup on the parent test, not the create subtest, so the
+	// resource survives through read/patch/delete assertions.
+	s.T().Cleanup(func() { s.bestEffortDeleteServiceEntry(createdName) })
 
 	s.Run("creates a ServiceEntry", func() {
 		createdName = fmt.Sprintf("contract-test-%d", time.Now().UnixMilli())
-		s.T().Cleanup(func() { s.bestEffortDeleteServiceEntry(createdName) })
 		seData := map[string]interface{}{
 			"apiVersion": "networking.istio.io/v1",
 			"kind":       "ServiceEntry",
