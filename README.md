@@ -89,6 +89,27 @@ Open your `claude_desktop_config.json` and add the mcp server to the list of `mc
 }
 ```
 
+Optional local guardrail with [Armorer Guard](https://github.com/ArmorerLabs/Armorer-Guard):
+
+```json
+{
+  "mcpServers": {
+    "kubernetes": {
+      "command": "armorer-guard",
+      "args": [
+        "mcp-proxy",
+        "--",
+        "npx",
+        "-y",
+        "kubernetes-mcp-server@latest"
+      ]
+    }
+  }
+}
+```
+
+This wraps the same Kubernetes MCP server with a local proxy that inspects tool-call arguments for prompt injection, credential leakage, exfiltration risk, and dangerous actions before forwarding safe calls.
+
 ### VS Code / VS Code Insiders
 
 Install the Kubernetes MCP server extension in VS Code Insiders by pressing the following link:
