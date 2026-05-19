@@ -1,0 +1,31 @@
+package netobserv
+
+import "fmt"
+
+// Defaults match netobserv-operator (PluginName, DefaultOperatorNamespace, advanced.port).
+const (
+	DefaultPluginNamespace = "netobserv"
+	DefaultPluginService   = "netobserv-plugin"
+	DefaultPluginPort      = 9001
+)
+
+// DefaultPluginServiceCAPath is the OpenShift service CA bundle path when mounted into
+// the pod (same convention as platform components and mcp-shield examples).
+const DefaultPluginServiceCAPath = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+
+// DefaultPluginInsecureSkipVerify is used on OpenShift when the service CA file is not present.
+const DefaultPluginInsecureSkipVerify = true
+
+// DefaultPluginURL returns the in-cluster Service URL using HTTPS on OpenShift and HTTP otherwise.
+func DefaultPluginURL(isOpenShift bool) string {
+	return BuildPluginURL(DefaultPluginNamespace, DefaultPluginService, DefaultPluginPort, isOpenShift)
+}
+
+// BuildPluginURL builds a URL for the console plugin backend Service.
+func BuildPluginURL(namespace, service string, port int, isOpenShift bool) string {
+	scheme := "http"
+	if isOpenShift {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s.%s.svc.cluster.local:%d", scheme, service, namespace, port)
+}
