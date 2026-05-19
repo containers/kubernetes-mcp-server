@@ -1,15 +1,22 @@
 kind: Task
+apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: core
   name: filter-namespace-by-name
   difficulty: easy
-steps:
+spec:
   setup:
-    file: setup.sh
+  - script:
+      file: setup.sh
   verify:
-    contains: "ns-beta"
+  - script:
+      env:
+        AGENTS_OUTPUT: "{agent.output}"
+      inline: |-
+        [ X"$(echo "$AGENTS_OUTPUT" | grep -v 'ns-beta')" = X"" ] && exit 0 || exit 1
   cleanup:
-    file: cleanup.sh
+  - script:
+      file: cleanup.sh
   prompt:
     inline: "Using a field selector, list only the namespace 'ns-beta' from the cluster"
