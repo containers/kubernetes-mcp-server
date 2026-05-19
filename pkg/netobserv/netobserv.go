@@ -21,6 +21,8 @@ import (
 type NetObserv struct {
 	bearerToken          string
 	pluginURL            string
+	prometheusURL        string
+	alertmanagerURL      string
 	insecure             bool
 	certificateAuthority string
 	requireTLS           func() bool
@@ -49,9 +51,12 @@ func NewNetObserv(configProvider api.BaseConfig, k8s api.KubernetesClient) *NetO
 		nc = &Config{}
 	}
 	isOpenShift := clusterIsOpenShift(k8s)
+	monitoringDefaults := useOpenShiftMonitoringDefaults(configProvider, nc, isOpenShift)
 	requireTLS := configProvider.IsRequireTLS()
 	nc.applyDefaults(requireTLS, isOpenShift)
 	client.pluginURL = nc.ResolvedURL(isOpenShift)
+	client.prometheusURL = nc.ResolvedPrometheusURL(monitoringDefaults)
+	client.alertmanagerURL = nc.ResolvedAlertmanagerURL(monitoringDefaults)
 	client.insecure = nc.Insecure
 	client.certificateAuthority = nc.CertificateAuthority
 	return client
@@ -152,11 +157,15 @@ func (n *NetObserv) ExecuteGet(ctx context.Context, endpoint string, arguments m
 }
 
 func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string) (string, error) {
-	baseURL, err := n.validateAndGetURL(endpoint)
+	requestURL, err := n.validateAndGetURL(endpoint)
 	if err != nil {
 		return "", err
 	}
-	u, err := url.Parse(baseURL)
+	return n.executeGetAbsolute(ctx, requestURL, arguments, accept)
+}
+
+func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string) (string, error) {
+	u, err := url.Parse(requestURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse request URL: %w", err)
 	}
@@ -189,7 +198,7 @@ func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments m
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {
-			return "", fmt.Errorf("netobserv API error: %s", strings.TrimSpace(string(respBody)))
+			return "", fmt.Errorf("netobserv API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		}
 		return "", fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
 	}
