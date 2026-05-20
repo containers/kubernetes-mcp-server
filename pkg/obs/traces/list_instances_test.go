@@ -31,3 +31,65 @@ func TestListInstancesHandler_Success(t *testing.T) {
 	require.Equal(t, "ns2", inst2.Namespace)
 	require.Equal(t, "stack2", inst2.Name)
 }
+
+func TestListInstancesHandler_TempoMonolithic(t *testing.T) {
+	fakeClient := newMockK8sClient(
+		newTempoMonolithic("mono-ns", "mono1", []string{}),
+	)
+
+	toolset := &Toolset{}
+	output, err := toolset.ListInstancesHandler(ToolParams{
+		context:       t.Context(),
+		dynamicClient: fakeClient,
+		config:        &Config{UseRoute: false},
+	})
+	require.NoError(t, err)
+	require.Len(t, output.Instances, 1)
+
+	inst := output.Instances[0]
+	require.Equal(t, "mono-ns", inst.Namespace)
+	require.Equal(t, "mono1", inst.Name)
+	require.False(t, inst.Multitenancy)
+	require.Empty(t, inst.Tenants)
+	require.Equal(t, "Ready", inst.Status)
+}
+
+func TestListInstancesHandler_TempoMonolithic_Multitenancy(t *testing.T) {
+	fakeClient := newMockK8sClient(
+		newTempoMonolithic("mono-ns", "mono-mt", []string{"dev", "prod"}),
+	)
+
+	toolset := &Toolset{}
+	output, err := toolset.ListInstancesHandler(ToolParams{
+		context:       t.Context(),
+		dynamicClient: fakeClient,
+		config:        &Config{UseRoute: false},
+	})
+	require.NoError(t, err)
+	require.Len(t, output.Instances, 1)
+
+	inst := output.Instances[0]
+	require.Equal(t, "mono-mt", inst.Name)
+	require.True(t, inst.Multitenancy)
+	require.Equal(t, []string{"dev", "prod"}, inst.Tenants)
+}
+
+func TestListInstancesHandler_MixedInstances(t *testing.T) {
+	fakeClient := newMockK8sClient(
+		newTempoStack("tracing", "stack1", []string{}),
+		newTempoMonolithic("tracing", "mono1", []string{}),
+	)
+
+	toolset := &Toolset{}
+	output, err := toolset.ListInstancesHandler(ToolParams{
+		context:       t.Context(),
+		dynamicClient: fakeClient,
+		config:        &Config{UseRoute: false},
+	})
+	require.NoError(t, err)
+	require.Len(t, output.Instances, 2)
+
+	// TempoStacks are listed first, then TempoMonolithics
+	require.Equal(t, "stack1", output.Instances[0].Name)
+	require.Equal(t, "mono1", output.Instances[1].Name)
+}
