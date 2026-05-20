@@ -96,6 +96,16 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
+			// Token passthrough, skips all JWT processing
+			if staticConfig.SkipJWTVerification && staticConfig.AuthorizationURL == "" {
+				skipJWTWarningOnce.Do(func() {
+					klog.Warningf("Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
+				})
+				ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			claims, err := ParseJWTClaims(token)
 			if err == nil && claims == nil {
 				// Impossible case, but just in case

@@ -515,7 +515,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 
 func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarning() {
 	// When require_oauth=true, skip_jwt_verification=true, and no OIDC provider
-	// is configured (offline-only mode), a warning log should be emitted once.
+	// is configured (passthrough mode), a warning log should be emitted once.
 	s.MockServer.ResetHandlers()
 	s.StaticConfig.OAuthAudience = "mcp-server"
 	s.StaticConfig.AuthorizationURL = ""
@@ -526,13 +526,13 @@ func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarning() {
 		"Authorization": "Bearer " + tokenBasicNotExpired,
 	})
 
-	s.Run("warning log emitted for offline-only JWT validation", func() {
+	s.Run("warning log emitted for passthrough mode", func() {
 		s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
 		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
-		s.Contains(s.logBuffer.String(), "JWT accepted without signature verification",
-			"Expected warning log for offline-only JWT validation")
-		s.Contains(s.logBuffer.String(), "set authorization_url for secure validation",
-			"Expected guidance to set authorization_url in warning")
+		s.Contains(s.logBuffer.String(), "Bearer token forwarded without local validation",
+			"Expected warning log for passthrough mode")
+		s.Contains(s.logBuffer.String(), "cluster is the sole authority",
+			"Expected guidance that cluster validates in warning")
 	})
 	s.mcpClient.Close()
 	s.mcpClient = nil
@@ -557,7 +557,7 @@ func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarningOnce() {
 
 	s.Run("warning log appears exactly once", func() {
 		logs := s.logBuffer.String()
-		count := strings.Count(logs, "JWT accepted without signature verification")
+		count := strings.Count(logs, "Bearer token forwarded without local validation")
 		s.Equal(1, count, "Expected warning to fire exactly once, got %d", count)
 	})
 	s.StopServer()
@@ -765,6 +765,218 @@ func (s *AuthorizationSuite) TestAuthorizationClusterAuthModeKubeconfigDropsClie
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationPassthroughOpaqueToken verifies that in passthrough mode
+// (skip_jwt_verification=true, no authorization_url) an opaque non-JWT token
+// such as an OpenShift sha256~ service-account token is forwarded to the cluster
+// unmodified — previously ParseJWTClaims would reject it with a 401 before
+// reaching the skip flag.
+func (s *AuthorizationSuite) TestAuthorizationPassthroughOpaqueToken() {
+	s.MockServer.ResetHandlers()
+	opaqueToken := "sha256~abc123openshifttoken"
+
+	var backendAuth atomic.Value
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			backendAuth.Store(auth)
+		}
+	}))
+
+	s.StaticConfig.SkipJWTVerification = true
+	s.StaticConfig.AuthorizationURL = ""
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + opaqueToken,
+	})
+
+	s.Run("Initialize returns OK for opaque token in passthrough mode", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for passthrough with opaque token")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+	s.Run("Tool call forwards opaque token to cluster", func() {
+		toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+			Name:      "events_list",
+			Arguments: map[string]any{},
+		})
+		s.Require().NoError(err, "Expected no error calling tool")
+		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
+	})
+	s.Run("Backend receives opaque token unmodified", func() {
+		got, _ := backendAuth.Load().(string)
+		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
+		s.Equal("Bearer "+opaqueToken, got,
+			"Passthrough mode must forward the token unchanged; any JWT processing would break opaque tokens")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationPassthroughMalformedJWT verifies that a syntactically invalid
+// JWT string does not produce a 401 in passthrough mode. The early return must
+// fire before ParseJWTClaims is ever called.
+func (s *AuthorizationSuite) TestAuthorizationPassthroughMalformedJWT() {
+	s.MockServer.ResetHandlers()
+
+	s.StaticConfig.SkipJWTVerification = true
+	s.StaticConfig.AuthorizationURL = ""
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer not.a.jwt.at.all",
+	})
+
+	s.Run("Initialize returns OK for malformed JWT in passthrough mode", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for malformed JWT in passthrough mode — ParseJWTClaims must not be reached")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationPassthroughMissingHeader verifies that the Bearer header
+// presence check still runs in passthrough mode — the early return fires only
+// after the header has been confirmed present.
+func (s *AuthorizationSuite) TestAuthorizationPassthroughMissingHeader() {
+	s.StaticConfig.SkipJWTVerification = true
+	s.StaticConfig.AuthorizationURL = ""
+	s.StartServer()
+
+	s.Run("Missing Authorization header returns 401 in passthrough mode", func() {
+		resp := s.HttpGet("")
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+		s.Equal(http.StatusUnauthorized, resp.StatusCode,
+			"Expected HTTP 401 for missing token even in passthrough mode — presence enforcement must remain")
+	})
+
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationPassthroughExpiredToken verifies that expired JWTs are
+// forwarded to the cluster in passthrough mode without local expiration checks.
+// The cluster is responsible for validating token expiration.
+// Covers test scenario #3 from issue #1131.
+func (s *AuthorizationSuite) TestAuthorizationPassthroughExpiredToken() {
+	s.MockServer.ResetHandlers()
+
+	var backendAuth atomic.Value
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			backendAuth.Store(auth)
+		}
+	}))
+
+	s.StaticConfig.SkipJWTVerification = true
+	s.StaticConfig.AuthorizationURL = ""
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + tokenBasicExpired,
+	})
+
+	s.Run("Initialize returns OK for expired token in passthrough mode", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for passthrough with expired token — expiration checks must be skipped")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+	s.Run("Tool call forwards expired token to cluster", func() {
+		toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+			Name:      "events_list",
+			Arguments: map[string]any{},
+		})
+		s.Require().NoError(err, "Expected no error calling tool with expired token in passthrough mode")
+		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
+	})
+	s.Run("Backend receives expired token unmodified", func() {
+		got, _ := backendAuth.Load().(string)
+		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
+		s.Equal("Bearer "+tokenBasicExpired, got,
+			"Passthrough mode must forward expired tokens unchanged; cluster validates expiration")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationPassthroughClusterIssuedJWT verifies that JWTs issued by the
+// cluster API server with cluster audience (not mcp-server audience) are forwarded
+// in passthrough mode without audience validation.
+// Covers test scenario #2 from issue #1131.
+func (s *AuthorizationSuite) TestAuthorizationPassthroughClusterIssuedJWT() {
+	s.MockServer.ResetHandlers()
+	// JWT with only cluster API server audience, not mcp-server
+	// https://jwt.io/#token=eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6Ijk4ZDU3YmUwNWI3ZjUzNWIwMzYyYjg2MDJhNTJlNGYxIn0.eyJhdWQiOlsiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiXSwiZXhwIjoyNTM0MDIyOTcxOTksImlhdCI6MCwiaXNzIjoiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiLCJqdGkiOiI5OTIyMmQ1Ni0zNDBlLTRlYjYtODU4OC0yNjE0MTFmMzVkMjYiLCJrdWJlcm5ldGVzLmlvIjp7Im5hbWVzcGFjZSI6ImRlZmF1bHQiLCJzZXJ2aWNlYWNjb3VudCI6eyJuYW1lIjoiZGVmYXVsdCIsInVpZCI6ImVhY2I2YWQyLTgwYjctNDE3OS04NDNkLTkyZWIxZTZiYmJhNiJ9fSwibmJmIjowLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6ZGVmYXVsdDpkZWZhdWx0In0.xqPTckVQOVzrP8VXVPeQw9Y9I9mAQ-1eGNp14xQkJKs9dJCN-3uxOBGS4VaL1Qk5N71RD7rIjC2HhgJ5YK1YBw // notsecret
+	clusterIssuedToken := "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6Ijk4ZDU3YmUwNWI3ZjUzNWIwMzYyYjg2MDJhNTJlNGYxIn0.eyJhdWQiOlsiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiXSwiZXhwIjoyNTM0MDIyOTcxOTksImlhdCI6MCwiaXNzIjoiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiLCJqdGkiOiI5OTIyMmQ1Ni0zNDBlLTRlYjYtODU4OC0yNjE0MTFmMzVkMjYiLCJrdWJlcm5ldGVzLmlvIjp7Im5hbWVzcGFjZSI6ImRlZmF1bHQiLCJzZXJ2aWNlYWNjb3VudCI6eyJuYW1lIjoiZGVmYXVsdCIsInVpZCI6ImVhY2I2YWQyLTgwYjctNDE3OS04NDNkLTkyZWIxZTZiYmJhNiJ9fSwibmJmIjowLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6ZGVmYXVsdDpkZWZhdWx0In0.xqPTckVQOVzrP8VXVPeQw9Y9I9mAQ-1eGNp14xQkJKs9dJCN-3uxOBGS4VaL1Qk5N71RD7rIjC2HhgJ5YK1YBw" // notsecret
+
+	var backendAuth atomic.Value
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			backendAuth.Store(auth)
+		}
+	}))
+
+	s.StaticConfig.SkipJWTVerification = true
+	s.StaticConfig.AuthorizationURL = ""
+	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + clusterIssuedToken,
+	})
+
+	s.Run("Initialize returns OK for cluster-issued JWT in passthrough mode", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for passthrough with cluster-issued JWT — audience checks must be skipped")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+	s.Run("Tool call forwards cluster-issued JWT to cluster", func() {
+		toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+			Name:      "events_list",
+			Arguments: map[string]any{},
+		})
+		s.Require().NoError(err, "Expected no error calling tool with cluster-issued JWT in passthrough mode")
+		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
+	})
+	s.Run("Backend receives cluster-issued JWT unmodified", func() {
+		got, _ := backendAuth.Load().(string)
+		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
+		s.Equal("Bearer "+clusterIssuedToken, got,
+			"Passthrough mode must forward cluster-issued JWTs unchanged; cluster validates audience")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.StopServer()
+	s.Require().NoError(s.WaitForShutdown())
+}
+
+// TestAuthorizationPassthroughOIDCPathUnaffected verifies that the passthrough
+// early return does NOT fire when authorization_url is set. With both
+// skip_jwt_verification=true and an OIDC server configured, an opaque token must
+// fall through to the normal JWT+OIDC validation path and be rejected.
+func (s *AuthorizationSuite) TestAuthorizationPassthroughOIDCPathUnaffected() {
+	oidcTestServer := NewOidcTestServer(s.T())
+	s.T().Cleanup(oidcTestServer.Close)
+
+	s.StaticConfig.SkipJWTVerification = true
+	s.StaticConfig.AuthorizationURL = oidcTestServer.URL
+	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.OidcProvider = oidcTestServer.Provider
+	s.StartServer()
+
+	s.Run("Opaque token is rejected when authorization_url is set", func() {
+		resp := s.HttpGet("Bearer sha256~abc123openshifttoken")
+		s.T().Cleanup(func() { _ = resp.Body.Close() })
+		s.Equal(http.StatusUnauthorized, resp.StatusCode,
+			"Expected HTTP 401 for opaque token with authorization_url set — passthrough must not bypass OIDC validation")
+	})
+
 	s.StopServer()
 	s.Require().NoError(s.WaitForShutdown())
 }

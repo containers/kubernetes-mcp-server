@@ -581,8 +581,8 @@ func (c *StaticConfig) validateSkipJWTVerification() error {
 		return nil
 	}
 	if c.SkipJWTVerification {
-		klog.Warningf("skip_jwt_verification is enabled: JWTs will be accepted without cryptographic signature verification. " +
-			"Only use this behind a trusted reverse proxy that performs token verification.")
+		klog.Warningf("skip_jwt_verification is enabled with no authorization_url: bearer tokens will be forwarded without any local validation. " +
+			"The cluster (or a trusted upstream) is the sole authority. Only use this when cluster_auth_mode=passthrough and the cluster validates tokens directly.")
 		return nil
 	}
 	return fmt.Errorf("require_oauth is enabled but authorization_url is not configured: " +
