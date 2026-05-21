@@ -513,7 +513,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	}
 }
 
-func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarning() {
+func (s *AuthorizationSuite) TestAuthorizationPassthroughWarning() {
 	// When require_oauth=true, skip_jwt_verification=true, and no OIDC provider
 	// is configured (passthrough mode), a warning log should be emitted once.
 	s.MockServer.ResetHandlers()
@@ -540,7 +540,7 @@ func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarning() {
 	s.Require().NoError(s.WaitForShutdown())
 }
 
-func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarningOnce() {
+func (s *AuthorizationSuite) TestAuthorizationPassthroughWarningOnce() {
 	// The warning should fire exactly once even with multiple requests.
 	s.MockServer.ResetHandlers()
 	s.StaticConfig.OAuthAudience = "mcp-server"
@@ -564,7 +564,7 @@ func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyWarningOnce() {
 	s.Require().NoError(s.WaitForShutdown())
 }
 
-func (s *AuthorizationSuite) TestAuthorizationOfflineOnlyRejectedWithoutSkipFlag() {
+func (s *AuthorizationSuite) TestAuthorizationPassthroughRejectedWithoutSkipFlag() {
 	// When require_oauth=true, skip_jwt_verification=false (default), and no OIDC
 	// provider is configured, requests should be rejected at runtime.
 	s.MockServer.ResetHandlers()
@@ -854,6 +854,12 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughMissingHeader() {
 		s.T().Cleanup(func() { _ = resp.Body.Close() })
 		s.Equal(http.StatusUnauthorized, resp.StatusCode,
 			"Expected HTTP 401 for missing token even in passthrough mode — presence enforcement must remain")
+
+		s.Run("returns WWW-Authenticate header", func() {
+			authHeader := resp.Header.Get("WWW-Authenticate")
+			expected := `Bearer realm="Kubernetes MCP Server", error="missing_token"`
+			s.Equal(expected, authHeader, "Expected WWW-Authenticate header to match")
+		})
 	})
 
 	s.StopServer()

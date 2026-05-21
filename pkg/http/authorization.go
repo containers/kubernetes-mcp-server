@@ -96,6 +96,13 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
+			// Empty token check post-trimming
+			if token == "" {
+				klog.V(1).Infof("Authentication failed - empty bearer token: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+				write401(w, wwwAuthenticateHeader, "invalid_token", "Unauthorized: Bearer token is empty")
+				return
+			}
+
 			// Token passthrough, skips all JWT processing
 			// Cluster is the sole authority for validating token (ex. sha256 token with OpenShift)
 			if staticConfig.SkipJWTVerification && staticConfig.AuthorizationURL == "" {
