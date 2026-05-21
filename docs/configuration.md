@@ -480,7 +480,7 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. This **DOES NOT** determine validation strategy, which is done seperately by ```authorization_url``` and ```skip_jwt_verification``` |
+| `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. This **DOES NOT** determine validation strategy, which is done separately by ```authorization_url``` and ```skip_jwt_verification``` |
 | `oauth_audience` | string | `""` | Valid audience for OAuth tokens (for offline JWT claim validation). |
 | `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
 | `skip_jwt_verification` | boolean | `false` | When true and authorization_url is unset, the server forwards the bearer token without any local validation (no parse, no claims check, no audience check). Required to enable pure passthrough with non-JWT tokens (e.g., OpenShift OAuth sha256~…). When true and authorization_url is set, this flag has no effect — the configured OIDC provider validates tokens normally. Only use the no-authorization_url form when a downstream component (cluster, reverse proxy) is the authority. |
