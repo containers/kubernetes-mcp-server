@@ -1,0 +1,54 @@
+# Example: kubernetes-mcp-server on OpenShift with the NetObserv toolset.
+# Pod ServiceAccount authenticates to the API and NetObserv plugin (no separate OAuth proxy).
+#
+# Install:
+#   helm upgrade -i kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server \
+#     -n kubernetes-mcp-server --create-namespace \
+#     -f examples/values-openshift-netobserv.yaml \
+#     --set ingress.host=kubernetes-mcp-server.apps.<cluster-domain>
+#
+# Prerequisites: NetObserv operator + console plugin (default: netobserv/netobserv-plugin:9001).
+
+openshift: true
+
+ingress:
+  enabled: true
+  # host: kubernetes-mcp-server.apps.example.com
+  termination: edge
+
+serviceAccount:
+  create: true
+  automountToken: true
+
+extraContainers: []
+
+rbac:
+  create: true
+  extraClusterRoleBindings:
+    # Core cluster read access (adjust to your policy).
+    - name: view
+      roleRef:
+        name: view
+        external: true
+    # Alert tools: Prometheus rules + Alertmanager silences on OpenShift.
+    - name: monitoring-view
+      roleRef:
+        name: cluster-monitoring-view
+        external: true
+
+config:
+  port: "8080"
+  toolsets:
+    - core
+    - netobserv
+  # Use the pod ServiceAccount for all cluster and NetObserv calls (no per-user OAuth).
+  cluster_auth_mode: kubeconfig
+  # require_oauth defaults to false — do not enable without an OAuth front end.
+
+  toolset_configs:
+    netobserv:
+      # In-cluster OpenShift: omit url to use https://netobserv-plugin.netobserv.svc.cluster.local:9001
+      # namespace: netobserv
+      # service: netobserv-plugin
+      # port: 9001
+      # Thanos / Alertmanager URLs are auto-set in-cluster on OpenShift when url is not loopback.

@@ -16,7 +16,7 @@ const (
 )
 
 // DefaultPluginServiceCAPath is the OpenShift service CA bundle path when mounted into
-// the pod (same convention as platform components and mcp-shield examples).
+// the pod (same convention as OpenShift platform components).
 const DefaultPluginServiceCAPath = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
 
 // DefaultPluginInsecureSkipVerify is used on OpenShift when the service CA file is not present.
