@@ -200,26 +200,27 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
 	//https://github.com/containers/kubernetes-mcp-server/issues/340
 	s.Run("InputSchema for no-arg tool is object with empty properties", func() {
+		s.Handle(test.NewInOpenShiftHandler())
 		s.InitMcpClient()
 		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {
 			s.NotNil(tools, "Expected tools from ListTools")
 			s.NoError(err, "Expected no error from ListTools")
 		})
-		var namespacesList *mcp.Tool
+		var projectsList *mcp.Tool
 		for _, t := range tools.Tools {
-			if t.Name == "namespaces_list" {
-				namespacesList = t
+			if t.Name == "projects_list" {
+				projectsList = t
 				break
 			}
 		}
-		s.Require().NotNil(namespacesList, "Expected namespaces_list from ListTools")
-		schema, ok := namespacesList.InputSchema.(map[string]any)
+		s.Require().NotNil(projectsList, "Expected projects_list from ListTools")
+		schema, ok := projectsList.InputSchema.(map[string]any)
 		s.Require().True(ok, "Expected InputSchema to be map[string]any")
-		s.NotNil(schema["properties"], "Expected namespaces_list.InputSchema.properties not to be nil")
+		s.NotNil(schema["properties"], "Expected projects_list.InputSchema.properties not to be nil")
 		properties, ok := schema["properties"].(map[string]any)
 		s.Require().True(ok, "Expected properties to be map[string]any")
-		s.Empty(properties, "Expected namespaces_list.InputSchema.properties to be empty")
+		s.Empty(properties, "Expected projects_list.InputSchema.properties to be empty")
 	})
 	// https://github.com/containers/kubernetes-mcp-server/issues/717
 	// Verifies ALL tools have Properties initialized (not just cluster-aware ones)

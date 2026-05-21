@@ -150,6 +150,37 @@ func (s *NamespacesSuite) TestNamespacesListAsTable() {
 	})
 }
 
+func (s *NamespacesSuite) TestNamespacesListWithFieldSelector() {
+	s.InitMcpClient()
+
+	s.Run("namespaces_list(fieldSelector=metadata.name=ns-1) returns only matching namespace", func() {
+		toolResult, err := s.CallTool("namespaces_list", map[string]interface{}{
+			"fieldSelector": "metadata.name=ns-1",
+		})
+		s.Run("no error", func() {
+			s.Nil(err, "call tool failed %v", err)
+			s.False(toolResult.IsError, "call tool failed")
+		})
+		var decoded []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
+		s.Run("has yaml content", func() {
+			s.Nil(err, "invalid tool result content %v", err)
+		})
+		s.Run("returns exactly 1 namespace", func() {
+			s.Lenf(decoded, 1, "expected exactly 1 namespace, got %v", len(decoded))
+		})
+		s.Run("returns ns-1", func() {
+			s.Equalf("ns-1", decoded[0].GetName(), "expected ns-1, got %v", decoded[0].GetName())
+		})
+		s.Run("excludes other namespaces", func() {
+			for _, ns := range decoded {
+				s.NotEqualf("default", ns.GetName(), "default should have been filtered out by fieldSelector")
+				s.NotEqualf("ns-2", ns.GetName(), "ns-2 should have been filtered out by fieldSelector")
+			}
+		})
+	})
+}
+
 func (s *NamespacesSuite) TestProjectsListInOpenShift() {
 	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
 	s.T().Cleanup(func() {

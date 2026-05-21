@@ -300,9 +300,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 <summary>core</summary>
 
 - **events_list** - List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces
+  - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter events by field values (e.g. 'type=Warning', 'involvedObject.name=my-pod'). Supported fields: involvedObject.kind, involvedObject.name, involvedObject.namespace, involvedObject.uid, involvedObject.apiVersion, involvedObject.resourceVersion, involvedObject.fieldPath, reason, reportingComponent, source, type. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
   - `namespace` (`string`) - Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces
 
 - **namespaces_list** - List all the Kubernetes namespaces in the current cluster
+  - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
 
 - **projects_list** - List all the OpenShift projects in the current cluster
 

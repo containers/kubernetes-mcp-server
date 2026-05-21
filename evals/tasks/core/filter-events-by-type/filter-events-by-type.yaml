@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: core
+  name: filter-events-by-type
+  difficulty: easy
+spec:
+  setup:
+  - script:
+      file: setup.sh
+  verify:
+  - script:
+      env:
+        AGENTS_OUTPUT: "{agent.output}"
+      inline: |-
+        bad=$(echo "$AGENTS_OUTPUT" | grep 'Warning events' | grep 'bad-pod' | grep '.events-filter-test. namespace')
+        good=$(echo "$AGENTS_OUTPUT" | grep "good-pod")
+        if [ -n "$bad" ] && [ -z "$good" ]; then
+          exit 0
+        else
+          exit 1
+        fi
+  cleanup:
+  - script:
+      file: cleanup.sh
+  prompt:
+    inline: "List only the Warning events for the pod named 'bad-pod' in the 'events-filter-test' namespace"
