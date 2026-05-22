@@ -77,15 +77,13 @@ For a secure production setup with dedicated ServiceAccount and read-only access
 If you have npm installed, this is the fastest way to get started with `kubernetes-mcp-server` on Claude Desktop.
 
 Open your `claude_desktop_config.json` and add the mcp server to the list of `mcpServers`:
-``` json
+
+```json
 {
   "mcpServers": {
     "kubernetes": {
       "command": "npx",
-      "args": [
-        "-y",
-        "kubernetes-mcp-server@latest"
-      ]
+      "args": ["-y", "kubernetes-mcp-server@latest"]
     }
   }
 }
@@ -135,6 +133,7 @@ Alternatively, you can install the extension manually by editing the `mcp.json` 
 If you have npm installed, this is the fastest way to get started with `kubernetes-mcp-server`.
 
 Open your goose `config.yaml` and add the mcp server to the list of `mcpServers`:
+
 ```yaml
 extensions:
   kubernetes:
@@ -142,7 +141,6 @@ extensions:
     args:
       - -y
       - kubernetes-mcp-server@latest
-
 ```
 
 ## 🎥 Demos <a id="demos"></a>
@@ -193,11 +191,11 @@ uvx kubernetes-mcp-server@latest --help
 ### Configuration Options
 
 | Option                    | Description                                                                                                                                                                                                                                                                                   |
-|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--port`                  | Starts the MCP server in Streamable HTTP mode (path /mcp) and Server-Sent Event (SSE) (path /sse) mode and listens on the specified port .                                                                                                                                                    |
 | `--log-level`             | Sets the logging level (values [from 0-9](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md)). Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
 | `--config`                | (Optional) Path to the main TOML configuration file. See [Configuration Reference](docs/configuration.md) for details.                                                                                                                                                                        |
-| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Configuration Reference](docs/configuration.md) for details.                                    |
+| `--config-dir`            | (Optional) Path to drop-in configuration directory. Files are loaded in lexical (alphabetical) order. Defaults to `conf.d` relative to the main config file if `--config` is specified. See [Configuration Reference](docs/configuration.md) for details.                                     |
 | `--kubeconfig`            | Path to the Kubernetes configuration file. If not provided, it will try to resolve the configuration (in-cluster, default location, etc.).                                                                                                                                                    |
 | `--list-output`           | Output format for resource list operations (one of: yaml, table) (default "table")                                                                                                                                                                                                            |
 | `--read-only`             | If set, the MCP server will run in read-only mode, meaning it will not allow any write operations (create, update, delete) on the Kubernetes cluster. This is useful for debugging or inspecting the cluster without making changes.                                                          |
@@ -235,6 +233,7 @@ endpoint = "http://localhost:4317"
 ```
 
 For comprehensive TOML configuration documentation, including:
+
 - All configuration options and their defaults
 - Drop-in configuration files for modular settings
 - Dynamic configuration reload via SIGHUP
@@ -301,9 +300,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 <summary>core</summary>
 
 - **events_list** - List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces
+  - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter events by field values (e.g. 'type=Warning', 'involvedObject.name=my-pod'). Supported fields: involvedObject.kind, involvedObject.name, involvedObject.namespace, involvedObject.uid, involvedObject.apiVersion, involvedObject.resourceVersion, involvedObject.fieldPath, reason, reportingComponent, source, type. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
   - `namespace` (`string`) - Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces
 
 - **namespaces_list** - List all the Kubernetes namespaces in the current cluster
+  - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
 
 - **projects_list** - List all the OpenShift projects in the current cluster
 
@@ -465,7 +466,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `clusterName` (`string`) - Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig
   - `namespaces` (`string`) - Comma-separated list of namespaces to query (e.g., 'bookinfo' or 'bookinfo,default'). If not provided, it will query across all accessible namespaces.
   - `resourceName` (`string`) - Optional. The specific name of the resource. If left empty, the tool returns a list of all resources of the specified type. If provided, the tool returns deep details for this specific resource.
-  - `resourceType` (`string`) **(required)** - The type of resource to query.
+  - `resourceType` (`string`) **(required)** - The type of resource to query. Use 'app' for Kiali applications (grouped by the Kubernetes 'app' label). Use 'argoapp' for ArgoCD Application CRDs (requires ArgoCD installed and the Kiali service account must have read permissions on applications.argoproj.io).
 
 - **kiali_list_traces** - Lists distributed traces for a service in a namespace. Returns a summary (namespace, service, total_found, avg_duration_ms) and a list of traces with id, duration_ms, spans_count, root_op, slowest_service, has_errors. Use get_trace_details with a trace id to get full hierarchy.
   - `clusterName` (`string`) - Optional cluster name. Defaults to the cluster name in the Kiali configuration.
@@ -532,6 +533,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `size` (`string`) - Optional workload size hint for the VM (e.g., 'small', 'medium', 'large', 'xlarge'). Used to auto-select an appropriate instance type if not explicitly specified.
   - `storage` (`string`) - Optional storage size for the VM's root disk when using DataSources (e.g., '30Gi', '50Gi', '100Gi'). Defaults to 30Gi. Ignored when using container disks.
   - `workload` (`string`) - The workload for the VM. Accepts OS names (e.g., 'fedora' (default), 'ubuntu', 'centos', 'centos-stream', 'debian', 'rhel', 'opensuse', 'opensuse-tumbleweed', 'opensuse-leap') or full container disk image URLs
+
+- **vm_guest_info** - Get guest operating system information from a VirtualMachine's QEMU guest agent. Requires the guest agent to be installed and running inside the VM. Provides detailed information about the OS, filesystems, network interfaces, and logged-in users.
+  - `info_type` (`string`) - Type of information to retrieve: 'all' (default - all available info), 'os' (operating system details), 'filesystem' (disk and filesystem info), 'users' (logged-in users), 'network' (network interfaces and IPs)
+  - `name` (`string`) **(required)** - The name of the virtual machine
+  - `namespace` (`string`) **(required)** - The namespace of the virtual machine
 
 - **vm_lifecycle** - Manage KubeVirt VirtualMachine lifecycle: start, stop, or restart a VM
   - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)

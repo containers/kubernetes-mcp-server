@@ -11,11 +11,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func (c *Core) EventsList(ctx context.Context, namespace string) ([]map[string]any, error) {
+func (c *Core) EventsList(ctx context.Context, namespace string, options api.ListOptions) ([]map[string]any, error) {
 	var eventMap []map[string]any
 	raw, err := c.ResourcesList(ctx, &schema.GroupVersionKind{
 		Group: "", Version: "v1", Kind: "Event",
-	}, namespace, api.ListOptions{})
+	}, namespace, options)
 	if err != nil {
 		return eventMap, err
 	}

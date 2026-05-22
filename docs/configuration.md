@@ -491,9 +491,10 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `sts_audience` | string | `""` | Audience for STS token exchange. |
 | `sts_scopes` | string[] | `[]` | Scopes for STS token exchange. |
 | `token_exchange_strategy` | string | `""` | Token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. |
-| `sts_auth_style` | string | `"params"` | How client credentials are sent: `params` (body), `header` (Basic Auth), or `assertion` (JWT). |
+| `sts_auth_style` | string | `"params"` | How client credentials are sent: `params` (body), `header` (Basic Auth), `assertion` (JWT), or `federated` (external IdP token file). |
 | `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
 | `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
+| `sts_federated_token_file` | string | `""` | Path to a JWT file from an external identity provider, e.g., SPIRE JWT-SVID (for `federated` auth style). |
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |

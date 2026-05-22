@@ -8,10 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -43,6 +45,9 @@ const (
 	StrategyRFC8693    = "rfc8693"
 )
 
+// TokenExchanger performs a token exchange against an STS endpoint.
+// The subjectToken parameter contains the user's OAuth token for strategies that
+// exchange user tokens (rfc8693, keycloak-v1, entra-obo).
 type TokenExchanger interface {
 	Exchange(ctx context.Context, cfg *TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error)
 }
@@ -65,6 +70,19 @@ func injectClientAuth(cfg *TargetTokenExchangeConfig, data url.Values, header ht
 		data.Set(FormKeyClientID, cfg.ClientID)
 		data.Set(FormKeyClientAssertionType, ClientAssertionType)
 		data.Set(FormKeyClientAssertion, assertion)
+	case AuthStyleFederated:
+		tokenBytes, err := os.ReadFile(cfg.FederatedTokenFile)
+		if err != nil {
+			return fmt.Errorf("failed to read federated token file %q: %w", cfg.FederatedTokenFile, err)
+		}
+		token := strings.TrimSpace(string(tokenBytes))
+		if token == "" {
+			return fmt.Errorf("federated token file %q is empty: the external identity provider may not have written a token yet", cfg.FederatedTokenFile)
+		}
+		klog.V(4).Infof("Read federated token from file %q (%d bytes)", cfg.FederatedTokenFile, len(token))
+		data.Set(FormKeyClientID, cfg.ClientID)
+		data.Set(FormKeyClientAssertionType, ClientAssertionType)
+		data.Set(FormKeyClientAssertion, token)
 	default: // AuthStyleParams or empty (default)
 		data.Set(FormKeyClientID, cfg.ClientID)
 		if cfg.ClientSecret != "" {

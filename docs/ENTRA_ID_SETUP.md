@@ -34,7 +34,7 @@ From the app's **Overview** page, copy:
 
 ### Configure Client Credentials
 
-You need **one** of the following — a client secret or a certificate. If you only need MCP server authentication (no other systems sharing this app registration), certificate-based auth is recommended.
+You need **one** of the following — a client secret, a certificate, or a federated identity credential. If you only need MCP server authentication (no other systems sharing this app registration), certificate-based auth is recommended. If your workload runs in an environment with an external identity provider (e.g., SPIRE), use federated credentials.
 
 #### Option A: Client Secret
 
@@ -233,6 +233,39 @@ For OBO to work, you need to configure API permissions in Azure:
 2. Click **Add a permission** → **APIs my organization uses**
 3. Select the downstream API app registration
 4. Add the required delegated permissions
+
+### With Workload Identity Federation (Federated Credential)
+
+If your MCP server runs in an environment with an external identity provider (e.g., SPIRE, GitHub Actions, or another Kubernetes cluster), you can use [workload identity federation](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation) instead of managing certificates or secrets. The external IdP issues a JWT that is passed directly to Entra ID as a federated credential.
+
+#### Prerequisites
+
+1. Configure a **federated identity credential** on your app registration:
+   - Go to **Certificates & secrets** → **Federated credentials** → **Add credential**
+   - Select the scenario (e.g., "Other issuer")
+   - Set the **Issuer** to your external IdP's OIDC issuer URL (e.g., `https://spire-server.example.com`)
+   - Set the **Subject identifier** to match the `sub` claim in the external JWT (e.g., `spiffe://example.com/mcp-server`)
+   - Set the **Audience** to match the `aud` claim (typically `api://AzureADTokenExchange`)
+2. Ensure the external IdP writes a JWT to a file accessible by the MCP server (e.g., via SPIRE agent, Kubernetes projected volumes, or a sidecar)
+
+#### Configuration
+
+```toml
+require_oauth = true
+oauth_audience = "<CLIENT_ID>"
+oauth_scopes = ["openid", "profile", "email"]
+
+authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
+
+# Token exchange with federated credential (workload identity federation)
+token_exchange_strategy = "entra-obo"
+sts_client_id = "<CLIENT_ID>"
+sts_auth_style = "federated"
+sts_federated_token_file = "/var/run/secrets/tokens/federated-token"
+sts_scopes = ["api://<DOWNSTREAM_API_APP_ID>/.default"]
+```
+
+The MCP server reads the JWT from `sts_federated_token_file` on each token request, so token rotation by the external IdP is handled automatically.
 
 ## Step 3: Run the MCP Server
 
@@ -500,5 +533,7 @@ This way, the cluster's existing OIDC configuration is untouched, and the MCP se
 
 - [Entra ID OAuth 2.0 Documentation](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow)
 - [Entra ID On-Behalf-Of Flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow)
+- [Entra ID Workload Identity Federation](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation)
+- [Entra ID Client Credentials with Federated Credential](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow#third-case-access-token-request-with-a-federated-credential)
 - [Kubernetes OIDC Authentication](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#openid-connect-tokens)
 - [Keycloak OIDC Setup](KEYCLOAK_OIDC_SETUP.md) - Alternative OIDC provider setup

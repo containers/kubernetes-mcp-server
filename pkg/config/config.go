@@ -93,11 +93,15 @@ type StaticConfig struct {
 	// "params" (default): client_id/secret in request body
 	// "header": HTTP Basic Authentication header
 	// "assertion": JWT client assertion (RFC 7523, for Entra ID certificate auth)
+	// "federated": JWT from an external identity provider file (workload identity federation)
 	StsAuthStyle string `toml:"sts_auth_style,omitempty"`
 	// StsClientCertFile is the path to the client certificate PEM file for JWT assertion auth
 	StsClientCertFile string `toml:"sts_client_cert_file,omitempty"`
 	// StsClientKeyFile is the path to the client private key PEM file for JWT assertion auth
 	StsClientKeyFile string `toml:"sts_client_key_file,omitempty"`
+	// StsFederatedTokenFile is the path to a file containing a JWT from an external identity
+	// provider (e.g., SPIRE JWT-SVID). Used with sts_auth_style="federated".
+	StsFederatedTokenFile string `toml:"sts_federated_token_file,omitempty"`
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
 	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
@@ -425,6 +429,10 @@ func (c *StaticConfig) GetStsClientKeyFile() string {
 	return c.StsClientKeyFile
 }
 
+func (c *StaticConfig) GetStsFederatedTokenFile() string {
+	return c.StsFederatedTokenFile
+}
+
 func (c *StaticConfig) GetCertificateAuthority() string {
 	return c.CertificateAuthority
 }
@@ -479,6 +487,7 @@ func (c *StaticConfig) Validate() error {
 	c.StsAuthStyle = strings.TrimSpace(c.StsAuthStyle)
 	c.StsClientCertFile = strings.TrimSpace(c.StsClientCertFile)
 	c.StsClientKeyFile = strings.TrimSpace(c.StsClientKeyFile)
+	c.StsFederatedTokenFile = strings.TrimSpace(c.StsFederatedTokenFile)
 	if output.FromString(c.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", c.ListOutput, strings.Join(output.Names, ", "))
 	}
@@ -584,9 +593,10 @@ func (c *StaticConfig) validateSkipJWTVerification() error {
 
 // validateTokenExchange validates token-exchange-related fields:
 //   - token_exchange_strategy must be a known strategy (when registry is provided)
-//   - sts_auth_style must be one of "params", "header", "assertion"
+//   - sts_auth_style must be one of "params", "header", "assertion", "federated"
 //   - when sts_auth_style is "assertion", sts_client_cert_file and sts_client_key_file
 //     must both be set and reference existing files
+//   - when sts_auth_style is "federated", sts_federated_token_file must be set and exist
 func (c *StaticConfig) validateTokenExchange() error {
 	if c.TokenExchangeStrategy != "" && len(c.tokenExchangeStrategies) > 0 {
 		if !slices.Contains(c.tokenExchangeStrategies, c.TokenExchangeStrategy) {
@@ -609,8 +619,15 @@ func (c *StaticConfig) validateTokenExchange() error {
 		if _, err := os.Stat(c.StsClientKeyFile); err != nil {
 			return fmt.Errorf("sts_client_key_file must be a valid file path: %w", err)
 		}
+	case tokenexchange.AuthStyleFederated:
+		if c.StsFederatedTokenFile == "" {
+			return fmt.Errorf("sts_federated_token_file is required when sts_auth_style is %q", tokenexchange.AuthStyleFederated)
+		}
+		if _, err := os.Stat(c.StsFederatedTokenFile); err != nil {
+			return fmt.Errorf("sts_federated_token_file must be a valid file path: %w", err)
+		}
 	default:
-		return fmt.Errorf("invalid sts_auth_style %q: must be %q, %q, or %q", c.StsAuthStyle, tokenexchange.AuthStyleParams, tokenexchange.AuthStyleHeader, tokenexchange.AuthStyleAssertion)
+		return fmt.Errorf("invalid sts_auth_style %q: must be %q, %q, %q, or %q", c.StsAuthStyle, tokenexchange.AuthStyleParams, tokenexchange.AuthStyleHeader, tokenexchange.AuthStyleAssertion, tokenexchange.AuthStyleFederated)
 	}
 	return nil
 }

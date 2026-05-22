@@ -23,8 +23,8 @@ func InitListOrGetResources() []api.ServerTool {
 				Properties: map[string]*jsonschema.Schema{
 					"resourceType": {
 						Type:        "string",
-						Description: "The type of resource to query.",
-						Enum:        []any{"app", "namespace", "service", "workload"},
+						Description: "The type of resource to query. Use 'app' for Kiali applications (grouped by the Kubernetes 'app' label). Use 'argoapp' for ArgoCD Application CRDs (requires ArgoCD installed and the Kiali service account must have read permissions on applications.argoproj.io).",
+						Enum:        []any{"app", "argoapp", "namespace", "service", "workload"},
 					},
 					"namespaces": {
 						Type:        "string",

@@ -82,15 +82,16 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 	}
 
 	cfg := &tokenexchange.TargetTokenExchangeConfig{
-		TokenURL:       tokenURL,
-		ClientID:       p.baseConfig.GetStsClientId(),
-		ClientSecret:   p.baseConfig.GetStsClientSecret(),
-		Audience:       p.baseConfig.GetStsAudience(),
-		Scopes:         p.baseConfig.GetStsScopes(),
-		AuthStyle:      authStyle,
-		ClientCertFile: p.baseConfig.GetStsClientCertFile(),
-		ClientKeyFile:  p.baseConfig.GetStsClientKeyFile(),
-		CAFile:         p.baseConfig.GetCertificateAuthority(),
+		TokenURL:           tokenURL,
+		ClientID:           p.baseConfig.GetStsClientId(),
+		ClientSecret:       p.baseConfig.GetStsClientSecret(),
+		Audience:           p.baseConfig.GetStsAudience(),
+		Scopes:             p.baseConfig.GetStsScopes(),
+		AuthStyle:          authStyle,
+		ClientCertFile:     p.baseConfig.GetStsClientCertFile(),
+		ClientKeyFile:      p.baseConfig.GetStsClientKeyFile(),
+		FederatedTokenFile: p.baseConfig.GetStsFederatedTokenFile(),
+		CAFile:             p.baseConfig.GetCertificateAuthority(),
 	}
 	if err := cfg.Validate(); err != nil {
 		klog.Warningf("STS config validation failed, token exchange will be attempted per-request but will likely fail with the same error: %v", err)

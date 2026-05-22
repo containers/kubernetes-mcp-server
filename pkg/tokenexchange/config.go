@@ -17,6 +17,9 @@ const (
 	AuthStyleHeader = "header"
 	// AuthStyleAssertion sends a signed JWT client assertion (RFC 7523)
 	AuthStyleAssertion = "assertion"
+	// AuthStyleFederated reads a JWT from an external identity provider token file
+	// and sends it as a client assertion (workload identity federation)
+	AuthStyleFederated = "federated"
 )
 
 // TargetTokenExchangeConfig holds per-target token exchange configuration
@@ -57,6 +60,10 @@ type TargetTokenExchangeConfig struct {
 	// AssertionLifetime is the validity duration for generated JWT assertions
 	// Defaults to 5 minutes if not specified
 	AssertionLifetime time.Duration `toml:"assertion_lifetime,omitempty"`
+	// FederatedTokenFile is the path to a file containing a JWT from an external
+	// identity provider (e.g., SPIRE JWT-SVID). Used with AuthStyleFederated.
+	// The file is re-read on each token request to support token rotation.
+	FederatedTokenFile string `toml:"federated_token_file,omitempty"`
 
 	// client is a http client configured to work with the IdP for this target
 	client *http.Client `toml:"-"`
@@ -82,8 +89,12 @@ func (c *TargetTokenExchangeConfig) Validate() error {
 		if c.ClientKeyFile == "" {
 			return fmt.Errorf("client_key_file is required when auth_style is %q", AuthStyleAssertion)
 		}
+	case AuthStyleFederated:
+		if c.FederatedTokenFile == "" {
+			return fmt.Errorf("federated_token_file is required when auth_style is %q", AuthStyleFederated)
+		}
 	default:
-		return fmt.Errorf("invalid auth_style %q: must be %q, %q, or %q", c.AuthStyle, AuthStyleParams, AuthStyleHeader, AuthStyleAssertion)
+		return fmt.Errorf("invalid auth_style %q: must be %q, %q, %q, or %q", c.AuthStyle, AuthStyleParams, AuthStyleHeader, AuthStyleAssertion, AuthStyleFederated)
 	}
 	return nil
 }

@@ -1,9 +1,9 @@
 # KubeVirt installation and management
 
 # KubeVirt version configuration
-KUBEVIRT_VERSION ?= v1.7.0
-CDI_VERSION ?= v1.64.0
-MULTUS_VERSION ?= v4.2.3
+KUBEVIRT_VERSION ?= v1.8.2
+CDI_VERSION ?= v1.65.0
+MULTUS_VERSION ?= v4.2.4
 
 # Detect if we're using a released version or main/latest
 KUBEVIRT_RELEASE_URL = https://github.com/kubevirt/kubevirt/releases/download/$(KUBEVIRT_VERSION)

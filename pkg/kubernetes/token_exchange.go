@@ -165,15 +165,16 @@ func strategyBasedTokenExchange(
 		}
 
 		cfg = &tokenexchange.TargetTokenExchangeConfig{
-			TokenURL:       tokenURL,
-			ClientID:       baseConfig.GetStsClientId(),
-			ClientSecret:   baseConfig.GetStsClientSecret(),
-			Audience:       baseConfig.GetStsAudience(),
-			Scopes:         baseConfig.GetStsScopes(),
-			AuthStyle:      authStyle,
-			ClientCertFile: baseConfig.GetStsClientCertFile(),
-			ClientKeyFile:  baseConfig.GetStsClientKeyFile(),
-			CAFile:         baseConfig.GetCertificateAuthority(),
+			TokenURL:           tokenURL,
+			ClientID:           baseConfig.GetStsClientId(),
+			ClientSecret:       baseConfig.GetStsClientSecret(),
+			Audience:           baseConfig.GetStsAudience(),
+			Scopes:             baseConfig.GetStsScopes(),
+			AuthStyle:          authStyle,
+			ClientCertFile:     baseConfig.GetStsClientCertFile(),
+			ClientKeyFile:      baseConfig.GetStsClientKeyFile(),
+			FederatedTokenFile: baseConfig.GetStsFederatedTokenFile(),
+			CAFile:             baseConfig.GetCertificateAuthority(),
 		}
 		if err := cfg.Validate(); err != nil {
 			return ctx, fmt.Errorf("token exchange config validation: %w", err)

@@ -403,6 +403,56 @@ func (s *ValidateSuite) TestStsClientCertKey() {
 	})
 }
 
+func (s *ValidateSuite) TestStsFederatedTokenFile() {
+	s.Run("federated auth_style without token file is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "federated"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_federated_token_file is required")
+	})
+
+	s.Run("federated auth_style with non-existent token file is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "federated"
+		cfg.StsFederatedTokenFile = "/nonexistent/token"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_federated_token_file must be a valid file path")
+	})
+
+	s.Run("federated auth_style with valid token file is accepted", func() {
+		tmpDir := s.T().TempDir()
+		tokenPath := filepath.Join(tmpDir, "token")
+		s.Require().NoError(os.WriteFile(tokenPath, []byte("jwt-token"), 0600))
+
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "federated"
+		cfg.StsFederatedTokenFile = tokenPath
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("whitespace-only sts_federated_token_file is treated as empty", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "federated"
+		cfg.StsFederatedTokenFile = "   "
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_federated_token_file is required")
+		s.Equal("", cfg.StsFederatedTokenFile, "whitespace should be trimmed")
+	})
+
+	s.Run("federated sts_auth_style is accepted in auth_style list", func() {
+		cfg := s.validConfig()
+		cfg.StsAuthStyle = "federated"
+		tmpDir := s.T().TempDir()
+		tokenPath := filepath.Join(tmpDir, "token")
+		s.Require().NoError(os.WriteFile(tokenPath, []byte("jwt-token"), 0600))
+		cfg.StsFederatedTokenFile = tokenPath
+		s.NoError(cfg.Validate())
+	})
+}
+
 func (s *ValidateSuite) TestConfirmationFallback() {
 	s.Run("empty fallback is accepted", func() {
 		cfg := s.validConfig()

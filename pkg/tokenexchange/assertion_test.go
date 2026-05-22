@@ -267,22 +267,101 @@ func (s *AssertionTestSuite) TestValidate() {
 		s.Error(err)
 		s.Contains(err.Error(), "invalid auth_style")
 	})
+
+	s.Run("federated style is valid with token file", func() {
+		cfg := &TargetTokenExchangeConfig{
+			AuthStyle:          AuthStyleFederated,
+			FederatedTokenFile: "/path/to/token",
+		}
+		err := cfg.Validate()
+		s.NoError(err)
+	})
+
+	s.Run("federated style requires token file", func() {
+		cfg := &TargetTokenExchangeConfig{
+			AuthStyle: AuthStyleFederated,
+		}
+		err := cfg.Validate()
+		s.Error(err)
+		s.Contains(err.Error(), "federated_token_file is required")
+	})
 }
 
-func (s *AssertionTestSuite) TestLoadCertificateAndKeyRejectsECKeys() {
+func (s *AssertionTestSuite) TestLoadCertificateAndKeyWithECKeys() {
+	s.Run("loads EC P-256 private key in PKCS8 format", func() {
+		ecCertFile, ecKeyFile := s.generateECCertAndKey(elliptic.P256())
+		cert, key, err := loadCertificateAndKey(ecCertFile, ecKeyFile)
+		s.Require().NoError(err)
+		s.NotNil(cert)
+		s.IsType(&ecdsa.PrivateKey{}, key)
+	})
+
+	s.Run("loads EC P-384 private key in PKCS8 format", func() {
+		ecCertFile, ecKeyFile := s.generateECCertAndKey(elliptic.P384())
+		cert, key, err := loadCertificateAndKey(ecCertFile, ecKeyFile)
+		s.Require().NoError(err)
+		s.NotNil(cert)
+		s.IsType(&ecdsa.PrivateKey{}, key)
+	})
+
 	s.Run("rejects EC private key in SEC1 format", func() {
 		ecKeyFile := s.generateECKeyFile("EC PRIVATE KEY", false)
 		_, _, err := loadCertificateAndKey(s.certFile, ecKeyFile)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to parse private key")
 	})
+}
 
-	s.Run("rejects EC private key in PKCS8 format", func() {
-		ecKeyFile := s.generateECKeyFile("PRIVATE KEY", true)
-		_, _, err := loadCertificateAndKey(s.certFile, ecKeyFile)
-		s.Error(err)
-		s.Contains(err.Error(), "unsupported key type")
+func (s *AssertionTestSuite) TestBuildClientAssertionWithECKey() {
+	s.Run("builds valid JWT with EC P-256 key", func() {
+		ecCertFile, ecKeyFile := s.generateECCertAndKey(elliptic.P256())
+		clientID := "spiffe-client"
+		tokenURL := "https://login.microsoftonline.com/tenant/oauth2/v2.0/token"
+
+		assertion, expiry, err := BuildClientAssertion(clientID, tokenURL, ecCertFile, ecKeyFile, 5*time.Minute)
+		s.Require().NoError(err)
+		s.NotEmpty(assertion)
+		s.True(expiry.After(time.Now()))
+
+		token, err := jwt.ParseSigned(assertion, []jose.SignatureAlgorithm{jose.ES256})
+		s.Require().NoError(err)
+
+		var claims jwt.Claims
+		err = token.UnsafeClaimsWithoutVerification(&claims)
+		s.Require().NoError(err)
+
+		s.Equal(clientID, claims.Issuer)
+		s.Equal(clientID, claims.Subject)
+		s.True(claims.Audience.Contains(tokenURL))
 	})
+}
+
+func (s *AssertionTestSuite) generateECCertAndKey(curve elliptic.Curve) (string, string) {
+	ecKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+	s.Require().NoError(err)
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "test-ec"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &ecKey.PublicKey, ecKey)
+	s.Require().NoError(err)
+
+	certFile := filepath.Join(s.tempDir, curve.Params().Name+"-cert.pem")
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	s.Require().NoError(os.WriteFile(certFile, certPEM, 0644))
+
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(ecKey)
+	s.Require().NoError(err)
+
+	keyFile := filepath.Join(s.tempDir, curve.Params().Name+"-key.pem")
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes})
+	s.Require().NoError(os.WriteFile(keyFile, keyPEM, 0600))
+
+	return certFile, keyFile
 }
 
 func (s *AssertionTestSuite) generateECKeyFile(pemType string, pkcs8 bool) string {
@@ -340,6 +419,96 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithAssertion() {
 		err := injectClientAuth(cfg, data, header)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to build client assertion")
+	})
+}
+
+func (s *AssertionTestSuite) TestInjectClientAuthWithFederated() {
+	s.Run("reads token from file and sets client assertion fields", func() {
+		tokenFile := filepath.Join(s.tempDir, "federated-token")
+		s.Require().NoError(os.WriteFile(tokenFile, []byte("eyJhbGciOiJSUzI1NiJ9.test.signature"), 0600))
+
+		cfg := &TargetTokenExchangeConfig{
+			ClientID:           "test-client",
+			AuthStyle:          AuthStyleFederated,
+			FederatedTokenFile: tokenFile,
+		}
+
+		data := url.Values{}
+		header := http.Header{}
+		err := injectClientAuth(cfg, data, header)
+		s.Require().NoError(err)
+
+		s.Equal("test-client", data.Get(FormKeyClientID))
+		s.Equal(ClientAssertionType, data.Get(FormKeyClientAssertionType))
+		s.Equal("eyJhbGciOiJSUzI1NiJ9.test.signature", data.Get(FormKeyClientAssertion))
+		s.Empty(data.Get(FormKeyClientSecret))
+		s.Empty(header.Get(HeaderAuthorization))
+	})
+
+	s.Run("trims whitespace from token file contents", func() {
+		tokenFile := filepath.Join(s.tempDir, "federated-token-ws")
+		s.Require().NoError(os.WriteFile(tokenFile, []byte("  eyJ0b2tlbi5qd3Q  \n"), 0600))
+
+		cfg := &TargetTokenExchangeConfig{
+			ClientID:           "test-client",
+			AuthStyle:          AuthStyleFederated,
+			FederatedTokenFile: tokenFile,
+		}
+
+		data := url.Values{}
+		header := http.Header{}
+		err := injectClientAuth(cfg, data, header)
+		s.Require().NoError(err)
+
+		s.Equal("eyJ0b2tlbi5qd3Q", data.Get(FormKeyClientAssertion))
+	})
+
+	s.Run("returns error for missing token file", func() {
+		cfg := &TargetTokenExchangeConfig{
+			ClientID:           "test-client",
+			AuthStyle:          AuthStyleFederated,
+			FederatedTokenFile: "/nonexistent/token",
+		}
+
+		data := url.Values{}
+		header := http.Header{}
+		err := injectClientAuth(cfg, data, header)
+		s.Error(err)
+		s.Contains(err.Error(), "failed to read federated token file")
+	})
+
+	s.Run("returns error for empty token file", func() {
+		tokenFile := filepath.Join(s.tempDir, "empty-token")
+		s.Require().NoError(os.WriteFile(tokenFile, []byte(""), 0600))
+
+		cfg := &TargetTokenExchangeConfig{
+			ClientID:           "test-client",
+			AuthStyle:          AuthStyleFederated,
+			FederatedTokenFile: tokenFile,
+		}
+
+		data := url.Values{}
+		header := http.Header{}
+		err := injectClientAuth(cfg, data, header)
+		s.Error(err)
+		s.Contains(err.Error(), "is empty")
+	})
+
+	s.Run("returns error for whitespace-only token file", func() {
+		tokenFile := filepath.Join(s.tempDir, "ws-token")
+		s.Require().NoError(os.WriteFile(tokenFile, []byte("  \n\t  \n"), 0600))
+
+		cfg := &TargetTokenExchangeConfig{
+			ClientID:           "test-client",
+			AuthStyle:          AuthStyleFederated,
+			FederatedTokenFile: tokenFile,
+		}
+
+		data := url.Values{}
+		header := http.Header{}
+		err := injectClientAuth(cfg, data, header)
+		s.Error(err)
+		s.Contains(err.Error(), "is empty")
 	})
 }
 

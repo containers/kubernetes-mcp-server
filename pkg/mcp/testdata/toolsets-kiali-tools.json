@@ -273,9 +273,10 @@
           "type": "string"
         },
         "resourceType": {
-          "description": "The type of resource to query.",
+          "description": "The type of resource to query. Use 'app' for Kiali applications (grouped by the Kubernetes 'app' label). Use 'argoapp' for ArgoCD Application CRDs (requires ArgoCD installed and the Kiali service account must have read permissions on applications.argoproj.io).",
           "enum": [
             "app",
+            "argoapp",
             "namespace",
             "service",
             "workload"

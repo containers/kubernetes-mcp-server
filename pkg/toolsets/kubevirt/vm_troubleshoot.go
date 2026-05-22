@@ -358,31 +358,40 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 // fetchEvents fetches events related to the VM and returns them formatted
 func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vmName string) string {
 	core := kubernetes.NewCore(client)
-	eventMap, err := core.EventsList(ctx, namespace)
+
+	// Server-side filter: events whose involvedObject.name exactly matches the VM name
+	vmEvents, err := core.EventsList(ctx, namespace, api.ListOptions{
+		ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + vmName},
+	})
 	if err != nil {
 		return fmt.Sprintf("### Events\n\n*Error listing events: %v*", err)
 	}
 
-	if len(eventMap) == 0 {
-		return "### Events\n\n*No events found in namespace*"
+	var relatedEvents []map[string]any
+	for _, event := range vmEvents {
+		involvedObj, ok := event["InvolvedObject"].(map[string]string)
+		if !ok {
+			continue
+		}
+		objKind := involvedObj["Kind"]
+		// Include events for VM, VMI
+		if objKind == "VirtualMachine" || objKind == "VirtualMachineInstance" {
+			relatedEvents = append(relatedEvents, event)
+		}
 	}
 
-	// Filter events related to the VM
-	var relatedEvents []map[string]any
-	for _, event := range eventMap {
+	// Prefix-based matches (virt-launcher pods, vmName-suffixed objects) can't be expressed
+	// as a field selector; list all events in the namespace and filter client-side.
+	allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
+	if err != nil {
+		return fmt.Sprintf("### Events\n\n*Error listing events: %v*", err)
+	}
+	for _, event := range allEvents {
 		involvedObj, ok := event["InvolvedObject"].(map[string]string)
 		if !ok {
 			continue
 		}
 		objName := involvedObj["Name"]
-		objKind := involvedObj["Kind"]
-
-		// Include events for VM, VMI
-		if objName == vmName && (objKind == "VirtualMachine" || objKind == "VirtualMachineInstance") {
-			relatedEvents = append(relatedEvents, event)
-			continue
-		}
-
 		// Include events for pods with VM name prefix
 		if strings.HasPrefix(objName, vmName+"-") || strings.HasPrefix(objName, "virt-launcher-"+vmName) {
 			relatedEvents = append(relatedEvents, event)

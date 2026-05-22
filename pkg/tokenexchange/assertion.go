@@ -2,6 +2,8 @@ package tokenexchange
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -75,11 +77,18 @@ func loadCertificateAndKey(certFile, keyFile string) (*x509.Certificate, crypto.
 	}
 
 	if privateKey == nil {
-		return nil, nil, fmt.Errorf("failed to parse private key from %q (tried PKCS#8 and PKCS#1 formats)", keyFile)
+		return nil, nil, fmt.Errorf("failed to parse private key from %q (tried PKCS#8 and PKCS#1 formats; EC keys must be in PKCS#8 format, convert with: openssl pkcs8 -topk8 -nocrypt)", keyFile)
 	}
 
-	if _, ok := privateKey.(*rsa.PrivateKey); !ok {
-		return nil, nil, fmt.Errorf("unsupported key type %T from %q: only RSA keys are currently supported for JWT client assertions", privateKey, keyFile)
+	switch key := privateKey.(type) {
+	case *rsa.PrivateKey:
+		// RSA keys are supported
+	case *ecdsa.PrivateKey:
+		if key.Curve != elliptic.P256() && key.Curve != elliptic.P384() {
+			return nil, nil, fmt.Errorf("unsupported EC curve %v from %q: only P-256 and P-384 are supported", key.Curve.Params().Name, keyFile)
+		}
+	default:
+		return nil, nil, fmt.Errorf("unsupported key type %T from %q: only RSA and EC keys are supported for JWT client assertions", privateKey, keyFile)
 	}
 
 	return cert, privateKey, nil
@@ -95,11 +104,20 @@ func computeX5TS256(cert *x509.Certificate) string {
 
 // getSignatureAlgorithm determines the jose.SignatureAlgorithm based on key type
 func getSignatureAlgorithm(key crypto.Signer) (jose.SignatureAlgorithm, error) {
-	switch key.(type) {
+	switch k := key.(type) {
 	case *rsa.PrivateKey:
 		return jose.RS256, nil
+	case *ecdsa.PrivateKey:
+		switch k.Curve {
+		case elliptic.P256():
+			return jose.ES256, nil
+		case elliptic.P384():
+			return jose.ES384, nil
+		default:
+			return "", fmt.Errorf("unsupported EC curve: %v", k.Curve.Params().Name)
+		}
 	default:
-		return "", fmt.Errorf("unsupported key type: %T (only RSA keys are currently supported)", key)
+		return "", fmt.Errorf("unsupported key type: %T (only RSA and EC keys are supported)", key)
 	}
 }
 
