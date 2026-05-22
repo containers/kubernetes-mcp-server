@@ -51,6 +51,17 @@ func (s *BaseHttpSuite) SetupTest() {
 }
 
 func (s *BaseHttpSuite) StartServer() {
+	// Stop any previous running servers to avoid resource leaks when StartServer is called multiple times
+	if s.StopServer != nil {
+		s.StopServer()
+		_ = s.WaitForShutdown()
+	}
+	if s.mcpServer != nil {
+		s.mcpServer.Close()
+	}
+	if s.timeoutCancel != nil {
+		s.timeoutCancel()
+	}
 
 	tcpAddr, err := test.RandomPortAddress()
 	s.Require().NoError(err, "Expected no error getting random port address")
@@ -169,7 +180,7 @@ func testCase(t *testing.T, test func(c *httpContext)) {
 
 func testCaseWithContext(t *testing.T, httpCtx *httpContext, test func(c *httpContext)) {
 	httpCtx.beforeEach(t)
-	t.Cleanup(func() { httpCtx.afterEach(t) })
+	defer httpCtx.afterEach(t)
 	test(httpCtx)
 }
 

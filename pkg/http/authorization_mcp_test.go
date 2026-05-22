@@ -363,8 +363,10 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 				s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
 			})
 		})
-		_ = s.mcpClient.Session.Close()
-		s.mcpClient.Session = nil
+		if s.mcpClient.Session != nil {
+			_ = s.mcpClient.Session.Close()
+			s.mcpClient.Session = nil
+		}
 		s.StopServer()
 		s.Require().NoError(s.WaitForShutdown())
 	}
