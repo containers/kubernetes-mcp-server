@@ -51,17 +51,8 @@ func (s *BaseHttpSuite) SetupTest() {
 }
 
 func (s *BaseHttpSuite) StartServer() {
-	// Stop any previous running servers to avoid resource leaks when StartServer is called multiple times
-	if s.StopServer != nil {
-		s.StopServer()
-		_ = s.WaitForShutdown()
-	}
-	if s.mcpServer != nil {
-		s.mcpServer.Close()
-	}
-	if s.timeoutCancel != nil {
-		s.timeoutCancel()
-	}
+	// Stop any previously started server so multiple StartServer calls in the same test do not leak resources.
+	s.stopRunningServer()
 
 	tcpAddr, err := test.RandomPortAddress()
 	s.Require().NoError(err, "Expected no error getting random port address")
@@ -87,12 +78,28 @@ func (s *BaseHttpSuite) StartServer() {
 
 func (s *BaseHttpSuite) TearDownTest() {
 	s.MockServer.Close()
-	if s.mcpServer != nil {
-		s.mcpServer.Close()
+	s.stopRunningServer()
+}
+
+// stopRunningServer cancels the running HTTP server, waits for the Serve goroutine to return,
+// and releases the associated resources. Safe to call when no server has been started yet
+// and idempotent across repeated invocations.
+func (s *BaseHttpSuite) stopRunningServer() {
+	if s.StopServer == nil {
+		return
 	}
 	s.StopServer()
 	s.Require().NoError(s.WaitForShutdown(), "HTTP server did not shut down gracefully")
-	s.timeoutCancel()
+	if s.mcpServer != nil {
+		s.mcpServer.Close()
+	}
+	if s.timeoutCancel != nil {
+		s.timeoutCancel()
+	}
+	s.StopServer = nil
+	s.WaitForShutdown = nil
+	s.mcpServer = nil
+	s.timeoutCancel = nil
 }
 
 type httpContext struct {
