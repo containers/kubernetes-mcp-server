@@ -325,8 +325,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedTokenExchangeFailure()
 	})
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
@@ -340,8 +339,7 @@ func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 	})
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 func (s *AuthorizationSuite) TestAuthorizationRawToken() {
@@ -365,8 +363,7 @@ func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 		})
 		s.mcpClient.Close()
 		s.mcpClient = nil
-		s.StopServer()
-		s.Require().NoError(s.WaitForShutdown())
+		s.stopRunningServer()
 	}
 }
 
@@ -397,8 +394,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	})
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationOidcTokenExchange verifies RFC 8693 / On-Behalf-Of token
@@ -507,8 +503,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 			} else {
 				s.Require().NoError(session.Close(), "Expected SSE session to close cleanly")
 			}
-			s.StopServer()
-			s.Require().NoError(s.WaitForShutdown())
+			s.stopRunningServer()
 		})
 	}
 }
@@ -536,8 +531,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughWarning() {
 	})
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 func (s *AuthorizationSuite) TestAuthorizationPassthroughWarningOnce() {
@@ -560,8 +554,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughWarningOnce() {
 		count := strings.Count(logs, "Bearer token forwarded without local validation")
 		s.Equal(1, count, "Expected warning to fire exactly once, got %d", count)
 	})
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 func (s *AuthorizationSuite) TestAuthorizationPassthroughRejectedWithoutSkipFlag() {
@@ -597,8 +590,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughRejectedWithoutSkipFlag
 		s.mcpClient.Close()
 		s.mcpClient = nil
 	}
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 func (s *AuthorizationSuite) TestAuthorizationExemptEndpointsFromOAuth() {
@@ -663,8 +655,7 @@ func (s *AuthorizationSuite) TestAuthorizationRawPassthroughStreamableHTTP() {
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationRawPassthroughSSE is the SSE counterpart to
@@ -717,8 +708,7 @@ func (s *AuthorizationSuite) TestAuthorizationRawPassthroughSSE() {
 	})
 
 	s.Require().NoError(session.Close(), "Expected SSE session to close cleanly")
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationClusterAuthModeKubeconfigDropsClientToken verifies that
@@ -765,8 +755,7 @@ func (s *AuthorizationSuite) TestAuthorizationClusterAuthModeKubeconfigDropsClie
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationPassthroughOpaqueToken verifies that in passthrough mode
@@ -813,8 +802,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughOpaqueToken() {
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationPassthroughMalformedJWT verifies that a syntactically invalid
@@ -837,8 +825,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughMalformedJWT() {
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationPassthroughMissingHeader verifies that the Bearer header
@@ -862,8 +849,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughMissingHeader() {
 		})
 	})
 
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationPassthroughExpiredToken verifies that expired JWTs are
@@ -908,8 +894,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughExpiredToken() {
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationPassthroughClusterIssuedJWT verifies that JWTs issued by the
@@ -958,8 +943,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughClusterIssuedJWT() {
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 // TestAuthorizationPassthroughOIDCPathUnaffected verifies that the passthrough
@@ -983,8 +967,7 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughOIDCPathUnaffected() {
 			"Expected HTTP 401 for opaque token with authorization_url set — passthrough must not bypass OIDC validation")
 	})
 
-	s.StopServer()
-	s.Require().NoError(s.WaitForShutdown())
+	s.stopRunningServer()
 }
 
 func TestAuthorization(t *testing.T) {

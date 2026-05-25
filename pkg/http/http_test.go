@@ -83,19 +83,16 @@ func (s *BaseHttpSuite) TearDownTest() {
 
 // stopRunningServer cancels the running HTTP server, waits for the Serve goroutine to return,
 // and releases the associated resources. Safe to call when no server has been started yet
-// and idempotent across repeated invocations.
+// and idempotent across repeated invocations. StartServer assigns mcpServer, timeoutCancel,
+// StopServer and WaitForShutdown as a group, so checking StopServer alone is sufficient.
 func (s *BaseHttpSuite) stopRunningServer() {
 	if s.StopServer == nil {
 		return
 	}
 	s.StopServer()
 	s.Require().NoError(s.WaitForShutdown(), "HTTP server did not shut down gracefully")
-	if s.mcpServer != nil {
-		s.mcpServer.Close()
-	}
-	if s.timeoutCancel != nil {
-		s.timeoutCancel()
-	}
+	s.mcpServer.Close()
+	s.timeoutCancel()
 	s.StopServer = nil
 	s.WaitForShutdown = nil
 	s.mcpServer = nil
