@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -103,12 +104,17 @@ func (n *NetObserv) createHTTPClient() *http.Client {
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: n.insecure,
 	}
+	transport := &http.Transport{
+		TLSClientConfig:       tlsConfig,
+		ResponseHeaderTimeout: DefaultPluginHTTPTimeout,
+	}
 	if caValue := strings.TrimSpace(n.certificateAuthority); caValue != "" {
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
 			klog.Errorf("failed to read CA certificate from file %s: %v; proceeding without custom CA", caValue, err)
 			return n.wrapWithTLSEnforcement(&http.Client{
-				Transport: &http.Transport{TLSClientConfig: tlsConfig},
+				Transport: transport,
+				Timeout:   DefaultPluginHTTPTimeout,
 			})
 		}
 		var certPool *x509.CertPool
@@ -124,7 +130,8 @@ func (n *NetObserv) createHTTPClient() *http.Client {
 		}
 	}
 	return n.wrapWithTLSEnforcement(&http.Client{
-		Transport: &http.Transport{TLSClientConfig: tlsConfig},
+		Transport: transport,
+		Timeout:   DefaultPluginHTTPTimeout,
 	})
 }
 
@@ -186,7 +193,10 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 	client := n.createHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return "", fmt.Errorf("netobserv API call canceled or timed out waiting for %s: %w", u.Redacted(), err)
+		}
+		return "", fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
