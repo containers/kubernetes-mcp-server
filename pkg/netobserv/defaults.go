@@ -1,6 +1,9 @@
 package netobserv
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Defaults match netobserv-operator (PluginName, DefaultOperatorNamespace, advanced.port).
 const (
@@ -13,6 +16,9 @@ const (
 	DefaultOpenShiftPrometheusURL       = "https://thanos-querier.openshift-monitoring.svc.cluster.local.:9091"
 	DefaultOpenShiftAlertmanagerURL     = "https://alertmanager-main.openshift-monitoring.svc.cluster.local.:9094"
 	DefaultOpenShiftMonitoringNamespace = "openshift-monitoring"
+
+	// DefaultPluginHTTPTimeout bounds waits for the console plugin HTTP API (Loki/Prometheus work behind it).
+	DefaultPluginHTTPTimeout = 120 * time.Second
 )
 
 // DefaultPluginServiceCAPath is the OpenShift service CA bundle path when mounted into
