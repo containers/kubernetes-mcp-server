@@ -33,7 +33,7 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 	}
 
 	handler := func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		content, err := res.Handler(ctx)
+		content, err := res.Handler(api.ResourceHandlerParams{Context: ctx})
 		if err != nil {
 			return nil, err
 		}

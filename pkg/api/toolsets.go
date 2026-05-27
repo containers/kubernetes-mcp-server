@@ -135,7 +135,14 @@ type ResourceContent struct {
 // ResourceHandler is called when a client reads a resource.
 // Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
-type ResourceHandler func(ctx context.Context) (*ResourceContent, error)
+type ResourceHandler func(params ResourceHandlerParams) (*ResourceContent, error)
+
+type ResourceHandlerParams struct {
+	context.Context
+	BaseConfig
+	KubernetesClient
+	URI string
+}
 
 // ServerResource represents a resource that can be registered with the MCP server.
 type ServerResource struct {
