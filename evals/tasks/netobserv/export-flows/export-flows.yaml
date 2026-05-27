@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+  name: "Export flows as CSV"
+  category: "Export"
+  description: "Exports flow records from NetObserv in CSV format."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "TimeFlowStartMs"
+  prompt:
+    inline: "Export NetObserv flow records for the default namespace from the last 5 minutes as CSV. Tell me whether the export succeeded and mention the CSV column headers if present."
