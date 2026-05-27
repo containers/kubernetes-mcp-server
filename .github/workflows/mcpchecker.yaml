@@ -13,12 +13,12 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (kubernetes, kubevirt, kiali, tekton, or all)'
+        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, or all)'
         required: false
-        default: 'kubernetes'
+        default: 'core'
         type: choice
         options:
-          - kubernetes
+          - core
           - helm
           - kubevirt
           - kiali
@@ -103,29 +103,20 @@ jobs:
             echo "pr-sha=${{ github.sha }}" >> $GITHUB_OUTPUT
           fi
 
-          # Suite selection:
-          # - For workflow_dispatch, use the provided input.
-          # - For other triggers (schedule/issue_comment), default to kubernetes.
-          SUITE="${{ github.event.inputs.suite || 'kubernetes' }}"
-          TASK_FILTER="${{ github.event.inputs.task-filter || '' }}"
+          # Suite selection: defaults to 'core', can be overridden by workflow_dispatch input or PR comment
+          SUITE="${{ github.event.inputs.suite || 'core' }}"
 
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Parse comment: /run-mcpchecker [suite]. Suite = kubernetes | helm | kubevirt | kiali | tekton | all
+            # Parse /run-mcpchecker [suite] from PR comment
             COMMENT_BODY="${{ github.event.comment.body }}"
             COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
             read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
             case "${FIRST_WORD,,}" in
-              helm|kubevirt|kiali|tekton|all)
-                SUITE_INPUT="${FIRST_WORD,,}"
+              core|helm|kubevirt|kiali|tekton|all)
+                SUITE="${FIRST_WORD,,}"
                 ;;
-              kubernetes)
-                SUITE_INPUT="kubernetes"
-                ;;
-              *) ;; # default: keep SUITE_INPUT empty → kubernetes
             esac
           fi
-
-          SUITE="${SUITE_INPUT:-$SUITE}"
 
           # Select label-selector and infrastructure based on suite
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
@@ -151,8 +142,9 @@ jobs:
               echo "toolsets=core,config,helm,kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
               ;;
             *)
-              echo "label-selector=suite=kubernetes" >> $GITHUB_OUTPUT
-              echo "toolsets=" >> $GITHUB_OUTPUT
+              # Default to core suite (matches 'core' or any unrecognized suite)
+              echo "label-selector=suite=core" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config" >> $GITHUB_OUTPUT
               ;;
           esac
 
