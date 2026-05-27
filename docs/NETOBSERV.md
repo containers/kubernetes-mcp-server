@@ -135,3 +135,15 @@ If you deploy a separate OAuth proxy in front of this server, clients authentica
 ## OAuth and MCP Shield
 
 [MCP Shield](https://github.com/jpinsonn/mcp-shield) can terminate OAuth for MCP clients and forward a user Bearer token to this server. NetObserv then uses that user token when `cluster_auth_mode` is `passthrough`. That is a separate deployment model from the Helm example above.
+
+## Evaluations
+
+Agent evaluation tasks for this toolset live under [`evals/tasks/netobserv/`](../evals/tasks/netobserv/). On Kind/CI a mock console plugin is used (`make setup-netobserv`); on OpenShift you can run the same tasks against a real FlowCollector.
+
+```bash
+make setup-netobserv
+make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
+make run-evals EVAL_LABEL_SELECTOR=suite=netobserv
+```
+
+Maintainers can trigger CI with `/run-mcpchecker netobserv` on a pull request. See [evals/tasks/netobserv/README.md](../evals/tasks/netobserv/README.md).

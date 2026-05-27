@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+  name: "List flow namespaces"
+  category: "Flow discovery"
+  description: "Lists Kubernetes namespaces that appear in NetObserv flow telemetry."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "netobserv-eval"
+  prompt:
+    inline: "Using NetObserv network observability, list every Kubernetes namespace that appears in recent flow data. Include all namespaces returned by the tool."

@@ -7,10 +7,11 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 - [Kubernetes tasks](kubernetes/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
 - [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing).
 - [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
+- [NetObserv tasks](netobserv/) – network flow and metrics workflows that exercise the NetObserv MCP toolset (flows, export, namespaces, metrics).
 
 ## Anatomy of a Task
 
-Every subdirectory under `core/`, `kiali/`, or `kubevirt/` defines a single scenario:
+Every subdirectory under `core/`, `kiali/`, `kubevirt/`, `netobserv/`, etc. defines a single scenario:
 
 1. `*.yaml` – declarative description consumed by the evaluation harness (prompts, success criteria, required tools).
 2. `setup.sh` / `verify.sh` / `cleanup.sh` – shell hooks (optional) that prime the cluster, assert post-conditions, and reset resources so tasks stay idempotent.
