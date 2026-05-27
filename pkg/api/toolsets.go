@@ -166,7 +166,7 @@ type ResourceTemplate struct {
 // Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
 // The uri parameter is the actual resource URI that matches the template.
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
-type ResourceTemplateHandler func(ctx context.Context, uri string) (*ResourceContent, error)
+type ResourceTemplateHandler func(params ResourceHandlerParams) (*ResourceContent, error)
 
 // ServerResourceTemplate represents a resource template that can be registered with the MCP server.
 type ServerResourceTemplate struct {

@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -88,8 +87,8 @@ func (s *ResourceAnnotationsSuite) TestResourceTemplateAnnotationsAllFieldsSet()
 					Priority:     &priority,
 					LastModified: &lastModified,
 				},
-				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
-					return &api.ResourceContent{Text: `{"uri": "` + uri + `"}`}, nil
+				Handler: func(params api.ResourceHandlerParams) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: `{"uri": "` + params.URI + `"}`}, nil
 				},
 			},
 		},
@@ -158,8 +157,8 @@ func (s *ResourceAnnotationsSuite) TestResourceTemplateAnnotationsNilWhenAllOmit
 					MIMEType:    "text/plain",
 					// Audience, Priority, LastModified all omitted
 				},
-				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
-					return &api.ResourceContent{Text: "template: " + uri}, nil
+				Handler: func(params api.ResourceHandlerParams) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "template: " + params.URI}, nil
 				},
 			},
 		},

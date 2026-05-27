@@ -79,7 +79,7 @@ func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResou
 		Title: rt.ResourceTemplate.Title,
 	}
 	handler := func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		content, err := rt.Handler(ctx, req.Params.URI)
+		content, err := rt.Handler(api.ResourceHandlerParams{Context: ctx, URI: req.Params.URI})
 		if err != nil {
 			return nil, err
 		}
