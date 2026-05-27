@@ -29,7 +29,9 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 			res.Resource.Priority,
 			res.Resource.LastModified,
 		),
+		Title: res.Resource.Title,
 	}
+
 	handler := func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		content, err := res.Handler(ctx)
 		if err != nil {
@@ -74,6 +76,7 @@ func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResou
 			rt.ResourceTemplate.Priority,
 			rt.ResourceTemplate.LastModified,
 		),
+		Title: rt.ResourceTemplate.Title,
 	}
 	handler := func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		content, err := rt.Handler(ctx, req.Params.URI)

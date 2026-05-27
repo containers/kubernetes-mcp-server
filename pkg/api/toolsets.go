@@ -118,6 +118,7 @@ type Resource struct {
 	Audience     []string // ["user", "assistant"]
 	Priority     *float64
 	LastModified *string
+	Title        string `json:"title,omitempty"`
 }
 
 // ResourceContent is the value returned by a resource handler.
@@ -151,6 +152,7 @@ type ResourceTemplate struct {
 	Audience     []string // ["user", "assistant"]
 	Priority     *float64
 	LastModified *string
+	Title        string `json:"title,omitempty"`
 }
 
 // ResourceTemplateHandler is called when a client reads a resource matching a template.
