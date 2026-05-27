@@ -41,6 +41,7 @@ func (s *ResourceSuite) TestResources() {
 				Resource: api.Resource{
 					URI:         "test://example/resource1",
 					Name:        "Resource One",
+					Title:       "Human-readable Resource One",
 					Description: "First",
 					MIMEType:    "text/plain",
 				},
@@ -79,6 +80,7 @@ func (s *ResourceSuite) TestResources() {
 
 		s.Require().Contains(byURI, "test://example/resource1")
 		s.Equal("Resource One", byURI["test://example/resource1"].Name)
+		s.Equal("Human-readable Resource One", byURI["test://example/resource1"].Title)
 		s.Equal("First", byURI["test://example/resource1"].Description)
 		s.Equal("text/plain", byURI["test://example/resource1"].MIMEType)
 
@@ -115,6 +117,7 @@ func (s *ResourceSuite) TestResourceTemplates() {
 				ResourceTemplate: api.ResourceTemplate{
 					URITemplate: uriTempl,
 					Name:        txtFoo,
+					Title:       "Foo Dynamic Resource",
 					Description: txtFoo,
 					MIMEType:    "text/plain",
 				},
@@ -136,6 +139,7 @@ func (s *ResourceSuite) TestResourceTemplates() {
 		s.Require().Len(result.ResourceTemplates, 1)
 		s.Equal(uriTempl, result.ResourceTemplates[0].URITemplate)
 		s.Equal(txtFoo, result.ResourceTemplates[0].Name)
+		s.Equal("Foo Dynamic Resource", result.ResourceTemplates[0].Title)
 		s.Equal(txtFoo, result.ResourceTemplates[0].Description)
 		s.Equal("text/plain", result.ResourceTemplates[0].MIMEType)
 	})
