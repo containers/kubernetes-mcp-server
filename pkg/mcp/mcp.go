@@ -19,6 +19,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/features"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -555,6 +556,14 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 		WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
 		Validate(); err != nil {
 		return fmt.Errorf("configuration reload rejected: %w", err)
+	}
+
+	// Apply feature gates from new config. This is thread-safe:
+	// SetFromMap acquires an internal mutex and publishes via atomic.Store.
+	// Callede after Validate (which dry-runs the gates) and before applyToolsets,
+	// so feature-fated tools see the new state when the toolset surface is built.
+	if err := features.ApplyFeatureGates(newConfig.FeatureGates); err != nil {
+		return fmt.Errorf("failed to apply feature gates: %w", err)
 	}
 
 	// Build a candidate Configuration view. applyToolsets will install it

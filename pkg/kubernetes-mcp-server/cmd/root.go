@@ -19,6 +19,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/features"
 	internalhttp "github.com/containers/kubernetes-mcp-server/pkg/http"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/logging"
@@ -85,6 +86,7 @@ const (
 	flagTLSCert              = "tls-cert"
 	flagTLSKey               = "tls-key"
 	flagRequireTLS           = "require-tls"
+	flagFeatureGates         = "feature-gates"
 )
 
 type MCPServerOptions struct {
@@ -110,6 +112,7 @@ type MCPServerOptions struct {
 	TLSCert              string
 	TLSKey               string
 	RequireTLS           bool
+	FeatureGates         string
 
 	ConfigPath   string
 	ConfigDir    string
@@ -188,6 +191,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.TLSCert, flagTLSCert, o.TLSCert, "Path to TLS certificate file for HTTPS. Must be used together with --tls-key.")
 	cmd.Flags().StringVar(&o.TLSKey, flagTLSKey, o.TLSKey, "Path to TLS private key file for HTTPS. Must be used together with --tls-cert.")
 	cmd.Flags().BoolVar(&o.RequireTLS, flagRequireTLS, o.RequireTLS, "Require TLS for server and all outbound connections")
+	cmd.Flags().StringVar(&o.FeatureGates, flagFeatureGates, o.FeatureGates, "A set of feature=bool pairs that describe feature gates for alpha/experimental features. Options are:\n"+strings.Join(features.DefaultFeatureGate.KnownFeatures(), "\n"))
 
 	return cmd
 }
@@ -280,6 +284,11 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagRequireTLS).Changed {
 		m.StaticConfig.RequireTLS = m.RequireTLS
+	}
+	if cmd.Flag(flagFeatureGates).Changed {
+		if err := features.DefaultMutableFeatureGate.Set(m.FeatureGates); err != nil {
+			klog.Warningf("Failed to set feature gates from flag: %v", err)
+		}
 	}
 }
 

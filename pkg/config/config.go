@@ -14,6 +14,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/features"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
@@ -58,6 +59,10 @@ type StaticConfig struct {
 	ToolOverrides map[string]ToolOverride `toml:"tool_overrides,omitempty"`
 	// Prompt configuration
 	Prompts []api.Prompt `toml:"prompts,omitempty"`
+
+	// FeatureGates is a map of feature gate names to their enabled/disabled state.
+	// Feature gates control the availability of features based on their maturity level.
+	FeatureGates map[string]bool `toml:"feature_gates,omitempty"`
 
 	// Authorization-related fields
 	// RequireOAuth indicates whether the server requires OAuth for authentication.
@@ -371,6 +376,10 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 		return nil, err
 	}
 
+	if err := features.ApplyFeatureGates(config.FeatureGates); err != nil {
+		return nil, err
+	}
+
 	return config, nil
 }
 
@@ -548,6 +557,9 @@ func (c *StaticConfig) Validate() error {
 		return err
 	}
 	if err := c.HTTP.Validate(); err != nil {
+		return err
+	}
+	if err := features.ValidateFeatureGates(c.FeatureGates); err != nil {
 		return err
 	}
 	return nil

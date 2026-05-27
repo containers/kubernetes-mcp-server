@@ -35,7 +35,7 @@ Living documentation for implemented and planned features:
 | **[Structured Tool Output](specs/structured-output.md)** | Conventions for tools that emit `structuredContent` | Implemented |
 
 ## Advanced Topics
-
+- **[Feature Gates](configuration.md#feature-gates)** - Control feature availability based on maturity level (Alpha, Beta, GA)
 - **[MCP Logging](logging.md)** - Structured logging to MCP clients with automatic K8s error categorization and secret redaction
 - **[OpenTelemetry Observability](OTEL.md)** - Distributed tracing and metrics configuration
 - **[MCP Prompts](prompts.md)** - Custom workflow templates for AI assistants
