@@ -187,6 +187,9 @@ make run-evals SUITE=core AGENT=claude-code MODEL=sonnet
 
 # kiali tasks (needs Istio + Kiali installed; see `make setup-kiali`)
 make run-evals SUITE=kiali AGENT=claude-code MODEL=sonnet
+
+# netobserv tasks (needs mock plugin or real NetObserv; see `make setup-netobserv`)
+make run-evals SUITE=netobserv AGENT=claude-code MODEL=sonnet
 ```
 
 If you omit `--label-selector`, the eval config's own `labelSelector` settings in

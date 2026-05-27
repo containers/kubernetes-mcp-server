@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+  name: "Get flow byte metrics"
+  category: "Metrics"
+  description: "Queries aggregated byte metrics from NetObserv for a namespace."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "success"
+  prompt:
+    inline: "Use NetObserv to get aggregated Bytes flow metrics for the default namespace over the last 5 minutes. Summarize the metric response status and any values you see."

@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+  name: "List Pod names in flow data"
+  category: "Flow discovery"
+  description: "Lists Pod names seen in NetObserv flows for a namespace."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "eval-mock-pod"
+  prompt:
+    inline: "In the default namespace, use NetObserv to list Pod names that appear in network flow data. Report the names returned."

@@ -2,7 +2,7 @@ toolsets = ["core", "config", "netobserv"]
 
 [toolset_configs.netobserv]
 # Mock / local port-forward:
-url = "https://127.0.0.1:9001"
+url = "http://127.0.0.1:9001"
 insecure = true
 
 # optional overrides:

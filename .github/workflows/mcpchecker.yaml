@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, or all)'
+        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, or all)'
         required: false
         default: 'core'
         type: choice
@@ -23,6 +23,7 @@ on:
           - kubevirt
           - kiali
           - tekton
+          - netobserv
           - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
@@ -198,7 +199,7 @@ jobs:
             BODY="${COMMENT_BODY//[[:space:]]/ }"
             read -r _ FIRST_WORD _ <<< "$BODY"
             case "${FIRST_WORD,,}" in
-              core|helm|kubevirt|kiali|tekton|all)
+              core|helm|kubevirt|kiali|tekton|netobserv|all)
                 SUITE="${FIRST_WORD,,}"
                 ;;
             esac
@@ -223,9 +224,13 @@ jobs:
               echo "label-selector=suite=tekton" >> "$GITHUB_OUTPUT"
               echo "toolsets=core,tekton" >> "$GITHUB_OUTPUT"
               ;;
+            netobserv)
+              echo "label-selector=suite=netobserv" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,netobserv" >> "$GITHUB_OUTPUT"
+              ;;
             all)
               echo "label-selector=" >> "$GITHUB_OUTPUT"  # No filter: run all taskSets
-              echo "toolsets=core,config,helm,kiali,kubevirt,tekton" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,config,helm,kiali,kubevirt,tekton,netobserv" >> "$GITHUB_OUTPUT"
               ;;
             *)
               # Default to core suite (matches 'core' or any unrecognized suite)
@@ -275,6 +280,10 @@ jobs:
         if: contains(needs.check-trigger.outputs.toolsets, 'tekton')
         run: make tekton-install
 
+      - name: Install NetObserv mock plugin
+        if: contains(needs.check-trigger.outputs.toolsets, 'netobserv')
+        run: make setup-netobserv
+
       - name: Start MCP server
         run: make run-server
         env:
@@ -310,6 +319,8 @@ jobs:
         if: always()
         run: |
           make stop-server || true
+          make stop-netobserv || true
+          make teardown-netobserv || true
           make kind-delete-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" || true
 
       # Compare PR results against baseline from main branch

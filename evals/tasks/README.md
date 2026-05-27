@@ -10,10 +10,11 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 - [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing).
 - [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
 - [Tekton tasks](tekton/) – CI/CD workflows that exercise the Tekton toolset (pipelines, tasks, pipeline runs).
+- [NetObserv tasks](netobserv/) – network flow and metrics workflows that exercise the NetObserv MCP toolset (flows, export, namespaces, metrics).
 
 ## Anatomy of a Task
 
-Most subdirectories under `core/`, `config/`, `helm/`, `kiali/`, `kubevirt/`, or `tekton/` define a single scenario (a few, like `kiali/scripts/`, `kubevirt/helpers/`, and `tekton/helpers/`, hold shared helpers instead):
+Most subdirectories under `core/`, `config/`, `helm/`, `kiali/`, `kubevirt/`, `netobserv/`, or `tekton/` define a single scenario (a few, like `kiali/scripts/`, `kubevirt/helpers/`, and `tekton/helpers/`, hold shared helpers instead):
 
 1. `*.yaml` – declarative description consumed by the evaluation harness (prompts, success criteria, required tools).
 2. `setup.sh` / `verify.sh` / `cleanup.sh` – shell hooks (optional) that prime the cluster, assert post-conditions, and reset resources so tasks stay idempotent.
