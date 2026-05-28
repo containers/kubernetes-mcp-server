@@ -453,6 +453,47 @@ func (s *ValidateSuite) TestStsFederatedTokenFile() {
 	})
 }
 
+func (s *ValidateSuite) TestStsTokenTypes() {
+	s.Run("empty values are accepted (rfc8693 exchanger applies default)", func() {
+		cfg := s.validConfig()
+		cfg.StsSubjectTokenType = ""
+		cfg.StsRequestedTokenType = ""
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("non-empty values are accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsSubjectTokenType = "urn:ietf:params:oauth:token-type:jwt"
+		cfg.StsRequestedTokenType = "urn:ietf:params:oauth:token-type:jwt"
+		s.NoError(cfg.Validate())
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsSubjectTokenType)
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsRequestedTokenType)
+	})
+
+	s.Run("whitespace-only sts_subject_token_type is trimmed to empty", func() {
+		cfg := s.validConfig()
+		cfg.StsSubjectTokenType = "   "
+		s.NoError(cfg.Validate())
+		s.Equal("", cfg.StsSubjectTokenType, "whitespace should be trimmed from sts_subject_token_type")
+	})
+
+	s.Run("whitespace-only sts_requested_token_type is trimmed to empty", func() {
+		cfg := s.validConfig()
+		cfg.StsRequestedTokenType = "   "
+		s.NoError(cfg.Validate())
+		s.Equal("", cfg.StsRequestedTokenType, "whitespace should be trimmed from sts_requested_token_type")
+	})
+
+	s.Run("padded values are trimmed but preserved", func() {
+		cfg := s.validConfig()
+		cfg.StsSubjectTokenType = "  urn:ietf:params:oauth:token-type:jwt  "
+		cfg.StsRequestedTokenType = "  urn:ietf:params:oauth:token-type:jwt  "
+		s.NoError(cfg.Validate())
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsSubjectTokenType)
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsRequestedTokenType)
+	})
+}
+
 func (s *ValidateSuite) TestConfirmationFallback() {
 	s.Run("empty fallback is accepted", func() {
 		cfg := s.validConfig()

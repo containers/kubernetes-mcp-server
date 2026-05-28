@@ -495,6 +495,8 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
 | `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
 | `sts_federated_token_file` | string | `""` | Path to a JWT file from an external identity provider, e.g., SPIRE JWT-SVID (for `federated` auth style). |
+| `sts_subject_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | `subject_token_type` form parameter for RFC 8693 token exchange. Override to `urn:ietf:params:oauth:token-type:jwt` for cross-realm flows. |
+| `sts_requested_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | `requested_token_type` form parameter for RFC 8693 token exchange. Override to `urn:ietf:params:oauth:token-type:jwt` when the STS must mint a fresh JWT rather than echo the subject token shape. |
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |

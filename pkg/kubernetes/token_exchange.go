@@ -174,6 +174,8 @@ func strategyBasedTokenExchange(
 			ClientCertFile:     baseConfig.GetStsClientCertFile(),
 			ClientKeyFile:      baseConfig.GetStsClientKeyFile(),
 			FederatedTokenFile: baseConfig.GetStsFederatedTokenFile(),
+			SubjectTokenType:   baseConfig.GetStsSubjectTokenType(),
+			RequestedTokenType: baseConfig.GetStsRequestedTokenType(),
 			CAFile:             baseConfig.GetCertificateAuthority(),
 		}
 		if err := cfg.Validate(); err != nil {

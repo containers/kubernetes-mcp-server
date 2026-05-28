@@ -91,6 +91,8 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 		ClientCertFile:     p.baseConfig.GetStsClientCertFile(),
 		ClientKeyFile:      p.baseConfig.GetStsClientKeyFile(),
 		FederatedTokenFile: p.baseConfig.GetStsFederatedTokenFile(),
+		SubjectTokenType:   p.baseConfig.GetStsSubjectTokenType(),
+		RequestedTokenType: p.baseConfig.GetStsRequestedTokenType(),
 		CAFile:             p.baseConfig.GetCertificateAuthority(),
 	}
 	if err := cfg.Validate(); err != nil {
