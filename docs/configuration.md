@@ -410,6 +410,68 @@ version = "v1"
 kind = "ClusterRoleBinding"
 ```
 
+### Redacted Resources
+
+Instead of fully denying a resource, you can allow access but redact sensitive fields. This is useful for resources like Secrets where the agent needs to see metadata (name, namespace, keys, type, ownership) but should not see actual values.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `redacted_resources` | array | `[]` | List of resources with field-level redaction. |
+
+Each entry in `redacted_resources` supports the following fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `group` | string | required | API group (e.g. `""` for core, `"apps"` for apps/v1) |
+| `version` | string | required | API version (e.g. `"v1"`) |
+| `kind` | string | required | Resource kind (e.g. `"Secret"`) |
+| `fields` | array | required | Dot-separated field paths to redact |
+| `mode` | string | `"opaque"` | How to redact values: `"opaque"` or `"hashed"` |
+
+**Example — redact Secret values while keeping metadata and key names visible:**
+```toml
+[[redacted_resources]]
+group = ""
+version = "v1"
+kind = "Secret"
+fields = ["data.*", "stringData.*"]
+mode = "hashed"
+```
+
+**Path syntax:**
+
+Fields are specified as dot-separated paths with `*` wildcard support. The wildcard adapts to the type it encounters — it iterates keys in a map and items in an array.
+
+| Path | Behavior |
+|------|----------|
+| `data.*` | Redact all values in a map (keys remain visible) |
+| `spec.credentials` | Redact a single field |
+| `spec.template.spec.containers.*.env.*.value` | Traverse arrays and maps to reach nested fields |
+
+**Redaction modes:**
+
+- `opaque` (default): replaces values with `[REDACTED]`
+- `hashed`: replaces values with `[REDACTED:gen_<id>:<hash>]`
+
+Hashed mode uses HMAC-SHA256 with a random salt generated once at server startup. This allows the agent to detect when two different resources reference the same value (e.g. two services using the same connection string) without exposing the actual content. The salt is never persisted and changes on restart. A generation ID is included so consumers can detect when the salt changed and know that hashes from different generations are not comparable.
+
+**More examples:**
+```toml
+# ConfigMap with sensitive data
+[[redacted_resources]]
+group = ""
+version = "v1"
+kind = "ConfigMap"
+fields = ["data.*"]
+
+# CRD with embedded credentials
+[[redacted_resources]]
+group = "db.example.com"
+version = "v1"
+kind = "DatabaseConnection"
+fields = ["spec.credentials.*", "spec.connectionString"]
+```
+
 ### Server Instructions
 
 Provide hints to MCP clients (like Claude Code) about when to use this server's tools. Useful for clients that support **MCP Tool Search**.

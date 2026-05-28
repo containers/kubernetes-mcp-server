@@ -472,7 +472,7 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 		Kind:    "ClusterOperator",
 	}
 
-	operatorList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, "", api.ListOptions{})
+	operatorList, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).ResourcesList(params, gvk, "", api.ListOptions{})
 	if err != nil {
 		// Not an OpenShift cluster
 		return "", err

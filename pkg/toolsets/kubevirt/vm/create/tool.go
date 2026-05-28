@@ -172,7 +172,7 @@ func create(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	// Create the VM in the cluster
-	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, vmYaml)
+	resources, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).ResourcesCreateOrUpdate(params, vmYaml)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create VirtualMachine: %w", err)), nil
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/redaction"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"k8s.io/klog/v2"
@@ -32,7 +33,8 @@ type ToolOverride struct {
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
-	DeniedResources []api.GroupVersionKind `toml:"denied_resources"`
+	DeniedResources   []api.GroupVersionKind `toml:"denied_resources"`
+	RedactedResources []api.RedactedResource `toml:"redacted_resources"`
 
 	LogLevel   int    `toml:"log_level,omitzero"`
 	LogFile    string `toml:"log_file,omitempty"`
@@ -382,6 +384,10 @@ func (c *StaticConfig) GetDeniedResources() []api.GroupVersionKind {
 	return c.DeniedResources
 }
 
+func (c *StaticConfig) GetRedactedResources() []api.RedactedResource {
+	return c.RedactedResources
+}
+
 func (c *StaticConfig) GetKubeConfigPath() string {
 	return c.KubeConfig
 }
@@ -549,6 +555,44 @@ func (c *StaticConfig) Validate() error {
 	}
 	if err := c.HTTP.Validate(); err != nil {
 		return err
+	}
+	if err := c.validateRedactedResources(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateRedactedResources validates the redacted_resources configuration:
+//   - version must be set
+//   - kind must be set (cannot redact fields on an entire group/version)
+//   - fields must not be empty and must contain valid dot-separated paths
+//   - mode must be "opaque", "hashed", or empty (defaults to opaque)
+func (c *StaticConfig) validateRedactedResources() error {
+	for i, rr := range c.RedactedResources {
+		if rr.Version == "" {
+			return fmt.Errorf("redacted_resources[%d]: version must be set", i)
+		}
+		if rr.Kind == "" {
+			return fmt.Errorf("redacted_resources[%d]: kind must be set", i)
+		}
+		if len(rr.Fields) == 0 {
+			return fmt.Errorf("redacted_resources[%d]: fields must not be empty", i)
+		}
+		for j, field := range rr.Fields {
+			if field == "" {
+				return fmt.Errorf("redacted_resources[%d]: fields[%d] must not be empty", i, j)
+			}
+			segments := strings.Split(field, ".")
+			for _, seg := range segments {
+				if seg == "" {
+					return fmt.Errorf("redacted_resources[%d]: fields[%d] %q contains empty path segment", i, j, field)
+				}
+			}
+		}
+		mode := rr.Mode
+		if mode != "" && mode != redaction.RedactionModeOpaque && mode != redaction.RedactionModeHashed {
+			return fmt.Errorf("redacted_resources[%d]: invalid mode %q, must be %q or %q", i, mode, redaction.RedactionModeOpaque, redaction.RedactionModeHashed)
+		}
 	}
 	return nil
 }

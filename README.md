@@ -222,11 +222,19 @@ log_level = 2
 read_only = true
 toolsets = ["core", "config", "helm", "kubevirt"]
 
-# Deny access to sensitive resources
+# Deny access to sensitive resources (fully blocked)
 [[denied_resources]]
+group = "rbac.authorization.k8s.io"
+version = "v1"
+kind = "ClusterRole"
+
+# Allow Secrets but redact their values (keys and metadata remain visible)
+[[redacted_resources]]
 group = ""
 version = "v1"
 kind = "Secret"
+fields = ["data.*", "stringData.*"]
+mode = "hashed"
 
 [telemetry]
 endpoint = "http://localhost:4317"
@@ -238,6 +246,7 @@ For comprehensive TOML configuration documentation, including:
 - Drop-in configuration files for modular settings
 - Dynamic configuration reload via SIGHUP
 - Denied resources for restricting access to sensitive resource types
+- Redacted resources for field-level redaction of sensitive values
 - Server instructions for MCP Tool Search
 - [Custom MCP prompts](docs/prompts.md)
 - OAuth/OIDC authentication for HTTP mode ([Keycloak](docs/KEYCLOAK_OIDC_SETUP.md), [Microsoft Entra ID](docs/ENTRA_ID_SETUP.md))
