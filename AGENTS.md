@@ -424,7 +424,7 @@ When introducing new modules run `make tidy` so that `go.mod` and `go.sum` remai
 
 ## Coding style
 
-- Go modules target Go **1.25** (see `go.mod`).
+- The Go version is declared in `go.mod`; CI installs whatever it requires via `go-version-file`.
 - Tests are written with the standard library `testing` package.
 - Build, test and lint steps are defined in the Makefile—keep them working.
 
