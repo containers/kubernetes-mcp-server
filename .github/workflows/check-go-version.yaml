@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: bash
@@ -29,7 +33,15 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'downstream-go-verified') }}
         run: |
-          base_go=$(git show "${BASE_SHA}:go.mod" 2>/dev/null | awk '/^go [0-9]/ {print $2; exit}')
+          if ! git cat-file -e "${BASE_SHA}" 2>/dev/null; then
+            echo "::error::Base commit ${BASE_SHA} is not available locally. The fetch step may have failed or the base was force-pushed."
+            exit 1
+          fi
+          if git cat-file -e "${BASE_SHA}:go.mod" 2>/dev/null; then
+            base_go=$(git show "${BASE_SHA}:go.mod" | awk '/^go [0-9]/ {print $2; exit}')
+          else
+            base_go=""
+          fi
           head_go=$(awk '/^go [0-9]/ {print $2; exit}' go.mod)
           {
             echo "### Go directive"
