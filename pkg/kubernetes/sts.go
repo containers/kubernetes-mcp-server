@@ -26,6 +26,9 @@ type SecurityTokenService struct {
 	ClientSecret            string
 	ExternalAccountAudience string
 	ExternalAccountScopes   []string
+	// TokenURL is the resolved STS endpoint: the explicit sts_token_url when
+	// configured, otherwise the discovered token endpoint of the OIDC provider.
+	TokenURL string
 }
 
 func NewFromConfig(stsConfigProvider api.StsConfigProvider, provider *oidc.Provider) *SecurityTokenService {
@@ -35,16 +38,17 @@ func NewFromConfig(stsConfigProvider api.StsConfigProvider, provider *oidc.Provi
 		ClientSecret:            stsConfigProvider.GetStsClientSecret(),
 		ExternalAccountAudience: stsConfigProvider.GetStsAudience(),
 		ExternalAccountScopes:   stsConfigProvider.GetStsScopes(),
+		TokenURL:                resolveStsTokenURL(stsConfigProvider, provider),
 	}
 }
 
 func (sts *SecurityTokenService) IsEnabled() bool {
-	return sts.Provider != nil && sts.ClientId != "" && sts.ExternalAccountAudience != ""
+	return sts.TokenURL != "" && sts.ClientId != "" && sts.ExternalAccountAudience != ""
 }
 
 func (sts *SecurityTokenService) ExternalAccountTokenExchange(ctx context.Context, originalToken *oauth2.Token) (*oauth2.Token, error) {
 	ts, err := externalaccount.NewTokenSource(ctx, externalaccount.Config{
-		TokenURL:             sts.Endpoint().TokenURL,
+		TokenURL:             sts.TokenURL,
 		ClientID:             sts.ClientId,
 		ClientSecret:         sts.ClientSecret,
 		Audience:             sts.ExternalAccountAudience,
