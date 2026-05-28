@@ -13,6 +13,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// resolveStsTokenURL returns the explicit sts_token_url if configured;
+// otherwise falls back to the OIDC provider's discovered token endpoint.
+// The explicit URL decouples the STS gateway from the user-token issuer
+// (authorization_url), which is required for cross-realm RFC 8693 deployments
+// and enables token exchange when skip_jwt_verification=true (no OIDC provider).
+func resolveStsTokenURL(stsConfig api.StsConfigProvider, oidcProvider *oidc.Provider) string {
+	if explicit := stsConfig.GetStsTokenURL(); explicit != "" {
+		return explicit
+	}
+	if oidcProvider != nil {
+		return oidcProvider.Endpoint().TokenURL
+	}
+	return ""
+}
+
 // ExchangeTokenInContext exchanges the OAuth token in the context for a token
 // that can access the target cluster. The optional stsConfig parameter allows
 // callers to reuse a TargetTokenExchangeConfig across calls to benefit from
@@ -148,15 +163,9 @@ func strategyBasedTokenExchange(
 
 	cfg := cachedConfig
 	if cfg == nil {
-		// Build token URL from OIDC provider
-		var tokenURL string
-		if oidcProvider != nil {
-			if endpoint := oidcProvider.Endpoint(); endpoint.TokenURL != "" {
-				tokenURL = endpoint.TokenURL
-			}
-		}
+		tokenURL := resolveStsTokenURL(baseConfig, oidcProvider)
 		if tokenURL == "" {
-			return ctx, fmt.Errorf("token exchange failed: no token URL available from OIDC provider")
+			return ctx, fmt.Errorf("token exchange failed: no token URL available (set sts_token_url or configure authorization_url for OIDC discovery)")
 		}
 
 		authStyle := baseConfig.GetStsAuthStyle()
@@ -174,6 +183,8 @@ func strategyBasedTokenExchange(
 			ClientCertFile:     baseConfig.GetStsClientCertFile(),
 			ClientKeyFile:      baseConfig.GetStsClientKeyFile(),
 			FederatedTokenFile: baseConfig.GetStsFederatedTokenFile(),
+			SubjectTokenType:   baseConfig.GetStsSubjectTokenType(),
+			RequestedTokenType: baseConfig.GetStsRequestedTokenType(),
 			CAFile:             baseConfig.GetCertificateAuthority(),
 		}
 		if err := cfg.Validate(); err != nil {

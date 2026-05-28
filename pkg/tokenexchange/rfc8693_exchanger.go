@@ -20,12 +20,27 @@ func (e *rfc8693Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExchang
 		return nil, fmt.Errorf("failed to acquire http client to talk to IdP for target: %w", err)
 	}
 
+	// RFC 8693 §2.1 mandates subject_token_type. Default to access_token — the
+	// canonical value for an inbound OAuth access token. Cross-realm flows can
+	// override to token-type:jwt.
+	subjectTokenType := cfg.SubjectTokenType
+	if subjectTokenType == "" {
+		subjectTokenType = TokenTypeAccessToken
+	}
+	// Per RFC 8693 §2.1 requested_token_type defaults to access_token when
+	// omitted. Some STS deployments require token-type:jwt to signal the AS
+	// should mint a fresh signed JWT rather than echo the subject token shape.
+	requestedTokenType := cfg.RequestedTokenType
+	if requestedTokenType == "" {
+		requestedTokenType = TokenTypeAccessToken
+	}
+
 	data := url.Values{}
 	data.Set(FormKeyGrantType, GrantTypeTokenExchange)
 	data.Set(FormKeySubjectToken, subjectToken)
-	data.Set(FormKeySubjectTokenType, cfg.SubjectTokenType)
+	data.Set(FormKeySubjectTokenType, subjectTokenType)
 	data.Set(FormKeyAudience, cfg.Audience)
-	data.Set(FormKeyRequestedTokenType, TokenTypeAccessToken)
+	data.Set(FormKeyRequestedTokenType, requestedTokenType)
 
 	if len(cfg.Scopes) > 0 {
 		data.Set(FormKeyScope, strings.Join(cfg.Scopes, " "))
