@@ -13,13 +13,14 @@ import (
 )
 
 func TestIsEnabled(t *testing.T) {
+	const tokenURL = "https://sts.example.com/token"
 	disabledCases := []SecurityTokenService{
 		{},
-		{Provider: nil},
-		{Provider: &oidc.Provider{}},
-		{Provider: &oidc.Provider{}, ClientId: "test-client-id", ClientSecret: "test-client-secret"},
+		{TokenURL: ""},
+		{TokenURL: tokenURL},
+		{TokenURL: tokenURL, ClientId: "test-client-id", ClientSecret: "test-client-secret"},
 		{ClientId: "test-client-id", ClientSecret: "test-client-secret", ExternalAccountAudience: "test-audience"},
-		{Provider: &oidc.Provider{}, ClientSecret: "test-client-secret", ExternalAccountAudience: "test-audience"},
+		{TokenURL: tokenURL, ClientSecret: "test-client-secret", ExternalAccountAudience: "test-audience"},
 	}
 	for _, sts := range disabledCases {
 		t.Run(fmt.Sprintf("SecurityTokenService{%+v}.IsEnabled() = false", sts), func(t *testing.T) {
@@ -29,9 +30,9 @@ func TestIsEnabled(t *testing.T) {
 		})
 	}
 	enabledCases := []SecurityTokenService{
-		{Provider: &oidc.Provider{}, ClientId: "test-client-id", ExternalAccountAudience: "test-audience"},
-		{Provider: &oidc.Provider{}, ClientId: "test-client-id", ExternalAccountAudience: "test-audience", ClientSecret: "test-client-secret"},
-		{Provider: &oidc.Provider{}, ClientId: "test-client-id", ExternalAccountAudience: "test-audience", ClientSecret: "test-client-secret", ExternalAccountScopes: []string{"test-scope"}},
+		{TokenURL: tokenURL, ClientId: "test-client-id", ExternalAccountAudience: "test-audience"},
+		{TokenURL: tokenURL, ClientId: "test-client-id", ExternalAccountAudience: "test-audience", ClientSecret: "test-client-secret"},
+		{TokenURL: tokenURL, ClientId: "test-client-id", ExternalAccountAudience: "test-audience", ClientSecret: "test-client-secret", ExternalAccountScopes: []string{"test-scope"}},
 	}
 	for _, sts := range enabledCases {
 		t.Run(fmt.Sprintf("SecurityTokenService{%+v}.IsEnabled() = true", sts), func(t *testing.T) {
@@ -74,7 +75,7 @@ func TestExternalAccountTokenExchange(t *testing.T) {
 		t.Fatalf("oidc.NewProvider() error = %v; want nil", err)
 	}
 	// With missing Token Source information
-	_, err = (&SecurityTokenService{Provider: provider}).ExternalAccountTokenExchange(t.Context(), &oauth2.Token{})
+	_, err = (&SecurityTokenService{Provider: provider, TokenURL: provider.Endpoint().TokenURL}).ExternalAccountTokenExchange(t.Context(), &oauth2.Token{})
 	t.Run("ExternalAccountTokenExchange with missing token source returns error", func(t *testing.T) {
 		if err == nil {
 			t.Fatalf("ExternalAccountTokenExchange() error = nil; want error")
@@ -86,6 +87,7 @@ func TestExternalAccountTokenExchange(t *testing.T) {
 	// With valid Token Source information
 	sts := SecurityTokenService{
 		Provider:                provider,
+		TokenURL:                provider.Endpoint().TokenURL,
 		ClientId:                "test-client-id",
 		ClientSecret:            "test-client-secret",
 		ExternalAccountAudience: "test-audience",

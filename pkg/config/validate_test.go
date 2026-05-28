@@ -453,6 +453,48 @@ func (s *ValidateSuite) TestStsFederatedTokenFile() {
 	})
 }
 
+func (s *ValidateSuite) TestStsTokenURL() {
+	s.Run("empty is accepted (resolution falls back to OIDC discovery)", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = ""
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("https URL is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "https://sts-gateway.example.com/oauth/token"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("http URL is accepted with warning", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "http://sts-gateway.example.com/oauth/token"
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("invalid scheme is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "ftp://sts-gateway.example.com/oauth/token"
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_token_url must be a valid URL")
+	})
+
+	s.Run("whitespace-only is trimmed to empty", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "   "
+		s.NoError(cfg.Validate())
+		s.Equal("", cfg.StsTokenURL, "whitespace should be trimmed from sts_token_url")
+	})
+
+	s.Run("padded value is trimmed but preserved", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "  https://sts-gateway.example.com/oauth/token  "
+		s.NoError(cfg.Validate())
+		s.Equal("https://sts-gateway.example.com/oauth/token", cfg.StsTokenURL)
+	})
+}
+
 func (s *ValidateSuite) TestStsTokenTypes() {
 	s.Run("empty values are accepted (rfc8693 exchanger applies default)", func() {
 		cfg := s.validConfig()

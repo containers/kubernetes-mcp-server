@@ -1152,6 +1152,27 @@ func (s *ConfigSuite) TestStsTokenTypesParsing() {
 	})
 }
 
+func (s *ConfigSuite) TestStsTokenURLParsing() {
+	s.Run("explicit value is parsed and exposed via getter", func() {
+		configPath := s.writeConfig(`
+			sts_token_url = "https://sts-gateway.example.com/oauth/token"
+		`)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Require().NotNil(config)
+		s.Equal("https://sts-gateway.example.com/oauth/token", config.StsTokenURL)
+		s.Equal("https://sts-gateway.example.com/oauth/token", config.GetStsTokenURL())
+	})
+
+	s.Run("defaults to empty when omitted", func() {
+		configPath := s.writeConfig(``)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Require().NotNil(config)
+		s.Empty(config.StsTokenURL, "sts_token_url should default to empty (resolution falls back to OIDC discovery)")
+	})
+}
+
 func (s *ConfigSuite) TestConfirmationRulesDefaults() {
 	configPath := s.writeConfig(``)
 	config, err := Read(configPath, "")

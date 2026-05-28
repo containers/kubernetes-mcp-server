@@ -112,6 +112,13 @@ type StaticConfig struct {
 	// deployments require "urn:ietf:params:oauth:token-type:jwt" to signal the AS should
 	// mint a fresh JWT rather than echo the subject token type.
 	StsRequestedTokenType string `toml:"sts_requested_token_type,omitempty"`
+	// StsTokenURL is the explicit token endpoint for RFC 8693 / built-in STS exchange.
+	// When set, it takes precedence over the token endpoint discovered from the OIDC
+	// provider at authorization_url. This decouples the trust boundary for user-token
+	// validation (authorization_url) from the trust boundary for delegated-token issuance
+	// (the STS gateway), which is required for cross-realm deployments and for using
+	// token exchange together with skip_jwt_verification=true.
+	StsTokenURL string `toml:"sts_token_url,omitempty"`
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
 	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
@@ -451,6 +458,10 @@ func (c *StaticConfig) GetStsRequestedTokenType() string {
 	return c.StsRequestedTokenType
 }
 
+func (c *StaticConfig) GetStsTokenURL() string {
+	return c.StsTokenURL
+}
+
 func (c *StaticConfig) GetCertificateAuthority() string {
 	return c.CertificateAuthority
 }
@@ -508,6 +519,7 @@ func (c *StaticConfig) Validate() error {
 	c.StsFederatedTokenFile = strings.TrimSpace(c.StsFederatedTokenFile)
 	c.StsSubjectTokenType = strings.TrimSpace(c.StsSubjectTokenType)
 	c.StsRequestedTokenType = strings.TrimSpace(c.StsRequestedTokenType)
+	c.StsTokenURL = strings.TrimSpace(c.StsTokenURL)
 	if output.FromString(c.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", c.ListOutput, strings.Join(output.Names, ", "))
 	}
@@ -532,6 +544,18 @@ func (c *StaticConfig) Validate() error {
 		}
 		if u.Scheme == "http" {
 			klog.Warningf("authorization-url is using http://, this is not recommended production use")
+		}
+	}
+	if c.StsTokenURL != "" {
+		u, err := url.Parse(c.StsTokenURL)
+		if err != nil {
+			return err
+		}
+		if u.Scheme != "https" && u.Scheme != "http" {
+			return fmt.Errorf("sts_token_url must be a valid URL")
+		}
+		if u.Scheme == "http" {
+			klog.Warningf("sts_token_url is using http://, this is not recommended for production use")
 		}
 	}
 	if err := c.validateSkipJWTVerification(); err != nil {
