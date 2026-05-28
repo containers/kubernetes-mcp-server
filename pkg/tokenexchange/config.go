@@ -41,6 +41,13 @@ type TargetTokenExchangeConfig struct {
 	// For same-realm: "urn:ietf:params:oauth:token-type:access_token"
 	// For cross-realm: "urn:ietf:params:oauth:token-type:jwt"
 	SubjectTokenType string `toml:"subject_token_type"`
+	// RequestedTokenType specifies the requested_token_type form parameter.
+	// RFC 8693 section 2.1 makes this OPTIONAL: when unspecified, the issued token
+	// type is at the discretion of the authorization server. Exchangers send
+	// access_token when this is empty, preserving pre-existing behaviour. Override to
+	// "urn:ietf:params:oauth:token-type:jwt" when the STS expects to mint a
+	// fresh JWT.
+	RequestedTokenType string `toml:"requested_token_type,omitempty"`
 	// SubjectIssuer is the IDP alias for cross-realm token exchange
 	// Only required when exchanging tokens across Keycloak realms
 	SubjectIssuer string `toml:"subject_issuer,omitempty"`
