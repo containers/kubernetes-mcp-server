@@ -202,7 +202,7 @@ func (l *RealLoader) getJSON(ctx context.Context, endpoint string, params url.Va
 	}
 
 	start := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to build request: %w", err)
 	}
