@@ -142,6 +142,24 @@ To set up Kiali infrastructure:
 make setup-kiali
 ```
 
+### Run only NetObserv tasks
+
+```bash
+mcpchecker check evals/openai-agent/eval.yaml --label-selector suite=netobserv
+```
+
+**Requirements:**
+
+- Mock NetObserv plugin (Kind) or real NetObserv operator (OpenShift)
+- MCP server with `TOOLSETS=core,netobserv` and `[toolset_configs.netobserv]` pointing at the plugin (see `dev/config/mcp-configs/netobserv.toml`)
+
+```bash
+make setup-netobserv
+make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
+```
+
+See [tasks/netobserv/README.md](tasks/netobserv/README.md) for details.
+
 ### Run all tasks
 
 If you omit the `--label-selector` flag, the eval configuration's `labelSelector` settings in the YAML file determine which tasks run. See the taskSets section in the eval.yaml files.

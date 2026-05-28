@@ -1,0 +1,18 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+  name: "List flows in default namespace"
+  category: "Flow inspection"
+  description: "Retrieves recent flow records for the default namespace."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "eval-flow-1"
+  prompt:
+    inline: "Show me recent NetObserv network flow records in the default namespace for the last 5 minutes (timeRange 300). Summarize what you find, including any flow names or counts mentioned in the response."
