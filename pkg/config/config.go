@@ -102,6 +102,16 @@ type StaticConfig struct {
 	// StsFederatedTokenFile is the path to a file containing a JWT from an external identity
 	// provider (e.g., SPIRE JWT-SVID). Used with sts_auth_style="federated".
 	StsFederatedTokenFile string `toml:"sts_federated_token_file,omitempty"`
+	// StsSubjectTokenType overrides the subject_token_type form parameter sent during
+	// RFC 8693 token exchange. RFC 8693 §2.1 mandates this field. Defaults to
+	// "urn:ietf:params:oauth:token-type:access_token" — the canonical value for an
+	// inbound OAuth access token. Override to "...token-type:jwt" for cross-realm flows.
+	StsSubjectTokenType string `toml:"sts_subject_token_type,omitempty"`
+	// StsRequestedTokenType overrides the requested_token_type form parameter sent during
+	// RFC 8693 token exchange. Per RFC 8693 §2.1 the default is access_token; some
+	// deployments require "urn:ietf:params:oauth:token-type:jwt" to signal the AS should
+	// mint a fresh JWT rather than echo the subject token type.
+	StsRequestedTokenType string `toml:"sts_requested_token_type,omitempty"`
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
 	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
@@ -433,6 +443,14 @@ func (c *StaticConfig) GetStsFederatedTokenFile() string {
 	return c.StsFederatedTokenFile
 }
 
+func (c *StaticConfig) GetStsSubjectTokenType() string {
+	return c.StsSubjectTokenType
+}
+
+func (c *StaticConfig) GetStsRequestedTokenType() string {
+	return c.StsRequestedTokenType
+}
+
 func (c *StaticConfig) GetCertificateAuthority() string {
 	return c.CertificateAuthority
 }
@@ -488,6 +506,8 @@ func (c *StaticConfig) Validate() error {
 	c.StsClientCertFile = strings.TrimSpace(c.StsClientCertFile)
 	c.StsClientKeyFile = strings.TrimSpace(c.StsClientKeyFile)
 	c.StsFederatedTokenFile = strings.TrimSpace(c.StsFederatedTokenFile)
+	c.StsSubjectTokenType = strings.TrimSpace(c.StsSubjectTokenType)
+	c.StsRequestedTokenType = strings.TrimSpace(c.StsRequestedTokenType)
 	if output.FromString(c.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", c.ListOutput, strings.Join(output.Names, ", "))
 	}
