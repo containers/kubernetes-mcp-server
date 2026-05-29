@@ -592,6 +592,45 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <details>
 
+<summary>kiali</summary>
+
+- **list-applications** - List applications in the mesh namespaces
+  - `namespace` (`string`) - Optional namespace to filter applications (default: all namespaces)
+
+- **list-istio-config** - List Istio configuration resources in the mesh namespaces
+  - `namespace` (`string`) - Optional namespace to filter Istio configuration (default: all namespaces)
+
+- **list-namespaces** - List all namespaces with their sidecar injection status and Istio labels
+
+- **list-services** - List services in the mesh namespaces
+  - `namespace` (`string`) - Optional namespace to filter services (default: all namespaces)
+
+- **list-workloads** - List workloads in the mesh namespaces
+  - `namespace` (`string`) - Optional namespace to filter workloads (default: all namespaces)
+
+- **mesh-health-check** - Perform a comprehensive health assessment of the Istio service mesh including control plane and data plane status
+  - `namespace` (`string`) - Optional namespace to focus the health check on (default: all namespaces)
+
+- **mesh-topology** - Show the mesh topology including control plane components and cluster connectivity
+
+- **traffic-topology** - Analyze the service mesh traffic topology showing service dependencies, traffic flow, and communication patterns
+  - `namespaces` (`string`) - Comma-separated list of namespaces to include in the graph (default: all mesh namespaces)
+
+- **service-troubleshoot** - Investigate service errors using logs, traces, and Istio configuration to identify root causes
+  - `namespace` (`string`) **(required)** - Namespace where the service is deployed
+  - `service` (`string`) **(required)** - Name of the service to troubleshoot
+
+- **trace-analysis** - Investigate distributed traces for a service to identify latency bottlenecks, error sources, and slow spans
+  - `namespace` (`string`) **(required)** - Namespace where the service is deployed
+  - `service` (`string`) **(required)** - Name of the service to investigate traces for
+
+- **istio-config-review** - Review and validate Istio configuration in a namespace, checking for misconfigurations and best practice violations
+  - `namespace` (`string`) **(required)** - Namespace to review Istio configuration for
+
+</details>
+
+<details>
+
 <summary>kubevirt</summary>
 
 - **vm-troubleshoot** - Generate a step-by-step troubleshooting guide for diagnosing KubeVirt VirtualMachine issues
