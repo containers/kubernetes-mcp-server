@@ -73,6 +73,8 @@ type StsConfigProvider interface {
 	GetStsClientCertFile() string
 	GetStsClientKeyFile() string
 	GetStsFederatedTokenFile() string
+	GetStsTokenURL() string
+	GetStsSubjectTokenType() string
 	GetCertificateAuthority() string
 }
 

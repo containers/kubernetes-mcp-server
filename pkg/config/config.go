@@ -102,6 +102,14 @@ type StaticConfig struct {
 	// StsFederatedTokenFile is the path to a file containing a JWT from an external identity
 	// provider (e.g., SPIRE JWT-SVID). Used with sts_auth_style="federated".
 	StsFederatedTokenFile string `toml:"sts_federated_token_file,omitempty"`
+	// StsTokenURL is the explicit token endpoint URL for STS token exchange.
+	// When set, this URL is used instead of the OIDC-discovered token endpoint,
+	// enabling token exchange with a dedicated STS gateway.
+	StsTokenURL string `toml:"sts_token_url,omitempty"`
+	// StsSubjectTokenType specifies the token type identifier for the subject token
+	// in the token exchange request (e.g., "urn:ietf:params:oauth:token-type:access_token"
+	// or "urn:ietf:params:oauth:token-type:jwt").
+	StsSubjectTokenType string `toml:"sts_subject_token_type,omitempty"`
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
 	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
@@ -431,6 +439,14 @@ func (c *StaticConfig) GetStsClientKeyFile() string {
 
 func (c *StaticConfig) GetStsFederatedTokenFile() string {
 	return c.StsFederatedTokenFile
+}
+
+func (c *StaticConfig) GetStsTokenURL() string {
+	return c.StsTokenURL
+}
+
+func (c *StaticConfig) GetStsSubjectTokenType() string {
+	return c.StsSubjectTokenType
 }
 
 func (c *StaticConfig) GetCertificateAuthority() string {
