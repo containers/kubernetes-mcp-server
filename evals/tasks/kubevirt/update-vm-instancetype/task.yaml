@@ -1,0 +1,94 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "update-vm-instancetype"
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  difficulty: hard
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: fedora-vm
+          namespace: vm-test
+        spec:
+          runStrategy: Halted
+          instancetype:
+            name: u1.small
+            kind: VirtualMachineClusterInstancetype
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                  - name: containerdisk
+                    disk:
+                      bus: virtio
+              volumes:
+              - name: containerdisk
+                containerDisk:
+                  image: quay.io/containerdisks/fedora:latest
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          NS="vm-test"
+          VM_NAME="fedora-vm"
+
+          # Verify VM still exists
+          kubectl get virtualmachine "$VM_NAME" -n "$NS" > /dev/null
+          echo "VirtualMachine $VM_NAME exists"
+
+          # Verify VM uses the expected u1.medium instancetype
+          INSTANCETYPE=$(kubectl get virtualmachine "$VM_NAME" -n "$NS" -o jsonpath='{.spec.instancetype.name}')
+          if [ "$INSTANCETYPE" != "u1.medium" ]; then
+            echo "ERROR: Expected instancetype 'u1.medium', found: '$INSTANCETYPE'"
+            exit 1
+          fi
+          echo "Instancetype is u1.medium"
+
+          # Verify no direct resource specification
+          GUEST_MEMORY=$(kubectl get virtualmachine "$VM_NAME" -n "$NS" -o jsonpath='{.spec.template.spec.domain.memory.guest}')
+          if [ -n "$GUEST_MEMORY" ]; then
+            echo "WARNING: VirtualMachine has direct memory specification: $GUEST_MEMORY"
+          else
+            echo "VirtualMachine uses instancetype for resources (no direct memory spec)"
+          fi
+
+          echo "All validations passed"
+          exit 0
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: fedora-vm
+          namespace: vm-test
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test
+        ignoreNotFound: true
+  prompt:
+    inline: |
+      A Fedora VirtualMachine named fedora-vm exists in the vm-test namespace using the u1.small instancetype. Double its memory by updating the instance type.
