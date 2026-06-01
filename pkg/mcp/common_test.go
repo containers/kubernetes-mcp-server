@@ -80,6 +80,10 @@ func TestMain(m *testing.M) {
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterpreferences", "VirtualMachineClusterPreference", "virtualmachineclusterpreference", false),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachinepreferences", "VirtualMachinePreference", "virtualmachinepreference", true),
+			// ArgoCD
+			CRD("argoproj.io", "v1alpha1", "applications", "Application", "application", true),
+			CRD("argoproj.io", "v1alpha1", "appprojects", "AppProject", "appproject", true),
+			CRD("argoproj.io", "v1beta1", "argocds", "ArgoCD", "argocd", true),
 		},
 	}
 	// Configure API server for faster CRD establishment and test performance
