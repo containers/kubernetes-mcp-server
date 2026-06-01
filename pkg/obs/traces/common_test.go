@@ -52,6 +52,40 @@ func newTempoStack(namespace, name string, tenants []string) *unstructured.Unstr
 	return obj
 }
 
+func newTempoMonolithic(namespace, name string, tenants []string) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "tempo.grafana.com",
+		Version: "v1alpha1",
+		Kind:    "TempoMonolithic",
+	})
+	obj.SetNamespace(namespace)
+	obj.SetName(name)
+
+	spec := map[string]any{}
+	if len(tenants) > 0 {
+		auth := make([]any, 0, len(tenants))
+		for _, t := range tenants {
+			auth = append(auth, map[string]any{"tenantName": t})
+		}
+		spec["multitenancy"] = map[string]any{
+			"enabled":        true,
+			"mode":           "openshift",
+			"authentication": auth,
+		}
+	}
+	obj.Object["spec"] = spec
+	obj.Object["status"] = map[string]any{
+		"conditions": []any{
+			map[string]any{
+				"type":   "Ready",
+				"status": string(metav1.ConditionTrue),
+			},
+		},
+	}
+	return obj
+}
+
 func newMockK8sClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
 	scheme := runtime.NewScheme()
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme,

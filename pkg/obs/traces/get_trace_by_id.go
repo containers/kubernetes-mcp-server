@@ -85,5 +85,8 @@ func (t *Toolset) GetTraceByIDHandler(params ToolParams) (GetTraceByIDOutput, er
 	if err := json.Unmarshal([]byte(trace), &output); err != nil {
 		return GetTraceByIDOutput{}, fmt.Errorf("failed to unmarshal trace: %w", err)
 	}
+	if output.Trace == nil {
+		return GetTraceByIDOutput{}, fmt.Errorf("trace %s not found", traceid)
+	}
 	return output, nil
 }
