@@ -24,9 +24,16 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 		Name:        res.Resource.Name,
 		Description: res.Resource.Description,
 		MIMEType:    res.Resource.MIMEType,
+		Annotations: buildAnnotations(
+			res.Resource.Audience,
+			res.Resource.Priority,
+			res.Resource.LastModified,
+		),
+		Title: res.Resource.Title,
 	}
+
 	handler := func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		content, err := res.Handler(ctx)
+		content, err := res.Handler(api.ResourceHandlerParams{Context: ctx})
 		if err != nil {
 			return nil, err
 		}
@@ -64,9 +71,15 @@ func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResou
 		Name:        rt.ResourceTemplate.Name,
 		Description: rt.ResourceTemplate.Description,
 		MIMEType:    rt.ResourceTemplate.MIMEType,
+		Annotations: buildAnnotations(
+			rt.ResourceTemplate.Audience,
+			rt.ResourceTemplate.Priority,
+			rt.ResourceTemplate.LastModified,
+		),
+		Title: rt.ResourceTemplate.Title,
 	}
 	handler := func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		content, err := rt.Handler(ctx, req.Params.URI)
+		content, err := rt.Handler(api.ResourceHandlerParams{Context: ctx, URI: req.Params.URI})
 		if err != nil {
 			return nil, err
 		}
@@ -104,4 +117,31 @@ func validateResourceContent(content *api.ResourceContent) error {
 		return errors.New("resource content must have only one of Text or Blob set, both are set")
 	}
 	return nil
+}
+
+// buildAnnotations converts internal annotation fields to Go SDK annotations
+// returns nil if all fields are empty
+func buildAnnotations(audience []string, priority *float64, lastModified *string) *mcp.Annotations {
+	if len(audience) == 0 && priority == nil && lastModified == nil {
+		return nil
+	}
+
+	annotations := &mcp.Annotations{}
+
+	if len(audience) > 0 {
+		annotations.Audience = make([]mcp.Role, len(audience))
+		for i, a := range audience {
+			annotations.Audience[i] = mcp.Role(a)
+		}
+	}
+
+	if priority != nil {
+		annotations.Priority = *priority
+	}
+
+	if lastModified != nil {
+		annotations.LastModified = *lastModified
+	}
+
+	return annotations
 }

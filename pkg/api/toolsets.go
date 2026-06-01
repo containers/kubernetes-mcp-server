@@ -111,10 +111,14 @@ func NewToolCallResultStructured(structured any, err error) *ToolCallResult {
 
 // Resource represents the metadata of an MCP resource.
 type Resource struct {
-	URI         string
-	Name        string
-	Description string
-	MIMEType    string
+	URI          string
+	Name         string
+	Description  string
+	MIMEType     string
+	Audience     []string // ["user", "assistant"]
+	Priority     *float64
+	LastModified *string
+	Title        string `json:"title,omitempty"`
 }
 
 // ResourceContent is the value returned by a resource handler.
@@ -131,7 +135,14 @@ type ResourceContent struct {
 // ResourceHandler is called when a client reads a resource.
 // Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
-type ResourceHandler func(ctx context.Context) (*ResourceContent, error)
+type ResourceHandler func(params ResourceHandlerParams) (*ResourceContent, error)
+
+type ResourceHandlerParams struct {
+	context.Context
+	BaseConfig
+	KubernetesClient
+	URI string
+}
 
 // ServerResource represents a resource that can be registered with the MCP server.
 type ServerResource struct {
@@ -141,17 +152,21 @@ type ServerResource struct {
 
 // ResourceTemplate represents the metadata of an MCP resource template.
 type ResourceTemplate struct {
-	URITemplate string
-	Name        string
-	Description string
-	MIMEType    string
+	URITemplate  string
+	Name         string
+	Description  string
+	MIMEType     string
+	Audience     []string // ["user", "assistant"]
+	Priority     *float64
+	LastModified *string
+	Title        string `json:"title,omitempty"`
 }
 
 // ResourceTemplateHandler is called when a client reads a resource matching a template.
 // Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
 // The uri parameter is the actual resource URI that matches the template.
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
-type ResourceTemplateHandler func(ctx context.Context, uri string) (*ResourceContent, error)
+type ResourceTemplateHandler func(params ResourceHandlerParams) (*ResourceContent, error)
 
 // ServerResourceTemplate represents a resource template that can be registered with the MCP server.
 type ServerResourceTemplate struct {
