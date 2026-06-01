@@ -6,6 +6,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
+	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
 	kialiTools "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
@@ -37,8 +38,19 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
-	// Kiali toolset does not provide prompts
-	return nil
+	return slices.Concat(
+		kialiPrompts.InitListApplications(),
+		kialiPrompts.InitListIstioConfig(),
+		kialiPrompts.InitListNamespaces(),
+		kialiPrompts.InitListServices(),
+		kialiPrompts.InitListWorkloads(),
+		kialiPrompts.InitMeshHealthCheck(),
+		kialiPrompts.InitMeshTopology(),
+		kialiPrompts.InitTrafficTopology(),
+		kialiPrompts.InitServiceTroubleshoot(),
+		kialiPrompts.InitTraceAnalysis(),
+		kialiPrompts.InitIstioConfigReview(),
+	)
 }
 
 func (t *Toolset) GetResources() []api.ServerResource {
