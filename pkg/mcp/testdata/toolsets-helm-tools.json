@@ -3,6 +3,39 @@
     "annotations": {
       "destructiveHint": false,
       "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Helm: History"
+    },
+    "description": "Get the revision history for a Helm release showing all deployed revisions",
+    "inputSchema": {
+      "properties": {
+        "max": {
+          "description": "Maximum number of revisions to return (Optional, default: 10)",
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "description": "Name of the Helm release to get history for",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Helm release (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "helm_history",
+    "title": "Helm: History"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
       "title": "Helm: Install"
     },
     "description": "Install (deploy) a Helm chart to create a release in the current or provided namespace",
