@@ -2,10 +2,14 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -67,6 +71,54 @@ func (s *TokenExchangeRoutingSuite) TestStsExchangeTokenInContextRouting() {
 
 		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
 		s.Equal("Bearer original-token", auth)
+	})
+}
+
+func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksHTTPTokenExchange() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"access_token": "exchanged-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer server.Close()
+
+	s.Run("strategyBasedTokenExchange rejects http token URL when require_tls is true", func() {
+		cfg := config.Default()
+		cfg.RequireTLS = true
+
+		cachedConfig := &tokenexchange.TargetTokenExchangeConfig{
+			TokenURL:     server.URL,
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+		}
+
+		_, err := strategyBasedTokenExchange(
+			context.Background(), cfg, nil, nil, "subject-token",
+			tokenexchange.StrategyRFC8693, cachedConfig,
+		)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "require_tls is enabled")
+	})
+
+	s.Run("strategyBasedTokenExchange allows http token URL when require_tls is false", func() {
+		cfg := config.Default()
+		cfg.RequireTLS = false
+
+		cachedConfig := &tokenexchange.TargetTokenExchangeConfig{
+			TokenURL:     server.URL,
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+		}
+
+		result, err := strategyBasedTokenExchange(
+			context.Background(), cfg, nil, nil, "subject-token",
+			tokenexchange.StrategyRFC8693, cachedConfig,
+		)
+		s.Require().NoError(err)
+		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
+		s.Equal("Bearer exchanged-token", auth)
 	})
 }
 

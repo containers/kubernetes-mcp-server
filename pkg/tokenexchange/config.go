@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -77,6 +79,45 @@ type TargetTokenExchangeConfig struct {
 	assertionMutex sync.Mutex `toml:"-"`
 	// clientMutex protects HTTP client creation from race conditions
 	clientMutex sync.Mutex `toml:"-"`
+
+	// requireTLS is nil or a function that returns true when TLS is required.
+	// When non-nil, HTTPClient() wraps the transport to reject non-HTTPS URLs at runtime.
+	requireTLS func() bool `toml:"-"`
+}
+
+// SetRequireTLS configures TLS enforcement for the HTTP client.
+// When enforcer is non-nil and returns true, HTTPClient() will reject
+// requests to non-HTTPS URLs. The enforcer is captured when the client
+// is built, so callers must set it before the first HTTPClient() call.
+func (c *TargetTokenExchangeConfig) SetRequireTLS(enforcer func() bool) {
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
+	c.requireTLS = enforcer
+}
+
+// tlsEnforcingTransport wraps an http.RoundTripper and rejects non-HTTPS requests
+// when RequireTLS returns true. Inlined here to avoid an import cycle with pkg/config.
+type tlsEnforcingTransport struct {
+	Base       http.RoundTripper
+	RequireTLS func() bool
+}
+
+func (t *tlsEnforcingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.RequireTLS != nil && t.RequireTLS() && !isSecureHTTPScheme(req.URL.Scheme) {
+		klog.FromContext(req.Context()).V(1).Info("require_tls: blocked request to host", "host", req.URL.Host)
+		return nil, fmt.Errorf("require_tls is enabled but request to %s uses %q scheme (secure scheme required)",
+			req.URL.Host, req.URL.Scheme)
+	}
+	return t.Base.RoundTrip(req)
+}
+
+func isSecureHTTPScheme(scheme string) bool {
+	switch scheme {
+	case "https", "wss":
+		return true
+	default:
+		return false
+	}
 }
 
 // Validate checks that the configuration values are valid
@@ -117,7 +158,7 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 		return c.client, nil
 	}
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
 
 	// Always set MinVersion for security, regardless of CAFile
 	tlsConfig := &tls.Config{
@@ -138,7 +179,12 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 		tlsConfig.RootCAs = caCertPool
 	}
 
-	transport.TLSClientConfig = tlsConfig
+	baseTransport.TLSClientConfig = tlsConfig
+
+	var transport http.RoundTripper = baseTransport
+	if c.requireTLS != nil {
+		transport = &tlsEnforcingTransport{Base: baseTransport, RequireTLS: c.requireTLS}
+	}
 
 	if c.client != nil {
 		c.client.CloseIdleConnections()

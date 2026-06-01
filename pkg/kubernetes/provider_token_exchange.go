@@ -117,6 +117,7 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 		FederatedTokenFile: baseConfig.GetStsFederatedTokenFile(),
 		CAFile:             baseConfig.GetCertificateAuthority(),
 	}
+	cfg.SetRequireTLS(baseConfig.IsRequireTLS)
 	if err := cfg.Validate(); err != nil {
 		logger.Error(
 			err,
@@ -147,6 +148,7 @@ type stsConfigCacheKey struct {
 	ClientKeyFile      string
 	FederatedTokenFile string
 	CAFile             string
+	RequireTLS         bool
 }
 
 func newStsConfigCacheKey(tokenURL string, cfg api.BaseConfig) stsConfigCacheKey {
@@ -162,6 +164,7 @@ func newStsConfigCacheKey(tokenURL string, cfg api.BaseConfig) stsConfigCacheKey
 		ClientKeyFile:      cfg.GetStsClientKeyFile(),
 		FederatedTokenFile: cfg.GetStsFederatedTokenFile(),
 		CAFile:             cfg.GetCertificateAuthority(),
+		RequireTLS:         cfg.IsRequireTLS(),
 	}
 }
 
