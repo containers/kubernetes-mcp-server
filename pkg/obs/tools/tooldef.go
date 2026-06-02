@@ -2,6 +2,7 @@ package tools
 
 import (
 	"encoding/json"
+	"maps"
 	"reflect"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -169,9 +170,8 @@ func (d ToolDef[T]) ToServerTool(handler func(api.ToolHandlerParams) (*api.ToolC
 	}
 
 	if d.AdditionalFields != nil {
-		tool.Meta = map[string]any{
-			"AdditionalFields": d.AdditionalFields,
-		}
+		tool.Meta = make(map[string]any)
+		maps.Copy(tool.Meta, d.AdditionalFields)
 	}
 
 	return api.ServerTool{
