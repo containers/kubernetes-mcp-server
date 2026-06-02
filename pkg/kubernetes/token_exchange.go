@@ -42,6 +42,8 @@ func ExchangeTokenInContext(
 		return stsExchangeTokenInContext(ctx, baseConfig, oidcProvider, httpClient, subjectToken, stsConfig)
 	}
 
+	exCfg.SetRequireTLS(baseConfig.IsRequireTLS)
+
 	exchanger, ok := tokenexchange.GetTokenExchanger(tep.GetTokenExchangeStrategy())
 	if !ok {
 		klog.Warningf("token exchange strategy %q not found in registry", tep.GetTokenExchangeStrategy())
@@ -179,6 +181,7 @@ func strategyBasedTokenExchange(
 		if err := cfg.Validate(); err != nil {
 			return ctx, fmt.Errorf("token exchange config validation: %w", err)
 		}
+		cfg.SetRequireTLS(baseConfig.IsRequireTLS)
 	}
 
 	if httpClient != nil {
