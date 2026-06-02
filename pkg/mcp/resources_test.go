@@ -1029,6 +1029,190 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesGetRedacted() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		[[redacted_resources]]
+		version = "v1"
+		kind = "Secret"
+		fields = ["data.*", "stringData.*"]
+		mode = "opaque"
+	`), s.Cfg), "Expected to parse redacted resources config")
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	_, _ = kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "redacted-secret"},
+		Data: map[string][]byte{
+			"DATABASE_PASSWORD": []byte("supersecret"),
+			"API_KEY":           []byte("myapikey"),
+		},
+	}, metav1.CreateOptions{})
+	s.Run("resources_get redacts secret data fields", func() {
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"namespace":  "default",
+			"name":       "redacted-secret",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		var decodedSecret unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedSecret)
+		s.Require().NoError(err, "invalid tool result content")
+		s.Run("data values are redacted", func() {
+			data, found, _ := unstructured.NestedMap(decodedSecret.Object, "data")
+			s.Truef(found, "data field should be present")
+			s.Equal("[REDACTED]", data["DATABASE_PASSWORD"], "DATABASE_PASSWORD should be redacted")
+			s.Equal("[REDACTED]", data["API_KEY"], "API_KEY should be redacted")
+		})
+		s.Run("metadata is preserved", func() {
+			s.Equal("redacted-secret", decodedSecret.GetName())
+			s.Equal("default", decodedSecret.GetNamespace())
+			s.Equal("Secret", decodedSecret.GetKind())
+		})
+	})
+	s.Run("resources_get (not redacted) returns unmodified resource", func() {
+		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		_, _ = kc.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "not-redacted-configmap"},
+			Data:       map[string]string{"visible-key": "visible-value"},
+		}, metav1.CreateOptions{})
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"namespace":  "default",
+			"name":       "not-redacted-configmap",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		var decodedCM unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedCM)
+		s.Require().NoError(err, "invalid tool result content")
+		data, found, _ := unstructured.NestedMap(decodedCM.Object, "data")
+		s.Truef(found, "data field should be present")
+		s.Equal("visible-value", data["visible-key"], "ConfigMap data should not be redacted")
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesGetRedactedHashed() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		[[redacted_resources]]
+		version = "v1"
+		kind = "Secret"
+		fields = ["data.*"]
+		mode = "hashed"
+	`), s.Cfg), "Expected to parse redacted resources config")
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	_, _ = kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "hashed-redacted-secret"},
+		Data: map[string][]byte{
+			"PASSWORD": []byte("samevalue"),
+			"TOKEN":    []byte("samevalue"),
+		},
+	}, metav1.CreateOptions{})
+	s.Run("resources_get produces hashed redaction markers", func() {
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"namespace":  "default",
+			"name":       "hashed-redacted-secret",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		var decodedSecret unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedSecret)
+		s.Require().NoError(err, "invalid tool result content")
+		data, found, _ := unstructured.NestedMap(decodedSecret.Object, "data")
+		s.Truef(found, "data field should be present")
+		passwordVal, _ := data["PASSWORD"].(string)
+		tokenVal, _ := data["TOKEN"].(string)
+		s.Run("values have hashed redaction prefix", func() {
+			s.Truef(strings.HasPrefix(passwordVal, "[REDACTED:gen_"), "PASSWORD should have hashed prefix, got %s", passwordVal)
+			s.Truef(strings.HasPrefix(tokenVal, "[REDACTED:gen_"), "TOKEN should have hashed prefix, got %s", tokenVal)
+		})
+		s.Run("same input values produce same hash", func() {
+			s.Equalf(passwordVal, tokenVal, "same input values should produce same hash")
+		})
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesListRedacted() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		[[redacted_resources]]
+		version = "v1"
+		kind = "Secret"
+		fields = ["data.*"]
+		mode = "opaque"
+	`), s.Cfg), "Expected to parse redacted resources config")
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	_, _ = kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "list-redacted-secret",
+			Labels: map[string]string{"test": "redaction"},
+		},
+		Data: map[string][]byte{
+			"SECRET_KEY": []byte("topsecret"),
+		},
+	}, metav1.CreateOptions{})
+	s.Run("resources_list redacts secret data in listed items", func() {
+		result, err := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion":    "v1",
+			"kind":          "Secret",
+			"namespace":     "default",
+			"labelSelector": "test=redaction",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		var decodedSecrets []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedSecrets)
+		s.Require().NoError(err, "invalid tool result content")
+		s.Require().Lenf(decodedSecrets, 1, "expected 1 secret, got %d", len(decodedSecrets))
+		s.Run("data values are redacted", func() {
+			data, found, _ := unstructured.NestedMap(decodedSecrets[0].Object, "data")
+			s.Truef(found, "data field should be present")
+			s.Equal("[REDACTED]", data["SECRET_KEY"], "SECRET_KEY should be redacted")
+		})
+		s.Run("metadata is preserved", func() {
+			s.Equal("list-redacted-secret", decodedSecrets[0].GetName())
+			s.Equal("default", decodedSecrets[0].GetNamespace())
+		})
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesCreateOrUpdateRedacted() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		[[redacted_resources]]
+		version = "v1"
+		kind = "Secret"
+		fields = ["data.*"]
+		mode = "opaque"
+	`), s.Cfg), "Expected to parse redacted resources config")
+	s.InitMcpClient()
+	// Secret created with stringData; Kubernetes converts stringData to base64-encoded data server-side,
+	// so the returned object contains data.* fields that match the redaction rule.
+	s.Run("resources_create_or_update returns redacted secret", func() {
+		secretYaml := "apiVersion: v1\nkind: Secret\nmetadata:\n  name: created-redacted-secret\n  namespace: default\nstringData:\n  MY_SECRET: sensitive-value\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": secretYaml})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		var decodedResources []unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedResources)
+		s.Require().NoError(err, "invalid tool result content")
+		s.Require().Lenf(decodedResources, 1, "expected 1 resource, got %d", len(decodedResources))
+		s.Run("returned data is redacted", func() {
+			data, found, _ := unstructured.NestedMap(decodedResources[0].Object, "data")
+			s.Truef(found, "data field should be present")
+			for key, val := range data {
+				s.Equalf("[REDACTED]", val, "data key %s should be redacted, got %v", key, val)
+			}
+		})
+		s.Run("metadata is preserved", func() {
+			s.Equal("created-redacted-secret", decodedResources[0].GetName())
+		})
+	})
+}
+
 func TestResources(t *testing.T) {
 	suite.Run(t, new(ResourcesSuite))
 }

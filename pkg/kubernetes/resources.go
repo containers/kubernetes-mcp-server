@@ -39,7 +39,12 @@ func (c *Core) ResourcesList(ctx context.Context, gvk *schema.GroupVersionKind, 
 	if options.AsTable {
 		return c.resourcesListAsTable(ctx, gvk, gvr, namespace, options)
 	}
-	return c.DynamicClient().Resource(*gvr).Namespace(namespace).List(ctx, options.ListOptions)
+	ret, err := c.DynamicClient().Resource(*gvr).Namespace(namespace).List(ctx, options.ListOptions)
+	if err != nil {
+		return nil, err
+	}
+	c.RedactResourceList(ret)
+	return ret, nil
 }
 
 func (c *Core) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string) (*unstructured.Unstructured, error) {
@@ -52,7 +57,12 @@ func (c *Core) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, n
 	if namespaced, nsErr := c.isNamespaced(gvk); nsErr == nil && namespaced {
 		namespace = c.NamespaceOrDefault(namespace)
 	}
-	return c.DynamicClient().Resource(*gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	ret, err := c.DynamicClient().Resource(*gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	c.RedactResource(ret)
+	return ret, nil
 }
 
 func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]*unstructured.Unstructured, error) {
@@ -133,6 +143,11 @@ func (c *Core) ResourcesScale(
 // resourcesListAsTable retrieves a list of resources in a table format.
 // It's almost identical to the dynamic.DynamicClient implementation, but it uses a specific Accept header to request the table format.
 // dynamic.DynamicClient does not provide a way to set the HTTP header (TODO: create an issue to request this feature)
+//
+// Note: field-level redaction is not applied to table-format responses because the
+// server returns computed column values (e.g. key count for Secrets), not the raw
+// resource fields that redaction rules target. If custom resources expose sensitive
+// data in their table columns, use the non-table list format instead.
 func (c *Core) resourcesListAsTable(ctx context.Context, gvk *schema.GroupVersionKind, gvr *schema.GroupVersionResource, namespace string, options api.ListOptions) (runtime.Unstructured, error) {
 	var url []string
 	if len(gvr.Group) == 0 {
@@ -197,6 +212,7 @@ func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstruc
 		if rErr != nil {
 			return nil, rErr
 		}
+		c.RedactResource(resources[i])
 		// Clear the cache to ensure the next operation is performed on the latest exposed APIs (will change after the CRD creation)
 		if gvk.Kind == "CustomResourceDefinition" {
 			c.RESTMapper().Reset()
