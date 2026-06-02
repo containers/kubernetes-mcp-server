@@ -8,7 +8,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	serverconfig "github.com/containers/kubernetes-mcp-server/pkg/config"
 
-	toolsetconfig "github.com/rhobs/obs-mcp/pkg/toolset/config"
+	"github.com/rhobs/obs-mcp/pkg/auth"
 )
 
 func init() {
@@ -18,7 +18,7 @@ func init() {
 type Config struct {
 	// AuthMode controls where the bearer token is obtained for authenticating against Tempo endpoints.
 	// Valid values: "header" (default), "kubeconfig".
-	AuthMode toolsetconfig.AuthMode `toml:"auth_mode,omitempty"`
+	AuthMode auth.AuthMode `toml:"auth_mode,omitempty"`
 
 	// Insecure controls whether to skip TLS certificate verification.
 	Insecure bool `toml:"insecure,omitempty"`
@@ -34,15 +34,15 @@ var DefaultConfig = &Config{
 }
 
 func (c *Config) Validate() error {
-	if c.AuthMode != "" && c.AuthMode != toolsetconfig.AuthModeHeader && c.AuthMode != toolsetconfig.AuthModeKubeConfig {
-		return fmt.Errorf("invalid auth_mode: %q (valid options: %q, %q)", c.AuthMode, toolsetconfig.AuthModeHeader, toolsetconfig.AuthModeKubeConfig)
+	if c.AuthMode != "" && c.AuthMode != auth.AuthModeHeader && c.AuthMode != auth.AuthModeKubeConfig {
+		return fmt.Errorf("invalid auth_mode: %q (valid options: %q, %q)", c.AuthMode, auth.AuthModeHeader, auth.AuthModeKubeConfig)
 	}
 	return nil
 }
 
-func (c *Config) GetAuthMode() toolsetconfig.AuthMode {
+func (c *Config) GetAuthMode() auth.AuthMode {
 	if c.AuthMode == "" {
-		return toolsetconfig.AuthModeHeader
+		return auth.AuthModeHeader
 	}
 	return c.AuthMode
 }
