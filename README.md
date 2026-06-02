@@ -266,6 +266,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 | Toolset  | Description                                                                                                                                                                     | Default |
 |----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| argocd   | ArgoCD tools for listing and inspecting Applications, AppProjects, and ArgoCD instances.                                                                                        |         |
 | config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                         | ✓       |
 | core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                             | ✓       |
 | helm     | Tools for managing Helm charts and releases                                                                                                                                     |         |
@@ -281,6 +282,36 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 In case multi-cluster support is enabled (default) and you have access to multiple clusters, all applicable tools will include an additional `context` argument to specify the Kubernetes context (cluster) to use for that operation.
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-START -->
+
+<details>
+
+<summary>argocd</summary>
+
+- **argocd_application_list** - List ArgoCD Applications in the current cluster
+  - `labelSelector` (`string`) - Optional Kubernetes label selector to filter Applications (e.g. 'app=myapp')
+  - `namespace` (`string`) - Namespace to list Applications from. If not provided, lists from all namespaces
+
+- **argocd_application_get** - Get an ArgoCD Application by name
+  - `name` (`string`) **(required)** - Name of the Application
+  - `namespace` (`string`) - Namespace of the Application
+
+- **argocd_appproject_list** - List ArgoCD AppProjects in the current cluster
+  - `labelSelector` (`string`) - Optional Kubernetes label selector to filter AppProjects (e.g. 'app=myapp')
+  - `namespace` (`string`) - Namespace to list AppProjects from. If not provided, lists from all namespaces
+
+- **argocd_appproject_get** - Get an ArgoCD AppProject by name
+  - `name` (`string`) **(required)** - Name of the AppProject
+  - `namespace` (`string`) - Namespace of the AppProject
+
+- **argocd_instance_list** - List ArgoCD instances (ArgoCD operator CRs) in the current cluster
+  - `labelSelector` (`string`) - Optional Kubernetes label selector to filter ArgoCD instances (e.g. 'app=myapp')
+  - `namespace` (`string`) - Namespace to list ArgoCD instances from. If not provided, lists from all namespaces
+
+- **argocd_instance_get** - Get an ArgoCD instance (ArgoCD operator CR) by name
+  - `name` (`string`) **(required)** - Name of the ArgoCD instance
+  - `namespace` (`string`) - Namespace of the ArgoCD instance
+
+</details>
 
 <details>
 

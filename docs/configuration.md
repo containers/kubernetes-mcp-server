@@ -297,6 +297,7 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 
 | Toolset  | Description                                                                                                                                                                     | Default |
 |----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| argocd   | ArgoCD tools for listing and inspecting Applications, AppProjects, and ArgoCD instances.                                                                                        |         |
 | config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                         | ✓       |
 | core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                             | ✓       |
 | helm     | Tools for managing Helm charts and releases                                                                                                                                     |         |

@@ -1,0 +1,161 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "ArgoCD: Get Application"
+    },
+    "description": "Get an ArgoCD Application by name",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Application",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Application",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "argocd_application_get",
+    "title": "ArgoCD: Get Application"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "ArgoCD: List Applications"
+    },
+    "description": "List ArgoCD Applications in the current cluster",
+    "inputSchema": {
+      "properties": {
+        "labelSelector": {
+          "description": "Optional Kubernetes label selector to filter Applications (e.g. 'app=myapp')",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to list Applications from. If not provided, lists from all namespaces",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "argocd_application_list",
+    "title": "ArgoCD: List Applications"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "ArgoCD: Get AppProject"
+    },
+    "description": "Get an ArgoCD AppProject by name",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the AppProject",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the AppProject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "argocd_appproject_get",
+    "title": "ArgoCD: Get AppProject"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "ArgoCD: List AppProjects"
+    },
+    "description": "List ArgoCD AppProjects in the current cluster",
+    "inputSchema": {
+      "properties": {
+        "labelSelector": {
+          "description": "Optional Kubernetes label selector to filter AppProjects (e.g. 'app=myapp')",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to list AppProjects from. If not provided, lists from all namespaces",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "argocd_appproject_list",
+    "title": "ArgoCD: List AppProjects"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "ArgoCD: Get Instance"
+    },
+    "description": "Get an ArgoCD instance (ArgoCD operator CR) by name",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the ArgoCD instance",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the ArgoCD instance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "argocd_instance_get",
+    "title": "ArgoCD: Get Instance"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "ArgoCD: List Instances"
+    },
+    "description": "List ArgoCD instances (ArgoCD operator CRs) in the current cluster",
+    "inputSchema": {
+      "properties": {
+        "labelSelector": {
+          "description": "Optional Kubernetes label selector to filter ArgoCD instances (e.g. 'app=myapp')",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to list ArgoCD instances from. If not provided, lists from all namespaces",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "argocd_instance_list",
+    "title": "ArgoCD: List Instances"
+  }
+]

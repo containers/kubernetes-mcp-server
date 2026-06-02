@@ -45,4 +45,3 @@ func listResources(gvr schema.GroupVersionResource, resourceName string) api.Too
 		return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
 	}
 }
-
