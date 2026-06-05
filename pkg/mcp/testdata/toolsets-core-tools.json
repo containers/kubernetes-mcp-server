@@ -396,11 +396,11 @@
       "openWorldHint": true,
       "title": "Resources: Create or Update"
     },
-    "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
     "inputSchema": {
       "properties": {
         "resource": {
-          "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
+          "description": "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec.",
           "type": "string"
         }
       },
