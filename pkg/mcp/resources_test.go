@@ -564,6 +564,83 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 			s.Falsef(hasStatus, "status should not be present on the persisted resource")
 		})
 	})
+
+	s.Run("resources_create_or_update with non-string fieldManager returns error", func() {
+		configMapYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-field-manager-type\n  namespace: default\n"
+		toolResult, _ := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":      configMapYaml,
+			"fieldManager": 123,
+		})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "fieldManager is not a string",
+			"error message should indicate fieldManager type error")
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesCreateOrUpdateSSAFieldAbandonment() {
+	s.InitMcpClient()
+	cmResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+	dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+
+	s.Run("same field manager abandons fields from earlier call", func() {
+		createCmYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-ssa-abandonment\n  namespace: default\ndata:\n  key1: value1\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":      createCmYaml,
+			"fieldManager": "same-manager",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed, got: %v", result.Content)
+
+		updateCmYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-ssa-abandonment\n  namespace: default\ndata:\n  key2: value2\n"
+		result, err = s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":      updateCmYaml,
+			"fieldManager": "same-manager",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed, got: %v", result.Content)
+
+		// Same manager omits key1 -> SSA abandons it
+		cm, err := dynamicClient.Resource(cmResource).Namespace("default").Get(
+			s.T().Context(), "cm-ssa-abandonment", metav1.GetOptions{},
+		)
+		s.Require().NoError(err)
+
+		key1, _, _ := unstructured.NestedString(cm.Object, "data", "key1")
+		s.Empty(key1, "key1 should be abandoned when same field manager omits it")
+
+		key2, _, _ := unstructured.NestedString(cm.Object, "data", "key2")
+		s.Equal("value2", key2, "key2 should exist from the second call")
+	})
+
+	s.Run("distinct field managers preserve fields across calls", func() {
+		createCmYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-ssa-distinct\n  namespace: default\ndata:\n  key1: value1\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":      createCmYaml,
+			"fieldManager": "create-ssa-test",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed, got: %v", result.Content)
+
+		updateCmYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-ssa-distinct\n  namespace: default\ndata:\n  key2: value2\n"
+		result, err = s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource":      updateCmYaml,
+			"fieldManager": "update-ssa-test",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(result.IsError, "call tool failed, got: %v", result.Content)
+
+		// Different manager doesn't touch key1 -> preserved
+		cm, err := dynamicClient.Resource(cmResource).Namespace("default").Get(
+			s.T().Context(), "cm-ssa-distinct", metav1.GetOptions{},
+		)
+		s.Require().NoError(err)
+
+		key1, _, _ := unstructured.NestedString(cm.Object, "data", "key1")
+		s.Equal("value1", key1, "key1 should survive when a different field manager handles the second call")
+
+		key2, _, _ := unstructured.NestedString(cm.Object, "data", "key2")
+		s.Equal("value2", key2, "key2 should exist from the second call")
+	})
 }
 
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateForcesSSA() {
