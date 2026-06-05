@@ -7,7 +7,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
-	"k8s.io/utils/ptr"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -162,10 +161,10 @@ func (d ToolDef[T]) ToServerTool(handler func(api.ToolHandlerParams) (*api.ToolC
 		InputSchema: inputSchema,
 		Annotations: api.ToolAnnotations{
 			Title:           d.Title,
-			ReadOnlyHint:    ptr.To(d.ReadOnly),
-			DestructiveHint: ptr.To(d.Destructive),
-			IdempotentHint:  ptr.To(d.Idempotent),
-			OpenWorldHint:   ptr.To(d.OpenWorld),
+			ReadOnlyHint:    new(d.ReadOnly),
+			DestructiveHint: new(d.Destructive),
+			IdempotentHint:  new(d.Idempotent),
+			OpenWorldHint:   new(d.OpenWorld),
 		},
 	}
 
@@ -178,6 +177,6 @@ func (d ToolDef[T]) ToServerTool(handler func(api.ToolHandlerParams) (*api.ToolC
 		Tool:    tool,
 		Handler: handler,
 		// TODO(saswatamcode): Modify this selectively on ACM setups.
-		ClusterAware: ptr.To(false),
+		ClusterAware: new(false),
 	}
 }
