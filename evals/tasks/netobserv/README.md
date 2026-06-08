@@ -1,19 +1,37 @@
 # NetObserv evaluation tasks
 
-These tasks exercise the **netobserv** MCP toolset (`netobserv_list_*`, `netobserv_get_flow_metrics`, `netobserv_export_flows`, etc.) against the NetObserv console plugin HTTP API.
+These tasks exercise the **netobserv** MCP toolset (`netobserv_list_*`, `netobserv_get_flow_metrics`, `netobserv_export_flows`, etc.) against the NetObserv console plugin HTTP API (Loki flow records, Prometheus metrics, CSV export).
+
+Each task is **self-contained**: `spec.setup` runs `shared/setup-mock.sh`, which deploys the in-cluster mock plugin and ensures `http://127.0.0.1:9001` is reachable before the agent runs.
 
 ## Prerequisites
 
-### Kind / CI (mock plugin)
+### Kind / local (mock plugin — recommended)
 
-The weekly mcpchecker workflow and local Kind runs use a **mock plugin** in `shared/mock-plugin.yaml` (same API paths as the real console plugin). No NetObserv operator is required.
+No NetObserv operator is required. The mock in `shared/mock-plugin.yaml` implements the same paths as the real console plugin (`/api/loki/flow/records`, `/api/loki/export`, etc.).
+
+**One-command reproducer** (deploy mock, start MCP server, run evals, clean up):
+
+```bash
+make kind-create-cluster   # skip if you already have kubectl context
+export MODEL_BASE_URL='https://your-api-endpoint/v1'
+export MODEL_KEY='your-api-key'
+# Optional: separate judge endpoint (defaults to MODEL_* when unset)
+export JUDGE_BASE_URL='https://your-judge-endpoint/v1'
+export JUDGE_API_KEY='your-judge-key'
+export JUDGE_MODEL_NAME='gpt-5'
+
+make run-netobserv-evals
+```
+
+**Manual steps** (same flow, useful for debugging):
 
 ```bash
 make kind-create-cluster
 make setup-netobserv          # deploy mock + port-forward :9001
 make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
 make run-evals EVAL_LABEL_SELECTOR=suite=netobserv
-make stop-server stop-netobserv
+make stop-server stop-netobserv teardown-netobserv
 ```
 
 Ensure `dev/config/mcp-configs/netobserv.toml` points at the port-forward:
@@ -23,6 +41,10 @@ Ensure `dev/config/mcp-configs/netobserv.toml` points at the port-forward:
 url = "http://127.0.0.1:9001"
 insecure = true
 ```
+
+### Pass rate target
+
+OpenShift MCP integration expects **≥ 80%** task and assertion pass rate. The CI workflow uses `task-pass-threshold: 0.8` and `assertion-pass-threshold: 0.8`. NetObserv evals are **not** in the default weekly `core` suite; run them locally or trigger `/run-mcpchecker netobserv` on a PR.
 
 ### OpenShift (real NetObserv)
 

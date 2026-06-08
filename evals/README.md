@@ -144,21 +144,44 @@ make setup-kiali
 
 ### Run only NetObserv tasks
 
+NetObserv tasks query flow logs (Loki), metrics, and CSV export via the console plugin HTTP API. They are **not** part of the default weekly CI run (`suite=core`); maintainers trigger them with `/run-mcpchecker netobserv` or run locally before merging.
+
+**Pass rate target:** ≥ 80% tasks and assertions (same threshold as other toolset integrations).
+
+**One-command local run:**
+
+```bash
+make kind-create-cluster   # if needed
+export MODEL_BASE_URL='https://your-api-endpoint/v1'
+export MODEL_KEY='your-api-key'
+make run-netobserv-evals
+```
+
+This target deploys the in-cluster mock plugin, port-forwards it to `:9001`, starts the MCP server with `dev/config/mcp-configs/netobserv.toml`, runs mcpchecker, then stops server and port-forward.
+
+**Manual run:**
+
 ```bash
 mcpchecker check evals/openai-agent/eval.yaml --label-selector suite=netobserv
 ```
 
 **Requirements:**
 
-- Mock NetObserv plugin (Kind) or real NetObserv operator (OpenShift)
+- Kubernetes cluster (`kubectl` context)
+- LLM credentials: `MODEL_BASE_URL`, `MODEL_KEY` (and optional `JUDGE_*` for the builtin judge)
 - MCP server with `TOOLSETS=core,netobserv` and `[toolset_configs.netobserv]` pointing at the plugin (see `dev/config/mcp-configs/netobserv.toml`)
+- Mock plugin on Kind/local, or real NetObserv operator on OpenShift
+
+Each task runs `evals/tasks/netobserv/shared/setup-mock.sh` automatically so evals are reproducible without extra steps.
 
 ```bash
 make setup-netobserv
 make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
+make run-evals EVAL_LABEL_SELECTOR=suite=netobserv
+make stop-server stop-netobserv
 ```
 
-See [tasks/netobserv/README.md](tasks/netobserv/README.md) for details.
+See [tasks/netobserv/README.md](tasks/netobserv/README.md) for OpenShift setup and task catalog.
 
 ### Run all tasks
 
