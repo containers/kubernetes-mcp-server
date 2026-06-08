@@ -163,6 +163,7 @@ func TestWithClusterParameter(t *testing.T) {
 			assert.NotNil(t, clusterProperty)
 			assert.Equal(t, "string", clusterProperty.Type)
 			assert.Contains(t, clusterProperty.Description, tt.defaultCluster)
+			assert.Contains(t, result.Tool.InputSchema.Required, tt.targetParameterName, "cluster parameter should be required in multi-target mode")
 		})
 	}
 }

@@ -46,6 +46,10 @@ func WithTargetParameter(defaultCluster, targetParameterName string, isMultiTarg
 				defaultCluster,
 				targetParameterName,
 			)
+			if tool.Tool.InputSchema.Required == nil {
+				tool.Tool.InputSchema.Required = []string{}
+			}
+			tool.Tool.InputSchema.Required = append(tool.Tool.InputSchema.Required, targetParameterName)
 		}
 
 		return tool
