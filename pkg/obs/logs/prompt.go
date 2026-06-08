@@ -13,8 +13,6 @@ Avoid broad queries without label matchers because they are expensive and noisy.
 `
 
 const (
-	lokiListInstancesPrompt = `List LokiStack instances available from the Loki Operator in the Kubernetes cluster.
-Use this first to discover lokiNamespace and lokiName values for Loki query tools.`
 	lokiLabelNamesPrompt  = `List available Loki label names for a time range. Use this before writing LogQL queries.`
 	lokiLabelValuesPrompt = `List possible values for a Loki label key. Use this to build precise label matchers in LogQL.`
 	lokiQueryRangePrompt  = `Execute a Loki LogQL range query and return matching log streams and lines.

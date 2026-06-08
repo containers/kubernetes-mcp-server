@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -76,6 +77,9 @@ func resolveRouteHost(ctx context.Context, k8sClient dynamic.Interface, namespac
 		host, err := getRouteHost(ctx, k8sClient, namespace, routeName)
 		if err == nil {
 			return host, nil
+		}
+		if !apierrors.IsNotFound(err) {
+			return "", err
 		}
 	}
 

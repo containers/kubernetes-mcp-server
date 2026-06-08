@@ -20,8 +20,9 @@ const (
 	labelValuesEndpoint = "/loki/api/v1/label/%s/values"
 	queryRangeEndpoint  = "/loki/api/v1/query_range"
 
-	requestTimeout = 60 * time.Second
-	defaultLimit   = 100
+	requestTimeout  = 60 * time.Second
+	defaultLimit    = 100
+	maxErrBodyBytes = 64 * 1024
 )
 
 // Loader defines the interface for querying Loki.
@@ -216,11 +217,6 @@ func (l *RealLoader) getJSON(ctx context.Context, endpoint string, params url.Va
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read loki response: %w", err)
-	}
-
 	slog.Debug("Backend call completed",
 		"backend", "loki",
 		"endpoint", endpoint,
@@ -229,10 +225,14 @@ func (l *RealLoader) getJSON(ctx context.Context, endpoint string, params url.Va
 	)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyBytes))
+		if err != nil {
+			return fmt.Errorf("loki request failed with status %d: failed to read response body: %w", resp.StatusCode, err)
+		}
 		return fmt.Errorf("loki request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	if err := json.Unmarshal(body, output); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(output); err != nil {
 		return fmt.Errorf("failed to decode loki response: %w", err)
 	}
 	return nil

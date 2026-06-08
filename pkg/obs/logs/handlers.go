@@ -180,6 +180,9 @@ func parseDefaultTimeRange(start, end string) (startTime, endTime time.Time, err
 	if err != nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid end time format: %w", err)
 	}
+	if startTime.After(endTime) {
+		return time.Time{}, time.Time{}, fmt.Errorf("start must be before or equal to end")
+	}
 	return startTime, endTime, nil
 }
 
@@ -195,6 +198,9 @@ func parseQueryTimeRange(input QueryRangeInput) (start, end time.Time, err error
 			return time.Time{}, time.Time{}, fmt.Errorf("invalid duration format: %w", parseErr)
 		}
 		duration = time.Duration(d)
+		if duration <= 0 {
+			return time.Time{}, time.Time{}, fmt.Errorf("duration must be positive")
+		}
 	}
 
 	end = time.Now()
