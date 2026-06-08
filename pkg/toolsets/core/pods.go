@@ -269,7 +269,7 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
 	}
-	ret, err := kubernetes.NewCore(params).PodsListInAllNamespaces(params, resourceListOptions)
+	ret, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).PodsListInAllNamespaces(params, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
 	}
@@ -287,7 +287,7 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace: %w", err)), nil
 	}
-	ret, err := kubernetes.NewCore(params).PodsListInNamespace(params, ns, resourceListOptions)
+	ret, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).PodsListInNamespace(params, ns, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
 	}
@@ -301,7 +301,7 @@ func podsGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod: %w", err)), nil
 	}
-	ret, err := kubernetes.NewCore(params).PodsGet(params, ns, name)
+	ret, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).PodsGet(params, ns, name)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s in namespace %s: %w", name, ns, err)), nil
 	}
@@ -410,7 +410,7 @@ func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to run pod: %w", err)), nil
 	}
-	resources, err := kubernetes.NewCore(params).PodsRun(params, ns, name, image, port)
+	resources, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).PodsRun(params, ns, name, image, port)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to run pod %s in namespace %s: %w", name, ns, err)), nil
 	}
