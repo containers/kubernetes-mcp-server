@@ -9,6 +9,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // KubeConfigTargetParameterName is the parameter name used to specify
@@ -174,6 +175,10 @@ func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.defaultContext
+}
+
+func (p *kubeConfigClusterProvider) SupportsGVKs(_ []schema.GroupVersionKind) bool {
+	return true
 }
 
 func (p *kubeConfigClusterProvider) WatchTargets(reload McpReload) {

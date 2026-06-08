@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // singleClusterProvider implements Provider for managing a single
@@ -99,6 +100,10 @@ func (p *singleClusterProvider) GetDefaultTarget() string {
 
 func (p *singleClusterProvider) GetTargetParameterName() string {
 	return ""
+}
+
+func (p *singleClusterProvider) SupportsGVKs(_ []schema.GroupVersionKind) bool {
+	return true
 }
 
 func (p *singleClusterProvider) WatchTargets(reload McpReload) {

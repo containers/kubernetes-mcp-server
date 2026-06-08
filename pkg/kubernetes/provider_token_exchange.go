@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 )
 
@@ -121,6 +122,10 @@ func (p *tokenExchangingProvider) GetDefaultTarget() string {
 
 func (p *tokenExchangingProvider) GetTargetParameterName() string {
 	return p.provider.GetTargetParameterName()
+}
+
+func (p *tokenExchangingProvider) SupportsGVKs(gvks []schema.GroupVersionKind) bool {
+	return p.provider.SupportsGVKs(gvks)
 }
 
 func (p *tokenExchangingProvider) WatchTargets(reload McpReload) {

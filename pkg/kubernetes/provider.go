@@ -6,6 +6,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
@@ -30,6 +31,10 @@ type Provider interface {
 	GetTargetParameterName() string
 	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
 	WatchTargets(reload McpReload)
+	// SupportsGVKs reports whether every GVK in gvks is available on every target
+	// exposed by this provider. Providers that have not opted in to GVK discovery
+	// should return true so existing tools remain visible.
+	SupportsGVKs(gvks []schema.GroupVersionKind) bool
 	Close()
 }
 

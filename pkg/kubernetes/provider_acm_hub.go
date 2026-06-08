@@ -341,6 +341,10 @@ func (p *acmHubClusterProvider) GetTargetParameterName() string {
 	return ACMHubTargetParameterName
 }
 
+func (p *acmHubClusterProvider) SupportsGVKs(_ []schema.GroupVersionKind) bool {
+	return true
+}
+
 func (p *acmHubClusterProvider) WatchTargets(reload McpReload) {
 	if p.watchKubeConfig {
 		p.kubeConfigWatcher.Watch(reload)

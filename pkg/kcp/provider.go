@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -267,6 +268,10 @@ func (p *kcpClusterProvider) GetDerivedKubernetes(ctx context.Context, workspace
 
 func (p *kcpClusterProvider) GetDefaultTarget() string {
 	return p.defaultWorkspace
+}
+
+func (p *kcpClusterProvider) SupportsGVKs(_ []schema.GroupVersionKind) bool {
+	return true
 }
 
 func (p *kcpClusterProvider) WatchTargets(reload kubernetes.McpReload) {
