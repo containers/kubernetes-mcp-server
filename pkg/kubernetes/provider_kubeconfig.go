@@ -9,6 +9,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // KubeConfigTargetParameterName is the parameter name used to specify
@@ -194,4 +195,8 @@ func (p *kubeConfigClusterProvider) Close() {
 			w.Close()
 		}
 	}
+}
+
+func (p *kubeConfigClusterProvider) HasGVKs(_ []schema.GroupVersionKind) bool {
+	return true
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 )
 
@@ -129,4 +130,8 @@ func (p *tokenExchangingProvider) WatchTargets(reload McpReload) {
 
 func (p *tokenExchangingProvider) Close() {
 	p.provider.Close()
+}
+
+func (p *tokenExchangingProvider) HasGVKs(gvks []schema.GroupVersionKind) bool {
+	return p.provider.HasGVKs(gvks)
 }

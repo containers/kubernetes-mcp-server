@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // singleClusterProvider implements Provider for managing a single
@@ -119,4 +120,8 @@ func (p *singleClusterProvider) Close() {
 			w.Close()
 		}
 	}
+}
+
+func (p *singleClusterProvider) HasGVKs(_ []schema.GroupVersionKind) bool {
+	return true
 }
