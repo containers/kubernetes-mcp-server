@@ -16,7 +16,7 @@ evals/
 ├── core-eval-testing/              # Extra agent/provider combinations for core tasks
 ├── results/                        # Committed eval results (baselines)
 └── tasks/                          # Shared task library, grouped by suite (see tasks/README.md)
-    └── <suite>/                    # core, config, helm, kiali, kubevirt, tekton
+    └── <suite>/                    # core, config, helm, kiali, kubevirt, tekton, netobserv
         └── <task-name>/
             ├── <task-name>.yaml    # Task definition (prompt, verify, labels). kubevirt/tekton use task.yaml
             ├── setup.sh            # Optional pre-task cluster setup
@@ -26,7 +26,7 @@ evals/
 ```
 
 Tasks are grouped into suites via a `suite: <name>` label. The available suites are
-`core`, `config`, `helm`, `kiali`, `kubevirt`, and `tekton`.
+`core`, `config`, `helm`, `kiali`, `kubevirt`, `tekton`, and `netobserv`.
 
 ## Prerequisites
 
@@ -188,7 +188,7 @@ make run-evals SUITE=core AGENT=claude-code MODEL=sonnet
 # kiali tasks (needs Istio + Kiali installed; see `make setup-kiali`)
 make run-evals SUITE=kiali AGENT=claude-code MODEL=sonnet
 
-# netobserv tasks (needs mock plugin or real NetObserv; see `make setup-netobserv`)
+# netobserv tasks (needs mock plugin or real NetObserv; see tasks/netobserv/README.md)
 make run-evals SUITE=netobserv AGENT=claude-code MODEL=sonnet
 ```
 
