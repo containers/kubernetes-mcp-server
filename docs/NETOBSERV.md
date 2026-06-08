@@ -138,12 +138,15 @@ If you deploy a separate OAuth proxy in front of this server, clients authentica
 
 ## Evaluations
 
-Agent evaluation tasks for this toolset live under [`evals/tasks/netobserv/`](../evals/tasks/netobserv/). On Kind/CI a mock console plugin is used (`make setup-netobserv`); on OpenShift you can run the same tasks against a real FlowCollector.
+Agent evaluation tasks for this toolset live under [`evals/tasks/netobserv/`](../evals/tasks/netobserv/). Each task deploys the mock console plugin via `shared/setup-mock.sh` (Kind/local) so evals are self-contained. On OpenShift you can run the same tasks against a real FlowCollector.
 
 ```bash
-make setup-netobserv
-make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
-make run-evals EVAL_LABEL_SELECTOR=suite=netobserv
+export MODEL_BASE_URL='https://your-api-endpoint/v1'
+export MODEL_KEY='your-api-key'
+make kind-create-cluster   # if needed
+make run-netobserv-evals   # mock + MCP server + mcpchecker (target: >= 80% pass rate)
 ```
 
-Maintainers can trigger CI with `/run-mcpchecker netobserv` on a pull request. See [evals/tasks/netobserv/README.md](../evals/tasks/netobserv/README.md).
+Manual steps: `make setup-netobserv`, `make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs`, `make run-evals EVAL_LABEL_SELECTOR=suite=netobserv`.
+
+Maintainers can trigger CI with `/run-mcpchecker netobserv` on a pull request. See [evals/README.md](../evals/README.md) and [evals/tasks/netobserv/README.md](../evals/tasks/netobserv/README.md).

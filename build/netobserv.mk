@@ -18,6 +18,15 @@ expose-netobserv: install-netobserv-mock ## Port-forward mock plugin to localhos
 .PHONY: setup-netobserv
 setup-netobserv: expose-netobserv ## Install mock NetObserv plugin and expose it locally
 
+.PHONY: run-netobserv-evals
+run-netobserv-evals: build setup-netobserv ## Run full NetObserv mcpchecker suite (mock plugin + MCP server + evals)
+	@set -e; \
+	trap '$(MAKE) stop-server stop-netobserv' EXIT; \
+	$(MAKE) run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs; \
+	$(MAKE) run-evals EVAL_LABEL_SELECTOR=suite=netobserv; \
+	echo ""; \
+	echo "NetObserv evals finished. Target pass rate: >= 80% tasks and assertions."
+
 .PHONY: stop-netobserv
 stop-netobserv: ## Stop NetObserv port-forward started by expose-netobserv
 	@if [ -f .netobserv-pf.pid ]; then \

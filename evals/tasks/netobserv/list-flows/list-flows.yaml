@@ -3,6 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: netobserv
+    requires: netobserv
   name: "List flows in default namespace"
   category: "Flow inspection"
   description: "Retrieves recent flow records for the default namespace."
@@ -11,7 +12,16 @@ spec:
   requires:
     - extension: kubernetes
       as: k8s
+  setup:
+    - script:
+        file: ../shared/setup-mock.sh
+        timeout: 180s
   verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          curl -sf "http://127.0.0.1:9001/api/loki/flow/records?namespace=default&timeRange=300" | grep -q eval-flow-1
     - llmJudge:
         contains: "eval-flow-1"
   prompt:
