@@ -273,7 +273,7 @@ func (m *mockElicitToolset) GetDescription() string {
 	return "Test toolset for elicitation"
 }
 
-func (m *mockElicitToolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (m *mockElicitToolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 	return m.tools
 }
 

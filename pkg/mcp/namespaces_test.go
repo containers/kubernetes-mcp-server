@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"regexp"
 	"slices"
 	"testing"
@@ -88,7 +89,7 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 func (s *NamespacesSuite) TestNamespacesListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	// Remove all permissions - user will have forbidden access
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
@@ -189,7 +190,7 @@ func (s *NamespacesSuite) TestProjectsListInOpenShift() {
 	s.InitMcpClient()
 
 	s.Run("projects_list returns project list in OpenShift", func() {
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 		_, _ = dynamicClient.Resource(schema.GroupVersionResource{Group: "project.openshift.io", Version: "v1", Resource: "projects"}).
 			Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "project.openshift.io/v1",

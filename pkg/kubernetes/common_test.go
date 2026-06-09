@@ -3,17 +3,18 @@ package kubernetes
 import (
 	"os"
 	"testing"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 )
 
 func TestMain(m *testing.M) {
-	// Set up
-	_ = os.Setenv("KUBECONFIG", "/dev/null")     // Avoid interference from existing kubeconfig
-	_ = os.Setenv("KUBERNETES_SERVICE_HOST", "") // Avoid interference from in-cluster config
-	_ = os.Setenv("KUBERNETES_SERVICE_PORT", "") // Avoid interference from in-cluster config
+	// Initialize shared envtest for this package
+	test.EnvTest()
 
 	// Run tests
 	code := m.Run()
 
-	// Tear down
+	// Clean up
+	_ = test.StopEnvTest()
 	os.Exit(code)
 }

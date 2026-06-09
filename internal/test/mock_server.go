@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -35,6 +36,8 @@ type MockServer struct {
 func NewMockServer() *MockServer {
 	ms := &MockServer{}
 	scheme := runtime.NewScheme()
+	// Register metav1.Status so error responses can be properly serialized
+	metav1.AddToGroupVersion(scheme, metav1.SchemeGroupVersion)
 	codecs := serializer.NewCodecFactory(scheme)
 	ms.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ms.mu.RLock()
@@ -316,6 +319,24 @@ func (h *DiscoveryClientHandler) ServeHTTP(w http.ResponseWriter, req *http.Requ
 					return
 				}
 			}
+			// GroupVersion not found - return 404
+			// Set Content-Type before WriteHeader
+			w.Header().Set("Content-Type", runtime.ContentTypeJSON)
+			w.WriteHeader(http.StatusNotFound)
+			status := &metav1.Status{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "v1",
+					Kind:       "Status",
+				},
+				Status:  metav1.StatusFailure,
+				Code:    404,
+				Reason:  metav1.StatusReasonNotFound,
+				Message: fmt.Sprintf("the server could not find the requested resource (get APIResourceList %s)", requestedGV),
+			}
+			if err := json.NewEncoder(w).Encode(status); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
 		}
 	}
 }

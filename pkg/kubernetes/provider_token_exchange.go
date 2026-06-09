@@ -168,10 +168,6 @@ func newStsConfigCacheKey(tokenURL string, cfg api.BaseConfig) stsConfigCacheKey
 	}
 }
 
-func (p *tokenExchangingProvider) IsOpenShift(ctx context.Context) bool {
-	return p.provider.IsOpenShift(ctx)
-}
-
 func (p *tokenExchangingProvider) IsMultiTarget() bool {
 	return p.provider.IsMultiTarget()
 }
@@ -196,6 +192,10 @@ func (p *tokenExchangingProvider) Close() {
 	p.provider.Close()
 }
 
-func (p *tokenExchangingProvider) HasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
-	return p.provider.HasGVKs(ctx, gvks)
+func (p *tokenExchangingProvider) AnyTargetHasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
+	return p.provider.AnyTargetHasGVKs(ctx, gvks)
+}
+
+func (p *tokenExchangingProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	return p.provider.IsTargetCompatibilityToolFiltersEnabled()
 }

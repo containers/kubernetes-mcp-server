@@ -22,8 +22,6 @@ type Manager struct {
 	config api.BaseConfig
 }
 
-var _ api.Openshift = (*Manager)(nil)
-
 var (
 	ErrorKubeconfigInClusterNotAllowed = errors.New("kubeconfig manager cannot be used in in-cluster deployments")
 	ErrorInClusterNotInCluster         = errors.New("in-cluster manager cannot be used outside of a cluster")

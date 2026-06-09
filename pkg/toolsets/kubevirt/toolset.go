@@ -24,7 +24,7 @@ func (t *Toolset) GetDescription() string {
 	return kubevirtdefaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 	return slices.Concat(
 		vm_clone.Tools(),
 		vm_create.Tools(),
