@@ -6,6 +6,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 )
 
@@ -87,6 +88,50 @@ func (s *ProviderSingleTestSuite) TestGetDefaultTarget() {
 
 func (s *ProviderSingleTestSuite) TestGetTargetParameterName() {
 	s.Empty(s.provider.GetTargetParameterName(), "Expected empty string as target parameter name")
+}
+
+func (s *ProviderSingleTestSuite) TestHasGVKs() {
+	handler := test.NewDiscoveryClientHandler()
+	s.mockServer.Handle(handler)
+
+	s.Run("returns true for nil GVKs list", func() {
+		s.True(s.provider.HasGVKs(nil))
+	})
+
+	s.Run("returns true for empty GVKs list", func() {
+		s.True(s.provider.HasGVKs([]schema.GroupVersionKind{}))
+	})
+
+	s.Run("returns true for a single GVK that exists on the cluster", func() {
+		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+			{Group: "", Version: "v1", Kind: "Pod"},
+		})
+		s.True(result)
+	})
+
+	s.Run("returns true when all GVKs exist on the cluster", func() {
+		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+			{Group: "", Version: "v1", Kind: "Pod"},
+			{Group: "", Version: "v1", Kind: "Node"},
+			{Group: "apps", Version: "v1", Kind: "Deployment"},
+		})
+		s.True(result)
+	})
+
+	s.Run("returns false when a GVK does not exist on the cluster", func() {
+		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+			{Group: "nonexistent.example.com", Version: "v1", Kind: "FakeResource"},
+		})
+		s.False(result)
+	})
+
+	s.Run("returns false when any GVK in the list does not exist", func() {
+		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+			{Group: "", Version: "v1", Kind: "Pod"},
+			{Group: "nonexistent.example.com", Version: "v1", Kind: "FakeResource"},
+		})
+		s.False(result)
+	})
 }
 
 func TestProviderSingle(t *testing.T) {

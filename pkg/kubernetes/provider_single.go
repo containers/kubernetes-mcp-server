@@ -122,6 +122,19 @@ func (p *singleClusterProvider) Close() {
 	}
 }
 
-func (p *singleClusterProvider) HasGVKs(_ []schema.GroupVersionKind) bool {
+// HasGVKs uses the cluster's REST mapper to verify that every requested GVK is available.
+func (p *singleClusterProvider) HasGVKs(gvks []schema.GroupVersionKind) bool {
+	if len(gvks) == 0 {
+		return true
+	}
+	if p.manager == nil {
+		return true
+	}
+	mapper := p.manager.kubernetes.RESTMapper()
+	for _, gvk := range gvks {
+		if _, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version); err != nil {
+			return false
+		}
+	}
 	return true
 }
