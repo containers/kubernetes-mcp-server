@@ -25,9 +25,9 @@ func ServerResourceToGoSdkResource(s *Server, res api.ServerResource) (*mcp.Reso
 		Description: res.Resource.Description,
 		MIMEType:    res.Resource.MIMEType,
 		Annotations: buildAnnotations(
-			res.Resource.Audience,
-			res.Resource.Priority,
-			res.Resource.LastModified,
+			res.Resource.Annotations.Audience,
+			res.Resource.Annotations.Priority,
+			res.Resource.Annotations.LastModified,
 		),
 		Title: res.Resource.Title,
 	}
@@ -89,9 +89,9 @@ func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResou
 		Description: rt.ResourceTemplate.Description,
 		MIMEType:    rt.ResourceTemplate.MIMEType,
 		Annotations: buildAnnotations(
-			rt.ResourceTemplate.Audience,
-			rt.ResourceTemplate.Priority,
-			rt.ResourceTemplate.LastModified,
+			rt.ResourceTemplate.Annotations.Audience,
+			rt.ResourceTemplate.Annotations.Priority,
+			rt.ResourceTemplate.Annotations.LastModified,
 		),
 		Title: rt.ResourceTemplate.Title,
 	}

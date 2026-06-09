@@ -109,16 +109,20 @@ func NewToolCallResultStructured(structured any, err error) *ToolCallResult {
 	return NewToolCallResultFull(content, structured, err)
 }
 
-// Resource represents the metadata of an MCP resource.
-type Resource struct {
-	URI          string
-	Name         string
-	Description  string
-	MIMEType     string
+type ResourceAnnotations struct {
 	Audience     []string // ["user", "assistant"]
 	Priority     *float64
 	LastModified *string
-	Title        string
+}
+
+// Resource represents the metadata of an MCP resource.
+type Resource struct {
+	URI         string
+	Name        string
+	Description string
+	MIMEType    string
+	Annotations *ResourceAnnotations
+	Title       string
 }
 
 // ResourceContent is the value returned by a resource handler.
@@ -153,14 +157,12 @@ type ServerResource struct {
 
 // ResourceTemplate represents the metadata of an MCP resource template.
 type ResourceTemplate struct {
-	URITemplate  string
-	Name         string
-	Description  string
-	MIMEType     string
-	Audience     []string // ["user", "assistant"]
-	Priority     *float64
-	LastModified *string
-	Title        string
+	URITemplate string
+	Name        string
+	Description string
+	MIMEType    string
+	Annotations *ResourceAnnotations
+	Title       string
 }
 
 // ResourceTemplateHandler is called when a client reads a resource matching a template.
