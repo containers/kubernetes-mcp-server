@@ -9,9 +9,10 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 )
 
-func initNamespaces(o api.Openshift) []api.ServerTool {
+func initNamespaces(p provider.ManagerProvider) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
@@ -35,23 +36,38 @@ func initNamespaces(o api.Openshift) []api.ServerTool {
 			},
 		}, Handler: namespacesList,
 	})
-	if o.IsOpenShift(context.Background()) {
-		ret = append(ret, api.ServerTool{
-			Tool: api.Tool{
-				Name:        "projects_list",
-				Description: "List all the OpenShift projects in the current cluster",
-				InputSchema: &jsonschema.Schema{
-					Type: "object",
-				},
-				Annotations: api.ToolAnnotations{
-					Title:           "Projects: List",
-					ReadOnlyHint:    ptr.To(true),
-					DestructiveHint: ptr.To(false),
-					OpenWorldHint:   ptr.To(true),
-				},
-			}, Handler: projectsList,
-		})
-	}
+	ret = append(ret, api.ServerTool{
+		Tool: api.Tool{
+			Name:        "projects_list",
+			Description: "List all the OpenShift projects in the current cluster",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "Projects: List",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				OpenWorldHint:   ptr.To(true),
+			},
+		},
+		Handler: projectsList,
+		TargetCompatibilityFilters: []func() bool{
+			func() bool {
+				mgrs, err := p.GetTargetManagers(context.Background())
+				// If an error occurs, don't exclude this tool
+				if err != nil {
+					return true
+				}
+				for _, m := range mgrs {
+					if m.IsOpenShift(context.Background()) {
+						// One is enough
+						return true
+					}
+				}
+				return false
+			},
+		},
+	})
 	return ret
 }
 

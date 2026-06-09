@@ -6,6 +6,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
@@ -104,16 +105,16 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 	return p.stsConfig
 }
 
-func (p *tokenExchangingProvider) IsOpenShift(ctx context.Context) bool {
-	return p.provider.IsOpenShift(ctx)
-}
-
 func (p *tokenExchangingProvider) IsMultiTarget() bool {
 	return p.provider.IsMultiTarget()
 }
 
 func (p *tokenExchangingProvider) GetTargets(ctx context.Context) ([]string, error) {
 	return p.provider.GetTargets(ctx)
+}
+
+func (p *tokenExchangingProvider) GetTargetManagers(ctx context.Context) ([]provider.TargetManager, error) {
+	return p.provider.GetTargetManagers(ctx)
 }
 
 func (p *tokenExchangingProvider) GetDefaultTarget() string {

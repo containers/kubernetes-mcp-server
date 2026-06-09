@@ -411,6 +411,21 @@
   },
   {
     "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Projects: List"
+    },
+    "description": "List all the OpenShift projects in the current cluster",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "projects_list",
+    "title": "Projects: List"
+  },
+  {
+    "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
@@ -685,10 +686,10 @@ func (m *mockResourceToolset) GetName() string {
 	}
 	return "resource-test"
 }
-func (m *mockResourceToolset) GetDescription() string                    { return "Test toolset for resources" }
-func (m *mockResourceToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
-func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt            { return nil }
-func (m *mockResourceToolset) GetResources() []api.ServerResource        { return m.resources }
+func (m *mockResourceToolset) GetDescription() string                               { return "Test toolset for resources" }
+func (m *mockResourceToolset) GetTools(_ provider.ManagerProvider) []api.ServerTool { return nil }
+func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt                       { return nil }
+func (m *mockResourceToolset) GetResources() []api.ServerResource                   { return m.resources }
 func (m *mockResourceToolset) GetResourceTemplates() []api.ServerResourceTemplate {
 	return m.resourceTemplates
 }

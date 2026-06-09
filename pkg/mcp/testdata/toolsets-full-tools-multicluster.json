@@ -479,12 +479,32 @@
   },
   {
     "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Projects: List"
+    },
+    "description": "List all the OpenShift projects in the current cluster",
+    "inputSchema": {
+      "properties": {
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "projects_list",
+    "title": "Projects: List"
+  },
+  {
+    "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true,
       "title": "Resources: Create or Update"
     },
-    "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
       "properties": {
         "context": {
@@ -511,7 +531,7 @@
       "openWorldHint": true,
       "title": "Resources: Delete"
     },
-    "description": "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
       "properties": {
         "apiVersion": {
@@ -556,7 +576,7 @@
       "readOnlyHint": true,
       "title": "Resources: Get"
     },
-    "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
       "properties": {
         "apiVersion": {
@@ -597,7 +617,7 @@
       "readOnlyHint": true,
       "title": "Resources: List"
     },
-    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
       "properties": {
         "apiVersion": {

@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -228,14 +229,6 @@ func (p *kcpClusterProvider) findOrCreateWorkspaceContext(
 	return contextName
 }
 
-func (p *kcpClusterProvider) IsOpenShift(ctx context.Context) bool {
-	// Use default workspace manager
-	if m, ok := p.managers[p.defaultWorkspace]; ok && m != nil {
-		return m.IsOpenShift(ctx)
-	}
-	return false
-}
-
 func (p *kcpClusterProvider) IsMultiTarget() bool {
 	return len(p.managers) > 1
 }
@@ -247,6 +240,14 @@ func (p *kcpClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	}
 	sort.Strings(workspaces)
 	return workspaces, nil
+}
+
+func (p *kcpClusterProvider) GetTargetManagers(_ context.Context) ([]provider.TargetManager, error) {
+	mgrs := make([]provider.TargetManager, 0, len(p.managers))
+	for _, m := range p.managers {
+		mgrs = append(mgrs, m)
+	}
+	return mgrs, nil
 }
 
 func (p *kcpClusterProvider) GetTargetParameterName() string {

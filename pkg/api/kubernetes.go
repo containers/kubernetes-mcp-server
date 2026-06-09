@@ -1,8 +1,6 @@
 package api
 
 import (
-	"context"
-
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -12,12 +10,6 @@ import (
 	"k8s.io/client-go/rest"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
-
-// Openshift provides OpenShift-specific detection capabilities.
-// This interface is used by toolsets to conditionally enable OpenShift-specific tools.
-type Openshift interface {
-	IsOpenShift(context.Context) bool
-}
 
 // ListOptions contains options for listing Kubernetes resources.
 type ListOptions struct {

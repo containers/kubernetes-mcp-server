@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
@@ -22,13 +22,13 @@ import (
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 )
 
-type OpenShift struct{}
+type ManagerProvider struct{}
 
-func (o *OpenShift) IsOpenShift(_ context.Context) bool {
-	return true
+func (p *ManagerProvider) GetTargetManagers(_ context.Context) ([]provider.TargetManager, error) {
+	return nil, nil
 }
 
-var _ api.Openshift = (*OpenShift)(nil)
+var _ provider.ManagerProvider = (*ManagerProvider)(nil)
 
 func main() {
 	// Snyk reports false positive unless we flow the args through filepath.Clean and filepath.Localize in this specific order
@@ -85,7 +85,7 @@ func main() {
 	toolsetTools := strings.Builder{}
 	for _, toolset := range toolsetsList {
 		toolsetTools.WriteString("<details>\n\n<summary>" + toolset.GetName() + "</summary>\n\n")
-		tools := toolset.GetTools(&OpenShift{})
+		tools := toolset.GetTools(&ManagerProvider{})
 		for _, tool := range tools {
 			fmt.Fprintf(&toolsetTools, "- **%s** - %s\n", tool.Tool.Name, tool.Tool.Description)
 			for _, propName := range slices.Sorted(maps.Keys(tool.Tool.InputSchema.Properties)) {

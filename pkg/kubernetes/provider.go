@@ -5,6 +5,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -13,12 +14,8 @@ import (
 type McpReload func() error
 
 type Provider interface {
-	// Openshift extends the Openshift interface to provide OpenShift specific functionality to toolset providers
-	// TODO: with the configurable toolset implementation and especially the multi-cluster approach
-	// extending this interface might not be a good idea anymore.
-	// For the kubecontext case, a user might be targeting both an OpenShift flavored cluster and a vanilla Kubernetes cluster.
-	// See: https://github.com/containers/kubernetes-mcp-server/pull/372#discussion_r2421592315
-	api.Openshift
+	// Embed ManagerProvider for target queries
+	provider.ManagerProvider
 	// IsMultiTarget reports whether the provider is configured for multiple targets.
 	// Unlike GetTargets, it does not require a user-scoped context and should be
 	// implementable without expensive lookups.

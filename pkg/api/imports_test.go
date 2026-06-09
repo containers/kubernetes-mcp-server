@@ -20,7 +20,8 @@ func (s *ImportsSuite) TestNoCyclicDependencies() {
 	// Whitelist of allowed internal packages that pkg/api can import.
 	// Any other internal import will cause the test to fail.
 	allowedInternalPackages := map[string]bool{
-		"github.com/containers/kubernetes-mcp-server/pkg/output": true,
+		"github.com/containers/kubernetes-mcp-server/pkg/output":   true,
+		"github.com/containers/kubernetes-mcp-server/pkg/provider": true,
 	}
 
 	s.Run("pkg/api only imports whitelisted internal packages", func() {

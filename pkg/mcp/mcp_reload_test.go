@@ -12,6 +12,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,7 +27,7 @@ type brokenToolset struct{}
 
 func (brokenToolset) GetName() string        { return "broken-test-toolset" }
 func (brokenToolset) GetDescription() string { return "test-only toolset that fails convert phase" }
-func (brokenToolset) GetTools(api.Openshift) []api.ServerTool {
+func (brokenToolset) GetTools(provider.ManagerProvider) []api.ServerTool {
 	return []api.ServerTool{{Tool: api.Tool{
 		Name:        "broken-tool",
 		InputSchema: &jsonschema.Schema{Type: "string"},

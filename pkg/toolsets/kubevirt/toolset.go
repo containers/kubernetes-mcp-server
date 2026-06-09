@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	kubevirtdefaults "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
 	vm_clone "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/clone"
@@ -24,7 +25,7 @@ func (t *Toolset) GetDescription() string {
 	return kubevirtdefaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ provider.ManagerProvider) []api.ServerTool {
 	return slices.Concat(
 		vm_clone.Tools(),
 		vm_create.Tools(),
