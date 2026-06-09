@@ -15,7 +15,7 @@ import (
 // ServerResourceToGoSdkResource converts an api.ServerResource to MCP SDK types.
 // It validates the URI upfront so callers can surface a wrapped error instead of
 // letting the SDK panic during registration on hot reload.
-func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Resource, mcp.ResourceHandler, error) {
+func ServerResourceToGoSdkResource(s *Server, res api.ServerResource) (*mcp.Resource, mcp.ResourceHandler, error) {
 	if _, err := url.Parse(res.Resource.URI); err != nil {
 		return nil, nil, fmt.Errorf("invalid URI %q: %w", res.Resource.URI, err)
 	}
@@ -32,8 +32,25 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 		Title: res.Resource.Title,
 	}
 
-	handler := func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		content, err := res.Handler(api.ResourceHandlerParams{Context: ctx})
+	handler := func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		cfg := s.configuration.Load()
+
+		cluster, err := extractClusterNameFromResourceURI(req.Params.URI)
+		if err != nil {
+			return nil, err
+		}
+
+		k, err := s.p.GetDerivedKubernetes(ctx, cluster)
+		if err != nil {
+			return nil, err
+		}
+
+		content, err := res.Handler(api.ResourceHandlerParams{
+			Context:          ctx,
+			BaseConfig:       cfg,
+			KubernetesClient: k,
+		})
+
 		if err != nil {
 			return nil, err
 		}
@@ -144,4 +161,19 @@ func buildAnnotations(audience []string, priority *float64, lastModified *string
 	}
 
 	return annotations
+}
+
+// returns the cluster name by parsing a resource URI, who's Host field should be the name of the cluster
+// ex: k8s://cluster-name/
+func extractClusterNameFromResourceURI(uri string) (string, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+
+	if u.Host != "" {
+		return u.Host, nil
+	}
+
+	return "", errors.New("Resource URI has invalid Host (cluster name)!")
 }

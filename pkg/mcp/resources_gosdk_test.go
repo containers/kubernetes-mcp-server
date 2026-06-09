@@ -676,6 +676,51 @@ func (s *ResourceSuite) TestResourceContentInvariant() {
 	})
 }
 
+func (s *ResourceSuite) TestClusterNameExtractionFromURI() {
+	testToolset := &mockResourceToolset{
+		name: "cluster-name-extraction",
+		resources: []api.ServerResource{
+			{
+				Resource: api.Resource{
+					URI:      "k8s://example/test",
+					Name:     "Test",
+					MIMEType: "text/plain",
+				},
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "x", Blob: []byte{0x01}}, nil
+				},
+			},
+		},
+		resourceTemplates: []api.ServerResourceTemplate{
+			{
+				ResourceTemplate: api.ResourceTemplate{
+					URITemplate: "k8s://example/test",
+					Name:        "Test",
+					MIMEType:    "text/plain",
+				},
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "x", Blob: []byte{0x01}}, nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	s.Cfg.Toolsets = []string{"cluster-name-extraction"}
+	s.InitMcpClient()
+
+	uri := "k8s://example/test"
+	expected := "example"
+
+	s.Run("cluster name is correctly extracted", func() {
+		cluster, err := extractClusterNameFromResourceURI(uri)
+
+		s.Require().Equal(cluster, expected)
+		s.NoError(err)
+	})
+}
+
 type mockResourceToolset struct {
 	name              string
 	resources         []api.ServerResource
