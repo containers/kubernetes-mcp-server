@@ -36,13 +36,15 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsAllFieldsSet() {
 		resources: []api.ServerResource{
 			{
 				Resource: api.Resource{
-					URI:          "test://example/annotated",
-					Name:         "Annotated Resource",
-					Description:  "Has all annotation fields",
-					MIMEType:     "text/plain",
-					Audience:     []string{"user", "assistant"},
-					Priority:     &priority,
-					LastModified: &lastModified,
+					URI:         "test://example/annotated",
+					Name:        "Annotated Resource",
+					Description: "Has all annotation fields",
+					MIMEType:    "text/plain",
+					Annotations: &api.ResourceAnnotations{
+						Audience:     []string{"user", "assistant"},
+						Priority:     &priority,
+						LastModified: &lastModified,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "content"}, nil
@@ -79,13 +81,15 @@ func (s *ResourceAnnotationsSuite) TestResourceTemplateAnnotationsAllFieldsSet()
 		resourceTemplates: []api.ServerResourceTemplate{
 			{
 				ResourceTemplate: api.ResourceTemplate{
-					URITemplate:  "test://example/{id}",
-					Name:         "Annotated Template",
-					Description:  "Has all annotation fields",
-					MIMEType:     "application/json",
-					Audience:     []string{"assistant"},
-					Priority:     &priority,
-					LastModified: &lastModified,
+					URITemplate: "test://example/{id}",
+					Name:        "Annotated Template",
+					Description: "Has all annotation fields",
+					MIMEType:    "application/json",
+					Annotations: &api.ResourceAnnotations{
+						Audience:     []string{"assistant"},
+						Priority:     &priority,
+						LastModified: &lastModified,
+					},
 				},
 				Handler: func(params api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: `{"uri": "` + params.URI + `"}`}, nil
@@ -184,12 +188,14 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsOnlyAudience() {
 		resources: []api.ServerResource{
 			{
 				Resource: api.Resource{
-					URI:          "test://example/only-audience",
-					Name:         "Only Audience",
-					MIMEType:     "text/plain",
-					Audience:     []string{"user"},
-					Priority:     nil,
-					LastModified: nil,
+					URI:      "test://example/only-audience",
+					Name:     "Only Audience",
+					MIMEType: "text/plain",
+					Annotations: &api.ResourceAnnotations{
+						Audience:     []string{"user"},
+						Priority:     nil,
+						LastModified: nil,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "content"}, nil
@@ -224,12 +230,14 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsOnlyPriority() {
 		resources: []api.ServerResource{
 			{
 				Resource: api.Resource{
-					URI:          "test://example/only-priority",
-					Name:         "Only Priority",
-					MIMEType:     "text/plain",
-					Audience:     nil,
-					Priority:     &priority,
-					LastModified: nil,
+					URI:      "test://example/only-priority",
+					Name:     "Only Priority",
+					MIMEType: "text/plain",
+					Annotations: &api.ResourceAnnotations{
+						Audience:     nil,
+						Priority:     &priority,
+						LastModified: nil,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "content"}, nil
@@ -263,12 +271,14 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsOnlyLastModified() {
 		resources: []api.ServerResource{
 			{
 				Resource: api.Resource{
-					URI:          "test://example/only-lastmod",
-					Name:         "Only LastModified",
-					MIMEType:     "text/plain",
-					Audience:     nil,
-					Priority:     nil,
-					LastModified: &lastModified,
+					URI:      "test://example/only-lastmod",
+					Name:     "Only LastModified",
+					MIMEType: "text/plain",
+					Annotations: &api.ResourceAnnotations{
+						Audience:     nil,
+						Priority:     nil,
+						LastModified: &lastModified,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "content"}, nil
@@ -305,7 +315,9 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsZeroPriority() {
 					URI:      "test://example/zero-priority",
 					Name:     "Zero Priority",
 					MIMEType: "text/plain",
-					Priority: &zeroPriority,
+					Annotations: &api.ResourceAnnotations{
+						Priority: &zeroPriority,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "content"}, nil
@@ -338,7 +350,9 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsEmptyAudienceArray() {
 					URI:      "test://example/empty-audience",
 					Name:     "Empty Audience Array",
 					MIMEType: "text/plain",
-					Audience: []string{}, // Empty array, not nil
+					Annotations: &api.ResourceAnnotations{
+						Audience: []string{}, // Empty array, not nil
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "content"}, nil
@@ -372,8 +386,10 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsMultipleAudienceRoles(
 					URI:      "test://example/multi-audience",
 					Name:     "Multiple Audience",
 					MIMEType: "text/plain",
-					Audience: []string{"user", "assistant", "system"},
-					Priority: &priority,
+					Annotations: &api.ResourceAnnotations{
+						Audience: []string{"user", "assistant", "system"},
+						Priority: &priority,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "content"}, nil
@@ -412,7 +428,9 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsPriorityBoundaries() {
 					URI:      "test://example/min-priority",
 					Name:     "Min Priority",
 					MIMEType: "text/plain",
-					Priority: &minPriority,
+					Annotations: &api.ResourceAnnotations{
+						Priority: &minPriority,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "min"}, nil
@@ -423,7 +441,9 @@ func (s *ResourceAnnotationsSuite) TestResourceAnnotationsPriorityBoundaries() {
 					URI:      "test://example/max-priority",
 					Name:     "Max Priority",
 					MIMEType: "text/plain",
-					Priority: &maxPriority,
+					Annotations: &api.ResourceAnnotations{
+						Priority: &maxPriority,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "max"}, nil
@@ -465,12 +485,14 @@ func (s *ResourceAnnotationsSuite) TestAnnotationsPersistAcrossReload() {
 		resources: []api.ServerResource{
 			{
 				Resource: api.Resource{
-					URI:          "test://example/persistent",
-					Name:         "Persistent Annotations",
-					MIMEType:     "text/plain",
-					Audience:     []string{"user"},
-					Priority:     &priority,
-					LastModified: &lastModified,
+					URI:      "test://example/persistent",
+					Name:     "Persistent Annotations",
+					MIMEType: "text/plain",
+					Annotations: &api.ResourceAnnotations{
+						Audience:     []string{"user"},
+						Priority:     &priority,
+						LastModified: &lastModified,
+					},
 				},
 				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "persistent"}, nil

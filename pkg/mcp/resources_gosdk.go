@@ -49,6 +49,7 @@ func ServerResourceToGoSdkResource(s *Server, res api.ServerResource) (*mcp.Reso
 			Context:          ctx,
 			BaseConfig:       cfg,
 			KubernetesClient: k,
+			URI:              res.Resource.URI,
 		})
 
 		if err != nil {
