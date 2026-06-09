@@ -496,6 +496,7 @@ func (s *ResourceAnnotationsSuite) TestAnnotationsPersistAcrossReload() {
 		newConfig := config.Default()
 		newConfig.Toolsets = []string{"resource-test"}
 		newConfig.KubeConfig = s.Cfg.KubeConfig
+		newConfig.ReadOnly = s.Cfg.ReadOnly
 
 		err := s.mcpServer.ReloadConfiguration(newConfig)
 		s.Require().NoError(err)

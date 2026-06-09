@@ -118,7 +118,7 @@ type Resource struct {
 	Audience     []string // ["user", "assistant"]
 	Priority     *float64
 	LastModified *string
-	Title        string `json:"title,omitempty"`
+	Title        string
 }
 
 // ResourceContent is the value returned by a resource handler.
@@ -133,10 +133,11 @@ type ResourceContent struct {
 }
 
 // ResourceHandler is called when a client reads a resource.
-// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
+// Session state (auth, request context), BaseConfig, and KubeClient are available through params
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
 type ResourceHandler func(params ResourceHandlerParams) (*ResourceContent, error)
 
+// ResourceHandlerParams represents data passed into ResourceHandler
 type ResourceHandlerParams struct {
 	context.Context
 	BaseConfig
@@ -159,12 +160,12 @@ type ResourceTemplate struct {
 	Audience     []string // ["user", "assistant"]
 	Priority     *float64
 	LastModified *string
-	Title        string `json:"title,omitempty"`
+	Title        string
 }
 
 // ResourceTemplateHandler is called when a client reads a resource matching a template.
-// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
-// The uri parameter is the actual resource URI that matches the template.
+// Session state (auth, request context), BaseConfig, and KubeClient are available through params
+// Params also includes the actual resource URI that matches the template.
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
 type ResourceTemplateHandler func(params ResourceHandlerParams) (*ResourceContent, error)
 
