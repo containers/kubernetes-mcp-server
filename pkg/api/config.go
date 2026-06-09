@@ -58,26 +58,15 @@ type GroupVersionKind struct {
 	Kind    string `json:"kind,omitempty" toml:"kind,omitempty"`
 }
 
-// RedactedResource defines a resource type whose specific fields should be redacted
-// rather than having the entire resource denied. This allows agents to see resource
-// metadata while sensitive field values are replaced with redaction markers.
-type RedactedResource struct {
-	Group   string   `json:"group" toml:"group"`
-	Version string   `json:"version" toml:"version"`
-	Kind    string   `json:"kind" toml:"kind"`
-	Fields  []string `json:"fields" toml:"fields"`
-	Mode    string   `json:"mode,omitempty" toml:"mode,omitempty"`
-}
-
 type DeniedResourcesProvider interface {
 	// GetDeniedResources returns a list of GroupVersionKinds that are denied.
 	GetDeniedResources() []GroupVersionKind
 }
 
-// RedactedResourcesProvider provides access to resources that should have specific fields redacted.
-type RedactedResourcesProvider interface {
-	// GetRedactedResources returns the list of resources with field-level redaction configured.
-	GetRedactedResources() []RedactedResource
+// SecretRedactionProvider provides access to the Secret redaction mode.
+type SecretRedactionProvider interface {
+	// GetRedactSecrets returns the Secret redaction mode ("opaque", "hashed", or "" for disabled).
+	GetRedactSecrets() string
 }
 
 type StsConfigProvider interface {
@@ -113,7 +102,7 @@ type BaseConfig interface {
 	ClusterProvider
 	ConfirmationRulesProvider
 	DeniedResourcesProvider
-	RedactedResourcesProvider
+	SecretRedactionProvider
 	ExtendedConfigProvider
 	StsConfigProvider
 	ValidationEnabledProvider

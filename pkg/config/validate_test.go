@@ -639,147 +639,31 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 	})
 }
 
-func (s *ValidateSuite) TestRedactedResources() {
-	s.Run("missing version is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:  "",
-				Kind:   "Secret",
-				Fields: []string{"data.*"},
-			},
-		}
-		err := cfg.Validate()
-		s.Require().Error(err)
-		s.Contains(err.Error(), "version must be set")
-	})
-
-	s.Run("missing kind is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Fields:  []string{"data.*"},
-			},
-		}
-		err := cfg.Validate()
-		s.Require().Error(err)
-		s.Contains(err.Error(), "kind must be set")
-	})
-
-	s.Run("empty fields is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-			},
-		}
-		err := cfg.Validate()
-		s.Require().Error(err)
-		s.Contains(err.Error(), "fields must not be empty")
-	})
-
-	s.Run("empty field path is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{""},
-			},
-		}
-		err := cfg.Validate()
-		s.Require().Error(err)
-		s.Contains(err.Error(), "fields[0] must not be empty")
-	})
-
-	s.Run("field path with empty segment is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data..key"},
-			},
-		}
-		err := cfg.Validate()
-		s.Require().Error(err)
-		s.Contains(err.Error(), "contains empty path segment")
-	})
-
+func (s *ValidateSuite) TestRedactSecrets() {
 	s.Run("invalid mode is rejected", func() {
 		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-				Mode:    "invalid-mode",
-			},
-		}
+		cfg.RedactSecrets = "invalid-mode"
 		err := cfg.Validate()
 		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid mode")
+		s.Contains(err.Error(), "invalid redact_secrets")
 		s.Contains(err.Error(), "invalid-mode")
 	})
 
 	s.Run("opaque mode is accepted", func() {
 		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-				Mode:    "opaque",
-			},
-		}
+		cfg.RedactSecrets = "opaque"
 		s.NoError(cfg.Validate())
 	})
 
 	s.Run("hashed mode is accepted", func() {
 		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-				Mode:    "hashed",
-			},
-		}
+		cfg.RedactSecrets = "hashed"
 		s.NoError(cfg.Validate())
 	})
 
-	s.Run("empty mode defaults to opaque and is accepted", func() {
+	s.Run("empty mode is accepted", func() {
 		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-			},
-		}
-		s.NoError(cfg.Validate())
-	})
-
-	s.Run("valid multi-segment field path is accepted", func() {
-		cfg := s.validConfig()
-		cfg.RedactedResources = []api.RedactedResource{
-			{
-				Group:   "apps",
-				Version: "v1",
-				Kind:    "Deployment",
-				Fields:  []string{"spec.template.spec.containers.*.env.*.value"},
-			},
-		}
+		cfg.RedactSecrets = ""
 		s.NoError(cfg.Validate())
 	})
 }

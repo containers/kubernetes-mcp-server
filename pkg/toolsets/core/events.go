@@ -41,7 +41,7 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
 	}
-	eventMap, err := kubernetes.NewCore(params).EventsList(params, namespace)
+	eventMap, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).EventsList(params, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
 	}

@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -14,15 +13,7 @@ type RedactorSuite struct {
 }
 
 func (s *RedactorSuite) TestSecretDataOpaque() {
-	redactor := NewRedactor([]api.RedactedResource{
-		{
-			Group:   "",
-			Version: "v1",
-			Kind:    "Secret",
-			Fields:  []string{"data.*", "stringData.*"},
-			Mode:    "opaque",
-		},
-	})
+	redactor := NewSecretRedactor("opaque")
 
 	s.Run("redacts data and stringData values", func() {
 		obj := &unstructured.Unstructured{
@@ -80,15 +71,7 @@ func (s *RedactorSuite) TestSecretDataOpaque() {
 }
 
 func (s *RedactorSuite) TestSecretDataHashed() {
-	redactor := NewRedactor([]api.RedactedResource{
-		{
-			Group:   "",
-			Version: "v1",
-			Kind:    "Secret",
-			Fields:  []string{"data.*"},
-			Mode:    "hashed",
-		},
-	})
+	redactor := NewSecretRedactor("hashed")
 
 	s.Run("produces hashed redaction markers", func() {
 		obj := &unstructured.Unstructured{
@@ -137,57 +120,9 @@ func (s *RedactorSuite) TestSecretDataHashed() {
 	})
 }
 
-func (s *RedactorSuite) TestDeploymentEnvValues() {
-	redactor := NewRedactor([]api.RedactedResource{
-		{
-			Group:   "apps",
-			Version: "v1",
-			Kind:    "Deployment",
-			Fields:  []string{"spec.template.spec.containers.*.env.*.value"},
-			Mode:    "opaque",
-		},
-	})
-
-	s.Run("redacts plain env values", func() {
-		obj := s.deploymentWithEnv()
-		redactor.Apply(obj)
-
-		env := s.getContainerEnv(obj, 0)
-
-		env0 := env[0].(map[string]interface{})
-		s.Equal("PORT", env0["name"])
-		s.Equal("[REDACTED]", env0["value"])
-
-		env1 := env[1].(map[string]interface{})
-		s.Equal("NODE_ENV", env1["name"])
-		s.Equal("[REDACTED]", env1["value"])
-	})
-
-	s.Run("preserves secretKeyRef entries", func() {
-		obj := s.deploymentWithEnv()
-		redactor.Apply(obj)
-
-		env := s.getContainerEnv(obj, 0)
-
-		env2 := env[2].(map[string]interface{})
-		s.Equal("DB_PASSWORD", env2["name"])
-		s.Nil(env2["value"], "secretKeyRef env should not have value field added")
-		secretRef := env2["valueFrom"].(map[string]interface{})["secretKeyRef"].(map[string]interface{})
-		s.Equal("db-secret", secretRef["name"])
-		s.Equal("password", secretRef["key"])
-	})
-}
-
-func (s *RedactorSuite) TestNoMatchingGVK() {
-	s.Run("non-matching GVK is not redacted", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-			},
-		})
+func (s *RedactorSuite) TestNonSecretNotRedacted() {
+	s.Run("ConfigMap is not redacted", func() {
+		redactor := NewSecretRedactor("opaque")
 
 		obj := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -204,71 +139,104 @@ func (s *RedactorSuite) TestNoMatchingGVK() {
 		data := obj.Object["data"].(map[string]interface{})
 		s.Equal("visible-value", data["config"])
 	})
-}
 
-func (s *RedactorSuite) TestEmptyRedactedFields() {
-	s.Run("no fields configured means no redaction", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-			},
-		})
+	s.Run("Deployment is not redacted", func() {
+		redactor := NewSecretRedactor("opaque")
 
 		obj := &unstructured.Unstructured{
 			Object: map[string]interface{}{
-				"apiVersion": "v1",
-				"kind":       "Secret",
-				"data": map[string]interface{}{
-					"PASSWORD": "should-stay",
-				},
+				"apiVersion": "apps/v1",
+				"kind":       "Deployment",
+				"metadata":   map[string]interface{}{"name": "app"},
 			},
 		}
 
 		redactor.Apply(obj)
-		data := obj.Object["data"].(map[string]interface{})
-		s.Equal("should-stay", data["PASSWORD"])
+		s.Equal("Deployment", obj.GetKind())
 	})
 }
 
-func (s *RedactorSuite) TestDefaultsToOpaque() {
-	s.Run("empty mode defaults to opaque redaction", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-			},
-		})
+func (s *RedactorSuite) TestLastAppliedConfigStripped() {
+	s.Run("strips last-applied-configuration annotation", func() {
+		redactor := NewSecretRedactor("opaque")
 
 		obj := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name": "my-secret",
+					"annotations": map[string]interface{}{
+						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"v1","data":{"PASSWORD":"c2VjcmV0"},"kind":"Secret"}`,
+						"other-annotation": "keep-this",
+					},
+				},
 				"data": map[string]interface{}{
-					"KEY": "value",
+					"PASSWORD": "c2VjcmV0",
 				},
 			},
 		}
 
 		redactor.Apply(obj)
+
+		annotations := obj.GetAnnotations()
+		s.NotContains(annotations, "kubectl.kubernetes.io/last-applied-configuration")
+		s.Equal("keep-this", annotations["other-annotation"])
+	})
+
+	s.Run("removes annotations key when last-applied-configuration is the only annotation", func() {
+		redactor := NewSecretRedactor("opaque")
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name": "my-secret",
+					"annotations": map[string]interface{}{
+						"kubectl.kubernetes.io/last-applied-configuration": `{"data":{"KEY":"val"}}`,
+					},
+				},
+				"data": map[string]interface{}{
+					"KEY": "val",
+				},
+			},
+		}
+
+		redactor.Apply(obj)
+
+		metadata := obj.Object["metadata"].(map[string]interface{})
+		_, hasAnnotations := metadata["annotations"]
+		s.False(hasAnnotations, "annotations should be removed entirely when empty")
+	})
+}
+
+func (s *RedactorSuite) TestVersionAgnosticMatching() {
+	s.Run("matches Secret regardless of API version", func() {
+		redactor := NewSecretRedactor("opaque")
+
+		// Hypothetical v1beta1 Secret
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1beta1",
+				"kind":       "Secret",
+				"metadata":   map[string]interface{}{"name": "my-secret"},
+				"data": map[string]interface{}{
+					"PASSWORD": "plaintext",
+				},
+			},
+		}
+
+		redactor.Apply(obj)
+
 		data := obj.Object["data"].(map[string]interface{})
-		s.Equal("[REDACTED]", data["KEY"])
+		s.Equal("[REDACTED]", data["PASSWORD"])
 	})
 }
 
 func (s *RedactorSuite) TestApplyToList() {
-	s.Run("redacts all items in list", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-			},
-		})
+	s.Run("redacts all Secret items in list", func() {
+		redactor := NewSecretRedactor("opaque")
 
 		list := &unstructured.UnstructuredList{
 			Items: []unstructured.Unstructured{
@@ -298,83 +266,44 @@ func (s *RedactorSuite) TestApplyToList() {
 			s.Equal("[REDACTED]", data["KEY"])
 		}
 	})
-}
 
-func (s *RedactorSuite) TestInitContainers() {
-	s.Run("redacts both init and main container env values", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "apps",
-				Version: "v1",
-				Kind:    "Deployment",
-				Fields: []string{
-					"spec.template.spec.containers.*.env.*.value",
-					"spec.template.spec.initContainers.*.env.*.value",
+	s.Run("skips non-Secret items in mixed list", func() {
+		redactor := NewSecretRedactor("opaque")
+
+		list := &unstructured.UnstructuredList{
+			Items: []unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "Secret",
+						"metadata":   map[string]interface{}{"name": "secret-1"},
+						"data":       map[string]interface{}{"KEY": "secret-value"},
+					},
 				},
-			},
-		})
-
-		obj := &unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"apiVersion": "apps/v1",
-				"kind":       "Deployment",
-				"metadata":   map[string]interface{}{"name": "app"},
-				"spec": map[string]interface{}{
-					"template": map[string]interface{}{
-						"spec": map[string]interface{}{
-							"initContainers": []interface{}{
-								map[string]interface{}{
-									"name": "init",
-									"env": []interface{}{
-										map[string]interface{}{
-											"name":  "INIT_SECRET",
-											"value": "init-secret-val",
-										},
-									},
-								},
-							},
-							"containers": []interface{}{
-								map[string]interface{}{
-									"name": "main",
-									"env": []interface{}{
-										map[string]interface{}{
-											"name":  "APP_SECRET",
-											"value": "app-secret-val",
-										},
-									},
-								},
-							},
-						},
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "ConfigMap",
+						"metadata":   map[string]interface{}{"name": "config-1"},
+						"data":       map[string]interface{}{"KEY": "visible-value"},
 					},
 				},
 			},
 		}
 
-		redactor.Apply(obj)
+		redactor.ApplyToList(list)
 
-		spec := obj.Object["spec"].(map[string]interface{})["template"].(map[string]interface{})["spec"].(map[string]interface{})
+		secretData := list.Items[0].Object["data"].(map[string]interface{})
+		s.Equal("[REDACTED]", secretData["KEY"])
 
-		initEnv := spec["initContainers"].([]interface{})[0].(map[string]interface{})["env"].([]interface{})[0].(map[string]interface{})
-		s.Equal("INIT_SECRET", initEnv["name"])
-		s.Equal("[REDACTED]", initEnv["value"])
-
-		mainEnv := spec["containers"].([]interface{})[0].(map[string]interface{})["env"].([]interface{})[0].(map[string]interface{})
-		s.Equal("APP_SECRET", mainEnv["name"])
-		s.Equal("[REDACTED]", mainEnv["value"])
+		configMapData := list.Items[1].Object["data"].(map[string]interface{})
+		s.Equal("visible-value", configMapData["KEY"])
 	})
 }
 
 func (s *RedactorSuite) TestHashedGenerationID() {
 	s.Run("hashed value contains generation ID", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-				Mode:    "hashed",
-			},
-		})
+		redactor := NewSecretRedactor("hashed")
 
 		obj := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -396,23 +325,34 @@ func (s *RedactorSuite) TestHashedGenerationID() {
 	})
 }
 
-func (s *RedactorSuite) TestMissingField() {
-	s.Run("non-existent field path does not panic", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"nonexistent.path.*"},
+func (s *RedactorSuite) TestMissingDataField() {
+	s.Run("Secret without data field does not panic", func() {
+		redactor := NewSecretRedactor("opaque")
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata":   map[string]interface{}{"name": "empty-secret"},
 			},
+		}
+
+		s.NotPanics(func() {
+			redactor.Apply(obj)
 		})
+	})
+}
+
+func (s *RedactorSuite) TestSecretWithoutMetadata() {
+	s.Run("Secret without metadata key does not panic", func() {
+		redactor := NewSecretRedactor("opaque")
 
 		obj := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "Secret",
 				"data": map[string]interface{}{
-					"KEY": "should-remain",
+					"KEY": "value",
 				},
 			},
 		}
@@ -422,20 +362,62 @@ func (s *RedactorSuite) TestMissingField() {
 		})
 
 		data := obj.Object["data"].(map[string]interface{})
-		s.Equal("should-remain", data["KEY"])
+		s.Equal("[REDACTED]", data["KEY"])
+	})
+}
+
+func (s *RedactorSuite) TestNonStringDataValues() {
+	s.Run("non-string data values are redacted without panic", func() {
+		redactor := NewSecretRedactor("opaque")
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata":   map[string]interface{}{"name": "weird-secret"},
+				"data": map[string]interface{}{
+					"string-val":  "normal",
+					"numeric-val": 42,
+					"bool-val":    true,
+					"nil-val":     nil,
+				},
+			},
+		}
+
+		s.NotPanics(func() {
+			redactor.Apply(obj)
+		})
+
+		data := obj.Object["data"].(map[string]interface{})
+		for key, val := range data {
+			s.Equal("[REDACTED]", val, "data key %s should be redacted", key)
+		}
+	})
+
+	s.Run("hashed mode handles non-string values deterministically", func() {
+		redactor := NewSecretRedactor("hashed")
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"data": map[string]interface{}{
+					"num1": 42,
+					"num2": 42,
+				},
+			},
+		}
+
+		redactor.Apply(obj)
+
+		data := obj.Object["data"].(map[string]interface{})
+		s.Equal(data["num1"], data["num2"], "same numeric values should produce same hash")
 	})
 }
 
 func (s *RedactorSuite) TestNilObject() {
 	s.Run("nil object does not panic", func() {
-		redactor := NewRedactor([]api.RedactedResource{
-			{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Secret",
-				Fields:  []string{"data.*"},
-			},
-		})
+		redactor := NewSecretRedactor("opaque")
 
 		s.NotPanics(func() {
 			redactor.Apply(nil)
@@ -443,54 +425,25 @@ func (s *RedactorSuite) TestNilObject() {
 	})
 }
 
-// Helper to create a deployment with env vars for testing
-func (s *RedactorSuite) deploymentWithEnv() *unstructured.Unstructured {
-	return &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "apps/v1",
-			"kind":       "Deployment",
-			"metadata": map[string]interface{}{
-				"name": "web-app",
-			},
-			"spec": map[string]interface{}{
-				"template": map[string]interface{}{
-					"spec": map[string]interface{}{
-						"containers": []interface{}{
-							map[string]interface{}{
-								"name":  "app",
-								"image": "myapp:latest",
-								"env": []interface{}{
-									map[string]interface{}{
-										"name":  "PORT",
-										"value": "3000",
-									},
-									map[string]interface{}{
-										"name":  "NODE_ENV",
-										"value": "production",
-									},
-									map[string]interface{}{
-										"name": "DB_PASSWORD",
-										"valueFrom": map[string]interface{}{
-											"secretKeyRef": map[string]interface{}{
-												"name": "db-secret",
-												"key":  "password",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
+func (s *RedactorSuite) TestNilRedactor() {
+	s.Run("nil redactor does not panic", func() {
+		redactor := NewSecretRedactor("")
+		s.Nil(redactor)
 
-// Helper to extract container env from a deployment
-func (s *RedactorSuite) getContainerEnv(obj *unstructured.Unstructured, containerIndex int) []interface{} {
-	containers := obj.Object["spec"].(map[string]interface{})["template"].(map[string]interface{})["spec"].(map[string]interface{})["containers"].([]interface{})
-	return containers[containerIndex].(map[string]interface{})["env"].([]interface{})
+		// Calling Apply on nil should not panic
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"data":       map[string]interface{}{"KEY": "value"},
+			},
+		}
+
+		s.NotPanics(func() {
+			var r *Redactor
+			r.Apply(obj)
+		})
+	})
 }
 
 func TestRedactor(t *testing.T) {

@@ -99,7 +99,7 @@ func initConfiguration() []api.ServerTool {
 }
 
 func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	contexts, err := kubernetes.NewCore(params).ConfigurationContextsList()
+	contexts, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ConfigurationContextsList()
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list contexts: %w", err)), nil
 	}
@@ -108,7 +108,7 @@ func contextsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("No contexts found in kubeconfig", nil), nil
 	}
 
-	defaultContext, err := kubernetes.NewCore(params).ConfigurationContextsDefault()
+	defaultContext, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ConfigurationContextsDefault()
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get default context: %w", err)), nil
 	}
@@ -154,7 +154,7 @@ func configurationView(params api.ToolHandlerParams) (*api.ToolCallResult, error
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get configuration: %w", err)), nil
 	}
-	ret, err := kubernetes.NewCore(params).ConfigurationView(minify)
+	ret, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ConfigurationView(minify)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get configuration: %w", err)), nil
 	}

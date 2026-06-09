@@ -221,7 +221,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
 	}
 
-	ret, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).ResourcesList(params, gvk, ns, resourceListOptions)
+	ret, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
@@ -252,7 +252,7 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
-	ret, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).ResourcesGet(params, gvk, ns, n)
+	ret, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ResourcesGet(params, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
 	}
@@ -270,7 +270,7 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := kubernetes.NewCoreWithRedaction(params, params.BaseConfig.GetRedactedResources()).ResourcesCreateOrUpdate(params, r)
+	resources, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ResourcesCreateOrUpdate(params, r)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
 	}
@@ -314,7 +314,7 @@ func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 		gracePeriodSecondsPtr = &gracePeriodSeconds
 	}
 
-	err = kubernetes.NewCore(params).ResourcesDelete(params, gvk, ns, n, gracePeriodSecondsPtr)
+	err = kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ResourcesDelete(params, gvk, ns, n, gracePeriodSecondsPtr)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %w", err)), nil
 	}
@@ -356,7 +356,7 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 	}
 
-	scale, err := kubernetes.NewCore(params).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
+	scale, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
 	}

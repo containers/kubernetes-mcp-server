@@ -12,37 +12,27 @@ type Core struct {
 	redactor *redaction.Redactor
 }
 
-func NewCore(client api.KubernetesClient) *Core {
+// NewCore creates a Core wrapper around a Kubernetes client.
+// If redactSecretsMode is non-empty ("opaque" or "hashed"), Secret values
+// are automatically redacted in ResourcesGet, ResourcesList, and
+// ResourcesCreateOrUpdate responses. The redaction covers data.*,
+// stringData.*, and strips the last-applied-configuration annotation.
+func NewCore(client api.KubernetesClient, redactSecretsMode string) *Core {
 	return &Core{
 		KubernetesClient: client,
+		redactor:         redaction.NewSecretRedactor(redactSecretsMode),
 	}
 }
 
-// NewCoreWithRedaction creates a Core with field-level redaction enabled.
-// The redactor is applied automatically in ResourcesGet, ResourcesList, and
-// ResourcesCreateOrUpdate. Toolsets that call the dynamic client directly
-// should use RedactResources/RedactResourceList to apply redaction manually.
-func NewCoreWithRedaction(client api.KubernetesClient, redactedResources []api.RedactedResource) *Core {
-	c := &Core{
-		KubernetesClient: client,
-	}
-	if len(redactedResources) > 0 {
-		c.redactor = redaction.NewRedactor(redactedResources)
-	}
-	return c
-}
-
-// RedactResource applies field-level redaction to a single unstructured resource.
-// This is exported for toolsets that bypass the Core wrapper and call the dynamic client directly.
-// It is a no-op if no redactor is configured.
+// RedactResource applies Secret redaction to a single unstructured resource.
+// It is a no-op if no redactor is configured or the resource is not a Secret.
 func (c *Core) RedactResource(obj *unstructured.Unstructured) {
 	if c.redactor != nil {
 		c.redactor.Apply(obj)
 	}
 }
 
-// RedactResourceList applies field-level redaction to all items in an unstructured list.
-// This is exported for toolsets that bypass the Core wrapper and call the dynamic client directly.
+// RedactResourceList applies Secret redaction to all items in an unstructured list.
 // It is a no-op if no redactor is configured.
 func (c *Core) RedactResourceList(list *unstructured.UnstructuredList) {
 	if c.redactor != nil {

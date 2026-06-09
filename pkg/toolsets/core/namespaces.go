@@ -49,7 +49,7 @@ func initNamespaces(o api.Openshift) []api.ServerTool {
 }
 
 func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ret, err := kubernetes.NewCore(params).NamespacesList(params, api.ListOptions{AsTable: params.ListOutput.AsTable()})
+	ret, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).NamespacesList(params, api.ListOptions{AsTable: params.ListOutput.AsTable()})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
 	}
@@ -57,7 +57,7 @@ func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ret, err := kubernetes.NewCore(params).ProjectsList(params, api.ListOptions{AsTable: params.ListOutput.AsTable()})
+	ret, err := kubernetes.NewCore(params, params.BaseConfig.GetRedactSecrets()).ProjectsList(params, api.ListOptions{AsTable: params.ListOutput.AsTable()})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
 	}

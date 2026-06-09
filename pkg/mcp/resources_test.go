@@ -1031,12 +1031,8 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 
 func (s *ResourcesSuite) TestResourcesGetRedacted() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
-		[[redacted_resources]]
-		version = "v1"
-		kind = "Secret"
-		fields = ["data.*", "stringData.*"]
-		mode = "opaque"
-	`), s.Cfg), "Expected to parse redacted resources config")
+		redact_secrets = "opaque"
+	`), s.Cfg), "Expected to parse redact_secrets config")
 	s.InitMcpClient()
 	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
 	_, _ = kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
@@ -1070,7 +1066,7 @@ func (s *ResourcesSuite) TestResourcesGetRedacted() {
 			s.Equal("Secret", decodedSecret.GetKind())
 		})
 	})
-	s.Run("resources_get (not redacted) returns unmodified resource", func() {
+	s.Run("non-matching resource is not redacted", func() {
 		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
 		_, _ = kc.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "not-redacted-configmap"},
@@ -1095,12 +1091,8 @@ func (s *ResourcesSuite) TestResourcesGetRedacted() {
 
 func (s *ResourcesSuite) TestResourcesGetRedactedHashed() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
-		[[redacted_resources]]
-		version = "v1"
-		kind = "Secret"
-		fields = ["data.*"]
-		mode = "hashed"
-	`), s.Cfg), "Expected to parse redacted resources config")
+		redact_secrets = "hashed"
+	`), s.Cfg), "Expected to parse redact_secrets config")
 	s.InitMcpClient()
 	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
 	_, _ = kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
@@ -1138,12 +1130,8 @@ func (s *ResourcesSuite) TestResourcesGetRedactedHashed() {
 
 func (s *ResourcesSuite) TestResourcesListRedacted() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
-		[[redacted_resources]]
-		version = "v1"
-		kind = "Secret"
-		fields = ["data.*"]
-		mode = "opaque"
-	`), s.Cfg), "Expected to parse redacted resources config")
+		redact_secrets = "opaque"
+	`), s.Cfg), "Expected to parse redact_secrets config")
 	s.InitMcpClient()
 	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
 	_, _ = kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
@@ -1182,12 +1170,8 @@ func (s *ResourcesSuite) TestResourcesListRedacted() {
 
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateRedacted() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
-		[[redacted_resources]]
-		version = "v1"
-		kind = "Secret"
-		fields = ["data.*"]
-		mode = "opaque"
-	`), s.Cfg), "Expected to parse redacted resources config")
+		redact_secrets = "opaque"
+	`), s.Cfg), "Expected to parse redact_secrets config")
 	s.InitMcpClient()
 	// Secret created with stringData; Kubernetes converts stringData to base64-encoded data server-side,
 	// so the returned object contains data.* fields that match the redaction rule.

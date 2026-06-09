@@ -33,8 +33,13 @@ type ToolOverride struct {
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
-	DeniedResources   []api.GroupVersionKind `toml:"denied_resources"`
-	RedactedResources []api.RedactedResource `toml:"redacted_resources"`
+	DeniedResources []api.GroupVersionKind `toml:"denied_resources"`
+	// RedactSecrets controls built-in Secret value redaction.
+	// When set, Secret data/stringData values and the last-applied-configuration
+	// annotation are redacted in all tool outputs.
+	// Valid values: "opaque" (replaces with [REDACTED]), "hashed" (deterministic hash),
+	// or empty string (disabled).
+	RedactSecrets string `toml:"redact_secrets,omitempty"`
 
 	LogLevel   int    `toml:"log_level,omitzero"`
 	LogFile    string `toml:"log_file,omitempty"`
@@ -384,8 +389,8 @@ func (c *StaticConfig) GetDeniedResources() []api.GroupVersionKind {
 	return c.DeniedResources
 }
 
-func (c *StaticConfig) GetRedactedResources() []api.RedactedResource {
-	return c.RedactedResources
+func (c *StaticConfig) GetRedactSecrets() string {
+	return c.RedactSecrets
 }
 
 func (c *StaticConfig) GetKubeConfigPath() string {
@@ -556,43 +561,18 @@ func (c *StaticConfig) Validate() error {
 	if err := c.HTTP.Validate(); err != nil {
 		return err
 	}
-	if err := c.validateRedactedResources(); err != nil {
+	if err := c.validateRedactSecrets(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// validateRedactedResources validates the redacted_resources configuration:
-//   - version must be set
-//   - kind must be set (cannot redact fields on an entire group/version)
-//   - fields must not be empty and must contain valid dot-separated paths
-//   - mode must be "opaque", "hashed", or empty (defaults to opaque)
-func (c *StaticConfig) validateRedactedResources() error {
-	for i, rr := range c.RedactedResources {
-		if rr.Version == "" {
-			return fmt.Errorf("redacted_resources[%d]: version must be set", i)
-		}
-		if rr.Kind == "" {
-			return fmt.Errorf("redacted_resources[%d]: kind must be set", i)
-		}
-		if len(rr.Fields) == 0 {
-			return fmt.Errorf("redacted_resources[%d]: fields must not be empty", i)
-		}
-		for j, field := range rr.Fields {
-			if field == "" {
-				return fmt.Errorf("redacted_resources[%d]: fields[%d] must not be empty", i, j)
-			}
-			segments := strings.Split(field, ".")
-			for _, seg := range segments {
-				if seg == "" {
-					return fmt.Errorf("redacted_resources[%d]: fields[%d] %q contains empty path segment", i, j, field)
-				}
-			}
-		}
-		mode := rr.Mode
-		if mode != "" && mode != redaction.RedactionModeOpaque && mode != redaction.RedactionModeHashed {
-			return fmt.Errorf("redacted_resources[%d]: invalid mode %q, must be %q or %q", i, mode, redaction.RedactionModeOpaque, redaction.RedactionModeHashed)
-		}
+// validateRedactSecrets validates the redact_secrets configuration.
+// Valid values: "", "opaque", "hashed".
+func (c *StaticConfig) validateRedactSecrets() error {
+	mode := c.RedactSecrets
+	if mode != "" && mode != redaction.RedactionModeOpaque && mode != redaction.RedactionModeHashed {
+		return fmt.Errorf("invalid redact_secrets %q: must be %q or %q", mode, redaction.RedactionModeOpaque, redaction.RedactionModeHashed)
 	}
 	return nil
 }
