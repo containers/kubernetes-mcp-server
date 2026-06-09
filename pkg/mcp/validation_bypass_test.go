@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -33,7 +34,7 @@ func (s *ValidationBypassSuite) TestValidationDisabledPassesToAPIServer() {
 	`), s.Cfg), "Expected to parse validation config")
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
 	s.Run("API server rejects with 403 Forbidden", func() {
@@ -54,7 +55,7 @@ func (s *ValidationBypassSuite) TestValidationEnabledCatchesRBACDenial() {
 	`), s.Cfg), "Expected to parse validation config")
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
 	s.Run("RBAC validator rejects before reaching API server", func() {

@@ -45,7 +45,7 @@ func (s *KubevirtSuite) SetupSuite() {
 	}
 	s.Require().NoError(tasks.Wait())
 
-	_, err := kubernetes.NewForConfigOrDie(envTestRestConfig).CoreV1().Namespaces().
+	_, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Namespaces().
 		Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "openshift-virtualization-os-images"}}, metav1.CreateOptions{})
 	s.Require().NoError(err, "failed to create test namespace openshift-virtualization-os-images")
 }
@@ -190,7 +190,7 @@ func (s *KubevirtSuite) TestCreate() {
 		})
 	})
 	s.Run("with size", func() {
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig).Resource(
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(
 			schema.GroupVersionResource{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterinstancetypes"},
 		)
 		instanceTypes := []struct{ instanceType, performance string }{
@@ -288,7 +288,7 @@ func (s *KubevirtSuite) TestCreate() {
 		})
 	})
 	s.Run("with data sources", func() {
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig).Resource(
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(
 			schema.GroupVersionResource{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "datasources"},
 		)
 		_, err := dynamicClient.Namespace("openshift-virtualization-os-images").Create(
@@ -392,7 +392,7 @@ func (s *KubevirtSuite) TestCreate() {
 		})
 	})
 	s.Run("with preferences", func() {
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig).Resource(
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(
 			schema.GroupVersionResource{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterpreferences"},
 		)
 		for _, preference := range []*unstructured.Unstructured{
@@ -458,7 +458,7 @@ func (s *KubevirtSuite) TestCreate() {
 
 func (s *KubevirtSuite) TestVMLifecycle() {
 	// Create a test VM in Halted state for start tests
-	dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+	dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 	vm := &unstructured.Unstructured{}
 	vm.SetUnstructuredContent(map[string]interface{}{
 		"apiVersion": "kubevirt.io/v1",
@@ -692,7 +692,7 @@ func (s *KubevirtSuite) TestVMClone() {
 
 	s.Run("vm_clone creates VirtualMachineClone CR", func() {
 		// Create a source VM first
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 		vm := &unstructured.Unstructured{}
 		vm.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
@@ -816,7 +816,7 @@ func (s *KubevirtSuite) TestVMGuestInfo() {
 		// Create a VM (not VMI, since it's not running)
 		// This tests the case where a VM definition exists but it's not running,
 		// so there's no VMI to query the guest agent from
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 		vm := &unstructured.Unstructured{}
 		vm.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
@@ -854,7 +854,7 @@ func (s *KubevirtSuite) TestVMGuestInfo() {
 
 	s.Run("vm_guest_info with running VM (no guest agent)", func() {
 		// Create a running VMI
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 		vmi := &unstructured.Unstructured{}
 		vmi.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
@@ -956,7 +956,7 @@ func (s *KubevirtSuite) TestVMGuestInfo() {
 
 	s.Run("vm_guest_info with VMI not in Running phase", func() {
 		// Create a VMI in a non-running state
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 		vmi := &unstructured.Unstructured{}
 		vmi.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
@@ -1000,7 +1000,7 @@ func (s *KubevirtSuite) TestVMGuestInfo() {
 
 	s.Run("vm_guest_info with default info_type", func() {
 		// Create a running VMI
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 		vmi := &unstructured.Unstructured{}
 		vmi.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",

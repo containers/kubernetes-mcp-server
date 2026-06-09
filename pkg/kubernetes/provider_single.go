@@ -7,17 +7,15 @@ import (
 	"reflect"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/klog/v2"
 )
 
 // singleClusterProvider implements Provider for managing a single
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
-	config              api.BaseConfig
+	api.BaseConfig
+	*ProviderGVKFilter
 	strategy            string
 	manager             *Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
@@ -37,30 +35,31 @@ func init() {
 func newSingleClusterProvider(strategy string) ProviderFactory {
 	return func(ctx context.Context, cfg api.BaseConfig) (Provider, error) {
 		ret := &singleClusterProvider{
-			config:   cfg,
-			strategy: strategy,
+			BaseConfig: cfg,
+			strategy:   strategy,
 		}
 		if err := ret.reset(ctx); err != nil {
 			return nil, err
 		}
+		ret.ProviderGVKFilter = NewProviderGVKFilter(ret)
 		return ret, nil
 	}
 }
 
 func (p *singleClusterProvider) reset(ctx context.Context) error {
-	if p.config != nil && p.config.GetKubeConfigPath() != "" && p.strategy == api.ClusterProviderInCluster {
+	if p.BaseConfig != nil && p.GetKubeConfigPath() != "" && p.strategy == api.ClusterProviderInCluster {
 		return fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy",
-			p.config.GetKubeConfigPath())
+			p.GetKubeConfigPath())
 	}
 
 	if p.manager != nil {
 		p.manager.Close()
 	}
 	var err error
-	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p.config) {
-		p.manager, err = NewInClusterManager(ctx, p.config)
+	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p) {
+		p.manager, err = NewInClusterManager(ctx, p)
 	} else {
-		p.manager, err = NewKubeconfigManager(ctx, p.config, "")
+		p.manager, err = NewKubeconfigManager(ctx, p, "")
 	}
 	if err != nil {
 		if errors.Is(err, ErrorInClusterNotInCluster) {
@@ -76,16 +75,16 @@ func (p *singleClusterProvider) reset(ctx context.Context) error {
 	return nil
 }
 
-func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
-	return p.manager.IsOpenShift(ctx)
-}
-
 func (p *singleClusterProvider) IsMultiTarget() bool {
 	return false
 }
 
 func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	return []string{""}, nil
+}
+
+func (p *singleClusterProvider) GetTargetManagers(_ context.Context) ([]*Manager, error) {
+	return []*Manager{p.manager}, nil
 }
 
 func (p *singleClusterProvider) GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error) {
@@ -122,22 +121,4 @@ func (p *singleClusterProvider) Close() {
 			w.Close()
 		}
 	}
-}
-
-// HasGVKs uses the cluster's REST mapper to verify that every requested GVK is available.
-func (p *singleClusterProvider) HasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
-	if len(gvks) == 0 {
-		return true
-	}
-	if p.manager == nil {
-		klogutil.LogWarn(klog.FromContext(ctx), "HasGVKs called with nil manager, assuming all GVKs are available")
-		return true
-	}
-	mapper := p.manager.kubernetes.RESTMapper()
-	for _, gvk := range gvks {
-		if _, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version); err != nil {
-			return false
-		}
-	}
-	return true
 }

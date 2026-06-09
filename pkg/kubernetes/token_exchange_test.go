@@ -11,6 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type TokenExchangeRoutingSuite struct {
@@ -134,6 +135,12 @@ func (f fakeTokenExchangeProvider) GetTokenExchangeConfig(string) *tokenexchange
 	return f.exchangeConfig
 }
 func (f fakeTokenExchangeProvider) GetTokenExchangeStrategy() string { return f.strategy }
+func (f fakeTokenExchangeProvider) AnyTargetHasGVKs(context.Context, []schema.GroupVersionKind) bool {
+	return true
+}
+func (f fakeTokenExchangeProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	return false
+}
 
 func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

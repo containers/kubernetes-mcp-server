@@ -24,10 +24,10 @@ import (
 // asserts a successful (2xx) response with a non-empty body.
 type ContractTestSuite struct {
 	suite.Suite
-	kialiURL   string
-	kialiToken string
-	httpClient *http.Client
-	testNS     string
+	kialiURL     string
+	kialiToken   string
+	httpClient   *http.Client
+	testNS       string
 	testService  string
 	testWorkload string
 	testTraceID  string

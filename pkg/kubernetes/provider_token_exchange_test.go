@@ -53,7 +53,6 @@ func (a *exchangeTestOIDCServer) recordedRequests() []observedTokenRequest {
 
 type fakeDerivedProvider struct{}
 
-func (fakeDerivedProvider) IsOpenShift(context.Context) bool             { return false }
 func (fakeDerivedProvider) IsMultiTarget() bool                          { return false }
 func (fakeDerivedProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
 func (fakeDerivedProvider) GetDefaultTarget() string                     { return "" }
@@ -65,6 +64,12 @@ func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kuber
 }
 func (fakeDerivedProvider) HasGVKs(context.Context, []schema.GroupVersionKind) bool {
 	return true
+}
+func (fakeDerivedProvider) AnyTargetHasGVKs(context.Context, []schema.GroupVersionKind) bool {
+	return true
+}
+func (fakeDerivedProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	return false
 }
 
 func (s *TokenExchangingProviderSuite) TestGetDerivedKubernetes() {

@@ -365,7 +365,7 @@ func (m *mockToolsetWithPrompts) GetDescription() string {
 	return m.description
 }
 
-func (m *mockToolsetWithPrompts) GetTools(_ api.Openshift) []api.ServerTool {
+func (m *mockToolsetWithPrompts) GetTools(_ api.FilteringProvider) []api.ServerTool {
 	return nil
 }
 

@@ -26,7 +26,7 @@ type brokenToolset struct{}
 
 func (brokenToolset) GetName() string        { return "broken-test-toolset" }
 func (brokenToolset) GetDescription() string { return "test-only toolset that fails convert phase" }
-func (brokenToolset) GetTools(api.Openshift) []api.ServerTool {
+func (brokenToolset) GetTools(api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{{Tool: api.Tool{
 		Name:        "broken-tool",
 		InputSchema: &jsonschema.Schema{Type: "string"},

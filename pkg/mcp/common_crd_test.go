@@ -5,56 +5,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
+
 	"golang.org/x/sync/errgroup"
-	apiextensionsv1spec "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
-	"k8s.io/utils/ptr"
 )
 
-func CRD(group, version, resource, kind, singular string, namespaced bool) *apiextensionsv1spec.CustomResourceDefinition {
-	scope := "Cluster"
-	if namespaced {
-		scope = "Namespaced"
-	}
-	crd := &apiextensionsv1spec.CustomResourceDefinition{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: apiextensionsv1spec.SchemeGroupVersion.String(),
-			Kind:       "CustomResourceDefinition",
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s.%s", resource, group)},
-		Spec: apiextensionsv1spec.CustomResourceDefinitionSpec{
-			Group: group,
-			Versions: []apiextensionsv1spec.CustomResourceDefinitionVersion{
-				{
-					Name:    version,
-					Served:  false,
-					Storage: true,
-					Schema: &apiextensionsv1spec.CustomResourceValidation{
-						OpenAPIV3Schema: &apiextensionsv1spec.JSONSchemaProps{
-							Type:                   "object",
-							XPreserveUnknownFields: ptr.To(true),
-						},
-					},
-				},
-			},
-			Scope: apiextensionsv1spec.ResourceScope(scope),
-			Names: apiextensionsv1spec.CustomResourceDefinitionNames{
-				Plural:     resource,
-				Singular:   singular,
-				Kind:       kind,
-				ShortNames: []string{singular},
-			},
-		},
-	}
-	return crd
-}
-
 func EnvTestEnableCRD(ctx context.Context, group, version, resource string) error {
-	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
+	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := apiExtensionsV1Client.CustomResourceDefinitions().Patch(
 		ctx,
 		fmt.Sprintf("%s.%s", resource, group),
@@ -68,7 +30,7 @@ func EnvTestEnableCRD(ctx context.Context, group, version, resource string) erro
 }
 
 func EnvTestDisableCRD(ctx context.Context, group, version, resource string) error {
-	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(envTestRestConfig)
+	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := apiExtensionsV1Client.CustomResourceDefinitions().Patch(
 		ctx,
 		fmt.Sprintf("%s.%s", resource, group),
@@ -82,7 +44,7 @@ func EnvTestDisableCRD(ctx context.Context, group, version, resource string) err
 }
 
 func EnvTestWaitForAPIResourceCondition(ctx context.Context, group, version, resource string, shouldBeAvailable bool) error {
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(envTestRestConfig)
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(test.EnvTestRestConfig())
 	if err != nil {
 		return fmt.Errorf("failed to create discovery client: %w", err)
 	}

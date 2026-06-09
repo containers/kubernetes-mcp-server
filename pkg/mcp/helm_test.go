@@ -33,7 +33,7 @@ type HelmSuite struct {
 func (s *HelmSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.Cfg.Toolsets = append(s.Cfg.Toolsets, "helm")
-	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(envTestRestConfig))
+	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()))
 
 	// Capture log output to verify denied resource messages
 	s.klogState = klog.CaptureState()
@@ -135,7 +135,7 @@ func (s *HelmSuite) TestHelmListNoReleases() {
 }
 
 func (s *HelmSuite) TestHelmList() {
-	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "sh.helm.release.v1.release-to-list",
@@ -212,7 +212,7 @@ func (s *HelmSuite) TestHelmListDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "Secret" } ]
 	`), s.Cfg), "Expected to parse denied resources config")
-	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "sh.helm.release.v1.release-to-list-denied",
@@ -260,7 +260,7 @@ func (s *HelmSuite) TestHelmUninstallNoReleases() {
 }
 
 func (s *HelmSuite) TestHelmUninstall() {
-	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "sh.helm.release.v1.existent-release-to-uninstall.v0",
@@ -296,7 +296,7 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 	s.Require().NoError(toml.Unmarshal([]byte(`
 		denied_resources = [ { version = "v1", kind = "ConfigMap" } ]
 	`), s.Cfg), "Expected to parse denied resources config")
-	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "sh.helm.release.v1.existent-release-to-uninstall.v0",
@@ -337,7 +337,7 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 func (s *HelmSuite) TestHelmListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
 	s.Run("helm_list (forbidden)", func() {

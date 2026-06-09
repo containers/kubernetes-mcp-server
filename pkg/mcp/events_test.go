@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ func (s *EventsSuite) TestEventsList() {
 		})
 	})
 	s.Run("events_list (with events)", func() {
-		client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 		for _, ns := range []string{"default", "ns-1"} {
 			_, eventCreateErr := client.CoreV1().Events(ns).Create(s.T().Context(), &v1.Event{
 				ObjectMeta: metav1.ObjectMeta{
@@ -146,7 +147,7 @@ func (s *EventsSuite) TestEventsListDenied() {
 func (s *EventsSuite) TestEventsListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	// Remove all permissions - user will have forbidden access
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
@@ -168,7 +169,7 @@ func (s *EventsSuite) TestEventsListForbidden() {
 
 func (s *EventsSuite) TestEventsListWithFieldSelector() {
 	s.InitMcpClient()
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 
 	// Create events with different types to verify fieldSelector filtering
 	_, err := client.CoreV1().Events("default").Create(s.T().Context(), &v1.Event{

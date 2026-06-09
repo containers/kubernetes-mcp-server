@@ -19,7 +19,7 @@ func (t *Toolset) GetDescription() string {
 	return "Tools for managing Helm charts and releases"
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 	return slices.Concat(
 		initHelm(),
 	)
