@@ -38,7 +38,7 @@ func InitListNamespaces() []api.ServerPrompt {
 				Title:       "List Namespaces",
 				Description: "List all namespaces with their sidecar injection status and Istio labels",
 			},
-			Handler: listResourceHandler("namespaces"),
+			Handler: listResourceHandler("namespace"),
 		},
 	}
 }
