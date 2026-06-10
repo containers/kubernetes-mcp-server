@@ -25,7 +25,7 @@ func InitListApplications() []api.ServerPrompt {
 					},
 				},
 			},
-			Handler: listResourceHandler("applications"),
+			Handler: listResourceHandler("app"),
 		},
 	}
 }
