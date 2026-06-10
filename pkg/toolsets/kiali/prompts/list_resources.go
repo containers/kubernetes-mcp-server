@@ -78,7 +78,7 @@ func InitListWorkloads() []api.ServerPrompt {
 					},
 				},
 			},
-			Handler: listResourceHandler("workloads"),
+			Handler: listResourceHandler("workload"),
 		},
 	}
 }
