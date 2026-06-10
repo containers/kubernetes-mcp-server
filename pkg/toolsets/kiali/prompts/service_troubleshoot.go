@@ -52,7 +52,7 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 
 	logsContent := fetchKialiData(kiali, params, tools.KialiGetLogsEndpoint,
-		map[string]any{"namespace": namespace, "workload": service + "-v1"})
+		map[string]any{"namespace": namespace, "name": service + "-v1"})
 
 	istioContent := fetchKialiData(kiali, params, tools.KialiManageIstioConfigReadEndpoint,
 		map[string]any{"namespace": namespace, "action": "list"})
