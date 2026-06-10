@@ -123,7 +123,7 @@ func listResourceHandler(resourceType string) api.PromptHandlerFunc {
 
 		klog.Infof("Starting list %s prompt...", resourceType)
 
-		reqArgs := map[string]any{"resource_type": resourceType}
+		reqArgs := map[string]any{"resourceType": resourceType}
 		if namespace != "" {
 			reqArgs["namespace"] = namespace
 		}
