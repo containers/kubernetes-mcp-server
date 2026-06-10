@@ -108,7 +108,7 @@ func TestQueryRangeSetsTenantHeader(t *testing.T) {
 		if got := r.Header.Get("X-Scope-OrgID"); got != "network" {
 			t.Fatalf("unexpected tenant header: %q", got)
 		}
-		if r.URL.Path != "/api/logs/v1/network/loki/api/v1/query_range" {
+		if r.URL.Path != "/loki/api/v1/query_range" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[]}}`))

@@ -187,12 +187,13 @@ func buildTimeParams(start, end time.Time) url.Values {
 }
 
 func (l *RealLoader) requestURL(endpoint string) string {
-	if strings.Contains(l.baseURL, "/api/logs/v1/") {
-		return l.baseURL + endpoint
+	// Gateway URL ending with /api/logs/v1 — insert tenant in path
+	// (used by OpenShift Loki gateway with tenant-based path routing)
+	if strings.HasSuffix(l.baseURL, "/api/logs/v1") && l.tenant != "" {
+		return l.baseURL + "/" + url.PathEscape(l.tenant) + endpoint
 	}
-	if l.tenant != "" {
-		return l.baseURL + "/api/logs/v1/" + url.PathEscape(l.tenant) + endpoint
-	}
+	// URL already includes /api/logs/v1/<tenant>, or standard Loki URL
+	// (for standard Loki, tenant is sent via X-Scope-OrgID header)
 	return l.baseURL + endpoint
 }
 

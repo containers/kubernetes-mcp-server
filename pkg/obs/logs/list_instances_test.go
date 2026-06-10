@@ -36,7 +36,7 @@ func TestListInstancesHandler_Success(t *testing.T) {
 	require.Len(t, output.Instances, 1)
 	require.Equal(t, "openshift-logging", output.Instances[0].LokiNamespace)
 	require.Equal(t, "logging-loki", output.Instances[0].LokiName)
-	require.Equal(t, "https://logging-loki-gateway-http.openshift-logging.svc:8080", output.Instances[0].URL)
+	require.Equal(t, "https://logging-loki-gateway-http.openshift-logging.svc:8080/api/logs/v1", output.Instances[0].URL)
 }
 
 func newLokiStack(namespace, name string) *unstructured.Unstructured {
@@ -48,6 +48,11 @@ func newLokiStack(namespace, name string) *unstructured.Unstructured {
 	})
 	obj.SetNamespace(namespace)
 	obj.SetName(name)
+	obj.Object["spec"] = map[string]any{
+		"tenants": map[string]any{
+			"mode": "openshift-network",
+		},
+	}
 	obj.Object["status"] = map[string]any{
 		"conditions": []any{
 			map[string]any{

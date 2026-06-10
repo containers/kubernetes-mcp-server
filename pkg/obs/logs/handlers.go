@@ -218,6 +218,10 @@ func (params ToolParams) getLokiClient() (loki.Loader, error) {
 }
 
 func (params ToolParams) resolveLokiURL() (string, error) {
+	if params.config != nil && params.config.LokiURL != "" {
+		return params.config.LokiURL, nil
+	}
+
 	namespace := tools.GetString(params.arguments, "lokiNamespace", "")
 	name := tools.GetString(params.arguments, "lokiName", "")
 	if namespace != "" || name != "" {
@@ -235,9 +239,6 @@ func (params ToolParams) resolveLokiURL() (string, error) {
 		return instance.GetURL(), nil
 	}
 
-	if params.config != nil && params.config.LokiURL != "" {
-		return params.config.LokiURL, nil
-	}
 	return "", fmt.Errorf("loki URL not configured; set loki_url/--loki-url/LOKI_URL or provide lokiNamespace and lokiName")
 }
 

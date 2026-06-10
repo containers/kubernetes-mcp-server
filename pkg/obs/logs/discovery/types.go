@@ -22,7 +22,16 @@ var (
 type LokiStack struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
+	Spec              LokiStackSpec   `json:"spec"`
 	Status            LokiStackStatus `json:"status"`
+}
+
+type LokiStackSpec struct {
+	Tenants *LokiStackTenants `json:"tenants,omitempty"`
+}
+
+type LokiStackTenants struct {
+	Mode string `json:"mode,omitempty"`
 }
 
 type LokiStackStatus struct {
