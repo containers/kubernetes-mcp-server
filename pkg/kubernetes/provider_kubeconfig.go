@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"reflect"
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"k8s.io/klog/v2"
 )
 
 // KubeConfigTargetParameterName is the parameter name used to specify
@@ -23,11 +27,13 @@ type kubeConfigClusterProvider struct {
 	config              api.BaseConfig
 	defaultContext      string
 	managers            map[string]*Manager
+	contextServers      map[string]string
 	kubeconfigWatcher   *watcher.Kubeconfig
 	clusterStateWatcher *watcher.ClusterState
 }
 
 var _ Provider = &kubeConfigClusterProvider{}
+var _ TokenExchangeProvider = &kubeConfigClusterProvider{}
 
 func init() {
 	RegisterProvider(api.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
@@ -94,6 +100,16 @@ func (p *kubeConfigClusterProvider) reset() error {
 			continue
 		}
 		p.managers[name] = nil
+	}
+
+	p.contextServers = make(map[string]string, len(rawConfig.Contexts))
+	for name, ctxObj := range rawConfig.Contexts {
+		if ctxObj == nil {
+			continue
+		}
+		if cluster, ok := rawConfig.Clusters[ctxObj.Cluster]; ok && cluster != nil {
+			p.contextServers[name] = cluster.Server
+		}
 	}
 
 	p.Close()
@@ -186,6 +202,99 @@ func (p *kubeConfigClusterProvider) WatchTargets(reload McpReload) {
 	}
 	p.kubeconfigWatcher.Watch(reloadWithReset)
 	p.clusterStateWatcher.Watch(reload)
+}
+
+// providerConfig returns the parsed [cluster_provider_configs.kubeconfig]
+// section, or nil if the operator did not configure one.
+func (p *kubeConfigClusterProvider) providerConfig() *KubeconfigProviderConfig {
+	raw, ok := p.config.GetProviderConfig(api.ClusterProviderKubeConfig)
+	if !ok {
+		return nil
+	}
+	cfg, _ := raw.(*KubeconfigProviderConfig)
+	return cfg
+}
+
+// serverHostForContext returns the host portion of the kubeconfig
+// cluster.server URL for the given context, or empty string if unknown.
+func (p *kubeConfigClusterProvider) serverHostForContext(target string) string {
+	p.mu.RLock()
+	server, ok := p.contextServers[target]
+	p.mu.RUnlock()
+	if !ok || server == "" {
+		return ""
+	}
+	u, err := url.Parse(server)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+// GetTokenExchangeStrategy returns the exchanger name configured for the
+// kubeconfig provider, falling back to the top-level sts strategy.
+func (p *kubeConfigClusterProvider) GetTokenExchangeStrategy() string {
+	if pc := p.providerConfig(); pc != nil && pc.TokenExchangeStrategy != "" {
+		return pc.TokenExchangeStrategy
+	}
+	return p.config.GetStsStrategy()
+}
+
+// GetTokenExchangeConfig returns a per-target token exchange config.
+//
+// Returns nil when:
+//   - no [cluster_provider_configs.kubeconfig] section is configured
+//     (defers to the global STS path);
+//   - the target's cluster.server host matches a SkipExchangeServers glob
+//     (the bearer token is forwarded as-is — provided no top-level
+//     token_exchange_strategy is set, otherwise the global path will run);
+//   - validation of the constructed config fails.
+//
+// Otherwise the returned config is built from the top-level sts_* settings.
+func (p *kubeConfigClusterProvider) GetTokenExchangeConfig(target string) *tokenexchange.TargetTokenExchangeConfig {
+	pc := p.providerConfig()
+	if pc == nil {
+		return nil
+	}
+
+	if host := p.serverHostForContext(target); host != "" {
+		for _, pattern := range pc.SkipExchangeServers {
+			matched, err := filepath.Match(pattern, host)
+			if err != nil {
+				klog.V(2).Infof("kubeconfig provider: invalid skip_exchange_servers glob %q: %v", pattern, err)
+				continue
+			}
+			if matched {
+				klog.V(5).Infof("kubeconfig provider: target %q server %q matched skip_exchange_servers %q, skipping exchange", target, host, pattern)
+				return nil
+			}
+		}
+	}
+
+	authStyle := p.config.GetStsAuthStyle()
+	if authStyle == "" {
+		authStyle = tokenexchange.AuthStyleParams
+	}
+
+	cfg := &tokenexchange.TargetTokenExchangeConfig{
+		TokenURL:           p.config.GetStsTokenURL(),
+		ClientID:           p.config.GetStsClientId(),
+		ClientSecret:       p.config.GetStsClientSecret(),
+		Audience:           p.config.GetStsAudience(),
+		Scopes:             p.config.GetStsScopes(),
+		AuthStyle:          authStyle,
+		ClientCertFile:     p.config.GetStsClientCertFile(),
+		ClientKeyFile:      p.config.GetStsClientKeyFile(),
+		FederatedTokenFile: p.config.GetStsFederatedTokenFile(),
+		SubjectTokenType:   p.config.GetStsSubjectTokenType(),
+		RequestedTokenType: p.config.GetStsRequestedTokenType(),
+		CAFile:             p.config.GetCertificateAuthority(),
+	}
+	if err := cfg.Validate(); err != nil {
+		klog.Warningf("kubeconfig provider: token exchange config validation failed for target %q: %v", target, err)
+		return nil
+	}
+	return cfg
 }
 
 func (p *kubeConfigClusterProvider) Close() {

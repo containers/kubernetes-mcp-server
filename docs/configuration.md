@@ -719,6 +719,48 @@ Configure cluster provider-specific settings via the `cluster_provider_configs` 
 # kcp-specific configuration
 ```
 
+#### `kubeconfig` provider
+
+When `cluster_provider_strategy = "kubeconfig"`, you can configure per-target
+token exchange behavior under `[cluster_provider_configs.kubeconfig]`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token_exchange_strategy` | string | Name of the registered exchanger (e.g. `rfc8693`). Falls back to the top-level `token_exchange_strategy` when empty. |
+| `skip_exchange_servers` | []string | List of `filepath.Match` globs evaluated against the host portion of each context's `cluster.server` URL. A match means the bearer token is forwarded as-is, with no exchange. |
+
+This is intended for deployments that mix cluster flavors with different
+issuer trust. Typical example: vanilla Kubernetes clusters configured to
+trust an internal STS gateway via structured auth, mixed with EKS clusters
+which can only trust a single OIDC issuer (the user-token issuer, e.g.
+Okta) and would reject the exchanged token.
+
+```toml
+require_oauth             = true
+authorization_url         = "https://idp.example.com"
+oauth_audience            = "kubernetes"
+cluster_provider_strategy = "kubeconfig"
+cluster_auth_mode         = "passthrough"
+
+# Top-level sts_* are read by the kubeconfig provider when building
+# the per-target exchange config.
+sts_token_url            = "https://sts-gateway.example.internal/oauth2/token"
+sts_client_id            = "kubernetes-mcp-server"
+sts_audience             = "vanilla-clusters"
+sts_subject_token_type   = "urn:ietf:params:oauth:token-type:jwt"
+sts_requested_token_type = "urn:ietf:params:oauth:token-type:jwt"
+
+[cluster_provider_configs.kubeconfig]
+token_exchange_strategy = "rfc8693"
+skip_exchange_servers   = ["*.eks.amazonaws.com"]
+```
+
+> **Important:** for `skip_exchange_servers` to actually skip the exchange,
+> leave the **top-level** `token_exchange_strategy` unset. A non-empty
+> top-level strategy makes the global STS path run as a fallback for
+> skipped targets, which would defeat the skip. Drive the strategy from
+> the `[cluster_provider_configs.kubeconfig]` section instead.
+
 ## CLI Configuration Options
 
 The following options can be set via command-line arguments. CLI arguments override TOML configuration values.
