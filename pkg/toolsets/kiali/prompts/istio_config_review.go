@@ -46,7 +46,7 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 		map[string]any{"namespace": namespace, "action": "list"})
 
 	resourceContent := fetchKialiData(kiali, params, tools.KialiListOrGetResourcesEndpoint,
-		map[string]any{"namespace": namespace, "resource_type": "services"})
+		map[string]any{"namespaces": namespace, "resourceType": "service"})
 
 	promptText := buildIstioConfigReviewPrompt(namespace, istioContent, resourceContent)
 
