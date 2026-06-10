@@ -125,7 +125,7 @@ func listResourceHandler(resourceType string) api.PromptHandlerFunc {
 
 		reqArgs := map[string]any{"resourceType": resourceType}
 		if namespace != "" {
-			reqArgs["namespace"] = namespace
+			reqArgs["namespaces"] = namespace
 		}
 
 		kiali := kialiclient.NewKiali(params, params.RESTConfig())
