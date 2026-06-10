@@ -58,7 +58,7 @@ func InitListServices() []api.ServerPrompt {
 					},
 				},
 			},
-			Handler: listResourceHandler("services"),
+			Handler: listResourceHandler("service"),
 		},
 	}
 }
