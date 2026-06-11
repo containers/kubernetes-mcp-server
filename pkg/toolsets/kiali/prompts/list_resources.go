@@ -98,9 +98,60 @@ func InitListIstioConfig() []api.ServerPrompt {
 					},
 				},
 			},
-			Handler: listResourceHandler("istio"),
+			Handler: listIstioConfigHandler,
 		},
 	}
+}
+
+func listIstioConfigHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
+	args := params.GetArguments()
+	namespace := args["namespace"]
+
+	klog.Info("Starting list istio config prompt...")
+
+	reqArgs := map[string]any{"action": "list"}
+	if namespace != "" {
+		reqArgs["namespace"] = namespace
+	}
+
+	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	content, err := kiali.ExecuteRequest(params.Context, tools.KialiManageIstioConfigReadEndpoint, reqArgs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list istio config: %w", err)
+	}
+
+	scope := "all namespaces"
+	if namespace != "" {
+		scope = fmt.Sprintf("namespace '%s'", namespace)
+	}
+
+	promptText := fmt.Sprintf(`# List Istio Configuration
+
+## Scope
+%s
+
+## Data
+
+%s
+
+## Instructions
+
+Summarize the Istio configuration listed above. Highlight any that need attention.
+`, scope, content)
+
+	return api.NewPromptCallResult(
+		"Istio configuration data retrieved successfully",
+		[]api.PromptMessage{
+			{
+				Role: "user",
+				Content: api.PromptContent{
+					Type: "text",
+					Text: promptText,
+				},
+			},
+		},
+		nil,
+	), nil
 }
 
 func InitMeshTopology() []api.ServerPrompt {
