@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -132,6 +133,278 @@ func (s *KialiSuite) TestGetMeshStatus() {
 		s.Run("response contains status", func() {
 			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "healthy", "Response should contain status")
 		})
+	})
+}
+
+func (s *KialiSuite) TestKialiPromptsRegistered() {
+	s.InitMcpClient()
+	prompts, err := s.ListPrompts()
+
+	s.Run("ListPrompts succeeds", func() {
+		s.NoError(err)
+		s.NotNil(prompts)
+	})
+
+	expectedPrompts := []string{
+		"list-applications",
+		"list-namespaces",
+		"list-services",
+		"list-workloads",
+		"list-istio-config",
+		"mesh-topology",
+		"mesh-health-check",
+		"traffic-topology",
+		"service-troubleshoot",
+		"trace-analysis",
+		"istio-config-review",
+	}
+
+	s.Run("all 11 kiali prompts are registered", func() {
+		s.Require().NotNil(prompts)
+		names := make(map[string]bool, len(prompts.Prompts))
+		for _, p := range prompts.Prompts {
+			names[p.Name] = true
+		}
+		for _, expected := range expectedPrompts {
+			s.Truef(names[expected], "expected prompt %q to be registered", expected)
+		}
+	})
+}
+
+func (s *KialiSuite) TestListApplicationsPrompt() {
+	var capturedURL *url.URL
+	var capturedBody string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("list-applications", map[string]string{
+		"namespace": "bookinfo",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls list_or_get_resources endpoint", func() {
+		s.Require().NotNil(capturedURL)
+		s.Equal("/api/chat/mcp/list_or_get_resources", capturedURL.Path)
+	})
+	s.Run("request body contains resourceType app", func() {
+		s.Contains(capturedBody, "app")
+	})
+	s.Run("request body contains namespace filter", func() {
+		s.Contains(capturedBody, "bookinfo")
+	})
+	s.Run("prompt result contains at least one user message", func() {
+		s.Require().NotEmpty(result.Messages)
+		s.Equal("user", string(result.Messages[0].Role))
+	})
+}
+
+func (s *KialiSuite) TestListIstioConfigPrompt() {
+	var capturedURL *url.URL
+	var capturedBody string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("list-istio-config", map[string]string{
+		"namespace": "bookinfo",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls manage_istio_config_read endpoint (not list_or_get_resources)", func() {
+		s.Require().NotNil(capturedURL)
+		s.Equal("/api/chat/mcp/manage_istio_config_read", capturedURL.Path)
+	})
+	s.Run("request body contains action list", func() {
+		s.Contains(capturedBody, "list")
+	})
+	s.Run("request body contains namespace filter", func() {
+		s.Contains(capturedBody, "bookinfo")
+	})
+}
+
+func (s *KialiSuite) TestMeshHealthCheckPrompt() {
+	var capturedURL *url.URL
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		_, _ = w.Write([]byte(`{"status":"healthy","components":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("mesh-health-check", map[string]string{})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls get_mesh_status endpoint", func() {
+		s.Require().NotNil(capturedURL)
+		s.Equal("/api/chat/mcp/get_mesh_status", capturedURL.Path)
+	})
+	s.Run("result has user and assistant messages", func() {
+		s.Require().Len(result.Messages, 2)
+		s.Equal("user", string(result.Messages[0].Role))
+		s.Equal("assistant", string(result.Messages[1].Role))
+	})
+}
+
+func (s *KialiSuite) TestTrafficTopologyPrompt() {
+	var capturedURL *url.URL
+	var capturedBody string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		_, _ = w.Write([]byte(`{"elements":{}}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("traffic-topology", map[string]string{
+		"namespaces": "bookinfo,default",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls get_mesh_traffic_graph endpoint", func() {
+		s.Require().NotNil(capturedURL)
+		s.Equal("/api/chat/mcp/get_mesh_traffic_graph", capturedURL.Path)
+	})
+	s.Run("request body contains the namespaces", func() {
+		s.Contains(capturedBody, "bookinfo")
+	})
+}
+
+func (s *KialiSuite) TestServiceTroubleshootPromptRequiredArgs() {
+	s.InitMcpClient()
+
+	s.Run("returns error when namespace is missing", func() {
+		result, err := s.GetPrompt("service-troubleshoot", map[string]string{
+			"service": "productpage",
+		})
+		s.Error(err)
+		s.Nil(result)
+	})
+
+	s.Run("returns error when service is missing", func() {
+		result, err := s.GetPrompt("service-troubleshoot", map[string]string{
+			"namespace": "bookinfo",
+		})
+		s.Error(err)
+		s.Nil(result)
+	})
+}
+
+func (s *KialiSuite) TestServiceTroubleshootPrompt() {
+	var mu sync.Mutex
+	var capturedPaths []string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		capturedPaths = append(capturedPaths, r.URL.Path)
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"logs":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("service-troubleshoot", map[string]string{
+		"namespace": "bookinfo",
+		"service":   "productpage",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls get_logs and manage_istio_config_read endpoints", func() {
+		mu.Lock()
+		defer mu.Unlock()
+		pathSet := make(map[string]bool)
+		for _, p := range capturedPaths {
+			pathSet[p] = true
+		}
+		s.True(pathSet["/api/chat/mcp/get_logs"], "expected get_logs to be called")
+		s.True(pathSet["/api/chat/mcp/manage_istio_config_read"], "expected manage_istio_config_read to be called")
+	})
+	s.Run("result contains user and assistant messages", func() {
+		s.Require().Len(result.Messages, 2)
+		s.Equal("user", string(result.Messages[0].Role))
+		s.Equal("assistant", string(result.Messages[1].Role))
+	})
+}
+
+func (s *KialiSuite) TestTraceAnalysisPromptRequiredArgs() {
+	s.InitMcpClient()
+
+	s.Run("returns error when namespace is missing", func() {
+		result, err := s.GetPrompt("trace-analysis", map[string]string{
+			"service": "productpage",
+		})
+		s.Error(err)
+		s.Nil(result)
+	})
+
+	s.Run("returns error when service is missing", func() {
+		result, err := s.GetPrompt("trace-analysis", map[string]string{
+			"namespace": "bookinfo",
+		})
+		s.Error(err)
+		s.Nil(result)
+	})
+}
+
+func (s *KialiSuite) TestTraceAnalysisPrompt() {
+	var mu sync.Mutex
+	var capturedPaths []string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		capturedPaths = append(capturedPaths, r.URL.Path)
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"traces":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("trace-analysis", map[string]string{
+		"namespace": "bookinfo",
+		"service":   "productpage",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls list_traces endpoint twice (recent + error traces)", func() {
+		mu.Lock()
+		defer mu.Unlock()
+		count := 0
+		for _, p := range capturedPaths {
+			if p == "/api/chat/mcp/list_traces" {
+				count++
+			}
+		}
+		s.Equal(2, count, "expected list_traces to be called twice")
+	})
+	s.Run("result contains user and assistant messages", func() {
+		s.Require().Len(result.Messages, 2)
+		s.Equal("user", string(result.Messages[0].Role))
 	})
 }
 
