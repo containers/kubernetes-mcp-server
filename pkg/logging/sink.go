@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -59,6 +60,13 @@ type Sink struct {
 	// httpOut while still serving stdio would corrupt the MCP protocol
 	// channel.
 	httpMode bool
+
+	// mu makes the writer-swap + file-close (in reload and Close) mutually
+	// exclusive with in-flight Write calls, so a descriptor is never closed
+	// mid-write. That race is a harmless EBADF on POSIX but deadlocks the
+	// runtime poller on Windows. Write holds the shared read lock (writers
+	// stay concurrent); reload and Close take the exclusive lock.
+	mu sync.RWMutex
 
 	// writer is what every Write call routes through. Updated by reload via
 	// Store; never mutated in place.
@@ -132,8 +140,11 @@ func New(cfg *config.StaticConfig, httpOut, errOut io.Writer) (*Sink, error) {
 }
 
 // Write implements io.Writer. It routes to whichever writer Reload most
-// recently installed.
+// recently installed, holding mu's read lock so a reload cannot close the
+// file mid-write (see mu).
 func (s *Sink) Write(p []byte) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	h := s.writer.Load()
 	if h == nil {
 		return io.Discard.Write(p)
@@ -183,6 +194,9 @@ func (s *Sink) Reload(cfg *config.StaticConfig) error {
 // returns an error) lands somewhere visible instead of being swallowed by
 // the file descriptor we are about to close.
 func (s *Sink) Close() error {
+	// Exclusive lock so the swap+close can't race an in-flight Write (see mu).
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.writer.Store(&writerHolder{s.errOut})
 	old := s.file.Swap(nil)
 	if old == nil {
@@ -233,19 +247,24 @@ func (s *Sink) applyDestination(cfg *config.StaticConfig) error {
 
 	s.lastLogFile = cfg.LogFile
 	s.applied = true
-	s.writer.Store(&writerHolder{newWriter})
 
-	// In-flight writes that already loaded the old writer may still hit the
-	// previous fd briefly after Close — same race log rotation already
-	// accepts (logrotate's copytruncate has the identical property).
+	// Swap + close under the exclusive lock (see mu). The new file was opened
+	// above, outside the lock, so writers only ever block for the swap+close,
+	// not for open latency.
+	s.mu.Lock()
+	s.writer.Store(&writerHolder{newWriter})
 	oldFile := s.file.Swap(newFile)
+	var closeErr error
 	if oldFile != nil {
-		if err := oldFile.Close(); err != nil {
-			// Surface this at default verbosity — a Close failure on
-			// rotation is the kind of thing that drops fds on disk-pressure
-			// or flaky network filesystems.
-			klog.Warningf("logging: failed to close previous log file: %v", err)
-		}
+		closeErr = oldFile.Close()
+	}
+	s.mu.Unlock()
+
+	if closeErr != nil {
+		// Logged outside the lock: klog.Warningf re-enters Write's read lock
+		// and sync.RWMutex is not reentrant. A rotation Close failure warrants
+		// default verbosity — it drops fds under disk pressure or flaky netfs.
+		klog.Warningf("logging: failed to close previous log file: %v", closeErr)
 	}
 	return nil
 }

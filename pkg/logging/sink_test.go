@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -304,6 +305,54 @@ func (s *SinkSuite) TestConcurrentWriteAndReloadIsRaceFree() {
 	}
 	close(stop)
 	wg.Wait()
+}
+
+func (s *SinkSuite) TestConcurrentWriteAndReloadNeverWritesToClosedFile() {
+	// Reload closes the previously-open file inline (sink.go applyDestination).
+	// Without mutual exclusion between Write and that close, a Write that has
+	// already loaded the old writer can land on the just-closed descriptor: on
+	// POSIX that surfaces as an os.ErrClosed write error, and on Windows it can
+	// wedge the runtime poller and deadlock the whole package (issue #1199).
+	// Drive direct Sink.Write (bypassing klog's global serialization, so the
+	// writers are genuinely concurrent) against a tight Reload loop and assert
+	// that no write ever observes a closed descriptor.
+	pathA := filepath.Join(s.tempDir, "a.log")
+	pathB := filepath.Join(s.tempDir, "b.log")
+	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+
+	stop := make(chan struct{})
+	var writeErr atomic.Value // first non-nil error observed by any writer
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					if _, err := sink.Write([]byte("hot-loop\n")); err != nil {
+						writeErr.CompareAndSwap(nil, err)
+					}
+					runtime.Gosched()
+				}
+			}
+		}()
+	}
+
+	for i := 0; i < 2000; i++ {
+		path := pathA
+		if i%2 == 1 {
+			path = pathB
+		}
+		s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: path}))
+	}
+	close(stop)
+	wg.Wait()
+
+	err, _ := writeErr.Load().(error)
+	s.NoError(err, "a concurrent Write landed on a descriptor that Reload had already closed")
 }
 
 func (s *SinkSuite) TestReloadIgnoresPortChangeForServeMode() {
