@@ -475,7 +475,9 @@ func (s *ContractTestSuite) TestGetLogs() {
 		resp, body, err := s.mcpCall(tools.KialiGetLogsEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiGetLogsEndpoint, resp, body)
-		logStr := s.requireJSONString(tools.KialiGetLogsEndpoint, body)
+		obj := s.requireJSONKeys(tools.KialiGetLogsEndpoint, body, "logs")
+		logStr, ok := obj["logs"].(string)
+		s.Require().True(ok, "get_logs 'logs' field should be a string, got %T", obj["logs"])
 		s.Require().Greater(len(logStr), 10,
 			"get_logs should return meaningful log content, not a stub")
 		s.True(strings.Contains(logStr, "\n") || strings.Contains(logStr, "~~~"),
@@ -512,7 +514,10 @@ func (s *ContractTestSuite) TestManageIstioConfigRead() {
 		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
-		items := s.requireJSONArray(tools.KialiManageIstioConfigReadEndpoint, body)
+		obj := s.requireJSONKeys(tools.KialiManageIstioConfigReadEndpoint, body, "cluster", "items")
+		items, ok := obj["items"].([]interface{})
+		s.Require().True(ok,
+			"manage_istio_config_read list 'items' field should be a JSON array, got %T", obj["items"])
 		s.Require().NotEmpty(items,
 			"manage_istio_config_read list response should return at least one item for namespace %q", s.testNS)
 
