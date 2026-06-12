@@ -32,7 +32,7 @@ func (e *rfc8693Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExchang
 	}
 
 	headers := http.Header{}
-	if err := injectClientAuth(cfg, data, headers); err != nil {
+	if err := injectClientAuth(ctx, cfg, data, headers); err != nil {
 		return nil, err
 	}
 

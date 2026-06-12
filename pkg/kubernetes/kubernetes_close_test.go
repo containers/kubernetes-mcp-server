@@ -47,7 +47,7 @@ func (s *DerivedClientCleanupSuite) SetupTest() {
 	cfg := test.Must(config.ReadToml([]byte(`kubeconfig = "` + strings.ReplaceAll(kubeconfigFile, `\`, `\\`) + `"`)))
 
 	var err error
-	s.manager, err = NewKubeconfigManager(cfg, "")
+	s.manager, err = NewKubeconfigManager(s.T().Context(), cfg, "")
 	s.Require().NoError(err)
 }
 

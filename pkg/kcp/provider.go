@@ -44,15 +44,15 @@ func init() {
 
 // newKcpClusterProvider creates a provider that manages multiple kcp workspaces.
 // Each workspace is treated as a separate cluster target.
-func newKcpClusterProvider(cfg api.BaseConfig) (kubernetes.Provider, error) {
+func newKcpClusterProvider(ctx context.Context, cfg api.BaseConfig) (kubernetes.Provider, error) {
 	ret := &kcpClusterProvider{config: cfg}
-	if err := ret.reset(); err != nil {
+	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
 	return ret, nil
 }
 
-func (p *kcpClusterProvider) reset() error {
+func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	// Load kubeconfig
 	pathOptions := clientcmd.NewDefaultPathOptions()
 	if p.config.GetKubeConfigPath() != "" {
@@ -92,7 +92,7 @@ func (p *kcpClusterProvider) reset() error {
 	}
 
 	// Create base manager for workspace discovery
-	baseManager, err := kubernetes.NewKubeconfigManager(p.config, rawConfig.CurrentContext)
+	baseManager, err := kubernetes.NewKubeconfigManager(ctx, p.config, rawConfig.CurrentContext)
 	if err != nil {
 		return fmt.Errorf("failed to create base manager: %w", err)
 	}
@@ -100,8 +100,8 @@ func (p *kcpClusterProvider) reset() error {
 	// Discover workspaces
 	workspaceList, err := p.discoverWorkspaces(baseManager)
 	if err != nil {
-		klog.Warningf("Failed to discover workspaces via API, falling back to kubeconfig: %v", err)
-		workspaceList, err = p.workspacesFromKubeconfig()
+		klog.FromContext(ctx).Info("Failed to discover workspaces via API, falling back to kubeconfig", "exception.message", err)
+		workspaceList, err = p.workspacesFromKubeconfig(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to discover workspaces: %w", err)
 		}
@@ -117,12 +117,12 @@ func (p *kcpClusterProvider) reset() error {
 
 	// Setup watchers
 	p.Close()
-	k8s, err := baseManager.Derived(context.Background())
+	k8s, err := baseManager.Derived(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
-	p.workspaceWatcher = NewWorkspaceWatcher(k8s.DynamicClient(), p.defaultWorkspace)
-	p.clusterStateWatcher = watcher.NewClusterState(k8s.DiscoveryClient())
+	p.workspaceWatcher = NewWorkspaceWatcher(ctx, k8s.DynamicClient(), p.defaultWorkspace)
+	p.clusterStateWatcher = watcher.NewClusterState(ctx, k8s.DiscoveryClient())
 
 	return nil
 }
@@ -134,7 +134,7 @@ func (p *kcpClusterProvider) discoverWorkspaces(_ *kubernetes.Manager) ([]string
 }
 
 // workspacesFromKubeconfig extracts workspace names from kubeconfig cluster URLs as a fallback.
-func (p *kcpClusterProvider) workspacesFromKubeconfig() ([]string, error) {
+func (p *kcpClusterProvider) workspacesFromKubeconfig(ctx context.Context) ([]string, error) {
 	rawConfig, err := p.clientCmdConfig.RawConfig()
 	if err != nil {
 		return nil, err
@@ -152,12 +152,12 @@ func (p *kcpClusterProvider) workspacesFromKubeconfig() ([]string, error) {
 		result = append(result, ws)
 	}
 
-	klog.V(2).Infof("Discovered %d workspaces from kubeconfig", len(result))
+	klog.FromContext(ctx).V(2).Info("Discovered workspaces from kubeconfig", "num_workspaces", len(result))
 	return result, nil
 }
 
 // managerForWorkspace returns or creates a Manager for the specified workspace.
-func (p *kcpClusterProvider) managerForWorkspace(workspace string) (*kubernetes.Manager, error) {
+func (p *kcpClusterProvider) managerForWorkspace(ctx context.Context, workspace string) (*kubernetes.Manager, error) {
 	m, ok := p.managers[workspace]
 	if ok && m != nil {
 		return m, nil
@@ -183,7 +183,7 @@ func (p *kcpClusterProvider) managerForWorkspace(workspace string) (*kubernetes.
 	clientCmdConfig := clientcmd.NewDefaultClientConfig(rawConfig,
 		&clientcmd.ConfigOverrides{CurrentContext: contextName})
 
-	m, err = kubernetes.NewManager(p.config, workspaceRestConfig, clientCmdConfig)
+	m, err = kubernetes.NewManager(ctx, p.config, workspaceRestConfig, clientCmdConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager for workspace %s: %w", workspace, err)
 	}
@@ -258,7 +258,7 @@ func (p *kcpClusterProvider) GetDerivedKubernetes(ctx context.Context, workspace
 		workspace = p.defaultWorkspace
 	}
 
-	m, err := p.managerForWorkspace(workspace)
+	m, err := p.managerForWorkspace(ctx, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -270,17 +270,17 @@ func (p *kcpClusterProvider) GetDefaultTarget() string {
 	return p.defaultWorkspace
 }
 
-func (p *kcpClusterProvider) WatchTargets(reload kubernetes.McpReload) {
+func (p *kcpClusterProvider) WatchTargets(ctx context.Context, reload kubernetes.McpReload) {
 	reloadWithReset := func() error {
-		if err := p.reset(); err != nil {
+		if err := p.reset(ctx); err != nil {
 			return err
 		}
-		p.WatchTargets(reload)
+		p.WatchTargets(ctx, reload)
 		return reload()
 	}
 
-	p.workspaceWatcher.Watch(reloadWithReset)
-	p.clusterStateWatcher.Watch(reload)
+	p.workspaceWatcher.Watch(ctx, reloadWithReset)
+	p.clusterStateWatcher.Watch(ctx, reload)
 }
 
 func (p *kcpClusterProvider) Close() {
@@ -291,6 +291,6 @@ func (p *kcpClusterProvider) Close() {
 	}
 }
 
-func (p *kcpClusterProvider) HasGVKs(_ []schema.GroupVersionKind) bool {
+func (p *kcpClusterProvider) HasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
 	return true
 }

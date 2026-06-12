@@ -25,7 +25,7 @@ func (s *McpMetricsSuite) TestToolCallMetricsRecorded() {
 	s.Require().Nilf(err, "call tool failed %v", err)
 	s.Require().Falsef(toolResult.IsError, "call tool failed")
 
-	stats := s.mcpServer.GetMetrics().GetStats()
+	stats := s.mcpServer.GetMetrics().GetStats(s.T().Context())
 
 	s.Run("increments total tool call count", func() {
 		s.GreaterOrEqual(stats.TotalToolCalls, int64(1))
@@ -48,7 +48,7 @@ func (s *McpMetricsSuite) TestToolCallErrorMetricsRecorded() {
 	s.Require().Nilf(err, "call tool should not return transport error %v", err)
 	s.Require().True(toolResult.IsError, "call tool should return error result for missing params")
 
-	stats := s.mcpServer.GetMetrics().GetStats()
+	stats := s.mcpServer.GetMetrics().GetStats(s.T().Context())
 
 	s.Run("increments total tool call count", func() {
 		s.GreaterOrEqual(stats.TotalToolCalls, int64(1))
@@ -71,7 +71,7 @@ func (s *McpMetricsSuite) TestMultipleToolCallsAggregate() {
 	_, err = s.CallTool("pods_list", map[string]interface{}{})
 	s.Require().Nilf(err, "third call failed %v", err)
 
-	stats := s.mcpServer.GetMetrics().GetStats()
+	stats := s.mcpServer.GetMetrics().GetStats(s.T().Context())
 
 	s.Run("total count matches sum of calls", func() {
 		s.GreaterOrEqual(stats.TotalToolCalls, int64(3))
@@ -114,7 +114,7 @@ func (s *McpMetricsSuite) TestPrometheusHandlerReflectsToolCalls() {
 
 func (s *McpMetricsSuite) TestStatsInitializedBeforeCalls() {
 	s.InitMcpClient()
-	stats := s.mcpServer.GetMetrics().GetStats()
+	stats := s.mcpServer.GetMetrics().GetStats(s.T().Context())
 
 	s.Run("maps are initialized", func() {
 		s.NotNil(stats.ToolCallsByName)

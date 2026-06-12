@@ -29,14 +29,14 @@ type Metrics struct {
 
 // New creates a new Metrics instance with configured collectors.
 // If OTEL_EXPORTER_OTLP_ENDPOINT is set, metrics will also be exported to OTLP.
-func New(cfg Config) (*Metrics, error) {
+func New(ctx context.Context, cfg Config) (*Metrics, error) {
 	m := &Metrics{
 		collectors: []Collector{},
 	}
 
 	// Stats collector - always enabled for /stats endpoint
 	// Also exports to OTLP if OTEL_EXPORTER_OTLP_ENDPOINT is set or Telemetry config is provided
-	stats, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+	stats, err := NewOtelStatsCollectorWithConfig(ctx, CollectorConfig{
 		MeterName:      cfg.TracerName,
 		ServiceName:    cfg.ServiceName,
 		ServiceVersion: cfg.ServiceVersion,
@@ -47,7 +47,7 @@ func New(cfg Config) (*Metrics, error) {
 	}
 	m.stats = stats
 	m.collectors = append(m.collectors, m.stats)
-	klog.V(1).Info("Stats collector enabled")
+	klog.FromContext(ctx).V(1).Info("Stats collector enabled")
 
 	return m, nil
 }
@@ -70,8 +70,8 @@ func (m *Metrics) RecordHTTPRequest(ctx context.Context, method, path string, st
 
 // GetStats returns the current statistics from the StatsCollector.
 // This is used by the /stats HTTP endpoint.
-func (m *Metrics) GetStats() *Statistics {
-	return m.stats.GetStats()
+func (m *Metrics) GetStats(ctx context.Context) *Statistics {
+	return m.stats.GetStats(ctx)
 }
 
 // Shutdown gracefully shuts down the metrics system, flushing any pending metrics.

@@ -56,7 +56,7 @@ type TLSEnforcingTransport struct {
 
 func (t *TLSEnforcingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if t.RequireTLS != nil && t.RequireTLS() && !isSecureHTTPScheme(req.URL.Scheme) {
-		klog.V(1).Infof("require_tls: blocked request to %s", req.URL.Host)
+		klog.FromContext(req.Context()).V(1).Info("require_tls: blocked request to host", "host", req.URL.Host)
 		return nil, fmt.Errorf("require_tls is enabled but request to %s uses %q scheme (secure scheme required)",
 			req.URL.Host, req.URL.Scheme)
 	}

@@ -15,7 +15,7 @@ type MetricsSuite struct {
 
 func (s *MetricsSuite) TestNew() {
 	s.Run("creates metrics with stats collector enabled", func() {
-		m, err := New(Config{
+		m, err := New(s.T().Context(), Config{
 			TracerName:     "test",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.0.0",
@@ -36,7 +36,7 @@ func (s *MetricsSuite) TestNew() {
 			Protocol: "grpc",
 		}
 
-		m, err := New(Config{
+		m, err := New(s.T().Context(), Config{
 			TracerName:     "test",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.0.0",
@@ -51,7 +51,7 @@ func (s *MetricsSuite) TestNew() {
 
 func (s *MetricsSuite) TestRecordHTTPRequest() {
 	s.Run("fans out to all collectors", func() {
-		m, err := New(Config{
+		m, err := New(s.T().Context(), Config{
 			TracerName:     "test",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.0.0",
@@ -63,7 +63,7 @@ func (s *MetricsSuite) TestRecordHTTPRequest() {
 		m.RecordHTTPRequest(ctx, "GET", "/test", 200, 50*time.Millisecond)
 
 		// Verify it was recorded in stats collector
-		stats := m.GetStats()
+		stats := m.GetStats(s.T().Context())
 		s.Equal(int64(1), stats.TotalHTTPRequests)
 		s.Equal(int64(1), stats.HTTPRequestsByPath["/test"])
 		s.Equal(int64(1), stats.HTTPRequestsByMethod["GET"])
@@ -73,7 +73,7 @@ func (s *MetricsSuite) TestRecordHTTPRequest() {
 
 func (s *MetricsSuite) TestGetStats() {
 	s.Run("returns stats from stats collector", func() {
-		m, err := New(Config{
+		m, err := New(s.T().Context(), Config{
 			TracerName:     "test",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.0.0",
@@ -84,7 +84,7 @@ func (s *MetricsSuite) TestGetStats() {
 		m.RecordToolCall(ctx, "tool_a", 100*time.Millisecond, nil)
 		m.RecordHTTPRequest(ctx, "GET", "/test", 200, 50*time.Millisecond)
 
-		stats := m.GetStats()
+		stats := m.GetStats(s.T().Context())
 		s.Equal(int64(1), stats.TotalToolCalls)
 		s.Equal(int64(1), stats.TotalHTTPRequests)
 	})

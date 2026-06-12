@@ -187,13 +187,15 @@ func WithDirPath(path string) ReadConfigOpt {
 // Read reads the toml file, applies drop-in configs from configDir (if provided),
 // and returns the StaticConfig with any opts applied.
 // Loading order: defaults → main config file → drop-in files (lexically sorted)
-func Read(configPath, dropInConfigDir string) (*StaticConfig, error) {
+func Read(ctx context.Context, configPath, dropInConfigDir string) (*StaticConfig, error) {
 	var configFiles []string
 	var configDir string
 
+	logger := klog.FromContext(ctx)
+
 	// Main config file
 	if configPath != "" {
-		klog.V(2).Infof("Loading main config from: %s", configPath)
+		logger.V(2).Info("Loading main config", "path", configPath)
 		configFiles = append(configFiles, configPath)
 
 		// get and save the absolute dir path to the config file, so that other config parsers can use it
@@ -218,19 +220,19 @@ func Read(configPath, dropInConfigDir string) (*StaticConfig, error) {
 		configDir = dropInConfigDir
 	}
 
-	dropInFiles, err := loadDropInConfigs(dropInConfigDir)
+	dropInFiles, err := loadDropInConfigs(ctx, dropInConfigDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load drop-in configs from %s: %w", dropInConfigDir, err)
 	}
 	if len(dropInFiles) == 0 {
-		klog.V(2).Infof("No drop-in config files found in: %s", dropInConfigDir)
+		logger.V(2).Info("No drop-in config files found", "config_dir", dropInConfigDir)
 	} else {
-		klog.V(2).Infof("Loading %d drop-in config file(s) from: %s", len(dropInFiles), dropInConfigDir)
+		logger.V(2).Info("Loading drop-in config file(s)", "num_config_files", len(dropInFiles), "config_dir", dropInConfigDir)
 	}
 	configFiles = append(configFiles, dropInFiles...)
 
 	// Read and merge all config files
-	configData, err := readAndMergeFiles(configFiles)
+	configData, err := readAndMergeFiles(ctx, configFiles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read and merge config files: %w", err)
 	}
@@ -241,12 +243,13 @@ func Read(configPath, dropInConfigDir string) (*StaticConfig, error) {
 // loadDropInConfigs loads and merges config files from a drop-in directory.
 // Files are processed in lexical (alphabetical) order.
 // Only files with .toml extension are processed; dotfiles are ignored.
-func loadDropInConfigs(dropInConfigDir string) ([]string, error) {
+func loadDropInConfigs(ctx context.Context, dropInConfigDir string) ([]string, error) {
+	logger := klog.FromContext(ctx)
 	// Check if directory exists
 	info, err := os.Stat(dropInConfigDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			klog.V(2).Infof("Drop-in config directory does not exist, skipping: %s", dropInConfigDir)
+			logger.V(2).Info("Drop-in config directory does not exist, skipping", "config_dir", dropInConfigDir)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to stat drop-in directory: %w", err)
@@ -257,13 +260,15 @@ func loadDropInConfigs(dropInConfigDir string) ([]string, error) {
 	}
 
 	// Get all .toml files in the directory
-	return getSortedConfigFiles(dropInConfigDir)
+	return getSortedConfigFiles(ctx, dropInConfigDir)
 }
 
 // getSortedConfigFiles returns a sorted list of .toml files in the specified directory.
 // Dotfiles (starting with '.') and non-.toml files are ignored.
 // Files are sorted lexically (alphabetically) by filename.
-func getSortedConfigFiles(dir string) ([]string, error) {
+func getSortedConfigFiles(ctx context.Context, dir string) ([]string, error) {
+	logger := klog.FromContext(ctx)
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
@@ -280,13 +285,13 @@ func getSortedConfigFiles(dir string) ([]string, error) {
 
 		// Skip dotfiles
 		if strings.HasPrefix(name, ".") {
-			klog.V(4).Infof("Skipping dotfile: %s", name)
+			logger.V(4).Info("Skipping dotfile", "file_name", name)
 			continue
 		}
 
 		// Only process .toml files
 		if !strings.HasSuffix(name, ".toml") {
-			klog.V(4).Infof("Skipping non-.toml file: %s", name)
+			logger.V(4).Info("Skipping non-.toml file", "file_name", name)
 			continue
 		}
 
@@ -301,11 +306,11 @@ func getSortedConfigFiles(dir string) ([]string, error) {
 
 // readAndMergeFiles reads and merges multiple TOML config files into a single byte slice.
 // Files are merged in the order provided, with later files overriding earlier ones.
-func readAndMergeFiles(files []string) ([]byte, error) {
+func readAndMergeFiles(ctx context.Context, files []string) ([]byte, error) {
 	rawConfig := map[string]interface{}{}
 	// Merge each file in order using deep merge
 	for _, file := range files {
-		klog.V(3).Infof("  - Merging config: %s", filepath.Base(file))
+		klog.FromContext(ctx).V(3).Info("Merging config", "file_name", filepath.Base(file))
 		configData, err := os.ReadFile(file)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read config %s: %w", file, err)
@@ -479,7 +484,7 @@ func (c *StaticConfig) WithTokenExchangeStrategies(strategies []string) *StaticC
 
 // Validate validates config-level invariants that must hold at both startup and
 // on SIGHUP reload.
-func (c *StaticConfig) Validate() error {
+func (c *StaticConfig) Validate(ctx context.Context) error {
 	// Normalize whitespace-padded fields before any checks use them.
 	c.CertificateAuthority = strings.TrimSpace(c.CertificateAuthority)
 	c.TLSCert = strings.TrimSpace(c.TLSCert)
@@ -511,10 +516,13 @@ func (c *StaticConfig) Validate() error {
 			return fmt.Errorf("--authorization-url must be a valid URL")
 		}
 		if u.Scheme == "http" {
-			klog.Warningf("authorization-url is using http://, this is not recommended production use")
+			klog.FromContext(ctx).Info(
+				"authorization-url is using insecure scheme, this is not recommended production use",
+				"url.scheme", "http",
+			)
 		}
 	}
-	if err := c.validateSkipJWTVerification(); err != nil {
+	if err := c.validateSkipJWTVerification(ctx); err != nil {
 		return err
 	}
 	if c.CertificateAuthority != "" {
@@ -576,12 +584,12 @@ func (c *StaticConfig) validateConfirmation() error {
 // validateSkipJWTVerification checks that the user has explicitly opted in to
 // skipping JWT signature verification when require_oauth is enabled but no
 // authorization_url is configured.
-func (c *StaticConfig) validateSkipJWTVerification() error {
+func (c *StaticConfig) validateSkipJWTVerification(ctx context.Context) error {
 	if !c.RequireOAuth || c.AuthorizationURL != "" {
 		return nil
 	}
 	if c.SkipJWTVerification {
-		klog.Warningf("skip_jwt_verification is enabled with no authorization_url: bearer tokens will be forwarded without any local validation. " +
+		klog.FromContext(ctx).Info("skip_jwt_verification is enabled with no authorization_url: bearer tokens will be forwarded without any local validation. " +
 			"The cluster (or a trusted upstream) is the sole authority. Only use this when cluster_auth_mode=passthrough and the cluster validates tokens directly.")
 		return nil
 	}

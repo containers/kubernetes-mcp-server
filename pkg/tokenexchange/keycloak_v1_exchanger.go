@@ -36,7 +36,7 @@ func (e *keycloakV1Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExch
 	}
 
 	headers := http.Header{}
-	if err := injectClientAuth(cfg, data, headers); err != nil {
+	if err := injectClientAuth(ctx, cfg, data, headers); err != nil {
 		return nil, err
 	}
 

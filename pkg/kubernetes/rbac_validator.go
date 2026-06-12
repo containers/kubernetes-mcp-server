@@ -36,7 +36,7 @@ func (v *RBACValidator) Validate(ctx context.Context, req *api.HTTPValidationReq
 
 	allowed, err := CanI(ctx, authClient, req.GVR, req.Namespace, req.ResourceName, req.Verb)
 	if err != nil {
-		klog.V(4).Infof("RBAC pre-validation failed with error: %v", err)
+		klog.FromContext(ctx).V(4).Info("RBAC pre-validation failed", "exception.message", err.Error())
 		return nil
 	}
 

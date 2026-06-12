@@ -44,7 +44,9 @@ func ExchangeTokenInContext(
 
 	exchanger, ok := tokenexchange.GetTokenExchanger(tep.GetTokenExchangeStrategy())
 	if !ok {
-		klog.Warningf("token exchange strategy %q not found in registry", tep.GetTokenExchangeStrategy())
+		klog.FromContext(ctx).Info("token exchange strategy not found in registry, falling back to sts exchange",
+			"token_exchange.strategy", tep.GetTokenExchangeStrategy(),
+		)
 		return stsExchangeTokenInContext(ctx, baseConfig, oidcProvider, httpClient, subjectToken, stsConfig)
 	}
 

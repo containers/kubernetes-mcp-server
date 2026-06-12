@@ -54,6 +54,7 @@ func DiscoverWorkspacesRecursive(
 	parentWorkspace string,
 	discovered map[string]bool,
 ) error {
+	logger := klog.FromContext(ctx)
 	// Parse base URL from the config
 	baseURL, _ := ParseServerURL(baseRestConfig.Host)
 
@@ -63,7 +64,7 @@ func DiscoverWorkspacesRecursive(
 
 	dynamicClient, err := dynamic.NewForConfig(workspaceRestConfig)
 	if err != nil {
-		klog.V(3).Infof("Failed to create client for workspace %s: %v", parentWorkspace, err)
+		logger.V(3).Info("Failed to create client for workspace", "workspace", parentWorkspace, "exception.message", err)
 		return nil // Don't fail entirely, just skip this workspace
 	}
 
@@ -71,7 +72,7 @@ func DiscoverWorkspacesRecursive(
 	workspaceList, err := dynamicClient.Resource(WorkspaceGVR).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
-		klog.V(3).Infof("Failed to list workspaces in %s: %v", parentWorkspace, err)
+		logger.V(3).Info("Failed to list workspaces in parent workspace", "parent_workspace", parentWorkspace, "exception.message", err)
 		return nil // Don't fail entirely, just skip
 	}
 
@@ -92,12 +93,12 @@ func DiscoverWorkspacesRecursive(
 		}
 
 		discovered[fullPath] = true
-		klog.V(3).Infof("Discovered workspace: %s", fullPath)
+		logger.V(3).Info("Discovered workspace", "workspace_path", fullPath)
 
 		// Recursively discover children of this workspace
 		err = DiscoverWorkspacesRecursive(ctx, baseRestConfig, fullPath, discovered)
 		if err != nil {
-			klog.V(3).Infof("Failed to recurse into workspace %s: %v", fullPath, err)
+			logger.V(3).Info("Failed to recurse into workspace", "workspace_path", fullPath, "exception.message", err)
 			// Continue with other workspaces
 		}
 	}
@@ -129,6 +130,6 @@ func DiscoverAllWorkspaces(
 		workspaces = append(workspaces, ws)
 	}
 
-	klog.V(2).Infof("Discovered %d workspaces via kcp API (including nested)", len(workspaces))
+	klog.FromContext(ctx).V(2).Info("Discovered workspaces via kcp API (including nested)", "num_workspaces", len(workspaces))
 	return workspaces, nil
 }

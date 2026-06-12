@@ -43,21 +43,23 @@ var _ watcher.Watcher = (*WorkspaceWatcher)(nil)
 
 // NewWorkspaceWatcher creates a new workspace watcher that polls the kcp tenancy API
 // for workspace changes.
-func NewWorkspaceWatcher(dynamicClient dynamic.Interface, rootWorkspace string) *WorkspaceWatcher {
+func NewWorkspaceWatcher(ctx context.Context, dynamicClient dynamic.Interface, rootWorkspace string) *WorkspaceWatcher {
 	pollInterval := DefaultWorkspacePollInterval
 	debounceWindow := DefaultWorkspaceDebounceWindow
+
+	logger := klog.FromContext(ctx)
 
 	// Allow override via environment variable for testing
 	if envInterval := os.Getenv("WORKSPACE_POLL_INTERVAL_MS"); envInterval != "" {
 		if ms, err := strconv.Atoi(envInterval); err == nil && ms > 0 {
 			pollInterval = time.Duration(ms) * time.Millisecond
-			klog.V(2).Infof("Using custom workspace poll interval: %v", pollInterval)
+			logger.V(2).Info("Using custom workspace poll interval", "poll_interval", pollInterval)
 		}
 	}
 	if envDebounce := os.Getenv("WORKSPACE_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
 		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
 			debounceWindow = time.Duration(ms) * time.Millisecond
-			klog.V(2).Infof("Using custom workspace debounce window: %v", debounceWindow)
+			logger.V(2).Info("Using custom workspace debounce window", "debounce_window", debounceWindow)
 		}
 	}
 
@@ -74,33 +76,37 @@ func NewWorkspaceWatcher(dynamicClient dynamic.Interface, rootWorkspace string) 
 // Watch starts watching for workspace changes. The onChange callback is called
 // when workspace changes are detected after debouncing.
 // This can only be called once per WorkspaceWatcher instance.
-func (w *WorkspaceWatcher) Watch(onChange func() error) {
+func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 	w.mu.Lock()
 	if w.started {
 		w.mu.Unlock()
 		return
 	}
 	w.started = true
-	w.lastKnownState = w.captureState()
+	w.lastKnownState = w.captureState(ctx)
 	w.mu.Unlock()
+
+	logger := klog.FromContext(ctx)
 
 	go func() {
 		defer close(w.stoppedCh)
 		ticker := time.NewTicker(w.pollInterval)
 		defer ticker.Stop()
 
-		klog.V(2).Infof("Started workspace watcher (poll interval: %v, debounce: %v)",
-			w.pollInterval, w.debounceWindow)
+		logger.V(2).Info("Started workspace watcher",
+			"poll_interval", w.pollInterval,
+			"debounce_window", w.debounceWindow,
+		)
 
 		for {
 			select {
 			case <-w.stopCh:
-				klog.V(2).Info("Stopping workspace watcher")
+				logger.V(2).Info("Stopping workspace watcher")
 				return
 			case <-ticker.C:
 				w.mu.Lock()
-				current := w.captureState()
-				klog.V(3).Infof("Polled workspaces: %d total", len(current.workspaces))
+				current := w.captureState(ctx)
+				logger.V(3).Info("Polled workspaces", "cluster.workspaces.count", len(current.workspaces))
 
 				changed := len(current.workspaces) != len(w.lastKnownState.workspaces)
 				if !changed {
@@ -113,19 +119,19 @@ func (w *WorkspaceWatcher) Watch(onChange func() error) {
 				}
 
 				if changed {
-					klog.V(2).Info("Workspace state changed, scheduling debounced reload")
+					logger.V(2).Info("Workspace state changed, scheduling debounced reload")
 					if w.debounceTimer != nil {
 						w.debounceTimer.Stop()
 					}
 					w.debounceTimer = time.AfterFunc(w.debounceWindow, func() {
-						klog.V(2).Info("Workspace debounce window expired, triggering reload")
+						logger.V(2).Info("Workspace debounce window expired, triggering reload")
 						if err := onChange(); err != nil {
-							klog.Errorf("Failed to reload: %v", err)
+							logger.Info("Failed to reload", "exception.message", err)
 						} else {
 							w.mu.Lock()
-							w.lastKnownState = w.captureState()
+							w.lastKnownState = w.captureState(ctx)
 							w.mu.Unlock()
-							klog.V(2).Info("Reload completed")
+							logger.V(2).Info("Reload completed")
 						}
 					})
 				}
@@ -167,13 +173,14 @@ func (w *WorkspaceWatcher) Close() {
 }
 
 // captureState queries the current workspace list from the kcp tenancy API.
-func (w *WorkspaceWatcher) captureState() workspaceState {
+func (w *WorkspaceWatcher) captureState(ctx context.Context) workspaceState {
+	logger := klog.FromContext(ctx)
 	state := workspaceState{workspaces: []string{}}
 
 	list, err := w.dynamicClient.Resource(WorkspaceGVR).
-		List(context.TODO(), metav1.ListOptions{})
+		List(ctx, metav1.ListOptions{})
 	if err != nil {
-		klog.V(2).Infof("Unable to list workspaces from kcp API (this is expected if tenancy API is not available): %v", err)
+		logger.V(2).Info("Unable to list workspaces from kcp API (this is expected if tenancy API is not available)", "exception.message", err)
 		// Return empty state - this means workspace watching won't work,
 		// but the provider will still function using kubeconfig-based discovery
 		return state

@@ -159,7 +159,7 @@ func (s *McpConfigProviderSuite) TestStrategyReflectsConfigReload() {
 		toolsets = ["config-provider-test"]
 		cluster_provider_strategy = "in-cluster"
 	`), newConfig), "Expected to parse reload config")
-	err := s.mcpServer.ReloadConfiguration(newConfig)
+	err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
 	s.Require().NoError(err)
 
 	s.Run("strategy reflects config reload", func() {

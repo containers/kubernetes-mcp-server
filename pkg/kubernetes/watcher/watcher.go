@@ -1,6 +1,8 @@
 package watcher
 
+import "context"
+
 type Watcher interface {
-	Watch(onChange func() error)
+	Watch(ctx context.Context, onChange func() error)
 	Close()
 }

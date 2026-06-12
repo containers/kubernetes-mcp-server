@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,11 +40,15 @@ type AccessControlRoundTripperConfig struct {
 }
 
 // NewAccessControlRoundTripper creates a new AccessControlRoundTripper.
-func NewAccessControlRoundTripper(cfg AccessControlRoundTripperConfig) *AccessControlRoundTripper {
+func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTripperConfig) *AccessControlRoundTripper {
 	var apiPathPrefix string
 	if cfg.HostURL != "" {
 		if hostURL, err := url.Parse(cfg.HostURL); err != nil {
-			klog.Warningf("failed to parse Kubernetes API server host %q to determine API path prefix: %v", cfg.HostURL, err)
+			klog.FromContext(ctx).Info(
+				"failed to parse Kubernetes API server host to determine API path prefix",
+				"url.full", cfg.HostURL,
+				"exception.message", err.Error(),
+			)
 		} else {
 			apiPathPrefix = hostURL.Path
 		}
@@ -133,10 +138,11 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 		validationReq.Body = body
 	}
 
+	logger := klog.FromContext(req.Context())
 	for _, v := range rt.validators {
 		if validationErr := v.Validate(req.Context(), validationReq); validationErr != nil {
 			if ve, ok := validationErr.(*api.ValidationError); ok {
-				klog.V(4).Infof("Validation failed [%s]: %v", v.Name(), ve)
+				logger.V(4).Info("Validation failed", "validator_name", v.Name(), "exception.message", ve.Error())
 			}
 			return nil, validationErr
 		}

@@ -49,7 +49,7 @@ users:
 			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
 		`)))
 		s.Run("without authorization header returns original clientset", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			derived, err := testManager.Derived(s.T().Context())
@@ -59,7 +59,7 @@ users:
 		})
 
 		s.Run("with invalid authorization header returns original client", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "invalid-token")
@@ -70,7 +70,7 @@ users:
 		})
 
 		s.Run("with valid bearer token creates derived kubernetes with correct configuration", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
@@ -162,7 +162,7 @@ users:
 		`)))
 
 		s.Run("with bearer token but RawConfig fails returns error", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Corrupt the clientCmdConfig by setting it to a config that will fail on RawConfig()
@@ -170,7 +170,7 @@ users:
 			badConfig := test.Must(config.ReadToml([]byte(`
 				kubeconfig = "` + strings.ReplaceAll(badKubeconfigPath, `\`, `\\`) + `"
 			`)))
-			badManager, _ := NewManager(badConfig, testManager.kubernetes.RESTConfig(), testManager.kubernetes.ToRawKubeConfigLoader())
+			badManager, _ := NewManager(s.T().Context(), badConfig, testManager.kubernetes.RESTConfig(), testManager.kubernetes.ToRawKubeConfigLoader())
 			// Replace the clientCmdConfig with one that will fail
 			pathOptions := clientcmd.NewDefaultPathOptions()
 			pathOptions.LoadingRules.ExplicitPath = badKubeconfigPath
@@ -201,11 +201,11 @@ users:
 			workingConfig := test.Must(config.ReadToml([]byte(`
 				kubeconfig = "` + strings.ReplaceAll(workingKubeconfigPath, `\`, `\\`) + `"
 			`)))
-			testManager, err := NewKubeconfigManager(workingConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), workingConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Now create a bad manager with RequireOAuth=true
-			badManager, _ := NewManager(testStaticConfig, testManager.kubernetes.RESTConfig(), testManager.kubernetes.ToRawKubeConfigLoader())
+			badManager, _ := NewManager(s.T().Context(), testStaticConfig, testManager.kubernetes.RESTConfig(), testManager.kubernetes.ToRawKubeConfigLoader())
 			// Replace the clientCmdConfig with one that will fail
 			pathOptions := clientcmd.NewDefaultPathOptions()
 			pathOptions.LoadingRules.ExplicitPath = badKubeconfigPath
@@ -228,7 +228,7 @@ users:
 		`)))
 
 		s.Run("with bearer token but invalid rest config returns error", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Corrupt the rest config to make NewKubernetes fail
@@ -248,7 +248,7 @@ users:
 		`)))
 
 		s.Run("with bearer token but invalid rest config returns error", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Corrupt the rest config to make NewKubernetes fail
@@ -269,7 +269,7 @@ users:
 		`)))
 
 		s.Run("with no authorization header returns error", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			derived, err := testManager.Derived(s.T().Context())
@@ -279,7 +279,7 @@ users:
 		})
 
 		s.Run("with invalid authorization header returns error", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "invalid-token")
@@ -290,7 +290,7 @@ users:
 		})
 
 		s.Run("with valid bearer token creates derived kubernetes", func() {
-			testManager, err := NewKubeconfigManager(testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")

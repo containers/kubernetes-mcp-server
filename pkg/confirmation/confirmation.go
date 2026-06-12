@@ -56,7 +56,7 @@ func CheckConfirmation(ctx context.Context, elicitor api.Elicitor, message, fall
 			if fallback == "deny" {
 				return ErrConfirmationDenied
 			}
-			klog.Warningf("Confirmation rules matched but client does not support elicitation, proceeding with fallback \"allow\": %s", message)
+			klog.FromContext(ctx).Info("Confirmation rules matched but client does not support elicitation, proceeding with fallback \"allow\"", "message", message)
 			return nil
 		}
 		return err

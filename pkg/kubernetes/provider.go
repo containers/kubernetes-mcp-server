@@ -30,12 +30,12 @@ type Provider interface {
 	GetDefaultTarget() string
 	GetTargetParameterName() string
 	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
-	WatchTargets(reload McpReload)
+	WatchTargets(ctx context.Context, reload McpReload)
 	Close()
 	// HasGVKs reports whether every GVK in gvks is available on at least one target
 	// exposed by this provider. Providers that have not opted in to GVK discovery
 	// should return true so existing tools remain visible.
-	HasGVKs(gvks []schema.GroupVersionKind) bool
+	HasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool
 }
 
 // TokenExchangeProvider is an optional interface that providers can implement to suport per-target token exchange.
@@ -67,7 +67,7 @@ func WithTokenExchange(oauthState *oauth.State) ProviderOption {
 	}
 }
 
-func NewProvider(cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
+func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
 	var providerOpts providerOptions
 	for _, opt := range opts {
 		opt(&providerOpts)
@@ -80,7 +80,7 @@ func NewProvider(cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
 		return nil, err
 	}
 
-	provider, err := factory(cfg)
+	provider, err := factory(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}

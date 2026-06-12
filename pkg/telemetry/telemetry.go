@@ -40,18 +40,28 @@ func Enabled() bool {
 //   - "parentbased_always_on": Respect parent span sampling decision, default to always_on
 //   - "parentbased_traceidratio": Respect parent span sampling decision, default to ratio
 //   - "" (empty/not set): Use default ParentBased(AlwaysSample)
-func getSamplerFromEnv() trace.Sampler {
+func getSamplerFromEnv(ctx context.Context) trace.Sampler {
 	samplerType := os.Getenv("OTEL_TRACES_SAMPLER")
 	samplerArg := os.Getenv("OTEL_TRACES_SAMPLER_ARG")
+	logger := klog.FromContext(ctx)
 
 	// Parse sampler argument (ratio) if provided
 	ratio := 1.0 // Default to 100% sampling
 	if samplerArg != "" {
 		parsed, err := strconv.ParseFloat(samplerArg, 64)
 		if err != nil {
-			klog.V(1).Infof("Invalid OTEL_TRACES_SAMPLER_ARG '%s', using default 1.0: %v", samplerArg, err)
+			logger.V(1).Info("Invalid OTEL_TRACES_SAMPLER_ARG, falling back to default",
+				"config.env_var", "OTEL_TRACES_SAMPLER_ARG",
+				"config.provided_value", samplerArg,
+				"config.default_value", 1.0,
+				"exception.message", err.Error(),
+			)
 		} else if parsed < 0.0 || parsed > 1.0 {
-			klog.V(1).Infof("OTEL_TRACES_SAMPLER_ARG '%f' out of range [0.0, 1.0], using default 1.0", parsed)
+			logger.V(1).Info("OTEL_TRACES_SAMPLER_ARG out of range [0.0, 1.0], falling back to default",
+				"config.env_var", "OTEL_TRACES_SAMPLER_ARG",
+				"config.provided_value", parsed,
+				"config.default_value", 1.0,
+			)
 		} else {
 			ratio = parsed
 		}
@@ -60,36 +70,40 @@ func getSamplerFromEnv() trace.Sampler {
 	// Select sampler based on type
 	switch samplerType {
 	case "always_on":
-		klog.V(2).Info("Using AlwaysSample sampler")
+		logger.V(2).Info("Using AlwaysSample sampler")
 		return trace.AlwaysSample()
 
 	case "always_off":
-		klog.V(2).Info("Using NeverSample sampler")
+		logger.V(2).Info("Using NeverSample sampler")
 		return trace.NeverSample()
 
 	case "traceidratio":
-		klog.V(2).Infof("Using TraceIDRatioBased sampler with ratio %.2f", ratio)
+		logger.V(2).Info("Using TraceIDRatioBased sampler", "telemetry.sampler.ratio", ratio)
 		return trace.TraceIDRatioBased(ratio)
 
 	case "parentbased_always_on":
-		klog.V(2).Info("Using ParentBased(AlwaysSample) sampler")
+		logger.V(2).Info("Using ParentBased(AlwaysSample) sampler")
 		return trace.ParentBased(trace.AlwaysSample())
 
 	case "parentbased_always_off":
-		klog.V(2).Info("Using ParentBased(NeverSample) sampler")
+		logger.V(2).Info("Using ParentBased(NeverSample) sampler")
 		return trace.ParentBased(trace.NeverSample())
 
 	case "parentbased_traceidratio":
-		klog.V(2).Infof("Using ParentBased(TraceIDRatioBased(%.2f)) sampler", ratio)
+		logger.V(2).Info("Using ParentBased(TraceIDRatioBased) sampler", "telemetry.sampler.ratio", ratio)
 		return trace.ParentBased(trace.TraceIDRatioBased(ratio))
 
 	case "":
 		// Default: ParentBased(AlwaysSample) for development
-		klog.V(2).Info("Using default ParentBased(AlwaysSample) sampler")
+		logger.V(2).Info("Using default ParentBased(AlwaysSample) sampler")
 		return trace.ParentBased(trace.AlwaysSample())
 
 	default:
-		klog.V(1).Infof("Unknown OTEL_TRACES_SAMPLER '%s', using default ParentBased(AlwaysSample)", samplerType)
+		logger.V(1).Info("Unknown OTEL_TRACES_SAMPLER, using default",
+			"config.env_var", "OTEL_TRACES_SAMPLER",
+			"config.provided", samplerType,
+			"config.default", "ParentBased(AlwaysSample)",
+		)
 		return trace.ParentBased(trace.AlwaysSample())
 	}
 }
@@ -101,23 +115,28 @@ func getSamplerFromEnv() trace.Sampler {
 //   - "http": Alias for "http/protobuf"
 func createExporter(ctx context.Context) (*otlptrace.Exporter, error) {
 	protocol := strings.ToLower(os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
+	logger := klog.FromContext(ctx)
 
 	switch protocol {
 	case "http/protobuf", "http":
-		klog.V(2).Infof("Using HTTP/protobuf OTLP exporter (protocol=%s)", protocol)
+		logger.V(2).Info("Using HTTP/protobuf OTLP exporter", "telemetry.exporter.protocol", protocol)
 		return otlptracehttp.New(ctx)
 
 	case "grpc", "":
 		// Default to gRPC
 		if protocol == "" {
-			klog.V(2).Info("Using gRPC OTLP exporter (default)")
+			logger.V(2).Info("Using gRPC OTLP exporter (default)")
 		} else {
-			klog.V(2).Info("Using gRPC OTLP exporter")
+			logger.V(2).Info("Using gRPC OTLP exporter")
 		}
 		return otlptracegrpc.New(ctx)
 
 	default:
-		klog.V(1).Infof("Unknown OTEL_EXPORTER_OTLP_PROTOCOL '%s', defaulting to gRPC", protocol)
+		logger.V(1).Info("Unknown OTEL_EXPORTER_OTLP_PROTOCOL falling back to default",
+			"config.env_var", "OTEL_EXPORTER_OTLP_PROTOCOL",
+			"config.provided", protocol,
+			"config.default", "grpc",
+		)
 		return otlptracegrpc.New(ctx)
 	}
 }
@@ -125,22 +144,21 @@ func createExporter(ctx context.Context) (*otlptrace.Exporter, error) {
 // InitTracer initializes the OpenTelemetry tracer provider.
 // Tracing is only enabled if OTEL_EXPORTER_OTLP_ENDPOINT is set.
 // Check telemetry.Enabled() to determine if tracing is active.
-func InitTracer(serviceName, serviceVersion string) (func(), error) {
+func InitTracer(ctx context.Context, serviceName, serviceVersion string) (func(), error) {
+	logger := klog.FromContext(ctx)
 	// Check if OTLP endpoint is configured - if not, skip all tracing setup
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
-		klog.V(2).Info("OTEL_EXPORTER_OTLP_ENDPOINT not set, tracing disabled")
+		logger.V(2).Info("OTEL_EXPORTER_OTLP_ENDPOINT not set, tracing disabled")
 		return func() {}, nil
 	}
-
-	ctx := context.Background()
 
 	// Create OTLP exporter based on protocol configuration
 	// Endpoint is configured via OTEL_EXPORTER_OTLP_ENDPOINT env var
 	// Protocol is configured via OTEL_EXPORTER_OTLP_PROTOCOL env var
 	exporter, err := createExporter(ctx)
 	if err != nil {
-		klog.V(1).Infof("Failed to create OTLP exporter, tracing disabled: %v", err)
+		logger.V(1).Error(err, "Failed to create OTLP exporter, tracing disabled")
 		return func() {}, nil
 	}
 
@@ -152,12 +170,12 @@ func InitTracer(serviceName, serviceVersion string) (func(), error) {
 		),
 	)
 	if err != nil {
-		klog.V(1).Infof("Failed to create resource, tracing disabled: %v", err)
+		logger.V(1).Error(err, "Failed to create resource, tracing disabled")
 		return func() {}, nil
 	}
 
 	// Configure tracer provider with sampler from environment
-	sampler := getSamplerFromEnv()
+	sampler := getSamplerFromEnv(ctx)
 
 	// Create batch span processor with production settings
 	// - BatchTimeout: Maximum time to wait before exporting a batch (5 seconds)
@@ -187,16 +205,16 @@ func InitTracer(serviceName, serviceVersion string) (func(), error) {
 
 	// Mark tracing as enabled so middleware knows to create spans
 	tracingEnabled.Store(true)
-	klog.V(1).Info("OpenTelemetry tracing initialized successfully")
+	logger.V(1).Info("OpenTelemetry tracing initialized successfully")
 
 	cleanup := func() {
 		tracingEnabled.Store(false)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := tp.Shutdown(ctx); err != nil {
-			klog.Errorf("Failed to shutdown tracer provider: %v", err)
+			logger.Error(err, "Failed to shutdown tracer provider")
 		}
-		klog.V(1).Info("OpenTelemetry tracer provider shutdown complete")
+		logger.V(1).Info("OpenTelemetry tracer provider shutdown complete")
 	}
 
 	return cleanup, nil
@@ -205,17 +223,17 @@ func InitTracer(serviceName, serviceVersion string) (func(), error) {
 // InitTracerWithConfig initializes the OpenTelemetry tracer provider using the provided config.
 // The config values can be overridden by environment variables.
 // Check telemetry.Enabled() to determine if tracing is active.
-func InitTracerWithConfig(cfg *config.TelemetryConfig, serviceName, serviceVersion string) (func(), error) {
+func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serviceName, serviceVersion string) (func(), error) {
+	logger := klog.FromContext(ctx)
+
 	if cfg == nil || !cfg.IsEnabled() {
-		klog.V(2).Info("Telemetry not enabled, tracing disabled")
+		logger.V(2).Info("Telemetry not enabled, tracing disabled")
 		return func() {}, nil
 	}
 
-	ctx := context.Background()
-
 	exporter, err := createExporterWithConfig(ctx, cfg)
 	if err != nil {
-		klog.V(1).Infof("Failed to create OTLP exporter, tracing disabled: %v", err)
+		logger.V(1).Error(err, "Failed to create OTLP exporter, tracing disabled")
 		return func() {}, nil
 	}
 
@@ -227,11 +245,11 @@ func InitTracerWithConfig(cfg *config.TelemetryConfig, serviceName, serviceVersi
 		),
 	)
 	if err != nil {
-		klog.V(1).Infof("Failed to create resource, tracing disabled: %v", err)
+		logger.V(1).Info("Failed to create resource, tracing disabled")
 		return func() {}, nil
 	}
 
-	sampler := getSamplerFromConfig(cfg)
+	sampler := getSamplerFromConfig(ctx, cfg)
 
 	bsp := trace.NewBatchSpanProcessor(
 		exporter,
@@ -254,16 +272,16 @@ func InitTracerWithConfig(cfg *config.TelemetryConfig, serviceName, serviceVersi
 	))
 
 	tracingEnabled.Store(true)
-	klog.V(1).Infof("OpenTelemetry tracing initialized successfully (endpoint=%s)", cfg.GetEndpoint())
+	logger.V(1).Info("OpenTelemetry tracing initialized successfully", "telemetry.exporter.endpoint", cfg.GetEndpoint())
 
 	cleanup := func() {
 		tracingEnabled.Store(false)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := tp.Shutdown(ctx); err != nil {
-			klog.Errorf("Failed to shutdown tracer provider: %v", err)
+			logger.Error(err, "Failed to shutdown tracer provider")
 		}
-		klog.V(1).Info("OpenTelemetry tracer provider shutdown complete")
+		logger.V(1).Info("OpenTelemetry tracer provider shutdown complete")
 	}
 
 	return cleanup, nil
@@ -271,17 +289,27 @@ func InitTracerWithConfig(cfg *config.TelemetryConfig, serviceName, serviceVersi
 
 // getSamplerFromConfig reads the sampler configuration from TelemetryConfig.
 // Environment variables take precedence over config values.
-func getSamplerFromConfig(cfg *config.TelemetryConfig) trace.Sampler {
+func getSamplerFromConfig(ctx context.Context, cfg *config.TelemetryConfig) trace.Sampler {
 	samplerType := cfg.GetTracesSampler()
 	samplerArg := cfg.GetTracesSamplerArg()
+	logger := klog.FromContext(ctx)
 
 	ratio := 1.0 // Default to 100% sampling
 	if samplerArg != "" {
 		parsed, err := strconv.ParseFloat(samplerArg, 64)
 		if err != nil {
-			klog.V(1).Infof("Invalid traces_sampler_arg '%s', using default 1.0: %v", samplerArg, err)
+			logger.V(1).Info("Invalid traces_sampler_arg, using",
+				"config.key", "traces_sampler_arg",
+				"config.provided", samplerArg,
+				"config.default", 1.0,
+				"exception.message", err,
+			)
 		} else if parsed < 0.0 || parsed > 1.0 {
-			klog.V(1).Infof("traces_sampler_arg '%f' out of range [0.0, 1.0], using default 1.0", parsed)
+			logger.V(1).Info("traces_sampler_arg out of range [0.0, 1.0], using default",
+				"config.key", "traces_sampler_arg",
+				"config.provided", parsed,
+				"config.default", 1.0,
+			)
 		} else {
 			ratio = parsed
 		}
@@ -289,36 +317,40 @@ func getSamplerFromConfig(cfg *config.TelemetryConfig) trace.Sampler {
 
 	switch samplerType {
 	case "always_on":
-		klog.V(2).Info("Using AlwaysSample sampler")
+		logger.V(2).Info("Using AlwaysSample sampler")
 		return trace.AlwaysSample()
 
 	case "always_off":
-		klog.V(2).Info("Using NeverSample sampler")
+		logger.V(2).Info("Using NeverSample sampler")
 		return trace.NeverSample()
 
 	case "traceidratio":
-		klog.V(2).Infof("Using TraceIDRatioBased sampler with ratio %.2f", ratio)
+		logger.V(2).Info("Using TraceIDRatioBased sampler", "telemetry.sampler.ratio", ratio)
 		return trace.TraceIDRatioBased(ratio)
 
 	case "parentbased_always_on":
-		klog.V(2).Info("Using ParentBased(AlwaysSample) sampler")
+		logger.V(2).Info("Using ParentBased(AlwaysSample) sampler")
 		return trace.ParentBased(trace.AlwaysSample())
 
 	case "parentbased_always_off":
-		klog.V(2).Info("Using ParentBased(NeverSample) sampler")
+		logger.V(2).Info("Using ParentBased(NeverSample) sampler")
 		return trace.ParentBased(trace.NeverSample())
 
 	case "parentbased_traceidratio":
-		klog.V(2).Infof("Using ParentBased(TraceIDRatioBased(%.2f)) sampler", ratio)
+		logger.V(2).Info("Using ParentBased(TraceIDRatioBased) sampler", "telemetry.sampler.ratio", ratio)
 		return trace.ParentBased(trace.TraceIDRatioBased(ratio))
 
 	case "":
 		// Default: ParentBased(AlwaysSample) for development
-		klog.V(2).Info("Using default ParentBased(AlwaysSample) sampler")
+		logger.V(2).Info("Using default ParentBased(AlwaysSample) sampler")
 		return trace.ParentBased(trace.AlwaysSample())
 
 	default:
-		klog.V(1).Infof("Unknown traces_sampler '%s', using default ParentBased(AlwaysSample)", samplerType)
+		logger.V(1).Info("Unknown traces_sampler, using default",
+			"config.key", "traces_sampler",
+			"config.provided", samplerType,
+			"config.default", "ParentBased(AlwaysSample)",
+		)
 		return trace.ParentBased(trace.AlwaysSample())
 	}
 }
@@ -328,22 +360,27 @@ func getSamplerFromConfig(cfg *config.TelemetryConfig) trace.Sampler {
 func createExporterWithConfig(ctx context.Context, cfg *config.TelemetryConfig) (*otlptrace.Exporter, error) {
 	protocol := strings.ToLower(cfg.GetProtocol())
 	endpoint := cfg.GetEndpoint()
+	logger := klog.FromContext(ctx)
 
 	switch protocol {
 	case "http/protobuf", "http":
-		klog.V(2).Infof("Using HTTP/protobuf OTLP exporter (protocol=%s)", protocol)
+		logger.V(2).Info("Using HTTP/protobuf OTLP exporter", "telemetry.exporter.protocol", protocol)
 		return otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
 
 	case "grpc", "":
 		if protocol == "" {
-			klog.V(2).Info("Using gRPC OTLP exporter (default)")
+			logger.V(2).Info("Using gRPC OTLP exporter (default)")
 		} else {
-			klog.V(2).Info("Using gRPC OTLP exporter")
+			logger.V(2).Info("Using gRPC OTLP exporter")
 		}
 		return otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(endpoint))
 
 	default:
-		klog.V(1).Infof("Unknown protocol '%s', defaulting to gRPC", protocol)
+		logger.V(1).Info("Unknown protocol, falling back to default",
+			"config.key", "protocol",
+			"config.provided", protocol,
+			"config.default", "grpc",
+		)
 		return otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(endpoint))
 	}
 }

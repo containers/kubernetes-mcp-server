@@ -25,7 +25,7 @@ func (s *ProviderSingleTestSuite) SetupTest() {
 	InClusterConfig = func() (*rest.Config, error) {
 		return s.mockServer.Config(), nil
 	}
-	provider, err := NewProvider(&config.StaticConfig{})
+	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{})
 	s.Require().NoError(err, "Expected no error creating provider with kubeconfig")
 	s.provider = provider
 }
@@ -95,22 +95,22 @@ func (s *ProviderSingleTestSuite) TestHasGVKs() {
 	s.mockServer.Handle(handler)
 
 	s.Run("returns true for nil GVKs list", func() {
-		s.True(s.provider.HasGVKs(nil))
+		s.True(s.provider.HasGVKs(s.T().Context(), nil))
 	})
 
 	s.Run("returns true for empty GVKs list", func() {
-		s.True(s.provider.HasGVKs([]schema.GroupVersionKind{}))
+		s.True(s.provider.HasGVKs(s.T().Context(), []schema.GroupVersionKind{}))
 	})
 
 	s.Run("returns true for a single GVK that exists on the cluster", func() {
-		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+		result := s.provider.HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "", Version: "v1", Kind: "Pod"},
 		})
 		s.True(result)
 	})
 
 	s.Run("returns true when all GVKs exist on the cluster", func() {
-		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+		result := s.provider.HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "", Version: "v1", Kind: "Pod"},
 			{Group: "", Version: "v1", Kind: "Node"},
 			{Group: "apps", Version: "v1", Kind: "Deployment"},
@@ -119,14 +119,14 @@ func (s *ProviderSingleTestSuite) TestHasGVKs() {
 	})
 
 	s.Run("returns false when a GVK does not exist on the cluster", func() {
-		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+		result := s.provider.HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "nonexistent.example.com", Version: "v1", Kind: "FakeResource"},
 		})
 		s.False(result)
 	})
 
 	s.Run("returns false when any GVK in the list does not exist", func() {
-		result := s.provider.HasGVKs([]schema.GroupVersionKind{
+		result := s.provider.HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "", Version: "v1", Kind: "Pod"},
 			{Group: "nonexistent.example.com", Version: "v1", Kind: "FakeResource"},
 		})

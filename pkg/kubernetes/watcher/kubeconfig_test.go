@@ -37,7 +37,7 @@ func (s *KubeconfigTestSuite) SetupTest() {
 
 func (s *KubeconfigTestSuite) TestNewKubeconfig() {
 	s.Run("creates watcher with client config", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
 		s.Run("stores client config", func() {
 			s.NotNil(watcher.ClientConfig)
@@ -51,7 +51,7 @@ func (s *KubeconfigTestSuite) TestNewKubeconfig() {
 
 func (s *KubeconfigTestSuite) TestWatch() {
 	s.Run("triggers onChange callback on file modification", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 		s.T().Cleanup(watcher.Close)
 
 		var changeDetected atomic.Bool
@@ -60,7 +60,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 			return nil
 		}
 
-		watcher.Watch(onChange)
+		watcher.Watch(s.T().Context(), onChange)
 
 		// Wait for the watcher to be ready
 		s.Eventually(func() bool {
@@ -81,11 +81,11 @@ func (s *KubeconfigTestSuite) TestWatch() {
 			&clientcmd.ClientConfigLoadingRules{ExplicitPath: ""},
 			&clientcmd.ConfigOverrides{},
 		)
-		watcher := NewKubeconfig(clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), clientConfig)
 
 		var completed atomic.Bool
 		go func() {
-			watcher.Watch(func() error { return nil })
+			watcher.Watch(s.T().Context(), func() error { return nil })
 			completed.Store(true)
 		}()
 
@@ -95,7 +95,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 	})
 
 	s.Run("handles multiple file changes with debouncing", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 		s.T().Cleanup(watcher.Close)
 
 		var callCount atomic.Int32
@@ -104,7 +104,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 			return nil
 		}
 
-		watcher.Watch(onChange)
+		watcher.Watch(s.T().Context(), onChange)
 
 		// Wait for the watcher to be ready
 		s.Eventually(func() bool {
@@ -125,7 +125,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 	})
 
 	s.Run("handles onChange callback errors gracefully", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 		s.T().Cleanup(watcher.Close)
 
 		var errorReturned atomic.Bool
@@ -134,7 +134,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 			return os.ErrInvalid // Return an error
 		}
 
-		watcher.Watch(onChange)
+		watcher.Watch(s.T().Context(), onChange)
 
 		// Wait for the watcher to be ready
 		s.Eventually(func() bool {
@@ -151,14 +151,14 @@ func (s *KubeconfigTestSuite) TestWatch() {
 	})
 
 	s.Run("ignores subsequent Watch calls when already started", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 		s.T().Cleanup(watcher.Close)
 
 		var firstWatcherActive atomic.Bool
 		var secondWatcherActive atomic.Bool
 
 		// Start first watcher
-		watcher.Watch(func() error {
+		watcher.Watch(s.T().Context(), func() error {
 			firstWatcherActive.Store(true)
 			return nil
 		})
@@ -169,7 +169,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 		}, kubeconfigTestTimeout, kubeconfigEventuallyTick, "timeout waiting for first watcher to be ready")
 
 		// Try to start second watcher (should be ignored since already started)
-		watcher.Watch(func() error {
+		watcher.Watch(s.T().Context(), func() error {
 			secondWatcherActive.Store(true)
 			return nil
 		})
@@ -189,7 +189,7 @@ func (s *KubeconfigTestSuite) TestWatch() {
 
 func (s *KubeconfigTestSuite) TestClose() {
 	s.Run("does not panic when watcher not started", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
 		s.NotPanics(func() {
 			watcher.Close()
@@ -197,9 +197,9 @@ func (s *KubeconfigTestSuite) TestClose() {
 	})
 
 	s.Run("closes watcher successfully", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
-		watcher.Watch(func() error { return nil })
+		watcher.Watch(s.T().Context(), func() error { return nil })
 
 		// Wait for the watcher to be ready
 		s.Eventually(func() bool {
@@ -212,10 +212,10 @@ func (s *KubeconfigTestSuite) TestClose() {
 	})
 
 	s.Run("stops triggering onChange after close", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
 		var callCount atomic.Int32
-		watcher.Watch(func() error {
+		watcher.Watch(s.T().Context(), func() error {
 			callCount.Add(1)
 			return nil
 		})
@@ -241,9 +241,9 @@ func (s *KubeconfigTestSuite) TestClose() {
 	})
 
 	s.Run("handles multiple close calls", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
-		watcher.Watch(func() error { return nil })
+		watcher.Watch(s.T().Context(), func() error { return nil })
 
 		// Wait for the watcher to be ready
 		s.Eventually(func() bool {
@@ -257,9 +257,9 @@ func (s *KubeconfigTestSuite) TestClose() {
 	})
 
 	s.Run("handles close when stopCh is already closed", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
-		watcher.Watch(func() error { return nil })
+		watcher.Watch(s.T().Context(), func() error { return nil })
 
 		// Wait for the watcher to be ready
 		s.Eventually(func() bool {
@@ -291,10 +291,10 @@ func (s *KubeconfigTestSuite) TestClose() {
 	})
 
 	s.Run("stops debounce timer on close", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
 		var callCount atomic.Int32
-		watcher.Watch(func() error {
+		watcher.Watch(s.T().Context(), func() error {
 			callCount.Add(1)
 			return nil
 		})
@@ -323,10 +323,10 @@ func (s *KubeconfigTestSuite) TestClose() {
 	})
 
 	s.Run("can restart watcher after close", func() {
-		watcher := NewKubeconfig(s.clientConfig)
+		watcher := NewKubeconfig(s.T().Context(), s.clientConfig)
 
 		var firstCallbackTriggered atomic.Bool
-		watcher.Watch(func() error {
+		watcher.Watch(s.T().Context(), func() error {
 			firstCallbackTriggered.Store(true)
 			return nil
 		})
@@ -345,7 +345,7 @@ func (s *KubeconfigTestSuite) TestClose() {
 
 		// Start a new watcher
 		var secondCallbackTriggered atomic.Bool
-		watcher.Watch(func() error {
+		watcher.Watch(s.T().Context(), func() error {
 			secondCallbackTriggered.Store(true)
 			return nil
 		})

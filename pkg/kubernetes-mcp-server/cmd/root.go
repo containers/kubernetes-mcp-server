@@ -128,13 +128,14 @@ func NewMCPServerOptions(streams genericiooptions.IOStreams) *MCPServerOptions {
 
 func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewMCPServerOptions(streams)
+	ctx := context.Background()
 	cmd := &cobra.Command{
 		Use:     "kubernetes-mcp-server [command] [options]",
 		Short:   "Kubernetes Model Context Protocol (MCP) server",
 		Long:    long,
 		Example: examples,
 		RunE: func(c *cobra.Command, args []string) error {
-			if err := o.Complete(c); err != nil {
+			if err := o.Complete(ctx, c); err != nil {
 				return err
 			}
 			// Close the log sink whatever happens next: Validate may fail, Run
@@ -143,14 +144,14 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 			defer func() {
 				if o.logSink != nil {
 					if err := o.logSink.Close(); err != nil {
-						klog.Errorf("failed to close log sink: %v", err)
+						klog.FromContext(ctx).Error(err, "failed to close log sink")
 					}
 				}
 			}()
-			if err := o.Validate(); err != nil {
+			if err := o.Validate(ctx); err != nil {
 				return err
 			}
-			if err := o.Run(); err != nil {
+			if err := o.Run(ctx); err != nil {
 				return err
 			}
 
@@ -192,9 +193,9 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	return cmd
 }
 
-func (m *MCPServerOptions) Complete(cmd *cobra.Command) error {
+func (m *MCPServerOptions) Complete(ctx context.Context, cmd *cobra.Command) error {
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		cnf, err := config.Read(m.ConfigPath, m.ConfigDir)
+		cnf, err := config.Read(ctx, m.ConfigPath, m.ConfigDir)
 		if err != nil {
 			return err
 		}
@@ -283,12 +284,12 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 }
 
-func (m *MCPServerOptions) Validate() error {
+func (m *MCPServerOptions) Validate(ctx context.Context) error {
 	// Config-level validations (shared with SIGHUP reload)
 	if err := m.StaticConfig.
 		WithProviderStrategies(kubernetes.GetRegisteredStrategies()).
 		WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
-		Validate(); err != nil {
+		Validate(ctx); err != nil {
 		return err
 	}
 	// CLI-level validations (flag interactions that can't change on reload)
@@ -303,26 +304,26 @@ func (m *MCPServerOptions) Validate() error {
 	return nil
 }
 
-func (m *MCPServerOptions) Run() error {
+func (m *MCPServerOptions) Run(ctx context.Context) error {
 	// Initialize OpenTelemetry tracing with config (env vars take precedence)
-	cleanup, _ := telemetry.InitTracerWithConfig(&m.StaticConfig.Telemetry, version.BinaryName, version.Version)
+	cleanup, _ := telemetry.InitTracerWithConfig(ctx, &m.StaticConfig.Telemetry, version.BinaryName, version.Version)
 	defer cleanup()
-
-	klog.V(1).Info("Starting kubernetes-mcp-server")
-	klog.V(1).Infof(" - Config: %s", m.ConfigPath)
-	klog.V(1).Infof(" - Toolsets: %s", strings.Join(m.StaticConfig.Toolsets, ", "))
-	klog.V(1).Infof(" - ListOutput: %s", m.StaticConfig.ListOutput)
-	klog.V(1).Infof(" - Read-only mode: %t", m.StaticConfig.ReadOnly)
-	klog.V(1).Infof(" - Disable destructive tools: %t", m.StaticConfig.DisableDestructive)
-	klog.V(1).Infof(" - Stateless mode: %t", m.StaticConfig.Stateless)
-	klog.V(1).Infof(" - Telemetry enabled: %t", m.StaticConfig.Telemetry.IsEnabled())
 
 	strategy := m.StaticConfig.ClusterProviderStrategy
 	if strategy == "" {
 		strategy = "auto-detect (it is recommended to set this explicitly in your Config)"
 	}
 
-	klog.V(1).Infof(" - ClusterProviderStrategy: %s", strategy)
+	klog.FromContext(ctx).V(1).Info("Starting kubernetes-mcp-server",
+		"config.path", m.ConfigPath,
+		"config.toolsets", m.StaticConfig.Toolsets,
+		"config.list_output", m.StaticConfig.ListOutput,
+		"config.read_only", m.StaticConfig.ReadOnly,
+		"config.disable_destructive", m.StaticConfig.DisableDestructive,
+		"config.stateless", m.StaticConfig.Stateless,
+		"config.telemetry.enabled", m.StaticConfig.Telemetry.Enabled,
+		"config.cluster_provider_strategy", strategy,
+	)
 
 	if m.Version {
 		_, _ = fmt.Fprintf(m.Out, "%s\n", version.Version)
@@ -335,12 +336,12 @@ func (m *MCPServerOptions) Run() error {
 	}
 	oauthState := internaloauth.NewState(internaloauth.SnapshotFromConfig(m.StaticConfig, oidcProvider, httpClient))
 
-	provider, err := kubernetes.NewProvider(m.StaticConfig, kubernetes.WithTokenExchange(oauthState))
+	provider, err := kubernetes.NewProvider(ctx, m.StaticConfig, kubernetes.WithTokenExchange(oauthState))
 	if err != nil {
 		return fmt.Errorf("unable to create kubernetes target provider: %w", err)
 	}
 
-	mcpServer, err := mcp.NewServer(mcp.Configuration{
+	mcpServer, err := mcp.NewServer(ctx, mcp.Configuration{
 		StaticConfig: m.StaticConfig,
 		SDKLogger:    m.logSink.SDKLogger(),
 	}, provider)
@@ -362,7 +363,7 @@ func (m *MCPServerOptions) Run() error {
 	// to drain — important because the goroutine accesses m.logSink, which
 	// the deferred Close in NewMCPServer's RunE would otherwise race with.
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		stopSIGHUP := m.setupSIGHUPHandler(mcpServer, oauthState, cfgState)
+		stopSIGHUP := m.setupSIGHUPHandler(ctx, mcpServer, oauthState, cfgState)
 		defer stopSIGHUP()
 	}
 
@@ -371,7 +372,6 @@ func (m *MCPServerOptions) Run() error {
 		return internalhttp.Serve(ctx, mcpServer, cfgState, oauthState)
 	}
 
-	ctx := context.Background()
 	if err := mcpServer.ServeStdio(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
@@ -382,27 +382,34 @@ func (m *MCPServerOptions) Run() error {
 // setupSIGHUPHandler sets up a signal handler to reload configuration on SIGHUP.
 // Returns a stop function that should be called to clean up the handler.
 // The stop function waits for the handler goroutine to finish.
-func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState *internaloauth.State, cfgState *config.StaticConfigState) (stop func()) {
+func (m *MCPServerOptions) setupSIGHUPHandler(
+	ctx context.Context,
+	mcpServer *mcp.Server,
+	oauthState *internaloauth.State,
+	cfgState *config.StaticConfigState,
+) (stop func()) {
 	sigHupCh := make(chan os.Signal, 1)
 	done := make(chan struct{})
 	signal.Notify(sigHupCh, syscall.SIGHUP)
 
+	logger := klog.FromContext(ctx)
+
 	go func() {
 		defer close(done)
 		for range sigHupCh {
-			klog.V(1).Info("Received SIGHUP signal, reloading configuration...")
+			logger.V(1).Info("Received SIGHUP signal, reloading configuration...")
 
 			// Reload config from files
-			newConfig, err := config.Read(m.ConfigPath, m.ConfigDir)
+			newConfig, err := config.Read(ctx, m.ConfigPath, m.ConfigDir)
 			if err != nil {
-				klog.Errorf("Failed to reload configuration from disk: %v", err)
+				logger.Error(err, "Failed to reload configuration from disk")
 				continue
 			}
 
 			// Apply the new configuration to the MCP server first — if this fails,
 			// we skip the OAuth state and config state updates to avoid inconsistent state.
-			if err := mcpServer.ReloadConfiguration(newConfig); err != nil {
-				klog.Errorf("Failed to apply reloaded configuration: %v", err)
+			if err := mcpServer.ReloadConfiguration(ctx, newConfig); err != nil {
+				logger.Error(err, "Failed to apply reloaded configuration")
 				continue
 			}
 
@@ -412,7 +419,7 @@ func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState 
 			// nil in tests that exercise the SIGHUP handler in isolation.
 			if m.logSink != nil {
 				if err := m.logSink.Reload(newConfig); err != nil {
-					klog.Errorf("Failed to reload log destination, keeping previous one: %v", err)
+					logger.Error(err, "Failed to reload log destination, keeping previous one")
 				}
 			}
 			// Publish the new config so the HTTP auth middleware picks it up.
@@ -425,26 +432,26 @@ func (m *MCPServerOptions) setupSIGHUPHandler(mcpServer *mcp.Server, oauthState 
 			}
 			newSnapshot := internaloauth.SnapshotFromConfig(newConfig, currentSnapshot.OIDCProvider, currentSnapshot.HTTPClient)
 			if currentSnapshot.HasProviderConfigChanged(newSnapshot) {
-				klog.V(1).Info("OAuth configuration changed, recreating OIDC provider...")
+				logger.V(1).Info("OAuth configuration changed, recreating OIDC provider...")
 				newProvider, newClient, err := internaloauth.CreateOIDCProviderAndClient(newConfig)
 				if err != nil {
-					klog.Errorf("Failed to recreate OIDC provider during reload: %v", err)
+					logger.Error(err, "Failed to recreate OIDC provider during reload")
 					continue
 				}
 				newSnapshot.OIDCProvider = newProvider
 				newSnapshot.HTTPClient = newClient
 				oauthState.Store(newSnapshot)
-				klog.V(1).Info("OIDC provider and HTTP client updated successfully")
+				logger.V(1).Info("OIDC provider and HTTP client updated successfully")
 			} else if currentSnapshot.HasWellKnownConfigChanged(newSnapshot) {
 				oauthState.Store(newSnapshot)
-				klog.V(1).Info("OAuth well-known configuration updated")
+				logger.V(1).Info("OAuth well-known configuration updated")
 			}
 
-			klog.V(1).Info("Configuration reloaded successfully via SIGHUP")
+			logger.V(1).Info("Configuration reloaded successfully via SIGHUP")
 		}
 	}()
 
-	klog.V(2).Info("SIGHUP handler registered for configuration reload")
+	logger.V(2).Info("SIGHUP handler registered for configuration reload")
 
 	return func() {
 		signal.Stop(sigHupCh)

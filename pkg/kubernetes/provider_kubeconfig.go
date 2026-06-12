@@ -38,19 +38,19 @@ func init() {
 // via kubeconfig contexts.
 // Internally, it leverages a KubeconfigManager for each context, initializing them
 // lazily when requested.
-func newKubeConfigClusterProvider(cfg api.BaseConfig) (Provider, error) {
+func newKubeConfigClusterProvider(ctx context.Context, cfg api.BaseConfig) (Provider, error) {
 	ret := &kubeConfigClusterProvider{config: cfg}
-	if err := ret.reset(); err != nil {
+	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
 	return ret, nil
 }
 
-func (p *kubeConfigClusterProvider) reset() error {
+func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	m, err := NewKubeconfigManager(p.config, "")
+	m, err := NewKubeconfigManager(ctx, p.config, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
 			return fmt.Errorf( //nolint:ST1005 // user-facing error with actionable multi-line guidance
@@ -98,16 +98,16 @@ func (p *kubeConfigClusterProvider) reset() error {
 	}
 
 	p.Close()
-	p.kubeconfigWatcher = watcher.NewKubeconfig(m.kubernetes.clientCmdConfig)
-	p.clusterStateWatcher = watcher.NewClusterState(m.kubernetes.DiscoveryClient())
+	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig)
+	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient())
 	p.defaultContext = defaultContext
 
 	return nil
 }
 
-func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager, error) {
+func (p *kubeConfigClusterProvider) managerForContext(ctx context.Context, kubeContext string) (*Manager, error) {
 	p.mu.RLock()
-	m, ok := p.managers[context]
+	m, ok := p.managers[kubeContext]
 	p.mu.RUnlock()
 	if ok && m != nil {
 		return m, nil
@@ -116,18 +116,18 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	m, ok = p.managers[context]
+	m, ok = p.managers[kubeContext]
 	if ok && m != nil {
 		return m, nil
 	}
 	baseManager := p.managers[p.defaultContext]
 
-	m, err := NewKubeconfigManager(baseManager.config, context)
+	m, err := NewKubeconfigManager(ctx, baseManager.config, kubeContext)
 	if err != nil {
 		return nil, err
 	}
 
-	p.managers[context] = m
+	p.managers[kubeContext] = m
 
 	return m, nil
 }
@@ -164,7 +164,7 @@ func (p *kubeConfigClusterProvider) GetTargetParameterName() string {
 }
 
 func (p *kubeConfigClusterProvider) GetDerivedKubernetes(ctx context.Context, context string) (*Kubernetes, error) {
-	m, err := p.managerForContext(context)
+	m, err := p.managerForContext(ctx, context)
 	if err != nil {
 		return nil, err
 	}
@@ -177,16 +177,16 @@ func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
 	return p.defaultContext
 }
 
-func (p *kubeConfigClusterProvider) WatchTargets(reload McpReload) {
+func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload McpReload) {
 	reloadWithReset := func() error {
-		if err := p.reset(); err != nil {
+		if err := p.reset(ctx); err != nil {
 			return err
 		}
-		p.WatchTargets(reload)
+		p.WatchTargets(ctx, reload)
 		return reload()
 	}
-	p.kubeconfigWatcher.Watch(reloadWithReset)
-	p.clusterStateWatcher.Watch(reload)
+	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
+	p.clusterStateWatcher.Watch(ctx, reload)
 }
 
 func (p *kubeConfigClusterProvider) Close() {
@@ -197,6 +197,6 @@ func (p *kubeConfigClusterProvider) Close() {
 	}
 }
 
-func (p *kubeConfigClusterProvider) HasGVKs(_ []schema.GroupVersionKind) bool {
+func (p *kubeConfigClusterProvider) HasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
 	return true
 }

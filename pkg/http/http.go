@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -92,11 +93,11 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 			return
 		}
 
-		stats := mcpServer.GetMetrics().GetStats()
+		stats := mcpServer.GetMetrics().GetStats(r.Context())
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(stats); err != nil {
-			klog.V(1).Infof("Failed to encode stats response: %v", err)
+			klog.FromContext(r.Context()).V(1).Info("Failed to encode stats response", "exception.message", err.Error())
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -104,6 +105,7 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 }
 
 func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticConfigState, oauthState *oauth.State) error {
+	logger := klog.FromContext(ctx)
 	// Only fields read below are startup-only; middleware reloads via cfgState.
 	staticConfig := cfgState.Load()
 	mux := http.NewServeMux()
@@ -127,6 +129,10 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},
+		// BaseContext propagates the server context (including the klog logger)
+		// to all incoming request contexts, so klog.FromContext(r.Context())
+		// returns the contextual logger rather than the global fallback.
+		BaseContext: func(_ net.Listener) context.Context { return ctx },
 	}
 
 	// Only set up custom error logger for TLS mode to filter noisy TLS handshake errors
@@ -157,10 +163,16 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	go func() {
 		var err error
 		if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
-			klog.V(0).Infof("HTTPS server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats, /metrics)", staticConfig.Port)
+			logger.Info("HTTPS server starting",
+				"server.port", staticConfig.Port,
+				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+			)
 			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert, staticConfig.TLSKey)
 		} else {
-			klog.V(0).Infof("HTTP server starting on port %s (endpoints: /mcp, /sse, /message, /healthz, /stats, /metrics)", staticConfig.Port)
+			logger.Info("HTTP server starting",
+				"server.port", staticConfig.Port,
+				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+			)
 			err = httpServer.ListenAndServe()
 		}
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -170,31 +182,31 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 
 	select {
 	case sig := <-sigChan:
-		klog.V(0).Infof("Received signal %v, initiating graceful shutdown", sig)
+		logger.Info("Received signal, initiating graceful shutdown", "signal", sig.String())
 		cancel()
 	case <-ctx.Done():
-		klog.V(0).Infof("Context cancelled, initiating graceful shutdown")
+		logger.Info("Context cancelled, initiating graceful shutdown")
 	case err := <-serverErr:
-		klog.Errorf("HTTP server error: %v", err)
+		logger.Error(err, "HTTP server error")
 		return err
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
-	klog.V(0).Infof("Shutting down HTTP server gracefully...")
+	logger.Info("Shutting down HTTP server gracefully...")
 
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		// Don't fail Run() for errors during shutdown
-		klog.Errorf("HTTP server shutdown error: %v", err)
+		logger.Error(err, "HTTP server shutdown error")
 	}
 
 	// Always attempt MCP server shutdown (flushes metrics) even if HTTP shutdown failed
 	if err := mcpServer.Shutdown(shutdownCtx); err != nil {
 		// Don't fail Run() for errors during shutdown
-		klog.Errorf("MCP server shutdown error: %v", err)
+		logger.Error(err, "MCP server shutdown error")
 	}
 
-	klog.V(0).Infof("HTTP server shutdown complete")
+	logger.Info("HTTP server shutdown complete")
 	return nil
 }

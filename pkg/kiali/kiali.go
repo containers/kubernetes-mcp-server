@@ -86,7 +86,8 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 	return u.String(), nil
 }
 
-func (k *Kiali) createHTTPClient() *http.Client {
+func (k *Kiali) createHTTPClient(ctx context.Context) *http.Client {
+	logger := klog.FromContext(ctx)
 	// Base TLS configuration with minimum version for security
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
@@ -98,7 +99,7 @@ func (k *Kiali) createHTTPClient() *http.Client {
 		// Read the certificate from file
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
-			klog.Errorf("failed to read CA certificate from file %s: %v; proceeding without custom CA", caValue, err)
+			logger.Error(err, "failed to read CA certificate from file, proceeding without custom CA", "ca_file", caValue)
 			return k.wrapWithTLSEnforcement(&http.Client{
 				Transport: &http.Transport{
 					TLSClientConfig: tlsConfig,
@@ -116,7 +117,7 @@ func (k *Kiali) createHTTPClient() *http.Client {
 		if ok := certPool.AppendCertsFromPEM(caPEM); ok {
 			tlsConfig.RootCAs = certPool
 		} else {
-			klog.V(0).Infof("failed to append provided certificate authority; proceeding without custom CA")
+			logger.V(0).Info("failed to append provided certificate authority; proceeding without custom CA")
 		}
 	}
 
@@ -173,7 +174,7 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal arguments: %w", err)
 	}
-	klog.V(0).Infof("kiali API call: %s", ApiCallURL)
+	klog.FromContext(ctx).V(0).Info("kiali API call", "url.full", ApiCallURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ApiCallURL, strings.NewReader(string(jsonData)))
 	if err != nil {
 		return "", err
@@ -184,7 +185,7 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
-	client := k.createHTTPClient()
+	client := k.createHTTPClient(ctx)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

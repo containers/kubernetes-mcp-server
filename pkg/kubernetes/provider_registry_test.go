@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -13,18 +14,18 @@ type ProviderRegistryTestSuite struct {
 
 func (s *ProviderRegistryTestSuite) TestRegisterProvider() {
 	s.Run("With no pre-existing provider, registers the provider", func() {
-		RegisterProvider("test-strategy", func(cfg api.BaseConfig) (Provider, error) {
+		RegisterProvider("test-strategy", func(_ context.Context, cfg api.BaseConfig) (Provider, error) {
 			return nil, nil
 		})
 		_, exists := providerReg.factories["test-strategy"]
 		s.True(exists, "Provider should be registered")
 	})
 	s.Run("With pre-existing provider, panics", func() {
-		RegisterProvider("test-pre-existent", func(cfg api.BaseConfig) (Provider, error) {
+		RegisterProvider("test-pre-existent", func(_ context.Context, cfg api.BaseConfig) (Provider, error) {
 			return nil, nil
 		})
 		s.Panics(func() {
-			RegisterProvider("test-pre-existent", func(cfg api.BaseConfig) (Provider, error) {
+			RegisterProvider("test-pre-existent", func(_ context.Context, cfg api.BaseConfig) (Provider, error) {
 				return nil, nil
 			})
 		}, "Registering a provider with an existing strategy should panic")
@@ -39,10 +40,10 @@ func (s *ProviderRegistryTestSuite) TestGetRegisteredStrategies() {
 	})
 	s.Run("With multiple registered providers, returns sorted list", func() {
 		providerReg.clear()
-		RegisterProvider("foo-strategy", func(cfg api.BaseConfig) (Provider, error) {
+		RegisterProvider("foo-strategy", func(_ context.Context, cfg api.BaseConfig) (Provider, error) {
 			return nil, nil
 		})
-		RegisterProvider("bar-strategy", func(cfg api.BaseConfig) (Provider, error) {
+		RegisterProvider("bar-strategy", func(_ context.Context, cfg api.BaseConfig) (Provider, error) {
 			return nil, nil
 		})
 		strategies := GetRegisteredStrategies()

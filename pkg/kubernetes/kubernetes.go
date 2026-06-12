@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -53,7 +54,12 @@ type Kubernetes struct {
 
 var _ api.KubernetesClient = (*Kubernetes)(nil)
 
-func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientConfig, restConfig *rest.Config) (*Kubernetes, error) {
+func NewKubernetes(
+	ctx context.Context,
+	baseConfig api.BaseConfig,
+	clientCmdConfig clientcmd.ClientConfig,
+	restConfig *rest.Config,
+) (*Kubernetes, error) {
 	k := &Kubernetes{
 		config:          baseConfig,
 		clientCmdConfig: clientCmdConfig,
@@ -64,7 +70,7 @@ func NewKubernetes(baseConfig api.BaseConfig, clientCmdConfig clientcmd.ClientCo
 	}
 
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
-		return NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
+		return NewAccessControlRoundTripper(ctx, AccessControlRoundTripperConfig{
 			Delegate:                  original,
 			DeniedResourcesProvider:   baseConfig,
 			RestMapperProvider:        func() meta.RESTMapper { return k.restMapper },

@@ -67,7 +67,7 @@ func (s *ToolsetConfigSuite) TestReadConfigValid() {
 		timeout = 30
 	`)
 
-	config, err := Read(validConfigPath, "")
+	config, err := Read(s.T().Context(), validConfigPath, "")
 	s.Run("returns no error for valid file with registered toolset config", func() {
 		s.Require().NoError(err, "Expected no error for valid file, got %v", err)
 	})
@@ -95,7 +95,7 @@ func (s *ToolsetConfigSuite) TestReadConfigInvalidToolsetConfig() {
 		timeout = 30
 	`)
 
-	config, err := Read(invalidConfigPath, "")
+	config, err := Read(s.T().Context(), invalidConfigPath, "")
 	s.Run("returns error for invalid toolset config", func() {
 		s.Require().NotNil(err, "Expected error for invalid toolset config, got nil")
 		s.ErrorContains(err, "validation error forced by test", "Expected validation error from toolset config")
@@ -113,7 +113,7 @@ func (s *ToolsetConfigSuite) TestReadConfigUnregisteredToolsetConfig() {
 		timeout = 30
 	`)
 
-	config, err := Read(unregisteredConfigPath, "")
+	config, err := Read(s.T().Context(), unregisteredConfigPath, "")
 	s.Run("returns no error for unregistered toolset config", func() {
 		s.Require().NoError(err, "Expected no error for unregistered toolset config, got %v", err)
 	})
@@ -146,7 +146,7 @@ func (s *ToolsetConfigSuite) TestConfigDirPathInContext() {
 	absConfigPath, err := filepath.Abs(configPath)
 	s.Require().NoError(err, "test error: getting the absConfigPath should not fail")
 
-	_, err = Read(configPath, "")
+	_, err = Read(s.T().Context(), configPath, "")
 	s.Run("provides config directory path in context to parser", func() {
 		s.Require().NoError(err, "Expected no error reading config")
 		s.NotEmpty(capturedDirPath, "Expected non-empty directory path in context")
@@ -191,7 +191,7 @@ func (s *ToolsetConfigSuite) TestExtendedConfigMergingAcrossDropIns() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -240,7 +240,7 @@ func (s *ToolsetConfigSuite) TestExtendedConfigFromDropInOnly() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -280,7 +280,7 @@ func (s *ToolsetConfigSuite) TestStandaloneConfigDirWithExtendedConfig() {
 	s.Require().NoError(err)
 
 	// Read with standalone config-dir (empty config path)
-	config, err := Read("", tempDir)
+	config, err := Read(s.T().Context(), "", tempDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -322,7 +322,7 @@ func (s *ToolsetConfigSuite) TestConfigDirPathInContextStandalone() {
 	absTempDir, err := filepath.Abs(tempDir)
 	s.Require().NoError(err)
 
-	_, err = Read("", tempDir)
+	_, err = Read(s.T().Context(), "", tempDir)
 	s.Run("provides config directory path in context for standalone mode", func() {
 		s.Require().NoError(err)
 		s.NotEmpty(capturedDirPath, "Expected non-empty directory path in context")

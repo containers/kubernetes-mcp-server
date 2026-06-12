@@ -208,9 +208,9 @@ func (s *BaseMcpSuite) TearDownTest() {
 }
 
 func (s *BaseMcpSuite) InitMcpClient(options ...test.McpClientOption) {
-	provider, err := internalk8s.NewProvider(s.Cfg)
+	provider, err := internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err, "Expected no error creating k8s provider")
-	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, provider)
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
 }

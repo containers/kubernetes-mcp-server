@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
@@ -10,7 +11,7 @@ import (
 // ProviderFactory creates a new Provider instance for a given strategy.
 // Implementations should validate that the Manager is compatible with their strategy
 // (e.g., kubeconfig provider should reject in-cluster managers).
-type ProviderFactory func(cfg api.BaseConfig) (Provider, error)
+type ProviderFactory func(ctx context.Context, cfg api.BaseConfig) (Provider, error)
 
 var providerReg = &providerRegistry{factories: make(map[string]ProviderFactory)}
 

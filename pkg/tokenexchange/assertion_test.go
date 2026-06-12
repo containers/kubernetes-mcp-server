@@ -70,7 +70,7 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 		clientID := "test-client-id"
 		tokenURL := "https://login.microsoftonline.com/tenant/oauth2/v2.0/token"
 
-		assertion, expiry, err := BuildClientAssertion(clientID, tokenURL, s.certFile, s.keyFile, 5*time.Minute)
+		assertion, expiry, err := BuildClientAssertion(s.T().Context(), clientID, tokenURL, s.certFile, s.keyFile, 5*time.Minute)
 		s.Require().NoError(err)
 		s.NotEmpty(assertion)
 		s.True(expiry.After(time.Now()))
@@ -89,7 +89,7 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 	})
 
 	s.Run("includes x5t#S256 header", func() {
-		assertion, _, err := BuildClientAssertion("client", "https://token.url", s.certFile, s.keyFile, 0)
+		assertion, _, err := BuildClientAssertion(s.T().Context(), "client", "https://token.url", s.certFile, s.keyFile, 0)
 		s.Require().NoError(err)
 
 		token, err := jwt.ParseSigned(assertion, []jose.SignatureAlgorithm{jose.RS256})
@@ -102,7 +102,7 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 	})
 
 	s.Run("uses default lifetime when zero", func() {
-		_, expiry, err := BuildClientAssertion("client", "https://token.url", s.certFile, s.keyFile, 0)
+		_, expiry, err := BuildClientAssertion(s.T().Context(), "client", "https://token.url", s.certFile, s.keyFile, 0)
 		s.Require().NoError(err)
 
 		expectedExpiry := time.Now().Add(DefaultAssertionLifetime)
@@ -110,13 +110,13 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 	})
 
 	s.Run("returns error for missing cert file", func() {
-		_, _, err := BuildClientAssertion("client", "https://token.url", "/nonexistent/cert.pem", s.keyFile, 0)
+		_, _, err := BuildClientAssertion(s.T().Context(), "client", "https://token.url", "/nonexistent/cert.pem", s.keyFile, 0)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to read certificate file")
 	})
 
 	s.Run("returns error for missing key file", func() {
-		_, _, err := BuildClientAssertion("client", "https://token.url", s.certFile, "/nonexistent/key.pem", 0)
+		_, _, err := BuildClientAssertion(s.T().Context(), "client", "https://token.url", s.certFile, "/nonexistent/key.pem", 0)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to read private key file")
 	})
@@ -125,7 +125,7 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 		invalidCert := filepath.Join(s.tempDir, "invalid-cert.pem")
 		s.Require().NoError(os.WriteFile(invalidCert, []byte("not a valid PEM"), 0644))
 
-		_, _, err := BuildClientAssertion("client", "https://token.url", invalidCert, s.keyFile, 0)
+		_, _, err := BuildClientAssertion(s.T().Context(), "client", "https://token.url", invalidCert, s.keyFile, 0)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to decode PEM block")
 	})
@@ -134,7 +134,7 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 		invalidKey := filepath.Join(s.tempDir, "invalid-key.pem")
 		s.Require().NoError(os.WriteFile(invalidKey, []byte("not a valid PEM"), 0600))
 
-		_, _, err := BuildClientAssertion("client", "https://token.url", s.certFile, invalidKey, 0)
+		_, _, err := BuildClientAssertion(s.T().Context(), "client", "https://token.url", s.certFile, invalidKey, 0)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to decode PEM block")
 	})
@@ -149,10 +149,10 @@ func (s *AssertionTestSuite) TestGetOrBuildAssertion() {
 			ClientKeyFile:  s.keyFile,
 		}
 
-		assertion1, err := cfg.GetOrBuildAssertion()
+		assertion1, err := cfg.GetOrBuildAssertion(s.T().Context())
 		s.Require().NoError(err)
 
-		assertion2, err := cfg.GetOrBuildAssertion()
+		assertion2, err := cfg.GetOrBuildAssertion(s.T().Context())
 		s.Require().NoError(err)
 
 		s.Equal(assertion1, assertion2, "should return cached assertion")
@@ -166,7 +166,7 @@ func (s *AssertionTestSuite) TestGetOrBuildAssertion() {
 			ClientKeyFile:  "/nonexistent/key.pem",
 		}
 
-		_, err := cfg.GetOrBuildAssertion()
+		_, err := cfg.GetOrBuildAssertion(s.T().Context())
 		s.Error(err)
 	})
 }
@@ -318,7 +318,7 @@ func (s *AssertionTestSuite) TestBuildClientAssertionWithECKey() {
 		clientID := "spiffe-client"
 		tokenURL := "https://login.microsoftonline.com/tenant/oauth2/v2.0/token"
 
-		assertion, expiry, err := BuildClientAssertion(clientID, tokenURL, ecCertFile, ecKeyFile, 5*time.Minute)
+		assertion, expiry, err := BuildClientAssertion(s.T().Context(), clientID, tokenURL, ecCertFile, ecKeyFile, 5*time.Minute)
 		s.Require().NoError(err)
 		s.NotEmpty(assertion)
 		s.True(expiry.After(time.Now()))
@@ -395,7 +395,7 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithAssertion() {
 
 		data := url.Values{}
 		header := http.Header{}
-		err := injectClientAuth(cfg, data, header)
+		err := injectClientAuth(s.T().Context(), cfg, data, header)
 		s.Require().NoError(err)
 
 		s.Equal("test-client", data.Get(FormKeyClientID))
@@ -416,7 +416,7 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithAssertion() {
 
 		data := url.Values{}
 		header := http.Header{}
-		err := injectClientAuth(cfg, data, header)
+		err := injectClientAuth(s.T().Context(), cfg, data, header)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to build client assertion")
 	})
@@ -435,7 +435,7 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithFederated() {
 
 		data := url.Values{}
 		header := http.Header{}
-		err := injectClientAuth(cfg, data, header)
+		err := injectClientAuth(s.T().Context(), cfg, data, header)
 		s.Require().NoError(err)
 
 		s.Equal("test-client", data.Get(FormKeyClientID))
@@ -457,7 +457,7 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithFederated() {
 
 		data := url.Values{}
 		header := http.Header{}
-		err := injectClientAuth(cfg, data, header)
+		err := injectClientAuth(s.T().Context(), cfg, data, header)
 		s.Require().NoError(err)
 
 		s.Equal("eyJ0b2tlbi5qd3Q", data.Get(FormKeyClientAssertion))
@@ -472,7 +472,7 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithFederated() {
 
 		data := url.Values{}
 		header := http.Header{}
-		err := injectClientAuth(cfg, data, header)
+		err := injectClientAuth(s.T().Context(), cfg, data, header)
 		s.Error(err)
 		s.Contains(err.Error(), "failed to read federated token file")
 	})
@@ -489,7 +489,7 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithFederated() {
 
 		data := url.Values{}
 		header := http.Header{}
-		err := injectClientAuth(cfg, data, header)
+		err := injectClientAuth(s.T().Context(), cfg, data, header)
 		s.Error(err)
 		s.Contains(err.Error(), "is empty")
 	})
@@ -506,7 +506,7 @@ func (s *AssertionTestSuite) TestInjectClientAuthWithFederated() {
 
 		data := url.Values{}
 		header := http.Header{}
-		err := injectClientAuth(cfg, data, header)
+		err := injectClientAuth(s.T().Context(), cfg, data, header)
 		s.Error(err)
 		s.Contains(err.Error(), "is empty")
 	})

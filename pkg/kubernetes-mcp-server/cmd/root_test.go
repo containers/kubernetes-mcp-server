@@ -56,7 +56,7 @@ func TestConfig(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		expectedConfig := `" - Config: "`
+		expectedConfig := `config.path=""`
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), expectedConfig) {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedConfig, out.String(), err)
 		}
@@ -68,7 +68,7 @@ func TestConfig(t *testing.T) {
 		emptyConfigPath := filepath.Join(filepath.Dir(file), "testdata", "empty-config.toml")
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config", emptyConfigPath})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - Config\:[^\"]+empty-config\.toml\"`
+		expected := `config\.path="[^"]*empty-config\.toml"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expected, out.String(), err)
 		}
@@ -93,23 +93,23 @@ func TestConfig(t *testing.T) {
 		validConfigPath := filepath.Join(filepath.Dir(file), "testdata", "valid-config.toml")
 		rootCmd.SetArgs([]string{"--version", "--config", validConfigPath})
 		_ = rootCmd.Execute()
-		expectedConfig := `(?m)\" - Config\:[^\"]+valid-config\.toml\"`
+		expectedConfig := `config\.path="[^"]*valid-config\.toml"`
 		if m, err := regexp.MatchString(expectedConfig, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedConfig, out.String(), err)
 		}
-		expectedListOutput := `(?m)\" - ListOutput\: yaml"`
+		expectedListOutput := `config\.list_output="yaml"`
 		if m, err := regexp.MatchString(expectedListOutput, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedListOutput, out.String(), err)
 		}
-		expectedReadOnly := `(?m)\" - Read-only mode: true"`
+		expectedReadOnly := `config\.read_only=true`
 		if m, err := regexp.MatchString(expectedReadOnly, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedReadOnly, out.String(), err)
 		}
-		expectedDisableDestruction := `(?m)\" - Disable destructive tools: true"`
+		expectedDisableDestruction := `config\.disable_destructive=true`
 		if m, err := regexp.MatchString(expectedDisableDestruction, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedDisableDestruction, out.String(), err)
 		}
-		expectedStateless := `(?m)\" - Stateless mode: true"`
+		expectedStateless := `config\.stateless=true`
 		if m, err := regexp.MatchString(expectedStateless, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedStateless, out.String(), err)
 		}
@@ -121,23 +121,23 @@ func TestConfig(t *testing.T) {
 		validConfigPath := filepath.Join(filepath.Dir(file), "testdata", "valid-config.toml")
 		rootCmd.SetArgs([]string{"--version", "--list-output=table", "--disable-destructive=false", "--read-only=false", "--stateless=false", "--config", validConfigPath})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - Config\:[^\"]+valid-config\.toml\"`
+		expected := `config\.path="[^"]*valid-config\.toml"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expected, out.String(), err)
 		}
-		expectedListOutput := `(?m)\" - ListOutput\: table"`
+		expectedListOutput := `config\.list_output="table"`
 		if m, err := regexp.MatchString(expectedListOutput, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedListOutput, out.String(), err)
 		}
-		expectedReadOnly := `(?m)\" - Read-only mode: false"`
+		expectedReadOnly := `config\.read_only=false`
 		if m, err := regexp.MatchString(expectedReadOnly, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedReadOnly, out.String(), err)
 		}
-		expectedDisableDestruction := `(?m)\" - Disable destructive tools: false"`
+		expectedDisableDestruction := `config\.disable_destructive=false`
 		if m, err := regexp.MatchString(expectedDisableDestruction, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedDisableDestruction, out.String(), err)
 		}
-		expectedStateless := `(?m)\" - Stateless mode: false"`
+		expectedStateless := `config\.stateless=false`
 		if m, err := regexp.MatchString(expectedStateless, out.String()); !m || err != nil {
 			t.Fatalf("Expected stateless mode to be false (flag overrides config), got %s %v", out.String(), err)
 		}
@@ -147,7 +147,7 @@ func TestConfig(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		_ = rootCmd.Execute()
-		expectedStateless := `(?m)\" - Stateless mode: false"`
+		expectedStateless := `config\.stateless=false`
 		if m, err := regexp.MatchString(expectedStateless, out.String()); !m || err != nil {
 			t.Fatalf("Expected stateless mode to be false by default, got %s %v", out.String(), err)
 		}
@@ -157,7 +157,7 @@ func TestConfig(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--stateless=true"})
 		_ = rootCmd.Execute()
-		expectedStateless := `(?m)\" - Stateless mode: true"`
+		expectedStateless := `config\.stateless=true`
 		if m, err := regexp.MatchString(expectedStateless, out.String()); !m || err != nil {
 			t.Fatalf("Expected stateless mode to be true, got %s %v", out.String(), err)
 		}
@@ -167,7 +167,7 @@ func TestConfig(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--stateless=false"})
 		_ = rootCmd.Execute()
-		expectedStateless := `(?m)\" - Stateless mode: false"`
+		expectedStateless := `config\.stateless=false`
 		if m, err := regexp.MatchString(expectedStateless, out.String()); !m || err != nil {
 			t.Fatalf("Expected stateless mode to be false, got %s %v", out.String(), err)
 		}
@@ -210,9 +210,9 @@ func (s *CmdSuite) TestConfigDir() {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", dropInDir})
 		s.Require().NoError(rootCmd.Execute())
-		s.Contains(out.String(), "ListOutput: yaml")
-		s.Contains(out.String(), "Read-only mode: true")
-		s.Contains(out.String(), "Disable destructive tools: true")
+		s.Contains(out.String(), `config.list_output="yaml"`)
+		s.Contains(out.String(), "config.read_only=true")
+		s.Contains(out.String(), "config.disable_destructive=true")
 	})
 	s.Run("--config-dir path is a file throws error", func() {
 		tempDir := s.T().TempDir()
@@ -232,7 +232,7 @@ func (s *CmdSuite) TestConfigDir() {
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", "/nonexistent/path/to/config-dir"})
 		err := rootCmd.Execute()
 		s.Require().NoError(err, "Nonexistent directories should be gracefully skipped")
-		s.Contains(out.String(), fmt.Sprintf("ListOutput: %s", config.Default().ListOutput), "Default values should be used")
+		s.Contains(out.String(), fmt.Sprintf(`config.list_output="%s"`, config.Default().ListOutput), "Default values should be used")
 	})
 	s.Run("--config with --config-dir merges configs", func() {
 		tempDir := s.T().TempDir()
@@ -254,10 +254,10 @@ func (s *CmdSuite) TestConfigDir() {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config", mainConfigPath, "--config-dir", dropInDir})
 		s.Require().NoError(rootCmd.Execute())
-		s.Contains(out.String(), "ListOutput: table", "list_output from main config")
-		s.Contains(out.String(), "Read-only mode: true", "read_only overridden by drop-in")
-		s.Contains(out.String(), "Disable destructive tools: true", "disable_destructive from drop-in")
-		s.Contains(out.String(), "Stateless mode: true", "stateless from drop-in")
+		s.Contains(out.String(), `config.list_output="table"`, "list_output from main config")
+		s.Contains(out.String(), "config.read_only=true", "read_only overridden by drop-in")
+		s.Contains(out.String(), "config.disable_destructive=true", "disable_destructive from drop-in")
+		s.Contains(out.String(), "config.stateless=true", "stateless from drop-in")
 	})
 	s.Run("multiple drop-in files are merged in order", func() {
 		dropInDir := s.T().TempDir()
@@ -274,9 +274,9 @@ func (s *CmdSuite) TestConfigDir() {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--config-dir", dropInDir})
 		s.Require().NoError(rootCmd.Execute())
-		s.Contains(out.String(), "ListOutput: table", "list_output from 20-second.toml (last wins)")
-		s.Contains(out.String(), "Read-only mode: true", "read_only from 10-first.toml")
-		s.Contains(out.String(), "Disable destructive tools: true", "disable_destructive from 20-second.toml")
+		s.Contains(out.String(), `config.list_output="table"`, "list_output from 20-second.toml (last wins)")
+		s.Contains(out.String(), "config.read_only=true", "read_only from 10-first.toml")
+		s.Contains(out.String(), "config.disable_destructive=true", "disable_destructive from 20-second.toml")
 	})
 	s.Run("flags take precedence over --config-dir", func() {
 		dropInDir := s.T().TempDir()
@@ -291,10 +291,10 @@ func (s *CmdSuite) TestConfigDir() {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--list-output=table", "--read-only=false", "--disable-destructive=false", "--stateless=false", "--config-dir", dropInDir})
 		s.Require().NoError(rootCmd.Execute())
-		s.Contains(out.String(), "ListOutput: table", "flag takes precedence")
-		s.Contains(out.String(), "Read-only mode: false", "flag takes precedence")
-		s.Contains(out.String(), "Disable destructive tools: false", "flag takes precedence")
-		s.Contains(out.String(), "Stateless mode: false", "flag takes precedence")
+		s.Contains(out.String(), `config.list_output="table"`, "flag takes precedence")
+		s.Contains(out.String(), "config.read_only=false", "flag takes precedence")
+		s.Contains(out.String(), "config.disable_destructive=false", "flag takes precedence")
+		s.Contains(out.String(), "config.stateless=false", "flag takes precedence")
 	})
 }
 
@@ -317,7 +317,7 @@ func TestToolsets(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		expected := "- Toolsets: " + strings.Join(config.Default().Toolsets, ", ")
+		expected := `config.toolsets=["` + strings.Join(config.Default().Toolsets, `","`) + `"]`
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
 			t.Fatalf("Expected toolsets '%s', got %s %v", expected, out, err)
 		}
@@ -327,7 +327,7 @@ func TestToolsets(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--toolsets", "helm,config"})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - Toolsets\: helm, config\"`
+		expected := `config\.toolsets=\["helm","config"\]`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected toolset to be %s, got %s %v", expected, out.String(), err)
 		}
@@ -349,7 +349,7 @@ func TestListOutput(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		defaults := config.Default()
-		expected := fmt.Sprintf("- ListOutput: %s", defaults.ListOutput)
+		expected := fmt.Sprintf(`config.list_output="%s"`, defaults.ListOutput)
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
 			t.Fatalf("Expected list-output '%s', got %s %v", defaults.ListOutput, out, err)
 		}
@@ -359,7 +359,7 @@ func TestListOutput(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--list-output", "yaml"})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - ListOutput\: yaml\"`
+		expected := `config\.list_output="yaml"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected list-output to be %s, got %s %v", expected, out.String(), err)
 		}
@@ -371,7 +371,7 @@ func TestReadOnly(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		expected := fmt.Sprintf(" - Read-only mode: %v", config.Default().ReadOnly)
+		expected := fmt.Sprintf("config.read_only=%v", config.Default().ReadOnly)
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
 			t.Fatalf("Expected read-only mode %v, got %s %v", config.Default().ReadOnly, out, err)
 		}
@@ -381,7 +381,7 @@ func TestReadOnly(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--read-only"})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - Read-only mode\: true\"`
+		expected := `config\.read_only=true`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected read-only mode to be %s, got %s %v", expected, out.String(), err)
 		}
@@ -394,7 +394,7 @@ func TestDisableDestructive(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		defaults := config.Default()
-		expected := fmt.Sprintf(" - Disable destructive tools: %t", defaults.DisableDestructive)
+		expected := fmt.Sprintf("config.disable_destructive=%t", defaults.DisableDestructive)
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
 			t.Fatalf("Expected disable destructive %t, got %s %v", defaults.DisableDestructive, out, err)
 		}
@@ -404,7 +404,7 @@ func TestDisableDestructive(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--disable-destructive"})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - Disable destructive tools\: true\"`
+		expected := `config\.disable_destructive=true`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected disable-destructive mode to be %s, got %s %v", expected, out.String(), err)
 		}
@@ -460,7 +460,7 @@ func TestDisableMultiCluster(t *testing.T) {
 		ioStreams, out := testStream()
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
-		if err := rootCmd.Execute(); !strings.Contains(out.String(), " - ClusterProviderStrategy: auto-detect (it is recommended to set this explicitly in your Config)") {
+		if err := rootCmd.Execute(); !strings.Contains(out.String(), `config.cluster_provider_strategy="auto-detect (it is recommended to set this explicitly in your Config)"`) {
 			t.Fatalf("Expected ClusterProviderStrategy kubeconfig, got %s %v", out, err)
 		}
 	})
@@ -469,7 +469,7 @@ func TestDisableMultiCluster(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--disable-multi-cluster"})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - ClusterProviderStrategy\: disabled\"`
+		expected := `config\.cluster_provider_strategy="disabled"`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected ClusterProviderStrategy %s, got %s %v", expected, out.String(), err)
 		}
@@ -522,7 +522,7 @@ func TestStateless(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1"})
 		defaults := config.Default()
-		expected := fmt.Sprintf(" - Stateless mode: %t", defaults.Stateless)
+		expected := fmt.Sprintf("config.stateless=%t", defaults.Stateless)
 		if err := rootCmd.Execute(); !strings.Contains(out.String(), expected) {
 			t.Fatalf("Expected stateless mode %t, got %s %v", defaults.Stateless, out, err)
 		}
@@ -532,7 +532,7 @@ func TestStateless(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--port=1337", "--log-level=1", "--stateless"})
 		_ = rootCmd.Execute()
-		expected := `(?m)\" - Stateless mode\: true\"`
+		expected := `config\.stateless=true`
 		if m, err := regexp.MatchString(expected, out.String()); !m || err != nil {
 			t.Fatalf("Expected stateless mode to be %s, got %s %v", expected, out.String(), err)
 		}
