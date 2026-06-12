@@ -18,9 +18,14 @@ import (
 const (
 	// eventuallyTick is the polling interval for Eventually assertions
 	eventuallyTick = time.Millisecond
-	// watcherStateTimeout is the maximum time to wait for the watcher to capture initial state
-	watcherStateTimeout = 100 * time.Millisecond
-	watcherPollTimeout  = 250 * time.Millisecond
+	// Eventually ceilings: generous so slow CI runners (macos-15-intel under -race)
+	// don't flake. Eventually short-circuits on success, so the ceiling costs nothing
+	// on the happy path.
+	watcherStateTimeout = 5 * time.Second // waiting for initial state capture
+	watcherPollTimeout  = 5 * time.Second // waiting for poll onChange / debounce timer
+	// watcherNeverWindow bounds Never assertions; kept small as Never always waits the
+	// full duration.
+	watcherNeverWindow = 250 * time.Millisecond
 )
 
 type ClusterStateTestSuite struct {
@@ -325,7 +330,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 			// We expect this to never happen because no callbacks should be triggered after close
 			s.Never(func() bool {
 				return callCount.Load() > beforeCount
-			}, watcherPollTimeout, eventuallyTick, "should not poll after close")
+			}, watcherNeverWindow, eventuallyTick, "should not poll after close")
 			afterCount := callCount.Load()
 			s.Equal(beforeCount, afterCount, "should not poll after close")
 		})
