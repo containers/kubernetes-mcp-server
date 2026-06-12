@@ -38,43 +38,59 @@ var (
 	}
 )
 
-// getTempoClient returns a Tempo client based on the tempoNamespace, tempoName and tenant parameters.
+// getTempoClient returns a Tempo client based on the config and tempoNamespace, tempoName and tenant parameters.
+// When a static TempoURL is configured, it is used directly without discovery.
+// Otherwise, the Tempo instance is resolved via Kubernetes discovery using the provided parameters.
 func (t *Toolset) getTempoClient(params ToolParams) (tempoclient.Loader, error) {
+	url, err := resolveTempoURL(params)
+	if err != nil {
+		return nil, err
+	}
+	return params.newTempoLoader(url)
+}
+
+func resolveTempoURL(params ToolParams) (string, error) {
+	if params.config != nil && params.config.TempoURL != "" {
+		return params.config.TempoURL, nil
+	}
+
 	args := params.arguments
 
 	namespace := tools.GetString(args, "tempoNamespace", "")
-	if namespace == "" {
-		return nil, errors.New("tempoNamespace parameter must not be empty")
-	}
-
 	name := tools.GetString(args, "tempoName", "")
+
+	if namespace == "" && name == "" {
+		return "", fmt.Errorf("tempo URL not configured; set tempo_url/--traces.tempo-url/TEMPO_URL or provide tempoNamespace and tempoName")
+	}
+	if namespace == "" {
+		return "", errors.New("tempoNamespace parameter must not be empty")
+	}
 	if name == "" {
-		return nil, errors.New("tempoName parameter must not be empty")
+		return "", errors.New("tempoName parameter must not be empty")
 	}
 
 	instances, err := discovery.ListInstances(params.context, params.dynamicClient, params.config.UseRoute)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	// Make sure this Tempo instance exists in cluster. Otherwise, an attacker could potentially trick the MCP tool to connect to non-Tempo services.
 	instance, err := findInstanceByName(instances, namespace, name)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	tenant := tools.GetString(args, "tenant", "")
 	if instance.Multitenancy {
 		if tenant == "" {
-			return nil, errors.New("tenant parameter must not be empty for multi-tenant instance")
+			return "", errors.New("tenant parameter must not be empty for multi-tenant instance")
 		}
 		if !slices.Contains(instance.Tenants, tenant) {
-			return nil, fmt.Errorf("tenant '%s' does not exist for instance '%s' in namespace '%s'", tenant, name, namespace)
+			return "", fmt.Errorf("tenant '%s' does not exist for instance '%s' in namespace '%s'", tenant, name, namespace)
 		}
 	}
 
-	url := instance.GetURL(tenant)
-	return params.newTempoLoader(url)
+	return instance.GetURL(tenant), nil
 }
 
 func findInstanceByName(instances []discovery.TempoInstance, namespace, name string) (discovery.TempoInstance, error) {
