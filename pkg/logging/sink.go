@@ -6,7 +6,7 @@
 // that "modifying the logger is not thread-safe and should be done while no
 // other goroutines invoke log calls, usually during program initialization."
 // We honor that by configuring klog exactly once in New and routing every
-// subsequent reload through an atomic writer pointer that the textlogger
+// subsequent reload through a mutex-guarded writer that the textlogger
 // writes to.
 package logging
 
@@ -18,7 +18,6 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"k8s.io/klog/v2"
@@ -35,14 +34,9 @@ const StderrSentinel = "stderr"
 // own -v flag is the real verbosity gate at runtime. See package docs.
 const maxTextloggerVerbosity = 9
 
-// writerHolder lets us put an io.Writer (an interface) inside an
-// atomic.Pointer without the awkward double indirection of
-// atomic.Pointer[io.Writer].
-type writerHolder struct{ io.Writer }
-
 // Sink is the runtime-reloadable log destination. It implements io.Writer
-// so the textlogger can write through it; reloads atomically swap the
-// underlying writer and close the previous file (if any).
+// so the textlogger can write through it; reloads swap the underlying
+// writer and close the previous file (if any).
 //
 // Construct with New. Reload on SIGHUP. Close on shutdown.
 type Sink struct {
@@ -68,14 +62,14 @@ type Sink struct {
 	// stay concurrent); reload and Close take the exclusive lock.
 	mu sync.RWMutex
 
-	// writer is what every Write call routes through. Updated by reload via
-	// Store; never mutated in place.
-	writer atomic.Pointer[writerHolder]
+	// writer is what every Write call routes through, guarded by mu. Replaced
+	// (never mutated in place) by reload and Close under the exclusive lock.
+	writer io.Writer
 
 	// file is the currently-open log file (nil when the destination is
-	// httpOut, errOut, or io.Discard). Owned by the Sink — close happens on
-	// reload (when replaced) and Close.
-	file atomic.Pointer[os.File]
+	// httpOut, errOut, or io.Discard), guarded by mu. Owned by the Sink —
+	// close happens on reload (when replaced) and Close.
+	file *os.File
 
 	// lastLogFile is the last cfg.LogFile value applyDestination acted on,
 	// used to short-circuit reloads that wouldn't change the destination
@@ -145,11 +139,10 @@ func New(cfg *config.StaticConfig, httpOut, errOut io.Writer) (*Sink, error) {
 func (s *Sink) Write(p []byte) (int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	h := s.writer.Load()
-	if h == nil {
+	if s.writer == nil {
 		return io.Discard.Write(p)
 	}
-	return h.Write(p)
+	return s.writer.Write(p)
 }
 
 // SDKLogger is the slog.Logger to hand to the MCP SDK's ServerOptions. It
@@ -159,14 +152,14 @@ func (s *Sink) SDKLogger() *slog.Logger {
 }
 
 // Reload re-applies cfg to the running sink: it opens the new log file (if
-// any), atomically swaps the writer, closes the previous file, and updates
-// klog's verbosity.
+// any), swaps the writer, closes the previous file, and updates klog's
+// verbosity.
 //
 // Reload is intended to be called by a single goroutine (the SIGHUP
-// handler). Concurrent Reload calls would not corrupt klog state — each
-// step is individually atomic — but they could leave the sink pointing at
-// an already-closed file via a Store/Swap interleaving. The package
-// assumes a single reloader.
+// handler). mu makes each swap+close safe against concurrent Writes, but
+// two concurrent Reloads could still interleave their open-then-swap and
+// leave the sink pointing at an already-closed file. The package assumes
+// a single reloader.
 //
 // The returned error reflects only the destination swap (open-file
 // failure). On error, the previous destination is preserved unchanged.
@@ -197,8 +190,9 @@ func (s *Sink) Close() error {
 	// Exclusive lock so the swap+close can't race an in-flight Write (see mu).
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.writer.Store(&writerHolder{s.errOut})
-	old := s.file.Swap(nil)
+	s.writer = s.errOut
+	old := s.file
+	s.file = nil
 	if old == nil {
 		return nil
 	}
@@ -206,9 +200,8 @@ func (s *Sink) Close() error {
 }
 
 // applyDestination resolves cfg.LogFile to a writer (and optionally an open
-// file), atomically swaps it in, and closes the previously-held file. It is
-// the only path that opens or closes log files — Reload and New both go
-// through it.
+// file), swaps it in, and closes the previously-held file. It is the only
+// path that opens or closes log files — Reload and New both go through it.
 //
 // A reload that wouldn't change the destination is skipped, with one
 // exception: a real file path always reopens, even when the path is
@@ -252,8 +245,9 @@ func (s *Sink) applyDestination(cfg *config.StaticConfig) error {
 	// above, outside the lock, so writers only ever block for the swap+close,
 	// not for open latency.
 	s.mu.Lock()
-	s.writer.Store(&writerHolder{newWriter})
-	oldFile := s.file.Swap(newFile)
+	s.writer = newWriter
+	oldFile := s.file
+	s.file = newFile
 	var closeErr error
 	if oldFile != nil {
 		closeErr = oldFile.Close()
