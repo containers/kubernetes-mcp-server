@@ -59,6 +59,9 @@
           "type": "string"
         }
       },
+      "required": [
+        "context"
+      ],
       "type": "object"
     },
     "name": "events_list",
@@ -84,6 +87,9 @@
           "type": "string"
         }
       },
+      "required": [
+        "context"
+      ],
       "type": "object"
     },
     "name": "namespaces_list",
@@ -120,7 +126,8 @@
       },
       "required": [
         "name",
-        "query"
+        "query",
+        "context"
       ],
       "type": "object"
     },
@@ -147,7 +154,8 @@
         }
       },
       "required": [
-        "name"
+        "name",
+        "context"
       ],
       "type": "object"
     },
@@ -179,6 +187,9 @@
           "type": "string"
         }
       },
+      "required": [
+        "context"
+      ],
       "type": "object"
     },
     "name": "nodes_top",
@@ -208,7 +219,8 @@
         }
       },
       "required": [
-        "name"
+        "name",
+        "context"
       ],
       "type": "object"
     },
@@ -250,7 +262,8 @@
       },
       "required": [
         "name",
-        "command"
+        "command",
+        "context"
       ],
       "type": "object"
     },
@@ -281,7 +294,8 @@
         }
       },
       "required": [
-        "name"
+        "name",
+        "context"
       ],
       "type": "object"
     },
@@ -313,6 +327,9 @@
           "type": "string"
         }
       },
+      "required": [
+        "context"
+      ],
       "type": "object"
     },
     "name": "pods_list",
@@ -348,7 +365,8 @@
         }
       },
       "required": [
-        "namespace"
+        "namespace",
+        "context"
       ],
       "type": "object"
     },
@@ -393,7 +411,8 @@
         }
       },
       "required": [
-        "name"
+        "name",
+        "context"
       ],
       "type": "object"
     },
@@ -431,7 +450,8 @@
         }
       },
       "required": [
-        "image"
+        "image",
+        "context"
       ],
       "type": "object"
     },
@@ -472,6 +492,9 @@
           "type": "string"
         }
       },
+      "required": [
+        "context"
+      ],
       "type": "object"
     },
     "name": "pods_top",
@@ -497,7 +520,8 @@
         }
       },
       "required": [
-        "resource"
+        "resource",
+        "context"
       ],
       "type": "object"
     },
@@ -542,7 +566,8 @@
       "required": [
         "apiVersion",
         "kind",
-        "name"
+        "name",
+        "context"
       ],
       "type": "object"
     },
@@ -583,7 +608,8 @@
       "required": [
         "apiVersion",
         "kind",
-        "name"
+        "name",
+        "context"
       ],
       "type": "object"
     },
@@ -629,7 +655,8 @@
       },
       "required": [
         "apiVersion",
-        "kind"
+        "kind",
+        "context"
       ],
       "type": "object"
     },
@@ -674,7 +701,8 @@
       "required": [
         "apiVersion",
         "kind",
-        "name"
+        "name",
+        "context"
       ],
       "type": "object"
     },
