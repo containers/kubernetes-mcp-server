@@ -126,7 +126,7 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 					w.debounceTimer = time.AfterFunc(w.debounceWindow, func() {
 						logger.V(2).Info("Workspace debounce window expired, triggering reload")
 						if err := onChange(); err != nil {
-							logger.Info("Failed to reload", "exception.message", err)
+							logger.Error(err, "Failed to reload")
 						} else {
 							w.mu.Lock()
 							w.lastKnownState = w.captureState(ctx)

@@ -11,6 +11,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
@@ -62,7 +63,7 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 			// Namespace doesn't exist - show warning and proceed with cluster-wide check
 			namespaceWarning = fmt.Sprintf("Namespace '%s' not found or not accessible. Showing cluster-wide information instead.", namespace)
 			namespace = "" // Fall back to cluster-wide check
-			logger.Info("Namespace not found, performing cluster-wide health check",
+			klogutil.Warn(params.Context, "Namespace not found, performing cluster-wide health check",
 				"kubernetes.namespace.name", requestedNamespace,
 			)
 		} else {

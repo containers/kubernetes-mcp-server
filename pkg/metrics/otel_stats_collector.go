@@ -171,7 +171,7 @@ func NewOtelStatsCollectorWithConfig(ctx context.Context, cfg CollectorConfig) (
 		if cfg.Telemetry != nil && cfg.Telemetry.IsEnabled() {
 			logger.Error(err, "Failed to create OTLP metrics exporter, OTLP export disabled")
 		} else {
-			logger.V(1).Error(err, "Failed to create OTLP metrics exporter, OTLP export disabled")
+			logger.V(1).Info("Failed to create OTLP metrics exporter, OTLP export disabled", "exception.message", err.Error())
 		}
 	} else if exporter != nil {
 		attrs := []attribute.KeyValue{
@@ -325,7 +325,7 @@ func (c *OtelStatsCollector) GetStats(ctx context.Context) *Statistics {
 	// Collect current metrics from the manual reader
 	var rm metricdata.ResourceMetrics
 	if err := c.reader.Collect(context.Background(), &rm); err != nil {
-		klog.FromContext(ctx).V(1).Error(err, "Failed to collect metrics for stats endpoint")
+		klog.FromContext(ctx).V(1).Info("Failed to collect metrics for stats endpoint", "exception.message", err.Error())
 		return &Statistics{
 			ToolCallsByName:      make(map[string]int64),
 			ToolErrorsByName:     make(map[string]int64),

@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -100,7 +101,7 @@ func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	// Discover workspaces
 	workspaceList, err := p.discoverWorkspaces(baseManager)
 	if err != nil {
-		klog.FromContext(ctx).Info("Failed to discover workspaces via API, falling back to kubeconfig", "exception.message", err)
+		klogutil.Warn(ctx, "Failed to discover workspaces via API, falling back to kubeconfig", "exception.message", err)
 		workspaceList, err = p.workspacesFromKubeconfig(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to discover workspaces: %w", err)

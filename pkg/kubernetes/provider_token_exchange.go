@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -67,7 +68,7 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 		}
 	}
 	if tokenURL == "" {
-		logger.Info("token exchange strategy configured but OIDC provider returned empty token URL",
+		klogutil.Warn(ctx, "token exchange strategy configured but OIDC provider returned empty token URL",
 			"token_exchange.strategy", strategy,
 		)
 		return nil

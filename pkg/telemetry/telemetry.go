@@ -158,7 +158,7 @@ func InitTracer(ctx context.Context, serviceName, serviceVersion string) (func()
 	// Protocol is configured via OTEL_EXPORTER_OTLP_PROTOCOL env var
 	exporter, err := createExporter(ctx)
 	if err != nil {
-		logger.V(1).Error(err, "Failed to create OTLP exporter, tracing disabled")
+		logger.V(1).Info("Failed to create OTLP exporter, tracing disabled", "exception.message", err.Error())
 		return func() {}, nil
 	}
 
@@ -170,7 +170,7 @@ func InitTracer(ctx context.Context, serviceName, serviceVersion string) (func()
 		),
 	)
 	if err != nil {
-		logger.V(1).Error(err, "Failed to create resource, tracing disabled")
+		logger.V(1).Info("Failed to create resource, tracing disabled", "exception.message", err.Error())
 		return func() {}, nil
 	}
 
@@ -233,7 +233,7 @@ func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serv
 
 	exporter, err := createExporterWithConfig(ctx, cfg)
 	if err != nil {
-		logger.V(1).Error(err, "Failed to create OTLP exporter, tracing disabled")
+		logger.V(1).Info("Failed to create OTLP exporter, tracing disabled", "exception.message", err.Error())
 		return func() {}, nil
 	}
 

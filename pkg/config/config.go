@@ -14,6 +14,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
@@ -516,7 +517,8 @@ func (c *StaticConfig) Validate(ctx context.Context) error {
 			return fmt.Errorf("--authorization-url must be a valid URL")
 		}
 		if u.Scheme == "http" {
-			klog.FromContext(ctx).Info(
+			klogutil.Warn(
+				ctx,
 				"authorization-url is using insecure scheme, this is not recommended production use",
 				"url.scheme", "http",
 			)
@@ -589,8 +591,9 @@ func (c *StaticConfig) validateSkipJWTVerification(ctx context.Context) error {
 		return nil
 	}
 	if c.SkipJWTVerification {
-		klog.FromContext(ctx).Info("skip_jwt_verification is enabled with no authorization_url: bearer tokens will be forwarded without any local validation. " +
-			"The cluster (or a trusted upstream) is the sole authority. Only use this when cluster_auth_mode=passthrough and the cluster validates tokens directly.")
+		klogutil.Warn(ctx,
+			"skip_jwt_verification is enabled with no authorization_url: bearer tokens will be forwarded without any local validation. "+
+				"The cluster (or a trusted upstream) is the sole authority. Only use this when cluster_auth_mode=passthrough and the cluster validates tokens directly.")
 		return nil
 	}
 	return fmt.Errorf("require_oauth is enabled but authorization_url is not configured: " +

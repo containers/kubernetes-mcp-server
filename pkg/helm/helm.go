@@ -127,8 +127,11 @@ func (h *Helm) newAction(ctx context.Context, namespace string, allNamespaces bo
 		return nil, err
 	}
 	cfg.RegistryClient = registryClient
+	logger := klog.FromContext(ctx)
 	return cfg, cfg.Init(h.kubernetes, applicableNamespace, storageDriver, func(format string, v ...any) {
-		klog.FromContext(ctx).Info(fmt.Sprintf(format, v...)) // TODO: revisit if this really needs to be info log, this is the helm "debug logger"
+		if logger.V(5).Enabled() {
+			logger.V(5).Info(fmt.Sprintf(format, v...))
+		}
 	})
 }
 

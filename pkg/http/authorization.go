@@ -14,6 +14,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 )
@@ -116,7 +117,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			// Cluster is the sole authority for validating token (ex. sha256 token with OpenShift)
 			if staticConfig.SkipJWTVerification && staticConfig.AuthorizationURL == "" {
 				skipJWTWarningOnce.Do(func() {
-					logger.Info("Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
+					klogutil.Warn(r.Context(), "Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
 				})
 				ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
 				next.ServeHTTP(w, r.WithContext(ctx))

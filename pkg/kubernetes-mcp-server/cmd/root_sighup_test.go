@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -67,12 +66,11 @@ func (s *SIGHUPSuite) TearDownTest() {
 }
 
 func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions {
-	ctx := context.Background()
-	cfg, err := config.Read(ctx, configPath, configDir)
+	cfg, err := config.Read(s.T().Context(), configPath, configDir)
 	s.Require().NoError(err)
 	cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 
-	provider, err := kubernetes.NewProvider(ctx, cfg)
+	provider, err := kubernetes.NewProvider(s.T().Context(), cfg)
 	s.Require().NoError(err)
 	s.server, err = mcp.NewServer(s.T().Context(), mcp.Configuration{
 		StaticConfig: cfg,
@@ -90,7 +88,7 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 	oauthState := oauth.NewState(&oauth.Snapshot{})
 
 	cfgState := config.NewStaticConfigState(cfg)
-	s.stopSIGHUP = opts.setupSIGHUPHandler(ctx, s.server, oauthState, cfgState)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, oauthState, cfgState)
 	return opts
 }
 
@@ -297,7 +295,7 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	mockServer.Handle(test.NewDiscoveryClientHandler())
 	t.Cleanup(mockServer.Close)
 
-	cfg, err := config.Read(context.Background(), configPath, "")
+	cfg, err := config.Read(t.Context(), configPath, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +312,7 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sink.Close() })
 
-	provider, err := kubernetes.NewProvider(context.Background(), cfg)
+	provider, err := kubernetes.NewProvider(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +331,7 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 		logSink: sink,
 	}
 	cfgState := config.NewStaticConfigState(cfg)
-	stop := opts.setupSIGHUPHandler(context.Background(), mcpServer, oauth.NewState(&oauth.Snapshot{}), cfgState)
+	stop := opts.setupSIGHUPHandler(t.Context(), mcpServer, oauth.NewState(&oauth.Snapshot{}), cfgState)
 	t.Cleanup(stop)
 
 	if err := os.WriteFile(configPath, []byte(

@@ -128,13 +128,13 @@ func NewMCPServerOptions(streams genericiooptions.IOStreams) *MCPServerOptions {
 
 func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewMCPServerOptions(streams)
-	ctx := context.Background()
 	cmd := &cobra.Command{
 		Use:     "kubernetes-mcp-server [command] [options]",
 		Short:   "Kubernetes Model Context Protocol (MCP) server",
 		Long:    long,
 		Example: examples,
 		RunE: func(c *cobra.Command, args []string) error {
+			ctx := c.Context()
 			if err := o.Complete(ctx, c); err != nil {
 				return err
 			}
@@ -321,7 +321,7 @@ func (m *MCPServerOptions) Run(ctx context.Context) error {
 		"config.read_only", m.StaticConfig.ReadOnly,
 		"config.disable_destructive", m.StaticConfig.DisableDestructive,
 		"config.stateless", m.StaticConfig.Stateless,
-		"config.telemetry.enabled", m.StaticConfig.Telemetry.Enabled,
+		"config.telemetry.enabled", m.StaticConfig.Telemetry.IsEnabled(),
 		"config.cluster_provider_strategy", strategy,
 	)
 
@@ -349,7 +349,7 @@ func (m *MCPServerOptions) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
 	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if err := mcpServer.Shutdown(shutdownCtx); err != nil {
 			klog.Errorf("MCP server shutdown error: %v", err)
@@ -368,7 +368,6 @@ func (m *MCPServerOptions) Run(ctx context.Context) error {
 	}
 
 	if m.StaticConfig.Port != "" {
-		ctx := context.Background()
 		return internalhttp.Serve(ctx, mcpServer, cfgState, oauthState)
 	}
 

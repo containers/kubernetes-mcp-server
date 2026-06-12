@@ -97,7 +97,7 @@ func (w *Kubeconfig) Watch(ctx context.Context, onChange func() error) {
 				w.debounceTimer = time.AfterFunc(w.debounceWindow, func() {
 					logger.V(2).Info("Kubeconfig debounce window expired, triggering reload")
 					if err := onChange(); err != nil {
-						logger.Error(err, "Failed to reload after kubeconfig change: %v")
+						logger.Error(err, "Failed to reload after kubeconfig change")
 					}
 				})
 				w.mu.Unlock()

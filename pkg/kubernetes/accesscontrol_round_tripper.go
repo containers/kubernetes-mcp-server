@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -44,7 +45,7 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 	var apiPathPrefix string
 	if cfg.HostURL != "" {
 		if hostURL, err := url.Parse(cfg.HostURL); err != nil {
-			klog.FromContext(ctx).Info(
+			klogutil.Warn(ctx,
 				"failed to parse Kubernetes API server host to determine API path prefix",
 				"url.full", cfg.HostURL,
 				"exception.message", err.Error(),
