@@ -1,0 +1,117 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: ssa-field-preservation
+  difficulty: medium
+  labels:
+    suite: core
+spec:
+  requires:
+    - extension: kubernetes
+
+  setup:
+    - kubernetes.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: ssa-test
+        ignoreNotFound: true
+
+    - kubernetes.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: ssa-test
+
+    # Apply a deployment with resource limits using SSA with the same field manager
+    # that resources_create_or_update uses, simulating a prior MCP tool call.
+    # TODO: Replace with kubernetes.apply once mcpchecker/kubernetes-extension#55 lands
+    - script:
+        inline: |
+          kubectl apply --server-side --field-manager=kubernetes-mcp-server --force-conflicts -f - <<'MANIFEST'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: payment-service
+            namespace: ssa-test
+            labels:
+              app: payment-service
+              team: platform
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: payment-service
+            template:
+              metadata:
+                labels:
+                  app: payment-service
+              spec:
+                containers:
+                - name: payment
+                  image: quay.io/nginx/nginx-unprivileged:latest
+                  ports:
+                  - containerPort: 8080
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: 500m
+                      memory: 512Mi
+          MANIFEST
+
+    - kubernetes.wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: payment-service
+          namespace: ssa-test
+        condition: Available
+
+  prompt:
+    inline: >-
+      The payment-service deployment in the ssa-test namespace needs a rolling
+      restart. Add a kubectl.kubernetes.io/restartedAt annotation with the
+      current timestamp to the pod template to trigger a rollout.
+
+  verify:
+    # Check the agent made the requested change
+    - script:
+        inline: |
+          ANNOTATION=$(kubectl get deployment payment-service -n ssa-test \
+            -o jsonpath='{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}')
+          if [ -z "$ANNOTATION" ]; then
+            echo "FAIL: restartedAt annotation not found on pod template"
+            exit 1
+          fi
+          echo "PASS: restartedAt annotation present: $ANNOTATION"
+
+    # Check that resource limits were NOT silently removed by SSA field abandonment
+    - script:
+        inline: |
+          FAIL=0
+          for FIELD in \
+            "resources.limits.memory" \
+            "resources.limits.cpu" \
+            "resources.requests.memory" \
+            "resources.requests.cpu"; do
+            VALUE=$(kubectl get deployment payment-service -n ssa-test \
+              -o jsonpath="{.spec.template.spec.containers[0].${FIELD}}")
+            if [ -z "$VALUE" ]; then
+              echo "FAIL: ${FIELD} was removed (SSA field abandonment)"
+              FAIL=1
+            else
+              echo "PASS: ${FIELD} preserved: ${VALUE}"
+            fi
+          done
+          exit $FAIL
+
+  cleanup:
+    - kubernetes.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: ssa-test
+        ignoreNotFound: true
+

@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -288,4 +289,8 @@ func (p *kcpClusterProvider) Close() {
 			w.Close()
 		}
 	}
+}
+
+func (p *kcpClusterProvider) HasGVKs(_ []schema.GroupVersionKind) bool {
+	return true
 }

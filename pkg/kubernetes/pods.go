@@ -12,12 +12,12 @@ import (
 	labelutil "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/metrics/pkg/apis/metrics"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	"k8s.io/streaming/pkg/httpstream"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -262,16 +262,16 @@ func (c *Core) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metric
 	return convertedMetrics, metricsv1beta1api.Convert_v1beta1_PodMetricsList_To_metrics_PodMetricsList(versionedMetrics, convertedMetrics, nil)
 }
 
-func (c *Core) PodsExec(ctx context.Context, namespace, name, container string, command []string) (string, error) {
+func (c *Core) PodsExec(ctx context.Context, namespace, name, container string, command []string) (string, string, error) {
 	namespace = c.NamespaceOrDefault(namespace)
 	pods := c.CoreV1().Pods(namespace)
 	pod, err := pods.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	// https://github.com/kubernetes/kubectl/blob/5366de04e168bcbc11f5e340d131a9ca8b7d0df4/pkg/cmd/exec/exec.go#L350-L352
 	if pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed {
-		return "", fmt.Errorf("cannot exec into a container in a completed pod; current phase is %s", pod.Status.Phase)
+		return "", "", fmt.Errorf("cannot exec into a container in a completed pod; current phase is %s", pod.Status.Phase)
 	}
 	container = resolveContainer(pod, container)
 	podExecOptions := &v1.PodExecOptions{
@@ -291,34 +291,28 @@ func (c *Core) PodsExec(ctx context.Context, namespace, name, container string, 
 	execRequest.VersionedParams(podExecOptions, ParameterCodec)
 	restConfig, err := c.ToRESTConfig()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	spdyExec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", execRequest.URL())
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	webSocketExec, err := remotecommand.NewWebSocketExecutor(restConfig, "GET", execRequest.URL().String())
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	executor, err := remotecommand.NewFallbackExecutor(webSocketExec, spdyExec, func(err error) bool {
 		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	stdout := bytes.NewBuffer(make([]byte, 0))
 	stderr := bytes.NewBuffer(make([]byte, 0))
 	if err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdout: stdout, Stderr: stderr, Tty: false,
 	}); err != nil {
-		return "", err
+		return "", "", err
 	}
-	if stdout.Len() > 0 {
-		return stdout.String(), nil
-	}
-	if stderr.Len() > 0 {
-		return stderr.String(), nil
-	}
-	return "", nil
+	return stdout.String(), stderr.String(), nil
 }

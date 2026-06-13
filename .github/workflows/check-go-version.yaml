@@ -1,0 +1,69 @@
+name: Go Version Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - go.mod
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check-go-directive:
+    name: Check Go directive bump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Fetch base ref
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --depth=1 origin "${BASE_SHA}"
+      - name: Compare go directive
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'downstream-go-verified') }}
+        run: |
+          if ! git cat-file -e "${BASE_SHA}" 2>/dev/null; then
+            echo "::error::Base commit ${BASE_SHA} is not available locally. The fetch step may have failed or the base was force-pushed."
+            exit 1
+          fi
+          if git cat-file -e "${BASE_SHA}:go.mod" 2>/dev/null; then
+            base_go=$(git show "${BASE_SHA}:go.mod" | awk '/^go [0-9]/ {print $2; exit}')
+          else
+            base_go=""
+          fi
+          head_go=$(awk '/^go [0-9]/ {print $2; exit}' go.mod)
+          {
+            echo "### Go directive"
+            echo
+            echo "| Base | Head |"
+            echo "| --- | --- |"
+            echo "| \`${base_go:-<absent>}\` | \`${head_go:-<absent>}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${base_go}" = "${head_go}" ]; then
+            echo "No change to the 'go' directive."
+            exit 0
+          fi
+          if [ "${HAS_LABEL}" = "true" ]; then
+            echo "Go directive changed (${base_go} -> ${head_go}) but 'downstream-go-verified' label is applied. Passing."
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "Bypassed via the \`downstream-go-verified\` label." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo
+            echo "**Action required:** confirm Go \`${head_go}\` is available in downstream build images (e.g. \`openshift/openshift-mcp-server\`)."
+            echo "Once verified, add the \`downstream-go-verified\` label to this PR to bypass this check."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Go directive changed (${base_go} -> ${head_go}). Confirm downstream readiness and apply the 'downstream-go-verified' label to bypass."
+          exit 1

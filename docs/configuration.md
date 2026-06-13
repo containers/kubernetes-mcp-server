@@ -480,10 +480,10 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. |
+| `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. This **DOES NOT** determine validation strategy, which is done separately by `authorization_url` and `skip_jwt_verification` |
 | `oauth_audience` | string | `""` | Valid audience for OAuth tokens (for offline JWT claim validation). |
 | `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
-| `skip_jwt_verification` | boolean | `false` | When `true`, allows JWTs without cryptographic signature verification when `require_oauth` is enabled but no `authorization_url` is configured. Only use behind a trusted reverse proxy that already verifies tokens. When `false` (default), the server refuses to start in this configuration. |
+| `skip_jwt_verification` | boolean | `false` | When true and authorization_url is unset, the server forwards the bearer token without any local validation (no parse, no claims check, no audience check). Required to enable pure passthrough with non-JWT tokens (e.g., OpenShift OAuth sha256~…). When true and authorization_url is set, this flag has no effect — the configured OIDC provider validates tokens normally. Only use the no-authorization_url form when a downstream component (cluster, reverse proxy) is the authority. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
 | `sts_client_id` | string | `""` | OAuth client ID for backend token exchange. |
@@ -524,6 +524,17 @@ sts_client_cert_file = "/path/to/client.crt"
 sts_client_key_file = "/path/to/client.key"
 sts_scopes = ["api://<DOWNSTREAM_API>/.default"]
 ```
+
+**Pure token passthrough (delegate validation to the cluster):**
+```toml
+require_oauth         = true
+skip_jwt_verification = true
+cluster_auth_mode     = "passthrough"
+# authorization_url is not set
+```
+- The MCP server performs ***no*** token validation in this mode; it only enforces that a bearer header ***is present*** and forwards it to the cluster
+- **Security note:** Use this **ONLY** when the cluster (or a trusted upstream component such as a reverse proxy or OIDC sidecar) is configured to validate tokens. Without that, the MCP server is effectively unauthenticated
+- `oauth_audience`, `authorization_url`, and other JWT-related options are **ignored** in this mode
 
 For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) or [ENTRA_ID_SETUP.md](ENTRA_ID_SETUP.md).
 

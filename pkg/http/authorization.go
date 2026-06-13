@@ -39,13 +39,13 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //
 //	 2. requireOAuth is set to true, server is protected:
 //
-//	    2.1. Raw Token Validation (oidcProvider is nil, SkipJWTVerification is true):
-//	         - Requires skip_jwt_verification=true; otherwise the request is rejected with 500.
-//	         - The token is validated offline for basic sanity checks (expiration).
-//	         - If OAuthAudience is set, the token is validated against the audience.
-//	         - No cryptographic signature verification is performed.
+//	    2.1. Token Passthrough mode (oidcProvider is nil, SkipJWTVerification is true):
+//	         - The token is forwarded directly to the cluster without ANY local validation.
+//	         - No JWT parsing, no expiration/audience checks, no signature verification.
+//			 - The cluster (or upstream reverse proxy) is the sole authority for validating the token.
+//			 - Use this mode for non-JWT tokens (ex. OpenShift sha256 tokens) or if delegating to cluster RBAC.
 //
-//	         see TestAuthorizationRawToken
+//	         see TestAuthorizationPassthroughOpaqueToken
 //
 //	    2.2. OIDC Provider Validation (oidcProvider is not nil):
 //	         - The token is validated offline for basic sanity checks (audience and expiration).
@@ -96,6 +96,24 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
+			// Empty token check post-trimming
+			if token == "" {
+				klog.V(1).Infof("Authentication failed - empty bearer token: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+				write401(w, wwwAuthenticateHeader, "invalid_token", "Unauthorized: Bearer token is empty")
+				return
+			}
+
+			// Token passthrough, skips all JWT processing
+			// Cluster is the sole authority for validating token (ex. sha256 token with OpenShift)
+			if staticConfig.SkipJWTVerification && staticConfig.AuthorizationURL == "" {
+				skipJWTWarningOnce.Do(func() {
+					klog.Warningf("Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
+				})
+				ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			claims, err := ParseJWTClaims(token)
 			if err == nil && claims == nil {
 				// Impossible case, but just in case
@@ -115,15 +133,12 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 						write401(w, wwwAuthenticateHeader, "temporarily_unavailable", "OIDC provider is not available")
 						return
 					}
+
 					// No provider configured - require explicit opt-in via skip_jwt_verification
-					if !staticConfig.SkipJWTVerification {
-						klog.V(1).Infof("Authentication rejected - JWT verification not configured: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-						http.Error(w, "JWT verification not configured - set authorization_url or skip_jwt_verification", http.StatusInternalServerError)
-						return
-					}
-					skipJWTWarningOnce.Do(func() {
-						klog.Warningf("JWT accepted without signature verification - set authorization_url for secure validation")
-					})
+					// We can only reach this if skip_jwt_verification is false
+					klog.V(1).Infof("Authentication rejected - JWT verification not configured: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+					http.Error(w, "JWT verification not configured - set authorization_url or skip_jwt_verification", http.StatusInternalServerError)
+					return
 				} else {
 					err = claims.ValidateWithProvider(r.Context(), staticConfig.OAuthAudience, snapshot.OIDCProvider)
 				}

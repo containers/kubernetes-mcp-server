@@ -184,22 +184,15 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 
 	klog.V(0).Infof("Shutting down HTTP server gracefully...")
 
-	// Attempt to shut down both servers, collecting all errors
-	var shutdownErrs []error
-
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		// Don't fail Run() for errors during shutdown
 		klog.Errorf("HTTP server shutdown error: %v", err)
-		shutdownErrs = append(shutdownErrs, err)
 	}
 
 	// Always attempt MCP server shutdown (flushes metrics) even if HTTP shutdown failed
 	if err := mcpServer.Shutdown(shutdownCtx); err != nil {
+		// Don't fail Run() for errors during shutdown
 		klog.Errorf("MCP server shutdown error: %v", err)
-		shutdownErrs = append(shutdownErrs, err)
-	}
-
-	if len(shutdownErrs) > 0 {
-		return errors.Join(shutdownErrs...)
 	}
 
 	klog.V(0).Infof("HTTP server shutdown complete")

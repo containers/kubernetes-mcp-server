@@ -8,6 +8,8 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2"
 )
 
 // singleClusterProvider implements Provider for managing a single
@@ -119,4 +121,22 @@ func (p *singleClusterProvider) Close() {
 			w.Close()
 		}
 	}
+}
+
+// HasGVKs uses the cluster's REST mapper to verify that every requested GVK is available.
+func (p *singleClusterProvider) HasGVKs(gvks []schema.GroupVersionKind) bool {
+	if len(gvks) == 0 {
+		return true
+	}
+	if p.manager == nil {
+		klog.Warning("HasGVKs called with nil manager, assuming all GVKs are available")
+		return true
+	}
+	mapper := p.manager.kubernetes.RESTMapper()
+	for _, gvk := range gvks {
+		if _, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version); err != nil {
+			return false
+		}
+	}
+	return true
 }

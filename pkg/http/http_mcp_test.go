@@ -71,8 +71,7 @@ func (s *McpTransportSuite) TestStreamableHttpTransport() {
 			s.Run("Can close Streamable HTTP client", func() {
 				s.Require().NoError(session.Close(), "Expected no error closing Streamable HTTP MCP client")
 			})
-			s.StopServer()
-			s.Require().NoError(s.WaitForShutdown())
+			s.stopRunningServer()
 		})
 	}
 }
