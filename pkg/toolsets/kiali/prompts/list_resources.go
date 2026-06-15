@@ -226,7 +226,13 @@ func meshTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResult,
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 
 	statusContent := fetchKialiData(kiali, params, tools.KialiGetMeshStatusEndpoint, nil)
-	graphContent := fetchKialiData(kiali, params, tools.KialiGetMeshTrafficGraphEndpoint, nil)
+
+	resolved, err := resolveNamespaces(kiali, params, allNamespacesKeyword)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve mesh namespaces: %w", err)
+	}
+	graphContent := fetchKialiData(kiali, params, tools.KialiGetMeshTrafficGraphEndpoint,
+		map[string]any{"namespaces": resolved})
 
 	promptText := fmt.Sprintf(`# Mesh Topology Overview
 

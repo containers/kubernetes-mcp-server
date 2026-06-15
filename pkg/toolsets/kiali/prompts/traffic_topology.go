@@ -22,7 +22,7 @@ func InitTrafficTopology() []api.ServerPrompt {
 				Arguments: []api.PromptArgument{
 					{
 						Name:        "namespaces",
-						Description: "Comma-separated list of namespaces to include in the graph, or 'all' to include all mesh namespaces",
+						Description: "Comma-separated list of namespaces to include in the graph, or 'all' to include all accessible mesh namespaces",
 						Required:    true,
 					},
 				},
@@ -37,7 +37,7 @@ func trafficTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 	namespaces := args["namespaces"]
 
 	if namespaces == "" {
-		return nil, fmt.Errorf("namespaces argument is required: provide a comma-separated list or 'all' for all mesh namespaces")
+		return nil, fmt.Errorf("namespaces argument is required: provide a comma-separated list or 'all' for all accessible mesh namespaces")
 	}
 
 	klog.Info("Starting traffic topology analysis prompt...")
@@ -79,11 +79,15 @@ func trafficTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 	), nil
 }
 
+// allNamespacesKeyword is the special value users can pass to indicate
+// "all accessible mesh namespaces" instead of listing them explicitly.
+const allNamespacesKeyword = "all"
+
 // resolveNamespaces resolves the namespaces argument. If "all" is provided,
-// it discovers all mesh namespaces via the Kiali API. Otherwise it returns
-// the input as-is (comma-separated list).
+// it discovers all accessible mesh namespaces via the Kiali API. Otherwise
+// it returns the input as-is (comma-separated list).
 func resolveNamespaces(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespaces string) (string, error) {
-	if !strings.EqualFold(strings.TrimSpace(namespaces), "all") {
+	if !strings.EqualFold(strings.TrimSpace(namespaces), allNamespacesKeyword) {
 		return namespaces, nil
 	}
 

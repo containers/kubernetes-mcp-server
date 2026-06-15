@@ -92,6 +92,9 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 	), nil
 }
 
+// fetchKialiData calls a Kiali endpoint and returns the response body.
+// On error it returns a placeholder string instead of failing the prompt,
+// allowing other sections to still render useful data.
 func fetchKialiData(kiali *kialiclient.Kiali, params api.PromptHandlerParams, endpoint string, args map[string]any) string {
 	content, err := kiali.ExecuteRequest(params.Context, endpoint, args)
 	if err != nil {

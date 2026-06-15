@@ -368,6 +368,48 @@ func (s *KialiSuite) TestMeshHealthCheckPrompt() {
 	})
 }
 
+func (s *KialiSuite) TestMeshTopologyPrompt() {
+	var capturedPaths []string
+	var capturedBodies []string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPaths = append(capturedPaths, r.URL.Path)
+		body, _ := io.ReadAll(r.Body)
+		capturedBodies = append(capturedBodies, string(body))
+		if r.URL.Path == "/api/chat/mcp/list_or_get_resources" {
+			_, _ = w.Write([]byte(`{"cluster":"default","namespaces":[{"name":"bookinfo","health":"Healthy"},{"name":"istio-system","health":"Healthy"}]}`))
+		} else {
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		}
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("mesh-topology", map[string]string{})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls get_mesh_status endpoint", func() {
+		s.Contains(capturedPaths, "/api/chat/mcp/get_mesh_status")
+	})
+	s.Run("resolves namespaces via list_or_get_resources", func() {
+		s.Contains(capturedPaths, "/api/chat/mcp/list_or_get_resources")
+	})
+	s.Run("calls get_mesh_traffic_graph with resolved namespaces", func() {
+		s.Contains(capturedPaths, "/api/chat/mcp/get_mesh_traffic_graph")
+		for i, path := range capturedPaths {
+			if path == "/api/chat/mcp/get_mesh_traffic_graph" {
+				s.Contains(capturedBodies[i], "bookinfo")
+				s.Contains(capturedBodies[i], "istio-system")
+			}
+		}
+	})
+	s.Run("prompt result contains user message", func() {
+		s.Require().NotEmpty(result.Messages)
+		s.Equal("user", string(result.Messages[0].Role))
+	})
+}
+
 func (s *KialiSuite) TestTrafficTopologyPrompt() {
 	var capturedURL *url.URL
 	var capturedBody string
