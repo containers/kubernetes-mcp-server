@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
@@ -20,7 +21,7 @@ func (t *Toolset) GetDescription() string {
 	return "Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns."
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ provider.ManagerProvider) []api.ServerTool {
 	return slices.Concat(
 		pipelineTools(),
 		pipelineRunTools(),

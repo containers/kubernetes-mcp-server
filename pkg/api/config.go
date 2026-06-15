@@ -81,6 +81,11 @@ type ValidationEnabledProvider interface {
 	IsValidationEnabled() bool
 }
 
+// TargetCompatibilityToolFiltersEnabledProvider provides access to target compatibility tool filters setting.
+type TargetCompatibilityToolFiltersEnabledProvider interface {
+	IsTargetCompatibilityToolFiltersEnabled() bool
+}
+
 // RequireTLSProvider provides access to require_tls setting.
 type RequireTLSProvider interface {
 	IsRequireTLS() bool
@@ -99,6 +104,7 @@ type BaseConfig interface {
 	ExtendedConfigProvider
 	StsConfigProvider
 	ValidationEnabledProvider
+	TargetCompatibilityToolFiltersEnabledProvider
 	RequireTLSProvider
 	RequireOAuthProvider
 }

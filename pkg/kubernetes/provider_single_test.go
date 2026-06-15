@@ -42,18 +42,22 @@ func (s *ProviderSingleTestSuite) TestType() {
 }
 
 func (s *ProviderSingleTestSuite) TestWithNonOpenShiftCluster() {
-	s.Run("IsOpenShift returns false", func() {
-		inOpenShift := s.provider.IsOpenShift(s.T().Context())
-		s.False(inOpenShift, "Expected InOpenShift to return false")
+	s.Run("target manager reports non-OpenShift", func() {
+		managers, err := s.provider.GetTargetManagers(s.T().Context())
+		s.Require().NoError(err, "Expected no error getting target managers")
+		s.Require().Len(managers, 1, "Expected exactly one manager")
+		s.False(managers[0].IsOpenShift(s.T().Context()), "Expected manager to report non-OpenShift")
 	})
 }
 
 func (s *ProviderSingleTestSuite) TestWithOpenShiftCluster() {
 	s.mockServer.Handle(test.NewInOpenShiftHandler())
 
-	s.Run("IsOpenShift returns true", func() {
-		inOpenShift := s.provider.IsOpenShift(s.T().Context())
-		s.True(inOpenShift, "Expected InOpenShift to return true")
+	s.Run("target manager reports OpenShift", func() {
+		managers, err := s.provider.GetTargetManagers(s.T().Context())
+		s.Require().NoError(err, "Expected no error getting target managers")
+		s.Require().Len(managers, 1, "Expected exactly one manager")
+		s.True(managers[0].IsOpenShift(s.T().Context()), "Expected manager to report OpenShift")
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -34,7 +35,7 @@ func (t *TestToolset) GetName() string { return t.name }
 
 func (t *TestToolset) GetDescription() string { return t.description }
 
-func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
+func (t *TestToolset) GetTools(_ provider.ManagerProvider) []api.ServerTool { return nil }
 
 func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
@@ -44,9 +45,15 @@ func (t *TestToolset) GetResourceTemplates() []api.ServerResourceTemplate { retu
 
 var _ api.Toolset = (*TestToolset)(nil)
 
-type fakeOpenshift struct{}
+type fakeManagerProvider struct{}
 
-func (f *fakeOpenshift) IsOpenShift(context.Context) bool { return false }
+type fakeTargetManager struct{}
+
+func (f *fakeTargetManager) IsOpenShift(context.Context) bool { return false }
+
+func (f *fakeManagerProvider) GetTargetManagers(context.Context) ([]provider.TargetManager, error) {
+	return []provider.TargetManager{&fakeTargetManager{}}, nil
+}
 
 func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 	Register(&TestToolset{name: "duplicate"})
@@ -58,7 +65,7 @@ func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 func (s *ToolsetsSuite) TestUniqueToolNames() {
 	toolNames := make(map[string]bool)
 	for _, toolset := range s.originalToolsets {
-		for _, tool := range toolset.GetTools(&fakeOpenshift{}) {
+		for _, tool := range toolset.GetTools(&fakeManagerProvider{}) {
 			s.Falsef(toolNames[tool.Tool.Name], "duplicate tool name: %s", tool.Tool.Name)
 			toolNames[tool.Tool.Name] = true
 		}

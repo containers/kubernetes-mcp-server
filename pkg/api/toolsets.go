@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -14,6 +15,9 @@ type ServerTool struct {
 	Handler            ToolHandlerFunc
 	ClusterAware       *bool
 	TargetListProvider *bool
+	// TargetCompatibilityFilters is a slice of closures, each of which answers whether the ServerTool
+	// should be exposed (true) or not (false).
+	TargetCompatibilityFilters []func() bool
 }
 
 // IsClusterAware indicates whether the tool can accept a "cluster" or "context" parameter
@@ -43,7 +47,7 @@ type Toolset interface {
 	// GetDescription returns a human-readable description of the toolset.
 	// Will be used to generate documentation and help text.
 	GetDescription() string
-	GetTools(o Openshift) []ServerTool
+	GetTools(p provider.ManagerProvider) []ServerTool
 	// GetPrompts returns the prompts provided by this toolset.
 	// Returns nil if the toolset doesn't provide any prompts.
 	GetPrompts() []ServerPrompt

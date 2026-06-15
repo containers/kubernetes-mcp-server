@@ -9,6 +9,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -132,20 +133,23 @@ func (p *kubeConfigClusterProvider) managerForContext(context string) (*Manager,
 	return m, nil
 }
 
-func (p *kubeConfigClusterProvider) IsOpenShift(ctx context.Context) bool {
-	p.mu.RLock()
-	m := p.managers[p.defaultContext]
-	p.mu.RUnlock()
-	if m == nil {
-		return false
-	}
-	return m.IsOpenShift(ctx)
-}
-
 func (p *kubeConfigClusterProvider) IsMultiTarget() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.managers) > 1
+}
+
+func (p *kubeConfigClusterProvider) getTargetsAndManagers() ([]string, []provider.TargetManager, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	contextNames := make([]string, 0, len(p.managers))
+	managers := make([]provider.TargetManager, 0, len(p.managers))
+	for contextName, mgr := range p.managers {
+		contextNames = append(contextNames, contextName)
+		managers = append(managers, mgr)
+	}
+
+	return contextNames, managers, nil
 }
 
 func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, error) {
@@ -157,6 +161,23 @@ func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, err
 	}
 
 	return contextNames, nil
+}
+
+func (p *kubeConfigClusterProvider) GetTargetManagers(_ context.Context) ([]provider.TargetManager, error) {
+	contextNames, err := p.GetTargets(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	managers := make([]provider.TargetManager, 0, len(contextNames))
+	for _, cn := range contextNames {
+		mgr, err := p.managerForContext(cn)
+		if err != nil {
+			return nil, err
+		}
+		managers = append(managers, mgr)
+	}
+
+	return managers, nil
 }
 
 func (p *kubeConfigClusterProvider) GetTargetParameterName() string {

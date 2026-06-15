@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
@@ -365,7 +366,7 @@ func (m *mockToolsetWithPrompts) GetDescription() string {
 	return m.description
 }
 
-func (m *mockToolsetWithPrompts) GetTools(_ api.Openshift) []api.ServerTool {
+func (m *mockToolsetWithPrompts) GetTools(_ provider.ManagerProvider) []api.ServerTool {
 	return nil
 }
 

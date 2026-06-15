@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -22,7 +23,7 @@ type Manager struct {
 	config api.BaseConfig
 }
 
-var _ api.Openshift = (*Manager)(nil)
+var _ provider.TargetManager = (*Manager)(nil)
 
 var (
 	ErrorKubeconfigInClusterNotAllowed = errors.New("kubeconfig manager cannot be used in in-cluster deployments")

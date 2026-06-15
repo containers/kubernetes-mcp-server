@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
@@ -19,7 +20,7 @@ func (t *Toolset) GetDescription() string {
 	return "View and manage the current local Kubernetes configuration (kubeconfig)"
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ provider.ManagerProvider) []api.ServerTool {
 	return slices.Concat(
 		initConfiguration(),
 	)

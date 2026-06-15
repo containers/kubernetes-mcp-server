@@ -105,6 +105,23 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 	})
 }
 
+func (s *ToolsetsSuite) TestDefaultToolsetsToolsWithFilteringEnabled() {
+	s.Run("Default configuration toolsets with filtering enabled on non-OpenShift", func() {
+		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+		})
+		s.Run("projects_list tool is not present", func() {
+			for _, tool := range tools.Tools {
+				s.Require().NotEqual("projects_list", tool.Name, "Expected projects_list to not be present when filtering enabled on non-OpenShift cluster")
+			}
+		})
+	})
+}
+
 func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 	s.Run("Default configuration toolsets in multi-cluster (with 11 clusters)", func() {
 		kubeconfig := s.Kubeconfig()

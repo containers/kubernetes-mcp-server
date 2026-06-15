@@ -27,7 +27,11 @@ func (s *ProviderKubeconfigTestSuite) SetupTest() {
 	kubeconfig := s.mockServer.Kubeconfig()
 	for i := 0; i < 10; i++ {
 		// Add multiple fake contexts to force multi-cluster behavior
-		kubeconfig.Contexts[fmt.Sprintf("context-%d", i)] = clientcmdapi.NewContext()
+		// Each context needs to reference the cluster and authinfo
+		ctx := clientcmdapi.NewContext()
+		ctx.Cluster = "fake"
+		ctx.AuthInfo = "fake"
+		kubeconfig.Contexts[fmt.Sprintf("context-%d", i)] = ctx
 	}
 	provider, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
 	s.Require().NoError(err, "Expected no error creating provider with kubeconfig")
@@ -45,17 +49,33 @@ func (s *ProviderKubeconfigTestSuite) TestType() {
 }
 
 func (s *ProviderKubeconfigTestSuite) TestWithNonOpenShiftCluster() {
-	s.Run("IsOpenShift returns false", func() {
-		inOpenShift := s.provider.IsOpenShift(s.T().Context())
-		s.False(inOpenShift, "Expected InOpenShift to return false")
+	s.Run("target managers report non-OpenShift", func() {
+		managers, err := s.provider.GetTargetManagers(s.T().Context())
+		s.Require().NoError(err, "Expected no error getting target managers")
+		s.Require().NotEmpty(managers, "Expected at least one manager")
+		for _, m := range managers {
+			s.Require().NotNil(m, "Expected all managers to be non-nil")
+			s.False(m.IsOpenShift(s.T().Context()), "Expected manager to report non-OpenShift")
+		}
 	})
 }
 
 func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 	s.mockServer.Handle(test.NewInOpenShiftHandler())
-	s.Run("IsOpenShift returns true", func() {
-		inOpenShift := s.provider.IsOpenShift(s.T().Context())
-		s.True(inOpenShift, "Expected InOpenShift to return true")
+	s.Run("target managers report OpenShift", func() {
+		managers, err := s.provider.GetTargetManagers(s.T().Context())
+		s.Require().NoError(err, "Expected no error getting target managers")
+		s.Require().NotEmpty(managers, "Expected at least one manager")
+		// At least one manager should report OpenShift
+		foundOpenShift := false
+		for _, m := range managers {
+			s.Require().NotNil(m, "Expected all managers to be non-nil")
+			if m.IsOpenShift(s.T().Context()) {
+				foundOpenShift = true
+				break
+			}
+		}
+		s.True(foundOpenShift, "Expected at least one manager to report OpenShift")
 	})
 }
 
@@ -129,7 +149,15 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentReads() {
 			func() { _, _ = s.provider.GetTargets(context.Background()) },
 			func() { _ = s.provider.GetDefaultTarget() },
 			func() { _ = s.provider.IsMultiTarget() },
-			func() { _ = s.provider.IsOpenShift(context.Background()) },
+			func() {
+				mgrs, err := s.provider.GetTargetManagers(context.Background())
+				s.Require().NoError(err, "Expected no error getting target managers")
+				for _, m := range mgrs {
+					s.Require().NotNil(m, "Expected all managers to be non-nil")
+					// TODO: Do these need to be threaded?
+					_ = m.IsOpenShift(context.Background())
+				}
+			},
 			func() { _, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context") },
 			func() { _ = s.provider.GetTargetParameterName() },
 		}
@@ -221,7 +249,13 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 						_, _ = provider.GetTargets(context.Background())
 						_ = provider.GetDefaultTarget()
 						_ = provider.IsMultiTarget()
-						_ = provider.IsOpenShift(context.Background())
+						mgrs, err := provider.GetTargetManagers(context.Background())
+						s.Require().NoError(err, "Expected no error getting target managers")
+						for _, m := range mgrs {
+							s.Require().NotNil(m, "Expected all managers to be non-nil")
+							// TODO: Do these need to be threaded?
+							_ = m.IsOpenShift(context.Background())
+						}
 						_, _ = provider.GetDerivedKubernetes(context.Background(), "fake-context")
 					}
 				}

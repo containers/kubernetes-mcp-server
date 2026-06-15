@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 )
@@ -75,16 +76,16 @@ func (p *singleClusterProvider) reset() error {
 	return nil
 }
 
-func (p *singleClusterProvider) IsOpenShift(ctx context.Context) bool {
-	return p.manager.IsOpenShift(ctx)
-}
-
 func (p *singleClusterProvider) IsMultiTarget() bool {
 	return false
 }
 
 func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	return []string{""}, nil
+}
+
+func (p *singleClusterProvider) GetTargetManagers(_ context.Context) ([]provider.TargetManager, error) {
+	return []provider.TargetManager{p.manager}, nil
 }
 
 func (p *singleClusterProvider) GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error) {

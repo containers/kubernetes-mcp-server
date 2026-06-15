@@ -12,11 +12,27 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/provider"
 )
 
-func initResources(o api.Openshift) []api.ServerTool {
+func initResources(p provider.ManagerProvider) []api.ServerTool {
+	// TODO: What purpose is this string serving in Description fields?
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
-	if o.IsOpenShift(context.Background()) {
+	// Check if any target is OpenShift
+	managers, err := p.GetTargetManagers(context.Background())
+	isOpenShift := false
+	if err != nil {
+		// If we couldn't get managers, we have to assume at least one target is OpenShift.
+		isOpenShift = true
+	} else {
+		for _, m := range managers {
+			if m.IsOpenShift(context.Background()) {
+				isOpenShift = true
+				break
+			}
+		}
+	}
+	if isOpenShift {
 		commonApiVersion += ", route.openshift.io/v1 Route"
 	}
 	commonApiVersion = fmt.Sprintf("(common apiVersion and kind include: %s)", commonApiVersion)
