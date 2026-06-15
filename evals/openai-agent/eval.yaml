@@ -72,3 +72,13 @@ config:
             toolPattern: ".*"
         minToolCalls: 1
         maxToolCalls: 20
+    # ArgoCD tasks
+    - glob: ../tasks/argocd/*/*.yaml
+      labelSelector:
+        suite: argocd
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "argocd_.*"
+        minToolCalls: 1
+        maxToolCalls: 10

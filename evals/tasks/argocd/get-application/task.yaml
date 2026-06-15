@@ -1,0 +1,68 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "get-argocd-application"
+  difficulty: easy
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-frontend
+          namespace: argocd-eval
+        spec:
+          project: default
+          source:
+            repoURL: https://github.com/example/frontend
+            targetRevision: HEAD
+            path: manifests
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          kubectl get application app-frontend -n argocd-eval -o name || exit 1
+          echo "Application app-frontend exists"
+    - llmJudge:
+        contains: "app-frontend"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-frontend
+          namespace: argocd-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: Get the ArgoCD Application named app-frontend in the argocd-eval namespace.

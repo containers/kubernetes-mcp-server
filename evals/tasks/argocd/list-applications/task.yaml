@@ -1,0 +1,100 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "list-argocd-applications"
+  difficulty: easy
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-frontend
+          namespace: argocd-eval
+          labels:
+            team: ui
+        spec:
+          project: default
+          source:
+            repoURL: https://github.com/example/frontend
+            targetRevision: HEAD
+            path: manifests
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-backend
+          namespace: argocd-eval
+          labels:
+            team: api
+        spec:
+          project: default
+          source:
+            repoURL: https://github.com/example/backend
+            targetRevision: main
+            path: k8s
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: backend
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          COUNT=$(kubectl get application -n argocd-eval --no-headers 2>/dev/null | wc -l)
+          if [ "$COUNT" -lt "2" ]; then
+            echo "ERROR: Expected at least 2 Applications, found $COUNT"
+            exit 1
+          fi
+          echo "Found $COUNT Applications in argocd-eval"
+    - llmJudge:
+        contains: "app-frontend"
+    - llmJudge:
+        contains: "app-backend"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-frontend
+          namespace: argocd-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-backend
+          namespace: argocd-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: List all ArgoCD Applications in the argocd-eval namespace.
