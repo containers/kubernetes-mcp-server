@@ -1,0 +1,19 @@
+toolsets = ["core", "config", "netobserv"]
+
+[toolset_configs.netobserv]
+# Mock / local port-forward:
+url = "http://127.0.0.1:9001"
+insecure = true
+
+# optional overrides:
+# namespace = "netobserv"
+# service = "netobserv-plugin"
+# port = 9001
+
+# Alert tools: try plugin proxy first, then fall back on 404 when URLs below are set.
+# In-cluster MCP on OpenShift uses Thanos/Alertmanager service URLs automatically.
+# Local dev (url = 127.0.0.1) must port-forward monitoring and set URLs explicitly, e.g.:
+#   oc port-forward -n openshift-monitoring svc/alertmanager-main 9094:9094
+#   oc port-forward -n openshift-monitoring svc/thanos-querier 9091:9091
+alertmanager_url = "https://127.0.0.1:9094"
+prometheus_url = "https://127.0.0.1:9091"
