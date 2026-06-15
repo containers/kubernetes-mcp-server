@@ -614,7 +614,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **mesh-topology** - Show the mesh topology including control plane components and cluster connectivity
 
 - **traffic-topology** - Analyze the service mesh traffic topology showing service dependencies, traffic flow, and communication patterns
-  - `namespaces` (`string`) **(required)** - Comma-separated list of namespaces to include in the graph, or 'all' to include all mesh namespaces
+  - `namespaces` (`string`) **(required)** - Comma-separated list of namespaces to include in the graph, or 'all' to include all accessible mesh namespaces
 
 - **service-troubleshoot** - Investigate service errors using logs, traces, and Istio configuration to identify root causes
   - `namespace` (`string`) **(required)** - Namespace where the service is deployed
