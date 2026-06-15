@@ -81,6 +81,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 						Type:        "string",
 						Description: "Name of the resource",
 					},
+					"statusOnly": {
+						Type:        "boolean",
+						Description: "Return only the status field of the resource instead of the full object (Optional)",
+					},
 				},
 				Required: []string{"apiVersion", "kind", "name"},
 			},
@@ -252,10 +256,28 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("name is not a string")), nil
 	}
 
+	var statusOnly bool
+	if v, ok := params.GetArguments()["statusOnly"]; ok {
+		b, ok := v.(bool)
+		if !ok {
+			return api.NewToolCallResult("", fmt.Errorf("statusOnly is not a boolean")), nil
+		}
+		statusOnly = b
+	}
+
 	ret, err := kubernetes.NewCore(params).ResourcesGet(params, gvk, ns, n)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
 	}
+
+	if statusOnly {
+		status, ok := ret.Object["status"]
+		if !ok || status == nil {
+			return api.NewToolCallResult(output.MarshalYaml(map[string]interface{}{})), nil
+		}
+		return api.NewToolCallResult(output.MarshalYaml(status)), nil
+	}
+
 	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
 }
 
