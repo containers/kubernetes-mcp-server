@@ -434,6 +434,10 @@
     "description": "Create or update a Kubernetes resource in the current cluster by providing a YAML or JSON representation of the resource\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
       "properties": {
+        "fieldManager": {
+          "description": "Optional field manager name for Server-Side Apply. Use distinct names across sequential calls to prevent SSA from abandoning fields omitted in the current call. Defaults to 'kubernetes-mcp-server' if not provided.",
+          "type": "string"
+        },
         "resource": {
           "description": "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
           "type": "string"

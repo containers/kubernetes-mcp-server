@@ -12,6 +12,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
 func initResources(o api.Openshift) []api.ServerTool {
@@ -100,6 +101,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 					"resource": {
 						Type:        "string",
 						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
+					},
+					"fieldManager": {
+						Type:        "string",
+						Description: fmt.Sprintf("Optional field manager name for Server-Side Apply. Use distinct names across sequential calls to prevent SSA from abandoning fields omitted in the current call. Defaults to '%s' if not provided.", version.BinaryName),
 					},
 				},
 				Required: []string{"resource"},
@@ -270,7 +275,15 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r)
+	var fieldManager string
+	if v, ok := params.GetArguments()["fieldManager"]; ok {
+		f, ok := v.(string)
+		if !ok {
+			return api.NewToolCallResult("", fmt.Errorf("fieldManager is not a string")), nil
+		}
+		fieldManager = f
+	}
+	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r, fieldManager)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
 	}

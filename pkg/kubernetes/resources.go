@@ -55,7 +55,7 @@ func (c *Core) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, n
 	return c.DynamicClient().Resource(*gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]*unstructured.Unstructured, error) {
+func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource, fieldManager string) ([]*unstructured.Unstructured, error) {
 	separator := regexp.MustCompile(`\r?\n---\r?\n`)
 	resources := separator.Split(resource, -1)
 	var parsedResources []*unstructured.Unstructured
@@ -70,7 +70,7 @@ func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]
 
 		parsedResources = append(parsedResources, &obj)
 	}
-	return c.resourcesCreateOrUpdate(ctx, parsedResources)
+	return c.resourcesCreateOrUpdate(ctx, parsedResources, fieldManager)
 }
 
 func (c *Core) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string, gracePeriodSeconds *int64) error {
@@ -177,7 +177,10 @@ func (c *Core) resourcesListAsTable(ctx context.Context, gvk *schema.GroupVersio
 	return &unstructured.Unstructured{Object: unstructuredObject}, err
 }
 
-func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstructured.Unstructured, fieldManager string) ([]*unstructured.Unstructured, error) {
+	if fieldManager == "" {
+		fieldManager = version.BinaryName
+	}
 	for i, obj := range resources {
 		gvk := obj.GroupVersionKind()
 		gvr, rErr := c.resourceFor(&gvk)
@@ -191,7 +194,7 @@ func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstruc
 			namespace = c.NamespaceOrDefault(namespace)
 		}
 		resources[i], rErr = c.DynamicClient().Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{
-			FieldManager: version.BinaryName,
+			FieldManager: fieldManager,
 			Force:        true,
 		})
 		if rErr != nil {
