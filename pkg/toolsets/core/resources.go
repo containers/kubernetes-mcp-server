@@ -1,11 +1,14 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"text/template"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
@@ -23,7 +26,7 @@ func initResources(o api.Openshift) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "resources_list",
-			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n" + commonApiVersion,
+			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector. Use the optional gotemplate parameter to extract specific fields instead of returning full YAML (same syntax as oc get -o go-template).\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -49,6 +52,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 						Description: "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
 						Pattern:     REGEX_FIELDSELECTOR,
 					},
+					"gotemplate": {
+						Type:        "string",
+						Description: "Optional Go template to extract specific fields instead of returning full YAML (e.g. {{range .items}}{{.metadata.name}}\\n{{end}}, {{.spec.source.repoURL}})",
+					},
 				},
 				Required: []string{"apiVersion", "kind"},
 			},
@@ -61,7 +68,7 @@ func initResources(o api.Openshift) []api.ServerTool {
 		}, Handler: resourcesList},
 		{Tool: api.Tool{
 			Name:        "resources_get",
-			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
+			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name. Use the optional gotemplate parameter to extract specific fields instead of returning full YAML (same syntax as oc get -o go-template).\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -80,6 +87,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 					"name": {
 						Type:        "string",
 						Description: "Name of the resource",
+					},
+					"gotemplate": {
+						Type:        "string",
+						Description: "Optional Go template to extract specific fields instead of returning full YAML (e.g. {{.spec.source.repoURL}}, {{.status.phase}})",
 					},
 				},
 				Required: []string{"apiVersion", "kind", "name"},
@@ -192,8 +203,9 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		namespace = ""
 	}
 	labelSelector := params.GetArguments()["labelSelector"]
+	_, hasGoTemplate := params.GetArguments()["gotemplate"].(string)
 	resourceListOptions := api.ListOptions{
-		AsTable: params.ListOutput.AsTable(),
+		AsTable: params.ListOutput.AsTable() && !hasGoTemplate,
 	}
 
 	if labelSelector != nil {
@@ -225,6 +237,29 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
+
+	if tmplExpr, ok := params.GetArguments()["gotemplate"].(string); ok && tmplExpr != "" {
+		var data interface{}
+		if ul, ok := ret.(*unstructured.UnstructuredList); ok {
+			obj := ul.Object
+			items := make([]interface{}, len(ul.Items))
+			for i := range ul.Items {
+				items[i] = ul.Items[i].Object
+			}
+			obj["items"] = items
+			data = obj
+		} else if u, ok := ret.(*unstructured.Unstructured); ok {
+			data = u.Object
+		}
+		if data != nil {
+			result, tmplErr := applyGoTemplate(tmplExpr, data)
+			if tmplErr != nil {
+				return api.NewToolCallResult("", tmplErr), nil
+			}
+			return api.NewToolCallResult(result, nil), nil
+		}
+	}
+
 	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
 }
 
@@ -256,7 +291,32 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
 	}
+
+	if tmplExpr, ok := params.GetArguments()["gotemplate"].(string); ok && tmplExpr != "" {
+		result, tmplErr := applyGoTemplate(tmplExpr, ret.Object)
+		if tmplErr != nil {
+			return api.NewToolCallResult("", tmplErr), nil
+		}
+		return api.NewToolCallResult(result, nil), nil
+	}
+
 	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
+}
+
+func applyGoTemplate(expr string, data interface{}) (string, error) {
+	tmpl, err := template.New("filter").Option("missingkey=zero").Parse(expr)
+	if err != nil {
+		return "", fmt.Errorf("invalid go template expression: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("go template execution failed: %w", err)
+	}
+	result := buf.String()
+	if result == "" {
+		return "(no output from go template)", nil
+	}
+	return result, nil
 }
 
 func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
