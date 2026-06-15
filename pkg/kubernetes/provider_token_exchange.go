@@ -58,14 +58,9 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 		return nil
 	}
 
-	var tokenURL string
-	if snap.OIDCProvider != nil {
-		if endpoint := snap.OIDCProvider.Endpoint(); endpoint.TokenURL != "" {
-			tokenURL = endpoint.TokenURL
-		}
-	}
+	tokenURL := resolveStsTokenURL(p.baseConfig, snap.OIDCProvider)
 	if tokenURL == "" {
-		klog.Warningf("token exchange strategy %q configured but OIDC provider returned empty token URL", strategy)
+		klog.Warningf("token exchange strategy %q configured but no token URL available (set sts_token_url or configure authorization_url for OIDC discovery)", strategy)
 		return nil
 	}
 
@@ -92,6 +87,8 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 		ClientCertFile:     p.baseConfig.GetStsClientCertFile(),
 		ClientKeyFile:      p.baseConfig.GetStsClientKeyFile(),
 		FederatedTokenFile: p.baseConfig.GetStsFederatedTokenFile(),
+		SubjectTokenType:   p.baseConfig.GetStsSubjectTokenType(),
+		RequestedTokenType: p.baseConfig.GetStsRequestedTokenType(),
 		CAFile:             p.baseConfig.GetCertificateAuthority(),
 	}
 	if err := cfg.Validate(); err != nil {

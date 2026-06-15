@@ -495,6 +495,9 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
 | `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
 | `sts_federated_token_file` | string | `""` | Path to a JWT file from an external identity provider, e.g., SPIRE JWT-SVID (for `federated` auth style). |
+| `sts_subject_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | `subject_token_type` form parameter for RFC 8693 token exchange. Override to `urn:ietf:params:oauth:token-type:jwt` for cross-realm flows. |
+| `sts_requested_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | `requested_token_type` form parameter for RFC 8693 token exchange. Override to `urn:ietf:params:oauth:token-type:jwt` when the STS must mint a fresh JWT rather than echo the subject token shape. |
+| `sts_token_url` | string | `""` | Explicit token endpoint for token exchange. When set, takes precedence over the endpoint discovered from the OIDC provider at `authorization_url`. Use this to point token exchange at a separate STS gateway, or to enable token exchange when no `authorization_url` is configured (e.g., with `skip_jwt_verification=true`). |
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
@@ -523,6 +526,23 @@ sts_auth_style = "assertion"
 sts_client_cert_file = "/path/to/client.crt"
 sts_client_key_file = "/path/to/client.key"
 sts_scopes = ["api://<DOWNSTREAM_API>/.default"]
+```
+
+**Example (separate STS gateway from user-token issuer):**
+
+`authorization_url` validates the user's bearer token; `sts_token_url` is the
+distinct gateway that mints the delegated cluster token. The two URLs may
+point at different hosts/realms.
+```toml
+require_oauth     = true
+authorization_url = "https://idp.example.com/realms/users"
+oauth_audience    = "kubernetes-mcp-server"
+
+token_exchange_strategy = "rfc8693"
+sts_token_url           = "https://sts-gateway.internal/oauth/token"
+sts_client_id           = "mcp-backend"
+sts_client_secret       = "your-client-secret"
+sts_audience            = "kubernetes-api"
 ```
 
 **Pure token passthrough (delegate validation to the cluster):**

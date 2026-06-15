@@ -1127,6 +1127,52 @@ func (s *ConfigSuite) TestToolOverridesDropInMerge() {
 	})
 }
 
+func (s *ConfigSuite) TestStsTokenTypesParsing() {
+	s.Run("explicit values are parsed and exposed via getters", func() {
+		configPath := s.writeConfig(`
+			sts_subject_token_type = "urn:ietf:params:oauth:token-type:jwt"
+			sts_requested_token_type = "urn:ietf:params:oauth:token-type:jwt"
+		`)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Require().NotNil(config)
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.StsSubjectTokenType)
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.StsRequestedTokenType)
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.GetStsSubjectTokenType())
+		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.GetStsRequestedTokenType())
+	})
+
+	s.Run("default to empty when omitted", func() {
+		configPath := s.writeConfig(``)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Require().NotNil(config)
+		s.Empty(config.StsSubjectTokenType, "sts_subject_token_type should default to empty (rfc8693 exchanger applies access_token default)")
+		s.Empty(config.StsRequestedTokenType, "sts_requested_token_type should default to empty (rfc8693 exchanger applies access_token default)")
+	})
+}
+
+func (s *ConfigSuite) TestStsTokenURLParsing() {
+	s.Run("explicit value is parsed and exposed via getter", func() {
+		configPath := s.writeConfig(`
+			sts_token_url = "https://sts-gateway.example.com/oauth/token"
+		`)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Require().NotNil(config)
+		s.Equal("https://sts-gateway.example.com/oauth/token", config.StsTokenURL)
+		s.Equal("https://sts-gateway.example.com/oauth/token", config.GetStsTokenURL())
+	})
+
+	s.Run("defaults to empty when omitted", func() {
+		configPath := s.writeConfig(``)
+		config, err := Read(configPath, "")
+		s.Require().NoError(err)
+		s.Require().NotNil(config)
+		s.Empty(config.StsTokenURL, "sts_token_url should default to empty (resolution falls back to OIDC discovery)")
+	})
+}
+
 func (s *ConfigSuite) TestConfirmationRulesDefaults() {
 	configPath := s.writeConfig(``)
 	config, err := Read(configPath, "")
