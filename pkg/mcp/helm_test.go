@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"flag"
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -352,6 +353,182 @@ func (s *HelmSuite) TestHelmListForbidden() {
 			logNotification := capture.RequireLogNotification(s.T(), 2*time.Second)
 			s.Equal("error", logNotification.Level, "forbidden errors should log at error level")
 			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
+		})
+	})
+}
+
+func (s *HelmSuite) TestHelmHistoryNoReleases() {
+	s.InitMcpClient()
+	s.Run("helm_history(name=release-to-check-history) with no releases", func() {
+		toolResult, err := s.CallTool("helm_history", map[string]interface{}{
+			"name": "release-to-check-history",
+		})
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes not found", func() {
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "release: not found")
+		})
+	})
+}
+
+func (s *HelmSuite) TestHelmHistory() {
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+
+	// Create release v1
+	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "sh.helm.release.v1.release-with-history.v1",
+			Labels: map[string]string{"owner": "helm", "name": "release-with-history", "version": "1"},
+		},
+		Data: map[string][]byte{
+			"release": []byte(base64.StdEncoding.EncodeToString([]byte("{" +
+				"\"name\":\"release-with-history\"," +
+				"\"version\":1," +
+				"\"info\":{\"status\":\"superseded\",\"description\":\"Upgrade complete\"}," +
+				"\"chart\":{\"metadata\":{\"name\":\"test-chart\",\"version\":\"1.0.0\"}}" +
+				"}"))),
+		},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+
+	// Create release v2
+	_, err = kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "sh.helm.release.v1.release-with-history.v2",
+			Labels: map[string]string{"owner": "helm", "name": "release-with-history", "version": "2"},
+		},
+		Data: map[string][]byte{
+			"release": []byte(base64.StdEncoding.EncodeToString([]byte("{" +
+				"\"name\":\"release-with-history\"," +
+				"\"version\":2," +
+				"\"info\":{\"status\":\"deployed\",\"description\":\"Install complete\"}," +
+				"\"chart\":{\"metadata\":{\"name\":\"test-chart\",\"version\":\"1.1.0\"}}" +
+				"}"))),
+		},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+
+	s.InitMcpClient()
+	s.Run("helm_history(name=release-with-history) with deployed release", func() {
+		toolResult, err := s.CallTool("helm_history", map[string]interface{}{
+			"name": "release-with-history",
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("returns history", func() {
+			var decoded []map[string]interface{}
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
+			s.Run("has yaml content", func() {
+				s.Nilf(err, "invalid tool result content %v", err)
+			})
+			s.Run("has 2 revisions", func() {
+				s.Lenf(decoded, 2, "invalid helm history count, expected 2, got %v", len(decoded))
+			})
+			s.Run("has valid revision 1", func() {
+				s.Equalf("release-with-history", decoded[0]["name"], "invalid name in history, expected release-with-history, got %v", decoded[0]["name"])
+				s.Equalf(float64(1), decoded[0]["revision"], "invalid revision in history, expected 1, got %v", decoded[0]["revision"])
+				s.Equalf("superseded", decoded[0]["status"], "invalid status in history, expected superseded, got %v", decoded[0]["status"])
+				s.Equalf("test-chart", decoded[0]["chart"], "invalid chart in history, expected test-chart, got %v", decoded[0]["chart"])
+				s.Equalf("1.0.0", decoded[0]["chartVersion"], "invalid chartVersion in history, expected 1.0.0, got %v", decoded[0]["chartVersion"])
+			})
+			s.Run("has valid revision 2", func() {
+				s.Equalf("release-with-history", decoded[1]["name"], "invalid name in history, expected release-with-history, got %v", decoded[1]["name"])
+				s.Equalf(float64(2), decoded[1]["revision"], "invalid revision in history, expected 2, got %v", decoded[1]["revision"])
+				s.Equalf("deployed", decoded[1]["status"], "invalid status in history, expected deployed, got %v", decoded[1]["status"])
+				s.Equalf("test-chart", decoded[1]["chart"], "invalid chart in history, expected test-chart, got %v", decoded[1]["chart"])
+				s.Equalf("1.1.0", decoded[1]["chartVersion"], "invalid chartVersion in history, expected 1.1.0, got %v", decoded[1]["chartVersion"])
+			})
+		})
+	})
+}
+
+func (s *HelmSuite) TestHelmHistoryWithMax() {
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+
+	// Create multiple releases for testing max parameter
+	for i := 1; i <= 3; i++ {
+		_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   fmt.Sprintf("sh.helm.release.v1.release-with-max.v%d", i),
+				Labels: map[string]string{"owner": "helm", "name": "release-with-max", "version": strconv.Itoa(i)},
+			},
+			Data: map[string][]byte{
+				"release": []byte(base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("{"+
+					"\"name\":\"release-with-max\","+
+					"\"version\":%d,"+
+					"\"info\":{\"status\":\"%s\",\"description\":\"Version %d\"},"+
+					"\"chart\":{\"metadata\":{\"name\":\"test-chart\",\"version\":\"1.%d.0\"}}"+
+					"}", i, func() string {
+					if i == 3 {
+						return "deployed"
+					}
+					return "superseded"
+				}(), i, i)))),
+			},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(err)
+	}
+
+	s.InitMcpClient()
+	s.Run("helm_history(name=release-with-max, max=2) with max parameter", func() {
+		toolResult, err := s.CallTool("helm_history", map[string]interface{}{
+			"name": "release-with-max",
+			"max":  2,
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("returns limited history", func() {
+			var decoded []map[string]interface{}
+			err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
+			s.Run("has yaml content", func() {
+				s.Nilf(err, "invalid tool result content %v", err)
+			})
+			s.Run("has max 2 revisions", func() {
+				s.LessOrEqualf(len(decoded), 2, "invalid helm history count with max, expected <=2, got %v", len(decoded))
+			})
+		})
+	})
+}
+
+func (s *HelmSuite) TestHelmHistoryDenied() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		denied_resources = [ { version = "v1", kind = "Secret" } ]
+	`), s.Cfg), "Expected to parse denied resources config")
+	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "sh.helm.release.v1.release-history-denied.v1",
+			Labels: map[string]string{"owner": "helm", "name": "release-history-denied"},
+		},
+		Data: map[string][]byte{
+			"release": []byte(base64.StdEncoding.EncodeToString([]byte("{" +
+				"\"name\":\"release-history-denied\"," +
+				"\"info\":{\"status\":\"deployed\"}" +
+				"}"))),
+		},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	s.InitMcpClient()
+	s.Run("helm_history(name=release-history-denied) with deployed release (denied)", func() {
+		toolResult, err := s.CallTool("helm_history", map[string]interface{}{
+			"name": "release-history-denied",
+		})
+		s.Run("has error", func() {
+			s.Truef(toolResult.IsError, "call tool should fail")
+			s.Nilf(err, "call tool should not return error object")
+		})
+		s.Run("describes denial", func() {
+			msg := toolResult.Content[0].(*mcp.TextContent).Text
+			s.Contains(msg, "resource not allowed:")
+			s.Truef(strings.HasPrefix(msg, "failed to get helm history for release"), "expected descriptive error, got %v", msg)
+			expectedMessage := ": resource not allowed: /v1, Kind=Secret"
+			s.Truef(strings.HasSuffix(msg, expectedMessage), "expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
 }

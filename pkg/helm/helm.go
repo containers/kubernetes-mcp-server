@@ -112,6 +112,41 @@ func (h *Helm) Uninstall(name string, namespace string) (string, error) {
 	return fmt.Sprintf("Uninstalled release %s %s", uninstalledRelease.Release.Name, uninstalledRelease.Info), nil
 }
 
+// History gets the revision history for a Helm release
+func (h *Helm) History(name string, namespace string, max int) (string, error) {
+	cfg, err := h.newAction(h.kubernetes.NamespaceOrDefault(namespace), false)
+	if err != nil {
+		return "", err
+	}
+	history := action.NewHistory(cfg)
+	if max <= 0 {
+		// Default to showing the last 10 revisions
+		history.Max = 10
+	} else {
+		history.Max = max
+	}
+
+	releases, err := history.Run(name)
+	if err != nil {
+		return "", err
+	}
+	if len(releases) == 0 {
+		return fmt.Sprintf("No revision history found for release %s", name), nil
+	}
+
+	// Apply max limit manually if Helm didn't do it (which can happen with manually created secrets)
+	if max > 0 && len(releases) > max {
+		// Keep the most recent `max` releases (Helm returns them in chronological order)
+		releases = releases[len(releases)-max:]
+	}
+
+	ret, err := yaml.Marshal(simplifyHistory(releases))
+	if err != nil {
+		return "", err
+	}
+	return string(ret), nil
+}
+
 func (h *Helm) newAction(namespace string, allNamespaces bool) (*action.Configuration, error) {
 	storageDriver := ""
 	if h.config != nil {
@@ -186,6 +221,33 @@ func simplify(release ...*release.Release) []map[string]interface{} {
 			ret[i]["status"] = r.Info.Status.String()
 			if !r.Info.LastDeployed.IsZero() {
 				ret[i]["lastDeployed"] = r.Info.LastDeployed.Format(time.RFC1123Z)
+			}
+		}
+	}
+	return ret
+}
+
+func simplifyHistory(releases []*release.Release) []map[string]interface{} {
+	ret := make([]map[string]interface{}, len(releases))
+	for i, r := range releases {
+		ret[i] = map[string]interface{}{
+			"name":      r.Name,
+			"namespace": r.Namespace,
+			"revision":  r.Version,
+		}
+		if r.Chart != nil {
+			ret[i]["chart"] = r.Chart.Metadata.Name
+			ret[i]["chartVersion"] = r.Chart.Metadata.Version
+			ret[i]["appVersion"] = r.Chart.Metadata.AppVersion
+		}
+		if r.Info != nil {
+			ret[i]["status"] = r.Info.Status.String()
+			ret[i]["description"] = r.Info.Description
+			if !r.Info.LastDeployed.IsZero() {
+				ret[i]["lastDeployed"] = r.Info.LastDeployed.Format(time.RFC1123Z)
+			}
+			if !r.Info.FirstDeployed.IsZero() {
+				ret[i]["firstDeployed"] = r.Info.FirstDeployed.Format(time.RFC1123Z)
 			}
 		}
 	}
