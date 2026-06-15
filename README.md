@@ -541,6 +541,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+  - `run_policy` (`string`) - The run policy to use when starting or restarting a VM (applies to 'start' and 'restart' actions; ignored for 'stop'). Options:
+  - 'HighAvailability': VM runs continuously (sets runStrategy to Always)
+  - 'RestartOnFailure': VM restarts on failure (sets runStrategy to RerunOnFailure)
+  - 'Once': VM runs once and stops after completion (sets runStrategy to Once)
+Defaults to 'HighAvailability' if not specified.
 
 </details>
 
