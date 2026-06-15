@@ -85,6 +85,7 @@ const (
 	flagTLSCert              = "tls-cert"
 	flagTLSKey               = "tls-key"
 	flagRequireTLS           = "require-tls"
+	flagApps                 = "apps"
 )
 
 type MCPServerOptions struct {
@@ -110,6 +111,7 @@ type MCPServerOptions struct {
 	TLSCert              string
 	TLSKey               string
 	RequireTLS           bool
+	Apps                 bool
 
 	ConfigPath   string
 	ConfigDir    string
@@ -188,6 +190,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVar(&o.TLSCert, flagTLSCert, o.TLSCert, "Path to TLS certificate file for HTTPS. Must be used together with --tls-key.")
 	cmd.Flags().StringVar(&o.TLSKey, flagTLSKey, o.TLSKey, "Path to TLS private key file for HTTPS. Must be used together with --tls-cert.")
 	cmd.Flags().BoolVar(&o.RequireTLS, flagRequireTLS, o.RequireTLS, "Require TLS for server and all outbound connections")
+	cmd.Flags().BoolVar(&o.Apps, flagApps, o.Apps, "Enable MCP Apps interactive UI extensions")
 
 	return cmd
 }
@@ -280,6 +283,9 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagRequireTLS).Changed {
 		m.StaticConfig.RequireTLS = m.RequireTLS
+	}
+	if cmd.Flag(flagApps).Changed {
+		m.StaticConfig.AppsEnabled = m.Apps
 	}
 }
 

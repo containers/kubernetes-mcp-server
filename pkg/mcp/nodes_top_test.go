@@ -160,6 +160,33 @@ func (s *NodesTopSuite) TestNodesTop() {
 			s.Contains(content, "CPU(cores)", "expected header with CPU column")
 			s.Contains(content, "MEMORY(bytes)", "expected header with MEMORY column")
 		})
+		s.Run("returns self-describing structured content", func() {
+			s.Require().NotNil(toolResult.StructuredContent, "expected structured content")
+			structured, ok := toolResult.StructuredContent.(map[string]any)
+			s.Require().True(ok, "expected map[string]any")
+			// Verify columns
+			columns, ok := structured["columns"].([]any)
+			s.Require().True(ok, "expected columns array")
+			s.Equal(5, len(columns), "expected 5 columns")
+			col0, _ := columns[0].(map[string]any)
+			s.Equal("name", col0["key"])
+			s.Equal("Node", col0["label"])
+			// Verify chart
+			chart, ok := structured["chart"].(map[string]any)
+			s.Require().True(ok, "expected chart object")
+			s.Equal("name", chart["labelKey"])
+			datasets, ok := chart["datasets"].([]any)
+			s.Require().True(ok, "expected datasets array")
+			s.Equal(2, len(datasets), "expected 2 datasets")
+			// Verify items
+			items, ok := structured["items"].([]any)
+			s.Require().True(ok, "expected items array")
+			s.Equal(2, len(items), "expected 2 node items")
+			item0, _ := items[0].(map[string]any)
+			s.Equal("node-1", item0["name"])
+			s.Equal("500m", item0["cpu"])
+			s.Equal("2048Mi", item0["memory"])
+		})
 	})
 
 	s.Run("nodes_top(name=node-1) - specific node", func() {

@@ -225,7 +225,11 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	result, err := params.ListOutput.PrintObjStructured(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
+	}
+	return api.NewToolCallResultFull(result.Text, result.Structured, nil), nil
 }
 
 func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
