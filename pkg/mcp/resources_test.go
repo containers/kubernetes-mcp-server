@@ -534,6 +534,26 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 		})
 	})
 
+	s.Run("resources_create_or_update respects namespace from resource metadata", func() {
+		configMapYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-ns-from-metadata\n  namespace: ns-1\ndata:\n  key: value\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": configMapYaml,
+		})
+		s.Run("returns success", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool should not fail, got: %v", result.Content)
+		})
+		s.Run("creates ConfigMap in the namespace specified in the resource metadata", func() {
+			cm, cmErr := client.CoreV1().ConfigMaps("ns-1").Get(s.T().Context(), "a-cm-ns-from-metadata", metav1.GetOptions{})
+			s.Require().Nilf(cmErr, "ConfigMap not found in ns-1 namespace")
+			s.Equalf("ns-1", cm.Namespace, "ConfigMap should be in the namespace from the resource metadata")
+		})
+		s.Run("does not create ConfigMap in the default namespace", func() {
+			_, cmErr := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-cm-ns-from-metadata", metav1.GetOptions{})
+			s.Errorf(cmErr, "ConfigMap should not exist in the default namespace")
+		})
+	})
+
 	s.Run("resources_create_or_update strips status from resource", func() {
 		configMapWithStatusYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-with-status\n  namespace: default\ndata:\n  key: value\nstatus:\n  conditions:\n  - type: Ready\n    status: \"True\"\n"
 		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": configMapWithStatusYaml})
