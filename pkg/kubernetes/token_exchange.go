@@ -148,15 +148,15 @@ func strategyBasedTokenExchange(
 
 	cfg := cachedConfig
 	if cfg == nil {
-		// Build token URL from OIDC provider
-		var tokenURL string
-		if oidcProvider != nil {
+		// Prefer explicit sts_token_url; fall back to OIDC discovery.
+		tokenURL := baseConfig.GetStsTokenURL()
+		if tokenURL == "" && oidcProvider != nil {
 			if endpoint := oidcProvider.Endpoint(); endpoint.TokenURL != "" {
 				tokenURL = endpoint.TokenURL
 			}
 		}
 		if tokenURL == "" {
-			return ctx, fmt.Errorf("token exchange failed: no token URL available from OIDC provider")
+			return ctx, fmt.Errorf("token exchange failed: no token URL available (set sts_token_url or configure an OIDC provider)")
 		}
 
 		authStyle := baseConfig.GetStsAuthStyle()
@@ -169,6 +169,7 @@ func strategyBasedTokenExchange(
 			ClientID:           baseConfig.GetStsClientId(),
 			ClientSecret:       baseConfig.GetStsClientSecret(),
 			Audience:           baseConfig.GetStsAudience(),
+			SubjectTokenType:   baseConfig.GetStsSubjectTokenType(),
 			Scopes:             baseConfig.GetStsScopes(),
 			AuthStyle:          authStyle,
 			ClientCertFile:     baseConfig.GetStsClientCertFile(),
