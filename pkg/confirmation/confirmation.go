@@ -7,7 +7,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/google/jsonschema-go/jsonschema"
-	"k8s.io/klog/v2"
 )
 
 // ErrConfirmationDenied is returned when the user declines a confirmation prompt

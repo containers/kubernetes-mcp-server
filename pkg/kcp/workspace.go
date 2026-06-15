@@ -64,7 +64,7 @@ func DiscoverWorkspacesRecursive(
 
 	dynamicClient, err := dynamic.NewForConfig(workspaceRestConfig)
 	if err != nil {
-		logger.V(3).Info("Failed to create client for workspace", "workspace", parentWorkspace, "exception.message", err)
+		logger.V(3).Info("Failed to create client for workspace", "workspace", parentWorkspace, "exception.message", err.Error())
 		return nil // Don't fail entirely, just skip this workspace
 	}
 
@@ -72,7 +72,7 @@ func DiscoverWorkspacesRecursive(
 	workspaceList, err := dynamicClient.Resource(WorkspaceGVR).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
-		logger.V(3).Info("Failed to list workspaces in parent workspace", "parent_workspace", parentWorkspace, "exception.message", err)
+		logger.V(3).Info("Failed to list workspaces in parent workspace", "parent_workspace", parentWorkspace, "exception.message", err.Error())
 		return nil // Don't fail entirely, just skip
 	}
 
@@ -98,7 +98,7 @@ func DiscoverWorkspacesRecursive(
 		// Recursively discover children of this workspace
 		err = DiscoverWorkspacesRecursive(ctx, baseRestConfig, fullPath, discovered)
 		if err != nil {
-			logger.V(3).Info("Failed to recurse into workspace", "workspace_path", fullPath, "exception.message", err)
+			logger.V(3).Info("Failed to recurse into workspace", "workspace_path", fullPath, "exception.message", err.Error())
 			// Continue with other workspaces
 		}
 	}

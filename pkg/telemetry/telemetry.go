@@ -302,7 +302,7 @@ func getSamplerFromConfig(ctx context.Context, cfg *config.TelemetryConfig) trac
 				"config.key", "traces_sampler_arg",
 				"config.provided", samplerArg,
 				"config.default", 1.0,
-				"exception.message", err,
+				"exception.message", err.Error(),
 			)
 		} else if parsed < 0.0 || parsed > 1.0 {
 			logger.V(1).Info("traces_sampler_arg out of range [0.0, 1.0], using default",
