@@ -101,6 +101,10 @@ func initResources(o api.Openshift) []api.ServerTool {
 						Type:        "string",
 						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
 					},
+					"namespace": {
+						Type:        "string",
+						Description: "Optional namespace to apply the resource(s) to. Overrides the namespace defined in the resource metadata. Useful when resources are rendered without a hardcoded namespace (similar to kubectl apply -n <namespace>)",
+					},
 				},
 				Required: []string{"resource"},
 			},
@@ -270,7 +274,15 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 		return api.NewToolCallResult("", fmt.Errorf("resource is not a string")), nil
 	}
 
-	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r)
+	ns := ""
+	if namespace := params.GetArguments()["namespace"]; namespace != nil {
+		ns, ok = namespace.(string)
+		if !ok {
+			return api.NewToolCallResult("", fmt.Errorf("namespace is not a string")), nil
+		}
+	}
+
+	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r, ns)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
 	}
