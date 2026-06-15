@@ -50,7 +50,7 @@ func (s *PodsExecSuite) TestPodsExec() {
 			_, _ = w.Write([]byte(err.Error()))
 			return
 		}
-		defer func(conn io.Closer) { _ = conn.Close() }(ctx.Closer)
+		defer func() { _ = ctx.Close() }()
 		_, _ = io.WriteString(ctx.StdoutStream, "command:"+strings.Join(req.URL.Query()["command"], " ")+"\n")
 		_, _ = io.WriteString(ctx.StdoutStream, "container:"+strings.Join(req.URL.Query()["container"], " ")+"\n")
 	}))
@@ -124,7 +124,7 @@ func (s *PodsExecSuite) TestPodsExecDefaultContainer() {
 			_, _ = w.Write([]byte(err.Error()))
 			return
 		}
-		defer func(conn io.Closer) { _ = conn.Close() }(ctx.Closer)
+		defer func() { _ = ctx.Close() }()
 		_, _ = io.WriteString(ctx.StdoutStream, "container:"+strings.Join(req.URL.Query()["container"], " ")+"\n")
 	}))
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

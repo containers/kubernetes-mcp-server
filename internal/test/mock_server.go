@@ -112,11 +112,39 @@ type streamAndReply struct {
 }
 
 type StreamContext struct {
-	Closer       io.Closer
+	closer       io.Closer
 	StdinStream  io.ReadCloser
 	StdoutStream io.WriteCloser
 	StderrStream io.WriteCloser
+	errorStream  io.WriteCloser
 	writeStatus  func(status *apierrors.StatusError) error
+}
+
+// Close gracefully tears down the exec streams so the client always observes a
+// clean EOF (and a v4 success terminal status on the error stream) before the
+// SPDY connection is torn down. Closing each stream first blocks until that
+// stream's reply has been flushed and then sends a FIN, so the connection
+// teardown's stream resets reach the client only after it has received every
+// reply and a clean EOF, instead of racing them — the race that otherwise
+// surfaces intermittently as a "Stream reset" on slow runners. The underlying
+// connection is intentionally unexported, so handlers must defer Close to tear
+// the streams down — this graceful teardown is the only path.
+func (c *StreamContext) Close() error {
+	// Send the v4 success terminal status on the error stream.
+	if c.writeStatus != nil {
+		_ = c.writeStatus(&apierrors.StatusError{ErrStatus: metav1.Status{Status: metav1.StatusSuccess}})
+	}
+	// Close every stream so each delivers a clean EOF (and flushes its reply)
+	// before the connection-level teardown.
+	for _, stream := range []io.Closer{c.StdoutStream, c.StderrStream, c.StdinStream, c.errorStream} {
+		if stream != nil {
+			_ = stream.Close()
+		}
+	}
+	if c.closer != nil {
+		return c.closer.Close()
+	}
+	return nil
 }
 
 type StreamOptions struct {
@@ -148,7 +176,7 @@ func CreateHTTPStreams(w http.ResponseWriter, req *http.Request, opts *StreamOpt
 		return nil
 	})
 	ctx := &StreamContext{
-		Closer: connection,
+		closer: connection,
 	}
 
 	// wait for stream
@@ -173,6 +201,7 @@ WaitForStreams:
 			switch streamType {
 			case v1.StreamTypeError:
 				replyChan <- struct{}{}
+				ctx.errorStream = stream
 				ctx.writeStatus = v4WriteStatusFunc(stream)
 			case v1.StreamTypeStdout:
 				replyChan <- struct{}{}
