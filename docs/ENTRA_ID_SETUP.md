@@ -124,20 +124,15 @@ Replace:
 If your Kubernetes cluster doesn't accept Entra ID tokens on the API server, use this configuration:
 
 ```toml
-require_oauth = true
-oauth_audience = "<CLIENT_ID>"
-oauth_scopes = ["openid", "profile", "email"]
-
-authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
-
 # Use kubeconfig ServiceAccount credentials for cluster access
 cluster_auth_mode = "kubeconfig"
 kubeconfig = "/path/to/sa-kubeconfig"
 ```
 
 This setup:
-- **MCP clients authenticate via Entra ID** (OAuth required for MCP access)
 - **Cluster access uses ServiceAccount token** (from kubeconfig)
+
+> **Note:** `require_oauth = true` is incompatible with `cluster_auth_mode = "kubeconfig"` and is rejected at startup.
 
 #### Creating a ServiceAccount Kubeconfig
 
