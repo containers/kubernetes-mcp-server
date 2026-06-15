@@ -111,7 +111,7 @@ type Server struct {
 	closeOnce                sync.Once
 }
 
-func NewServer(configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
+func NewServer(ctx context.Context, configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
 	sdkLogger := configuration.SDKLogger
 	if sdkLogger == nil {
 		sdkLogger = slog.New(logr.ToSlogHandler(klog.Background()))
@@ -139,7 +139,7 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	s.configuration.Store(&configuration)
 
 	// Initialize metrics system
-	metricsInstance, err := metrics.New(metrics.Config{
+	metricsInstance, err := metrics.New(ctx, metrics.Config{
 		TracerName:     version.BinaryName + "/mcp",
 		ServiceName:    version.BinaryName,
 		ServiceVersion: version.Version,
@@ -174,11 +174,11 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 	// path entirely; protocolSendingMiddleware makes them visible at V(6).
 	s.server.AddSendingMiddleware(protocolSendingMiddleware)
 
-	err = s.applyToolsets(s.configuration.Load())
+	err = s.applyToolsets(ctx, s.configuration.Load())
 	if err != nil {
 		return nil, err
 	}
-	s.p.WatchTargets(s.reapplyToolsets)
+	s.p.WatchTargets(ctx, s.reapplyToolsets)
 
 	return s, nil
 }
@@ -191,7 +191,9 @@ func NewServer(configuration Configuration, targetProvider internalk8s.Provider)
 // a new cfg while we're blocked on reloadMu — we'd then silently roll it
 // back by re-installing the stale snapshot.
 func (s *Server) reapplyToolsets() error {
-	return s.applyToolsets(nil)
+	// TODO: context.Background is likely correct here, but let's verify when we add otel traces on SIGHUP path
+	// We want to make sure all the logs get correlated correctly through handling a SIGHUP signal
+	return s.applyToolsets(context.Background(), nil)
 }
 
 // applyToolsets recomputes the SDK's tool/prompt/resource/template surface
@@ -207,7 +209,7 @@ func (s *Server) reapplyToolsets() error {
 //
 // On error s.configuration, the SDK, and the enabled-X bookkeeping all stay
 // at their prior consistent values.
-func (s *Server) applyToolsets(cfg *Configuration) error {
+func (s *Server) applyToolsets(ctx context.Context, cfg *Configuration) error {
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(tools...)
 
@@ -314,7 +316,7 @@ func (s *Server) applyToolsets(cfg *Configuration) error {
 	s.mu.Unlock()
 
 	// Start new watch
-	s.p.WatchTargets(s.reapplyToolsets)
+	s.p.WatchTargets(ctx, s.reapplyToolsets)
 	return nil
 }
 
@@ -546,14 +548,15 @@ func (s *Server) GetEnabledResourceTemplates() []string {
 // SDK, and the enabled-X bookkeeping at their previous consistent values, so
 // concurrent readers (rate-limit closure, confirmation rules, list output...)
 // can never observe a new-but-rejected configuration.
-func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
-	klog.V(1).Info("Reloading MCP server configuration...")
+func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.StaticConfig) error {
+	logger := klog.FromContext(ctx)
+	logger.V(1).Info("Reloading MCP server configuration...")
 
 	// Validate config-level invariants (same checks as startup)
 	if err := newConfig.
 		WithProviderStrategies(internalk8s.GetRegisteredStrategies()).
 		WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
-		Validate(); err != nil {
+		Validate(ctx); err != nil {
 		return fmt.Errorf("configuration reload rejected: %w", err)
 	}
 
@@ -561,11 +564,11 @@ func (s *Server) ReloadConfiguration(newConfig *config.StaticConfig) error {
 	// atomically only if the convert phase succeeds.
 	candidate := &Configuration{StaticConfig: newConfig}
 
-	if err := s.applyToolsets(candidate); err != nil {
+	if err := s.applyToolsets(ctx, candidate); err != nil {
 		return fmt.Errorf("failed to reload toolsets: %w", err)
 	}
 
-	klog.V(1).Info("MCP server configuration reloaded successfully")
+	logger.V(1).Info("MCP server configuration reloaded successfully")
 	return nil
 }
 

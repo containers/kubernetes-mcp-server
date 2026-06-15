@@ -11,6 +11,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
@@ -50,7 +51,8 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 	namespace := args["namespace"]
 	checkEvents := args["check_events"] != "false" // default true
 
-	klog.Info("Starting cluster health check...")
+	logger := klog.FromContext(params.Context)
+	logger.Info("Starting cluster health check...")
 
 	// Check if namespace exists if specified
 	namespaceWarning := ""
@@ -61,12 +63,14 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 			// Namespace doesn't exist - show warning and proceed with cluster-wide check
 			namespaceWarning = fmt.Sprintf("Namespace '%s' not found or not accessible. Showing cluster-wide information instead.", namespace)
 			namespace = "" // Fall back to cluster-wide check
-			klog.Warningf("Namespace '%s' not found, performing cluster-wide health check", requestedNamespace)
+			klogutil.Warn(params.Context, "Namespace not found, performing cluster-wide health check",
+				"kubernetes.namespace.name", requestedNamespace,
+			)
 		} else {
-			klog.Infof("Performing health check for namespace: %s", namespace)
+			logger.Info("Performing health check for namespace", "kubernetes.namespace.name", namespace)
 		}
 	} else {
-		klog.Info("Performing cluster-wide health check")
+		logger.Info("Performing cluster-wide health check")
 	}
 
 	diagnostics, err := gatherClusterDiagnostics(params, namespace, checkEvents)
@@ -131,93 +135,95 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 		TargetNamespace: namespace,
 	}
 
+	logger := klog.FromContext(params.Context)
+
 	// Gather node diagnostics using ResourcesList
-	klog.Info("Collecting node diagnostics...")
+	logger.Info("Collecting node diagnostics...")
 	nodeDiag, err := gatherNodeDiagnostics(params)
 	if err == nil {
 		diag.Nodes = nodeDiag
-		klog.Info("Node diagnostics collected")
+		logger.Info("Node diagnostics collected")
 	} else {
-		klog.Warningf("Failed to collect node diagnostics: %v", err)
+		logger.Error(err, "Failed to collect node diagnostics")
 	}
 
 	// Gather pod diagnostics
-	klog.Info("Collecting pod diagnostics...")
+	logger.Info("Collecting pod diagnostics...")
 	podDiag, err := gatherPodDiagnostics(params, namespace)
 	if err == nil {
 		diag.Pods = podDiag
-		klog.Info("Pod diagnostics collected")
+		logger.Info("Pod diagnostics collected")
 	} else {
-		klog.Warningf("Failed to collect pod diagnostics: %v", err)
+		logger.Error(err, "Failed to collect pod diagnostics")
 	}
 
 	// Gather workload diagnostics
-	klog.Info("Collecting deployment diagnostics...")
+	logger.Info("Collecting deployment diagnostics...")
 	deployDiag, err := gatherWorkloadDiagnostics(params, "Deployment", namespace)
 	if err == nil {
 		diag.Deployments = deployDiag
-		klog.Info("Deployment diagnostics collected")
+		logger.Info("Deployment diagnostics collected")
 	} else {
-		klog.Warningf("Failed to collect deployment diagnostics: %v", err)
+		logger.Error(err, "Failed to collect deployment diagnostics")
 	}
 
-	klog.Info("Collecting statefulset diagnostics...")
+	logger.Info("Collecting statefulset diagnostics...")
 	stsDiag, err := gatherWorkloadDiagnostics(params, "StatefulSet", namespace)
 	if err == nil {
 		diag.StatefulSets = stsDiag
-		klog.Info("StatefulSet diagnostics collected")
+		logger.Info("StatefulSet diagnostics collected")
 	} else {
-		klog.Warningf("Failed to collect statefulset diagnostics: %v", err)
+		logger.Error(err, "Failed to collect statefulset diagnostics")
 	}
 
-	klog.Info("Collecting daemonset diagnostics...")
+	logger.Info("Collecting daemonset diagnostics...")
 	dsDiag, err := gatherWorkloadDiagnostics(params, "DaemonSet", namespace)
 	if err == nil {
 		diag.DaemonSets = dsDiag
-		klog.Info("DaemonSet diagnostics collected")
+		logger.Info("DaemonSet diagnostics collected")
 	} else {
-		klog.Warningf("Failed to collect daemonset diagnostics: %v", err)
+		logger.Error(err, "Failed to collect daemonset diagnostics")
 	}
 
 	// Gather PVC diagnostics
-	klog.Info("Collecting PVC diagnostics...")
+	logger.Info("Collecting PVC diagnostics...")
 	pvcDiag, err := gatherPVCDiagnostics(params, namespace)
 	if err == nil {
 		diag.PVCs = pvcDiag
-		klog.Info("PVC diagnostics collected")
+		logger.Info("PVC diagnostics collected")
 	} else {
-		klog.Warningf("Failed to collect PVC diagnostics: %v", err)
+		logger.Error(err, "Failed to collect PVC diagnostics")
 	}
 
 	// Gather cluster operator diagnostics (OpenShift only)
-	klog.Info("Checking for cluster operators (OpenShift)...")
+	logger.Info("Checking for cluster operators (OpenShift)...")
 	operatorDiag, err := gatherClusterOperatorDiagnostics(params)
 	if err == nil {
 		diag.ClusterOperators = operatorDiag
-		klog.Info("Cluster operator diagnostics collected")
+		logger.Info("Cluster operator diagnostics collected")
 	}
 
 	// Gather recent events if requested
 	if checkEvents {
-		klog.Info("Collecting recent events...")
+		logger.Info("Collecting recent events...")
 		eventDiag, err := gatherEventDiagnostics(params, namespace)
 		if err == nil {
 			diag.Events = eventDiag
-			klog.Info("Event diagnostics collected")
+			logger.Info("Event diagnostics collected")
 		} else {
-			klog.Warningf("Failed to collect event diagnostics: %v", err)
+			logger.Error(err, "Failed to collect event diagnostics")
 		}
 	}
 
 	// Count namespaces
-	klog.Info("Counting namespaces...")
+	logger.Info("Counting namespaces...")
 	namespaceList, err := params.CoreV1().Namespaces().List(params.Context, metav1.ListOptions{})
 	if err == nil {
 		diag.TotalNamespaces = len(namespaceList.Items)
-		klog.Infof("Found %d namespaces", diag.TotalNamespaces)
+		logger.Info("Found namespaces", "kubernetes.namespaces.count", diag.TotalNamespaces)
 	}
 
-	klog.Info("Cluster health check data collection completed")
+	logger.Info("Cluster health check data collection completed")
 	return diag, nil
 }
 

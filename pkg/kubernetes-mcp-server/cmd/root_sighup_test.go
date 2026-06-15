@@ -66,13 +66,13 @@ func (s *SIGHUPSuite) TearDownTest() {
 }
 
 func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions {
-	cfg, err := config.Read(configPath, configDir)
+	cfg, err := config.Read(s.T().Context(), configPath, configDir)
 	s.Require().NoError(err)
 	cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 
-	provider, err := kubernetes.NewProvider(cfg)
+	provider, err := kubernetes.NewProvider(s.T().Context(), cfg)
 	s.Require().NoError(err)
-	s.server, err = mcp.NewServer(mcp.Configuration{
+	s.server, err = mcp.NewServer(s.T().Context(), mcp.Configuration{
 		StaticConfig: cfg,
 	}, provider)
 	s.Require().NoError(err)
@@ -88,7 +88,7 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 	oauthState := oauth.NewState(&oauth.Snapshot{})
 
 	cfgState := config.NewStaticConfigState(cfg)
-	s.stopSIGHUP = opts.setupSIGHUPHandler(s.server, oauthState, cfgState)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, oauthState, cfgState)
 	return opts
 }
 
@@ -295,7 +295,7 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	mockServer.Handle(test.NewDiscoveryClientHandler())
 	t.Cleanup(mockServer.Close)
 
-	cfg, err := config.Read(configPath, "")
+	cfg, err := config.Read(t.Context(), configPath, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,11 +312,11 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sink.Close() })
 
-	provider, err := kubernetes.NewProvider(cfg)
+	provider, err := kubernetes.NewProvider(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mcpServer, err := mcp.NewServer(mcp.Configuration{StaticConfig: cfg, SDKLogger: sink.SDKLogger()}, provider)
+	mcpServer, err := mcp.NewServer(t.Context(), mcp.Configuration{StaticConfig: cfg, SDKLogger: sink.SDKLogger()}, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,7 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 		logSink: sink,
 	}
 	cfgState := config.NewStaticConfigState(cfg)
-	stop := opts.setupSIGHUPHandler(mcpServer, oauth.NewState(&oauth.Snapshot{}), cfgState)
+	stop := opts.setupSIGHUPHandler(t.Context(), mcpServer, oauth.NewState(&oauth.Snapshot{}), cfgState)
 	t.Cleanup(stop)
 
 	if err := os.WriteFile(configPath, []byte(

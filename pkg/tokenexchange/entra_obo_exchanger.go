@@ -46,7 +46,7 @@ func (e *entraOBOExchanger) Exchange(ctx context.Context, cfg *TargetTokenExchan
 	}
 
 	headers := make(http.Header)
-	if err := injectClientAuth(cfg, data, headers); err != nil {
+	if err := injectClientAuth(ctx, cfg, data, headers); err != nil {
 		return nil, err
 	}
 

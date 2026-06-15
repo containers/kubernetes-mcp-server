@@ -207,9 +207,9 @@ func (s *UserAgentPropagationSuite) TestPropagatesExplicitUserAgentWithOAuthToKu
 func (s *UserAgentPropagationSuite) TestFallsBackToMCPClientInfoForUserAgent() {
 	// Create MCP client through a handler that strips the User-Agent header,
 	// simulating a transport without HTTP User-Agent (like stdio).
-	provider, err := internalk8s.NewProvider(s.Cfg)
+	provider, err := internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err)
-	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, provider)
 	s.Require().NoError(err)
 	handler := s.mcpServer.ServeHTTP()
 	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -237,9 +237,9 @@ func (s *UserAgentPropagationSuite) TestFallsBackToMCPClientInfoForUserAgent() {
 func (s *UserAgentPropagationSuite) TestFallsBackToServerPrefixWhenNoClientInfo() {
 	// Create MCP client through a handler that strips the User-Agent header
 	// and initialize with empty client info.
-	provider, err := internalk8s.NewProvider(s.Cfg)
+	provider, err := internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err)
-	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, provider)
 	s.Require().NoError(err)
 	handler := s.mcpServer.ServeHTTP()
 	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -273,9 +273,9 @@ func (s *UserAgentPropagationSuite) TestDoesNotPanicWhenClientInfoIsNil() {
 	// However, some non-compliant clients omit it, which caused a nil pointer panic
 	// in the user-agent middleware. This test verifies that the server handles
 	// non-compliant clients gracefully by sending a raw initialize request without clientInfo.
-	provider, err := internalk8s.NewProvider(s.Cfg)
+	provider, err := internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err)
-	s.mcpServer, err = NewServer(Configuration{StaticConfig: s.Cfg}, provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, provider)
 	s.Require().NoError(err)
 	handler := s.mcpServer.ServeHTTP()
 	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

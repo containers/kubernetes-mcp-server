@@ -59,7 +59,7 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 }
 
 func (s *ConfigSuite) TestReadConfigMissingFile() {
-	config, err := Read("non-existent-config.toml", "")
+	config, err := Read(s.T().Context(), "non-existent-config.toml", "")
 	s.Run("returns error for missing file", func() {
 		s.Require().NotNil(err, "Expected error for missing file, got nil")
 		s.True(errors.Is(err, fs.ErrNotExist), "Expected ErrNotExist, got %v", err)
@@ -81,7 +81,7 @@ func (s *ConfigSuite) TestReadConfigInvalid() {
 		kind = "Role
 	`)
 
-	config, err := Read(invalidConfigPath, "")
+	config, err := Read(s.T().Context(), invalidConfigPath, "")
 	s.Run("returns error for invalid file", func() {
 		s.Require().NotNil(err, "Expected error for invalid file, got nil")
 	})
@@ -133,7 +133,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 
 	`)
 
-	config, err := Read(validConfigPath, "")
+	config, err := Read(s.T().Context(), validConfigPath, "")
 	s.Require().NotNil(config)
 	s.Run("reads and unmarshalls file", func() {
 		s.Nil(err, "Expected nil error for valid file")
@@ -234,7 +234,7 @@ func (s *ConfigSuite) TestReadConfigStatelessDefaults() {
 		port = "8080"
 	`)
 
-	config, err := Read(configPath, "")
+	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -251,7 +251,7 @@ func (s *ConfigSuite) TestReadConfigStatelessExplicitFalse() {
 		stateless = false
 	`)
 
-	config, err := Read(configPath, "")
+	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -265,7 +265,7 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 		port = "1337"
 	`)
 
-	config, err := Read(validConfigPath, "")
+	config, err := Read(s.T().Context(), validConfigPath, "")
 	s.Require().NotNil(config)
 	s.Run("reads and unmarshalls file", func() {
 		s.Nil(err, "Expected nil error for valid file")
@@ -310,7 +310,7 @@ func (s *ConfigSuite) TestGetSortedConfigFiles() {
 	err := os.Mkdir(subDir, 0755)
 	s.Require().NoError(err)
 
-	sorted, err := getSortedConfigFiles(tempDir)
+	sorted, err := getSortedConfigFiles(s.T().Context(), tempDir)
 	s.Require().NoError(err)
 
 	s.Run("returns only .toml files", func() {
@@ -372,7 +372,7 @@ func (s *ConfigSuite) TestDropInConfigPrecedence() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(mainConfigPath, dropInDir)
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -399,7 +399,7 @@ func (s *ConfigSuite) TestDropInConfigMissingDirectory() {
 		port = "8080"
 	`)
 
-	config, err := Read(mainConfigPath, "/non/existent/directory")
+	config, err := Read(s.T().Context(), mainConfigPath, "/non/existent/directory")
 	s.Require().NoError(err, "Should not error for missing drop-in directory")
 	s.Require().NotNil(config)
 
@@ -416,7 +416,7 @@ func (s *ConfigSuite) TestDropInConfigEmptyDirectory() {
 
 	dropInDir := s.T().TempDir()
 
-	config, err := Read(mainConfigPath, dropInDir)
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -448,7 +448,7 @@ func (s *ConfigSuite) TestDropInConfigPartialOverride() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(mainConfigPath, dropInDir)
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -483,7 +483,7 @@ func (s *ConfigSuite) TestDropInConfigWithArrays() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(mainConfigPath, dropInDir)
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -520,7 +520,7 @@ func (s *ConfigSuite) TestDefaultConfDResolution() {
 	`), 0644))
 
 	// Read config WITHOUT specifying drop-in directory - should auto-discover conf.d
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -537,7 +537,7 @@ func (s *ConfigSuite) TestDefaultConfDNotExist() {
 		port = "8080"
 	`)
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err, "Should not error when default conf.d doesn't exist")
 	s.Require().NotNil(config)
 
@@ -567,7 +567,7 @@ func (s *ConfigSuite) TestStandaloneConfigDir() {
 	`), 0644))
 
 	// Read with empty config path (standalone --config-dir)
-	config, err := Read("", tempDir)
+	config, err := Read(s.T().Context(), "", tempDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -589,7 +589,7 @@ func (s *ConfigSuite) TestStandaloneConfigDirPreservesDefaults() {
 		port = "9999"
 	`), 0644))
 
-	config, err := Read("", tempDir)
+	config, err := Read(s.T().Context(), "", tempDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -604,7 +604,7 @@ func (s *ConfigSuite) TestStandaloneConfigDirEmpty() {
 	// Test standalone --config-dir with empty directory
 	tempDir := s.T().TempDir()
 
-	config, err := Read("", tempDir)
+	config, err := Read(s.T().Context(), "", tempDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -616,7 +616,7 @@ func (s *ConfigSuite) TestStandaloneConfigDirEmpty() {
 
 func (s *ConfigSuite) TestStandaloneConfigDirNonExistent() {
 	// Test standalone --config-dir with non-existent directory
-	config, err := Read("", "/non/existent/directory")
+	config, err := Read(s.T().Context(), "", "/non/existent/directory")
 	s.Require().NoError(err, "Should not error for non-existent directory")
 	s.Require().NotNil(config)
 
@@ -653,7 +653,7 @@ func (s *ConfigSuite) TestConfigDirOverridesDefaultConfD() {
 	`), 0644))
 
 	// Read with explicit config-dir (should override default conf.d)
-	config, err := Read(mainConfigPath, customDir)
+	config, err := Read(s.T().Context(), mainConfigPath, customDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -684,7 +684,7 @@ func (s *ConfigSuite) TestInvalidTomlInDropIn() {
 		port = "unclosed string
 	`), 0644))
 
-	config, err := Read(mainConfigPath, dropInDir)
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 
 	s.Run("returns error for invalid TOML in drop-in", func() {
 		s.Require().Error(err, "Expected error for invalid TOML")
@@ -720,7 +720,7 @@ func (s *ConfigSuite) TestAbsoluteDropInConfigDir() {
 	absDropInDir, err := filepath.Abs(dropInDir)
 	s.Require().NoError(err)
 
-	config, err := Read(mainConfigPath, absDropInDir)
+	config, err := Read(s.T().Context(), mainConfigPath, absDropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -741,7 +741,7 @@ func (s *ConfigSuite) TestDropInNotADirectory() {
 	notADir := filepath.Join(tempDir, "not-a-dir")
 	s.Require().NoError(os.WriteFile(notADir, []byte("i am a file"), 0644))
 
-	config, err := Read(mainConfigPath, notADir)
+	config, err := Read(s.T().Context(), mainConfigPath, notADir)
 
 	s.Run("returns error when drop-in path is not a directory", func() {
 		s.Require().Error(err)
@@ -872,7 +872,7 @@ func (s *ConfigSuite) TestDropInWithDeniedResources() {
 		]
 	`), 0644))
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -914,7 +914,7 @@ func (s *ConfigSuite) TestRelativeConfigDirPath() {
 	`), 0644))
 
 	// Use relative path for config-dir
-	config, err := Read(mainConfigPath, "overrides.d")
+	config, err := Read(s.T().Context(), mainConfigPath, "overrides.d")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -926,7 +926,7 @@ func (s *ConfigSuite) TestRelativeConfigDirPath() {
 
 func (s *ConfigSuite) TestBothConfigAndConfigDirEmpty() {
 	// Edge case: Read("", "") should return defaults
-	config, err := Read("", "")
+	config, err := Read(s.T().Context(), "", "")
 	s.Require().NoError(err, "Should not error when both config and config-dir are empty")
 	s.Require().NotNil(config)
 
@@ -966,7 +966,7 @@ func (s *ConfigSuite) TestMultipleDropInFilesInOrder() {
 		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, name), []byte(content), 0644))
 	}
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -1013,7 +1013,7 @@ func (s *ConfigSuite) TestDropInWithNestedConfig() {
 		setting3 = "new-in-drop-in-2"
 	`), 0644))
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -1039,7 +1039,7 @@ func (s *ConfigSuite) TestEmptyConfigFile() {
 		port = "9999"
 	`), 0644))
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -1061,7 +1061,7 @@ func (s *ConfigSuite) TestToolOverridesParsed() {
 		description = "Custom resources get description"
 	`)
 
-	config, err := Read(configPath, "")
+	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -1078,7 +1078,7 @@ func (s *ConfigSuite) TestToolOverridesMatchDefaultsWhenNotSpecified() {
 		log_level = 1
 	`)
 
-	config, err := Read(configPath, "")
+	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -1110,7 +1110,7 @@ func (s *ConfigSuite) TestToolOverridesDropInMerge() {
 		description = "New events description"
 	`), 0644))
 
-	config, err := Read(mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, "")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -1129,7 +1129,7 @@ func (s *ConfigSuite) TestToolOverridesDropInMerge() {
 
 func (s *ConfigSuite) TestConfirmationRulesDefaults() {
 	configPath := s.writeConfig(``)
-	config, err := Read(configPath, "")
+	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Run("default fallback is allow", func() {
 		s.Equal("allow", config.GetConfirmationFallback())
@@ -1161,7 +1161,7 @@ func (s *ConfigSuite) TestConfirmationRulesParsing() {
 		kind = "Secret"
 		message = "Accessing a Secret."
 	`)
-	config, err := Read(configPath, "")
+	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Run("confirmation_fallback parsed correctly", func() {
 		s.Equal("deny", config.GetConfirmationFallback())

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/klog/v2"
 )
@@ -56,7 +57,7 @@ func CheckConfirmation(ctx context.Context, elicitor api.Elicitor, message, fall
 			if fallback == "deny" {
 				return ErrConfirmationDenied
 			}
-			klog.Warningf("Confirmation rules matched but client does not support elicitation, proceeding with fallback \"allow\": %s", message)
+			klogutil.Warn(ctx, "Confirmation rules matched but client does not support elicitation, proceeding with fallback \"allow\"", "message", message)
 			return nil
 		}
 		return err

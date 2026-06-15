@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -19,7 +20,7 @@ import (
 
 // resettable is satisfied by both singleClusterProvider and kubeConfigClusterProvider.
 type resettable interface {
-	reset() error
+	reset(ctx context.Context) error
 }
 
 // ProviderCloseTestSuite verifies that provider reset() calls close HTTP
@@ -61,9 +62,9 @@ func (s *ProviderCloseTestSuite) SetupTest() {
 	}
 	cfg := &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)}
 
-	singleProvider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(cfg)
+	singleProvider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), cfg)
 	s.Require().NoError(err)
-	kubeconfigProvider, err := newKubeConfigClusterProvider(cfg)
+	kubeconfigProvider, err := newKubeConfigClusterProvider(s.T().Context(), cfg)
 	s.Require().NoError(err)
 
 	s.providers = []Provider{singleProvider, kubeconfigProvider}
@@ -131,7 +132,7 @@ func (s *ProviderCloseTestSuite) TestClosesOldConnectionsOnReset() {
 
 			providerConns := s.connsSince(beforeConns)
 
-			err = provider.(resettable).reset()
+			err = provider.(resettable).reset(s.T().Context())
 			s.Require().NoError(err)
 
 			s.Eventually(func() bool {
@@ -175,7 +176,7 @@ func (s *ProviderCloseTestSuite) TestClosesLazyContextConnectionsOnReset() {
 
 			providerConns := s.connsSince(beforeConns)
 
-			err = provider.(resettable).reset()
+			err = provider.(resettable).reset(s.T().Context())
 			s.Require().NoError(err)
 
 			s.Eventually(func() bool {

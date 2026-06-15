@@ -102,7 +102,12 @@ func RequestMiddleware(cfgState *config.StaticConfigState) func(http.Handler) ht
 				}
 				start := time.Now()
 				next.ServeHTTP(lrw, r)
-				klog.V(5).Infof("%s %s %d %v", r.Method, r.URL.Path, lrw.statusCode, time.Since(start))
+				klog.FromContext(r.Context()).V(5).Info("HTTP request completed",
+					"http.request.method", r.Method,
+					"url.path", r.URL.Path,
+					"http.response.status_code", lrw.statusCode,
+					"duration", time.Since(start),
+				)
 				return
 			}
 
@@ -175,7 +180,12 @@ func RequestMiddleware(cfgState *config.StaticConfigState) func(http.Handler) ht
 				span.SetStatus(codes.Ok, "")
 			}
 
-			klog.V(5).Infof("%s %s %d %v", r.Method, r.URL.Path, lrw.statusCode, duration)
+			klog.FromContext(r.Context()).V(5).Info("HTTP request completed",
+				"http.request.method", r.Method,
+				"url.path", r.URL.Path,
+				"http.response.status_code", lrw.statusCode,
+				"duration", duration,
+			)
 		})
 	}
 }

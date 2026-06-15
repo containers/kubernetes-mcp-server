@@ -29,7 +29,7 @@ func (s *ProviderKubeconfigTestSuite) SetupTest() {
 		// Add multiple fake contexts to force multi-cluster behavior
 		kubeconfig.Contexts[fmt.Sprintf("context-%d", i)] = clientcmdapi.NewContext()
 	}
-	provider, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
 	s.Require().NoError(err, "Expected no error creating provider with kubeconfig")
 	s.provider = provider
 }
@@ -100,7 +100,7 @@ func (s *ProviderKubeconfigTestSuite) TestEmptyCurrentContext() {
 	s.Run("with single context auto-selects it as default target", func() {
 		kubeconfig := s.mockServer.Kubeconfig()
 		kubeconfig.CurrentContext = ""
-		provider, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
 		s.Require().NoError(err, "Expected no error creating provider with empty current-context and single context")
 		s.Equal("fake-context", provider.GetDefaultTarget(), "Expected auto-selected fake-context as default target")
 	})
@@ -108,7 +108,7 @@ func (s *ProviderKubeconfigTestSuite) TestEmptyCurrentContext() {
 		kubeconfig := s.mockServer.Kubeconfig()
 		kubeconfig.CurrentContext = ""
 		kubeconfig.Contexts["another-context"] = clientcmdapi.NewContext()
-		_, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		_, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
 		s.Require().Error(err, "Expected error creating provider with empty current-context and multiple contexts")
 		s.ErrorContains(err, "current-context is not set")
 		s.ErrorContains(err, "kubectl config use-context")
@@ -162,7 +162,7 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentLazyManagerInit() {
 			kubeconfig.Contexts[fmt.Sprintf("lazy-context-%d", i)] = ctx
 		}
 
-		provider, err := NewProvider(&config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
 		s.Require().NoError(err, "Expected no error creating provider")
 
 		const goroutines = 20
@@ -198,12 +198,12 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 		}
 
 		kubeconfigPath := test.KubeconfigFile(s.T(), kubeconfig)
-		provider, err := NewProvider(&config.StaticConfig{KubeConfig: kubeconfigPath})
+		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: kubeconfigPath})
 		s.Require().NoError(err, "Expected no error creating provider")
 		s.T().Cleanup(provider.Close)
 
 		callback, waitForCallback := CallbackWaiter()
-		provider.WatchTargets(callback)
+		provider.WatchTargets(s.T().Context(), callback)
 
 		const readers = 10
 		stop := make(chan struct{})

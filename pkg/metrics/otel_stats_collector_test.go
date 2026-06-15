@@ -39,7 +39,7 @@ func (s *OtelStatsCollectorSuite) TestRecordToolCall() {
 		collector.RecordToolCall(ctx, "failing_tool", 100*time.Millisecond, nil)
 		collector.RecordToolCall(ctx, "failing_tool", 200*time.Millisecond, &TestError{msg: "test error"})
 
-		stats := collector.GetStats()
+		stats := collector.GetStats(s.T().Context())
 		s.Equal(int64(2), stats.TotalToolCalls, "Should have 2 total tool calls")
 		s.Equal(int64(1), stats.ToolCallErrors, "Should have 1 error")
 		s.Equal(int64(1), stats.ToolErrorsByName["failing_tool"], "Should have 1 error for failing_tool")
@@ -54,7 +54,7 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 		s.collector.RecordHTTPRequest(ctx, "GET", "/api/v2", 404, 30*time.Millisecond)
 		s.collector.RecordHTTPRequest(ctx, "POST", "/api/v1", 500, 200*time.Millisecond)
 
-		stats := s.collector.GetStats()
+		stats := s.collector.GetStats(s.T().Context())
 		s.Equal(int64(4), stats.TotalHTTPRequests, "Should have 4 total HTTP requests")
 		s.Equal(int64(2), stats.HTTPRequestsByStatus["2xx"], "Should have 2 successful requests")
 		s.Equal(int64(1), stats.HTTPRequestsByStatus["4xx"], "Should have 1 client error")
@@ -70,7 +70,7 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 		collector.RecordHTTPRequest(ctx, "GET", "/api/v2", 200, 60*time.Millisecond)
 		collector.RecordHTTPRequest(ctx, "POST", "/api/v1", 201, 100*time.Millisecond)
 
-		stats := collector.GetStats()
+		stats := collector.GetStats(s.T().Context())
 		s.Equal(int64(2), stats.HTTPRequestsByMethod["GET"], "Should have 2 GET requests")
 		s.Equal(int64(1), stats.HTTPRequestsByMethod["POST"], "Should have 1 POST request")
 	})
@@ -84,7 +84,7 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 		collector.RecordHTTPRequest(ctx, "GET", "/api/v1", 200, 60*time.Millisecond)
 		collector.RecordHTTPRequest(ctx, "POST", "/api/v2", 201, 100*time.Millisecond)
 
-		stats := collector.GetStats()
+		stats := collector.GetStats(s.T().Context())
 		s.Equal(int64(2), stats.HTTPRequestsByPath["/api/v1"], "Should have 2 requests to /api/v1")
 		s.Equal(int64(1), stats.HTTPRequestsByPath["/api/v2"], "Should have 1 request to /api/v2")
 	})
@@ -97,7 +97,7 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 		collector.RecordHTTPRequest(ctx, "GET", "/old-path", 301, 10*time.Millisecond)
 		collector.RecordHTTPRequest(ctx, "GET", "/temp-redirect", 302, 10*time.Millisecond)
 
-		stats := collector.GetStats()
+		stats := collector.GetStats(s.T().Context())
 		s.Equal(int64(2), stats.HTTPRequestsByStatus["3xx"])
 	})
 
@@ -108,14 +108,14 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 
 		collector.RecordHTTPRequest(ctx, "GET", "/info", 100, 10*time.Millisecond)
 
-		stats := collector.GetStats()
+		stats := collector.GetStats(s.T().Context())
 		s.Equal(int64(1), stats.HTTPRequestsByStatus["other"])
 	})
 }
 
 func (s *OtelStatsCollectorSuite) TestGetStats() {
 	s.Run("returns uptime and start time", func() {
-		stats := s.collector.GetStats()
+		stats := s.collector.GetStats(s.T().Context())
 		s.NotNil(stats, "Stats should not be nil")
 		s.True(stats.UptimeSeconds >= 0, "Uptime should be non-negative")
 		s.True(stats.StartTime > 0, "Start time should be set")
@@ -124,7 +124,7 @@ func (s *OtelStatsCollectorSuite) TestGetStats() {
 
 func (s *OtelStatsCollectorSuite) TestToolDurationHistogram() {
 	s.Run("records tool call duration", func() {
-		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+		collector, err := NewOtelStatsCollectorWithConfig(s.T().Context(), CollectorConfig{
 			MeterName:      "test-meter-duration",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.0.0",
@@ -164,7 +164,7 @@ func (s *OtelStatsCollectorSuite) TestToolDurationHistogram() {
 
 func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 	s.Run("records server info with version labels", func() {
-		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+		collector, err := NewOtelStatsCollectorWithConfig(s.T().Context(), CollectorConfig{
 			MeterName:      "test-meter-info",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.2.3",
@@ -211,7 +211,7 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 
 func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
 	s.Run("serves metrics in Prometheus format", func() {
-		collector, err := NewOtelStatsCollectorWithConfig(CollectorConfig{
+		collector, err := NewOtelStatsCollectorWithConfig(s.T().Context(), CollectorConfig{
 			MeterName:      "test-meter-prom-serve",
 			ServiceName:    "test-service",
 			ServiceVersion: "1.0.0",

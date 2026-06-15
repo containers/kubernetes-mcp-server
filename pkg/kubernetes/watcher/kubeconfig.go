@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"sync"
@@ -28,14 +29,14 @@ type Kubeconfig struct {
 
 var _ Watcher = (*Kubeconfig)(nil)
 
-func NewKubeconfig(clientConfig clientcmd.ClientConfig) *Kubeconfig {
+func NewKubeconfig(ctx context.Context, clientConfig clientcmd.ClientConfig) *Kubeconfig {
 	debounceWindow := DefaultKubeconfigDebounceWindow
 
 	// Allow override via environment variable for testing
 	if envDebounce := os.Getenv("KUBECONFIG_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
 		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
 			debounceWindow = time.Duration(ms) * time.Millisecond
-			klog.V(2).Infof("Using custom kubeconfig debounce window: %v", debounceWindow)
+			klog.FromContext(ctx).V(2).Info("Using custom kubeconfig debounce window", "debounce_window", debounceWindow)
 		}
 	}
 
@@ -50,7 +51,9 @@ func NewKubeconfig(clientConfig clientcmd.ClientConfig) *Kubeconfig {
 // Watch starts a background watcher that monitors kubeconfig file changes
 // and triggers a debounced reload when changes are detected.
 // It can only be called once per Kubeconfig instance.
-func (w *Kubeconfig) Watch(onChange func() error) {
+func (w *Kubeconfig) Watch(ctx context.Context, onChange func() error) {
+	logger := klog.FromContext(ctx)
+
 	w.mu.Lock()
 	if w.started {
 		w.mu.Unlock()
@@ -75,26 +78,26 @@ func (w *Kubeconfig) Watch(onChange func() error) {
 		defer close(w.stoppedCh)
 		defer func() { _ = watcher.Close() }()
 
-		klog.V(2).Infof("Started kubeconfig watcher (debounce: %v)", w.debounceWindow)
+		logger.V(2).Info("Started kubeconfig watcher", "debounce_window", w.debounceWindow)
 
 		for {
 			select {
 			case <-w.stopCh:
-				klog.V(2).Info("Stopping kubeconfig watcher")
+				logger.V(2).Info("Stopping kubeconfig watcher")
 				return
 			case _, ok := <-watcher.Events:
 				if !ok {
 					return
 				}
 				w.mu.Lock()
-				klog.V(3).Info("Kubeconfig file change detected, scheduling debounced reload")
+				logger.V(3).Info("Kubeconfig file change detected, scheduling debounced reload")
 				if w.debounceTimer != nil {
 					w.debounceTimer.Stop()
 				}
 				w.debounceTimer = time.AfterFunc(w.debounceWindow, func() {
-					klog.V(2).Info("Kubeconfig debounce window expired, triggering reload")
+					logger.V(2).Info("Kubeconfig debounce window expired, triggering reload")
 					if err := onChange(); err != nil {
-						klog.Errorf("Failed to reload after kubeconfig change: %v", err)
+						logger.Error(err, "Failed to reload after kubeconfig change")
 					}
 				})
 				w.mu.Unlock()

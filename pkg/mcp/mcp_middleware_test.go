@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"regexp"
 	"strconv"
 	"testing"
 
@@ -52,13 +51,10 @@ func (s *McpLoggingSuite) TestLogsToolCall() {
 	s.Require().NoError(err, "call to tool configuration_view failed")
 
 	s.Run("Logs tool name", func() {
-		s.Contains(s.logBuffer.String(), "mcp tool call: configuration_view(")
+		s.Contains(s.logBuffer.String(), `mcp.tool_call.tool_name="configuration_view"`)
 	})
 	s.Run("Logs tool call arguments", func() {
-		expected := `"mcp tool call: configuration_view\((.+)\)"`
-		m := regexp.MustCompile(expected).FindStringSubmatch(s.logBuffer.String())
-		s.Len(m, 2, "Expected log entry to contain arguments")
-		s.Equal("map[minified:false]", m[1], "Expected log arguments to be 'map[minified:false]'")
+		s.Contains(s.logBuffer.String(), `mcp.tool_call.arguments="map[minified:false]"`)
 	})
 }
 
@@ -74,8 +70,7 @@ func (s *McpLoggingSuite) TestLogsToolCallHeaders() {
 	s.Require().NoError(err, "call to tool configuration_view failed")
 
 	s.Run("Logs tool call headers", func() {
-		expectedLog := "mcp tool call headers: A-Loggable-Header: should-be-logged"
-		s.Contains(s.logBuffer.String(), expectedLog, "Expected log to contain loggable header")
+		s.Contains(s.logBuffer.String(), "A-Loggable-Header: should-be-logged", "Expected log to contain loggable header")
 	})
 	sensitiveHeaders := []string{
 		"Authorization:",

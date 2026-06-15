@@ -41,7 +41,7 @@ func (s *ManagerTestSuite) TestNewInClusterManager() {
 			return &rest.Config{}, nil
 		}
 		s.Run("with default StaticConfig (empty kubeconfig)", func() {
-			manager, err := NewInClusterManager(&config.StaticConfig{})
+			manager, err := NewInClusterManager(s.T().Context(), &config.StaticConfig{})
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as in cluster", func() {
@@ -54,7 +54,7 @@ func (s *ManagerTestSuite) TestNewInClusterManager() {
 			})
 		})
 		s.Run("with explicit kubeconfig", func() {
-			manager, err := NewInClusterManager(&config.StaticConfig{
+			manager, err := NewInClusterManager(s.T().Context(), &config.StaticConfig{
 				KubeConfig: s.mockServer.KubeconfigFile(s.T()),
 			})
 			s.Run("returns error", func() {
@@ -68,7 +68,7 @@ func (s *ManagerTestSuite) TestNewInClusterManager() {
 		InClusterConfig = func() (*rest.Config, error) {
 			return nil, rest.ErrNotInCluster
 		}
-		manager, err := NewInClusterManager(&config.StaticConfig{})
+		manager, err := NewInClusterManager(s.T().Context(), &config.StaticConfig{})
 		s.Run("returns error", func() {
 			s.Error(err)
 			s.Nil(manager)
@@ -86,7 +86,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 		s.Run("with valid kubeconfig in env", func() {
 			kubeconfig := s.mockServer.KubeconfigFile(s.T())
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfig))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "")
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
@@ -109,7 +109,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			kubeconfigInEnv := s.mockServer.KubeconfigFile(s.T())
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigInEnv))
 			kubeconfigExplicit := s.mockServer.KubeconfigFile(s.T())
-			manager, err := NewKubeconfigManager(&config.StaticConfig{
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{
 				KubeConfig: kubeconfigExplicit,
 			}, "")
 			s.Require().NoError(err)
@@ -137,7 +137,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			kubeconfig.CurrentContext = "not-the-mock-server"
 			kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "fake-context") // fake-context is the one mock-server serves
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "fake-context") // fake-context is the one mock-server serves
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("behaves as NOT in cluster", func() {
@@ -156,7 +156,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 		s.Run("with valid kubeconfig in env and explicit kubeconfig context (invalid)", func() {
 			kubeconfigInEnv := s.mockServer.KubeconfigFile(s.T())
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigInEnv))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "i-do-not-exist")
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "i-do-not-exist")
 			s.Run("returns error", func() {
 				s.Error(err)
 				s.Nil(manager)
@@ -165,7 +165,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 		})
 		s.Run("with invalid path kubeconfig in env", func() {
 			s.Require().NoError(os.Setenv("KUBECONFIG", "i-dont-exist"))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "")
 			s.Run("returns error", func() {
 				s.Error(err)
 				s.Nil(manager)
@@ -176,7 +176,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			kubeconfigPath := filepath.Join(s.T().TempDir(), "config")
 			s.Require().NoError(os.WriteFile(kubeconfigPath, []byte(""), 0644))
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigPath))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "")
 			s.Run("returns error", func() {
 				s.Error(err)
 				s.Nil(manager)
@@ -188,7 +188,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			kubeconfig.CurrentContext = ""
 			kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "")
 			s.Require().NoError(err)
 			s.Require().NotNil(manager)
 			s.Run("rest config host points to mock server", func() {
@@ -201,7 +201,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			kubeconfig.Contexts["another-context"] = clientcmdapi.NewContext()
 			kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "")
 			s.Run("returns error listing available contexts", func() {
 				s.Error(err)
 				s.Nil(manager)
@@ -213,7 +213,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 			kubeconfig := clientcmdapi.NewConfig()
 			kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
 			s.Require().NoError(os.Setenv("KUBECONFIG", kubeconfigFile))
-			manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+			manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "")
 			s.Run("returns error", func() {
 				s.Error(err)
 				s.Nil(manager)
@@ -225,7 +225,7 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 		InClusterConfig = func() (*rest.Config, error) {
 			return &rest.Config{}, nil
 		}
-		manager, err := NewKubeconfigManager(&config.StaticConfig{}, "")
+		manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{}, "")
 		s.Run("returns error", func() {
 			s.Error(err)
 			s.Nil(manager)
@@ -237,28 +237,28 @@ func (s *ManagerTestSuite) TestNewKubeconfigManager() {
 
 func (s *ManagerTestSuite) TestNewManager() {
 	s.Run("with nil config returns error", func() {
-		manager, err := NewManager(nil, &rest.Config{}, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
+		manager, err := NewManager(s.T().Context(), nil, &rest.Config{}, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
 		s.Require().Error(err)
 		s.EqualError(err, "config cannot be nil", "expected 'config cannot be nil' error")
 		s.Nil(manager, "expected nil manager when config is nil")
 	})
 
 	s.Run("with nil restConfig returns error", func() {
-		manager, err := NewManager(&config.StaticConfig{}, nil, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
+		manager, err := NewManager(s.T().Context(), &config.StaticConfig{}, nil, clientcmd.NewDefaultClientConfig(clientcmdapi.Config{}, nil))
 		s.Require().Error(err)
 		s.EqualError(err, "restConfig cannot be nil", "expected 'restConfig cannot be nil' error")
 		s.Nil(manager, "expected nil manager when restConfig is nil")
 	})
 
 	s.Run("with nil clientCmdConfig returns error", func() {
-		manager, err := NewManager(&config.StaticConfig{}, &rest.Config{}, nil)
+		manager, err := NewManager(s.T().Context(), &config.StaticConfig{}, &rest.Config{}, nil)
 		s.Require().Error(err)
 		s.EqualError(err, "clientCmdConfig cannot be nil", "expected 'clientCmdConfig cannot be nil' error")
 		s.Nil(manager, "expected nil manager when clientCmdConfig is nil")
 	})
 
 	s.Run("with all nil parameters returns config error first", func() {
-		manager, err := NewManager(nil, nil, nil)
+		manager, err := NewManager(s.T().Context(), nil, nil, nil)
 		s.Require().Error(err)
 		s.EqualError(err, "config cannot be nil", "expected 'config cannot be nil' error as first check")
 		s.Nil(manager, "expected nil manager when all parameters are nil")

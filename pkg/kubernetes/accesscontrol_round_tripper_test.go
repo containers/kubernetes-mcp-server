@@ -295,7 +295,7 @@ func (s *AccessControlRoundTripperTestSuite) TestValidationDisabledBypassesValid
 
 	s.Run("validation disabled allows request with unknown fields", func() {
 		delegateCalled = false
-		rt := NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
+		rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
 			Delegate:           mockDelegate,
 			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
 			ValidationEnabled:  false,
@@ -311,7 +311,7 @@ func (s *AccessControlRoundTripperTestSuite) TestValidationDisabledBypassesValid
 
 	s.Run("validation enabled rejects request with unknown fields", func() {
 		delegateCalled = false
-		rt := NewAccessControlRoundTripper(AccessControlRoundTripperConfig{
+		rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
 			Delegate:           mockDelegate,
 			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
 			ValidationEnabled:  true,

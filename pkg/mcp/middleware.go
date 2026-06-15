@@ -58,33 +58,42 @@ var redactedHeaders = map[string]bool{
 func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		rawParams := req.GetParams()
-		// Gate the JSON marshal explicitly: Infof's args are evaluated
+		logger := klog.FromContext(ctx)
+		// Gate the JSON marshal explicitly: Info's args are evaluated
 		// before the V(6) check, so an unguarded jsonCompact(rawParams)
 		// would marshal every request even at the default log_level=0.
-		if klog.V(6).Enabled() {
-			klog.V(6).Infof("mcp protocol: client→server %s params=%s", method, mcplog.Sanitize(jsonCompact(rawParams)))
+		if logger.V(6).Enabled() {
+			logger.V(6).Info("mcp protocol", "mcp.client.method", method, "mcp.params", mcplog.Sanitize(jsonCompact(rawParams)))
 		}
-		if params, ok := rawParams.(*mcp.CallToolParamsRaw); ok {
+		if params, ok := rawParams.(*mcp.CallToolParamsRaw); ok && logger.V(5).Enabled() {
 			// Same gating rationale as the V(6) block above: the per-tool
 			// conversion and the per-header buffer build run before the
 			// V() check unless we short-circuit explicitly.
-			if klog.V(5).Enabled() {
-				if toolCallRequest, err := GoSdkToolCallParamsToToolCallRequest(params); err == nil {
-					klog.V(5).Infof("mcp tool call: %s(%v)", toolCallRequest.Name, mcplog.Sanitize(fmt.Sprintf("%v", toolCallRequest.GetArguments())))
-				}
+			var attributes []any
+
+			if toolCallRequest, err := GoSdkToolCallParamsToToolCallRequest(params); err == nil {
+				attributes = append(attributes,
+					"mcp.tool_call.tool_name", toolCallRequest.Name,
+					"mcp.tool_call.arguments", mcplog.Sanitize(fmt.Sprintf("%v", toolCallRequest.GetArguments())),
+				)
 			}
-			if klog.V(7).Enabled() && req.GetExtra() != nil && req.GetExtra().Header != nil {
+
+			if logger.V(7).Enabled() && req.GetExtra() != nil && req.GetExtra().Header != nil {
 				buffer := bytes.NewBuffer(make([]byte, 0))
 				if err := req.GetExtra().Header.WriteSubset(buffer, redactedHeaders); err == nil {
-					klog.V(7).Infof("mcp tool call headers: %s", mcplog.Sanitize(buffer.String()))
+					attributes = append(attributes,
+						"mcp.tool_call.headers", mcplog.Sanitize(buffer.String()),
+					)
 				}
 			}
+
+			logger.V(5).Info("mcp tool call", attributes...)
 		}
 		result, err := next(ctx, method, req)
 		if err != nil {
-			klog.V(6).Infof("mcp protocol: server→client %s error=%s", method, mcplog.Sanitize(fmt.Sprintf("%v", err)))
-		} else if klog.V(6).Enabled() {
-			klog.V(6).Infof("mcp protocol: server→client %s result=%s", method, mcplog.Sanitize(jsonCompact(result)))
+			logger.V(6).Info("mcp protocol", "mcp.client.method", method, "exception.message", mcplog.Sanitize(fmt.Sprintf("%v", err)))
+		} else if logger.V(6).Enabled() {
+			logger.V(6).Info("mcp protocol", "mcp.client.method", method, "mcp.call.result", mcplog.Sanitize(jsonCompact(result)))
 		}
 		return result, err
 	}
@@ -100,15 +109,16 @@ func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 // Sanitization is applied identically to the receiving path.
 func protocolSendingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-		if klog.V(6).Enabled() {
-			klog.V(6).Infof("mcp protocol: server→client %s params=%s", method, mcplog.Sanitize(jsonCompact(req.GetParams())))
+		logger := klog.FromContext(ctx)
+		if logger.V(6).Enabled() {
+			logger.V(6).Info("mcp protocol", "mcp.server.method", method, "mcp.params", mcplog.Sanitize(jsonCompact(req.GetParams())))
 		}
 		result, err := next(ctx, method, req)
 		if err != nil {
-			klog.V(6).Infof("mcp protocol: client→server %s error=%s", method, mcplog.Sanitize(fmt.Sprintf("%v", err)))
-		} else if result != nil && klog.V(6).Enabled() {
+			logger.V(6).Info("mcp protocol", "mcp.server.method", method, "exception.message", mcplog.Sanitize(fmt.Sprintf("%v", err)))
+		} else if result != nil && logger.V(6).Enabled() {
 			// Notifications return nil result; only requests have one.
-			klog.V(6).Infof("mcp protocol: client→server %s result=%s", method, mcplog.Sanitize(jsonCompact(result)))
+			logger.V(6).Info("mcp protocol", "mcp.server.method", method, "mcp.call.result", mcplog.Sanitize(jsonCompact(result)))
 		}
 		return result, err
 	}
@@ -189,6 +199,8 @@ func traceContextPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler
 			return next(ctx, method, req)
 		}
 
+		logger := klog.FromContext(ctx)
+
 		// Extract trace context from request params metadata
 		if params := req.GetParams(); params != nil {
 			if callParams, ok := params.(interface{ GetMeta() map[string]any }); ok {
@@ -198,7 +210,7 @@ func traceContextPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
-							klog.V(7).Infof("GetMeta() panicked (metadata not set): %v", r)
+							logger.V(7).Info("GetMeta() panicked (metadata not set)", "recover.value", r)
 						}
 					}()
 					meta = callParams.GetMeta()
@@ -213,7 +225,10 @@ func traceContextPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler
 					scAfter := trace.SpanContextFromContext(ctx)
 
 					if scAfter.IsValid() && !scAfter.Equal(scBefore) {
-						klog.V(6).Infof("Extracted trace context from MCP request: trace_id=%s span_id=%s", scAfter.TraceID(), scAfter.SpanID())
+						logger.V(6).Info("Extracted trace context from MCP request",
+							"trace_id", scAfter.TraceID(),
+							"span_id", scAfter.SpanID(),
+						)
 					}
 				}
 			}

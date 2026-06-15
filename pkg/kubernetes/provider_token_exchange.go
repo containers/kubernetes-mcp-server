@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -42,7 +43,7 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 	if snap == nil {
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
-	stsConfig := p.getOrBuildStsConfig(snap)
+	stsConfig := p.getOrBuildStsConfig(ctx, snap)
 	ctx, err := ExchangeTokenInContext(ctx, p.baseConfig, snap.OIDCProvider, snap.HTTPClient, p.provider, target, stsConfig)
 	if err != nil {
 		return nil, err
@@ -52,7 +53,9 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 
 // getOrBuildStsConfig returns a cached STS config, rebuilding it when the
 // OIDC provider's token URL changes (e.g., after SIGHUP).
-func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tokenexchange.TargetTokenExchangeConfig {
+func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap *oauth.Snapshot) *tokenexchange.TargetTokenExchangeConfig {
+	logger := klog.FromContext(ctx)
+
 	strategy := p.baseConfig.GetStsStrategy()
 	if strategy == "" {
 		return nil
@@ -65,7 +68,9 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 		}
 	}
 	if tokenURL == "" {
-		klog.Warningf("token exchange strategy %q configured but OIDC provider returned empty token URL", strategy)
+		klogutil.Warn(ctx, "token exchange strategy configured but OIDC provider returned empty token URL",
+			"token_exchange.strategy", strategy,
+		)
 		return nil
 	}
 
@@ -95,7 +100,10 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(snap *oauth.Snapshot) *tok
 		CAFile:             p.baseConfig.GetCertificateAuthority(),
 	}
 	if err := cfg.Validate(); err != nil {
-		klog.Warningf("STS config validation failed, token exchange will be attempted per-request but will likely fail with the same error: %v", err)
+		logger.Error(
+			err,
+			"STS config validation failed, token exchange will be attempted per-request but will likely fail with the same error",
+		)
 		return nil
 	}
 
@@ -124,14 +132,14 @@ func (p *tokenExchangingProvider) GetTargetParameterName() string {
 	return p.provider.GetTargetParameterName()
 }
 
-func (p *tokenExchangingProvider) WatchTargets(reload McpReload) {
-	p.provider.WatchTargets(reload)
+func (p *tokenExchangingProvider) WatchTargets(ctx context.Context, reload McpReload) {
+	p.provider.WatchTargets(ctx, reload)
 }
 
 func (p *tokenExchangingProvider) Close() {
 	p.provider.Close()
 }
 
-func (p *tokenExchangingProvider) HasGVKs(gvks []schema.GroupVersionKind) bool {
-	return p.provider.HasGVKs(gvks)
+func (p *tokenExchangingProvider) HasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
+	return p.provider.HasGVKs(ctx, gvks)
 }

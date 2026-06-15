@@ -53,7 +53,7 @@ func (s *AuthorizationSuite) SetupTest() {
 	flags := flag.NewFlagSet("test", flag.ContinueOnError)
 	klog.InitFlags(flags)
 	_ = flags.Set("v", "5")
-	klog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(5), textlogger.Output(&s.logBuffer))))
+	s.Logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(5), textlogger.Output(&s.logBuffer)))
 
 	// Default Auth settings (overridden in tests as needed)
 	s.OidcProvider = nil
@@ -179,7 +179,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalid() {
 		})
 		s.Run("logs error", func() {
 			s.Contains(s.logBuffer.String(), "Authentication failed - JWT validation error", "Expected log entry for JWT validation error")
-			s.Contains(s.logBuffer.String(), "error: failed to parse JWT token: illegal base64 data", "Expected log entry for JWT validation error details")
+			s.Contains(s.logBuffer.String(), "failed to parse JWT token: illegal base64 data", "Expected log entry for JWT validation error details")
 		})
 	})
 }

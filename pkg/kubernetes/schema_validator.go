@@ -42,14 +42,16 @@ func (v *SchemaValidator) Validate(ctx context.Context, req *api.HTTPValidationR
 		return nil
 	}
 
+	logger := klog.FromContext(ctx)
+
 	// Only validate for create/update operations (exclude patch as partial bodies cause false positives)
 	if req.Verb != "create" && req.Verb != "update" {
 		return nil
 	}
 
-	validator, err := v.getValidator()
+	validator, err := v.getValidator(ctx)
 	if err != nil {
-		klog.V(4).Infof("Failed to get schema validator: %v", err)
+		logger.V(4).Info("Failed to get schema validator", "exception.message", err.Error())
 		return nil
 	}
 
@@ -63,7 +65,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, req *api.HTTPValidationR
 		// In that case, skip validation rather than blocking the request
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "yaml:") || strings.Contains(errMsg, "json:") {
-			klog.V(4).Infof("Schema validation skipped due to parsing error: %v", err)
+			logger.V(4).Info("Schema validation skipped due to parsing error", "exception.message", err.Error())
 			return nil
 		}
 		return convertKubectlValidationError(err)
@@ -81,7 +83,7 @@ func (a *openAPIResourcesAdapter) OpenAPISchema() (kubectlopenapi.Resources, err
 	return a.parser.Parse()
 }
 
-func (v *SchemaValidator) getValidator() (kubectlvalidation.Schema, error) {
+func (v *SchemaValidator) getValidator(ctx context.Context) (kubectlvalidation.Schema, error) {
 	v.validatorMu.Lock()
 	defer v.validatorMu.Unlock()
 
@@ -96,7 +98,7 @@ func (v *SchemaValidator) getValidator() (kubectlvalidation.Schema, error) {
 
 	openAPIClient, ok := discoveryClient.(discovery.OpenAPISchemaInterface)
 	if !ok {
-		klog.V(4).Infof("Discovery client does not support OpenAPI schema")
+		klog.FromContext(ctx).V(4).Info("Discovery client does not support OpenAPI schema")
 		return nil, nil
 	}
 

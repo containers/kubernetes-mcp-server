@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"context"
 	"os"
 	"sort"
 	"strconv"
@@ -40,21 +41,22 @@ type ClusterState struct {
 
 var _ Watcher = (*ClusterState)(nil)
 
-func NewClusterState(discoveryClient discovery.CachedDiscoveryInterface) *ClusterState {
+func NewClusterState(ctx context.Context, discoveryClient discovery.CachedDiscoveryInterface) *ClusterState {
 	pollInterval := DefaultClusterStatePollInterval
 	debounceWindow := DefaultClusterStateDebounceWindow
+	logger := klog.FromContext(ctx)
 
 	// Allow override via environment variable for testing
 	if envInterval := os.Getenv("CLUSTER_STATE_POLL_INTERVAL_MS"); envInterval != "" {
 		if ms, err := strconv.Atoi(envInterval); err == nil && ms > 0 {
 			pollInterval = time.Duration(ms) * time.Millisecond
-			klog.V(2).Infof("Using custom cluster state poll interval: %v", pollInterval)
+			logger.V(2).Info("Using custom cluster state poll interval", "poll_interval", pollInterval)
 		}
 	}
 	if envDebounce := os.Getenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
 		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
 			debounceWindow = time.Duration(ms) * time.Millisecond
-			klog.V(2).Infof("Using custom cluster state debounce window: %v", debounceWindow)
+			logger.V(2).Info("Using custom cluster state debounce window", "debounce_window", debounceWindow)
 		}
 	}
 
@@ -70,7 +72,9 @@ func NewClusterState(discoveryClient discovery.CachedDiscoveryInterface) *Cluste
 // Watch starts a background watcher that periodically polls for cluster state changes
 // and triggers a debounced reload when changes are detected.
 // It can only be called once per ClusterState instance.
-func (w *ClusterState) Watch(onChange func() error) {
+func (w *ClusterState) Watch(ctx context.Context, onChange func() error) {
+	logger := klog.FromContext(ctx)
+
 	w.mu.Lock()
 	if w.started {
 		w.mu.Unlock()
@@ -86,12 +90,15 @@ func (w *ClusterState) Watch(onChange func() error) {
 		ticker := time.NewTicker(w.pollInterval)
 		defer ticker.Stop()
 
-		klog.V(2).Infof("Started cluster state watcher (poll interval: %v, debounce: %v)", w.pollInterval, w.debounceWindow)
+		logger.V(2).Info("Started cluster state watcher",
+			"poll_interval", w.pollInterval,
+			"debounce_window", w.debounceWindow,
+		)
 
 		for {
 			select {
 			case <-w.stopCh:
-				klog.V(2).Info("Stopping cluster state watcher")
+				logger.V(2).Info("Stopping cluster state watcher")
 				return
 			case <-ticker.C:
 				// Invalidate discovery cache to get fresh API groups
@@ -99,7 +106,10 @@ func (w *ClusterState) Watch(onChange func() error) {
 
 				w.mu.Lock()
 				current := w.captureState()
-				klog.V(3).Infof("Polled cluster state: %d API groups, OpenShift=%v", len(current.apiGroups), current.isOpenShift)
+				logger.V(3).Info("Polled cluster state",
+					"cluster.api_groups.count", len(current.apiGroups),
+					"cluster.is_openshift", current.isOpenShift,
+				)
 
 				changed := current.isOpenShift != w.lastKnownState.isOpenShift ||
 					len(current.apiGroups) != len(w.lastKnownState.apiGroups)
@@ -114,19 +124,19 @@ func (w *ClusterState) Watch(onChange func() error) {
 				}
 
 				if changed {
-					klog.V(2).Info("Cluster state changed, scheduling debounced reload")
+					logger.V(2).Info("Cluster state changed, scheduling debounced reload")
 					if w.debounceTimer != nil {
 						w.debounceTimer.Stop()
 					}
 					w.debounceTimer = time.AfterFunc(w.debounceWindow, func() {
-						klog.V(2).Info("Debounce window expired, triggering reload")
+						logger.V(2).Info("Debounce window expired, triggering reload")
 						if err := onChange(); err != nil {
-							klog.Errorf("Failed to reload: %v", err)
+							logger.Error(err, "Failed to reload")
 						} else {
 							w.mu.Lock()
 							w.lastKnownState = w.captureState()
 							w.mu.Unlock()
-							klog.V(2).Info("Reload completed")
+							logger.V(2).Info("Reload completed")
 						}
 					})
 				}

@@ -303,7 +303,7 @@ func (s *ResourceSuite) TestReloadRemovesResources() {
 		newConfig.Toolsets = []string{"resource-test-empty"}
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 
-		err := s.mcpServer.ReloadConfiguration(newConfig)
+		err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
 		s.Require().NoError(err)
 
 		result, err := s.ListResources()
@@ -346,7 +346,7 @@ func (s *ResourceSuite) TestReloadNotifiesResourceListChanged() {
 	newConfig.Toolsets = []string{"resource-test-empty"}
 	newConfig.KubeConfig = s.Cfg.KubeConfig
 
-	err := s.mcpServer.ReloadConfiguration(newConfig)
+	err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
 	s.Require().NoError(err)
 
 	notification := capture.RequireNotification(s.T(), 2*time.Second, "notifications/resources/list_changed")
@@ -486,7 +486,7 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 
 		s.NotPanics(func() {
-			err := s.mcpServer.ReloadConfiguration(newConfig)
+			err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
 			s.Require().Error(err)
 			s.Contains(err.Error(), "{{invalid")
 		})
@@ -514,7 +514,7 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 		recoveryConfig.Toolsets = []string{"resource-test-good"}
 		recoveryConfig.KubeConfig = s.Cfg.KubeConfig
 
-		s.Require().NoError(s.mcpServer.ReloadConfiguration(recoveryConfig))
+		s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), recoveryConfig))
 
 		result, err := s.ReadResource("test://example/good")
 		s.Require().NoError(err)
@@ -569,7 +569,7 @@ func (s *ResourceSuite) TestInvalidResourceURIReturnsError() {
 		newConfig.KubeConfig = s.Cfg.KubeConfig
 
 		s.NotPanics(func() {
-			err := s.mcpServer.ReloadConfiguration(newConfig)
+			err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
 			s.Require().Error(err)
 			s.Contains(err.Error(), "%zz")
 		})

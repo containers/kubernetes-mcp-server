@@ -53,7 +53,7 @@ type TokenExchanger interface {
 }
 
 // injectClientAuth adds client credentials to the request based on auth style
-func injectClientAuth(cfg *TargetTokenExchangeConfig, data url.Values, header http.Header) error {
+func injectClientAuth(ctx context.Context, cfg *TargetTokenExchangeConfig, data url.Values, header http.Header) error {
 	if cfg.ClientID == "" {
 		return nil
 	}
@@ -63,7 +63,7 @@ func injectClientAuth(cfg *TargetTokenExchangeConfig, data url.Values, header ht
 		credentials := cfg.ClientID + ":" + cfg.ClientSecret
 		header.Set(HeaderAuthorization, "Basic "+base64.StdEncoding.EncodeToString([]byte(credentials)))
 	case AuthStyleAssertion:
-		assertion, err := cfg.GetOrBuildAssertion()
+		assertion, err := cfg.GetOrBuildAssertion(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to build client assertion: %w", err)
 		}
@@ -79,7 +79,10 @@ func injectClientAuth(cfg *TargetTokenExchangeConfig, data url.Values, header ht
 		if token == "" {
 			return fmt.Errorf("federated token file %q is empty: the external identity provider may not have written a token yet", cfg.FederatedTokenFile)
 		}
-		klog.V(4).Infof("Read federated token from file %q (%d bytes)", cfg.FederatedTokenFile, len(token))
+		klog.FromContext(ctx).V(4).Info("Read federated token from file",
+			"token_exchange.federated_token_file", cfg.FederatedTokenFile,
+			"token_exchange.token.size", len(token),
+		)
 		data.Set(FormKeyClientID, cfg.ClientID)
 		data.Set(FormKeyClientAssertionType, ClientAssertionType)
 		data.Set(FormKeyClientAssertion, token)

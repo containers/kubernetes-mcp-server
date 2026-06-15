@@ -51,9 +51,9 @@ func (s *ProviderWatchTargetsTestSuite) TearDownTest() {
 
 func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 	testCases := []func() (Provider, error){
-		func() (Provider, error) { return newKubeConfigClusterProvider(s.staticConfig) },
+		func() (Provider, error) { return newKubeConfigClusterProvider(s.T().Context(), s.staticConfig) },
 		func() (Provider, error) {
-			return newSingleClusterProvider(api.ClusterProviderDisabled)(s.staticConfig)
+			return newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
 		},
 	}
 	for _, tc := range testCases {
@@ -62,7 +62,7 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 
 		s.Run("With provider "+reflect.TypeOf(provider).String(), func() {
 			callback, waitForCallback := CallbackWaiter()
-			provider.WatchTargets(callback)
+			provider.WatchTargets(s.T().Context(), callback)
 			s.Run("Reloads provider on cluster changes", func() {
 				s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "alex.example.com/v1"})
 
@@ -75,11 +75,11 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 }
 
 func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
-	provider, err := newKubeConfigClusterProvider(s.staticConfig)
+	provider, err := newKubeConfigClusterProvider(s.T().Context(), s.staticConfig)
 	s.Require().NoError(err, "Expected no error from provider creation")
 
 	callback, waitForCallback := CallbackWaiter()
-	provider.WatchTargets(callback)
+	provider.WatchTargets(s.T().Context(), callback)
 
 	s.Run("KubeConfigClusterProvider updates targets (reset) on kubeconfig change", func() {
 		s.kubeconfig.CurrentContext = "context-1"
@@ -118,11 +118,11 @@ func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
 }
 
 func (s *ProviderWatchTargetsTestSuite) TestSingleClusterProvider() {
-	provider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(s.staticConfig)
+	provider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
 	s.Require().NoError(err, "Expected no error from provider creation")
 
 	callback, waitForCallback := CallbackWaiter()
-	provider.WatchTargets(callback)
+	provider.WatchTargets(s.T().Context(), callback)
 
 	s.Run("SingleClusterProvider reloads/resets on kubeconfig change", func() {
 		s.kubeconfig.CurrentContext = "context-1"

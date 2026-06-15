@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
-	"k8s.io/klog/v2"
 )
 
 // ExchangeTokenInContext exchanges the OAuth token in the context for a token
@@ -44,7 +44,9 @@ func ExchangeTokenInContext(
 
 	exchanger, ok := tokenexchange.GetTokenExchanger(tep.GetTokenExchangeStrategy())
 	if !ok {
-		klog.Warningf("token exchange strategy %q not found in registry", tep.GetTokenExchangeStrategy())
+		klogutil.Warn(ctx, "token exchange strategy not found in registry, falling back to sts exchange",
+			"token_exchange.strategy", tep.GetTokenExchangeStrategy(),
+		)
 		return stsExchangeTokenInContext(ctx, baseConfig, oidcProvider, httpClient, subjectToken, stsConfig)
 	}
 

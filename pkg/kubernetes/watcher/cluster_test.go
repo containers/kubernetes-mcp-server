@@ -57,7 +57,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 
 		s.Run("initializes with default poll interval at 30s", func() {
 			s.Equal(30*time.Second, watcher.pollInterval)
@@ -80,7 +80,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "500")
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 
 		s.Run("uses custom poll interval", func() {
 			s.Equal(500*time.Millisecond, watcher.pollInterval)
@@ -95,7 +95,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "250")
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 
 		s.Run("uses default poll interval", func() {
 			s.Equal(30*time.Second, watcher.pollInterval)
@@ -111,7 +111,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 
 		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "100")
 		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "50")
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 
 		s.Run("uses custom poll interval", func() {
 			s.Equal(100*time.Millisecond, watcher.pollInterval)
@@ -127,19 +127,19 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 
 		s.Run("ignores non-numeric value", func() {
 			s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "invalid")
-			watcher := NewClusterState(discoveryClient)
+			watcher := NewClusterState(s.T().Context(), discoveryClient)
 			s.Equal(30*time.Second, watcher.pollInterval)
 		})
 
 		s.Run("ignores negative value", func() {
 			s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "-100")
-			watcher := NewClusterState(discoveryClient)
+			watcher := NewClusterState(s.T().Context(), discoveryClient)
 			s.Equal(30*time.Second, watcher.pollInterval)
 		})
 
 		s.Run("ignores zero value", func() {
 			s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "0")
-			watcher := NewClusterState(discoveryClient)
+			watcher := NewClusterState(s.T().Context(), discoveryClient)
 			s.Equal(30*time.Second, watcher.pollInterval)
 		})
 	})
@@ -150,19 +150,19 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 
 		s.Run("ignores non-numeric value", func() {
 			s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "invalid")
-			watcher := NewClusterState(discoveryClient)
+			watcher := NewClusterState(s.T().Context(), discoveryClient)
 			s.Equal(5*time.Second, watcher.debounceWindow)
 		})
 
 		s.Run("ignores negative value", func() {
 			s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "-50")
-			watcher := NewClusterState(discoveryClient)
+			watcher := NewClusterState(s.T().Context(), discoveryClient)
 			s.Equal(5*time.Second, watcher.debounceWindow)
 		})
 
 		s.Run("ignores zero value", func() {
 			s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "0")
-			watcher := NewClusterState(discoveryClient)
+			watcher := NewClusterState(s.T().Context(), discoveryClient)
 			s.Equal(5*time.Second, watcher.debounceWindow)
 		})
 	})
@@ -172,7 +172,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 	s.Run("captures initial cluster state", func() {
 		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 
 		var callCount atomic.Int32
 		onChange := func() error {
@@ -181,7 +181,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}
 
 		go func() {
-			watcher.Watch(onChange)
+			watcher.Watch(s.T().Context(), onChange)
 		}()
 		s.T().Cleanup(watcher.Close)
 
@@ -206,7 +206,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
 		// Create watcher with very short intervals for testing
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 		watcher.pollInterval = 50 * time.Millisecond
 		watcher.debounceWindow = 20 * time.Millisecond
 
@@ -217,7 +217,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}
 
 		go func() {
-			watcher.Watch(onChange)
+			watcher.Watch(s.T().Context(), onChange)
 		}()
 		s.T().Cleanup(watcher.Close)
 
@@ -239,7 +239,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		s.mockServer.Handle(test.NewInOpenShiftHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 
 		var callCount atomic.Int32
 		onChange := func() error {
@@ -248,7 +248,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}
 
 		go func() {
-			watcher.Watch(onChange)
+			watcher.Watch(s.T().Context(), onChange)
 		}()
 		s.T().Cleanup(watcher.Close)
 
@@ -269,7 +269,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 		watcher.pollInterval = 50 * time.Millisecond
 		watcher.debounceWindow = 20 * time.Millisecond
 
@@ -281,7 +281,7 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}
 
 		go func() {
-			watcher.Watch(onChange)
+			watcher.Watch(s.T().Context(), onChange)
 		}()
 		s.T().Cleanup(watcher.Close)
 
@@ -305,7 +305,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 		watcher.pollInterval = 50 * time.Millisecond
 		watcher.debounceWindow = 10 * time.Millisecond
 
@@ -316,7 +316,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		}
 
 		go func() {
-			watcher.Watch(onChange)
+			watcher.Watch(s.T().Context(), onChange)
 		}()
 
 		// Wait for the watcher to start
@@ -340,9 +340,9 @@ func (s *ClusterStateTestSuite) TestClose() {
 		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 		onChange := func() error { return nil }
-		watcher.Watch(onChange)
+		watcher.Watch(s.T().Context(), onChange)
 
 		s.NotPanics(func() {
 			watcher.Close()
@@ -356,7 +356,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 		watcher.pollInterval = 30 * time.Millisecond
 		watcher.debounceWindow = 500 * time.Millisecond // Long debounce window
 
@@ -367,7 +367,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		}
 
 		go func() {
-			watcher.Watch(onChange)
+			watcher.Watch(s.T().Context(), onChange)
 		}()
 
 		// Wait for the watcher to start
@@ -405,7 +405,7 @@ func (s *ClusterStateTestSuite) TestClose() {
 		s.mockServer.Handle(test.NewDiscoveryClientHandler())
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 		// Don't call Watch() - the watcher goroutine is never started
 
 		// Close the stoppedCh channel since the goroutine never started
@@ -424,7 +424,7 @@ func (s *ClusterStateTestSuite) TestCaptureState() {
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
 
-		watcher := NewClusterState(discoveryClient)
+		watcher := NewClusterState(s.T().Context(), discoveryClient)
 		state := watcher.captureState()
 
 		s.Run("sorts groups alphabetically", func() {
