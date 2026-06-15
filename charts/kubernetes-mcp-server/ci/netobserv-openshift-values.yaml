@@ -15,7 +15,7 @@ config:
 
 rbac:
   extraClusterRoleBindings:
-    - name: monitoring-view
+    - name: view
       roleRef:
-        name: cluster-monitoring-view
+        name: view
         external: true

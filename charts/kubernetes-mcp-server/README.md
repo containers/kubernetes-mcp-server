@@ -62,7 +62,7 @@ helm upgrade -i kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes
   --set ingress.host=kubernetes-mcp-server.apps.<cluster-domain>
 ```
 
-See [examples/README.md](examples/README.md) and [docs/NETOBSERV.md](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for RBAC (`view`, `cluster-monitoring-view`) and configuration options.
+See [examples/README.md](examples/README.md) and [docs/NETOBSERV.md](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for RBAC (`view`) and configuration options.
 
 ### RBAC Configuration
 

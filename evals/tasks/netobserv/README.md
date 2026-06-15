@@ -70,9 +70,7 @@ LLM judge strings in tasks assume the **mock** responses (`netobserv-eval`, `eva
 
 | Task | Tool exercised | Mock expectation |
 |------|----------------|------------------|
-| list-namespaces | `netobserv_list_namespaces` | includes `netobserv-eval` |
 | list-flows | `netobserv_list_flows` | includes `eval-flow-1` |
-| list-names | `netobserv_list_names` | includes `eval-mock-pod` |
 | get-flow-metrics | `netobserv_get_flow_metrics` | status `success` |
 | export-flows | `netobserv_export_flows` | CSV header `TimeFlowStartMs` |
 

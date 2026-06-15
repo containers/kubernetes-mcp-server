@@ -2,7 +2,7 @@ package defaults
 
 const (
 	DefaultToolsetName        = "netobserv"
-	DefaultToolsetDescription = "Network observability tools backed by the NetObserv console plugin API (flows, metrics, alerts, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details."
+	DefaultToolsetDescription = "Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details."
 )
 
 func ToolsetName() string {

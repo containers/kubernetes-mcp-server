@@ -23,13 +23,9 @@ func (t *Toolset) GetDescription() string {
 
 func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 	return slices.Concat(
-		netobservTools.InitListNamespaces(),
-		netobservTools.InitListNames(),
 		netobservTools.InitListFlows(),
 		netobservTools.InitGetFlowMetrics(),
 		netobservTools.InitExportFlows(),
-		netobservTools.InitListAlerts(),
-		netobservTools.InitListAlertSilences(),
 	)
 }
 

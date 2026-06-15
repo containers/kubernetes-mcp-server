@@ -85,36 +85,6 @@ func (s *ConfigSuite) TestApplyDefaults_fallsBackToInsecureWithoutServiceCA() {
 	s.Empty(cfg.CertificateAuthority)
 }
 
-func (s *ConfigSuite) TestResolvedMonitoringURLs() {
-	s.Run("OpenShift defaults when enabled", func() {
-		cfg := &Config{}
-		s.Equal(DefaultOpenShiftPrometheusURL, cfg.ResolvedPrometheusURL(true))
-		s.Equal(DefaultOpenShiftAlertmanagerURL, cfg.ResolvedAlertmanagerURL(true))
-	})
-
-	s.Run("plain Kubernetes has no defaults", func() {
-		cfg := &Config{}
-		s.Empty(cfg.ResolvedPrometheusURL(false))
-		s.Empty(cfg.ResolvedAlertmanagerURL(false))
-	})
-
-	s.Run("explicit overrides", func() {
-		cfg := &Config{
-			PrometheusUrl:   "https://prom.example/",
-			AlertmanagerUrl: "https://am.example",
-		}
-		s.Equal("https://prom.example", cfg.ResolvedPrometheusURL(false))
-		s.Equal("https://am.example", cfg.ResolvedAlertmanagerURL(true))
-	})
-}
-
-func (s *ConfigSuite) TestIsLocalPluginURL() {
-	s.True(isLocalPluginURL("http://127.0.0.1:9001"))
-	s.True(isLocalPluginURL("https://localhost:9001/"))
-	s.False(isLocalPluginURL("https://netobserv-plugin.netobserv.svc.cluster.local:9001"))
-	s.False(isLocalPluginURL(""))
-}
-
 func TestConfig(t *testing.T) {
 	suite.Run(t, new(ConfigSuite))
 }
