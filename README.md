@@ -594,18 +594,18 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>kiali</summary>
 
-- **list-applications** - List applications in the mesh namespaces
+- **mesh-list-applications** - List applications in the mesh namespaces
   - `namespace` (`string`) - Optional namespace to filter applications (default: all namespaces)
 
 - **list-istio-config** - List Istio configuration resources in the mesh namespaces
   - `namespace` (`string`) - Optional namespace to filter Istio configuration (default: all namespaces)
 
-- **list-namespaces** - List all namespaces with their sidecar injection status and Istio labels
+- **mesh-list-namespaces** - List all namespaces with their sidecar injection status and Istio labels
 
-- **list-services** - List services in the mesh namespaces
+- **mesh-list-services** - List services in the mesh namespaces
   - `namespace` (`string`) - Optional namespace to filter services (default: all namespaces)
 
-- **list-workloads** - List workloads in the mesh namespaces
+- **mesh-list-workloads** - List workloads in the mesh namespaces
   - `namespace` (`string`) - Optional namespace to filter workloads (default: all namespaces)
 
 - **mesh-health-check** - Perform a comprehensive health assessment of the Istio service mesh including control plane and data plane status
@@ -614,11 +614,12 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **mesh-topology** - Show the mesh topology including control plane components and cluster connectivity
 
 - **traffic-topology** - Analyze the service mesh traffic topology showing service dependencies, traffic flow, and communication patterns
-  - `namespaces` (`string`) - Comma-separated list of namespaces to include in the graph (default: all mesh namespaces)
+  - `namespaces` (`string`) **(required)** - Comma-separated list of namespaces to include in the graph, or 'all' to include all mesh namespaces
 
 - **service-troubleshoot** - Investigate service errors using logs, traces, and Istio configuration to identify root causes
   - `namespace` (`string`) **(required)** - Namespace where the service is deployed
   - `service` (`string`) **(required)** - Name of the service to troubleshoot
+  - `workload` (`string`) - Optional workload or pod name to fetch logs from (if omitted, uses the service name)
 
 - **trace-analysis** - Investigate distributed traces for a service to identify latency bottlenecks, error sources, and slow spans
   - `namespace` (`string`) **(required)** - Namespace where the service is deployed

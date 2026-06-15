@@ -146,10 +146,10 @@ func (s *KialiSuite) TestKialiPromptsRegistered() {
 	})
 
 	expectedPrompts := []string{
-		"list-applications",
-		"list-namespaces",
-		"list-services",
-		"list-workloads",
+		"mesh-list-applications",
+		"mesh-list-namespaces",
+		"mesh-list-services",
+		"mesh-list-workloads",
 		"list-istio-config",
 		"mesh-topology",
 		"mesh-health-check",
@@ -183,7 +183,7 @@ func (s *KialiSuite) TestListApplicationsPrompt() {
 	}))
 	s.InitMcpClient()
 
-	result, err := s.GetPrompt("list-applications", map[string]string{
+	result, err := s.GetPrompt("mesh-list-applications", map[string]string{
 		"namespace": "bookinfo",
 	})
 
@@ -200,6 +200,109 @@ func (s *KialiSuite) TestListApplicationsPrompt() {
 	})
 	s.Run("request body contains namespace filter", func() {
 		s.Contains(capturedBody, "bookinfo")
+	})
+	s.Run("prompt result contains at least one user message", func() {
+		s.Require().NotEmpty(result.Messages)
+		s.Equal("user", string(result.Messages[0].Role))
+	})
+}
+
+func (s *KialiSuite) TestListNamespacesPrompt() {
+	var capturedURL *url.URL
+	var capturedBody string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		_, _ = w.Write([]byte(`{"cluster":"default","namespaces":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("mesh-list-namespaces", map[string]string{})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls list_or_get_resources endpoint", func() {
+		s.Require().NotNil(capturedURL)
+		s.Equal("/api/chat/mcp/list_or_get_resources", capturedURL.Path)
+	})
+	s.Run("request body contains resourceType namespace", func() {
+		s.Contains(capturedBody, "namespace")
+	})
+	s.Run("prompt result contains at least one user message", func() {
+		s.Require().NotEmpty(result.Messages)
+		s.Equal("user", string(result.Messages[0].Role))
+	})
+}
+
+func (s *KialiSuite) TestListServicesPrompt() {
+	var capturedURL *url.URL
+	var capturedBody string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		_, _ = w.Write([]byte(`{"services":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("mesh-list-services", map[string]string{
+		"namespace": "bookinfo",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls list_or_get_resources endpoint", func() {
+		s.Require().NotNil(capturedURL)
+		s.Equal("/api/chat/mcp/list_or_get_resources", capturedURL.Path)
+	})
+	s.Run("request body contains resourceType service", func() {
+		s.Contains(capturedBody, "service")
+	})
+	s.Run("request body contains namespace filter", func() {
+		s.Contains(capturedBody, "bookinfo")
+	})
+	s.Run("prompt result contains at least one user message", func() {
+		s.Require().NotEmpty(result.Messages)
+		s.Equal("user", string(result.Messages[0].Role))
+	})
+}
+
+func (s *KialiSuite) TestListWorkloadsPrompt() {
+	var capturedURL *url.URL
+	var capturedBody string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		_, _ = w.Write([]byte(`{"workloads":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("mesh-list-workloads", map[string]string{
+		"namespace": "kube-system",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("calls list_or_get_resources endpoint", func() {
+		s.Require().NotNil(capturedURL)
+		s.Equal("/api/chat/mcp/list_or_get_resources", capturedURL.Path)
+	})
+	s.Run("request body contains resourceType workload", func() {
+		s.Contains(capturedBody, "workload")
+	})
+	s.Run("request body contains namespace filter", func() {
+		s.Contains(capturedBody, "kube-system")
 	})
 	s.Run("prompt result contains at least one user message", func() {
 		s.Require().NotEmpty(result.Messages)
@@ -291,6 +394,77 @@ func (s *KialiSuite) TestTrafficTopologyPrompt() {
 	})
 	s.Run("request body contains the namespaces", func() {
 		s.Contains(capturedBody, "bookinfo")
+	})
+}
+
+func (s *KialiSuite) TestTrafficTopologyPromptAllNamespaces() {
+	var mu sync.Mutex
+	var capturedPaths []string
+	var capturedBodies []string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		capturedPaths = append(capturedPaths, r.URL.Path)
+		body, _ := io.ReadAll(r.Body)
+		capturedBodies = append(capturedBodies, string(body))
+		mu.Unlock()
+		if r.URL.Path == "/api/chat/mcp/list_or_get_resources" {
+			_, _ = w.Write([]byte(`{"namespaces":[{"name":"bookinfo"},{"name":"istio-system"}]}`))
+		} else {
+			_, _ = w.Write([]byte(`{"elements":{}}`))
+		}
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("traffic-topology", map[string]string{
+		"namespaces": "all",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("resolves namespaces via list_or_get_resources then calls traffic graph", func() {
+		mu.Lock()
+		defer mu.Unlock()
+		s.Require().Len(capturedPaths, 2)
+		s.Equal("/api/chat/mcp/list_or_get_resources", capturedPaths[0])
+		s.Equal("/api/chat/mcp/get_mesh_traffic_graph", capturedPaths[1])
+	})
+	s.Run("traffic graph request contains resolved namespaces", func() {
+		mu.Lock()
+		defer mu.Unlock()
+		s.Contains(capturedBodies[1], "bookinfo")
+		s.Contains(capturedBodies[1], "istio-system")
+	})
+}
+
+func (s *KialiSuite) TestServiceTroubleshootPromptWithWorkload() {
+	var mu sync.Mutex
+	var capturedBodies []string
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		body, _ := io.ReadAll(r.Body)
+		capturedBodies = append(capturedBodies, string(body))
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"logs":[]}`))
+	}))
+	s.InitMcpClient()
+
+	result, err := s.GetPrompt("service-troubleshoot", map[string]string{
+		"namespace": "bookinfo",
+		"service":   "productpage",
+		"workload":  "productpage-v1",
+	})
+
+	s.Run("prompt executes without error", func() {
+		s.NoError(err)
+		s.NotNil(result)
+	})
+	s.Run("logs request uses workload name instead of service name", func() {
+		mu.Lock()
+		defer mu.Unlock()
+		s.Require().NotEmpty(capturedBodies)
+		s.Contains(capturedBodies[0], "productpage-v1")
 	})
 }
 

@@ -28,6 +28,11 @@ func InitServiceTroubleshoot() []api.ServerPrompt {
 						Description: "Name of the service to troubleshoot",
 						Required:    true,
 					},
+					{
+						Name:        "workload",
+						Description: "Optional workload or pod name to fetch logs from (if omitted, uses the service name)",
+						Required:    false,
+					},
 				},
 			},
 			Handler: serviceTroubleshootHandler,
@@ -39,6 +44,7 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 	args := params.GetArguments()
 	namespace := args["namespace"]
 	service := args["service"]
+	workload := args["workload"]
 
 	if namespace == "" {
 		return nil, fmt.Errorf("namespace argument is required")
@@ -47,12 +53,17 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 		return nil, fmt.Errorf("service argument is required")
 	}
 
+	logTarget := service
+	if workload != "" {
+		logTarget = workload
+	}
+
 	klog.Infof("Starting service troubleshoot prompt for %s/%s...", namespace, service)
 
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 
 	logsContent := fetchKialiData(kiali, params, tools.KialiGetLogsEndpoint,
-		map[string]any{"namespace": namespace, "name": service + "-v1"})
+		map[string]any{"namespace": namespace, "name": logTarget})
 
 	istioContent := fetchKialiData(kiali, params, tools.KialiManageIstioConfigReadEndpoint,
 		map[string]any{"namespace": namespace, "action": "list"})

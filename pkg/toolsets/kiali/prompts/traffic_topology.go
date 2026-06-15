@@ -1,7 +1,9 @@
 package prompts
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"k8s.io/klog/v2"
 
@@ -20,8 +22,8 @@ func InitTrafficTopology() []api.ServerPrompt {
 				Arguments: []api.PromptArgument{
 					{
 						Name:        "namespaces",
-						Description: "Comma-separated list of namespaces to include in the graph (default: all mesh namespaces)",
-						Required:    false,
+						Description: "Comma-separated list of namespaces to include in the graph, or 'all' to include all mesh namespaces",
+						Required:    true,
 					},
 				},
 			},
@@ -34,20 +36,26 @@ func trafficTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 	args := params.GetArguments()
 	namespaces := args["namespaces"]
 
-	klog.Info("Starting traffic topology analysis prompt...")
-
-	reqArgs := map[string]any{}
-	if namespaces != "" {
-		reqArgs["namespaces"] = namespaces
+	if namespaces == "" {
+		return nil, fmt.Errorf("namespaces argument is required: provide a comma-separated list or 'all' for all mesh namespaces")
 	}
 
+	klog.Info("Starting traffic topology analysis prompt...")
+
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+
+	resolvedNamespaces, err := resolveNamespaces(kiali, params, namespaces)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve namespaces: %w", err)
+	}
+
+	reqArgs := map[string]any{"namespaces": resolvedNamespaces}
 	graphContent, err := kiali.ExecuteRequest(params.Context, tools.KialiGetMeshTrafficGraphEndpoint, reqArgs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve traffic graph: %w", err)
 	}
 
-	promptText := buildTrafficTopologyPrompt(graphContent, namespaces)
+	promptText := buildTrafficTopologyPrompt(graphContent, resolvedNamespaces)
 
 	return api.NewPromptCallResult(
 		"Traffic topology data gathered successfully",
@@ -71,16 +79,57 @@ func trafficTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 	), nil
 }
 
-func buildTrafficTopologyPrompt(graphData string, namespaces string) string {
-	scope := "all mesh namespaces"
-	if namespaces != "" {
-		scope = fmt.Sprintf("namespaces: %s", namespaces)
+// resolveNamespaces resolves the namespaces argument. If "all" is provided,
+// it discovers all mesh namespaces via the Kiali API. Otherwise it returns
+// the input as-is (comma-separated list).
+func resolveNamespaces(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespaces string) (string, error) {
+	if !strings.EqualFold(strings.TrimSpace(namespaces), "all") {
+		return namespaces, nil
 	}
 
+	content, err := kiali.ExecuteRequest(params.Context, tools.KialiListOrGetResourcesEndpoint,
+		map[string]any{"resourceType": "namespace"})
+	if err != nil {
+		return "", fmt.Errorf("failed to discover mesh namespaces: %w", err)
+	}
+
+	discovered := parseNamespacesFromResponse(content)
+	if discovered == "" {
+		return "", fmt.Errorf("no mesh namespaces found")
+	}
+	return discovered, nil
+}
+
+// parseNamespacesFromResponse extracts namespace names from the Kiali
+// list_or_get_resources JSON response and returns them as a comma-separated string.
+func parseNamespacesFromResponse(content string) string {
+	type nsItem struct {
+		Name string `json:"name"`
+	}
+	type nsResponse struct {
+		Namespaces []nsItem `json:"namespaces"`
+	}
+
+	var resp nsResponse
+	if err := json.Unmarshal([]byte(content), &resp); err != nil {
+		klog.Warningf("Failed to parse namespace list response: %v", err)
+		return ""
+	}
+
+	names := make([]string, 0, len(resp.Namespaces))
+	for _, ns := range resp.Namespaces {
+		if ns.Name != "" {
+			names = append(names, ns.Name)
+		}
+	}
+	return strings.Join(names, ",")
+}
+
+func buildTrafficTopologyPrompt(graphData string, namespaces string) string {
 	return fmt.Sprintf(`# Traffic Topology Analysis
 
 ## Scope
-Analyze traffic topology for %s.
+Analyze traffic topology for namespaces: %s.
 
 ## Collected Data
 
@@ -95,5 +144,5 @@ Based on the traffic graph data above, provide an analysis covering:
 2. **Traffic Patterns**: Identify high-traffic paths, bottlenecks, or unusual communication patterns.
 3. **Health Overview**: Highlight any services or edges showing errors or degraded health.
 4. **Observations**: Note any unexpected dependencies, circular calls, or services that appear isolated.
-`, scope, graphData)
+`, namespaces, graphData)
 }

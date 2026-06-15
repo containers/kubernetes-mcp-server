@@ -14,8 +14,8 @@ func InitListApplications() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: api.Prompt{
-				Name:        "list-applications",
-				Title:       "List Applications",
+				Name:        "mesh-list-applications",
+				Title:       "List Mesh Applications",
 				Description: "List applications in the mesh namespaces",
 				Arguments: []api.PromptArgument{
 					{
@@ -34,8 +34,8 @@ func InitListNamespaces() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: api.Prompt{
-				Name:        "list-namespaces",
-				Title:       "List Namespaces",
+				Name:        "mesh-list-namespaces",
+				Title:       "List Mesh Namespaces",
 				Description: "List all namespaces with their sidecar injection status and Istio labels",
 			},
 			Handler: listResourceHandler("namespace"),
@@ -47,8 +47,8 @@ func InitListServices() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: api.Prompt{
-				Name:        "list-services",
-				Title:       "List Services",
+				Name:        "mesh-list-services",
+				Title:       "List Mesh Services",
 				Description: "List services in the mesh namespaces",
 				Arguments: []api.PromptArgument{
 					{
@@ -67,8 +67,8 @@ func InitListWorkloads() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: api.Prompt{
-				Name:        "list-workloads",
-				Title:       "List Workloads",
+				Name:        "mesh-list-workloads",
+				Title:       "List Mesh Workloads",
 				Description: "List workloads in the mesh namespaces",
 				Arguments: []api.PromptArgument{
 					{
