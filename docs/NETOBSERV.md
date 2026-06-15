@@ -1,13 +1,13 @@
 # NetObserv integration
 
-This server exposes tools that call the [NetObserv](https://github.com/netobserv-network-observability/netobserv-operator) console plugin backend API (flows, metrics, alerts, export). The toolset targets OpenShift clusters with the NetObserv operator installed; other Kubernetes distributions work when you set `[toolset_configs.netobserv].url` explicitly.
+This server exposes tools that call the [NetObserv](https://github.com/netobserv-network-observability/netobserv-operator) console plugin backend API (flows, metrics, export). The toolset targets OpenShift clusters with the NetObserv operator installed; other Kubernetes distributions work when you set `[toolset_configs.netobserv].url` explicitly.
+
+Namespace and workload discovery use the **core** Kubernetes toolset; Prometheus rules and Alertmanager silences belong in **obs-mcp** / **prometheus-mcp-server**, not here.
 
 ## Prerequisites
 
 - NetObserv operator and console plugin running (default plugin Service: `netobserv-plugin` in namespace `netobserv`, port `9001`).
-- MCP server network access to:
-  - the plugin API (in-cluster Service URL or explicit `url`),
-  - and optionally OpenShift monitoring (Thanos / Alertmanager) for alert tools.
+- MCP server network access to the plugin API (in-cluster Service URL or explicit `url`).
 
 ## Enable the NetObserv toolset
 
@@ -33,15 +33,11 @@ When `netobserv` is listed in `toolsets`, configuration is loaded from `[toolset
 | `netobserv_list_flows` | Flow records from Loki |
 | `netobserv_get_flow_metrics` | Aggregated flow metrics |
 | `netobserv_export_flows` | Export flows as CSV |
-| `netobserv_list_namespaces` | Namespaces seen in flow data |
-| `netobserv_list_names` | Workload/resource names for filters |
-| `netobserv_list_alerts` | Prometheus rules (plugin proxy or direct Thanos) |
-| `netobserv_list_alert_silences` | Alertmanager silences (plugin proxy or direct) |
 
 ## How authentication works
 
 - The server reads the bearer token from the **Kubernetes REST config** for the current tool call (`rest.Config.BearerToken`).
-- That token is sent as `Authorization: Bearer …` to the NetObserv plugin (and to direct Prometheus/Alertmanager URLs when fallback is used).
+- That token is sent as `Authorization: Bearer …` to the NetObserv plugin.
 - **HTTP `Authorization` from MCP clients is not required** when the server uses in-cluster ServiceAccount or kubeconfig credentials (typical Helm deployment).
 - Do **not** enable `require_oauth` unless you also deploy a separate OAuth front end for MCP clients. Without that, HTTP clients cannot complete OAuth.
 
@@ -83,7 +79,6 @@ Grant the release ServiceAccount permission to:
 
 1. Use core Kubernetes tools (for example bind `view` or a custom ClusterRole).
 2. Call the NetObserv plugin API (the plugin enforces Kubernetes RBAC for the token).
-3. Read Prometheus rules and Alertmanager silences when using alert tools (for example `cluster-monitoring-view` on OpenShift).
 
 ### TLS
 
@@ -97,12 +92,8 @@ On OpenShift, synthesized plugin URLs use HTTPS. Mount the pod service account s
 | `namespace` | `netobserv` | Plugin Service namespace |
 | `service` | `netobserv-plugin` | Plugin Service name |
 | `port` | `9001` | Plugin port |
-| `prometheus_url` | Thanos querier (in-cluster OCP) | Direct rules API if plugin returns 404 |
-| `alertmanager_url` | `alertmanager-main` (in-cluster OCP) | Direct silences API if plugin returns 404 |
 | `insecure` | `true` if service CA file missing | Skip TLS verify (avoid in production) |
 | `certificate_authority` | auto: service CA on OCP | CA file path for HTTPS |
-
-Set `prometheus_url` and `alertmanager_url` explicitly when using a loopback `url` (local port-forward); in-cluster OpenShift defaults are skipped for `127.0.0.1` / `localhost`.
 
 ## Local development
 
@@ -112,11 +103,9 @@ toolsets = ["core", "netobserv"]
 [toolset_configs.netobserv]
 url = "https://127.0.0.1:9001"
 insecure = true
-prometheus_url = "https://127.0.0.1:9091"
-alertmanager_url = "https://127.0.0.1:9094"
 ```
 
-Port-forward the plugin and monitoring Services, then run MCP locally with `KUBECONFIG` after `oc login`. The server uses your kubeconfig token for NetObserv.
+Port-forward the plugin Service, then run MCP locally with `KUBECONFIG` after `oc login`. The server uses your kubeconfig token for NetObserv.
 
 ## Troubleshooting
 
@@ -124,7 +113,6 @@ Port-forward the plugin and monitoring Services, then run MCP locally with `KUBE
 |---------|----------------|
 | `netobserv plugin URL not configured` | Enable toolset; on non-OCP set `url` or `namespace` / `service` / `port` |
 | `certificate_authority is required for https` | Set `certificate_authority`, ensure service CA is mounted, or `insecure = true` (dev only) |
-| Alert tools: no monitoring fallback | Not on loopback `url` in-cluster; or set `prometheus_url` / `alertmanager_url` |
 | 401/403 from plugin | ServiceAccount RBAC must allow NetObserv API access for that token |
 | HTTP MCP 401 on all requests | `require_oauth = true` without an OAuth proxy in front of the server — disable `require_oauth` or add OAuth termination |
 

@@ -22,8 +22,6 @@ import (
 type NetObserv struct {
 	bearerToken          string
 	pluginURL            string
-	prometheusURL        string
-	alertmanagerURL      string
 	insecure             bool
 	certificateAuthority string
 	requireTLS           func() bool
@@ -52,12 +50,9 @@ func NewNetObserv(configProvider api.BaseConfig, k8s api.KubernetesClient) *NetO
 		nc = &Config{}
 	}
 	isOpenShift := clusterIsOpenShift(k8s)
-	monitoringDefaults := useOpenShiftMonitoringDefaults(configProvider, nc, isOpenShift)
 	requireTLS := configProvider.IsRequireTLS()
 	nc.applyDefaults(requireTLS, isOpenShift)
 	client.pluginURL = nc.ResolvedURL(isOpenShift)
-	client.prometheusURL = nc.ResolvedPrometheusURL(monitoringDefaults)
-	client.alertmanagerURL = nc.ResolvedAlertmanagerURL(monitoringDefaults)
 	client.insecure = nc.Insecure
 	client.certificateAuthority = nc.CertificateAuthority
 	return client

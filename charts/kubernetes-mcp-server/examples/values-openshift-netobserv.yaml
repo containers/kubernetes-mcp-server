@@ -30,11 +30,6 @@ rbac:
       roleRef:
         name: view
         external: true
-    # Alert tools: Prometheus rules + Alertmanager silences on OpenShift.
-    - name: monitoring-view
-      roleRef:
-        name: cluster-monitoring-view
-        external: true
 
 config:
   port: "8080"
@@ -51,4 +46,3 @@ config:
       # namespace: netobserv
       # service: netobserv-plugin
       # port: 9001
-      # Thanos / Alertmanager URLs are auto-set in-cluster on OpenShift when url is not loopback.

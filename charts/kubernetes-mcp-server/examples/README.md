@@ -7,7 +7,7 @@
 - `toolsets`: `core` and `netobserv`
 - `cluster_auth_mode: kubeconfig` (pod ServiceAccount for Kubernetes API and NetObserv plugin)
 - Pod ServiceAccount auth (`require_oauth` stays off)
-- RBAC: `view` + `cluster-monitoring-view` for core tools and alert tools
+- RBAC: `view` for core tools and NetObserv plugin API access
 
 Full toolset and authentication details: [NetObserv integration](../../../docs/NETOBSERV.md).
 

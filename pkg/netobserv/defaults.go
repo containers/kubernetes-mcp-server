@@ -11,12 +11,6 @@ const (
 	DefaultPluginService   = "netobserv-plugin"
 	DefaultPluginPort      = 9001
 
-	// OpenShift cluster monitoring URLs (consoleplugin_objects.go prom auto mode).
-	// Trailing dot on cluster.local is a DNS optimization used by the operator.
-	DefaultOpenShiftPrometheusURL       = "https://thanos-querier.openshift-monitoring.svc.cluster.local.:9091"
-	DefaultOpenShiftAlertmanagerURL     = "https://alertmanager-main.openshift-monitoring.svc.cluster.local.:9094"
-	DefaultOpenShiftMonitoringNamespace = "openshift-monitoring"
-
 	// DefaultPluginHTTPTimeout bounds waits for the console plugin HTTP API (Loki/Prometheus work behind it).
 	DefaultPluginHTTPTimeout = 120 * time.Second
 )

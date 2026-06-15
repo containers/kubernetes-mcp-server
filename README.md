@@ -264,16 +264,16 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset   | Description                                                                                                                                                                                                                                     | Default |
-|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config    | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                         | ✓       |
-| core      | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                             | ✓       |
-| helm      | Tools for managing Helm charts and releases                                                                                                                                                                                                     |         |
-| kcp       | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                                |         |
-| kiali     | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                            |         |
-| kubevirt  | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                                 |         |
-| netobserv | Network observability tools backed by the NetObserv console plugin API (flows, metrics, alerts, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
-| tekton    | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                                                                                              |         |
+| Toolset   | Description                                                                                                                                                                                                                             | Default |
+|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config    | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
+| core      | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| helm      | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
+| kcp       | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
+| kiali     | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
+| kubevirt  | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
+| netobserv | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| tekton    | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                                                                                      |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -549,13 +549,6 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>netobserv</summary>
 
-- **netobserv_list_namespaces** - Lists Kubernetes namespace names observed in NetObserv flow data. Use before building filters or the namespace parameter on flow tools.
-  - `namespace` (`string`) - Optional tenant scope (same as the namespace parameter on list_flows). When set, restricts discovery to flows visible in that namespace context.
-
-- **netobserv_list_names** - Lists workload or resource names seen in NetObserv flows for a namespace and kind. Use results to build SrcK8S_Name, DstK8S_Name, SrcK8S_OwnerName, or DstK8S_OwnerName filters.
-  - `kind` (`string`) **(required)** - Resource kind. Pod, Service, and Node use K8S_Name fields; other kinds (Deployment, StatefulSet, …) use K8S_OwnerName / K8S_OwnerType.
-  - `namespace` (`string`) **(required)** - Kubernetes namespace to search in.
-
 - **netobserv_list_flows** - Lists network flow records from NetObserv (Loki). Returns aggregated flow log entries with optional filters on namespaces, workloads, IPs, ports, and protocols.
   - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
   - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
@@ -568,7 +561,7 @@ Syntax:
 - OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
 
 Prefer the dedicated "namespace" parameter for namespace scope when possible.
-Use netobserv_list_namespaces and netobserv_list_names to discover values before building filters.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
 
 Common Kubernetes fields (Src/Dst prefixes mirror each other):
 - SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
@@ -658,7 +651,7 @@ Syntax:
 - OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
 
 Prefer the dedicated "namespace" parameter for namespace scope when possible.
-Use netobserv_list_namespaces and netobserv_list_names to discover values before building filters.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
 
 Common Kubernetes fields (Src/Dst prefixes mirror each other):
 - SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
@@ -722,7 +715,7 @@ Syntax:
 - OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
 
 Prefer the dedicated "namespace" parameter for namespace scope when possible.
-Use netobserv_list_namespaces and netobserv_list_names to discover values before building filters.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
 
 Common Kubernetes fields (Src/Dst prefixes mirror each other):
 - SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
@@ -751,13 +744,6 @@ Examples:
   - `recordType` (`string`) - Flow record type filter.
   - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
-
-- **netobserv_list_alerts** - Lists Prometheus alerting or recording rules for NetObserv. Uses the console plugin proxy when available; on OpenShift (or when configured with prometheus_url) falls back to cluster monitoring (Thanos) directly.
-  - `match` (`string`) - Prometheus label matcher without braces (e.g. alertname=NetObserv_* or namespace=openshift-netobserv). Translated to match[]={match} on the API.
-  - `type` (`string`) - Rule type: alert or record.
-
-- **netobserv_list_alert_silences** - Lists Alertmanager silences for NetObserv alerts. Uses the console plugin proxy when available; on OpenShift (or when configured with alertmanager_url) falls back to cluster Alertmanager directly.
-  - `filter` (`string`) - Alertmanager silence filter (e.g. alertname=MyAlert).
 
 </details>
 

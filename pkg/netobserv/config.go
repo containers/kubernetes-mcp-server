@@ -23,12 +23,6 @@ type Config struct {
 	Port                 int    `toml:"port,omitempty"`
 	Insecure             bool   `toml:"insecure,omitempty"`
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
-	// PrometheusUrl overrides the Prometheus base URL for alert/recording rules when the plugin
-	// does not proxy /api/prometheus (OpenShift Console mode). On OpenShift, defaults to Thanos querier.
-	PrometheusUrl string `toml:"prometheus_url,omitempty"`
-	// AlertmanagerUrl overrides the Alertmanager base URL for silences when the plugin does not
-	// proxy /api/alertmanager. On OpenShift, defaults to alertmanager-main.
-	AlertmanagerUrl string `toml:"alertmanager_url,omitempty"`
 }
 
 var _ api.ExtendedConfig = (*Config)(nil)
@@ -54,33 +48,6 @@ func (c *Config) ResolvedURL(isOpenShift bool) string {
 		port = DefaultPluginPort
 	}
 	return BuildPluginURL(ns, svc, port, isOpenShift)
-}
-
-// ResolvedPrometheusURL returns the Prometheus base URL for direct rules API access.
-// useOpenShiftDefaults is true only for in-cluster MCP on OpenShift (see useOpenShiftMonitoringDefaults).
-func (c *Config) ResolvedPrometheusURL(useOpenShiftDefaults bool) string {
-	if c != nil {
-		if u := strings.TrimSpace(c.PrometheusUrl); u != "" {
-			return strings.TrimSuffix(u, "/")
-		}
-	}
-	if useOpenShiftDefaults {
-		return DefaultOpenShiftPrometheusURL
-	}
-	return ""
-}
-
-// ResolvedAlertmanagerURL returns the Alertmanager base URL for direct silences API access.
-func (c *Config) ResolvedAlertmanagerURL(useOpenShiftDefaults bool) string {
-	if c != nil {
-		if u := strings.TrimSpace(c.AlertmanagerUrl); u != "" {
-			return strings.TrimSuffix(u, "/")
-		}
-	}
-	if useOpenShiftDefaults {
-		return DefaultOpenShiftAlertmanagerURL
-	}
-	return ""
 }
 
 func (c *Config) usesSynthesizedURL() bool {

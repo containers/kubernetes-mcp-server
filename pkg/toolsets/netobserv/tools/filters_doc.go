@@ -11,7 +11,7 @@ Syntax:
 - OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
 
 Prefer the dedicated "namespace" parameter for namespace scope when possible.
-Use netobserv_list_namespaces and netobserv_list_names to discover values before building filters.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
 
 Common Kubernetes fields (Src/Dst prefixes mirror each other):
 - SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
