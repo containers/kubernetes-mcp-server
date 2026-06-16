@@ -63,8 +63,8 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 			// Namespace doesn't exist - show warning and proceed with cluster-wide check
 			namespaceWarning = fmt.Sprintf("Namespace '%s' not found or not accessible. Showing cluster-wide information instead.", namespace)
 			namespace = "" // Fall back to cluster-wide check
-			klogutil.WarnLogger(logger, "Namespace not found, performing cluster-wide health check",
-				"kubernetes.namespace.name", requestedNamespace,
+			klogutil.LogWarn(logger, "Namespace not found, performing cluster-wide health check",
+				klogutil.Field("kubernetes.namespace.name", requestedNamespace),
 			)
 		} else {
 			logger.Info("Performing health check for namespace", "kubernetes.namespace.name", namespace)
@@ -144,7 +144,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 		diag.Nodes = nodeDiag
 		logger.Info("Node diagnostics collected")
 	} else {
-		klogutil.WarnLogger(logger, "Failed to collect node diagnostics", "exception.message", err.Error())
+		klogutil.LogWarn(logger, "Failed to collect node diagnostics", klogutil.Err(err))
 	}
 
 	// Gather pod diagnostics
@@ -154,7 +154,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 		diag.Pods = podDiag
 		logger.Info("Pod diagnostics collected")
 	} else {
-		klogutil.WarnLogger(logger, "Failed to collect pod diagnostics", "exception.message", err.Error())
+		klogutil.LogWarn(logger, "Failed to collect pod diagnostics", klogutil.Err(err))
 	}
 
 	// Gather workload diagnostics
@@ -164,7 +164,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 		diag.Deployments = deployDiag
 		logger.Info("Deployment diagnostics collected")
 	} else {
-		klogutil.WarnLogger(logger, "Failed to collect deployment diagnostics", "exception.message", err.Error())
+		klogutil.LogWarn(logger, "Failed to collect deployment diagnostics", klogutil.Err(err))
 	}
 
 	logger.Info("Collecting statefulset diagnostics...")
@@ -173,7 +173,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 		diag.StatefulSets = stsDiag
 		logger.Info("StatefulSet diagnostics collected")
 	} else {
-		klogutil.WarnLogger(logger, "Failed to collect statefulset diagnostics", "exception.message", err.Error())
+		klogutil.LogWarn(logger, "Failed to collect statefulset diagnostics", klogutil.Err(err))
 	}
 
 	logger.Info("Collecting daemonset diagnostics...")
@@ -182,7 +182,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 		diag.DaemonSets = dsDiag
 		logger.Info("DaemonSet diagnostics collected")
 	} else {
-		klogutil.WarnLogger(logger, "Failed to collect daemonset diagnostics", "exception.message", err.Error())
+		klogutil.LogWarn(logger, "Failed to collect daemonset diagnostics", klogutil.Err(err))
 	}
 
 	// Gather PVC diagnostics
@@ -192,7 +192,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 		diag.PVCs = pvcDiag
 		logger.Info("PVC diagnostics collected")
 	} else {
-		klogutil.WarnLogger(logger, "Failed to collect PVC diagnostics", "exception.message", err.Error())
+		klogutil.LogWarn(logger, "Failed to collect PVC diagnostics", klogutil.Err(err))
 	}
 
 	// Gather cluster operator diagnostics (OpenShift only)
@@ -211,7 +211,7 @@ func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, 
 			diag.Events = eventDiag
 			logger.Info("Event diagnostics collected")
 		} else {
-			klogutil.WarnLogger(logger, "Failed to collect event diagnostics", "exception.message", err.Error())
+			klogutil.LogWarn(logger, "Failed to collect event diagnostics", klogutil.Err(err))
 		}
 	}
 

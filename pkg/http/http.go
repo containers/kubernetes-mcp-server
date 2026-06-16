@@ -18,6 +18,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 )
@@ -97,7 +98,7 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(stats); err != nil {
-			klog.FromContext(r.Context()).V(1).Info("Failed to encode stats response", "exception.message", err.Error())
+			klogutil.LogInfo(klog.FromContext(r.Context()).V(1), "Failed to encode stats response", klogutil.Err(err))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}

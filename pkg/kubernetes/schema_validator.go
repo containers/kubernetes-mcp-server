@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/discovery"
 	"k8s.io/klog/v2"
@@ -51,7 +52,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, req *api.HTTPValidationR
 
 	validator, err := v.getValidator(ctx)
 	if err != nil {
-		logger.V(4).Info("Failed to get schema validator", "exception.message", err.Error())
+		klogutil.LogInfo(logger.V(4), "Failed to get schema validator", klogutil.Err(err))
 		return nil
 	}
 
@@ -65,7 +66,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, req *api.HTTPValidationR
 		// In that case, skip validation rather than blocking the request
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "yaml:") || strings.Contains(errMsg, "json:") {
-			logger.V(4).Info("Schema validation skipped due to parsing error", "exception.message", err.Error())
+			klogutil.LogInfo(logger.V(4), "Schema validation skipped due to parsing error", klogutil.Err(err))
 			return nil
 		}
 		return convertKubectlValidationError(err)

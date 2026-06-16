@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
@@ -180,7 +181,7 @@ func (w *WorkspaceWatcher) captureState(ctx context.Context) workspaceState {
 	list, err := w.dynamicClient.Resource(WorkspaceGVR).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
-		logger.V(2).Info("Unable to list workspaces from kcp API (this is expected if tenancy API is not available)", "exception.message", err.Error())
+		klogutil.LogInfo(logger.V(2), "Unable to list workspaces from kcp API (this is expected if tenancy API is not available)", klogutil.Err(err))
 		// Return empty state - this means workspace watching won't work,
 		// but the provider will still function using kubeconfig-based discovery
 		return state

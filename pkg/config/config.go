@@ -517,10 +517,10 @@ func (c *StaticConfig) Validate(ctx context.Context) error {
 			return fmt.Errorf("--authorization-url must be a valid URL")
 		}
 		if u.Scheme == "http" {
-			klogutil.Warn(
-				ctx,
+			klogutil.LogWarn(
+				klog.FromContext(ctx),
 				"authorization-url is using insecure scheme, this is not recommended production use",
-				"url.scheme", "http",
+				klogutil.Field("url.scheme", "http"),
 			)
 		}
 	}
@@ -591,7 +591,7 @@ func (c *StaticConfig) validateSkipJWTVerification(ctx context.Context) error {
 		return nil
 	}
 	if c.SkipJWTVerification {
-		klogutil.Warn(ctx,
+		klogutil.LogWarn(klog.FromContext(ctx),
 			"skip_jwt_verification is enabled with no authorization_url: bearer tokens will be forwarded without any local validation. "+
 				"The cluster (or a trusted upstream) is the sole authority. Only use this when cluster_auth_mode=passthrough and the cluster validates tokens directly.")
 		return nil

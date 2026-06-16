@@ -117,7 +117,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			// Cluster is the sole authority for validating token (ex. sha256 token with OpenShift)
 			if staticConfig.SkipJWTVerification && staticConfig.AuthorizationURL == "" {
 				skipJWTWarningOnce.Do(func() {
-					klogutil.WarnLogger(logger, "Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
+					klogutil.LogWarn(logger, "Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
 				})
 				ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -162,11 +162,11 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 				}
 			}
 			if err != nil {
-				logger.V(1).Info("Authentication failed - JWT validation error",
-					"http.request.method", r.Method,
-					"url.path", r.URL.Path,
-					"client.address", r.RemoteAddr,
-					"exception.message", err.Error(),
+				klogutil.LogInfo(logger.V(1), "Authentication failed - JWT validation error",
+					klogutil.Field("http.request.method", r.Method),
+					klogutil.Field("url.path", r.URL.Path),
+					klogutil.Field("client.address", r.RemoteAddr),
+					klogutil.Err(err),
 				)
 				write401(w, wwwAuthenticateHeader, "invalid_token", "Unauthorized: Invalid token")
 				return

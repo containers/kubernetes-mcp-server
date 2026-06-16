@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2"
 )
 
 // singleClusterProvider implements Provider for managing a single
@@ -129,7 +130,7 @@ func (p *singleClusterProvider) HasGVKs(ctx context.Context, gvks []schema.Group
 		return true
 	}
 	if p.manager == nil {
-		klogutil.Warn(ctx, "HasGVKs called with nil manager, assuming all GVKs are available")
+		klogutil.LogWarn(klog.FromContext(ctx), "HasGVKs called with nil manager, assuming all GVKs are available")
 		return true
 	}
 	mapper := p.manager.kubernetes.RESTMapper()

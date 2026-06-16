@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -64,7 +65,7 @@ func DiscoverWorkspacesRecursive(
 
 	dynamicClient, err := dynamic.NewForConfig(workspaceRestConfig)
 	if err != nil {
-		logger.V(3).Info("Failed to create client for workspace", "workspace", parentWorkspace, "exception.message", err.Error())
+		klogutil.LogInfo(logger.V(3), "Failed to create client for workspace", klogutil.Field("workspace", parentWorkspace), klogutil.Err(err))
 		return nil // Don't fail entirely, just skip this workspace
 	}
 
@@ -72,7 +73,7 @@ func DiscoverWorkspacesRecursive(
 	workspaceList, err := dynamicClient.Resource(WorkspaceGVR).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
-		logger.V(3).Info("Failed to list workspaces in parent workspace", "parent_workspace", parentWorkspace, "exception.message", err.Error())
+		klogutil.LogInfo(logger.V(3), "Failed to list workspaces in parent workspace", klogutil.Field("parent_workspace", parentWorkspace), klogutil.Err(err))
 		return nil // Don't fail entirely, just skip
 	}
 
@@ -98,7 +99,7 @@ func DiscoverWorkspacesRecursive(
 		// Recursively discover children of this workspace
 		err = DiscoverWorkspacesRecursive(ctx, baseRestConfig, fullPath, discovered)
 		if err != nil {
-			logger.V(3).Info("Failed to recurse into workspace", "workspace_path", fullPath, "exception.message", err.Error())
+			klogutil.LogInfo(logger.V(3), "Failed to recurse into workspace", klogutil.Field("workspace_path", fullPath), klogutil.Err(err))
 			// Continue with other workspaces
 		}
 	}

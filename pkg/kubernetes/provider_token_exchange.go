@@ -68,8 +68,8 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 		}
 	}
 	if tokenURL == "" {
-		klogutil.WarnLogger(logger, "token exchange strategy configured but OIDC provider returned empty token URL",
-			"token_exchange.strategy", strategy,
+		klogutil.LogWarn(logger, "token exchange strategy configured but OIDC provider returned empty token URL",
+			klogutil.Field("token_exchange.strategy", strategy),
 		)
 		return nil
 	}

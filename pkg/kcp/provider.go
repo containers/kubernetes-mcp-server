@@ -101,7 +101,7 @@ func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	// Discover workspaces
 	workspaceList, err := p.discoverWorkspaces(baseManager)
 	if err != nil {
-		klogutil.Warn(ctx, "Failed to discover workspaces via API, falling back to kubeconfig", "exception.message", err.Error())
+		klogutil.LogWarn(klog.FromContext(ctx), "Failed to discover workspaces via API, falling back to kubeconfig", klogutil.Err(err))
 		workspaceList, err = p.workspacesFromKubeconfig(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to discover workspaces: %w", err)

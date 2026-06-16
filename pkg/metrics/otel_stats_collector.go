@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -171,7 +172,7 @@ func NewOtelStatsCollectorWithConfig(ctx context.Context, cfg CollectorConfig) (
 		if cfg.Telemetry != nil && cfg.Telemetry.IsEnabled() {
 			logger.Error(err, "Failed to create OTLP metrics exporter, OTLP export disabled")
 		} else {
-			logger.V(1).Info("Failed to create OTLP metrics exporter, OTLP export disabled", "exception.message", err.Error())
+			klogutil.LogInfo(logger.V(1), "Failed to create OTLP metrics exporter, OTLP export disabled", klogutil.Err(err))
 		}
 	} else if exporter != nil {
 		attrs := []attribute.KeyValue{
@@ -185,7 +186,7 @@ func NewOtelStatsCollectorWithConfig(ctx context.Context, cfg CollectorConfig) (
 			resource.WithAttributes(attrs...),
 		)
 		if err != nil {
-			logger.V(1).Info("Failed to create resource for metrics, using default", "exception.message", err.Error())
+			klogutil.LogInfo(logger.V(1), "Failed to create resource for metrics, using default", klogutil.Err(err))
 		} else {
 			opts = append(opts, sdkmetric.WithResource(res))
 		}
@@ -325,7 +326,7 @@ func (c *OtelStatsCollector) GetStats(ctx context.Context) *Statistics {
 	// Collect current metrics from the manual reader
 	var rm metricdata.ResourceMetrics
 	if err := c.reader.Collect(context.Background(), &rm); err != nil {
-		klog.FromContext(ctx).V(1).Info("Failed to collect metrics for stats endpoint", "exception.message", err.Error())
+		klogutil.LogInfo(klog.FromContext(ctx).V(1), "Failed to collect metrics for stats endpoint", klogutil.Err(err))
 		return &Statistics{
 			ToolCallsByName:      make(map[string]int64),
 			ToolErrorsByName:     make(map[string]int64),

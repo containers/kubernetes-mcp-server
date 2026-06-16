@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
@@ -91,7 +92,8 @@ func protocolReceivingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 		result, err := next(ctx, method, req)
 		if err != nil {
-			logger.V(6).Info("mcp protocol", "mcp.client.method", method, "exception.message", mcplog.Sanitize(fmt.Sprintf("%v", err)))
+			// Field (not Err) so the error is routed through mcplog.Sanitize; Err would log the raw err.Error().
+			klogutil.LogInfo(logger.V(6), "mcp protocol", klogutil.Field("mcp.client.method", method), klogutil.Field("exception.message", mcplog.Sanitize(fmt.Sprintf("%v", err))))
 		} else if logger.V(6).Enabled() {
 			logger.V(6).Info("mcp protocol", "mcp.client.method", method, "mcp.call.result", mcplog.Sanitize(jsonCompact(result)))
 		}
@@ -115,7 +117,8 @@ func protocolSendingMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 		result, err := next(ctx, method, req)
 		if err != nil {
-			logger.V(6).Info("mcp protocol", "mcp.server.method", method, "exception.message", mcplog.Sanitize(fmt.Sprintf("%v", err)))
+			// Field (not Err) so the error is routed through mcplog.Sanitize; Err would log the raw err.Error().
+			klogutil.LogInfo(logger.V(6), "mcp protocol", klogutil.Field("mcp.server.method", method), klogutil.Field("exception.message", mcplog.Sanitize(fmt.Sprintf("%v", err))))
 		} else if result != nil && logger.V(6).Enabled() {
 			// Notifications return nil result; only requests have one.
 			logger.V(6).Info("mcp protocol", "mcp.server.method", method, "mcp.call.result", mcplog.Sanitize(jsonCompact(result)))

@@ -45,10 +45,10 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 	var apiPathPrefix string
 	if cfg.HostURL != "" {
 		if hostURL, err := url.Parse(cfg.HostURL); err != nil {
-			klogutil.Warn(ctx,
+			klogutil.LogWarn(klog.FromContext(ctx),
 				"failed to parse Kubernetes API server host to determine API path prefix",
-				"url.full", cfg.HostURL,
-				"exception.message", err.Error(),
+				klogutil.Field("url.full", cfg.HostURL),
+				klogutil.Err(err),
 			)
 		} else {
 			apiPathPrefix = hostURL.Path
@@ -143,7 +143,7 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	for _, v := range rt.validators {
 		if validationErr := v.Validate(req.Context(), validationReq); validationErr != nil {
 			if ve, ok := validationErr.(*api.ValidationError); ok {
-				logger.V(4).Info("Validation failed", "validator_name", v.Name(), "exception.message", ve.Error())
+				klogutil.LogInfo(logger.V(4), "Validation failed", klogutil.Field("validator_name", v.Name()), klogutil.Err(ve))
 			}
 			return nil, validationErr
 		}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -50,11 +51,11 @@ func getSamplerFromEnv(ctx context.Context) trace.Sampler {
 	if samplerArg != "" {
 		parsed, err := strconv.ParseFloat(samplerArg, 64)
 		if err != nil {
-			logger.V(1).Info("Invalid OTEL_TRACES_SAMPLER_ARG, falling back to default",
-				"config.env_var", "OTEL_TRACES_SAMPLER_ARG",
-				"config.provided_value", samplerArg,
-				"config.default_value", 1.0,
-				"exception.message", err.Error(),
+			klogutil.LogInfo(logger.V(1), "Invalid OTEL_TRACES_SAMPLER_ARG, falling back to default",
+				klogutil.Field("config.env_var", "OTEL_TRACES_SAMPLER_ARG"),
+				klogutil.Field("config.provided_value", samplerArg),
+				klogutil.Field("config.default_value", 1.0),
+				klogutil.Err(err),
 			)
 		} else if parsed < 0.0 || parsed > 1.0 {
 			logger.V(1).Info("OTEL_TRACES_SAMPLER_ARG out of range [0.0, 1.0], falling back to default",
@@ -158,7 +159,7 @@ func InitTracer(ctx context.Context, serviceName, serviceVersion string) (func()
 	// Protocol is configured via OTEL_EXPORTER_OTLP_PROTOCOL env var
 	exporter, err := createExporter(ctx)
 	if err != nil {
-		logger.V(1).Info("Failed to create OTLP exporter, tracing disabled", "exception.message", err.Error())
+		klogutil.LogInfo(logger.V(1), "Failed to create OTLP exporter, tracing disabled", klogutil.Err(err))
 		return func() {}, nil
 	}
 
@@ -170,7 +171,7 @@ func InitTracer(ctx context.Context, serviceName, serviceVersion string) (func()
 		),
 	)
 	if err != nil {
-		logger.V(1).Info("Failed to create resource, tracing disabled", "exception.message", err.Error())
+		klogutil.LogInfo(logger.V(1), "Failed to create resource, tracing disabled", klogutil.Err(err))
 		return func() {}, nil
 	}
 
@@ -233,7 +234,7 @@ func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serv
 
 	exporter, err := createExporterWithConfig(ctx, cfg)
 	if err != nil {
-		logger.V(1).Info("Failed to create OTLP exporter, tracing disabled", "exception.message", err.Error())
+		klogutil.LogInfo(logger.V(1), "Failed to create OTLP exporter, tracing disabled", klogutil.Err(err))
 		return func() {}, nil
 	}
 
@@ -298,11 +299,11 @@ func getSamplerFromConfig(ctx context.Context, cfg *config.TelemetryConfig) trac
 	if samplerArg != "" {
 		parsed, err := strconv.ParseFloat(samplerArg, 64)
 		if err != nil {
-			logger.V(1).Info("Invalid traces_sampler_arg, using",
-				"config.key", "traces_sampler_arg",
-				"config.provided", samplerArg,
-				"config.default", 1.0,
-				"exception.message", err.Error(),
+			klogutil.LogInfo(logger.V(1), "Invalid traces_sampler_arg, using",
+				klogutil.Field("config.key", "traces_sampler_arg"),
+				klogutil.Field("config.provided", samplerArg),
+				klogutil.Field("config.default", 1.0),
+				klogutil.Err(err),
 			)
 		} else if parsed < 0.0 || parsed > 1.0 {
 			logger.V(1).Info("traces_sampler_arg out of range [0.0, 1.0], using default",

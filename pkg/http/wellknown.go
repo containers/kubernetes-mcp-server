@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"k8s.io/klog/v2"
 )
@@ -153,9 +154,9 @@ func (w *WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 	// Try direct proxy first (works for Keycloak and other providers that support all endpoints)
 	resourceMetadata, respHeaders, err := w.fetchWellKnownEndpoint(request, upstreamURL)
 	if err != nil {
-		logger.V(1).Info("Well-known proxy failed to fetch endpoint",
-			"url.path", requestPath,
-			"exception.message", err.Error(),
+		klogutil.LogInfo(logger.V(1), "Well-known proxy failed to fetch endpoint",
+			klogutil.Field("url.path", requestPath),
+			klogutil.Err(err),
 		)
 		http.Error(writer, "Failed to fetch well-known metadata", http.StatusInternalServerError)
 		return
@@ -169,8 +170,8 @@ func (w *WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 		case strings.HasPrefix(requestPath, oauthAuthorizationServerEndpoint):
 			resourceMetadata, err = w.generateAuthorizationServerMetadata(request)
 			if err != nil {
-				logger.V(1).Info("Well-known proxy failed to generate authorization server metadata",
-					"exception.message", err.Error(),
+				klogutil.LogInfo(logger.V(1), "Well-known proxy failed to generate authorization server metadata",
+					klogutil.Err(err),
 				)
 				http.Error(writer, "Failed to generate well-known metadata", http.StatusInternalServerError)
 				return
@@ -179,8 +180,8 @@ func (w *WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 		case strings.HasPrefix(requestPath, oauthProtectedResourceEndpoint):
 			resourceMetadata, err = w.generateProtectedResourceMetadata(request)
 			if err != nil {
-				logger.V(1).Info("Well-known proxy failed to generate protected resource metadata",
-					"exception.message", err.Error(),
+				klogutil.LogInfo(logger.V(1), "Well-known proxy failed to generate protected resource metadata",
+					klogutil.Err(err),
 				)
 				http.Error(writer, "Failed to generate well-known metadata", http.StatusInternalServerError)
 				return
@@ -197,9 +198,9 @@ func (w *WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 
 	body, err := json.Marshal(resourceMetadata)
 	if err != nil {
-		logger.V(1).Info("Well-known proxy failed to marshal response",
-			"url.path", request.URL.Path,
-			"exception.message", err.Error(),
+		klogutil.LogInfo(logger.V(1), "Well-known proxy failed to marshal response",
+			klogutil.Field("url.path", request.URL.Path),
+			klogutil.Err(err),
 		)
 		http.Error(writer, "Internal server error", http.StatusInternalServerError)
 		return
