@@ -13,9 +13,6 @@ on:
       - 'charts/**'
       - 'build/helm.mk'
       - '.github/workflows/helm.yaml'
-  # Required checks must report on merge-queue entries or the queue stalls; these
-  # jobs need no pull-request context, so they run as-is.
-  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

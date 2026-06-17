@@ -5,10 +5,6 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - go.mod
-  # Required checks must report on merge-queue entries or the queue stalls. This
-  # one needs PR context (a merge_group event has none), so the job below skips
-  # and reports as a passing skip there.
-  merge_group:
 
 permissions:
   contents: read
@@ -24,8 +20,6 @@ defaults:
 jobs:
   check-go-directive:
     name: Check Go directive bump
-    # Needs the PR base ref; skip (and report green) on merge_group.
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

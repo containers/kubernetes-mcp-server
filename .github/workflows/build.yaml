@@ -13,10 +13,6 @@ on:
       - '.gitignore'
       - 'LICENSE'
       - '*.md'
-  # Re-run build + test on merge-queue entries against the PR combined with
-  # current main (not the stale base it was last tested on), catching semantic
-  # merge skew. paths-ignore does not apply to merge_group, so this always runs.
-  merge_group:
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.
