@@ -23,6 +23,10 @@ type Config struct {
 	// Insecure controls whether to skip TLS certificate verification.
 	Insecure bool `toml:"insecure,omitempty"`
 
+	// TempoURL is the URL of the Tempo API endpoint.
+	// When set, it is used directly instead of discovering Tempo instances via Kubernetes.
+	TempoURL string `toml:"tempo_url,omitempty"`
+
 	// UseRoute controls whether to use OpenShift Routes for discovering Tempo endpoints.
 	UseRoute bool `toml:"useRoute,omitempty"`
 }

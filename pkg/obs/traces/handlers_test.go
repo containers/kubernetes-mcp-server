@@ -255,6 +255,48 @@ func TestSearchTagValuesHandler_InvalidEndTime(t *testing.T) {
 	require.ErrorContains(t, err, "invalid end time")
 }
 
+// --- Static TempoURL ---
+
+func TestHandler_StaticTempoURL(t *testing.T) {
+	var capturedURL string
+	mock := &mockLoader{searchResult: `{"traces":[{"traceID":"abc"}],"metrics":{}}`}
+	params := ToolParams{
+		context: t.Context(),
+		config:  &Config{TempoURL: "http://my-tempo:3200"},
+		newTempoLoader: func(url string) (tempoclient.Loader, error) {
+			capturedURL = url
+			return mock, nil
+		},
+		arguments: map[string]any{
+			"query": "{}",
+		},
+	}
+
+	toolset := &Toolset{}
+	output, err := toolset.SearchTracesHandler(params)
+	require.NoError(t, err)
+	require.Len(t, output.Traces, 1)
+	require.Equal(t, "http://my-tempo:3200", capturedURL)
+}
+
+func TestHandler_NoURLAndNoDiscoveryParams(t *testing.T) {
+	// When neither TempoURL nor tempoNamespace/tempoName are provided, an error is returned.
+	params := ToolParams{
+		context: t.Context(),
+		config:  &Config{},
+		newTempoLoader: func(_ string) (tempoclient.Loader, error) {
+			return &mockLoader{}, nil
+		},
+		arguments: map[string]any{
+			"query": "{}",
+		},
+	}
+
+	toolset := &Toolset{}
+	_, err := toolset.SearchTracesHandler(params)
+	require.ErrorContains(t, err, "tempo URL not configured")
+}
+
 // --- Instance resolution errors ---
 
 func TestHandler_UnknownInstance(t *testing.T) {
