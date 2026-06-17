@@ -13,6 +13,14 @@ on:
       - '.gitignore'
       - 'LICENSE'
       - '*.md'
+  # Run on merge-queue entries so build + test execute against the actual
+  # combination of the PR and the current main, not the (possibly stale) base
+  # the PR was last tested against. This catches semantic merge skew — e.g. a
+  # test that compiles on the PR's base but not after another PR changes a
+  # function signature — which per-PR checks against an out-of-date base miss.
+  # (paths-ignore is not applied to merge_group events, so build + test always
+  # run in the queue.)
+  merge_group:
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.

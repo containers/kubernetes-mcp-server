@@ -403,7 +403,7 @@ type HTTPSIGHUPSuite struct {
 	httpClient      *http.Client
 	httpAddress     string
 	timeoutCancel   context.CancelFunc
-	stopServer      func()
+	stopServer      context.CancelFunc
 	waitForShutdown func() error
 }
 
@@ -421,7 +421,10 @@ func (s *HTTPSIGHUPSuite) TearDownTest() {
 	}
 	s.stopServer()
 	if s.waitForShutdown != nil {
-		_ = s.waitForShutdown()
+		// Non-fatal so the remaining teardown (timeoutCancel, klog restore via
+		// the deferred teardown) always runs, but surfaces a localized
+		// diagnostic if the server fails to shut down on context cancel.
+		s.NoError(s.waitForShutdown(), "HTTP server did not shut down gracefully")
 	}
 	if s.timeoutCancel != nil {
 		s.timeoutCancel()
@@ -480,24 +483,26 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 		},
 	}
 
-	// Start the server in a goroutine (going through root.go's Run path)
-	var timeoutCtx context.Context
+	// Start the server in a goroutine (going through root.go's Run path).
+	// Thread a cancelable context into Complete/Run (mirroring
+	// pkg/http/http_test.go) so the server is stopped by canceling that context
+	// rather than a process-wide SIGTERM. The timeout context is a real
+	// backstop: if Serve ever hangs, it cancels the derived context after 10s so
+	// group.Wait returns with a localized diagnostic instead of deadlocking
+	// until the global go test deadline.
+	var timeoutCtx, cancelCtx context.Context
 	timeoutCtx, s.timeoutCancel = context.WithTimeout(s.T().Context(), 10*time.Second)
-	group, _ := errgroup.WithContext(timeoutCtx)
+	group, gc := errgroup.WithContext(timeoutCtx)
+	cancelCtx, s.stopServer = context.WithCancel(gc)
 
 	group.Go(func() error {
 		rootCmd := NewMCPServer(opts.IOStreams)
-		if err := opts.Complete(rootCmd); err != nil {
+		if err := opts.Complete(cancelCtx, rootCmd); err != nil {
 			return err
 		}
-		return opts.Run()
+		return opts.Run(cancelCtx)
 	})
 	s.waitForShutdown = group.Wait
-
-	// We can't cancel via context, so we'll use SIGTERM at the end
-	s.stopServer = func() {
-		_ = syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
-	}
 
 	// Wait for server to start
 	s.Require().NoError(test.WaitForServer(tcpAddr), "HTTP server did not start in time")
@@ -533,7 +538,13 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 			})
 		}, 3*time.Second, 200*time.Millisecond, "Helm tools should appear after SIGHUP and config reload")
 
-		s.True(len(toolsAfter) > len(toolsBefore), "Should have more tools after adding helm toolset")
+		// Stronger than len(after) > len(before): assert the reload was purely
+		// additive. A reload that dropped a core tool while adding a helm one
+		// would still satisfy the length comparison, so verify every tool that
+		// was present before SIGHUP is still present afterwards.
+		for _, tool := range toolsBefore {
+			s.Contains(toolsAfter, tool, "reload should not drop previously-available tool %q", tool)
+		}
 	})
 
 	s.Run("server continues to respond after SIGHUP", func() {
@@ -548,11 +559,16 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 	})
 
 	s.Run("no shutdown messages in logs", func() {
-		time.Sleep(100 * time.Millisecond)
-		logOutput := s.logBuffer.String()
-		s.False(strings.Contains(logOutput, "Received signal hangup"), "Should not receive signal shutdown message for SIGHUP")
-		s.False(strings.Contains(logOutput, "initiating graceful shutdown"), "Should not initiate shutdown")
-		s.False(strings.Contains(logOutput, "Shutting down HTTP server"), "Should not shut down HTTP server")
+		// Poll the negative condition over a window instead of sleeping a fixed
+		// amount and sampling the buffer once: a shutdown path triggered by
+		// SIGHUP would emit one of these lines, and Never fails as soon as it
+		// observes one. This does not rely on the preceding Eventually subtests
+		// having already given a buggy shutdown path time to emit.
+		s.Never(func() bool {
+			logOutput := s.logBuffer.String()
+			return strings.Contains(logOutput, "initiating graceful shutdown") ||
+				strings.Contains(logOutput, "Shutting down HTTP server")
+		}, 500*time.Millisecond, 50*time.Millisecond, "SIGHUP must not trigger shutdown of the HTTP server")
 	})
 }
 
