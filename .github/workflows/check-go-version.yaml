@@ -5,12 +5,9 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - go.mod
-  # This check only makes sense for a pull request (it diffs go.mod against the
-  # PR base), but it must still report on merge-queue entries or the queue
-  # stalls if it is a required check. The job below is guarded to run only for
-  # pull_request events, so on a merge_group event it is reported as a passing
-  # skip. merge_group events carry no pull_request context, so the comparison
-  # cannot (and need not) run there.
+  # Required checks must report on merge-queue entries or the queue stalls. This
+  # one needs PR context (a merge_group event has none), so the job below skips
+  # and reports as a passing skip there.
   merge_group:
 
 permissions:
@@ -27,9 +24,7 @@ defaults:
 jobs:
   check-go-directive:
     name: Check Go directive bump
-    # Only the pull_request event carries the base ref this check diffs against.
-    # On merge_group entries the job is skipped, which reports as a passing
-    # required check instead of failing on an empty base SHA.
+    # Needs the PR base ref; skip (and report green) on merge_group.
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:

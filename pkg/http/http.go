@@ -160,32 +160,14 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Drain SIGHUP with a no-op so it never reaches Go's default disposition,
-	// which would terminate the process abruptly and bypass graceful shutdown
-	// (no httpServer.Shutdown / mcpServer.Shutdown, no metrics flush). In HTTP
-	// mode without a config file, cmd/root.go registers no configuration-reload
-	// handler, so without this the documented "SIGHUP signals are ignored"
-	// behavior would not hold. When a config file IS present, the reload handler
-	// in cmd/root.go receives its own copy of the signal (signal.Notify
-	// multicasts to every registered channel) and performs the reload; this
-	// drain is a harmless no-op in that case.
+	// Registering SIGHUP overrides Go's default disposition (terminate): os/signal
+	// then drops it via a non-blocking send to this unread channel. Without a
+	// config file cmd/root.go registers no reload handler, so this alone
+	// preserves the documented "SIGHUP is ignored" behavior; with one, that
+	// handler gets its own copy (Notify multicasts) and reloads.
 	sigHupChan := make(chan os.Signal, 1)
 	signal.Notify(sigHupChan, syscall.SIGHUP)
 	defer signal.Stop(sigHupChan)
-	go func() {
-		for {
-			select {
-			case <-sigHupChan:
-				// Deliberately neutral wording: when a config is present
-				// cmd/root.go's handler performs (and logs) the reload, so Serve
-				// must not claim the signal was "ignored" here. All Serve does
-				// with SIGHUP is decline to shut down.
-				logger.V(5).Info("SIGHUP received by HTTP server; not initiating shutdown")
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
 
 	serverErr := make(chan error, 1)
 	go func() {
