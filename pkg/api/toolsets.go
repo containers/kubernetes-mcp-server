@@ -233,6 +233,9 @@ type Tool struct {
 	Meta map[string]any `json:"_meta,omitempty"`
 	// A JSON Schema object defining the expected parameters for the tool.
 	InputSchema *jsonschema.Schema
+	// A JSON Schema object defining the structure of the tool's output
+	// returned in the StructuredContent field of a CallToolResult.
+	OutputSchema *jsonschema.Schema
 }
 
 type ToolAnnotations struct {

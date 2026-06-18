@@ -44,6 +44,16 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		},
 		InputSchema: inputSchema,
 	}
+	// A nil *jsonschema.Schema assigned to an "any" field (goSdkTool.OutputSchema)
+	// becomes a typed nil (non-nil interface), triggering a panic in AddTool.
+	// Therefore, only assign this field when non-nil.
+	outputSchema := tool.Tool.OutputSchema
+	if outputSchema != nil {
+		if outputSchema.Type != "object" {
+			return nil, nil, fmt.Errorf("tool %q: output schema must have type %q (got %q)", tool.Tool.Name, "object", outputSchema.Type)
+		}
+		goSdkTool.OutputSchema = outputSchema
+	}
 	goSdkHandler := func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toolCallRequest, err := GoSdkToolCallRequestToToolCallRequest(request)
 		if err != nil {
