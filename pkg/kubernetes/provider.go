@@ -58,12 +58,19 @@ type TokenExchangeProvider interface {
 type ProviderOption func(*providerOptions)
 
 type providerOptions struct {
-	oauthState *oauth.State
+	oauthState         *oauth.State
+	baseConfigProvider func() api.BaseConfig
 }
 
 func WithTokenExchange(oauthState *oauth.State) ProviderOption {
 	return func(opts *providerOptions) {
 		opts.oauthState = oauthState
+	}
+}
+
+func WithBaseConfigProvider(baseConfigProvider func() api.BaseConfig) ProviderOption {
+	return func(opts *providerOptions) {
+		opts.baseConfigProvider = baseConfigProvider
 	}
 }
 
@@ -86,9 +93,15 @@ func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption
 	}
 
 	if providerOpts.oauthState != nil {
+		baseConfigProvider := providerOpts.baseConfigProvider
+		if baseConfigProvider == nil {
+			baseConfigProvider = func() api.BaseConfig {
+				return cfg
+			}
+		}
 		provider = newTokenExchangingProvider(
 			provider,
-			cfg,
+			baseConfigProvider,
 			providerOpts.oauthState,
 		)
 	}

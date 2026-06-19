@@ -67,6 +67,8 @@ type TargetTokenExchangeConfig struct {
 
 	// client is a http client configured to work with the IdP for this target
 	client *http.Client `toml:"-"`
+	// clientCAFile tracks which CAFile was used to build the cached client
+	clientCAFile string `toml:"-"`
 	// cachedAssertion stores the most recently generated JWT assertion
 	cachedAssertion string `toml:"-"`
 	// cachedAssertionExpiry is when the cached assertion expires
@@ -103,7 +105,7 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
 
-	if c.client != nil {
+	if c.client != nil && c.clientCAFile == c.CAFile {
 		return c.client, nil
 	}
 
@@ -130,10 +132,14 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 
 	transport.TLSClientConfig = tlsConfig
 
+	if c.client != nil {
+		c.client.CloseIdleConnections()
+	}
 	c.client = &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: transport,
 	}
+	c.clientCAFile = c.CAFile
 
 	return c.client, nil
 }

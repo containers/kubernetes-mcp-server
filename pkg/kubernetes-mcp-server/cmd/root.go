@@ -335,8 +335,16 @@ func (m *MCPServerOptions) Run(ctx context.Context) error {
 		return err
 	}
 	oauthState := internaloauth.NewState(internaloauth.SnapshotFromConfig(m.StaticConfig, oidcProvider, httpClient))
+	cfgState := config.NewStaticConfigState(m.StaticConfig)
 
-	provider, err := kubernetes.NewProvider(ctx, m.StaticConfig, kubernetes.WithTokenExchange(oauthState))
+	provider, err := kubernetes.NewProvider(
+		ctx,
+		m.StaticConfig,
+		kubernetes.WithTokenExchange(oauthState),
+		kubernetes.WithBaseConfigProvider(func() api.BaseConfig {
+			return cfgState.Load()
+		}),
+	)
 	if err != nil {
 		return fmt.Errorf("unable to create kubernetes target provider: %w", err)
 	}
@@ -355,8 +363,6 @@ func (m *MCPServerOptions) Run(ctx context.Context) error {
 			klog.Errorf("MCP server shutdown error: %v", err)
 		}
 	}()
-
-	cfgState := config.NewStaticConfigState(m.StaticConfig)
 
 	// Set up SIGHUP handler for configuration reload. The returned stop
 	// function unregisters the signal handler and waits for the goroutine

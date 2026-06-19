@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -13,28 +14,28 @@ import (
 )
 
 type tokenExchangingProvider struct {
-	provider   Provider
-	baseConfig api.BaseConfig
-	oauthState *oauth.State
+	provider           Provider
+	baseConfigProvider func() api.BaseConfig
+	oauthState         *oauth.State
 	// stsConfig is cached and reused across calls so that assertion caching
-	// in TargetTokenExchangeConfig is effective. Rebuilt when the token URL changes
-	// (e.g., after SIGHUP reloads the OIDC provider).
-	stsConfig   *tokenexchange.TargetTokenExchangeConfig
-	stsConfigMu sync.Mutex
-	stsTokenURL string // tracks which token URL the cached config was built for
+	// in TargetTokenExchangeConfig is effective. Rebuilt when the token URL or
+	// any STS/TLS config field changes after a reload.
+	stsConfig    *tokenexchange.TargetTokenExchangeConfig
+	stsConfigMu  sync.Mutex
+	stsConfigKey stsConfigCacheKey
 }
 
 var _ Provider = &tokenExchangingProvider{}
 
 func newTokenExchangingProvider(
 	provider Provider,
-	baseConfig api.BaseConfig,
+	baseConfigProvider func() api.BaseConfig,
 	oauthState *oauth.State,
 ) Provider {
 	return &tokenExchangingProvider{
-		provider:   provider,
-		baseConfig: baseConfig,
-		oauthState: oauthState,
+		provider:           provider,
+		baseConfigProvider: baseConfigProvider,
+		oauthState:         oauthState,
 	}
 }
 
@@ -43,20 +44,31 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 	if snap == nil {
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
-	stsConfig := p.getOrBuildStsConfig(ctx, snap)
-	ctx, err := ExchangeTokenInContext(ctx, p.baseConfig, snap.OIDCProvider, snap.HTTPClient, p.provider, target, stsConfig)
+	baseConfig := p.baseConfig()
+	if baseConfig == nil {
+		return p.provider.GetDerivedKubernetes(ctx, target)
+	}
+	stsConfig := p.getOrBuildStsConfig(ctx, snap, baseConfig)
+	ctx, err := ExchangeTokenInContext(ctx, baseConfig, snap.OIDCProvider, snap.HTTPClient, p.provider, target, stsConfig)
 	if err != nil {
 		return nil, err
 	}
 	return p.provider.GetDerivedKubernetes(ctx, target)
 }
 
+func (p *tokenExchangingProvider) baseConfig() api.BaseConfig {
+	if p.baseConfigProvider == nil {
+		return nil
+	}
+	return p.baseConfigProvider()
+}
+
 // getOrBuildStsConfig returns a cached STS config, rebuilding it when the
-// OIDC provider's token URL changes (e.g., after SIGHUP).
-func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap *oauth.Snapshot) *tokenexchange.TargetTokenExchangeConfig {
+// OIDC provider's token URL or STS/TLS config fields change.
+func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap *oauth.Snapshot, baseConfig api.BaseConfig) *tokenexchange.TargetTokenExchangeConfig {
 	logger := klog.FromContext(ctx)
 
-	strategy := p.baseConfig.GetStsStrategy()
+	strategy := baseConfig.GetStsStrategy()
 	if strategy == "" {
 		return nil
 	}
@@ -77,27 +89,28 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 	p.stsConfigMu.Lock()
 	defer p.stsConfigMu.Unlock()
 
-	// Return cached config if token URL hasn't changed
-	if p.stsConfig != nil && p.stsTokenURL == tokenURL {
+	key := newStsConfigCacheKey(tokenURL, baseConfig)
+	if p.stsConfig != nil && p.stsConfigKey == key {
 		return p.stsConfig
 	}
 
-	authStyle := p.baseConfig.GetStsAuthStyle()
+	authStyle := baseConfig.GetStsAuthStyle()
 	if authStyle == "" {
 		authStyle = tokenexchange.AuthStyleParams
 	}
+	scopes := append([]string(nil), baseConfig.GetStsScopes()...)
 
 	cfg := &tokenexchange.TargetTokenExchangeConfig{
 		TokenURL:           tokenURL,
-		ClientID:           p.baseConfig.GetStsClientId(),
-		ClientSecret:       p.baseConfig.GetStsClientSecret(),
-		Audience:           p.baseConfig.GetStsAudience(),
-		Scopes:             p.baseConfig.GetStsScopes(),
+		ClientID:           baseConfig.GetStsClientId(),
+		ClientSecret:       baseConfig.GetStsClientSecret(),
+		Audience:           baseConfig.GetStsAudience(),
+		Scopes:             scopes,
 		AuthStyle:          authStyle,
-		ClientCertFile:     p.baseConfig.GetStsClientCertFile(),
-		ClientKeyFile:      p.baseConfig.GetStsClientKeyFile(),
-		FederatedTokenFile: p.baseConfig.GetStsFederatedTokenFile(),
-		CAFile:             p.baseConfig.GetCertificateAuthority(),
+		ClientCertFile:     baseConfig.GetStsClientCertFile(),
+		ClientKeyFile:      baseConfig.GetStsClientKeyFile(),
+		FederatedTokenFile: baseConfig.GetStsFederatedTokenFile(),
+		CAFile:             baseConfig.GetCertificateAuthority(),
 	}
 	if err := cfg.Validate(); err != nil {
 		logger.Error(
@@ -108,8 +121,38 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 	}
 
 	p.stsConfig = cfg
-	p.stsTokenURL = tokenURL
+	p.stsConfigKey = key
 	return p.stsConfig
+}
+
+type stsConfigCacheKey struct {
+	TokenURL           string
+	Strategy           string
+	ClientID           string
+	ClientSecret       string
+	Audience           string
+	Scopes             string
+	AuthStyle          string
+	ClientCertFile     string
+	ClientKeyFile      string
+	FederatedTokenFile string
+	CAFile             string
+}
+
+func newStsConfigCacheKey(tokenURL string, cfg api.BaseConfig) stsConfigCacheKey {
+	return stsConfigCacheKey{
+		TokenURL:           tokenURL,
+		Strategy:           cfg.GetStsStrategy(),
+		ClientID:           cfg.GetStsClientId(),
+		ClientSecret:       cfg.GetStsClientSecret(),
+		Audience:           cfg.GetStsAudience(),
+		Scopes:             strings.Join(cfg.GetStsScopes(), "\x00"),
+		AuthStyle:          cfg.GetStsAuthStyle(),
+		ClientCertFile:     cfg.GetStsClientCertFile(),
+		ClientKeyFile:      cfg.GetStsClientKeyFile(),
+		FederatedTokenFile: cfg.GetStsFederatedTokenFile(),
+		CAFile:             cfg.GetCertificateAuthority(),
+	}
 }
 
 func (p *tokenExchangingProvider) IsOpenShift(ctx context.Context) bool {
