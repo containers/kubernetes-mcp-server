@@ -52,7 +52,7 @@ jobs:
             binary_suffix: ".exe"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.event.workflow_run.head_sha }}
           persist-credentials: false
