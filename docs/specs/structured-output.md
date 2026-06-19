@@ -177,6 +177,11 @@ This repo takes an **opportunistic** stance:
 When in doubt, leave it off and add it later in a follow-up PR — declaring
 nothing is preferable to declaring something inaccurate.
 
+A declared `outputSchema` is set on the tool definition and surfaced to clients
+through `tools/list`; it is **advertising, not enforcement**. The server does
+not validate a handler's `structuredContent` against the declared schema, so the
+tool author owns keeping the two aligned — see "Wire-contract discipline" below.
+
 ## Wire-contract discipline
 
 Once a tool emits `structuredContent`, its JSON shape is public API and
