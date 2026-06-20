@@ -222,7 +222,7 @@ func (s *TargetParameterToolMutatorSuite) TestClusterAwareTool() {
 	})
 	s.Run("adds correct description", func() {
 		desc := tool.Tool.InputSchema.Properties["cluster"].Description
-		s.Contains(desc, "Optional parameter selecting which cluster to run the tool in", "Expected description to mention cluster selection")
+		s.Contains(desc, "Required parameter selecting which cluster to run the tool in", "Expected description to mention cluster selection")
 		s.Contains(desc, "Defaults to default-cluster if not set", "Expected description to mention default cluster")
 	})
 }
@@ -242,6 +242,70 @@ func (s *TargetParameterToolMutatorSuite) TestNonClusterAwareTool() {
 	tool := tm(nonClusterAware)
 	s.Run("does not add cluster parameter", func() {
 		s.Nilf(tool.Tool.InputSchema.Properties["cluster"], "Expected cluster property to not be added")
+	})
+}
+
+func (s *TargetParameterToolMutatorSuite) TestMultiTargetMarksParameterRequired() {
+	tm := WithTargetParameter("default-cluster", "cluster", true)
+	tool := tm(createTestTool("multi-target-tool"))
+	s.Run("cluster is in Required slice", func() {
+		s.Contains(tool.Tool.InputSchema.Required, "cluster",
+			"Expected cluster to be marked required in multi-target mode so LLMs honor it from the JSON Schema")
+	})
+}
+
+func (s *TargetParameterToolMutatorSuite) TestSingleTargetLeavesParameterOptional() {
+	tm := WithTargetParameter("default-cluster", "cluster", false)
+	tool := tm(createTestTool("single-target-tool"))
+	s.Run("cluster is not in Required slice", func() {
+		s.NotContains(tool.Tool.InputSchema.Required, "cluster",
+			"Expected cluster to remain optional in single-target mode")
+	})
+}
+
+func (s *TargetParameterToolMutatorSuite) TestMultiTargetPreservesExistingRequiredFields() {
+	tm := WithTargetParameter("default-cluster", "cluster", true)
+	tool := createTestTool("multi-target-tool")
+	tool.Tool.InputSchema.Required = []string{"namespace"}
+	tool = tm(tool)
+	s.Run("preserves pre-existing Required entries", func() {
+		s.Contains(tool.Tool.InputSchema.Required, "namespace",
+			"Expected pre-existing Required entries to be preserved")
+		s.Contains(tool.Tool.InputSchema.Required, "cluster",
+			"Expected cluster to be added alongside pre-existing Required entries")
+		s.Len(tool.Tool.InputSchema.Required, 2,
+			"Expected exactly two Required entries (namespace + cluster)")
+	})
+}
+
+func (s *TargetParameterToolMutatorSuite) TestMultiTargetIdempotentRequired() {
+	// Running the mutator twice should not duplicate the required entry.
+	tm := WithTargetParameter("default-cluster", "cluster", true)
+	tool := tm(createTestTool("multi-target-tool"))
+	tool = tm(tool)
+	s.Run("does not duplicate cluster in Required", func() {
+		count := 0
+		for _, r := range tool.Tool.InputSchema.Required {
+			if r == "cluster" {
+				count++
+			}
+		}
+		s.Equal(1, count, "Expected cluster to appear exactly once in Required")
+	})
+}
+
+func TestAppendUnique(t *testing.T) {
+	t.Run("appends when missing", func(t *testing.T) {
+		got := appendUnique([]string{"a"}, "b")
+		assert.Equal(t, []string{"a", "b"}, got)
+	})
+	t.Run("does not duplicate when present", func(t *testing.T) {
+		got := appendUnique([]string{"a", "b"}, "a")
+		assert.Equal(t, []string{"a", "b"}, got)
+	})
+	t.Run("handles nil slice", func(t *testing.T) {
+		got := appendUnique(nil, "a")
+		assert.Equal(t, []string{"a"}, got)
 	})
 }
 

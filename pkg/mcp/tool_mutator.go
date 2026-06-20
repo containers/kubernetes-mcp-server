@@ -46,17 +46,33 @@ func WithTargetParameter(defaultCluster, targetParameterName string, isMultiTarg
 				defaultCluster,
 				targetParameterName,
 			)
+			// Mark the target parameter as required in multi-target mode so LLMs
+			// honor it from the JSON Schema. Without this, LLMs read the schema
+			// as optional and fall back to the default target instead of the
+			// user-specified cluster. Single-target mode keeps it optional since
+			// only one cluster is reachable anyway.
+			tool.Tool.InputSchema.Required = appendUnique(tool.Tool.InputSchema.Required, targetParameterName)
 		}
 
 		return tool
 	}
 }
 
+// appendUnique appends s to dst if s is not already present, preserving order.
+func appendUnique(dst []string, s string) []string {
+	for _, existing := range dst {
+		if existing == s {
+			return dst
+		}
+	}
+	return append(dst, s)
+}
+
 func createTargetProperty(defaultCluster, targetName string) *jsonschema.Schema {
 	baseSchema := &jsonschema.Schema{
 		Type: "string",
 		Description: fmt.Sprintf(
-			"Optional parameter selecting which %s to run the tool in. Defaults to %s if not set",
+			"Required parameter selecting which %s to run the tool in. Defaults to %s if not set",
 			targetName,
 			defaultCluster,
 		),
