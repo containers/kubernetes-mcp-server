@@ -135,6 +135,37 @@ func HasVirtualMachineTemplate(p api.FilteringProvider) func() bool {
 	}
 }
 
+// HCO (HyperConverged Cluster Operator) resources
+var (
+	// HyperConvergedGVR is the GroupVersionResource for HyperConverged resources
+	HyperConvergedGVR = schema.GroupVersionResource{
+		Group:    "hco.kubevirt.io",
+		Version:  "v1",
+		Resource: "hyperconvergeds",
+	}
+
+	// KubeVirtCRGVR is the GroupVersionResource for KubeVirt operator CR resources
+	KubeVirtCRGVR = schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "kubevirts",
+	}
+
+	// CDIGVR is the GroupVersionResource for CDI operator CR resources
+	CDIGVR = schema.GroupVersionResource{
+		Group:    "cdi.kubevirt.io",
+		Version:  "v1beta1",
+		Resource: "cdis",
+	}
+
+	// NetworkAddonsConfigGVR is the GroupVersionResource for NetworkAddonsConfig resources
+	NetworkAddonsConfigGVR = schema.GroupVersionResource{
+		Group:    "networkaddonsoperator.network.kubevirt.io",
+		Version:  "v1",
+		Resource: "networkaddonsconfigs",
+	}
+)
+
 // HasVirtualMachine returns a TargetCompatibilityFilter that checks whether any
 // target cluster has the VirtualMachine GVK registered.
 func HasVirtualMachine(p api.FilteringProvider) func() bool {
