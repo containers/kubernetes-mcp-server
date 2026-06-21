@@ -1,0 +1,39 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-check-component-health"
+  difficulty: medium
+  description: "Check health of individual components managed by HCO (KubeVirt, CDI, Network Addons)"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          if ! kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+          echo "HCO is deployed and ready for evaluation"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1 || { echo "✗ HyperConverged CR not found"; exit 1; }
+          kubectl wait hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged --for condition=Available --timeout=60s 2>/dev/null || { echo "✗ HyperConverged is not Available"; exit 1; }
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "KubeVirt"
+    - llmJudge:
+        contains: "CDI"
+  prompt:
+    inline: |-
+      Check the health of each component managed by HCO. For each one, report whether its
+      CR exists, its current conditions, and the component version.
