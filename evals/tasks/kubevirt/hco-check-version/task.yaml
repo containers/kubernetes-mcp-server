@@ -1,0 +1,43 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-check-version"
+  difficulty: easy
+  description: "Determine the installed HCO version and the versions of components it manages"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          if ! kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+          echo "HCO is deployed and ready for evaluation"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1 || { echo "✗ HyperConverged CR not found"; exit 1; }
+          OPERATOR_VERSION=$(kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged \
+              -o jsonpath='{.status.versions[?(@.name=="operator")].version}' 2>/dev/null)
+          [[ -n "$OPERATOR_VERSION" ]] || { echo "✗ Could not determine HCO operator version"; exit 1; }
+          echo "✓ HCO operator version: $OPERATOR_VERSION"
+          KUBEVIRT_VERSION=$(kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged \
+              -o jsonpath='{.status.versions[?(@.name=="kubevirt")].version}' 2>/dev/null)
+          [[ -n "$KUBEVIRT_VERSION" ]] || { echo "✗ Could not determine KubeVirt version"; exit 1; }
+          echo "✓ KubeVirt version: $KUBEVIRT_VERSION"
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "version"
+  prompt:
+    inline: |-
+      What version of HCO is installed, and what versions of its managed components are running?

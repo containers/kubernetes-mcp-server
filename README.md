@@ -644,6 +644,8 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `windowsVersion` (`string`) - Windows version: 10, 11, 2k22 (default), or 2k25
   - `pipelineVersion` (`string`) - Pipeline version (default: latest). Use specific version like 0.25.0 if needed
 
+- **hco-status** - Generate a status report for the HyperConverged Cluster Operator (HCO) managing KubeVirt and related components
+
 </details>
 
 

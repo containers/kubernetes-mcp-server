@@ -1,0 +1,65 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-get-live-migration-config"
+  difficulty: medium
+  description: "Retrieve and explain the live migration configuration from HCO"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="kubevirt-hyperconverged"
+          HCO_NAME="kubevirt-hyperconverged"
+
+          if ! kubectl get hyperconverged "$HCO_NAME" -n "$NS" > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+
+          # Configure specific live migration settings
+          echo "Setting custom live migration configuration..."
+          kubectl patch hyperconverged "$HCO_NAME" -n "$NS" --type=merge \
+              -p '{"spec":{"liveMigrationConfig":{"bandwidthPerMigration":"128Mi","completionTimeoutPerGiB":300,"parallelMigrationsPerCluster":3,"parallelOutboundMigrationsPerNode":1,"progressTimeout":300}}}'
+
+          echo "Waiting for HCO to reconcile..."
+          kubectl wait hyperconverged "$HCO_NAME" -n "$NS" --for condition=Available --timeout=120s
+          echo "Live migration configuration updated"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1 || { echo "✗ HyperConverged CR not found"; exit 1; }
+          BANDWIDTH=$(kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged \
+              -o jsonpath='{.spec.liveMigrationConfig.bandwidthPerMigration}' 2>/dev/null)
+          [[ "$BANDWIDTH" == "128Mi" ]] || { echo "✗ Expected bandwidthPerMigration '128Mi', got '$BANDWIDTH'"; exit 1; }
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "128Mi"
+    - llmJudge:
+        contains: "completionTimeoutPerGiB"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="kubevirt-hyperconverged"
+          HCO_NAME="kubevirt-hyperconverged"
+
+          # Revert to default live migration config
+          kubectl patch hyperconverged "$HCO_NAME" -n "$NS" --type=merge \
+              -p '{"spec":{"liveMigrationConfig":{"bandwidthPerMigration":"0Mi","completionTimeoutPerGiB":150,"parallelMigrationsPerCluster":5,"parallelOutboundMigrationsPerNode":2,"progressTimeout":150}}}' 2>/dev/null || true
+
+          kubectl wait hyperconverged "$HCO_NAME" -n "$NS" --for condition=Available --timeout=120s 2>/dev/null || true
+          echo "Live migration configuration reverted"
+  prompt:
+    inline: |-
+      What are the current live migration settings in HCO? Report each setting, explain what
+      it controls, and whether the value is custom or default.

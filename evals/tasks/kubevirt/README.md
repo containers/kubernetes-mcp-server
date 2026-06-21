@@ -55,6 +55,44 @@ KubeVirt-focused MCP tasks live here. Each folder under this directory represent
   - **Prompt:** *There is a VirtualMachine named "broken-vm" in the vm-test namespace that is not working correctly. Please use the vm-troubleshoot prompt to diagnose the issue with this VirtualMachine. Follow the troubleshooting guide and report your findings, including the root cause and recommended action.*
   - **Tests:** Agent's ability to use MCP prompts for guided troubleshooting workflows
 
+### HCO (HyperConverged Cluster Operator)
+
+These tasks evaluate the agent's ability to work with the HyperConverged Cluster Operator, which manages KubeVirt, CDI, and other components as a single operator. They test whether the agent can leverage the `hco-status` prompt and other tools to diagnose and report on HCO state.
+
+**Prerequisites:** HCO must be deployed — use `make local-env-setup-hco` to set up a Kind cluster with HCO.
+
+- **[easy] hco-get-status** - Retrieve and interpret the HyperConverged CR status and conditions
+  - **Prompt:** *Describe the current status of HCO and whether the cluster is healthy.*
+  - **Tests:** Can the agent retrieve and interpret HCO conditions?
+
+- **[easy] hco-check-version** - Determine the installed HCO version and managed component versions
+  - **Prompt:** *What version of HCO is installed, and what versions of its managed components are running?*
+  - **Tests:** Can the agent extract version info from the HCO CR status?
+
+- **[easy] hco-get-feature-gates** - List the feature gates configured in the HyperConverged CR
+  - **Prompt:** *What feature gates are configured in HCO, and which ones are currently enabled?*
+  - **Tests:** Can the agent navigate the HCO spec structure to find feature gate configuration?
+
+- **[medium] hco-check-component-health** - Check health of individual HCO-managed components
+  - **Prompt:** *Check the health of each component managed by HCO and report any issues.*
+  - **Tests:** Can the agent correlate HCO with individual component CRs?
+
+- **[medium] hco-get-live-migration-config** - Retrieve and explain the live migration configuration
+  - **Prompt:** *What are the current live migration settings in HCO? Report each setting, explain what it controls, and whether the value is custom or default.*
+  - **Tests:** Can the agent find and interpret the liveMigrationConfig section?
+
+- **[medium] hco-list-managed-components** - List all components managed by HCO with their status
+  - **Prompt:** *List all components managed by HCO, their versions, and whether each one is healthy.*
+  - **Tests:** Can the agent discover the relationship between HCO and its managed operators?
+
+- **[medium] hco-status-prompt** - Use the hco-status prompt to generate a full status report
+  - **Prompt:** *Use the hco-status prompt to generate a status report for the HyperConverged Cluster Operator. Analyze the report and summarize the overall health, managed component status, and any warnings.*
+  - **Tests:** Can the agent use the `hco-status` MCP prompt to produce and interpret a status report?
+
+- **[hard] hco-diagnose-degraded** - Diagnose why HCO is reporting an unusual condition
+  - **Prompt:** *HCO seems to be reporting an unusual condition. Investigate the issue, determine the root cause, and recommend remediation steps.*
+  - **Tests:** Can the agent correlate HCO conditions with underlying component states to diagnose issues?
+
 ## Helper Scripts
 
 Some verification steps rely on helper scripts located in `helpers/`:

@@ -80,6 +80,11 @@ func TestMain(m *testing.M) {
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterpreferences", "VirtualMachineClusterPreference", "virtualmachineclusterpreference", false),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachinepreferences", "VirtualMachinePreference", "virtualmachinepreference", true),
+			// HCO
+			CRD("hco.kubevirt.io", "v1beta1", "hyperconvergeds", "HyperConverged", "hyperconverged", true),
+			CRD("kubevirt.io", "v1", "kubevirts", "KubeVirt", "kubevirt", true),
+			CRD("cdi.kubevirt.io", "v1beta1", "cdis", "CDI", "cdi", false),
+			CRD("networkaddonsoperator.network.kubevirt.io", "v1", "networkaddonsconfigs", "NetworkAddonsConfig", "networkaddonsconfig", false),
 		},
 	}
 	// Configure API server for faster CRD establishment and test performance
