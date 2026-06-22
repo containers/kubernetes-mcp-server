@@ -46,6 +46,11 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 	}
 	baseConfig := p.baseConfig()
 	if baseConfig == nil {
+		// Defensive only: production wiring always supplies a non-nil config
+		// (NewProvider defaults the provider to return cfg, and the cmd path
+		// passes cfgState.Load(), which is non-nil by the StaticConfigState
+		// invariant). If a caller ever omits it, fall back to the wrapped
+		// provider rather than panicking; token exchange is simply skipped.
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
 	stsConfig := p.getOrBuildStsConfig(ctx, snap, baseConfig)
@@ -120,6 +125,11 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 		return nil
 	}
 
+	// Release the previous client's idle connections before swapping in the
+	// rebuilt config so they don't linger until garbage collection.
+	if p.stsConfig != nil {
+		p.stsConfig.CloseIdleConnections()
+	}
 	p.stsConfig = cfg
 	p.stsConfigKey = key
 	return p.stsConfig

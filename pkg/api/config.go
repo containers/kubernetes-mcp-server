@@ -73,6 +73,12 @@ type StsConfigProvider interface {
 	GetStsClientCertFile() string
 	GetStsClientKeyFile() string
 	GetStsFederatedTokenFile() string
+}
+
+// CertificateAuthorityProvider provides access to the top-level certificate_authority
+// TLS setting. It is a general OAuth/TLS option (also consumed by pkg/oauth) rather
+// than an STS-specific one, so it is kept separate from StsConfigProvider.
+type CertificateAuthorityProvider interface {
 	GetCertificateAuthority() string
 }
 
@@ -98,6 +104,7 @@ type BaseConfig interface {
 	DeniedResourcesProvider
 	ExtendedConfigProvider
 	StsConfigProvider
+	CertificateAuthorityProvider
 	ValidationEnabledProvider
 	RequireTLSProvider
 	RequireOAuthProvider

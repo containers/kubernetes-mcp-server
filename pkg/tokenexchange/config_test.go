@@ -80,9 +80,14 @@ func (s *TargetTokenExchangeConfigSuite) TestHTTPClientCAFile() {
 		s.Require().NoError(err)
 		s.Require().NoError(resp.Body.Close())
 
+		sameClient, err := cfg.HTTPClient()
+		s.Require().NoError(err)
+		s.Same(oldClient, sameClient, "unchanged CAFile must reuse the memoized client")
+
 		cfg.CAFile = s.writeCAFile(newServer.Certificate())
 		newClient, err := cfg.HTTPClient()
 		s.Require().NoError(err)
+		s.NotSame(oldClient, newClient, "changed CAFile must rebuild the client")
 		resp, err = newClient.Get(newServer.URL)
 		s.Require().NoError(err)
 		s.Require().NoError(resp.Body.Close())
