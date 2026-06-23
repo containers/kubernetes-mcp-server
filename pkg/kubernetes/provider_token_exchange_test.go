@@ -232,6 +232,24 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			s.NotSame(first, second)
 			s.Equal("/new-token", second.FederatedTokenFile)
 		})
+
+		s.Run("require_tls", func() {
+			snap := s.newSnapshot()
+			cfg := config.Default()
+			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
+			cfg.StsClientId = "client"
+			cfg.StsAudience = "audience"
+			cfg.RequireTLS = false
+			p := newProvider(cfg)
+
+			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(first)
+
+			cfg.RequireTLS = true
+			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second)
+		})
 	})
 }
 

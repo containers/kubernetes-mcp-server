@@ -212,6 +212,29 @@ func (s *TargetTokenExchangeConfigSuite) TestSetRequireTLS() {
 		_ = resp.Body.Close()
 		s.Equal(http.StatusOK, resp.StatusCode)
 	})
+
+	s.Run("re-setting the enforcer is honored on the memoized client", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		cfg := &TargetTokenExchangeConfig{}
+		cfg.SetRequireTLS(func() bool { return false })
+		client, err := cfg.HTTPClient()
+		s.Require().NoError(err)
+
+		resp, err := client.Get(server.URL)
+		s.Require().NoError(err)
+		_ = resp.Body.Close()
+
+		// A later SetRequireTLS (e.g. SIGHUP toggle) must take effect on the same
+		// memoized client, with no rebuild (guards the cached exCfg path).
+		cfg.SetRequireTLS(func() bool { return true })
+		_, err = client.Get(server.URL)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "require_tls is enabled")
+	})
 }
 
 func (s *TargetTokenExchangeConfigSuite) TestExchangeEnforcement() {

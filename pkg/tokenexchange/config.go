@@ -80,23 +80,31 @@ type TargetTokenExchangeConfig struct {
 	// clientMutex protects HTTP client creation from race conditions
 	clientMutex sync.Mutex `toml:"-"`
 
-	// requireTLS is nil or a function that returns true when TLS is required.
-	// When non-nil, HTTPClient() wraps the transport to reject non-HTTPS URLs at runtime.
+	// requireTLS, when set, returns true while TLS is required. The wrapped
+	// transport reads it live per request via currentRequireTLS.
 	requireTLS func() bool `toml:"-"`
 }
 
-// SetRequireTLS configures TLS enforcement for the HTTP client.
-// When enforcer is non-nil and returns true, HTTPClient() will reject
-// requests to non-HTTPS URLs. The enforcer is captured when the client
-// is built, so callers must set it before the first HTTPClient() call.
+// SetRequireTLS installs the TLS enforcer, which HTTPClient() wraps the
+// transport with. It is read live per request, so re-setting it — e.g. a SIGHUP
+// that toggles require_tls — is honored on an already-memoized client.
 func (c *TargetTokenExchangeConfig) SetRequireTLS(enforcer func() bool) {
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
 	c.requireTLS = enforcer
 }
 
-// tlsEnforcingTransport wraps an http.RoundTripper and rejects non-HTTPS requests
-// when RequireTLS returns true. Inlined here to avoid an import cycle with pkg/config.
+// currentRequireTLS reports whether TLS is required now, reading the latest
+// enforcer under clientMutex.
+func (c *TargetTokenExchangeConfig) currentRequireTLS() bool {
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
+	return c.requireTLS != nil && c.requireTLS()
+}
+
+// tlsEnforcingTransport rejects non-HTTPS requests when RequireTLS returns true.
+// Mirrors pkg/config.TLSEnforcingTransport (duplicated to avoid an import cycle),
+// but RequireTLS is wired to currentRequireTLS for live, per-request evaluation.
 type tlsEnforcingTransport struct {
 	Base       http.RoundTripper
 	RequireTLS func() bool
@@ -181,9 +189,12 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 
 	baseTransport.TLSClientConfig = tlsConfig
 
+	// Wrap when an enforcer is configured. RequireTLS reads currentRequireTLS,
+	// so a later SetRequireTLS (e.g. a SIGHUP that toggles require_tls) is
+	// honored on this memoized client without a rebuild.
 	var transport http.RoundTripper = baseTransport
 	if c.requireTLS != nil {
-		transport = &tlsEnforcingTransport{Base: baseTransport, RequireTLS: c.requireTLS}
+		transport = &tlsEnforcingTransport{Base: baseTransport, RequireTLS: c.currentRequireTLS}
 	}
 
 	if c.client != nil {
