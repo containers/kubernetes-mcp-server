@@ -122,6 +122,61 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksHTTPTokenExchange() {
 	})
 }
 
+// fakeTokenExchangeProvider implements the optional TokenExchangeProvider
+// interface so ExchangeTokenInContext takes the per-target exCfg branch.
+type fakeTokenExchangeProvider struct {
+	fakeDerivedProvider
+	exchangeConfig *tokenexchange.TargetTokenExchangeConfig
+	strategy       string
+}
+
+func (f fakeTokenExchangeProvider) GetTokenExchangeConfig(string) *tokenexchange.TargetTokenExchangeConfig {
+	return f.exchangeConfig
+}
+func (f fakeTokenExchangeProvider) GetTokenExchangeStrategy() string { return f.strategy }
+
+func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"access_token": "exchanged-token",
+			"token_type":   "Bearer",
+		})
+	}))
+	defer server.Close()
+
+	newProvider := func() fakeTokenExchangeProvider {
+		return fakeTokenExchangeProvider{
+			exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{
+				TokenURL:     server.URL,
+				ClientID:     "test-client",
+				ClientSecret: "test-secret",
+			},
+			strategy: tokenexchange.StrategyRFC8693,
+		}
+	}
+	ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer subject-token")
+
+	s.Run("rejects http token URL via per-target config when require_tls is true", func() {
+		cfg := config.Default()
+		cfg.RequireTLS = true
+
+		_, err := ExchangeTokenInContext(ctx, cfg, nil, nil, newProvider(), "", nil)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "require_tls is enabled")
+	})
+
+	s.Run("allows http token URL via per-target config when require_tls is false", func() {
+		cfg := config.Default()
+		cfg.RequireTLS = false
+
+		result, err := ExchangeTokenInContext(ctx, cfg, nil, nil, newProvider(), "", nil)
+		s.Require().NoError(err)
+		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
+		s.Equal("Bearer exchanged-token", auth)
+	})
+}
+
 func TestTokenExchangeRouting(t *testing.T) {
 	suite.Run(t, new(TokenExchangeRoutingSuite))
 }

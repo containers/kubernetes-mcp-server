@@ -251,6 +251,31 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			s.NotSame(first, second)
 		})
 	})
+
+	s.Run("wires require_tls enforcement into the built config", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		snap := s.newSnapshot()
+		cfg := config.Default()
+		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
+		cfg.StsClientId = "client"
+		cfg.RequireTLS = true
+		p := newProvider(cfg)
+
+		built := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+		s.Require().NotNil(built)
+
+		// getOrBuildStsConfig must wire the enforcer into the config it returns,
+		// or the http token endpoint slips through when require_tls is on.
+		client, err := built.HTTPClient()
+		s.Require().NoError(err)
+		_, err = client.Get(server.URL)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "require_tls is enabled")
+	})
 }
 
 func (s *TokenExchangingProviderSuite) newExchangeTestOIDCServer() *exchangeTestOIDCServer {

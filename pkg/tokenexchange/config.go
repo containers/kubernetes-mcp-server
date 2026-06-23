@@ -80,14 +80,14 @@ type TargetTokenExchangeConfig struct {
 	// clientMutex protects HTTP client creation from race conditions
 	clientMutex sync.Mutex `toml:"-"`
 
-	// requireTLS, when set, returns true while TLS is required. The wrapped
-	// transport reads it live per request via currentRequireTLS.
+	// requireTLS, when set, returns true while TLS is required. The transport
+	// consults it live per request via currentRequireTLS.
 	requireTLS func() bool `toml:"-"`
 }
 
-// SetRequireTLS installs the TLS enforcer, which HTTPClient() wraps the
-// transport with. It is read live per request, so re-setting it — e.g. a SIGHUP
-// that toggles require_tls — is honored on an already-memoized client.
+// SetRequireTLS installs the TLS enforcer. HTTPClient() always wraps its
+// transport to read it live per request, so this may be (re)set at any time —
+// before or after the client is memoized, e.g. on a SIGHUP toggle.
 func (c *TargetTokenExchangeConfig) SetRequireTLS(enforcer func() bool) {
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
@@ -189,13 +189,11 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 
 	baseTransport.TLSClientConfig = tlsConfig
 
-	// Wrap when an enforcer is configured. RequireTLS reads currentRequireTLS,
-	// so a later SetRequireTLS (e.g. a SIGHUP that toggles require_tls) is
-	// honored on this memoized client without a rebuild.
-	var transport http.RoundTripper = baseTransport
-	if c.requireTLS != nil {
-		transport = &tlsEnforcingTransport{Base: baseTransport, RequireTLS: c.currentRequireTLS}
-	}
+	// Always wrap so require_tls is enforced live per request via
+	// currentRequireTLS, regardless of whether an enforcer was set before this
+	// client was memoized. currentRequireTLS is a no-op until SetRequireTLS
+	// installs one, at the cost of a clientMutex lock per request.
+	transport := &tlsEnforcingTransport{Base: baseTransport, RequireTLS: c.currentRequireTLS}
 
 	if c.client != nil {
 		c.client.CloseIdleConnections()

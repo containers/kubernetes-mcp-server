@@ -30,7 +30,9 @@ func (s *TargetTokenExchangeConfigSuite) TestHTTPClientCAFile() {
 		client, err := (&TargetTokenExchangeConfig{}).HTTPClient()
 		s.Require().NoError(err)
 
-		transport, ok := client.Transport.(*http.Transport)
+		wrapper, ok := client.Transport.(*tlsEnforcingTransport)
+		s.Require().True(ok)
+		transport, ok := wrapper.Base.(*http.Transport)
 		s.Require().True(ok)
 		s.Require().NotNil(transport.TLSClientConfig)
 		s.Equal(uint16(tls.VersionTLS12), transport.TLSClientConfig.MinVersion)
@@ -213,14 +215,14 @@ func (s *TargetTokenExchangeConfigSuite) TestSetRequireTLS() {
 		s.Equal(http.StatusOK, resp.StatusCode)
 	})
 
-	s.Run("re-setting the enforcer is honored on the memoized client", func() {
+	s.Run("enforces when the enforcer is set after the client is built", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
 
+		// Build (and memoize) the client with no enforcer installed.
 		cfg := &TargetTokenExchangeConfig{}
-		cfg.SetRequireTLS(func() bool { return false })
 		client, err := cfg.HTTPClient()
 		s.Require().NoError(err)
 
@@ -228,8 +230,9 @@ func (s *TargetTokenExchangeConfigSuite) TestSetRequireTLS() {
 		s.Require().NoError(err)
 		_ = resp.Body.Close()
 
-		// A later SetRequireTLS (e.g. SIGHUP toggle) must take effect on the same
-		// memoized client, with no rebuild (guards the cached exCfg path).
+		// Always-wrapping means a later SetRequireTLS still takes effect on the
+		// same memoized client, with no rebuild (guards against an unwrapped
+		// client being cached before the enforcer is wired).
 		cfg.SetRequireTLS(func() bool { return true })
 		_, err = client.Get(server.URL)
 		s.Require().Error(err)
