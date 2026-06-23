@@ -136,6 +136,32 @@ func (s *KialiSuite) TestGetMeshStatus() {
 	})
 }
 
+func (s *KialiSuite) TestListClusters() {
+	var capturedURL *url.URL
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		_, _ = w.Write([]byte(`[{"name":"cluster-east","isHomeCluster":true},{"name":"cluster-west","isHomeCluster":false}]`))
+	}))
+	s.InitMcpClient()
+
+	s.Run("list_mesh_clusters", func() {
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_list_mesh_clusters", s.toolsetName), map[string]interface{}{})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("sends POST to MCP endpoint", func() {
+			s.Equal("/api/chat/mcp/list_clusters", capturedURL.Path, "Unexpected path")
+		})
+		s.Run("response contains cluster names", func() {
+			text := toolResult.Content[0].(*mcp.TextContent).Text
+			s.Contains(text, "cluster-east", "Response should contain home cluster name")
+			s.Contains(text, "cluster-west", "Response should contain remote cluster name")
+		})
+	})
+}
+
 func (s *KialiSuite) TestKialiPromptsRegistered() {
 	s.InitMcpClient()
 	prompts, err := s.ListPrompts()

@@ -31,9 +31,9 @@ func InitGetMeshTrafficGraph() []api.ServerTool {
 						Default:     api.ToRawMessage(DefaultGraphType),
 						Enum:        []any{"app", "versionedApp", "service", "workload"},
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional cluster name to include in the graph. Default is the cluster name in the Kiali configuration (KubeConfig).",
+						Description: "Optional Istio mesh cluster name to include in the graph. Defaults to the Kiali home cluster.",
 					},
 				},
 				Required: []string{"namespaces"},
@@ -53,7 +53,7 @@ func InitGetMeshTrafficGraph() []api.ServerTool {
 func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiGetMeshTrafficGraphEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiGetMeshTrafficGraphEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh traffic graph: %w", err)), nil
 	}

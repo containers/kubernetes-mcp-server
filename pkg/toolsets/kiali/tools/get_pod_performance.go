@@ -42,9 +42,9 @@ func InitGetPodPerformance() []api.ServerTool {
 						Type:        "string",
 						Description: "Optional end timestamp (RFC3339) for the query. Defaults to now.",
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+						Description: "Optional Istio mesh cluster name. Defaults to the Kiali home cluster.",
 					},
 				},
 				Required: []string{"namespace"},
@@ -65,7 +65,7 @@ func InitGetPodPerformance() []api.ServerTool {
 func getPodPerformanceHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiGetPodPerformanceEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiGetPodPerformanceEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod performance: %w", err)), nil
 	}
