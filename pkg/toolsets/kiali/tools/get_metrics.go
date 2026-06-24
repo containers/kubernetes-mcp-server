@@ -56,9 +56,8 @@ func InitGetMetrics() []api.ServerTool {
 					},
 					"reporter": {
 						Type:        "string",
-						Description: "Metrics reporter. Optional, defaults to 'source'",
+						Description: "Metrics reporter(s). Comma-separated list of: 'source', 'destination', 'waypoint', or the special value 'both' (no reporter filter). Optional, defaults to 'source'. Example: 'source,waypoint'",
 						Default:     api.ToRawMessage(DefaultReporter),
-						Enum:        []any{"source", "destination", "both"},
 					},
 					"requestProtocol": {
 						Type:        "string",

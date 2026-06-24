@@ -158,12 +158,7 @@
         },
         "reporter": {
           "default": "source",
-          "description": "Metrics reporter. Optional, defaults to 'source'",
-          "enum": [
-            "source",
-            "destination",
-            "both"
-          ],
+          "description": "Metrics reporter(s). Comma-separated list of: 'source', 'destination', 'waypoint', or the special value 'both' (no reporter filter). Optional, defaults to 'source'. Example: 'source,waypoint'",
           "type": "string"
         },
         "requestProtocol": {

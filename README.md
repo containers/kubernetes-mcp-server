@@ -503,7 +503,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) **(required)** - Namespace to get metrics from
   - `quantiles` (`string`) - Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional
   - `rateInterval` (`string`) - Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'
-  - `reporter` (`string`) - Metrics reporter. Optional, defaults to 'source'
+  - `reporter` (`string`) - Metrics reporter(s). Comma-separated list of: 'source', 'destination', 'waypoint', or the special value 'both' (no reporter filter). Optional, defaults to 'source'. Example: 'source,waypoint'
   - `requestProtocol` (`string`) - Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional
   - `resourceName` (`string`) **(required)** - Name of the resource to get metrics for
   - `resourceType` (`string`) **(required)** - Type of resource to get metrics
