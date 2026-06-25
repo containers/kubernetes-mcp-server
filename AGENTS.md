@@ -47,6 +47,8 @@ The project uses a toolset-based architecture for organizing MCP tools:
 - **Registration** happens in `pkg/toolsets/` where toolsets are registered at initialization.
 - Each toolset lives in its own subdirectory under `pkg/toolsets/` (e.g., `pkg/toolsets/config/`, `pkg/toolsets/core/`, `pkg/toolsets/helm/`).
 
+**Important:** When creating a new toolset, adding tools to an existing toolset, or modifying tool definitions, **always use the `/toolset-design` skill first**. This skill validates the design (naming, grouping, input schema, eval coverage) before implementation begins.
+
 When adding a new tool:
 1. Define the tool handler function that implements the tool's logic.
 2. Create a `ServerTool` struct with the tool definition and handler.
