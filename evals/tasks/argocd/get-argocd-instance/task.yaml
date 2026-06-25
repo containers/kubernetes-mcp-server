@@ -1,0 +1,63 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "get-argocd-instance"
+  difficulty: easy
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-get-inst
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-get-inst
+    - k8s.create:
+        apiVersion: argoproj.io/v1beta1
+        kind: ArgoCD
+        metadata:
+          name: argocd-main
+          namespace: argocd-eval-get-inst
+        spec:
+          server:
+            route:
+              enabled: false
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          kubectl get argocd argocd-main -n argocd-eval-get-inst -o name || exit 1
+          echo "ArgoCD instance argocd-main exists"
+    - llmJudge:
+        contains: "argocd-main"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1beta1
+        kind: ArgoCD
+        metadata:
+          name: argocd-main
+          namespace: argocd-eval-get-inst
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-get-inst
+        ignoreNotFound: true
+
+  prompt:
+    inline: Get the ArgoCD instance named argocd-main in the argocd-eval-get-inst namespace.

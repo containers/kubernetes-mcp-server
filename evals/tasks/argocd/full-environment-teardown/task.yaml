@@ -1,0 +1,163 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "argocd-full-environment-teardown"
+  difficulty: hard
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-teardown
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-teardown
+    - k8s.create:
+        apiVersion: argoproj.io/v1beta1
+        kind: ArgoCD
+        metadata:
+          name: argocd-legacy
+          namespace: argocd-eval-teardown
+        spec:
+          server:
+            route:
+              enabled: false
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-legacy-project
+          namespace: argocd-eval-teardown
+        spec:
+          description: Legacy team project
+          sourceRepos:
+            - https://github.com/legacy/app
+          destinations:
+            - server: https://kubernetes.default.svc
+              namespace: legacy
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: legacy-api
+          namespace: argocd-eval-teardown
+        spec:
+          project: team-legacy-project
+          source:
+            repoURL: https://github.com/legacy/app
+            targetRevision: HEAD
+            path: api
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: legacy
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: legacy-web
+          namespace: argocd-eval-teardown
+        spec:
+          project: team-legacy-project
+          source:
+            repoURL: https://github.com/legacy/app
+            targetRevision: HEAD
+            path: web
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: legacy
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: legacy-worker
+          namespace: argocd-eval-teardown
+        spec:
+          project: team-legacy-project
+          source:
+            repoURL: https://github.com/legacy/app
+            targetRevision: HEAD
+            path: worker
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: legacy
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          for APP in legacy-api legacy-web legacy-worker; do
+            if kubectl get application "$APP" -n argocd-eval-teardown 2>/dev/null; then
+              echo "ERROR: Application $APP still exists"
+              exit 1
+            fi
+          done
+
+          if kubectl get appproject team-legacy-project -n argocd-eval-teardown 2>/dev/null; then
+            echo "ERROR: AppProject team-legacy-project still exists"
+            exit 1
+          fi
+
+          if kubectl get argocd argocd-legacy -n argocd-eval-teardown 2>/dev/null; then
+            echo "ERROR: ArgoCD instance argocd-legacy still exists"
+            exit 1
+          fi
+
+          echo "Full environment teardown complete: all applications, project, and ArgoCD instance removed"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: legacy-api
+          namespace: argocd-eval-teardown
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: legacy-web
+          namespace: argocd-eval-teardown
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: legacy-worker
+          namespace: argocd-eval-teardown
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-legacy-project
+          namespace: argocd-eval-teardown
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1beta1
+        kind: ArgoCD
+        metadata:
+          name: argocd-legacy
+          namespace: argocd-eval-teardown
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-teardown
+        ignoreNotFound: true
+
+  prompt:
+    inline: Decommission the entire ArgoCD environment in namespace 'argocd-eval-teardown'. First find and remove all ArgoCD Applications (apiVersion argoproj.io/v1alpha1) that belong to project 'team-legacy-project'. Then delete the AppProject (apiVersion argoproj.io/v1alpha1) named 'team-legacy-project'. Finally delete the ArgoCD instance (apiVersion argoproj.io/v1beta1, kind ArgoCD) named 'argocd-legacy'.
