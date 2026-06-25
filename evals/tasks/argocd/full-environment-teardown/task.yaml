@@ -115,6 +115,8 @@ spec:
           fi
 
           echo "Full environment teardown complete: all applications, project, and ArgoCD instance removed"
+    - llmJudge:
+        contains: "legacy-api"
 
   cleanup:
     - k8s.delete:
