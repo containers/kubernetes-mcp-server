@@ -6,6 +6,8 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
+// clusterIsOpenShift reports whether the connected cluster is OpenShift.
+// TODO: replace openshift.IsOpenshift with a generic cluster-capability API when available upstream.
 func clusterIsOpenShift(k8s api.KubernetesClient) bool {
 	if k8s == nil {
 		return false

@@ -21,6 +21,7 @@ import (
 // NetObserv is an HTTP client for the NetObserv console plugin backend API.
 type NetObserv struct {
 	bearerToken          string
+	bearerTokenFile      string
 	pluginURL            string
 	insecure             bool
 	certificateAuthority string
@@ -38,7 +39,8 @@ func NewNetObserv(configProvider api.BaseConfig, k8s api.KubernetesClient) *NetO
 		requireTLS:  configProvider.IsRequireTLS,
 	}
 	if restConfig != nil {
-		client.bearerToken = restConfig.BearerToken
+		client.bearerToken = strings.TrimSpace(restConfig.BearerToken)
+		client.bearerTokenFile = strings.TrimSpace(restConfig.BearerTokenFile)
 	}
 	var nc *Config
 	if cfg, ok := configProvider.GetToolsetConfig("netobserv"); ok {
@@ -50,8 +52,7 @@ func NewNetObserv(configProvider api.BaseConfig, k8s api.KubernetesClient) *NetO
 		nc = &Config{}
 	}
 	isOpenShift := clusterIsOpenShift(k8s)
-	requireTLS := configProvider.IsRequireTLS()
-	nc.applyDefaults(requireTLS, isOpenShift)
+	nc.applyDefaults(isOpenShift)
 	client.pluginURL = nc.ResolvedURL(isOpenShift)
 	client.insecure = nc.Insecure
 	client.certificateAuthority = nc.CertificateAuthority
@@ -94,7 +95,8 @@ func (n *NetObserv) validateAndGetURL(endpoint string) (string, error) {
 	return u.String(), nil
 }
 
-func (n *NetObserv) createHTTPClient() *http.Client {
+func (n *NetObserv) createHTTPClient(ctx context.Context) *http.Client {
+	logger := klog.FromContext(ctx)
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: n.insecure,
@@ -106,7 +108,7 @@ func (n *NetObserv) createHTTPClient() *http.Client {
 	if caValue := strings.TrimSpace(n.certificateAuthority); caValue != "" {
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
-			klog.Errorf("failed to read CA certificate from file %s: %v; proceeding without custom CA", caValue, err)
+			logger.Error(err, "failed to read CA certificate; proceeding without custom CA", "path", caValue)
 			return n.wrapWithTLSEnforcement(&http.Client{
 				Transport: transport,
 				Timeout:   DefaultPluginHTTPTimeout,
@@ -121,7 +123,7 @@ func (n *NetObserv) createHTTPClient() *http.Client {
 		if ok := certPool.AppendCertsFromPEM(caPEM); ok {
 			tlsConfig.RootCAs = certPool
 		} else {
-			klog.V(0).Infof("failed to append provided certificate authority; proceeding without custom CA")
+			logger.V(0).Info("failed to append provided certificate authority; proceeding without custom CA")
 		}
 	}
 	return n.wrapWithTLSEnforcement(&http.Client{
@@ -137,11 +139,19 @@ func (n *NetObserv) wrapWithTLSEnforcement(client *http.Client) *http.Client {
 	return config.NewTLSEnforcingClient(client, n.requireTLS)
 }
 
-func (n *NetObserv) authorizationHeader() string {
+func (n *NetObserv) authorizationHeader(ctx context.Context) string {
 	if n == nil {
 		return ""
 	}
 	token := strings.TrimSpace(n.bearerToken)
+	if token == "" && n.bearerTokenFile != "" {
+		data, err := os.ReadFile(n.bearerTokenFile)
+		if err != nil {
+			klog.FromContext(ctx).Error(err, "failed to read bearer token file", "path", n.bearerTokenFile)
+			return ""
+		}
+		token = strings.TrimSpace(string(data))
+	}
 	if token == "" {
 		return ""
 	}
@@ -173,19 +183,19 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 	}
 	query := ArgumentsToValues(arguments)
 	u.RawQuery = query.Encode()
-	klog.V(0).Infof("netobserv API call: %s", u.String())
+	klog.FromContext(ctx).V(0).Info("netobserv API call", "url", u.Redacted())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return "", err
 	}
-	if authHeader := n.authorizationHeader(); authHeader != "" {
+	if authHeader := n.authorizationHeader(ctx); authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}
 	if accept != "" {
 		req.Header.Set("Accept", accept)
 	}
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
-	client := n.createHTTPClient()
+	client := n.createHTTPClient(ctx)
 	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

@@ -12,6 +12,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"k8s.io/klog/v2"
 )
 
 // Config holds NetObserv console plugin backend configuration.
@@ -54,12 +55,12 @@ func (c *Config) usesSynthesizedURL() bool {
 	return c == nil || strings.TrimSpace(c.Url) == ""
 }
 
-// applyDefaults fills implicit TLS settings for synthesized in-cluster URLs on OpenShift.
-func (c *Config) applyDefaults(requireTLS, isOpenShift bool) {
-	c.applyDefaultsWithStat(requireTLS, isOpenShift, os.Stat)
+// applyDefaults sets certificate_authority from the projected service CA on OpenShift when url is synthesized.
+func (c *Config) applyDefaults(isOpenShift bool) {
+	c.applyDefaultsWithStat(isOpenShift, os.Stat)
 }
 
-func (c *Config) applyDefaultsWithStat(requireTLS, isOpenShift bool, stat func(string) (os.FileInfo, error)) {
+func (c *Config) applyDefaultsWithStat(isOpenShift bool, stat func(string) (os.FileInfo, error)) {
 	if c == nil || !c.usesSynthesizedURL() || !isOpenShift {
 		return
 	}
@@ -70,10 +71,10 @@ func (c *Config) applyDefaultsWithStat(requireTLS, isOpenShift bool, stat func(s
 		c.CertificateAuthority = DefaultPluginServiceCAPath
 		return
 	}
-	if requireTLS {
-		return
-	}
-	c.Insecure = DefaultPluginInsecureSkipVerify
+	klog.Background().Info(
+		"NetObserv plugin TLS: service CA not found; set certificate_authority or insecure=true",
+		"path", DefaultPluginServiceCAPath,
+	)
 }
 
 func (c *Config) Validate() error {
@@ -85,10 +86,10 @@ func (c *Config) validate(isOpenShift bool) error {
 		return errors.New("netobserv config is nil")
 	}
 	resolved := c.ResolvedURL(isOpenShift)
-	if u, err := url.Parse(resolved); err != nil || u.Scheme == "" || u.Host == "" {
+	u, err := url.Parse(resolved)
+	if err != nil || u.Scheme == "" || u.Host == "" {
 		return errors.New("url must be a valid URL")
 	}
-	u, _ := url.Parse(resolved)
 	if strings.EqualFold(u.Scheme, "https") && !c.Insecure && strings.TrimSpace(c.CertificateAuthority) == "" {
 		return errors.New("certificate_authority is required for https when insecure is false")
 	}
@@ -125,7 +126,7 @@ func netobservToolsetParser(ctx context.Context, primitive toml.Primitive, md to
 		}
 	}
 
-	cfg.applyDefaults(requireTLS, configLoadOpenShift)
+	cfg.applyDefaults(configLoadOpenShift)
 
 	if err := cfg.validate(configLoadOpenShift); err != nil {
 		return nil, err

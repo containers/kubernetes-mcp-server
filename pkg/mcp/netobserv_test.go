@@ -85,6 +85,33 @@ func (s *NetObservSuite) TestExportFlows() {
 	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "TimeFlowStartMs")
 }
 
+func (s *NetObservSuite) TestGetFlowMetrics() {
+	var capturedURL *url.URL
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		_, _ = w.Write([]byte(`{"data":[],"stats":{}}`))
+	}))
+	s.InitMcpClient()
+
+	s.Run("get_flow_metrics forwards query parameters", func() {
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_flow_metrics", s.toolsetName), map[string]interface{}{
+			"namespace":   "default",
+			"timeRange":   300,
+			"aggregateBy": "namespace",
+			"type":        "Bytes",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed")
+		s.Equal("/api/flow/metrics", capturedURL.Path)
+		s.Equal("default", capturedURL.Query().Get("namespace"))
+		s.Equal("300", capturedURL.Query().Get("timeRange"))
+		s.Equal("namespace", capturedURL.Query().Get("aggregateBy"))
+		s.Equal("Bytes", capturedURL.Query().Get("type"))
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "data")
+	})
+}
+
 func TestNetObservMcp(t *testing.T) {
 	suite.Run(t, new(NetObservSuite))
 }

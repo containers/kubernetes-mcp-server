@@ -24,7 +24,7 @@ toolsets = ["core", "netobserv"]
 # port = 9001
 ```
 
-When `netobserv` is listed in `toolsets`, configuration is loaded from `[toolset_configs.netobserv]` if present. On **in-cluster OpenShift** without `url`, the plugin base URL is synthesized as `https://netobserv-plugin.netobserv.svc.cluster.local:9001`. The pod service CA bundle at `/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt` is used automatically when present.
+When `netobserv` is listed in `toolsets`, configuration is loaded from `[toolset_configs.netobserv]` if present. Without `url`, the in-cluster plugin URL defaults to `https://netobserv-plugin.netobserv.svc.cluster.local:9001` on OpenShift and `http://…` on other clusters. On OpenShift, the projected service CA at `/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt` is used when present. For port-forward or custom TLS, set `insecure` or `certificate_authority` in config.
 
 ### Tools
 
