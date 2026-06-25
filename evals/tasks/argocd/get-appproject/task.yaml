@@ -1,0 +1,66 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "get-argocd-appproject"
+  difficulty: easy
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-get-proj
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-get-proj
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-platform
+          namespace: argocd-eval-get-proj
+        spec:
+          description: "Platform team project"
+          sourceRepos:
+            - "https://github.com/platform/*"
+          destinations:
+            - namespace: "*"
+              server: "https://kubernetes.default.svc"
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          kubectl get appproject team-platform -n argocd-eval-get-proj -o name || exit 1
+          echo "AppProject team-platform exists"
+    - llmJudge:
+        contains: "team-platform"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-platform
+          namespace: argocd-eval-get-proj
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-get-proj
+        ignoreNotFound: true
+
+  prompt:
+    inline: Get the ArgoCD AppProject named team-platform in the argocd-eval-get-proj namespace.
