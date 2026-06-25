@@ -47,17 +47,39 @@ Operators: =, !=, >, <, >=, <=
 
 Common attributes:
 - resource.service.name (service name)
+- resource.k8s.namespace.name (Kubernetes namespace)
+- resource.k8s.deployment.name (Kubernetes deployment)
+- resource.k8s.statefulset.name (Kubernetes statefulset)
+- resource.k8s.daemonset.name (Kubernetes daemonset)
+- resource.k8s.replicaset.name (Kubernetes replicaset)
+- resource.k8s.pod.name (Kubernetes pod)
+- resource.k8s.container.name (Kubernetes container)
+- resource.k8s.job.name (Kubernetes job)
+- resource.k8s.cronjob.name (Kubernetes cronjob)
+- resource.k8s.node.name (Kubernetes node)
+- resource.k8s.cluster.name (Kubernetes cluster)
 - span.http.response.status_code (HTTP response code)
 - span.http.request.method (HTTP method like GET, POST)
 - span.url.full (request URL)
+- name (span name / operation name, e.g. "GET /api/users")
 - duration (trace duration, e.g. 100ms, 2s)
 - status (trace status: ok, error, unset)
 
-IMPORTANT: Always wrap filters in curly braces { }.
-Do NOT use SQL, PromQL, or Lucene syntax.
-Do NOT omit the "resource." or "span." prefix from attribute names
+Note: older instrumentation may use legacy HTTP attribute names (e.g. span.http.status_code instead of span.http.response.status_code).
+If a query returns no results, try tempo_search_tags to check which attributes exist.
 
-If unsure which attributes to filter on, start with {} to return all traces, then use tempo_search_tags to discover available attributes.
+IMPORTANT:
+- Always wrap filters in curly braces { }.
+- Do NOT use SQL, PromQL, or Lucene syntax.
+- Do NOT omit the "resource." or "span." prefix from attribute names
+- When the user refers to a Kubernetes resource type (deployment, pod, namespace, etc.), use the matching resource.k8s.* attribute, NOT resource.service.name.
+
+Examples:
+- { resource.service.name="frontend" }
+- { resource.k8s.deployment.name="checkout" && span.http.response.status_code>=500 }
+- { status=error && duration>2s }
+
+If unsure which attributes to filter on, use tempo_search_tags to discover available attributes before building a query.
 `,
 			Required: true,
 		},
