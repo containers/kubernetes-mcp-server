@@ -50,14 +50,14 @@ func (s *ConfigSuite) TestNewNetObserv_withoutToolsetConfigSection() {
 
 func (s *ConfigSuite) TestApplyDefaults_explicitURLUnchanged() {
 	cfg := &Config{Url: "http://localhost:9001"}
-	cfg.applyDefaults(false, true)
+	cfg.applyDefaults(true)
 	s.False(cfg.Insecure)
 	s.Empty(cfg.CertificateAuthority)
 }
 
 func (s *ConfigSuite) TestApplyDefaults_skipsTLSOnNonOpenShift() {
 	cfg := &Config{}
-	cfg.applyDefaults(false, false)
+	cfg.applyDefaults(false)
 	s.False(cfg.Insecure)
 	s.Empty(cfg.CertificateAuthority)
 }
@@ -66,7 +66,7 @@ func (s *ConfigSuite) TestApplyDefaults_usesServiceCAWhenPresent() {
 	caFile := filepath.Join(s.T().TempDir(), "service-ca.crt")
 	s.Require().NoError(os.WriteFile(caFile, []byte("test ca"), 0644))
 	cfg := &Config{}
-	cfg.applyDefaultsWithStat(false, true, func(path string) (os.FileInfo, error) {
+	cfg.applyDefaultsWithStat(true, func(path string) (os.FileInfo, error) {
 		if path == DefaultPluginServiceCAPath {
 			return os.Stat(caFile)
 		}
@@ -76,12 +76,12 @@ func (s *ConfigSuite) TestApplyDefaults_usesServiceCAWhenPresent() {
 	s.False(cfg.Insecure)
 }
 
-func (s *ConfigSuite) TestApplyDefaults_fallsBackToInsecureWithoutServiceCA() {
+func (s *ConfigSuite) TestApplyDefaults_leavesTLSUnsetWithoutServiceCA() {
 	cfg := &Config{}
-	cfg.applyDefaultsWithStat(false, true, func(string) (os.FileInfo, error) {
+	cfg.applyDefaultsWithStat(true, func(string) (os.FileInfo, error) {
 		return nil, os.ErrNotExist
 	})
-	s.True(cfg.Insecure)
+	s.False(cfg.Insecure)
 	s.Empty(cfg.CertificateAuthority)
 }
 

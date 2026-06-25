@@ -75,6 +75,22 @@ func (s *NetObservSuite) TestExecuteGet() {
 	s.Equal("300", seenQuery.Get("timeRange"))
 	s.Equal("50", seenQuery.Get("limit"))
 
+	s.Run("reads bearer token from BearerTokenFile", func() {
+		tokenFile := filepath.Join(s.T().TempDir(), "token")
+		s.Require().NoError(os.WriteFile(tokenFile, []byte("file-sa-token\n"), 0600))
+		s.MockServer.ResetHandlers()
+		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.Equal("Bearer file-sa-token", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		}))
+		client := NewNetObserv(s.Config, nil)
+		client.bearerTokenFile = tokenFile
+
+		content, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
+		s.Require().NoError(err)
+		s.Equal(`{"status":"ok"}`, content)
+	})
+
 	s.Run("returns error when response exceeds maximum allowed size", func() {
 		s.MockServer.ResetHandlers()
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

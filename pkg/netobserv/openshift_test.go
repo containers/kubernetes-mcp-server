@@ -5,52 +5,45 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 )
 
-func TestClusterIsOpenShift(t *testing.T) {
-	t.Run("returns false without client", func(t *testing.T) {
-		t.Parallel()
-		if clusterIsOpenShift(nil) {
-			t.Fatal("expected false")
-		}
+type OpenShiftSuite struct {
+	suite.Suite
+}
+
+func (s *OpenShiftSuite) TestClusterIsOpenShift() {
+	s.Run("returns false without client", func() {
+		s.False(clusterIsOpenShift(nil))
 	})
 
-	t.Run("returns false without discovery client", func(t *testing.T) {
-		t.Parallel()
-		if isOpenShiftDiscovery(nil) {
-			t.Fatal("expected false")
-		}
+	s.Run("returns false without discovery client", func() {
+		s.False(isOpenShiftDiscovery(nil))
 	})
 }
 
-func TestIsOpenShiftDiscovery(t *testing.T) {
-	t.Run("returns true when project.openshift.io is registered", func(t *testing.T) {
-		t.Parallel()
+func (s *OpenShiftSuite) TestIsOpenShiftDiscovery() {
+	s.Run("returns true when project.openshift.io is registered", func() {
 		srv := httptest.NewServer(test.NewInOpenShiftHandler())
-		t.Cleanup(srv.Close)
+		s.T().Cleanup(srv.Close)
 
 		dc, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: srv.URL})
-		if err != nil {
-			t.Fatalf("discovery client: %v", err)
-		}
-		if !isOpenShiftDiscovery(dc) {
-			t.Fatal("expected OpenShift cluster")
-		}
+		s.Require().NoError(err)
+		s.True(isOpenShiftDiscovery(dc))
 	})
 
-	t.Run("returns false on plain Kubernetes discovery", func(t *testing.T) {
-		t.Parallel()
+	s.Run("returns false on plain Kubernetes discovery", func() {
 		srv := httptest.NewServer(test.NewDiscoveryClientHandler())
-		t.Cleanup(srv.Close)
+		s.T().Cleanup(srv.Close)
 
 		dc, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: srv.URL})
-		if err != nil {
-			t.Fatalf("discovery client: %v", err)
-		}
-		if isOpenShiftDiscovery(dc) {
-			t.Fatal("expected plain Kubernetes cluster")
-		}
+		s.Require().NoError(err)
+		s.False(isOpenShiftDiscovery(dc))
 	})
+}
+
+func TestOpenShift(t *testing.T) {
+	suite.Run(t, new(OpenShiftSuite))
 }

@@ -15,12 +15,8 @@ const (
 	DefaultPluginHTTPTimeout = 120 * time.Second
 )
 
-// DefaultPluginServiceCAPath is the OpenShift service CA bundle path when mounted into
-// the pod (same convention as OpenShift platform components).
+// DefaultPluginServiceCAPath is the OpenShift-projected service-serving CA bundle.
 const DefaultPluginServiceCAPath = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
-
-// DefaultPluginInsecureSkipVerify is used on OpenShift when the service CA file is not present.
-const DefaultPluginInsecureSkipVerify = true
 
 // DefaultPluginURL returns the in-cluster Service URL using HTTPS on OpenShift and HTTP otherwise.
 func DefaultPluginURL(isOpenShift bool) string {
