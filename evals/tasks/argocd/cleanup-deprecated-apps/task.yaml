@@ -109,7 +109,7 @@ spec:
           kubectl get application app-active-2 -n argocd-eval-cleanup -o name || { echo "ERROR: app-active-2 was deleted"; exit 1; }
           echo "Deprecated apps removed, active apps preserved"
     - llmJudge:
-        contains: "deprecated"
+        contains: "app-deprecated"
 
   cleanup:
     - k8s.delete:
