@@ -17,7 +17,13 @@ type SearchTracesOutput struct {
 var SearchTracesTool = tools.ToolDef[SearchTracesOutput]{
 	Name: "tempo_search_traces",
 	Description: `Search for distributed traces in Tempo using TraceQL.
-Use this tool to find traces matching specific criteria such as service name, HTTP status code, duration, or other span or resource attributes.`,
+Use this tool to find traces matching specific criteria such as service name, HTTP status code, duration, or other span or resource attributes.
+
+IMPORTANT — "slow" or "long" trace requests: Do NOT guess a duration threshold.
+First call this tool WITHOUT a duration filter to establish a latency baseline, then use that baseline to set a sensible threshold.
+Both steps are required — do NOT skip the second search with the duration filter.
+Skip this two-step process only when the user provides an explicit duration (e.g. "find traces slower than 2s").
+`,
 	Title: "Search traces",
 	Params: []tools.ParamDef{
 		tempoNamespaceParameter,
