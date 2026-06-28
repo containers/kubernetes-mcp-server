@@ -225,7 +225,11 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
+	printed, err := params.ListOutput.PrintObjStructured(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to format resources: %w", err)), nil
+	}
+	return api.NewToolCallResultFull(printed.Text, printed.Structured, nil), nil
 }
 
 func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -256,7 +260,11 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
 	}
-	return api.NewToolCallResult(output.MarshalYaml(ret)), nil
+	printed, err := output.Yaml.PrintObjStructured(ret)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to format resource: %w", err)), nil
+	}
+	return api.NewToolCallResultFull(printed.Text, printed.Structured, nil), nil
 }
 
 func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

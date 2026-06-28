@@ -66,6 +66,18 @@ func (s *ResourcesSuite) TestResourcesList() {
 		s.Run("returns more than 2 items", func() {
 			s.Truef(len(decodedNamespaces) >= 3, "invalid namespace count, expected >2, got %v", len(decodedNamespaces))
 		})
+		s.Run("returns structured content with items", func() {
+			s.Require().NotNil(namespaces.StructuredContent, "expected structuredContent for resources_list")
+			structured, ok := namespaces.StructuredContent.(map[string]interface{})
+			s.Require().True(ok, "expected structuredContent to be wrapped in an object per MCP spec")
+			items, ok := structured["items"].([]interface{})
+			s.Require().True(ok, "expected items array in structured content")
+			s.Truef(len(items) >= 3, "expected >=3 structured items, got %d", len(items))
+			first, ok := items[0].(map[string]interface{})
+			s.Require().True(ok, "expected each item to be a map")
+			s.Equal("Namespace", first["kind"], "structured item kind should be Namespace")
+			s.Equal("v1", first["apiVersion"], "structured item apiVersion should be v1")
+		})
 	})
 	s.Run("resources_list with label selector returns filtered pods", func() {
 		s.Run("list pods with app=nginx label", func() {
@@ -261,6 +273,26 @@ func (s *ResourcesSuite) TestResourcesListAsTable() {
 			s.Truef(m, "Expected row '%s' not found in output:\n%s", expectedRow, outConfigMapList)
 			s.NoErrorf(e, "Error matching row regex: %v", e)
 		})
+		s.Run("returns structured content from table", func() {
+			s.Require().NotNil(configMapList.StructuredContent, "expected structuredContent for table output")
+			structured, ok := configMapList.StructuredContent.(map[string]interface{})
+			s.Require().True(ok, "expected structuredContent to be wrapped in an object per MCP spec")
+			items, ok := structured["items"].([]interface{})
+			s.Require().True(ok, "expected items array in structured content")
+			s.Truef(len(items) >= 1, "expected >=1 structured items, got %d", len(items))
+			var found bool
+			for _, item := range items {
+				row, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if name, _ := row["Name"].(string); name == "a-configmap-to-list-as-table" {
+					found = true
+					break
+				}
+			}
+			s.True(found, "expected to find a-configmap-to-list-as-table in structured content items")
+		})
 	})
 
 	s.Run("resources_list(apiVersion=route.openshift.io/v1, kind=Route) (list_output=table)", func() {
@@ -360,6 +392,16 @@ func (s *ResourcesSuite) TestResourcesGet() {
 		})
 		s.Run("returns default namespace", func() {
 			s.Equalf("default", decodedNamespace.GetName(), "invalid namespace name, expected default, got %v", decodedNamespace.GetName())
+		})
+		s.Run("returns structured content", func() {
+			s.Require().NotNil(namespace.StructuredContent, "expected structuredContent for resources_get")
+			structured, ok := namespace.StructuredContent.(map[string]interface{})
+			s.Require().True(ok, "expected structuredContent to be a map")
+			s.Equal("Namespace", structured["kind"], "structured kind should be Namespace")
+			s.Equal("v1", structured["apiVersion"], "structured apiVersion should be v1")
+			metadata, ok := structured["metadata"].(map[string]interface{})
+			s.Require().True(ok, "expected metadata map in structured content")
+			s.Equal("default", metadata["name"], "structured metadata.name should be default")
 		})
 	})
 }
