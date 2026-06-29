@@ -119,67 +119,12 @@ Replace:
 >
 > In `passthrough` mode, if token exchange is configured (`token_exchange_strategy` or `sts_audience`), the token is exchanged before being passed to the cluster.
 
-### With ServiceAccount Credentials
-
-If your Kubernetes cluster doesn't accept Entra ID tokens on the API server, use this configuration:
-
-```toml
-# Use kubeconfig ServiceAccount credentials for cluster access
-cluster_auth_mode = "kubeconfig"
-kubeconfig = "/path/to/sa-kubeconfig"
-```
-
-This setup:
-- **Cluster access uses ServiceAccount token** (from kubeconfig)
-
-> **Note:** `require_oauth = true` is incompatible with `cluster_auth_mode = "kubeconfig"` and is rejected at startup.
-
-#### Creating a ServiceAccount Kubeconfig
-
-Your regular kubeconfig likely uses interactive login. Create a kubeconfig with a static ServiceAccount token:
-
-```bash
-# Create ServiceAccount
-kubectl create sa mcp-server -n default
-
-# Grant permissions (adjust role as needed)
-kubectl create clusterrolebinding mcp-server-reader \
-  --clusterrole=view \
-  --serviceaccount=default:mcp-server
-
-# Create a token (adjust duration to your security requirements)
-kubectl create token mcp-server -n default --duration=720h > sa-token
-
-# Create kubeconfig with the token
-export SA_TOKEN=$(cat sa-token)
-export CLUSTER_URL=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-export CLUSTER_CA=$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
-
-cat > mcp-kubeconfig << EOF
-apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    certificate-authority-data: ${CLUSTER_CA}
-    server: ${CLUSTER_URL}
-  name: cluster
-contexts:
-- context:
-    cluster: cluster
-    user: mcp-server
-  name: mcp-context
-current-context: mcp-context
-users:
-- name: mcp-server
-  user:
-    token: ${SA_TOKEN}
-EOF
-```
-
-Then run:
-```bash
-./kubernetes-mcp-server --config config.toml
-```
+> **Note:** Authenticating MCP clients with `require_oauth = true` while using a shared ServiceAccount
+> for cluster access (`cluster_auth_mode = "kubeconfig"`) is **not supported** and is rejected at
+> startup — a single ServiceAccount collapses every authenticated user to one cluster identity, breaking
+> per-user audit trails. If your cluster's API server doesn't accept the user's Entra ID tokens directly,
+> use [On-Behalf-Of token exchange](#with-token-exchange-on-behalf-of-flow) to exchange them for tokens
+> the cluster accepts while preserving per-user identity.
 
 ### With Token Exchange (On-Behalf-Of Flow)
 
