@@ -99,7 +99,7 @@ func initResources(o api.Openshift) []api.ServerTool {
 				Properties: map[string]*jsonschema.Schema{
 					"resource": {
 						Type:        "string",
-						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion,kind,metadata, and spec",
+						Description: "A JSON or YAML containing a representation of the Kubernetes resource. Should include top-level fields such as apiVersion, kind, metadata, and spec. For namespaced resources, include metadata.namespace to specify the target namespace; if omitted, the configured default namespace is used",
 					},
 				},
 				Required: []string{"resource"},
