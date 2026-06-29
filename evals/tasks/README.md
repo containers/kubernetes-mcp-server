@@ -4,13 +4,16 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 
 ## Task Families
 
-- [Kubernetes tasks](kubernetes/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
+- [Core tasks](core/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
+- [Config tasks](config/) – workflows that exercise the configuration toolset (contexts, current config).
+- [Helm tasks](helm/) – workflows that exercise the Helm toolset (install, list, uninstall releases).
 - [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing).
 - [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
+- [Tekton tasks](tekton/) – CI/CD workflows that exercise the Tekton toolset (pipelines, tasks, pipeline runs).
 
 ## Anatomy of a Task
 
-Every subdirectory under `core/`, `kiali/`, or `kubevirt/` defines a single scenario:
+Every subdirectory under `core/`, `config/`, `helm/`, `kiali/`, `kubevirt/`, or `tekton/` defines a single scenario:
 
 1. `*.yaml` – declarative description consumed by the evaluation harness (prompts, success criteria, required tools).
 2. `setup.sh` / `verify.sh` / `cleanup.sh` – shell hooks (optional) that prime the cluster, assert post-conditions, and reset resources so tasks stay idempotent.
@@ -27,7 +30,7 @@ Well-scoped, deterministic tasks make it easier to compare agents and regression
 
 ## Adding a New Task Stack
 
-When a new MCP toolset lands , keep its evaluations isolated by creating a sibling directory under `tasks/` named after the toolset (`tasks/<name>>`, etc.). Populate it with:
+When a new MCP toolset lands, keep its evaluations isolated by creating a sibling directory under `tasks/` named after the toolset (`tasks/<name>`, etc.). Populate it with:
 
 1. A scoped `README.md` describing the toolset focus and prerequisite context.
 2. One subfolder per scenario that follows the same layout described above (`*.yaml`, scripts, `artifacts/`).

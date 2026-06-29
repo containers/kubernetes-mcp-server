@@ -4,11 +4,11 @@ metadata:
 config:
   agent:
     type: "builtin.llm-agent"
-    model: "google:gemini-2.0-flash"
+    model: "openai:gpt-5"
   mcpConfigFile: ../../../mcp-config.yaml
   extensions:
     kubernetes:
-      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.3
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
   taskSets:
     - glob: ../*/task.yaml
       assertions:
