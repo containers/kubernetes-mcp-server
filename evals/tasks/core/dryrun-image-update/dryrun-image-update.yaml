@@ -1,0 +1,15 @@
+kind: Task
+metadata:
+  labels:
+    suite: kubernetes
+  name: "dryrun-image-update"
+  difficulty: medium
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    file: verify.sh
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: "Dry run update the image of the web-app in dryrun-image-update namespace to 1.25 version."
