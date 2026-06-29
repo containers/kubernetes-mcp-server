@@ -49,6 +49,9 @@ KubeVirt-focused MCP tasks live here. Each folder under this directory represent
 - **[hard] update-vm-resources** - Update VM CPU and memory resources
   - **Prompt:** *A VirtualMachine named test-vm-update exists in the vm-test namespace. It currently has 1 vCPU and 2Gi of memory. Please update the VirtualMachine to add an additional vCPU (making it 2 vCPUs total) and increase the memory to at least 3Gi.*
 
+- **[hard] update-vm-instancetype** - Double a VM's memory by switching its instancetype
+  - **Prompt:** *A Fedora VirtualMachine named fedora-vm exists in the vm-test-instancetype-update namespace using the u1.small instancetype. Double its memory by updating the instance type.*
+
 ### VM Troubleshooting
 
 - **[hard] troubleshoot-vm** - Use the vm-troubleshoot prompt to diagnose VirtualMachine issues
