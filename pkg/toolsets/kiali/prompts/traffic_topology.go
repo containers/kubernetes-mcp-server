@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
@@ -40,7 +42,7 @@ func trafficTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 		return nil, fmt.Errorf("namespaces argument is required: provide a comma-separated list or 'all' for all accessible mesh namespaces")
 	}
 
-	klog.Info("Starting traffic topology analysis prompt...")
+	klog.FromContext(params.Context).Info("Starting traffic topology analysis prompt...")
 
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 
@@ -97,7 +99,7 @@ func resolveNamespaces(kiali *kialiclient.Kiali, params api.PromptHandlerParams,
 		return "", fmt.Errorf("failed to discover mesh namespaces: %w", err)
 	}
 
-	discovered := parseNamespacesFromResponse(content)
+	discovered := parseNamespacesFromResponse(params.Context, content)
 	if discovered == "" {
 		return "", fmt.Errorf("no mesh namespaces found")
 	}
@@ -106,7 +108,7 @@ func resolveNamespaces(kiali *kialiclient.Kiali, params api.PromptHandlerParams,
 
 // parseNamespacesFromResponse extracts namespace names from the Kiali
 // list_or_get_resources JSON response and returns them as a comma-separated string.
-func parseNamespacesFromResponse(content string) string {
+func parseNamespacesFromResponse(ctx context.Context, content string) string {
 	type nsItem struct {
 		Name string `json:"name"`
 	}
@@ -116,7 +118,7 @@ func parseNamespacesFromResponse(content string) string {
 
 	var resp nsResponse
 	if err := json.Unmarshal([]byte(content), &resp); err != nil {
-		klog.Warningf("Failed to parse namespace list response: %v", err)
+		klogutil.LogWarn(klog.FromContext(ctx), "Failed to parse namespace list response", klogutil.Err(err))
 		return ""
 	}
 

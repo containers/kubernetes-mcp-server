@@ -38,7 +38,7 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 		return nil, fmt.Errorf("namespace argument is required")
 	}
 
-	klog.Infof("Starting Istio config review for namespace %s...", namespace)
+	klog.FromContext(params.Context).Info("Starting Istio config review...", "namespace", namespace)
 
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 

@@ -26,6 +26,7 @@ import (
 // tlsErrorFilterWriter filters out noisy TLS handshake errors from health checks
 type tlsErrorFilterWriter struct {
 	underlying io.Writer
+	logger     klog.Logger
 }
 
 func (w *tlsErrorFilterWriter) Write(p []byte) (n int, err error) {
@@ -35,7 +36,7 @@ func (w *tlsErrorFilterWriter) Write(p []byte) (n int, err error) {
 	// Log at V(4) instead of discarding silently so they can still be seen
 	// when debugging with higher verbosity.
 	if strings.Contains(msg, "TLS handshake error") && strings.Contains(msg, "EOF") {
-		klog.V(4).Infof("TLS handshake error (likely health check): %s", strings.TrimSpace(msg))
+		w.logger.V(4).Info("TLS handshake error (likely health check)", "message", strings.TrimSpace(msg))
 		return len(p), nil
 	}
 	return w.underlying.Write(p)
@@ -139,7 +140,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	// Only set up custom error logger for TLS mode to filter noisy TLS handshake errors
 	// from load balancer health checks
 	if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
-		httpServer.ErrorLog = log.New(&tlsErrorFilterWriter{underlying: os.Stderr}, "", 0)
+		httpServer.ErrorLog = log.New(&tlsErrorFilterWriter{underlying: os.Stderr, logger: logger}, "", 0)
 	}
 
 	sseServer := mcpServer.ServeSse()

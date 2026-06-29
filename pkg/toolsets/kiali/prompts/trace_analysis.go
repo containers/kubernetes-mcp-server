@@ -47,7 +47,7 @@ func traceAnalysisHandler(params api.PromptHandlerParams) (*api.PromptCallResult
 		return nil, fmt.Errorf("service argument is required")
 	}
 
-	klog.Infof("Starting trace analysis prompt for %s/%s...", namespace, service)
+	klog.FromContext(params.Context).Info("Starting trace analysis prompt...", "namespace", namespace, "service", service)
 
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 

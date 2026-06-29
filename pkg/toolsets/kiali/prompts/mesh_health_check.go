@@ -34,7 +34,7 @@ func meshHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 	args := params.GetArguments()
 	namespace := args["namespace"]
 
-	klog.Info("Starting mesh health check prompt...")
+	klog.FromContext(params.Context).Info("Starting mesh health check prompt...")
 
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	statusContent, err := kiali.ExecuteRequest(params.Context, tools.KialiGetMeshStatusEndpoint, nil)

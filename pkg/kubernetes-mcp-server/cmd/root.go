@@ -360,7 +360,7 @@ func (m *MCPServerOptions) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if err := mcpServer.Shutdown(shutdownCtx); err != nil {
-			klog.Errorf("MCP server shutdown error: %v", err)
+			klog.FromContext(ctx).Error(err, "MCP server shutdown error")
 		}
 	}()
 

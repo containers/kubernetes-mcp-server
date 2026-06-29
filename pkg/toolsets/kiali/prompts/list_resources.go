@@ -107,7 +107,7 @@ func listIstioConfigHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 	args := params.GetArguments()
 	namespace := args["namespace"]
 
-	klog.Info("Starting list istio config prompt...")
+	klog.FromContext(params.Context).Info("Starting list istio config prompt...")
 
 	reqArgs := map[string]any{"action": "list"}
 	if namespace != "" {
@@ -172,7 +172,7 @@ func listResourceHandler(resourceType string) api.PromptHandlerFunc {
 		args := params.GetArguments()
 		namespace := args["namespace"]
 
-		klog.Infof("Starting list %s prompt...", resourceType)
+		klog.FromContext(params.Context).Info("Starting list prompt...", "resourceType", resourceType)
 
 		reqArgs := map[string]any{"resourceType": resourceType}
 		if namespace != "" {
@@ -221,7 +221,7 @@ Summarize the %s listed above. Highlight any that need attention.
 }
 
 func meshTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
-	klog.Info("Starting mesh topology prompt...")
+	klog.FromContext(params.Context).Info("Starting mesh topology prompt...")
 
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 
