@@ -49,7 +49,8 @@ Tasks are grouped into suites via a `suite: <name>` label. The available suites 
 ## Quickstart: run one suite locally with Claude Code
 
 This runs the `kubevirt` suite end to end with the Claude Code agent on a Sonnet
-model, with **no OpenAI key required** (per-suite configs carry no LLM judge, see
+model, with **no OpenAI key required**. With the Claude Code agent both the agent
+and the LLM judge run on your Claude subscription, so every suite is keyless (see
 [Eval configs](#eval-configs-top-level-vs-per-suite) below).
 
 ```bash
@@ -100,7 +101,9 @@ environment variable (for example `ANTHROPIC_MODEL=sonnet`), which
 model for the run, overriding whatever default your Claude Code session would
 otherwise use, and it runs on your existing Claude subscription (no API key
 needed). `make run-evals` sets it for you from the `MODEL` variable, so
-`make run-evals ... MODEL=sonnet` is how you pin the eval to Sonnet.
+`make run-evals ... MODEL=sonnet` is how you pin the eval to Sonnet. The same
+variable also drives the Claude Code judge (see [Eval configs](#eval-configs-top-level-vs-per-suite)),
+so agent and judge share the model.
 
 The OpenAI-compatible agent instead takes its model from
 `evals/openai-agent/agent.yaml` plus the `MODEL_BASE_URL` and `MODEL_KEY`
@@ -124,22 +127,30 @@ task. The assertions accept either, for example `toolPattern: "(pods_.*|resource
 
 ## Eval configs: top-level vs per-suite
 
-There are two eval-config trees:
+There are two top-level eval configs, one per agent:
 
-- **Top-level** (`evals/{claude-code,openai-agent}/eval.yaml`): one config per agent,
-  globbing every suite. These are what **CI** runs. They declare an
-  `llmJudge: { model: "openai:gpt-5" }`. That judge only runs for tasks that
-  include an `llmJudge` verify step, and **only those tasks need an OpenAI key**.
-  The `core` and `helm` suites have no such tasks, so they run key-free even here;
-  `config`, `kiali`, and `tekton` (and 4 `kubevirt` tasks) include `llmJudge` steps
-  that need a key under these configs. Filter with `--label-selector suite=<name>`.
-- **Per-suite** (`evals/tasks/<suite>/{claude-code,openai-agent}/eval.yaml`):
-  a scoped config with **no** config-level `llmJudge`, so any `llmJudge` verify step
-  degrades to a no-op pass (mcpchecker's `noopLLMJudge`) and no OpenAI key is ever
-  needed. Currently only `kubevirt` ships these.
+- **`evals/claude-code/eval.yaml`** (Claude Code): the agent runs via
+  `claude-agent-acp`, and the LLM judge is also `builtin.claude-code`, so **both
+  agent and judge run on your Claude subscription — fully keyless, for every
+  suite**. Judge-backed tasks are really evaluated (semantic), not skipped. This
+  is the recommended local path.
+- **`evals/openai-agent/eval.yaml`** (OpenAI-compatible, what **CI** runs): the
+  agent uses `MODEL_BASE_URL`/`MODEL_KEY` and the judge is `openai:gpt-5`, so its
+  judge-backed tasks need an OpenAI key.
 
-`make run-evals` prefers a per-suite config when one exists for the chosen
-`SUITE`/`AGENT`, and otherwise falls back to the agent's top-level config.
+A task is "judge-backed" when its verify phase has an `llmJudge` step —
+**including the legacy `verify: contains:` short form, which is judge-evaluated
+(semantic), not a literal string match.** Judge-backed task counts per suite:
+`helm` 0, `core` 4, `kubevirt` 4, `tekton` 5, `config` 3, `kiali` 18. With the
+OpenAI agent those tasks need a key; with the Claude Code agent none do. Filter
+either config to one suite with `--label-selector suite=<name>`.
+
+**Per-suite** configs (`evals/tasks/<suite>/{claude-code,openai-agent}/eval.yaml`,
+currently only `kubevirt`) are scoped to a single suite. The claude-code one
+judges with claude-code (keyless); the openai-agent one declares no judge, so its
+judge steps degrade to a no-op pass (mcpchecker's `noopLLMJudge`). `make run-evals`
+prefers a per-suite config when one exists for the chosen `SUITE`/`AGENT`, and
+otherwise falls back to the agent's top-level config.
 
 ## Agent configuration
 
@@ -181,10 +192,10 @@ make run-evals SUITE=kiali AGENT=claude-code MODEL=sonnet
 If you omit `--label-selector`, the eval config's own `labelSelector` settings in
 each `taskSets` entry determine which tasks run.
 
-Note: suites other than `kubevirt` use the agent's top-level config, which has a
-real `llmJudge`. `core` and `helm` have no `llmJudge` tasks, so they run with no
-OpenAI key; `config`, `kiali`, and `tekton` include `llmJudge` tasks that do need
-one there (see [Eval configs](#eval-configs-top-level-vs-per-suite)).
+Note: with `AGENT=claude-code` every suite is keyless (agent and judge both run on
+your Claude subscription). With `AGENT=openai-agent` the judge-backed tasks need an
+OpenAI key — `core` 4, `config` 3, `kiali` 18, `tekton` 5, `kubevirt` 4, `helm` 0
+(see [Eval configs](#eval-configs-top-level-vs-per-suite)).
 
 ## Versions
 
@@ -192,6 +203,11 @@ one there (see [Eval configs](#eval-configs-top-level-vs-per-suite)).
 `.github/workflows/mcpchecker.yaml` calls `mcpchecker-action` (currently pinned at
 `v0.0.18`) with `mcpchecker-version: latest`. If you need to reproduce CI exactly,
 pin the binary with `make mcpchecker MCPCHECKER_VERSION=<version>`.
+
+`make claude-agent-acp` likewise installs `@agentclientprotocol/claude-agent-acp@latest`;
+pin it with `make claude-agent-acp CLAUDE_AGENT_ACP_VERSION=<version>` for local
+reproducibility. CI never installs the adapter (it runs the OpenAI agent), so this
+knob is purely local.
 
 ## Expected results
 

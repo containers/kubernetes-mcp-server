@@ -8,6 +8,11 @@ config:
   extensions:
     kubernetes:
       package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  # Judge with claude-code so judge-backed tasks (verify: contains / llmJudge)
+  # are really evaluated, keyless on the Claude subscription, like the agent.
+  llmJudge:
+    ref:
+      type: builtin.claude-code
   taskSets:
     - glob: ../*/task.yaml
       assertions:

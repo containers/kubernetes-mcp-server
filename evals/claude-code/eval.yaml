@@ -9,10 +9,12 @@ config:
   extensions:
     kubernetes:
       package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  # The claude-code agent judges with claude-code too, so the whole flow (agent +
+  # judge) runs on one Anthropic/Claude-subscription auth with no OpenAI key.
+  # (The openai-agent config keeps an independent openai:gpt-5 judge for CI.)
   llmJudge:
     ref:
-      type: builtin.llm-agent
-      model: "openai:gpt-5"
+      type: builtin.claude-code
   taskSets:
     # Kubernetes tasks
     - glob: ../tasks/*/*/*.yaml

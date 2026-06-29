@@ -7,6 +7,7 @@ MCP_CONFIG_DIR ?= dev/config/mcp-configs
 
 MCPCHECKER = $(shell pwd)/_output/tools/bin/mcpchecker
 MCPCHECKER_VERSION ?= latest
+CLAUDE_AGENT_ACP_VERSION ?= latest
 
 # High-level knobs for local single-suite runs, e.g.:
 #   make run-evals SUITE=kubevirt AGENT=claude-code MODEL=sonnet
@@ -41,8 +42,10 @@ mcpchecker:
 .PHONY: claude-agent-acp
 claude-agent-acp: ## Install the claude-agent-acp adapter for the claude-code eval agent
 	@command -v claude-agent-acp >/dev/null 2>&1 || { \
-		echo "Installing claude-agent-acp (npm install -g @agentclientprotocol/claude-agent-acp)..." ;\
-		npm install -g @agentclientprotocol/claude-agent-acp ;\
+		set -e ;\
+		echo "Installing claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) (npm install -g)..." ;\
+		npm install -g @agentclientprotocol/claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) ;\
+		echo "✅ claude-agent-acp installed" ;\
 	}
 
 .PHONY: run-evals
