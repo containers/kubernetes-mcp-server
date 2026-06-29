@@ -21,7 +21,8 @@ Every subdirectory under `core/`, `kiali/`, or `kubevirt/` defines a single scen
 1. Pick the closest family and create a new subfolder.
 2. Author the task YAML referencing MCP tools, expected observations, and any artifacts.
 3. Provide helper scripts if the scenario needs deterministic setup or verification.
-4. Document nuances in a local `README.md` so future contributors and eval authors can replay the scenario manually.
+4. Add `project` / `project-name` / `project-url` metadata so the task appears in the README's validated-projects table (unlabeled tasks are skipped).
+5. Document nuances in a local `README.md` so future contributors and eval authors can replay the scenario manually.
 
 Well-scoped, deterministic tasks make it easier to compare agents and regressions over time, so keep inputs minimal, outputs explicit, and always clean up what you create.
 

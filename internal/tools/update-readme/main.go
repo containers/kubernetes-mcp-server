@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
@@ -30,6 +32,21 @@ func (o *OpenShift) IsOpenShift(_ context.Context) bool {
 
 var _ api.Openshift = (*OpenShift)(nil)
 
+type evalTask struct {
+	Kind     string `json:"kind"`
+	Metadata struct {
+		Labels      map[string]string `json:"labels"`
+		Annotations map[string]string `json:"annotations"`
+	} `json:"metadata"`
+}
+
+type projectInfo struct {
+	Name     string
+	URL      string
+	Toolsets map[string]bool
+	Count    int
+}
+
 func main() {
 	// Snyk reports false positive unless we flow the args through filepath.Clean and filepath.Localize in this specific order
 	var err error
@@ -42,6 +59,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Validated Projects
+	updated := generateValidatedProjects(string(readme))
+
 	// Available Toolsets
 	toolsetsList := toolsets.Toolsets()
 
@@ -74,8 +95,8 @@ func main() {
 		}
 		fmt.Fprintf(&availableToolsets, "| %-*s | %-*s | %-*s |\n", maxNameLen, toolset.GetName(), maxDescLen, toolset.GetDescription(), defaultHeaderLen, defaultIndicator)
 	}
-	updated := replaceBetweenMarkers(
-		string(readme),
+	updated = replaceBetweenMarkers(
+		updated,
 		"<!-- AVAILABLE-TOOLSETS-START -->",
 		"<!-- AVAILABLE-TOOLSETS-END -->",
 		availableToolsets.String(),
@@ -194,4 +215,108 @@ func replaceBetweenMarkers(content, startMarker, endMarker, replacement string) 
 		return content
 	}
 	return content[:startIdx+len(startMarker)] + "\n\n" + replacement + "\n" + content[endIdx:]
+}
+
+func generateValidatedProjects(content string) string {
+	evalsDir := "evals/tasks"
+	projects := make(map[string]*projectInfo)
+
+	err := filepath.Walk(evalsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".yaml" {
+			return nil
+		}
+		if strings.Contains(path, "/artifacts/") {
+			return nil
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		var task evalTask
+		if err := yaml.Unmarshal(data, &task); err != nil {
+			panic(fmt.Sprintf("failed to parse %q: %v", path, err))
+		}
+
+		if task.Kind != "Task" && task.Kind != "Prompt" {
+			return nil
+		}
+
+		projectKey := task.Metadata.Labels["project"]
+		if projectKey == "" {
+			return nil
+		}
+
+		projectName := task.Metadata.Annotations["project-name"]
+		projectURL := task.Metadata.Annotations["project-url"]
+
+		if projectName == "" || projectURL == "" {
+			panic(fmt.Sprintf("task %q has project label %q but is missing project-name or project-url annotations", path, projectKey))
+		}
+
+		p, exists := projects[projectKey]
+		if !exists {
+			p = &projectInfo{
+				Name:     projectName,
+				URL:      projectURL,
+				Toolsets: map[string]bool{"core": true},
+			}
+			projects[projectKey] = p
+		} else {
+			if p.Name != projectName {
+				panic(fmt.Sprintf("project %q has conflicting names: %q vs %q", projectKey, p.Name, projectName))
+			}
+			if p.URL != projectURL {
+				panic(fmt.Sprintf("project %q has conflicting URLs: %q vs %q", projectKey, p.URL, projectURL))
+			}
+		}
+
+		p.Count++
+
+		if requires := task.Metadata.Labels["requires"]; requires != "" {
+			for _, ts := range strings.Split(requires, ",") {
+				if ts = strings.TrimSpace(ts); ts != "" {
+					p.Toolsets[ts] = true
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	type row struct {
+		name     string
+		url      string
+		toolsets string
+		count    int
+	}
+	var rows []row
+	for _, p := range projects {
+		extras := slices.DeleteFunc(slices.Sorted(maps.Keys(p.Toolsets)), func(s string) bool { return s == "core" })
+		ts := append([]string{"core"}, extras...)
+		toolsetsStr := "`" + strings.Join(ts, "`, `") + "`"
+		rows = append(rows, row{name: p.Name, url: p.URL, toolsets: toolsetsStr, count: p.Count})
+	}
+	slices.SortFunc(rows, func(a, b row) int {
+		return strings.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
+	})
+
+	table := strings.Builder{}
+	table.WriteString("| Project | Required toolset(s) | Validated scenarios |\n")
+	table.WriteString("|---------|---------------------|---------------------|\n")
+	for _, r := range rows {
+		fmt.Fprintf(&table, "| [%s](%s) | %s | %d |\n", r.name, r.url, r.toolsets, r.count)
+	}
+
+	return replaceBetweenMarkers(content, "<!-- VALIDATED-PROJECTS-START -->", "<!-- VALIDATED-PROJECTS-END -->", table.String())
 }

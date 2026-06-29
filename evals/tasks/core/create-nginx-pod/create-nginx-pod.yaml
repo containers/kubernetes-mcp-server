@@ -2,6 +2,10 @@ kind: Task
 metadata:
   labels:
     suite: core
+    project: kubernetes
+  annotations:
+    project-name: "Kubernetes"
+    project-url: "https://kubernetes.io"
   name: "create-nginx-pod"
   difficulty: easy
 steps:

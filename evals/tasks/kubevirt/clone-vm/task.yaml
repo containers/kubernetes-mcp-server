@@ -3,7 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
+    project: kubevirt
     requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
   name: "clone-vm"
   difficulty: medium
 spec:

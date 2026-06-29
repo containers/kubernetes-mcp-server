@@ -3,6 +3,10 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: config
+    project: kubernetes
+  annotations:
+    project-name: "Kubernetes"
+    project-url: "https://kubernetes.io"
   name: "view-current-config"
   difficulty: easy
 spec:

@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "Retrieve Recent Workload Logs"
   category: "Troubleshooting & Diagnostics"
   description: "Fetches the most recent log entries for a specific workload to aid in immediate troubleshooting."

@@ -258,6 +258,25 @@ The Kubernetes MCP server supports enabling or disabling specific groups of tool
 This allows you to control which Kubernetes functionalities are available to your AI tools.
 Enabling only the toolsets you need can help reduce the context size and improve the LLM's tool selection accuracy.
 
+### Validated CNCF/Kubernetes Projects
+
+The following CNCF and Kubernetes ecosystem projects are continuously validated against
+an automated evaluation suite ([`evals/tasks`](evals/tasks)). Most require only the `core`
+toolset — a dedicated toolset is not a prerequisite for compatibility.
+
+<!-- VALIDATED-PROJECTS-START -->
+
+| Project | Required toolset(s) | Validated scenarios |
+|---------|---------------------|---------------------|
+| [Helm](https://helm.sh) | `core`, `helm` | 3 |
+| [Istio](https://istio.io) | `core`, `kiali` | 5 |
+| [Kiali](https://kiali.io) | `core`, `kiali` | 16 |
+| [Kubernetes](https://kubernetes.io) | `core` | 32 |
+| [KubeVirt](https://kubevirt.io) | `core`, `kubevirt`, `tekton` | 18 |
+| [Tekton](https://tekton.dev) | `core`, `tekton` | 9 |
+
+<!-- VALIDATED-PROJECTS-END -->
+
 ### Available Toolsets
 
 The following sets of tools are available (toolsets marked with ✓ in the Default column are enabled by default):

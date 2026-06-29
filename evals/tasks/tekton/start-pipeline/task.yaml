@@ -5,7 +5,11 @@ metadata:
   difficulty: medium
   labels:
     suite: tekton
+    project: tekton
     requires: tekton
+  annotations:
+    project-name: "Tekton"
+    project-url: "https://tekton.dev"
 spec:
   requires:
     - extension: kubernetes

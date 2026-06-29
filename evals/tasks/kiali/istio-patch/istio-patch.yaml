@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: istio
+    requires: kiali
+  annotations:
+    project-name: "Istio"
+    project-url: "https://istio.io"
   name: "Update Traffic Shifting"
   category: "Configuration Management"
   description: "Applies a patch to a VirtualService to implement weight-based traffic shifting between versions."
