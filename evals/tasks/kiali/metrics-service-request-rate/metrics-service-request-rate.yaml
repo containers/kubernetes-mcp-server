@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "Analyze Service Traffic Volume"
   category: "Performance Analysis"
   description: "Retrieves and analyzes request and error rate metrics for a specific service over a time window."

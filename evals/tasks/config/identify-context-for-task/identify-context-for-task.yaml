@@ -3,6 +3,10 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: config
+    project: kubernetes
+  annotations:
+    project-name: "Kubernetes"
+    project-url: "https://kubernetes.io"
   name: "identify-context-for-task"
   difficulty: medium
 spec:

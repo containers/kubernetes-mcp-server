@@ -3,7 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
+    project: kubevirt
     requires: kubevirt,tekton
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
   name: "windows-golden-image-no-eula"
   difficulty: medium
   description: "Test the windows-golden-image prompt output and EULA handling"

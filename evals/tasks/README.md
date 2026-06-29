@@ -24,7 +24,11 @@ Most subdirectories under `core/`, `config/`, `helm/`, `kiali/`, `kubevirt/`, or
 1. Pick the closest family and create a new subfolder.
 2. Author the task YAML referencing MCP tools, expected observations, and any artifacts.
 3. Provide helper scripts if the scenario needs deterministic setup or verification.
-4. Document nuances in a local `README.md` so future contributors and eval authors can replay the scenario manually.
+4. Add project metadata so the task appears in the README validated-projects table (unlabeled tasks are skipped).
+   - The toolset column comes from the `requires` label, not `project`; set `requires` when a scenario needs a non-core toolset.
+   - `project` is a label; `project-name` and `project-url` are annotations. The generator panics if `project` is set without both.
+   - Example: [helm/install-chart/install-chart.yaml](helm/install-chart/install-chart.yaml).
+5. Document nuances in a local `README.md` so future contributors and eval authors can replay the scenario manually.
 
 Well-scoped, deterministic tasks make it easier to compare agents and regressions over time, so keep inputs minimal, outputs explicit, and always clean up what you create.
 

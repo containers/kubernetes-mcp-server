@@ -5,6 +5,11 @@ metadata:
   difficulty: medium
   labels:
     suite: helm
+    project: helm
+    requires: helm
+  annotations:
+    project-name: "Helm"
+    project-url: "https://helm.sh"
 spec:
   requires:
     - extension: kubernetes

@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "Analyze Workload Response Times"
   category: "Performance Analysis"
   description: "Retrieves p50, p95, and p99 latency quantiles for a specific workload to identify performance bottlenecks."

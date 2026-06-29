@@ -3,7 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
+    project: kubevirt
     requires: kubevirt,tekton
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
   name: "windows-golden-image-success"
   difficulty: hard
   description: "Use the windows-golden-image prompt to generate a Windows golden image creation guide"

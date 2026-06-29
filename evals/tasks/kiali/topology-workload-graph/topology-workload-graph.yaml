@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "Visualize Workload-Level Topology"
   category: "Traffic Observability"
   description: "Generates a detailed workload-level traffic graph to see individual pod-to-pod communication patterns."
