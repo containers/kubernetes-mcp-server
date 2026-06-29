@@ -13,7 +13,7 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 
 ## Anatomy of a Task
 
-Every subdirectory under `core/`, `config/`, `helm/`, `kiali/`, `kubevirt/`, or `tekton/` defines a single scenario:
+Most subdirectories under `core/`, `config/`, `helm/`, `kiali/`, `kubevirt/`, or `tekton/` define a single scenario (a few, like `kiali/scripts/`, `kubevirt/helpers/`, and `tekton/helpers/`, hold shared helpers instead):
 
 1. `*.yaml` – declarative description consumed by the evaluation harness (prompts, success criteria, required tools).
 2. `setup.sh` / `verify.sh` / `cleanup.sh` – shell hooks (optional) that prime the cluster, assert post-conditions, and reset resources so tasks stay idempotent.
