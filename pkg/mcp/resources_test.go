@@ -362,6 +362,77 @@ func (s *ResourcesSuite) TestResourcesGet() {
 			s.Equalf("default", decodedNamespace.GetName(), "invalid namespace name, expected default, got %v", decodedNamespace.GetName())
 		})
 	})
+	s.Run("resources_get with statusOnly returns only status", func() {
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"name":       "default",
+			"statusOnly": true,
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed")
+		})
+		var decoded map[string]interface{}
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decoded)
+		s.Run("has yaml content", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+		})
+		s.Run("contains status phase field", func() {
+			_, hasPhase := decoded["phase"]
+			s.Truef(hasPhase, "expected status to contain phase field, got %v", decoded)
+		})
+		s.Run("does not contain metadata", func() {
+			_, hasMetadata := decoded["metadata"]
+			s.Falsef(hasMetadata, "status-only response should not contain metadata")
+		})
+		s.Run("does not contain kind", func() {
+			_, hasKind := decoded["kind"]
+			s.Falsef(hasKind, "status-only response should not contain kind")
+		})
+	})
+	s.Run("resources_get with statusOnly false returns full resource", func() {
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"name":       "default",
+			"statusOnly": false,
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed")
+		})
+		var decodedNamespace unstructured.Unstructured
+		err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decodedNamespace)
+		s.Run("returns full resource", func() {
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Equalf("default", decodedNamespace.GetName(), "expected default namespace, got %v", decodedNamespace.GetName())
+		})
+	})
+	s.Run("resources_get with statusOnly on resource without status returns empty object", func() {
+		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		_, _ = kc.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "cm-status-only-test"},
+			Data:       map[string]string{"key": "value"},
+		}, metav1.CreateOptions{})
+		result, err := s.CallTool("resources_get", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"namespace":  "default",
+			"name":       "cm-status-only-test",
+			"statusOnly": true,
+		})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool failed")
+		})
+		s.Run("returns empty object", func() {
+			var decoded map[string]interface{}
+			err = yaml.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &decoded)
+			s.Nilf(err, "invalid tool result content %v", err)
+			s.Emptyf(decoded, "expected empty status for ConfigMap, got %v", decoded)
+		})
+	})
 }
 
 func (s *ResourcesSuite) TestResourcesGetDenied() {
