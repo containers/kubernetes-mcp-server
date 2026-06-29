@@ -10,6 +10,7 @@ import (
 	vm_create "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/create"
 	vm_guestagent "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/guestagent"
 	vm_lifecycle "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/lifecycle"
+	vm_troubleshoot "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/troubleshoot"
 )
 
 type Toolset struct{}
@@ -30,6 +31,7 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 		vm_create.Tools(),
 		vm_guestagent.Tools(),
 		vm_lifecycle.Tools(),
+		vm_troubleshoot.Tools(),
 	)
 }
 
