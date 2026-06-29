@@ -30,6 +30,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
+	golang.org/x/mod v0.36.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/time v0.15.0
@@ -165,12 +166,3 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
-
-// tektoncd/pipeline v1.12.0 pins gen-crd-api-reference-docs to a pseudo-version
-// whose commit (6bbddc29119c) exists on GitHub but is not reachable from any
-// branch, tag, or PR ref in the upstream repo. proxy.golang.org and
-// `GOPROXY=direct` both 404, which breaks `go list -m all` and IDE indexing.
-// Pinned here to a real tag so module resolution succeeds; the tool itself is
-// not imported by any compiled code in this repo.
-// Track: https://github.com/tektoncd/pipeline/issues/9997
-replace github.com/ahmetb/gen-crd-api-reference-docs => github.com/ahmetb/gen-crd-api-reference-docs v0.3.0
