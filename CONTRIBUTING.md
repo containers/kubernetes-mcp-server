@@ -12,7 +12,7 @@ Before reporting an issue, check our backlog of [open issues](https://github.com
 
 If you find a new bug or have a feature request, we'd love to hear about it! For bug reports, the most important aspect is that they include enough information for us to reproduce the problem. Please include as much detail as possible and try to remove extra details that don't relate to the issue itself. The easier it is for us to reproduce it, the faster it'll be fixed! For feature requests, please describe the use case and why the feature would be valuable.
 
-Please don't include any private or sensitive information in your issue. Security issues should **NOT** be reported via GitHub issues. Please report security vulnerabilities responsibly through [GitHub's security advisory feature](https://github.com/containers/kubernetes-mcp-server/security/advisories).
+Please don't include any private or sensitive information in your issue. Security issues should **NOT** be reported via GitHub issues. Please report security vulnerabilities responsibly by following our [security policy](SECURITY.md).
 
 ## Contributing Code
 
