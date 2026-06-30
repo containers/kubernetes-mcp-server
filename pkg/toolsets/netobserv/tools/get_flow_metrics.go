@@ -1,8 +1,6 @@
 package tools
 
 import (
-	"fmt"
-
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	netobservclient "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv/internal/defaults"
@@ -56,7 +54,7 @@ func InitGetFlowMetrics() []api.ServerTool {
 	return []api.ServerTool{{
 		Tool: api.Tool{
 			Name:        name,
-			Description: "Returns aggregated NetObserv flow metrics (topology/time series) from Prometheus and/or Loki via the console plugin. See aggregateBy and groups parameter descriptions for topology scopes (namespace, resource, app, …) and field breakdowns (TLSVersion, DnsName, PktDropLatestState, …).",
+			Description: "Returns aggregated NetObserv flow metrics as topology or time-series data. Use for throughput, TLS/DNS/drop breakdowns, and namespace or workload traffic analysis; see aggregateBy and groups for grouping options.",
 			InputSchema: &jsonschema.Schema{
 				Type:       "object",
 				Properties: props,
@@ -71,8 +69,5 @@ func InitGetFlowMetrics() []api.ServerTool {
 func getFlowMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	client := netobservclient.NewNetObserv(params, params.KubernetesClient)
 	content, err := client.ExecuteGet(params.Context, NetObservFlowMetricsEndpoint, params.GetArguments())
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get flow metrics: %w", err)), nil
-	}
-	return api.NewToolCallResult(content, nil), nil
+	return jsonAPIResult(content, wrapAPIError("get flow metrics", err))
 }

@@ -1,8 +1,6 @@
 package tools
 
 import (
-	"fmt"
-
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	netobservclient "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv/internal/defaults"
@@ -26,9 +24,8 @@ func InitExportFlows() []api.ServerTool {
 	name := defaults.ToolsetName() + "_export_flows"
 	return []api.ServerTool{{
 		Tool: api.Tool{
-			Name: name,
-			Description: "Exports NetObserv flow records as CSV using the same filters as list_flows. " +
-				"Requires Loki to be enabled on the console plugin backend.",
+			Name:        name,
+			Description: "Exports NetObserv flow records as CSV with the same filters as list_flows. Use when the user needs downloadable flow data for audits or offline analysis.",
 			InputSchema: &jsonschema.Schema{
 				Type:       "object",
 				Properties: props,
@@ -49,8 +46,5 @@ func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	}
 	client := netobservclient.NewNetObserv(params, params.KubernetesClient)
 	content, err := client.ExecuteGetAccept(params.Context, NetObservExportFlowsEndpoint, args, "text/csv,*/*")
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to export flows: %w", err)), nil
-	}
-	return api.NewToolCallResult(content, nil), nil
+	return textAPIResult(content, wrapAPIError("export flows", err))
 }

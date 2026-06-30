@@ -25,4 +25,4 @@ spec:
     - llmJudge:
         contains: "TimeFlowStartMs"
   prompt:
-    inline: "Export NetObserv flow records for the default namespace from the last 5 minutes as CSV. Tell me whether the export succeeded and mention the CSV column headers if present."
+    inline: "I need a CSV export of flow records from the default namespace for the last 5 minutes for an audit. Export the data and confirm whether it succeeded, including the CSV column headers."

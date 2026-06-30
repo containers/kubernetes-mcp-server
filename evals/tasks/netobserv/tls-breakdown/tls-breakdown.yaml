@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+    requires: netobserv
+  name: "TLS version breakdown"
+  category: "Security analysis"
+  description: "Investigates TLS version usage for a namespace using flow metrics."
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        file: ../shared/setup-mock.sh
+        timeout: 180s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          curl -sf "http://127.0.0.1:9001/api/flow/metrics?namespace=default&aggregateBy=TLSVersion&type=Bytes&timeRange=300" | grep -q 'TLS 1.3'
+    - llmJudge:
+        contains: "TLS 1.3"
+  prompt:
+    inline: "I'm reviewing security posture for workloads in the default namespace. Show me how TLS traffic breaks down by TLS version over the last 5 minutes and summarize which versions are in use."
