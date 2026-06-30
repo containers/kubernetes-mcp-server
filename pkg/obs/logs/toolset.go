@@ -6,7 +6,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/logs/loki"
 )
 
-const ToolsetName = "logs"
+const ToolsetName = "observability/logs"
 
 // Toolset implements the observability toolset for Loki.
 type Toolset struct {

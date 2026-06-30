@@ -6,7 +6,7 @@ import (
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
-const ToolsetName = "traces"
+const ToolsetName = "observability/traces"
 
 // Toolset implements the observability toolset for Tempo.
 type Toolset struct {
