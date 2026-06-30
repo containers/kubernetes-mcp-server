@@ -19,8 +19,10 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          JOB_CONCLUSION=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs" \
+          JOB_CONCLUSION=$(gh api "repos/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}/jobs" \
             --jq '.jobs[] | select(.name == "Run MCP Evaluation") | .conclusion')
 
           if [[ -n "$JOB_CONCLUSION" && "$JOB_CONCLUSION" != "skipped" ]]; then
@@ -43,6 +45,9 @@ jobs:
         if: steps.check.outputs.should-report == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
           PR_NUMBER=$(jq -r '.pr_number' eval-context/context.json)
           PR_SHA=$(jq -r '.pr_sha' eval-context/context.json)
@@ -56,7 +61,7 @@ jobs:
 
           PASS_RATE=$(awk "BEGIN {printf \"%.1f\", $TASK_PASS_RATE * 100}")
 
-          if [[ "${{ github.event.workflow_run.conclusion }}" != "success" ]]; then
+          if [[ "$RUN_CONCLUSION" != "success" ]]; then
             OVERALL="⚠️ Workflow failed"
           elif [[ "$PASSED" == "true" ]]; then
             OVERALL="✅ Passed"
@@ -82,7 +87,7 @@ jobs:
           )
           fi
 
-          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$(cat <<EOF
+          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body "$(cat <<EOF
           ## mcpchecker MCP Evaluation Results
 
           **Commit:** \`${PR_SHA:0:7}\`
@@ -95,6 +100,6 @@ jobs:
           | Overall | ${OVERALL} |
           ${DIFF_SECTION}
 
-          [View full results](https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }})
+          [View full results](https://github.com/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID})
           EOF
           )"

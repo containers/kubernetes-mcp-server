@@ -74,42 +74,51 @@ jobs:
     steps:
       - name: Check trigger conditions
         id: check
+        # All event-derived values are passed through `env` and referenced as shell
+        # variables. They are never interpolated directly into the `run` script, so
+        # untrusted input (e.g. a comment body) cannot alter the script that executes.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          HEAD_SHA: ${{ github.sha }}
+          INPUT_SUITE: ${{ github.event.inputs.suite }}
         run: |
-          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            # Check if commenter has write access
-            PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" --jq '.permission')
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            # Only repository collaborators with admin/write access may trigger a run.
+            PERMISSION=$(gh api "repos/${REPOSITORY}/collaborators/${COMMENTER}/permission" --jq '.permission')
 
-            if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" ]]; then
-              echo "should-run=true" >> $GITHUB_OUTPUT
-              echo "is-pr=true" >> $GITHUB_OUTPUT
-              PR_NUMBER="${{ github.event.issue.number }}"
-              echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
-
-              # Capture SHA at trigger time to prevent TOCTOU race condition
-              # This ensures we run the exact code the maintainer reviewed
-              PR_SHA=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefOid --jq '.headRefOid')
-              echo "pr-sha=$PR_SHA" >> $GITHUB_OUTPUT
-              echo "Pinned to SHA: $PR_SHA"
-            else
-              echo "should-run=false" >> $GITHUB_OUTPUT
-              echo "User ${{ github.event.comment.user.login }} does not have permission to trigger evaluations"
+            if [[ "$PERMISSION" != "admin" && "$PERMISSION" != "write" ]]; then
+              echo "should-run=false" >> "$GITHUB_OUTPUT"
+              echo "User ${COMMENTER} does not have permission to trigger evaluations"
+              exit 0
             fi
+
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+            echo "is-pr=true" >> "$GITHUB_OUTPUT"
+            echo "pr-number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+
+            # Capture SHA at trigger time to prevent TOCTOU race condition
+            # This ensures we run the exact code the maintainer reviewed
+            PR_SHA=$(gh pr view "$ISSUE_NUMBER" --repo "$REPOSITORY" --json headRefOid --jq '.headRefOid')
+            echo "pr-sha=$PR_SHA" >> "$GITHUB_OUTPUT"
+            echo "Pinned to SHA: $PR_SHA"
           else
-            echo "should-run=true" >> $GITHUB_OUTPUT
-            echo "is-pr=false" >> $GITHUB_OUTPUT
-            echo "pr-sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+            echo "is-pr=false" >> "$GITHUB_OUTPUT"
+            echo "pr-sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
           fi
 
           # Suite selection: defaults to 'core', can be overridden by workflow_dispatch input or PR comment
-          SUITE="${{ github.event.inputs.suite || 'core' }}"
+          SUITE="${INPUT_SUITE:-core}"
 
-          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
             # Parse /run-mcpchecker [suite] from PR comment
-            COMMENT_BODY="${{ github.event.comment.body }}"
-            COMMENT_BODY="${COMMENT_BODY//[[:space:]]/ }"
-            read -r _ FIRST_WORD _ <<< "$COMMENT_BODY"
+            BODY="${COMMENT_BODY//[[:space:]]/ }"
+            read -r _ FIRST_WORD _ <<< "$BODY"
             case "${FIRST_WORD,,}" in
               core|helm|kubevirt|kiali|tekton|all)
                 SUITE="${FIRST_WORD,,}"
