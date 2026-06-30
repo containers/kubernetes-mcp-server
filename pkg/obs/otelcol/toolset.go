@@ -14,7 +14,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/resultutil"
 )
 
-const ToolsetName = "otelcol"
+const ToolsetName = "observability/otelcol"
 
 // Config holds OpenTelemetry Collector toolset configuration.
 type Config struct {
