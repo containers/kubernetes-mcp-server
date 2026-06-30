@@ -24,6 +24,7 @@ Choose the guide that matches your needs:
 
 - **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
 - **[KubeVirt](kubevirt.md)** - KubeVirt virtual machine management tools
+- **[Tekton](tekton.md)** - Tekton PipelineRun, TaskRun, and troubleshooting tools
 
 ## Feature Specifications
 

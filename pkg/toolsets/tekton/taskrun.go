@@ -1,6 +1,7 @@
 package tekton
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -159,18 +160,8 @@ func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to convert TaskRun from unstructured: %w", err)), nil
 	}
 
-	if tr.Status.PodName == "" {
-		return api.NewToolCallResult(fmt.Sprintf("TaskRun '%s' in namespace '%s' has not started a pod yet", name, namespace), nil), nil
-	}
-
 	var sb strings.Builder
-
-	for _, step := range tr.Status.Steps {
-		collectContainerLogs(params, &sb, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailInt)
-	}
-	for _, sidecar := range tr.Status.Sidecars {
-		collectContainerLogs(params, &sb, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailInt)
-	}
+	collectTaskRunLogs(params, &sb, namespace, &tr, tailInt)
 
 	if sb.Len() == 0 {
 		return api.NewToolCallResult(fmt.Sprintf("No logs available for TaskRun '%s' in namespace '%s'", name, namespace), nil), nil
@@ -179,12 +170,29 @@ func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	return api.NewToolCallResult(sb.String(), nil), nil
 }
 
-func collectContainerLogs(params api.ToolHandlerParams, sb *strings.Builder, podName, namespace, kind, name, container string, tailLines int64) {
-	req := params.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+func collectTaskRunLogs(params api.ToolHandlerParams, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, tailLines int64) {
+	collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, sb, namespace, tr, tailLines)
+}
+
+func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, tailLines int64) {
+	if tr.Status.PodName == "" {
+		fmt.Fprintf(sb, "TaskRun '%s' in namespace '%s' has not started a pod yet\n", tr.Name, namespace)
+		return
+	}
+	for _, step := range tr.Status.Steps {
+		collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailLines)
+	}
+	for _, sidecar := range tr.Status.Sidecars {
+		collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailLines)
+	}
+}
+
+func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, podName, namespace, kind, name, container string, tailLines int64) {
+	req := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: container,
 		TailLines: &tailLines,
 	})
-	stream, err := req.Stream(params.Context)
+	stream, err := req.Stream(ctx)
 	if err != nil {
 		fmt.Fprintf(sb, "[%s: %s] error retrieving logs: %v\n", kind, name, err)
 		return

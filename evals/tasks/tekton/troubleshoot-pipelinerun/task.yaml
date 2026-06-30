@@ -1,0 +1,162 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "troubleshoot-tekton-pipelinerun"
+  difficulty: hard
+  labels:
+    suite: tekton
+    requires: tekton
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/cleanup-namespace.sh
+          cleanup_tekton_namespace
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          ensure_crd() {
+            local name="$1" group="$2" version="$3" plural="$4" singular="$5" kind="$6" scope="$7"
+            if kubectl get crd "$name" >/dev/null 2>&1; then
+              return
+            fi
+            cat <<EOF | kubectl apply -f -
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: ${name}
+            labels:
+              tekton-eval-temporary: "true"
+          spec:
+            group: ${group}
+            scope: ${scope}
+            names:
+              plural: ${plural}
+              singular: ${singular}
+              kind: ${kind}
+            versions:
+              - name: ${version}
+                served: true
+                storage: true
+                schema:
+                  openAPIV3Schema:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+          EOF
+            kubectl wait --for=condition=Established "crd/${name}" --timeout=30s
+          }
+          ensure_crd repositories.pipelinesascode.tekton.dev pipelinesascode.tekton.dev v1alpha1 repositories repository Repository Namespaced
+          ensure_crd tektonconfigs.operator.tekton.dev operator.tekton.dev v1alpha1 tektonconfigs tektonconfig TektonConfig Cluster
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: PipelineRun
+        metadata:
+          name: failed-run
+          namespace: tekton-eval
+        spec:
+          pipelineRef:
+            name: missing-pipeline
+        status:
+          conditions:
+            - type: Succeeded
+              status: "False"
+              reason: Failed
+              message: "Pipeline missing-pipeline was not found"
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: TaskRun
+        metadata:
+          name: failed-run-missing-pipeline
+          namespace: tekton-eval
+          labels:
+            tekton.dev/pipelineRun: failed-run
+        spec:
+          taskRef:
+            name: missing-task
+        status:
+          conditions:
+            - type: Succeeded
+              status: "False"
+              reason: Failed
+              message: "Task missing-task was not found"
+    - k8s.create:
+        apiVersion: pipelinesascode.tekton.dev/v1alpha1
+        kind: Repository
+        metadata:
+          name: eval-repo
+          namespace: tekton-eval
+        spec:
+          url: https://github.com/example/tekton-eval
+    - k8s.create:
+        apiVersion: operator.tekton.dev/v1alpha1
+        kind: TektonConfig
+        metadata:
+          name: tekton-eval-config
+        spec:
+          profile: all
+
+  verify:
+    - llmJudge:
+        contains: "failed-run"
+    - llmJudge:
+        contains: "missing"
+    - llmJudge:
+        contains: "eval-repo"
+    - llmJudge:
+        contains: "tekton-eval-config"
+
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete repository eval-repo -n tekton-eval --ignore-not-found=true 2>/dev/null || true
+          kubectl delete tektonconfig tekton-eval-config --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: TaskRun
+        metadata:
+          name: failed-run-missing-pipeline
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: PipelineRun
+        metadata:
+          name: failed-run
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          for crd in repositories.pipelinesascode.tekton.dev tektonconfigs.operator.tekton.dev; do
+            if [ "$(kubectl get crd "$crd" -o jsonpath='{.metadata.labels.tekton-eval-temporary}' 2>/dev/null)" = "true" ]; then
+              kubectl delete crd "$crd" --ignore-not-found=true
+            fi
+          done
+
+  prompt:
+    inline: |-
+      The Tekton PipelineRun named failed-run in the tekton-eval namespace is failing. Diagnose the likely root cause, include any Pipeline-as-Code Repository and TektonConfig context that may be relevant, and recommend the next action.
