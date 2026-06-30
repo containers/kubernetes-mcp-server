@@ -1,0 +1,163 @@
+name: Toolset triage
+
+# Triages pull requests by toolset, driven entirely by .github/CODEOWNERS (the
+# single source of truth). For each toolset block in CODEOWNERS — introduced by
+# a "# toolset: <name>" marker — this workflow:
+#   * applies/removes the `toolset/<name>` label based on the changed files, and
+#   * @-mentions the block's owners in a sticky comment.
+#
+# The label half replaces the previous actions/labeler step. Reconciling labels
+# against the *current* changed-file set (adding AND removing) avoids the stale
+# "over-labeling" that labeler's default sync-labels=false behaviour produced.
+#
+# The mention half exists because GitHub only auto-requests review from code
+# owners that have *write* access to the repository
+# (https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners);
+# external toolset owners are otherwise never notified.
+#
+# Why pull_request_target (not pull_request): external contributors open PRs
+# from forks, where a `pull_request` run only gets a read-only token and can
+# neither label nor comment. pull_request_target runs in the base repository's
+# context with a token that can.
+#
+# SECURITY: this workflow never checks out or executes the PR's code. It only
+# reads the changed-file list and the *base* branch's CODEOWNERS via the API,
+# then labels and comments. Keep it that way — do not add a checkout of the PR
+# head or run any code/scripts originating from the PR.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const MARKER = '<!-- toolset-owner-notify -->';
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+
+            // Read CODEOWNERS from the base branch (trusted; never the PR's
+            // version). Bail out gracefully if it isn't there yet.
+            let raw;
+            try {
+              const res = await github.rest.repos.getContent({
+                owner, repo, path: '.github/CODEOWNERS', ref: pr.base.sha,
+              });
+              raw = Buffer.from(res.data.content, 'base64').toString('utf8');
+            } catch (e) {
+              core.info('No CODEOWNERS on the base branch; nothing to do.');
+              return;
+            }
+
+            // Parse CODEOWNERS into { pattern, owners, toolset } rules. A
+            // "# toolset: <name>" marker tags the rules beneath it (until the
+            // next blank line) with that toolset. The "*" default rule and any
+            // rule outside a toolset block carry no toolset (no label) but still
+            // carry owners.
+            const rules = [];
+            let toolset = null;
+            for (const rawLine of raw.split('\n')) {
+              const line = rawLine.replace(/\r$/, '');
+              if (line.trim() === '') { toolset = null; continue; }
+              const marker = line.match(/^\s*#\s*toolset:\s*([a-z0-9_-]+)\s*$/i);
+              if (marker) { toolset = marker[1].toLowerCase(); continue; }
+              const trimmed = line.replace(/#.*$/, '').trim();
+              if (trimmed === '') continue;
+              const [pattern, ...owners] = trimmed.split(/\s+/);
+              if (owners.length === 0) continue;
+              rules.push({ pattern, owners, toolset });
+            }
+
+            // Match a changed file against a CODEOWNERS pattern. Patterns here
+            // are limited to "/dir/" (prefix), "/path/prefix*" (wildcard suffix),
+            // "/exact/file" (exact) and "*" (default, never label/notify on).
+            const matches = (file, pattern) => {
+              if (pattern === '*') return false;
+              const p = pattern.startsWith('/') ? pattern.slice(1) : pattern;
+              if (p.endsWith('/')) return file.startsWith(p);
+              if (p.endsWith('*')) return file.startsWith(p.slice(0, -1));
+              return file === p;
+            };
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+            const changed = files.map(f => f.filename);
+
+            // Resolve touched toolsets (-> labels) and owners (-> mentions).
+            const author = pr.user.login.toLowerCase();
+            const toolsets = new Set();
+            const mentions = new Set();
+            for (const rule of rules) {
+              if (!changed.some(f => matches(f, rule.pattern))) continue;
+              if (rule.toolset) toolsets.add(rule.toolset);
+              for (const o of rule.owners) {
+                if (o.replace(/^@/, '').toLowerCase() !== author) mentions.add(o);
+              }
+            }
+
+            // --- Labels: reconcile toolset/* to exactly the touched toolsets ---
+            // Runs on every event, including drafts (matching prior labeler
+            // behaviour). Add what's now relevant, remove what no longer is.
+            const desired = new Set([...toolsets].map(t => `toolset/${t}`));
+            const currentLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const currentToolsetLabels = currentLabels
+              .map(l => l.name).filter(n => n.startsWith('toolset/'));
+            const toAdd = [...desired].filter(n => !currentToolsetLabels.includes(n));
+            const toRemove = currentToolsetLabels.filter(n => !desired.has(n));
+            if (toAdd.length) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: toAdd });
+            }
+            for (const name of toRemove) {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: pr.number, name })
+                .catch(e => { if (e.status !== 404) throw e; });
+            }
+
+            // --- Mentions: sticky comment, skipped while the PR is a draft ---
+            if (pr.draft) {
+              core.info('PR is a draft; labels applied, owner mention skipped.');
+              return;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            // Scope to the bot's own comment so a pre-seeded comment carrying
+            // the marker can't hijack or suppress the sticky slot.
+            const existing = comments.find(c =>
+              c.body.includes(MARKER) &&
+              (c.user.type === 'Bot' || c.user.login === 'github-actions[bot]'));
+
+            if (mentions.size === 0) {
+              if (existing) {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
+              }
+              core.info('No owned paths changed; nothing to notify.');
+              return;
+            }
+
+            const body = [
+              MARKER,
+              `👋 Heads up — this pull request changes files owned by ${[...mentions].sort().join(' ')}.`,
+              '',
+              'You are listed as an owner of one or more of the changed areas in ' +
+              '`.github/CODEOWNERS`. GitHub cannot auto-request review from owners ' +
+              'without write access, so this comment is the notification instead. ' +
+              'A review when you have a moment would be appreciated 🙏',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+            }

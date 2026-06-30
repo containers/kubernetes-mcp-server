@@ -1,0 +1,50 @@
+# CODEOWNERS for containers/kubernetes-mcp-server
+#
+# Single source of truth for toolset ownership AND toolset labels.
+# Order matters: the LAST matching pattern takes precedence.
+#
+# Each toolset block is introduced by a machine-readable marker on its own line:
+#
+#     # toolset: <name>
+#
+# The .github/workflows/toolset-triage.yaml workflow parses these markers to
+# (a) apply/remove the `toolset/<name>` label on PRs based on their changed
+# files, and (b) @-mention the block's owners. A marker tags every rule beneath
+# it up to the next blank line.
+#
+# NOTE ON EXTERNAL CONTRIBUTORS:
+# GitHub only auto-requests review from code owners that have *write* access to
+# the repository. Most toolset owners below are external contributors who do not
+# (and cannot) have write access, so GitHub will not auto-request them and will
+# flag those lines with a "no write access" warning. They are listed here as the
+# documented owners of their areas; the toolset-triage workflow @-mentions them
+# on pull requests that touch their paths, which is what actually notifies them.
+
+# Default — core maintainers own everything not claimed below
+*                           @manusa @Cali0707
+
+# toolset: kiali
+/pkg/toolsets/kiali/        @aljesusg @josunect
+/pkg/kiali/                 @aljesusg @josunect
+/pkg/mcp/kiali*             @aljesusg @josunect
+/build/kiali.mk            @aljesusg @josunect
+/evals/tasks/kiali/         @aljesusg @josunect
+/docs/KIALI.md              @aljesusg @josunect
+
+# toolset: kubevirt
+/pkg/toolsets/kubevirt/     @ksimon1 @lyarwood
+/pkg/kubevirt/              @ksimon1 @lyarwood
+/pkg/mcp/kubevirt*          @ksimon1 @lyarwood
+/build/kubevirt.mk          @ksimon1 @lyarwood
+/evals/tasks/kubevirt/      @ksimon1 @lyarwood
+/docs/kubevirt.md           @ksimon1 @lyarwood
+
+# toolset: tekton
+/pkg/toolsets/tekton/       @ksimon1
+/pkg/mcp/tekton*            @ksimon1
+/build/tekton.mk            @ksimon1
+/evals/tasks/tekton/        @ksimon1
+
+# toolset: kcp
+/pkg/toolsets/kcp/          @mjudeikis
+/pkg/kcp/                   @mjudeikis
