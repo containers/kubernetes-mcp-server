@@ -130,29 +130,29 @@ jobs:
           # All suites use the same eval.yaml file; suite controls label-selector + infra.
           case "$SUITE" in
             helm)
-              echo "label-selector=suite=helm" >> $GITHUB_OUTPUT
-              echo "toolsets=core,config,helm" >> $GITHUB_OUTPUT
+              echo "label-selector=suite=helm" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,config,helm" >> "$GITHUB_OUTPUT"
               ;;
             kubevirt)
-              echo "label-selector=suite=kubevirt" >> $GITHUB_OUTPUT
-              echo "toolsets=core,config,kubevirt,tekton" >> $GITHUB_OUTPUT
+              echo "label-selector=suite=kubevirt" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,config,kubevirt,tekton" >> "$GITHUB_OUTPUT"
               ;;
             kiali)
-              echo "label-selector=suite=kiali" >> $GITHUB_OUTPUT
-              echo "toolsets=core,config,kiali" >> $GITHUB_OUTPUT
+              echo "label-selector=suite=kiali" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,config,kiali" >> "$GITHUB_OUTPUT"
               ;;
             tekton)
-              echo "label-selector=suite=tekton" >> $GITHUB_OUTPUT
-              echo "toolsets=core,tekton" >> $GITHUB_OUTPUT
+              echo "label-selector=suite=tekton" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,tekton" >> "$GITHUB_OUTPUT"
               ;;
             all)
-              echo "label-selector=" >> $GITHUB_OUTPUT  # No filter: run all taskSets
-              echo "toolsets=core,config,helm,kiali,kubevirt,tekton" >> $GITHUB_OUTPUT
+              echo "label-selector=" >> "$GITHUB_OUTPUT"  # No filter: run all taskSets
+              echo "toolsets=core,config,helm,kiali,kubevirt,tekton" >> "$GITHUB_OUTPUT"
               ;;
             *)
               # Default to core suite (matches 'core' or any unrecognized suite)
-              echo "label-selector=suite=core" >> $GITHUB_OUTPUT
-              echo "toolsets=core,config" >> $GITHUB_OUTPUT
+              echo "label-selector=suite=core" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,config" >> "$GITHUB_OUTPUT"
               ;;
           esac
 
@@ -177,7 +177,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Setup Kind cluster
-        run: make kind-create-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }}
+        run: make kind-create-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
 
       - name: Install Istio/Kiali and bookinfo demo
         if: contains(needs.check-trigger.outputs.toolsets, 'kiali')
@@ -226,7 +226,7 @@ jobs:
         if: always()
         run: |
           make stop-server || true
-          make kind-delete-cluster KIND_CLUSTER_NAME=${{ env.KIND_CLUSTER_NAME }} || true
+          make kind-delete-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" || true
 
       # Compare PR results against baseline from main branch
       - name: Fetch baseline results from main
@@ -271,19 +271,28 @@ jobs:
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
         env:
           DIFF_OUTPUT: ${{ steps.mcpchecker-diff.outputs.diff-output }}
+          PR_NUMBER: ${{ needs.check-trigger.outputs.pr-number }}
+          PR_SHA: ${{ needs.check-trigger.outputs.pr-sha }}
+          TASKS_PASSED: ${{ steps.mcpchecker.outputs.tasks-passed }}
+          TASKS_TOTAL: ${{ steps.mcpchecker.outputs.tasks-total }}
+          TASK_PASS_RATE: ${{ steps.mcpchecker.outputs.task-pass-rate }}
+          ASSERTIONS_PASSED: ${{ steps.mcpchecker.outputs.assertions-passed }}
+          ASSERTIONS_TOTAL: ${{ steps.mcpchecker.outputs.assertions-total }}
+          PASSED: ${{ steps.mcpchecker.outputs.passed }}
+          HAS_DIFF: ${{ steps.diff-check.outputs.has-diff || 'false' }}
         run: |
           mkdir -p eval-context
           cat > eval-context/context.json << EOF
           {
-            "pr_number": "${{ needs.check-trigger.outputs.pr-number }}",
-            "pr_sha": "${{ needs.check-trigger.outputs.pr-sha }}",
-            "tasks_passed": "${{ steps.mcpchecker.outputs.tasks-passed }}",
-            "tasks_total": "${{ steps.mcpchecker.outputs.tasks-total }}",
-            "task_pass_rate": "${{ steps.mcpchecker.outputs.task-pass-rate }}",
-            "assertions_passed": "${{ steps.mcpchecker.outputs.assertions-passed }}",
-            "assertions_total": "${{ steps.mcpchecker.outputs.assertions-total }}",
-            "passed": "${{ steps.mcpchecker.outputs.passed }}",
-            "has_diff": "${{ steps.diff-check.outputs.has-diff || 'false' }}"
+            "pr_number": "${PR_NUMBER}",
+            "pr_sha": "${PR_SHA}",
+            "tasks_passed": "${TASKS_PASSED}",
+            "tasks_total": "${TASKS_TOTAL}",
+            "task_pass_rate": "${TASK_PASS_RATE}",
+            "assertions_passed": "${ASSERTIONS_PASSED}",
+            "assertions_total": "${ASSERTIONS_TOTAL}",
+            "passed": "${PASSED}",
+            "has_diff": "${HAS_DIFF}"
           }
           EOF
           if [ -n "$DIFF_OUTPUT" ]; then
