@@ -33,6 +33,16 @@ var (
 		Version:  "v1",
 		Resource: "taskruns",
 	}
+	pacRepositoryGVR = schema.GroupVersionResource{
+		Group:    "pipelinesascode.tekton.dev",
+		Version:  "v1alpha1",
+		Resource: "repositories",
+	}
+	tektonConfigGVR = schema.GroupVersionResource{
+		Group:    "operator.tekton.dev",
+		Version:  "v1alpha1",
+		Resource: "tektonconfigs",
+	}
 )
 
 // parseParams converts a map[string]interface{} from a tool call argument into Tekton Params.

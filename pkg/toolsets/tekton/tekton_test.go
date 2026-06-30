@@ -21,5 +21,5 @@ func (s *TektonSuite) TestToolset() {
 	s.NotEmpty(ts.GetDescription())
 	tools := ts.GetTools(nil)
 	s.NotEmpty(tools)
-	s.Nil(ts.GetPrompts())
+	s.NotEmpty(ts.GetPrompts())
 }

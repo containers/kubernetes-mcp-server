@@ -31,7 +31,7 @@ var (
 )
 
 // EnvTest returns a shared envtest.Environment instance, initializing it on first call.
-// The environment includes CRDs for OpenShift (Project, Route) and KubeVirt resources.
+// The environment includes CRDs for OpenShift, KubeVirt, and Tekton resources.
 // Each test package process gets its own envtest instance with isolated etcd data directory.
 func EnvTest() *envtest.Environment {
 	envTestOnce.Do(func() {
@@ -95,6 +95,13 @@ func EnvTest() *envtest.Environment {
 				CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
 				CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterpreferences", "VirtualMachineClusterPreference", "virtualmachineclusterpreference", false),
 				CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachinepreferences", "VirtualMachinePreference", "virtualmachinepreference", true),
+				// Tekton
+				CRD("tekton.dev", "v1", "pipelines", "Pipeline", "pipeline", true),
+				CRD("tekton.dev", "v1", "pipelineruns", "PipelineRun", "pipelinerun", true),
+				CRD("tekton.dev", "v1", "tasks", "Task", "task", true),
+				CRD("tekton.dev", "v1", "taskruns", "TaskRun", "taskrun", true),
+				CRD("pipelinesascode.tekton.dev", "v1alpha1", "repositories", "Repository", "repository", true),
+				CRD("operator.tekton.dev", "v1alpha1", "tektonconfigs", "TektonConfig", "tektonconfig", false),
 			},
 		}
 

@@ -1,6 +1,6 @@
 # Tekton Task Stack
 
-Tekton-focused MCP eval tasks live here. Each folder represents a self-contained scenario that exercises the Tekton toolset (Pipeline and PipelineRun management, Task and TaskRun lifecycle).
+Tekton-focused MCP eval tasks live here. Each folder represents a self-contained scenario that exercises the Tekton toolset (Pipeline and PipelineRun management, Task and TaskRun lifecycle, and troubleshooting).
 
 All tasks use the `tekton-eval` namespace and require Tekton Pipelines to be installed in the cluster (`tekton.dev/v1` CRDs must be available).
 
@@ -36,7 +36,15 @@ All tasks use the `tekton-eval` namespace and require Tekton Pipelines to be ins
 
 - **[medium] restart-pipelinerun** – Restart a PipelineRun by creating a new one with the same spec
   - **Prompt:** *Restart the Tekton PipelineRun named test-run in the tekton-eval namespace.*
-  - **Tests:** `resources_get` + `resources_create` tools (core toolset)
+  - **Tests:** `tekton_pipelinerun_restart` tool
+
+- **[medium] cancel-pipelinerun** – Cancel a PipelineRun by setting `spec.status=Cancelled`
+  - **Prompt:** *Cancel the Tekton PipelineRun named cancel-me in the tekton-eval namespace.*
+  - **Tests:** `tekton_pipelinerun_cancel` tool
+
+- **[hard] troubleshoot-pipelinerun** – Gather PipelineRun status, TaskRuns, logs, events, Pipeline-as-Code Repository, and TektonConfig context for diagnosis
+  - **Prompt:** *The Tekton PipelineRun named failed-run in the tekton-eval namespace is failing. Diagnose the likely root cause, include any Pipeline-as-Code Repository and TektonConfig context that may be relevant, and recommend the next action.*
+  - **Tests:** `pipeline-troubleshoot` prompt and PAC/TektonConfig visibility
 
 ### Task Operations
 
