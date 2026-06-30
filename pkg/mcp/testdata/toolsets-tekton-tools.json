@@ -33,11 +33,72 @@
   },
   {
     "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Tekton: Cancel PipelineRun"
+    },
+    "description": "Cancel a running Tekton PipelineRun by setting spec.status to Cancelled. Use when a PipelineRun should stop executing.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the PipelineRun to cancel",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the PipelineRun",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "tekton_pipelinerun_cancel",
+    "title": "Tekton: Cancel PipelineRun"
+  },
+  {
+    "annotations": {
       "destructiveHint": false,
-      "openWorldHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Tekton: Get PipelineRun Logs"
+    },
+    "description": "Get logs for all TaskRuns owned by a Tekton PipelineRun. Use this to inspect PipelineRun execution output without locating pods manually.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the PipelineRun to get logs from",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the PipelineRun",
+          "type": "string"
+        },
+        "tail": {
+          "default": 100,
+          "description": "Number of lines to retrieve from the end of each container log (default: 100)",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "tekton_pipelinerun_logs",
+    "title": "Tekton: Get PipelineRun Logs"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
       "title": "Tekton: Restart PipelineRun"
     },
-    "description": "Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec",
+    "description": "Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec.",
     "inputSchema": {
       "properties": {
         "name": {

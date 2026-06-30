@@ -80,6 +80,13 @@ func TestMain(m *testing.M) {
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterpreferences", "VirtualMachineClusterPreference", "virtualmachineclusterpreference", false),
 			CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachinepreferences", "VirtualMachinePreference", "virtualmachinepreference", true),
+			// Tekton
+			CRD("tekton.dev", "v1", "pipelines", "Pipeline", "pipeline", true),
+			CRD("tekton.dev", "v1", "pipelineruns", "PipelineRun", "pipelinerun", true),
+			CRD("tekton.dev", "v1", "tasks", "Task", "task", true),
+			CRD("tekton.dev", "v1", "taskruns", "TaskRun", "taskrun", true),
+			CRD("pipelinesascode.tekton.dev", "v1alpha1", "repositories", "Repository", "repository", true),
+			CRD("operator.tekton.dev", "v1alpha1", "tektonconfigs", "TektonConfig", "tektonconfig", false),
 		},
 	}
 	// Configure API server for faster CRD establishment and test performance

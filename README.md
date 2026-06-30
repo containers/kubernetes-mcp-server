@@ -36,7 +36,7 @@ A powerful and flexible Kubernetes [Model Context Protocol (MCP)](https://blog.m
   - **Uninstall** a Helm release in the current or provided namespace.
 - **🔧 Tekton**: Tekton-specific operations that complement generic Kubernetes resource management.
   - **Pipeline**: Start a Tekton Pipeline by creating a PipelineRun.
-  - **PipelineRun**: Restart a PipelineRun with the same spec.
+  - **PipelineRun**: Restart, cancel, troubleshoot, and retrieve PipelineRun logs.
   - **Task**: Start a Tekton Task by creating a TaskRun.
   - **TaskRun**: Restart a TaskRun with the same spec, and retrieve TaskRun logs via pod resolution.
 - **🔭 Observability**: Optional OpenTelemetry distributed tracing and metrics with custom sampling rates. Includes `/stats` endpoint for real-time statistics. See [OTEL.md](docs/OTEL.md).
@@ -272,7 +272,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 | kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                                |         |
 | kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.            |         |
 | kubevirt | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details. |         |
-| tekton   | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                              |         |
+| tekton   | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                             |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -553,9 +553,18 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) - Namespace of the Pipeline
   - `params` (`object`) - Parameter values to pass to the Pipeline. Keys are parameter names; values can be a string, an array of strings, or an object (map of string to string) depending on the parameter type defined in the Pipeline spec
 
-- **tekton_pipelinerun_restart** - Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec
+- **tekton_pipelinerun_restart** - Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec.
   - `name` (`string`) **(required)** - Name of the PipelineRun to restart
   - `namespace` (`string`) - Namespace of the PipelineRun
+
+- **tekton_pipelinerun_cancel** - Cancel a running Tekton PipelineRun by setting spec.status to Cancelled. Use when a PipelineRun should stop executing.
+  - `name` (`string`) **(required)** - Name of the PipelineRun to cancel
+  - `namespace` (`string`) - Namespace of the PipelineRun
+
+- **tekton_pipelinerun_logs** - Get logs for all TaskRuns owned by a Tekton PipelineRun. Use this to inspect PipelineRun execution output without locating pods manually.
+  - `name` (`string`) **(required)** - Name of the PipelineRun to get logs from
+  - `namespace` (`string`) - Namespace of the PipelineRun
+  - `tail` (`integer`) - Number of lines to retrieve from the end of each container log (default: 100)
 
 - **tekton_task_start** - Start a Tekton Task by creating a TaskRun that references it
   - `name` (`string`) **(required)** - Name of the Task to start
@@ -643,6 +652,16 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) - Target namespace for the PipelineRun
   - `windowsVersion` (`string`) - Windows version: 10, 11, 2k22 (default), or 2k25
   - `pipelineVersion` (`string`) - Pipeline version (default: latest). Use specific version like 0.25.0 if needed
+
+</details>
+
+<details>
+
+<summary>tekton</summary>
+
+- **pipeline-troubleshoot** - Gather PipelineRun status, TaskRuns, logs, events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting
+  - `namespace` (`string`) **(required)** - Namespace of the PipelineRun to troubleshoot
+  - `name` (`string`) **(required)** - Name of the PipelineRun to troubleshoot
 
 </details>
 
