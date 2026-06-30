@@ -31,6 +31,15 @@ data:
         "data": [{"metric": {}, "values": [[0, "42"]]}],
         "status": "success",
     }
+    TLS_METRICS = {
+        "data": [
+            {
+                "metric": {"TLSVersion": "TLS 1.3"},
+                "values": [[0, "10240"]],
+            }
+        ],
+        "status": "success",
+    }
     NAMES = ["eval-mock-pod", "eval-mock-svc"]
 
 
@@ -46,7 +55,12 @@ data:
             elif path == "/api/loki/flow/records":
                 body = json.dumps(FLOW_RECORDS).encode()
             elif path == "/api/flow/metrics":
-                body = json.dumps(FLOW_METRICS).encode()
+                query = urllib.parse.parse_qs(parsed.query)
+                aggregate_by = query.get("aggregateBy", [""])[0]
+                if aggregate_by == "TLSVersion":
+                    body = json.dumps(TLS_METRICS).encode()
+                else:
+                    body = json.dumps(FLOW_METRICS).encode()
             elif path == "/api/resources/names":
                 body = json.dumps(NAMES).encode()
             elif path == "/api/loki/export":

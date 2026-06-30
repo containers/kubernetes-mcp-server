@@ -1,6 +1,19 @@
 # NetObserv evaluation tasks
 
-These tasks exercise the **netobserv** MCP toolset (`netobserv_list_*`, `netobserv_get_flow_metrics`, `netobserv_export_flows`, etc.) against the NetObserv console plugin HTTP API (Loki flow records, Prometheus metrics, CSV export).
+These tasks exercise the **netobserv** MCP toolset (`netobserv_list_flows`, `netobserv_get_flow_metrics`, `netobserv_export_flows`) against the NetObserv console plugin HTTP API (Loki flow records, Prometheus metrics, CSV export).
+
+## Eval-first methodology
+
+Before relying on these tools, the domain was validated with **baseline evals** using only `core` (and `config`) toolsets. Generic Kubernetes tools cannot query NetObserv flow logs or aggregated flow metrics through the console plugin API, so dedicated tools fill a genuine capability gap rather than wrapping `pods_exec` or `resources_get`.
+
+Run a baseline locally when changing the toolset:
+
+```bash
+mcpchecker check evals/openai-agent/eval.yaml --label-selector suite=netobserv \
+  # with toolsets = ["core"] only — tasks should fail or produce poor results
+```
+
+Then re-run with `netobserv` enabled (see below) and compare pass rates and tool usage (`netobserv_.*` assertions in `evals/*/eval.yaml`).
 
 Each task is **self-contained**: `spec.setup` runs `shared/setup-mock.sh`, which deploys the in-cluster mock plugin and ensures `http://127.0.0.1:9001` is reachable before the agent runs.
 
@@ -73,6 +86,7 @@ LLM judge strings in tasks assume the **mock** responses (`netobserv-eval`, `eva
 | list-flows | `netobserv_list_flows` | includes `eval-flow-1` |
 | get-flow-metrics | `netobserv_get_flow_metrics` | status `success` |
 | export-flows | `netobserv_export_flows` | CSV header `TimeFlowStartMs` |
+| tls-breakdown | `netobserv_get_flow_metrics` | includes `TLS 1.3` |
 
 ## Maintainer trigger
 

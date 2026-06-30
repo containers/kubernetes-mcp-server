@@ -25,4 +25,4 @@ spec:
     - llmJudge:
         contains: "success"
   prompt:
-    inline: "Use NetObserv to get aggregated Bytes flow metrics for the default namespace over the last 5 minutes. Summarize the metric response status and any values you see."
+    inline: "How much byte throughput is the default namespace generating? Use NetObserv metrics for the last 5 minutes and summarize the response."

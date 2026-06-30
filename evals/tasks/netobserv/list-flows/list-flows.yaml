@@ -25,4 +25,4 @@ spec:
     - llmJudge:
         contains: "eval-flow-1"
   prompt:
-    inline: "Show me recent NetObserv network flow records in the default namespace for the last 5 minutes (timeRange 300). Summarize what you find, including any flow names or counts mentioned in the response."
+    inline: "A teammate asked what network traffic the default namespace has seen in the last 5 minutes. Use NetObserv to investigate and summarize the flows you find, including any flow names or counts."

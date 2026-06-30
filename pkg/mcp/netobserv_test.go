@@ -66,6 +66,7 @@ func (s *NetObservSuite) TestListFlows() {
 		s.Equal("default", capturedURL.Query().Get("namespace"))
 		s.Equal("300", capturedURL.Query().Get("timeRange"))
 		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "result")
+		s.NotNil(toolResult.StructuredContent)
 	})
 }
 
@@ -109,6 +110,7 @@ func (s *NetObservSuite) TestGetFlowMetrics() {
 		s.Equal("namespace", capturedURL.Query().Get("aggregateBy"))
 		s.Equal("Bytes", capturedURL.Query().Get("type"))
 		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "data")
+		s.NotNil(toolResult.StructuredContent)
 	})
 }
 
