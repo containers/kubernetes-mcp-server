@@ -6,6 +6,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ToolsetsSuite struct {
@@ -34,7 +35,7 @@ func (t *TestToolset) GetName() string { return t.name }
 
 func (t *TestToolset) GetDescription() string { return t.description }
 
-func (t *TestToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
+func (t *TestToolset) GetTools(_ api.FilteringProvider) []api.ServerTool { return nil }
 
 func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
 
@@ -44,9 +45,21 @@ func (t *TestToolset) GetResourceTemplates() []api.ServerResourceTemplate { retu
 
 var _ api.Toolset = (*TestToolset)(nil)
 
-type fakeOpenshift struct{}
+type fakeProvider struct{}
 
-func (f *fakeOpenshift) IsOpenShift(context.Context) bool { return false }
+func (f *fakeProvider) IsMultiTarget() bool { return false }
+
+func (f *fakeProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
+
+func (f *fakeProvider) GetDefaultTarget() string { return "" }
+
+func (f *fakeProvider) GetTargetParameterName() string { return "" }
+
+func (f *fakeProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
+	return true
+}
+
+func (f *fakeProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return false }
 
 func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 	Register(&TestToolset{name: "duplicate"})
@@ -58,7 +71,7 @@ func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 func (s *ToolsetsSuite) TestUniqueToolNames() {
 	toolNames := make(map[string]bool)
 	for _, toolset := range s.originalToolsets {
-		for _, tool := range toolset.GetTools(&fakeOpenshift{}) {
+		for _, tool := range toolset.GetTools(&fakeProvider{}) {
 			s.Falsef(toolNames[tool.Tool.Name], "duplicate tool name: %s", tool.Tool.Name)
 			toolNames[tool.Tool.Name] = true
 		}

@@ -78,6 +78,13 @@ func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
 	if c.DisabledTools != nil && slices.Contains(c.DisabledTools, tool.Tool.Name) {
 		return false
 	}
+	if c.EnableTargetCompatibilityToolFilters {
+		for _, filter := range tool.TargetCompatibilityFilters {
+			if !filter() {
+				return false
+			}
+		}
+	}
 	return true
 }
 

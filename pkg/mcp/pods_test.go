@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"regexp"
 	"strings"
 	"testing"
@@ -68,7 +69,7 @@ func (s *PodsSuite) TestPodsListInAllNamespaces() {
 func (s *PodsSuite) TestPodsListInAllNamespacesUnauthorized() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	// Authorize user only for default/configured namespace
 	r, _ := client.RbacV1().Roles("default").Create(s.T().Context(), &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: "allow-pods-list"},
@@ -80,7 +81,7 @@ func (s *PodsSuite) TestPodsListInAllNamespacesUnauthorized() {
 	}, metav1.CreateOptions{})
 	_, _ = client.RbacV1().RoleBindings("default").Create(s.T().Context(), &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: "allow-pods-list"},
-		Subjects:   []rbacv1.Subject{{Kind: "User", Name: envTestUser.Name}},
+		Subjects:   []rbacv1.Subject{{Kind: "User", Name: test.EnvTestUser().Name}},
 		RoleRef:    rbacv1.RoleRef{Kind: "Role", Name: r.Name},
 	}, metav1.CreateOptions{})
 	// Deny cluster by removing cluster rule
@@ -197,7 +198,7 @@ func (s *PodsSuite) TestPodsListDenied() {
 func (s *PodsSuite) TestPodsListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	// Remove all permissions - user will have forbidden access
 	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
 
@@ -420,7 +421,7 @@ func (s *PodsSuite) TestPodsDelete() {
 		})
 	})
 	s.Run("pods_delete(name=a-pod-to-delete, namespace=nil), uses configured namespace", func() {
-		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 		_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "a-pod-to-delete"},
 			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
@@ -439,7 +440,7 @@ func (s *PodsSuite) TestPodsDelete() {
 		})
 	})
 	s.Run("pods_delete(name=a-pod-to-delete-in-ns-1, namespace=ns-1)", func() {
-		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 		_, _ = kc.CoreV1().Pods("ns-1").Create(s.T().Context(), &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "a-pod-to-delete-in-ns-1"},
 			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
@@ -459,7 +460,7 @@ func (s *PodsSuite) TestPodsDelete() {
 		})
 	})
 	s.Run("pods_delete(name=a-managed-pod-to-delete, namespace=ns-1) with managed pod", func() {
-		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 		managedLabels := map[string]string{
 			"app.kubernetes.io/managed-by": "kubernetes-mcp-server",
 			"app.kubernetes.io/name":       "a-manged-pod-to-delete",
@@ -522,12 +523,12 @@ func (s *PodsSuite) TestPodsDeleteInOpenShift() {
 			"app.kubernetes.io/managed-by": "kubernetes-mcp-server",
 			"app.kubernetes.io/name":       "a-manged-pod-to-delete",
 		}
-		kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+		kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 		_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "a-managed-pod-to-delete-in-openshift", Labels: managedLabels},
 			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
 		}, metav1.CreateOptions{})
-		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 		_, _ = dynamicClient.Resource(schema.GroupVersionResource{Group: "route.openshift.io", Version: "v1", Resource: "routes"}).
 			Namespace("default").Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
 			"apiVersion": "route.openshift.io/v1",
@@ -687,7 +688,7 @@ func (s *PodsSuite) TestPodsLogDenied() {
 }
 
 func (s *PodsSuite) TestPodsLogDefaultContainer() {
-	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	// Multi-container pod with default-container annotation
 	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -742,7 +743,7 @@ func (s *PodsSuite) TestPodsLogDefaultContainer() {
 
 func (s *PodsSuite) TestPodsListWithLabelSelector() {
 	s.InitMcpClient()
-	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	// Create pods with labels
 	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -823,7 +824,7 @@ func (s *PodsSuite) TestPodsListWithLabelSelector() {
 
 func (s *PodsSuite) TestPodsListWithFieldSelector() {
 	s.InitMcpClient()
-	kc := kubernetes.NewForConfigOrDie(envTestRestConfig)
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	// Create multiple pods for field selector testing to verify filtering excludes unwanted pods
 	_, _ = kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

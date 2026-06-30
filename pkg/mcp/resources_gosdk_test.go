@@ -685,10 +685,10 @@ func (m *mockResourceToolset) GetName() string {
 	}
 	return "resource-test"
 }
-func (m *mockResourceToolset) GetDescription() string                    { return "Test toolset for resources" }
-func (m *mockResourceToolset) GetTools(_ api.Openshift) []api.ServerTool { return nil }
-func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt            { return nil }
-func (m *mockResourceToolset) GetResources() []api.ServerResource        { return m.resources }
+func (m *mockResourceToolset) GetDescription() string                            { return "Test toolset for resources" }
+func (m *mockResourceToolset) GetTools(_ api.FilteringProvider) []api.ServerTool { return nil }
+func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt                    { return nil }
+func (m *mockResourceToolset) GetResources() []api.ServerResource                { return m.resources }
 func (m *mockResourceToolset) GetResourceTemplates() []api.ServerResourceTemplate {
 	return m.resourceTemplates
 }

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
@@ -30,10 +31,10 @@ func (s *ProxiedKubernetesSuite) SetupTest() {
 
 	// Create a reverse proxy that exposes the envtest API server behind a path prefix.
 	// This simulates a gateway/proxy that serves the Kubernetes API under a sub-path.
-	targetURL, err := url.Parse(envTestRestConfig.Host)
+	targetURL, err := url.Parse(test.EnvTestRestConfig().Host)
 	s.Require().NoError(err, "Expected to parse envtest host URL")
 
-	transport, err := rest.TransportFor(envTestRestConfig)
+	transport, err := rest.TransportFor(test.EnvTestRestConfig())
 	s.Require().NoError(err, "Expected to create transport for envtest")
 
 	s.proxy = httptest.NewServer(&httputil.ReverseProxy{
