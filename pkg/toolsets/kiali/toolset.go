@@ -28,6 +28,7 @@ func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
 		kialiTools.InitGetMeshStatus(),
 		kialiTools.InitManageIstioConfigRead(),
 		kialiTools.InitManageIstioConfig(),
+		kialiTools.InitListMeshClusters(),
 		kialiTools.InitListOrGetResources(),
 		kialiTools.InitListTraces(),
 		kialiTools.InitGetTraceDetails(),

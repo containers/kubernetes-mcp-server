@@ -34,9 +34,9 @@ func InitListOrGetResources() []api.ServerTool {
 						Type:        "string",
 						Description: "Optional. The specific name of the resource. If left empty, the tool returns a list of all resources of the specified type. If provided, the tool returns deep details for this specific resource.",
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+						Description: "Optional Istio mesh cluster name to get resources from. Defaults to the Kiali home cluster.",
 					},
 				},
 				Required: []string{"resourceType"},
@@ -60,7 +60,7 @@ func InitListOrGetResources() []api.ServerTool {
 func listOrGetResourcesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiListOrGetResourcesEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiListOrGetResourcesEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list or get resources: %w", err)), nil
 	}

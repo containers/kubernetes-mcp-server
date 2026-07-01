@@ -25,6 +25,12 @@ When the `kiali` toolset is enabled, a Kiali toolset configuration is required v
 - The server uses your existing Kubernetes credentials (from kubeconfig or in-cluster) to set a bearer token for Kiali calls.
 - If you pass an HTTP Authorization header to the MCP HTTP endpoint, that is not required for Kiali; Kiali calls use the server's configured token.
 
+### Multi-cluster support
+
+Kiali can manage multiple Kubernetes clusters within an Istio service mesh. Most Kiali tools accept an optional `meshCluster` parameter to target a specific mesh cluster. When omitted, Kiali defaults to its home cluster (where Kiali is deployed).
+
+Use `kiali_list_mesh_clusters` to discover available mesh cluster names before calling other tools.
+
 ### Troubleshooting
 
 - Missing Kiali configuration when `kiali` toolset is enabled → set `[toolset_configs.kiali].url` in the config TOML.

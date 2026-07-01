@@ -52,9 +52,9 @@ func InitManageIstioConfig() []api.ServerTool {
 						Type:        "string",
 						Description: "Complete JSON or YAML data to apply or create the object. Required for create and patch actions. You MUST provide a COMPLETE and VALID manifest with ALL required fields for the resource type. Arrays (like servers, http, etc.) are REPLACED entirely, so you must include ALL required fields within each array element.",
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
+						Description: "Optional Istio mesh cluster name. Defaults to the Kiali home cluster.",
 					},
 				},
 				Required: []string{"action", "namespace", "group", "version", "kind", "object"},
@@ -74,7 +74,7 @@ func InitManageIstioConfig() []api.ServerTool {
 func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiManageIstioConfigEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiManageIstioConfigEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to manage istio config: %w", err)), nil
 	}
