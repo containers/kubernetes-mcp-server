@@ -264,15 +264,16 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset  | Description                                                                                                                                                                     | Default |
-|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                         | ✓       |
-| core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                             | ✓       |
-| helm     | Tools for managing Helm charts and releases                                                                                                                                     |         |
-| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                                |         |
-| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.            |         |
-| kubevirt | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details. |         |
-| tekton   | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                              |         |
+| Toolset   | Description                                                                                                                                                                                                                             | Default |
+|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config    | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
+| core      | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| helm      | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
+| kcp       | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
+| kiali     | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
+| kubevirt  | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
+| netobserv | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| tekton    | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                                                                                      |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -541,6 +542,208 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+
+</details>
+
+<details>
+
+<summary>netobserv</summary>
+
+- **netobserv_list_flows** - Lists network flow records from NetObserv (Loki). Returns aggregated flow log entries with optional filters on namespaces, workloads, IPs, ports, and protocols.
+  - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
+  - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
+
+Syntax:
+- key=value — exact match; key=a,b — OR multiple values for the same key
+- key~pattern — regex / contains match; key!~pattern — NOT regex
+- key!=value — not equal; key>number — numeric greater-or-equal (e.g. Bytes>1000)
+- AND within a group: & (e.g. SrcK8S_Namespace=default&Proto=6)
+- OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
+
+Prefer the dedicated "namespace" parameter for namespace scope when possible.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
+
+Common Kubernetes fields (Src/Dst prefixes mirror each other):
+- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
+- SrcK8S_Type, DstK8S_Type (e.g. Pod, Service, Node)
+- SrcK8S_OwnerName, DstK8S_OwnerName, SrcK8S_OwnerType, DstK8S_OwnerType (for Deployment, StatefulSet, etc.)
+- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone, K8S_ClusterName, UDN
+
+Network & flow:
+- SrcAddr, DstAddr (IPs), SrcPort, DstPort, Proto (IANA number, e.g. 6=TCP, 17=UDP)
+- FlowDirection (0=Ingress, 1=Egress, 2=Inner), Bytes, Packets, Dscp, Flags
+
+Packet drops (often with recordType flowLog and packetLoss dropped/hasDrops):
+- PktDropPackets, PktDropBytes, PktDropLatestState, PktDropLatestDropCause
+
+DNS:
+- DnsName, DnsId, DnsLatencyMs, DnsErrno, DnsFlagsResponseCode
+
+Examples:
+- SrcK8S_Namespace=openshift-netobserv&SrcK8S_Name~my-app
+- Proto=6&DstPort=443
+- SrcK8S_Name=pod-a|SrcK8S_Name=pod-b
+  - `limit` (`integer`) - Maximum number of flow records to return. Default 100.
+  - `namespace` (`string`) - Restrict results to flows where source or destination namespace matches (dev-scoped Loki tenant).
+  - `packetLoss` (`string`) - Packet loss filter.
+  - `recordType` (`string`) - Flow record type filter.
+  - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
+  - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
+
+- **netobserv_get_flow_metrics** - Returns aggregated NetObserv flow metrics (topology/time series) from Prometheus and/or Loki via the console plugin. See aggregateBy and groups parameter descriptions for topology scopes (namespace, resource, app, …) and field breakdowns (TLSVersion, DnsName, PktDropLatestState, …).
+  - `aggregateBy` (`string`) **(required)** - Primary dimension for netobserv_get_flow_metrics (console plugin /api/flow/metrics).
+
+Two forms (use exact spelling):
+
+1) Topology scopes — aggregate endpoints for graph/topology views:
+- app — application workloads (pods/services), excluding infrastructure traffic
+- namespace — Kubernetes namespace (default)
+- owner — controller owner (Deployment, StatefulSet, …)
+- resource — pod, service, or node (finest workload granularity)
+- host — node name
+- zone — availability zone
+- cluster — cluster name (multi-cluster)
+- network — user-defined / secondary network name
+
+2) Flow record fields — group by a single flow attribute (PascalCase field name).
+Use for breakdown charts (TLS, DNS, drops, protocol). Field names match filters / flow logs.
+
+TLS (requires TLS tracking on the FlowCollector):
+- TLSVersion, TLSCipherSuite, TLSGroup, TLSTypes
+
+DNS:
+- DnsName, DnsFlagsResponseCode, DnsErrno
+
+Packet drops:
+- PktDropLatestState, PktDropLatestDropCause
+
+Network / K8s (single-sided breakdown; pair with filters for src/dst):
+- Proto, SrcPort, DstPort, FlowDirection, Dscp
+- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
+- SrcK8S_Type, DstK8S_Type, SrcK8S_OwnerName, DstK8S_OwnerName
+- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone
+- K8S_ClusterName, SrcK8S_NetworkName, DstK8S_NetworkName
+
+Pair aggregateBy with type and function:
+- Throughput: type=Bytes or Packets, function=rate
+- Flow count: type=Flows, function=count or rate
+- DNS volume: type=DnsFlows, function=count
+- DNS latency: type=DnsLatencyMs, function=avg, p90, or max
+- RTT: type=TimeFlowRttNs, function=avg, min, or p90
+- Drops: type=PktDropPackets or PktDropBytes, function=rate
+
+Examples:
+- aggregateBy=namespace, type=Bytes, function=rate
+- aggregateBy=TLSVersion, type=Bytes, function=rate, filters=TLSTypes!~""
+- aggregateBy=TLSGroup, type=Flows, function=count
+- aggregateBy=DnsFlagsResponseCode, type=DnsFlows, function=count
+- aggregateBy=PktDropLatestState, type=PktDropPackets, function=rate, packetLoss=dropped
+- aggregateBy=resource, type=Bytes, function=rate, namespace=netobserv
+  - `dataSource` (`string`) - Metrics backend: auto (prefer Prometheus, fallback to Loki), prom, or loki.
+  - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
+  - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
+
+Syntax:
+- key=value — exact match; key=a,b — OR multiple values for the same key
+- key~pattern — regex / contains match; key!~pattern — NOT regex
+- key!=value — not equal; key>number — numeric greater-or-equal (e.g. Bytes>1000)
+- AND within a group: & (e.g. SrcK8S_Namespace=default&Proto=6)
+- OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
+
+Prefer the dedicated "namespace" parameter for namespace scope when possible.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
+
+Common Kubernetes fields (Src/Dst prefixes mirror each other):
+- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
+- SrcK8S_Type, DstK8S_Type (e.g. Pod, Service, Node)
+- SrcK8S_OwnerName, DstK8S_OwnerName, SrcK8S_OwnerType, DstK8S_OwnerType (for Deployment, StatefulSet, etc.)
+- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone, K8S_ClusterName, UDN
+
+Network & flow:
+- SrcAddr, DstAddr (IPs), SrcPort, DstPort, Proto (IANA number, e.g. 6=TCP, 17=UDP)
+- FlowDirection (0=Ingress, 1=Egress, 2=Inner), Bytes, Packets, Dscp, Flags
+
+Packet drops (often with recordType flowLog and packetLoss dropped/hasDrops):
+- PktDropPackets, PktDropBytes, PktDropLatestState, PktDropLatestDropCause
+
+DNS:
+- DnsName, DnsId, DnsLatencyMs, DnsErrno, DnsFlagsResponseCode
+
+Examples:
+- SrcK8S_Namespace=openshift-netobserv&SrcK8S_Name~my-app
+- Proto=6&DstPort=443
+- SrcK8S_Name=pod-a|SrcK8S_Name=pod-b
+  - `function` (`string`) - Aggregation function.
+  - `groups` (`string`) - Optional comma-separated parent scopes when aggregateBy is a topology scope.
+Adds extra label dimensions (e.g. break namespace results down by cluster or zone).
+Ignored or less useful when aggregateBy is already a raw flow field (e.g. TLSVersion); use filters instead.
+
+Single scopes:
+- clusters, networks, zones, hosts, namespaces, owners
+
+Combined scopes (use +, no spaces):
+- clusters+zones, clusters+hosts, clusters+namespaces, clusters+owners
+- zones+hosts, zones+namespaces, zones+owners
+- hosts+namespaces, hosts+owners
+- namespaces+owners
+- networks+zones, networks+hosts, networks+namespaces, networks+owners
+
+Examples:
+- aggregateBy=namespace, groups=clusters
+- aggregateBy=resource, groups=namespaces
+- aggregateBy=owner, groups=zones,hosts
+  - `limit` (`integer`) - Maximum number of flow records to return. Default 100.
+  - `namespace` (`string`) - Restrict results to flows where source or destination namespace matches (dev-scoped Loki tenant).
+  - `packetLoss` (`string`) - Packet loss filter.
+  - `rateInterval` (`string`) - Prometheus rate interval (e.g. 1m, 5m).
+  - `recordType` (`string`) - Flow record type filter.
+  - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
+  - `step` (`string`) - Query resolution step (e.g. 30s, 1m).
+  - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
+  - `type` (`string`) - Metric type to aggregate.
+
+- **netobserv_export_flows** - Exports NetObserv flow records as CSV using the same filters as list_flows. Requires Loki to be enabled on the console plugin backend.
+  - `columns` (`string`) - Optional comma-separated column names to include (e.g. SrcK8S_Namespace,DstK8S_Namespace,Bytes). Omit to export all columns present in the result.
+  - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
+  - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
+
+Syntax:
+- key=value — exact match; key=a,b — OR multiple values for the same key
+- key~pattern — regex / contains match; key!~pattern — NOT regex
+- key!=value — not equal; key>number — numeric greater-or-equal (e.g. Bytes>1000)
+- AND within a group: & (e.g. SrcK8S_Namespace=default&Proto=6)
+- OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
+
+Prefer the dedicated "namespace" parameter for namespace scope when possible.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
+
+Common Kubernetes fields (Src/Dst prefixes mirror each other):
+- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
+- SrcK8S_Type, DstK8S_Type (e.g. Pod, Service, Node)
+- SrcK8S_OwnerName, DstK8S_OwnerName, SrcK8S_OwnerType, DstK8S_OwnerType (for Deployment, StatefulSet, etc.)
+- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone, K8S_ClusterName, UDN
+
+Network & flow:
+- SrcAddr, DstAddr (IPs), SrcPort, DstPort, Proto (IANA number, e.g. 6=TCP, 17=UDP)
+- FlowDirection (0=Ingress, 1=Egress, 2=Inner), Bytes, Packets, Dscp, Flags
+
+Packet drops (often with recordType flowLog and packetLoss dropped/hasDrops):
+- PktDropPackets, PktDropBytes, PktDropLatestState, PktDropLatestDropCause
+
+DNS:
+- DnsName, DnsId, DnsLatencyMs, DnsErrno, DnsFlagsResponseCode
+
+Examples:
+- SrcK8S_Namespace=openshift-netobserv&SrcK8S_Name~my-app
+- Proto=6&DstPort=443
+- SrcK8S_Name=pod-a|SrcK8S_Name=pod-b
+  - `format` (`string`) - Export format. Only csv is supported.
+  - `limit` (`integer`) - Maximum number of flow records to return. Default 100.
+  - `namespace` (`string`) - Restrict results to flows where source or destination namespace matches (dev-scoped Loki tenant).
+  - `packetLoss` (`string`) - Packet loss filter.
+  - `recordType` (`string`) - Flow record type filter.
+  - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
+  - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
 
 </details>
 

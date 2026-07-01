@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+    requires: netobserv
+  name: "Get flow byte metrics"
+  category: "Metrics"
+  description: "Queries aggregated byte metrics from NetObserv for a namespace."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        file: ../shared/setup-mock.sh
+        timeout: 180s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          curl -sf "http://127.0.0.1:9001/api/flow/metrics?namespace=default&metric=Bytes&timeRange=300" | grep -q success
+    - llmJudge:
+        contains: "success"
+  prompt:
+    inline: "How much byte throughput is the default namespace generating? Use NetObserv metrics for the last 5 minutes and summarize the response."

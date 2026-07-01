@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: netobserv
+    requires: netobserv
+  name: "Export flows as CSV"
+  category: "Export"
+  description: "Exports flow records from NetObserv in CSV format."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        file: ../shared/setup-mock.sh
+        timeout: 180s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          curl -sf "http://127.0.0.1:9001/api/loki/export?namespace=default&timeRange=300&format=csv" | grep -q TimeFlowStartMs
+    - llmJudge:
+        contains: "TimeFlowStartMs"
+  prompt:
+    inline: "I need a CSV export of flow records from the default namespace for the last 5 minutes for an audit. Export the data and confirm whether it succeeded, including the CSV column headers."

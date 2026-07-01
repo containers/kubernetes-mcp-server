@@ -51,6 +51,19 @@ httpRoute:
 
 Functionality has been added to the Chart to simplify the deployment to OpenShift Cluster.
 
+### OpenShift with NetObserv
+
+To enable the [NetObserv toolset](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) on OpenShift, use the example values file. The pod ServiceAccount authenticates to the Kubernetes API and the NetObserv console plugin (`cluster_auth_mode: kubeconfig`).
+
+```bash
+helm upgrade -i kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server \
+  -n kubernetes-mcp-server --create-namespace \
+  -f examples/values-openshift-netobserv.yaml \
+  --set ingress.host=kubernetes-mcp-server.apps.<cluster-domain>
+```
+
+See [examples/README.md](examples/README.md) and [docs/NETOBSERV.md](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for RBAC (`view`) and configuration options.
+
 ### RBAC Configuration
 
 The chart supports creating custom RBAC resources. Set `rbac.create: false` to disable all RBAC resource creation.

@@ -1,0 +1,135 @@
+# Minimal NetObserv console plugin API mock for mcpchecker (Kind / local dev).
+# Matches paths in pkg/toolsets/netobserv/tools/endpoints.go.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netobserv
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netobserv-plugin-mock
+  namespace: netobserv
+data:
+  server.py: |
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json
+    import urllib.parse
+
+    NAMESPACES = ["default", "netobserv-eval"]
+    FLOW_RECORDS = {
+        "result": [
+            {
+                "name": "eval-flow-1",
+                "namespace": "default",
+                "workload": "eval-mock",
+            }
+        ],
+        "stats": {"flows": 1},
+    }
+    FLOW_METRICS = {
+        "data": [{"metric": {}, "values": [[0, "42"]]}],
+        "status": "success",
+    }
+    TLS_METRICS = {
+        "data": [
+            {
+                "metric": {"TLSVersion": "TLS 1.3"},
+                "values": [[0, "10240"]],
+            }
+        ],
+        "status": "success",
+    }
+    NAMES = ["eval-mock-pod", "eval-mock-svc"]
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            return
+
+        def do_GET(self):
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            if path == "/api/resources/namespaces":
+                body = json.dumps(NAMESPACES).encode()
+            elif path == "/api/loki/flow/records":
+                body = json.dumps(FLOW_RECORDS).encode()
+            elif path == "/api/flow/metrics":
+                query = urllib.parse.parse_qs(parsed.query)
+                aggregate_by = query.get("aggregateBy", [""])[0]
+                if aggregate_by == "TLSVersion":
+                    body = json.dumps(TLS_METRICS).encode()
+                else:
+                    body = json.dumps(FLOW_METRICS).encode()
+            elif path == "/api/resources/names":
+                body = json.dumps(NAMES).encode()
+            elif path == "/api/loki/export":
+                body = b"TimeFlowStartMs,Bytes,SrcK8S_Namespace\n1,128,default\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            else:
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+
+    if __name__ == "__main__":
+        HTTPServer(("0.0.0.0", 9001), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netobserv-plugin
+  namespace: netobserv
+  labels:
+    app: netobserv-plugin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netobserv-plugin
+  template:
+    metadata:
+      labels:
+        app: netobserv-plugin
+    spec:
+      containers:
+        - name: mock
+          image: python:3.12-alpine
+          command: ["python", "/scripts/server.py"]
+          ports:
+            - containerPort: 9001
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/resources/namespaces
+              port: 9001
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: scripts
+          configMap:
+            name: netobserv-plugin-mock
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netobserv-plugin
+  namespace: netobserv
+spec:
+  selector:
+    app: netobserv-plugin
+  ports:
+    - name: http
+      port: 9001
+      targetPort: 9001

@@ -1,0 +1,21 @@
+# CI: render chart with NetObserv toolset and OpenShift-oriented config.
+ingress:
+  host: netobserv-mcp.example.com
+
+openshift: true
+
+config:
+  toolsets:
+    - core
+    - netobserv
+  cluster_auth_mode: kubeconfig
+  toolset_configs:
+    netobserv:
+      namespace: netobserv
+
+rbac:
+  extraClusterRoleBindings:
+    - name: view
+      roleRef:
+        name: view
+        external: true

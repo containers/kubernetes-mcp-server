@@ -74,3 +74,13 @@ config:
             toolPattern: ".*"
         minToolCalls: 1
         maxToolCalls: 20
+    # NetObserv tasks
+    - glob: ../tasks/netobserv/*/*.yaml
+      labelSelector:
+        suite: netobserv
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "netobserv_.*"
+        minToolCalls: 1
+        maxToolCalls: 10
