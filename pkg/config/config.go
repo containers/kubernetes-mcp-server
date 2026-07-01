@@ -161,6 +161,11 @@ type StaticConfig struct {
 	// ConfirmationRules define rules for prompting the user before dangerous actions.
 	ConfirmationRules []api.ConfirmationRule `toml:"confirmation_rules,omitempty"`
 
+	// AppsEnabled enables MCP Apps interactive UI extensions.
+	// When true, tools expose a _meta.ui.resourceUri field and the server
+	// registers the viewer HTML as a ui:// resource.
+	AppsEnabled bool `toml:"apps_enabled,omitempty"`
+
 	// Internal: parsed provider configs (not exposed to TOML package)
 	parsedClusterProviderConfigs map[string]api.ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML package)
@@ -688,4 +693,8 @@ func (c *StaticConfig) ValidateClusterAuthMode() error {
 		return fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)")
 	}
 	return nil
+}
+
+func (c *StaticConfig) IsAppsEnabled() bool {
+	return c.AppsEnabled
 }

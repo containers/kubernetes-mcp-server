@@ -53,10 +53,10 @@ output layer. `output.Output.PrintObjStructured` (defined in
 with both the text rendering (table or YAML) and a structured view extracted
 from the underlying object.
 
-The current list-tool callers — e.g. `namespacesList` in
-[`pkg/toolsets/core/namespaces.go`](../../pkg/toolsets/core/namespaces.go) —
-still use `PrintObj` + `NewToolCallResult` and emit no structured content.
-When converting one of them, the pattern is:
+`namespacesList` in
+[`pkg/toolsets/core/namespaces.go`](../../pkg/toolsets/core/namespaces.go)
+is a converted reference for this pattern. Any remaining list tools that still
+use `PrintObj` + `NewToolCallResult` follow the same shape when converted:
 
 ```go
 func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -79,12 +79,14 @@ For the table output format, `tableToStructured` produces a
 the cleaned-up object or list of objects. No tool-specific extractor is
 required.
 
-> **Status:** the recipe is the intended pattern but has no in-tree adopter
-> yet. The first converted list tool — tracked in #920 (MCP Apps), which
-> retrofits several core tools with this pattern — will become the canonical
-> reference. If that conversion uncovers a wrinkle (error-wrap style, params
-> plumbing, a dedicated helper, etc.), please thread the change back into
-> this section so the snippet doesn't quietly diverge from the live code.
+> **Status:** Recipe 1 has in-tree adopters as of #1232 (`resources_get` and
+> `resources_list` in
+> [`pkg/toolsets/core/resources.go`](../../pkg/toolsets/core/resources.go)) and
+> #920 (MCP Apps), which converts `namespacesList` and the pod list tools. Those
+> handlers are the canonical reference. The `nodes`/`pods` top tools instead use
+> bespoke Recipe 2 extractors (`extractNodesTopStructured` and
+> `extractPodsTopStructured`). Keep this section in sync if the error-wrap style,
+> params plumbing, or helpers change.
 
 ### Recipe 2 — Bespoke / non-Kubernetes data
 
