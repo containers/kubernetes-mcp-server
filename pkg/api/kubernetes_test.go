@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
 )
 
 type HasGVKsTestSuite struct {
@@ -69,6 +70,27 @@ func (s *HasGVKsTestSuite) TestGroupVersionDoesNotExist() {
 		hasGVKs, err := HasGVKs(s.discoveryClient(), gvks)
 		s.NoError(err, "404 should not be returned as an error")
 		s.False(hasGVKs, "should return false when GV doesn't exist")
+	})
+}
+
+func (s *HasGVKsTestSuite) TestMemCacheGroupVersionDoesNotExist() {
+	s.Run("returns false with no error for missing GroupVersion via memcache client", func() {
+		// Production derives discovery from a memory-cached client, which returns
+		// memory.ErrCacheNotFound (a plain error, not a StatusError with IsNotFound)
+		// for an absent GroupVersion. This guards the errors.Is(err, ErrCacheNotFound)
+		// branch in HasGVKs, which the raw-discovery cases above do not exercise.
+		handler := test.NewDiscoveryClientHandler()
+		s.mockServer.Handle(handler)
+
+		cached := memory.NewMemCacheClient(s.discoveryClient())
+
+		gvks := []schema.GroupVersionKind{
+			{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
+		}
+
+		hasGVKs, err := HasGVKs(cached, gvks)
+		s.NoError(err, "missing GroupVersion via memcache should map to (false, nil)")
+		s.False(hasGVKs, "should return false when the GroupVersion is absent from the memcache")
 	})
 }
 

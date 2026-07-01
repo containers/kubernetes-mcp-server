@@ -1,12 +1,15 @@
 package api
 
 import (
-	"k8s.io/apimachinery/pkg/api/errors"
+	"errors"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -64,8 +67,8 @@ func HasGVKs(discoveryClient discovery.DiscoveryInterface, gvks []schema.GroupVe
 		if err != nil {
 			// If the GroupVersion doesn't exist (404), treat as "GVK not found" rather than an error.
 			// The discovery client may return either a StatusError with IsNotFound() true,
-			// or a plain error with message "not found" (from cached 404 responses).
-			if errors.IsNotFound(err) || err.Error() == "not found" {
+			// or memory.ErrCacheNotFound when a cached memcache client sees an absent GroupVersion.
+			if apierrors.IsNotFound(err) || errors.Is(err, memory.ErrCacheNotFound) {
 				return false, nil
 			}
 			// Other errors (network issues, etc.) are returned to the caller
