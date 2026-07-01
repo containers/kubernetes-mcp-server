@@ -18,9 +18,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Initialize shared envtest environment once for all test packages.
-	// This runs in the mcp package but envtest is shared via internal/test
-	// so kubernetes, http, watcher packages all use the same instance.
+	// Initialize the envtest environment once for this test package. Go runs each
+	// package's tests as a separate process, so this TestMain and the resulting
+	// envtest instance are scoped to the mcp package alone (see
+	// internal/test/envtest.go); other packages initialize their own.
 	test.EnvTest()
 
 	// Create test data specific to mcp tests

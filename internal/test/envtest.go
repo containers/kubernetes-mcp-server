@@ -156,7 +156,11 @@ func EnvTestUser() *envtest.User {
 func StopEnvTest() error {
 	if envTestInstance != nil {
 		err := envTestInstance.Stop()
-		// Reset the instance so it can be reinitialized in another test package process
+		// Null the instance/config so any stray EnvTest() call after Stop() fails
+		// loudly instead of handing out a stopped environment. This does NOT re-arm
+		// envTestOnce, so EnvTest() cannot reinitialize within the same process; it
+		// is safe only because StopEnvTest runs from TestMain after m.Run(), and each
+		// test package runs as its own process.
 		envTestInstance = nil
 		envTestRestConfig = nil
 		return err

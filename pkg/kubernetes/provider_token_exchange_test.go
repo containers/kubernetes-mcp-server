@@ -62,9 +62,6 @@ func (fakeDerivedProvider) Close()                                       {}
 func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kubernetes, error) {
 	return &Kubernetes{}, nil
 }
-func (fakeDerivedProvider) HasGVKs(context.Context, []schema.GroupVersionKind) bool {
-	return true
-}
 func (fakeDerivedProvider) AnyTargetHasGVKs(context.Context, []schema.GroupVersionKind) bool {
 	return true
 }
