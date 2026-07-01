@@ -28,6 +28,8 @@ kubernetes-mcp-server-windows-amd64.exe
 kubernetes-mcp-server-windows-arm64.exe
 
 python/.venv/
+test/e2e/.venv/
+__pycache__/
 python/build/
 python/dist/
 python/kubernetes_mcp_server.egg-info/
