@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "Identify Degraded Namespaces"
   category: "Mesh Health & Status"
   description: "Scans the entire mesh to identify namespaces with health issues or degraded performance."

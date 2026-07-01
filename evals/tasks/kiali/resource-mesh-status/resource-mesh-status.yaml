@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "Comprehensive Mesh Health Audit"
   category: "Mesh Health & Status"
   description: "Performs a high-level audit of the mesh health, including control plane and data plane status."

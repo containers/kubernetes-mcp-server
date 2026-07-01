@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "Visualize Namespace Traffic"
   category: "Traffic Observability"
   description: "Generates a traffic graph for a specific namespace to visualize service-to-service communication."

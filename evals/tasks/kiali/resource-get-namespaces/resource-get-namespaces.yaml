@@ -3,6 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kiali
+    project: kiali
+    requires: kiali
+  annotations:
+    project-name: "Kiali"
+    project-url: "https://kiali.io"
   name: "List Mesh-Enabled Namespaces"
   category: "Resource Inspection"
   description: "Retrieves a list of all namespaces currently managed or observed by the Istio service mesh."
