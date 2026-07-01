@@ -1,0 +1,104 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "argocd-multi-app-sync-waves"
+  difficulty: hard
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-sync-waves
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-sync-waves
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          kubectl get appproject pipeline-project -n argocd-eval-sync-waves -o name || { echo "ERROR: AppProject pipeline-project not found"; exit 1; }
+
+          for APP in db-migration api-server web-frontend; do
+            kubectl get application "$APP" -n argocd-eval-sync-waves -o name || { echo "ERROR: Application $APP not found"; exit 1; }
+          done
+
+          DB_WAVE=$(kubectl get application db-migration -n argocd-eval-sync-waves -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/sync-wave}')
+          API_WAVE=$(kubectl get application api-server -n argocd-eval-sync-waves -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/sync-wave}')
+          WEB_WAVE=$(kubectl get application web-frontend -n argocd-eval-sync-waves -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/sync-wave}')
+
+          if [ "$DB_WAVE" -ge "$API_WAVE" ] 2>/dev/null; then
+            echo "ERROR: db-migration sync-wave ($DB_WAVE) should be less than api-server ($API_WAVE)"
+            exit 1
+          fi
+          if [ "$API_WAVE" -ge "$WEB_WAVE" ] 2>/dev/null; then
+            echo "ERROR: api-server sync-wave ($API_WAVE) should be less than web-frontend ($WEB_WAVE)"
+            exit 1
+          fi
+
+          DB_PATH=$(kubectl get application db-migration -n argocd-eval-sync-waves -o jsonpath='{.spec.source.path}')
+          API_PATH=$(kubectl get application api-server -n argocd-eval-sync-waves -o jsonpath='{.spec.source.path}')
+          WEB_PATH=$(kubectl get application web-frontend -n argocd-eval-sync-waves -o jsonpath='{.spec.source.path}')
+          if [ "$DB_PATH" = "$API_PATH" ] || [ "$API_PATH" = "$WEB_PATH" ]; then
+            echo "ERROR: Applications should have different paths"
+            exit 1
+          fi
+
+          echo "Pipeline apps created with correct sync-wave ordering: db($DB_WAVE) < api($API_WAVE) < web($WEB_WAVE)"
+    - llmJudge:
+        contains: "db-migration"
+    - llmJudge:
+        contains: "api-server"
+    - llmJudge:
+        contains: "web-frontend"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: db-migration
+          namespace: argocd-eval-sync-waves
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: api-server
+          namespace: argocd-eval-sync-waves
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: web-frontend
+          namespace: argocd-eval-sync-waves
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: pipeline-project
+          namespace: argocd-eval-sync-waves
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-sync-waves
+        ignoreNotFound: true
+
+  prompt:
+    inline: Create a deployment pipeline in namespace 'argocd-eval-sync-waves'. First create an AppProject (apiVersion argoproj.io/v1alpha1) named 'pipeline-project' allowing repo 'https://github.com/company/platform' and destination namespace '*' on server 'https://kubernetes.default.svc'. Then create 3 Applications (apiVersion argoproj.io/v1alpha1) in that project, all using repo 'https://github.com/company/platform' but different paths - 'db-migration' with path 'db/' and sync-wave annotation -1, 'api-server' with path 'api/' and sync-wave 0, 'web-frontend' with path 'web/' and sync-wave 1. Use annotation key 'argocd.argoproj.io/sync-wave'.
