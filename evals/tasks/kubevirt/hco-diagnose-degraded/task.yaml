@@ -1,0 +1,65 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-diagnose-degraded"
+  difficulty: hard
+  description: "Diagnose why HCO is reporting an issue by correlating conditions across managed components"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="kubevirt-hyperconverged"
+          HCO_NAME="kubevirt-hyperconverged"
+
+          if ! kubectl get hyperconverged "$HCO_NAME" -n "$NS" > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+
+          # Add a pause annotation to the HCO CR to trigger an unsafe modification condition.
+          # This annotation tells HCO that an admin is making direct changes to managed CRs,
+          # which causes HCO to report a TaintedConfiguration condition.
+          echo "Adding jsonpatch annotation to trigger TaintedConfiguration..."
+          kubectl annotate hyperconverged "$HCO_NAME" -n "$NS" \
+              hco.kubevirt.io/jsonpatch='[{"op":"add","path":"/spec/configuration/developerConfiguration","value":{"logVerbosity":{"virtLauncher":5}}}]' \
+              --overwrite
+
+          echo "Waiting for HCO to reconcile..."
+          kubectl wait hyperconverged "$HCO_NAME" -n "$NS" --for condition=TaintedConfiguration --timeout=60s
+          echo "Degradation scenario configured"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1 || { echo "✗ HyperConverged CR not found"; exit 1; }
+          echo "✓ HCO is accessible for investigation"
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "jsonpatch"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="kubevirt-hyperconverged"
+          HCO_NAME="kubevirt-hyperconverged"
+
+          # Remove the jsonpatch annotation
+          kubectl annotate hyperconverged "$HCO_NAME" -n "$NS" \
+              hco.kubevirt.io/jsonpatch- 2>/dev/null || true
+
+          echo "Waiting for HCO to reconcile..."
+          kubectl wait hyperconverged "$HCO_NAME" -n "$NS" --for condition=Available --timeout=120s 2>/dev/null || true
+          echo "Degradation scenario cleaned up"
+  prompt:
+    inline: |-
+      HCO seems to be reporting an unusual condition. Investigate the issue, determine the
+      root cause, and recommend remediation steps.

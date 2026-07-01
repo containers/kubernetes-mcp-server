@@ -30,6 +30,10 @@ var kubevirtApis = []schema.GroupVersionResource{
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineinstancetypes"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterpreferences"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachinepreferences"},
+	{Group: "hco.kubevirt.io", Version: "v1", Resource: "hyperconvergeds"},
+	{Group: "kubevirt.io", Version: "v1", Resource: "kubevirts"},
+	{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "cdis"},
+	{Group: "networkaddonsoperator.network.kubevirt.io", Version: "v1", Resource: "networkaddonsconfigs"},
 }
 
 type KubevirtSuite struct {
@@ -1040,6 +1044,104 @@ func (s *KubevirtSuite) TestVMGuestInfo() {
 			Version:  "v1",
 			Resource: "virtualmachineinstances",
 		}).Namespace("default").Delete(s.T().Context(), "default-info-vm", metav1.DeleteOptions{})
+	})
+}
+
+func (s *KubevirtSuite) TestHCOStatusPrompt() {
+	s.Run("hco-status prompt returns report when no HCO CR exists", func() {
+		result, err := s.GetPrompt("hco-status", map[string]string{})
+
+		s.Run("returns error for missing HCO", func() {
+			s.Error(err, "expected error when HCO is not installed")
+			s.Nil(result)
+			s.Contains(err.Error(), "not installed")
+		})
+	})
+
+	s.Run("hco-status prompt returns report with HCO CR present", func() {
+		dynamicClient := dynamic.NewForConfigOrDie(envTestRestConfig)
+		ctx := s.T().Context()
+
+		// Create a HyperConverged CR
+		hcoCR := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "hco.kubevirt.io/v1",
+				"kind":       "HyperConverged",
+				"metadata": map[string]interface{}{
+					"name":      "kubevirt-hyperconverged",
+					"namespace": "default",
+				},
+				"spec": map[string]interface{}{
+					"featureGates": map[string]interface{}{
+						"downwardMetrics": false,
+					},
+					"liveMigrationConfig": map[string]interface{}{
+						"completionTimeoutPerGiB":           int64(150),
+						"parallelMigrationsPerCluster":      int64(5),
+						"parallelOutboundMigrationsPerNode": int64(2),
+						"progressTimeout":                   int64(150),
+					},
+				},
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":   "Available",
+							"status": "True",
+						},
+						map[string]interface{}{
+							"type":   "Progressing",
+							"status": "False",
+						},
+						map[string]interface{}{
+							"type":   "Degraded",
+							"status": "False",
+						},
+					},
+					"versions": []interface{}{
+						map[string]interface{}{
+							"name":    "operator",
+							"version": "1.17.1",
+						},
+						map[string]interface{}{
+							"name":    "kubevirt",
+							"version": "1.5.2",
+						},
+					},
+				},
+			},
+		}
+
+		hcoGVR := schema.GroupVersionResource{
+			Group:    "hco.kubevirt.io",
+			Version:  "v1",
+			Resource: "hyperconvergeds",
+		}
+		_, err := dynamicClient.Resource(hcoGVR).Namespace("default").Create(ctx, hcoCR, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create HyperConverged CR")
+
+		defer func() {
+			_ = dynamicClient.Resource(hcoGVR).Namespace("default").Delete(ctx, "kubevirt-hyperconverged", metav1.DeleteOptions{})
+		}()
+
+		result, err := s.GetPrompt("hco-status", map[string]string{})
+
+		s.Run("no error", func() {
+			s.NoError(err, "GetPrompt failed")
+			s.NotNil(result)
+		})
+
+		s.Run("returns status report with correct details", func() {
+			s.Require().NotNil(result)
+			s.Require().Len(result.Messages, 2, "Expected 2 messages")
+
+			textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
+			s.Require().True(ok, "expected TextContent")
+			s.Contains(textContent.Text, "HyperConverged Cluster Operator Status Report")
+			s.Contains(textContent.Text, "kubevirt-hyperconverged")
+			s.Contains(textContent.Text, "Available")
+			s.Contains(textContent.Text, "Feature Gates")
+			s.Contains(textContent.Text, "Live Migration")
+		})
 	})
 }
 
