@@ -27,7 +27,7 @@ type Config struct {
 	Insecure bool `toml:"insecure,omitempty"`
 
 	// UseRoute controls whether to use OpenShift Routes for discovering LokiStack endpoints.
-	UseRoute bool `toml:"useRoute,omitempty"`
+	UseRoute bool `toml:"use_route,omitempty"`
 }
 
 var _ api.ExtendedConfig = (*Config)(nil)

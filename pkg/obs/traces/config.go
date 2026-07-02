@@ -28,7 +28,7 @@ type Config struct {
 	TempoURL string `toml:"tempo_url,omitempty"`
 
 	// UseRoute controls whether to use OpenShift Routes for discovering Tempo endpoints.
-	UseRoute bool `toml:"useRoute,omitempty"`
+	UseRoute bool `toml:"use_route,omitempty"`
 }
 
 var _ api.ExtendedConfig = (*Config)(nil)
