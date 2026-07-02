@@ -564,6 +564,10 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
 
+- **vm_troubleshoot** - Diagnose KubeVirt VirtualMachine issues with automated root-cause detection. Collects VM status, VMI status, volumes, DataVolume/PVC state, cloud-init configuration, pod state, logs, and events, then runs heuristic checks to identify specific problems and suggest fixes. Returns a 'Detected Issues' section with CRITICAL/WARNING findings and actionable remediation steps, followed by raw diagnostic data. Use this tool FIRST whenever a user asks why a VM is not starting, stuck in Provisioning, crashlooping, failing to migrate, or exhibiting unexpected behavior. Automatically detects: missing StorageClasses, invalid PVC specs, dangerous cloud-init commands (shutdown/halt), nodeSelector migration blockers, failed migrations, and pod crashloops. If the user asks to fix or remediate the issue, use the Suggested Fixes from the report with vm_lifecycle (restart) or resources_create_or_update.
+  - `name` (`string`) **(required)** - The name of the VirtualMachine to troubleshoot
+  - `namespace` (`string`) **(required)** - The namespace of the VirtualMachine to troubleshoot
+
 </details>
 
 <details>

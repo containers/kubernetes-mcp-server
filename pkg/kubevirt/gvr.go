@@ -103,6 +103,16 @@ var (
 	}
 )
 
+// Migration resources
+var (
+	// VirtualMachineInstanceMigrationGVR is the GroupVersionResource for VirtualMachineInstanceMigration resources
+	VirtualMachineInstanceMigrationGVR = schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "virtualmachineinstancemigrations",
+	}
+)
+
 // HasVirtualMachine returns a TargetCompatibilityFilter that checks whether any
 // target cluster has the VirtualMachine GVK registered.
 func HasVirtualMachine(p api.FilteringProvider) func() bool {
@@ -125,5 +135,12 @@ var (
 		Group:    "",
 		Version:  "v1",
 		Resource: "pods",
+	}
+
+	// StorageClassGVR is the GroupVersionResource for StorageClass resources
+	StorageClassGVR = schema.GroupVersionResource{
+		Group:    "storage.k8s.io",
+		Version:  "v1",
+		Resource: "storageclasses",
 	}
 )
