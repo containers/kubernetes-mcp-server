@@ -14,7 +14,16 @@ spec:
       env:
         AGENTS_OUTPUT: "{agent.output}"
       inline: |-
-        [ X"$(echo "$AGENTS_OUTPUT" | grep -v 'ns-beta')" = X"" ] && exit 0 || exit 1
+        # The task asks for ONLY ns-beta via a field selector; ns-alpha and ns-gamma
+        # must be excluded. Check that ns-beta is present and the other two are absent,
+        # regardless of any surrounding prose (the old every-line grep rejected correct
+        # answers that included a heading or listed the namespace field-by-field).
+        if echo "$AGENTS_OUTPUT" | grep -q 'ns-beta' \
+          && ! echo "$AGENTS_OUTPUT" | grep -qE 'ns-(alpha|gamma)'; then
+          exit 0
+        else
+          exit 1
+        fi
   cleanup:
   - script:
       file: cleanup.sh

@@ -31,8 +31,10 @@ if [[ ! "$VOLUMES" == *"logs-volume"* ]]; then
 fi
 
 # is web server accessible
+# nginx-unprivileged listens on 8080 (it cannot bind :80 as a non-root user), so
+# probe 8080 rather than 80 — curl to :80 exits 7 (connection refused).
 echo "Testing web server access..."
-kubectl exec "$POD_NAME" -n "$NAMESPACE" -c web-server -- curl -s -o /dev/null -w "%{http_code}" localhost:80 | grep -q 200
+kubectl exec "$POD_NAME" -n "$NAMESPACE" -c web-server -- curl -s -o /dev/null -w "%{http_code}" localhost:8080 | grep -q 200
 
 # logger container can see the access logs
 echo "Verifying logger container can access nginx logs..."

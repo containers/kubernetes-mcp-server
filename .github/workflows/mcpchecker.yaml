@@ -179,6 +179,12 @@ jobs:
       - name: Setup Kind cluster
         run: make kind-create-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
 
+      # Only the core suite needs a resize-capable StorageClass (for resize-pvc).
+      # Runs for suite=core and for the "all" run (empty label-selector).
+      - name: Install CSI hostPath driver (resize-capable StorageClass)
+        if: needs.check-trigger.outputs.label-selector == 'suite=core' || needs.check-trigger.outputs.label-selector == ''
+        run: make csi-hostpath-install
+
       - name: Install Istio/Kiali and bookinfo demo
         if: contains(needs.check-trigger.outputs.toolsets, 'kiali')
         run: make setup-kiali
