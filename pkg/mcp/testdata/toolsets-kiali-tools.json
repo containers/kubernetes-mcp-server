@@ -9,10 +9,6 @@
     "description": "Get the logs of a Kubernetes Pod (or workload name that will be resolved to a pod) in a namespace. Output is plain text, matching kubernetes-mcp-server pods_log. The line_count field tells you the total number of log lines returned. Analyze ALL of them, but summarize the results unless the user explicitly asks for the raw output. Do not omit any error or warning lines.",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional. Name of the cluster to get the logs from. If not provided, will use the default cluster name in the Kiali KubeConfig",
-          "type": "string"
-        },
         "container": {
           "description": "Optional. Name of the Pod container to get the logs from.",
           "type": "string"
@@ -23,6 +19,10 @@
             "codeblock",
             "plain"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "name": {
@@ -86,10 +86,6 @@
     "description": "Returns service-to-service traffic topology, dependencies, and network metrics (throughput, response time, mTLS) for the specified namespaces. Use this to diagnose routing issues, latency, or find upstream/downstream dependencies.",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional cluster name to include in the graph. Default is the cluster name in the Kiali configuration (KubeConfig).",
-          "type": "string"
-        },
         "graphType": {
           "default": "versionedApp",
           "description": "Granularity of the graph. 'app' aggregates by app name, 'versionedApp' separates by versions, 'workload' maps specific pods/deployments. Default: versionedApp.",
@@ -99,6 +95,10 @@
             "service",
             "workload"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespaces": {
@@ -129,10 +129,6 @@
           "description": "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
           "type": "string"
         },
-        "clusterName": {
-          "description": "Cluster name to get metrics from. Optional, defaults to the cluster name in the Kiali configuration (KubeConfig)",
-          "type": "string"
-        },
         "direction": {
           "default": "outbound",
           "description": "Traffic direction. Optional, defaults to 'outbound'",
@@ -140,6 +136,10 @@
             "inbound",
             "outbound"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespace": {
@@ -205,8 +205,8 @@
     "description": "Returns a human-readable text summary with current Pod CPU/memory usage (from Prometheus) compared to Kubernetes requests/limits (from the Pod spec). Useful to answer questions like 'Is this workload using too much memory?'",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespace": {
@@ -255,8 +255,8 @@
         ]
       },
       "properties": {
-        "clusterName": {
-          "description": "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespaces": {
@@ -317,15 +317,27 @@
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
+      "title": "List Mesh Clusters"
+    },
+    "description": "Returns the list of Istio mesh clusters that Kiali can access. Each entry includes its name and whether it is the home cluster (where Kiali is deployed). Call this tool before using meshCluster on other Kiali tools when the target cluster is unknown.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "kiali_list_mesh_clusters",
+    "title": "List Mesh Clusters"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
       "title": "List Traces by Service Name"
     },
     "description": "Lists distributed traces for a service in a namespace. Returns a summary (namespace, service, total_found, avg_duration_ms) and a list of traces with id, duration_ms, spans_count, root_op, slowest_service, has_errors. Use get_trace_details with a trace id to get full hierarchy.",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
-          "type": "string"
-        },
         "errorOnly": {
           "default": false,
           "description": "If true, only consider traces that contain errors. Default false.",
@@ -340,6 +352,10 @@
           "default": 600,
           "description": "How far back to search. Default 600 (10m).",
           "type": "integer"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+          "type": "string"
         },
         "namespace": {
           "description": "Kubernetes namespace of the service.",
@@ -378,10 +394,6 @@
           ],
           "type": "string"
         },
-        "clusterName": {
-          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
-          "type": "string"
-        },
         "data": {
           "description": "JSON or YAML data for the resource. Required for create and patch actions. For create, you can provide partial content (e.g. only spec) and it will be merged onto a valid template with defaults. Arrays (like servers, http, etc.) are REPLACED entirely, so include ALL elements you want.",
           "type": "string"
@@ -417,6 +429,10 @@
             "TLSRoute",
             "InferencePool"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespace": {
@@ -472,10 +488,6 @@
           ],
           "type": "string"
         },
-        "clusterName": {
-          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
-          "type": "string"
-        },
         "group": {
           "description": "API group of the Istio object. Required ONLY for 'get' action. For 'list', OMIT group and kind to retrieve ALL config types in a single call. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
           "enum": [
@@ -507,6 +519,10 @@
             "TLSRoute",
             "InferencePool"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespace": {

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	kialiToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 type KialiSuite struct {
@@ -132,6 +134,32 @@ func (s *KialiSuite) TestGetMeshStatus() {
 		})
 		s.Run("response contains status", func() {
 			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "healthy", "Response should contain status")
+		})
+	})
+}
+
+func (s *KialiSuite) TestListClusters() {
+	var capturedURL *url.URL
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		_, _ = w.Write([]byte(`[{"name":"cluster-east","isHomeCluster":true},{"name":"cluster-west","isHomeCluster":false}]`))
+	}))
+	s.InitMcpClient()
+
+	s.Run("list_mesh_clusters", func() {
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_list_mesh_clusters", s.toolsetName), map[string]interface{}{})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("sends POST to MCP endpoint", func() {
+			s.Equal("/api/chat/mcp/list_clusters", capturedURL.Path, "Unexpected path")
+		})
+		s.Run("response contains cluster names", func() {
+			text := toolResult.Content[0].(*mcp.TextContent).Text
+			s.Contains(text, "cluster-east", "Response should contain home cluster name")
+			s.Contains(text, "cluster-west", "Response should contain remote cluster name")
 		})
 	})
 }
@@ -622,6 +650,29 @@ func (s *KialiSuite) TestTraceAnalysisPrompt() {
 		s.Require().Len(result.Messages, 2)
 		s.Equal("user", string(result.Messages[0].Role))
 	})
+}
+
+func (s *KialiSuite) TestKialiToolsNotClusterAware() {
+	kubeconfig := s.mockServer.Kubeconfig()
+	for i := range 10 {
+		kubeconfig.Contexts[strconv.Itoa(i)] = clientcmdapi.NewContext()
+	}
+	s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.Require().NotEmpty(tools.Tools)
+
+	for _, tool := range tools.Tools {
+		s.Run(tool.Name, func() {
+			schema, ok := tool.InputSchema.(map[string]any)
+			s.Require().True(ok, "expected InputSchema map for tool %s", tool.Name)
+			properties, ok := schema["properties"].(map[string]any)
+			s.Require().True(ok, "expected properties map for tool %s", tool.Name)
+			s.NotContains(properties, "context", "kiali tool %s must not expose context parameter", tool.Name)
+		})
+	}
 }
 
 func TestKiali(t *testing.T) {

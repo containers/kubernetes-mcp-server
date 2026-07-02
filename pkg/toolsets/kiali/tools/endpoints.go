@@ -14,4 +14,5 @@ const (
 	KialiManageIstioConfigEndpoint     = KialiMCPPath + "/manage_istio_config"
 	KialiManageIstioConfigReadEndpoint = KialiMCPPath + "/manage_istio_config_read"
 	KialiGetPodPerformanceEndpoint     = KialiMCPPath + "/get_pod_performance"
+	KialiListClustersEndpoint          = KialiMCPPath + "/list_clusters"
 )

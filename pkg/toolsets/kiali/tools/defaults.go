@@ -15,3 +15,19 @@ const (
 	DefaultLookbackSeconds = 600
 	DefaultErrorOnly       = false
 )
+
+// meshClusterDescription is the shared schema description for the meshCluster tool parameter.
+const meshClusterDescription = "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). " +
+	"When omitted, Kiali defaults to its home cluster."
+
+// remapMeshCluster translates the MCP-facing "meshCluster" parameter to the
+// Kiali API's "clusterName" before forwarding the request. This avoids a
+// naming collision with the provider-level target parameter (e.g. "context"
+// from the kubeconfig provider) while keeping the Kiali backend API unchanged.
+func remapMeshCluster(arguments map[string]any) map[string]any {
+	if v, ok := arguments["meshCluster"]; ok {
+		arguments["clusterName"] = v
+		delete(arguments, "meshCluster")
+	}
+	return arguments
+}

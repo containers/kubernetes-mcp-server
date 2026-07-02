@@ -51,9 +51,9 @@ func InitManageIstioConfigRead() []api.ServerTool {
 						Type:        "string",
 						Description: "Name of the Istio object. Required for 'get' action.",
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
+						Description: meshClusterDescription,
 					},
 					"serviceName": {
 						Type:        "string",
@@ -80,7 +80,7 @@ func InitManageIstioConfigRead() []api.ServerTool {
 func istioConfigHandlerRead(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	kiali := kialiclient.NewKiali(params, params.RESTConfig())
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiManageIstioConfigReadEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiManageIstioConfigReadEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve istio config: %w", err)), nil
 	}
