@@ -149,7 +149,7 @@ func (s *BaseMcpSuite) InitMcpClient(options ...test.McpClientOption) {
 // This method sets the logging level to debug to ensure all log messages are received.
 func (s *BaseMcpSuite) StartCapturingLogNotifications() *test.NotificationCapture {
 	// Set logging level to debug to receive all log messages
-	err := s.SetLoggingLevel(mcp.LoggingLevel("debug"))
+	err := s.SetLoggingLevel(mcp.LoggingLevel("debug")) //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 	s.Require().NoError(err, "failed to set logging level")
 
 	return s.StartCapturingNotifications()

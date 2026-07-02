@@ -136,7 +136,7 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 					Resources: &mcp.ResourceCapabilities{ListChanged: !configuration.Stateless},
 					Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
 					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
-					Logging:   &mcp.LoggingCapabilities{},
+					Logging:   &mcp.LoggingCapabilities{}, //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 				},
 				Instructions: configuration.ServerInstructions,
 				Logger:       sdkLogger,

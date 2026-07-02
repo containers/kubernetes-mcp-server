@@ -351,8 +351,8 @@ func (m *McpClient) GetPrompt(name string, arguments map[string]string) (*mcp.Ge
 }
 
 // SetLoggingLevel sets the logging level on the server
-func (m *McpClient) SetLoggingLevel(level mcp.LoggingLevel) error {
-	return m.Session.SetLoggingLevel(m.ctx, &mcp.SetLoggingLevelParams{
+func (m *McpClient) SetLoggingLevel(level mcp.LoggingLevel) error { //nolint:staticcheck // MCP logging deprecated (SEP-2577)
+	return m.Session.SetLoggingLevel(m.ctx, &mcp.SetLoggingLevelParams{ //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 		Level: level,
 	})
 }
@@ -437,7 +437,7 @@ func parseLogNotification(notification *CapturedNotification) *LogNotification {
 	}
 
 	// The Params field should be *mcp.LoggingMessageParams
-	if params, ok := notification.Params.(*mcp.LoggingMessageParams); ok {
+	if params, ok := notification.Params.(*mcp.LoggingMessageParams); ok { //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 		// Convert Data to string
 		var dataStr string
 		switch v := params.Data.(type) {

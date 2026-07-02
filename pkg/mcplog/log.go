@@ -1,3 +1,8 @@
+// Package mcplog sends log notifications to MCP clients via the MCP logging capability.
+//
+// Deprecated: The MCP logging feature is deprecated as of protocol version 2026-07-28 (SEP-2577).
+// Migrate to consuming stderr output (for STDIO servers) or OpenTelemetry.
+// See https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging.
 package mcplog
 
 import (
@@ -166,8 +171,8 @@ func SendMCPLog(ctx context.Context, level Level, message string) {
 
 	message = Sanitize(message)
 
-	if err := session.Log(ctx, &mcp.LoggingMessageParams{
-		Level:  mcp.LoggingLevel(level.String()),
+	if err := session.Log(ctx, &mcp.LoggingMessageParams{ //nolint:staticcheck // MCP logging deprecated (SEP-2577)
+		Level:  mcp.LoggingLevel(level.String()), //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 		Logger: "kubernetes-mcp-server",
 		Data:   message,
 	}); err != nil {
