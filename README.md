@@ -462,25 +462,25 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **kiali_get_mesh_status** - Retrieves the high-level health, topology, and environment details of the Istio service mesh. Returns multi-cluster control plane status (istiod), data plane namespace health (including ambient mesh status), observability stack health (Prometheus, Grafana...), and component connectivity. Use this tool as the first step to diagnose mesh-wide issues, verify Istio/Kiali versions, or check overall health before drilling into specific workloads.
 
-- **kiali_manage_istio_config_read** - Read Istio config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names. 'get' returns full YAML. For writes use manage_istio_config.
+- **kiali_manage_istio_config_read** - Read Istio, Gateway API, and Inference API config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names; omit group/kind to retrieve ALL config types in a single call. Supports Istio (networking.istio.io, security.istio.io), Gateway API (gateway.networking.k8s.io), and Inference API (inference.networking.k8s.io) when installed. 'get' returns full YAML. For writes use manage_istio_config.
   - `action` (`string`) **(required)** - Action to perform (read-only)
   - `clusterName` (`string`) - Optional cluster name. Defaults to the cluster name in the Kiali configuration.
-  - `group` (`string`) - API group of the Istio object. Required for 'get' action.
-  - `kind` (`string`) - Kind of the Istio object. Required for 'get' action.
+  - `group` (`string`) - API group of the Istio object. Required ONLY for 'get' action. For 'list', OMIT group and kind to retrieve ALL config types in a single call. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.
+  - `kind` (`string`) - Kind of the Istio object. Required ONLY for 'get' action. For 'list', OMIT to return all kinds at once — do NOT call separately for each kind.
   - `namespace` (`string`) - Namespace containing the Istio object. For 'list', if not provided, returns objects across all namespaces. For 'get', required.
   - `object` (`string`) - Name of the Istio object. Required for 'get' action.
   - `serviceName` (`string`) - Filter Istio configurations (VirtualServices, DestinationRules, and their referenced Gateways) that affect a specific service. Only applicable for 'list' action
-  - `version` (`string`) - API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.
+  - `version` (`string`) - API version. Use 'v1' for all resource types. Required for 'get' action.
 
-- **kiali_manage_istio_config** - Create, patch, or delete Istio config. For list and get (read-only) use manage_istio_config_read.
+- **kiali_manage_istio_config** - Create, patch, or delete Istio, Gateway API, and Inference API config. Supports Istio resources (networking.istio.io, security.istio.io), Gateway API resources (gateway.networking.k8s.io), and Inference API resources (inference.networking.k8s.io) when installed on the cluster. For list and get (read-only) use manage_istio_config_read.
   - `action` (`string`) **(required)** - Action to perform (write)
   - `clusterName` (`string`) - Optional cluster name. Defaults to the cluster name in the Kiali configuration.
-  - `data` (`string`) - Complete JSON or YAML data to apply or create the object. Required for create and patch actions. You MUST provide a COMPLETE and VALID manifest with ALL required fields for the resource type. Arrays (like servers, http, etc.) are REPLACED entirely, so you must include ALL required fields within each array element.
-  - `group` (`string`) **(required)** - API group of the Istio object
+  - `data` (`string`) - JSON or YAML data for the resource. Required for create and patch actions. For create, you can provide partial content (e.g. only spec) and it will be merged onto a valid template with defaults. Arrays (like servers, http, etc.) are REPLACED entirely, so include ALL elements you want.
+  - `group` (`string`) **(required)** - API group of the Istio object. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.
   - `kind` (`string`) **(required)** - Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule').
-  - `namespace` (`string`) **(required)** - Namespace containing the Istio object
-  - `object` (`string`) **(required)** - Name of the Istio object
-  - `version` (`string`) **(required)** - API version. Use 'v1' for VirtualService, DestinationRule, and Gateway.
+  - `namespace` (`string`) **(required)** - Namespace containing the Istio object.
+  - `object` (`string`) **(required)** - Name of the Istio object.
+  - `version` (`string`) **(required)** - API version. Use 'v1' for all resource types.
 
 - **kiali_get_resource_details** - Fetches a list of resources OR retrieves detailed data for a specific resource. If 'resourceName' is omitted, it returns a list. If 'resourceName' is provided, it returns details for that specific resource.
   - `clusterName` (`string`) - Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig

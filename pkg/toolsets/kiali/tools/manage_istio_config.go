@@ -17,7 +17,7 @@ func InitManageIstioConfig() []api.ServerTool {
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        name,
-			Description: "Create, patch, or delete Istio config. For list and get (read-only) use manage_istio_config_read.",
+			Description: "Create, patch, or delete Istio, Gateway API, and Inference API config. Supports Istio resources (networking.istio.io, security.istio.io), Gateway API resources (gateway.networking.k8s.io), and Inference API resources (inference.networking.k8s.io) when installed on the cluster. For list and get (read-only) use manage_istio_config_read.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -28,29 +28,29 @@ func InitManageIstioConfig() []api.ServerTool {
 					},
 					"namespace": {
 						Type:        "string",
-						Description: "Namespace containing the Istio object",
+						Description: "Namespace containing the Istio object.",
 					},
 					"group": {
 						Type:        "string",
-						Description: "API group of the Istio object",
-						Enum:        []any{"networking.istio.io", "security.istio.io"},
+						Description: "API group of the Istio object. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
+						Enum:        []any{"networking.istio.io", "security.istio.io", "gateway.networking.k8s.io", "inference.networking.k8s.io"},
 					},
 					"version": {
 						Type:        "string",
-						Description: "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway.",
+						Description: "API version. Use 'v1' for all resource types.",
 					},
 					"kind": {
 						Type:        "string",
 						Description: "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule').",
-						Enum:        []any{"VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication"},
+						Enum:        []any{"VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication", "HTTPRoute", "GRPCRoute", "ReferenceGrant", "TCPRoute", "TLSRoute", "InferencePool"},
 					},
 					"object": {
 						Type:        "string",
-						Description: "Name of the Istio object",
+						Description: "Name of the Istio object.",
 					},
 					"data": {
 						Type:        "string",
-						Description: "Complete JSON or YAML data to apply or create the object. Required for create and patch actions. You MUST provide a COMPLETE and VALID manifest with ALL required fields for the resource type. Arrays (like servers, http, etc.) are REPLACED entirely, so you must include ALL required fields within each array element.",
+						Description: "JSON or YAML data for the resource. Required for create and patch actions. For create, you can provide partial content (e.g. only spec) and it will be merged onto a valid template with defaults. Arrays (like servers, http, etc.) are REPLACED entirely, so include ALL elements you want.",
 					},
 					"clusterName": {
 						Type:        "string",
@@ -60,7 +60,7 @@ func InitManageIstioConfig() []api.ServerTool {
 				Required: []string{"action", "namespace", "group", "version", "kind", "object"},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Manage Istio Config: Create, Patch, Delete",
+				Title:           "Manage Istio, Gateway API, and Inference API Config: Create, Patch, Delete",
 				ReadOnlyHint:    ptr.To(false),
 				DestructiveHint: ptr.To(true),
 				IdempotentHint:  ptr.To(true),

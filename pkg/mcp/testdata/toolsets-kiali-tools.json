@@ -364,9 +364,9 @@
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true,
-      "title": "Manage Istio Config: Create, Patch, Delete"
+      "title": "Manage Istio, Gateway API, and Inference API Config: Create, Patch, Delete"
     },
-    "description": "Create, patch, or delete Istio config. For list and get (read-only) use manage_istio_config_read.",
+    "description": "Create, patch, or delete Istio, Gateway API, and Inference API config. Supports Istio resources (networking.istio.io, security.istio.io), Gateway API resources (gateway.networking.k8s.io), and Inference API resources (inference.networking.k8s.io) when installed on the cluster. For list and get (read-only) use manage_istio_config_read.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -383,14 +383,16 @@
           "type": "string"
         },
         "data": {
-          "description": "Complete JSON or YAML data to apply or create the object. Required for create and patch actions. You MUST provide a COMPLETE and VALID manifest with ALL required fields for the resource type. Arrays (like servers, http, etc.) are REPLACED entirely, so you must include ALL required fields within each array element.",
+          "description": "JSON or YAML data for the resource. Required for create and patch actions. For create, you can provide partial content (e.g. only spec) and it will be merged onto a valid template with defaults. Arrays (like servers, http, etc.) are REPLACED entirely, so include ALL elements you want.",
           "type": "string"
         },
         "group": {
-          "description": "API group of the Istio object",
+          "description": "API group of the Istio object. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
           "enum": [
             "networking.istio.io",
-            "security.istio.io"
+            "security.istio.io",
+            "gateway.networking.k8s.io",
+            "inference.networking.k8s.io"
           ],
           "type": "string"
         },
@@ -407,20 +409,26 @@
             "EnvoyFilter",
             "AuthorizationPolicy",
             "PeerAuthentication",
-            "RequestAuthentication"
+            "RequestAuthentication",
+            "HTTPRoute",
+            "GRPCRoute",
+            "ReferenceGrant",
+            "TCPRoute",
+            "TLSRoute",
+            "InferencePool"
           ],
           "type": "string"
         },
         "namespace": {
-          "description": "Namespace containing the Istio object",
+          "description": "Namespace containing the Istio object.",
           "type": "string"
         },
         "object": {
-          "description": "Name of the Istio object",
+          "description": "Name of the Istio object.",
           "type": "string"
         },
         "version": {
-          "description": "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway.",
+          "description": "API version. Use 'v1' for all resource types.",
           "type": "string"
         }
       },
@@ -435,7 +443,7 @@
       "type": "object"
     },
     "name": "kiali_manage_istio_config",
-    "title": "Manage Istio Config: Create, Patch, Delete"
+    "title": "Manage Istio, Gateway API, and Inference API Config: Create, Patch, Delete"
   },
   {
     "annotations": {
@@ -443,9 +451,9 @@
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
-      "title": "Manage Istio Config: List or Get"
+      "title": "Manage Istio, Gateway API, and Inference API Config: List or Get"
     },
-    "description": "Read Istio config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names. 'get' returns full YAML. For writes use manage_istio_config.",
+    "description": "Read Istio, Gateway API, and Inference API config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names; omit group/kind to retrieve ALL config types in a single call. Supports Istio (networking.istio.io, security.istio.io), Gateway API (gateway.networking.k8s.io), and Inference API (inference.networking.k8s.io) when installed. 'get' returns full YAML. For writes use manage_istio_config.",
     "inputSchema": {
       "dependentRequired": {
         "object": [
@@ -469,15 +477,17 @@
           "type": "string"
         },
         "group": {
-          "description": "API group of the Istio object. Required for 'get' action.",
+          "description": "API group of the Istio object. Required ONLY for 'get' action. For 'list', OMIT group and kind to retrieve ALL config types in a single call. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
           "enum": [
             "networking.istio.io",
-            "security.istio.io"
+            "security.istio.io",
+            "gateway.networking.k8s.io",
+            "inference.networking.k8s.io"
           ],
           "type": "string"
         },
         "kind": {
-          "description": "Kind of the Istio object. Required for 'get' action.",
+          "description": "Kind of the Istio object. Required ONLY for 'get' action. For 'list', OMIT to return all kinds at once — do NOT call separately for each kind.",
           "enum": [
             "VirtualService",
             "DestinationRule",
@@ -489,7 +499,13 @@
             "EnvoyFilter",
             "AuthorizationPolicy",
             "PeerAuthentication",
-            "RequestAuthentication"
+            "RequestAuthentication",
+            "HTTPRoute",
+            "GRPCRoute",
+            "ReferenceGrant",
+            "TCPRoute",
+            "TLSRoute",
+            "InferencePool"
           ],
           "type": "string"
         },
@@ -506,7 +522,7 @@
           "type": "string"
         },
         "version": {
-          "description": "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.",
+          "description": "API version. Use 'v1' for all resource types. Required for 'get' action.",
           "type": "string"
         }
       },
@@ -516,6 +532,6 @@
       "type": "object"
     },
     "name": "kiali_manage_istio_config_read",
-    "title": "Manage Istio Config: List or Get"
+    "title": "Manage Istio, Gateway API, and Inference API Config: List or Get"
   }
 ]

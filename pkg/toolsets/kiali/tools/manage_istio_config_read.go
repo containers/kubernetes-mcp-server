@@ -17,8 +17,10 @@ func InitManageIstioConfigRead() []api.ServerTool {
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name: name,
-			Description: "Read Istio config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} " +
-				"where valid/invalid arrays contain resource names. 'get' returns full YAML. For writes use manage_istio_config.",
+			Description: "Read Istio, Gateway API, and Inference API config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} " +
+				"where valid/invalid arrays contain resource names; omit group/kind to retrieve ALL config types in a single call. " +
+				"Supports Istio (networking.istio.io, security.istio.io), Gateway API (gateway.networking.k8s.io), and Inference API (inference.networking.k8s.io) when installed. " +
+				"'get' returns full YAML. For writes use manage_istio_config.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -33,17 +35,17 @@ func InitManageIstioConfigRead() []api.ServerTool {
 					},
 					"group": {
 						Type:        "string",
-						Description: "API group of the Istio object. Required for 'get' action.",
-						Enum:        []any{"networking.istio.io", "security.istio.io"},
+						Description: "API group of the Istio object. Required ONLY for 'get' action. For 'list', OMIT group and kind to retrieve ALL config types in a single call. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
+						Enum:        []any{"networking.istio.io", "security.istio.io", "gateway.networking.k8s.io", "inference.networking.k8s.io"},
 					},
 					"version": {
 						Type:        "string",
-						Description: "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.",
+						Description: "API version. Use 'v1' for all resource types. Required for 'get' action.",
 					},
 					"kind": {
 						Type:        "string",
-						Description: "Kind of the Istio object. Required for 'get' action.",
-						Enum:        []any{"VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication"},
+						Description: "Kind of the Istio object. Required ONLY for 'get' action. For 'list', OMIT to return all kinds at once \u2014 do NOT call separately for each kind.",
+						Enum:        []any{"VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication", "HTTPRoute", "GRPCRoute", "ReferenceGrant", "TCPRoute", "TLSRoute", "InferencePool"},
 					},
 					"object": {
 						Type:        "string",
@@ -64,7 +66,7 @@ func InitManageIstioConfigRead() []api.ServerTool {
 				},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "Manage Istio Config: List or Get",
+				Title:           "Manage Istio, Gateway API, and Inference API Config: List or Get",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(true),
