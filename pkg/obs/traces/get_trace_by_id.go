@@ -4,89 +4,100 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rhobs/obs-mcp/pkg/tools"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/google/jsonschema-go/jsonschema"
+
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
-// GetTraceByIDOutput defines the output schema for the tempo_get_trace_by_id tool.
-type GetTraceByIDOutput struct {
+// getTraceByIDOutput defines the output schema for the tempo_get_trace_by_id tool.
+type getTraceByIDOutput struct {
 	Trace any `json:"trace" jsonschema:"The trace data with services, scopes and spans"`
 }
 
-var GetTraceByIDTool = tools.ToolDef[GetTraceByIDOutput]{
-	Name: "tempo_get_trace_by_id",
-	Description: `Retrieve a single distributed trace by its trace ID from Tempo.
+var getTraceByIDOutputSchema = mustSchema[getTraceByIDOutput]()
+
+func initGetTraceByID() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name: "tempo_get_trace_by_id",
+			Description: `Retrieve a single distributed trace by its trace ID from Tempo.
 Returns the full trace with all its spans, including service names, operation names, durations, and attributes.
 Use this tool when you already have a specific trace ID, e.g. from search results or logs.`,
-	Title: "Get trace by ID",
-	Params: []tools.ParamDef{
-		tempoNamespaceParameter,
-		tempoNameParameter,
-		tempoTenantParameter,
-		{
-			Name:        "traceid",
-			Type:        tools.ParamTypeString,
-			Description: `The trace ID to retrieve, e.g. "26dad4a0e2b0dd9a440dd5ff203a24a4".`,
-			Required:    true,
-		},
-		{
-			Name: "start",
-			Type: tools.ParamTypeString,
-			Description: `Optional start of the time range in RFC 3339 format, e.g. "2025-01-01T00:00:00Z".
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"tempoNamespace": tempoNamespaceSchema,
+					"tempoName":      tempoNameSchema,
+					"tenant":         tempoTenantSchema,
+					"traceid": {
+						Type:        "string",
+						Description: `The trace ID to retrieve, e.g. "26dad4a0e2b0dd9a440dd5ff203a24a4".`,
+					},
+					"start": {
+						Type: "string",
+						Description: `Optional start of the time range in RFC 3339 format, e.g. "2025-01-01T00:00:00Z".
 Narrows the time range to improve query performance.`,
-		},
-		{
-			Name: "end",
-			Type: tools.ParamTypeString,
-			Description: `Optional end of the time range in RFC 3339 format, e.g. "2025-01-02T00:00:00Z".
+					},
+					"end": {
+						Type: "string",
+						Description: `Optional end of the time range in RFC 3339 format, e.g. "2025-01-02T00:00:00Z".
 Narrows the time range to improve query performance.`,
+					},
+				},
+				Required: []string{"tempoNamespace", "tempoName", "traceid"},
+			},
+			OutputSchema: getTraceByIDOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "Get trace by ID",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
+			},
 		},
-	},
-	ReadOnly:    true,
-	Destructive: false,
-	Idempotent:  true,
-	OpenWorld:   true,
+		Handler: getTraceByIDHandler,
+	}
 }
 
-func (t *Toolset) GetTraceByIDHandler(params ToolParams) (GetTraceByIDOutput, error) {
-	client, err := t.getTempoClient(params)
+func getTraceByIDHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
+	traceid := p.RequiredString("traceid")
+	startStr := p.OptionalString("start", "")
+	endStr := p.OptionalString("end", "")
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get trace by ID: %w", err)), nil
+	}
+
+	start, err := parseTime(startStr)
 	if err != nil {
-		return GetTraceByIDOutput{}, err
+		return api.NewToolCallResult("", fmt.Errorf("invalid start time: %v", err)), nil
 	}
 
-	args := params.arguments
-
-	traceid := tools.GetString(args, "traceid", "")
-	if traceid == "" {
-		return GetTraceByIDOutput{}, fmt.Errorf("traceid parameter must not be empty")
-	}
-
-	start, err := parseTime(tools.GetString(args, "start", ""))
+	end, err := parseTime(endStr)
 	if err != nil {
-		return GetTraceByIDOutput{}, fmt.Errorf("invalid start time: %v", err)
+		return api.NewToolCallResult("", fmt.Errorf("invalid end time: %v", err)), nil
 	}
 
-	end, err := parseTime(tools.GetString(args, "end", ""))
+	client, err := getTempoClient(params)
 	if err != nil {
-		return GetTraceByIDOutput{}, fmt.Errorf("invalid end time: %v", err)
+		return api.NewToolCallResult("", err), nil
 	}
 
-	opts := tempoclient.QueryV2Options{
+	trace, err := client.QueryV2(params.Context, traceid, tempoclient.QueryV2Options{
 		Start: start,
 		End:   end,
-	}
-
-	trace, err := client.QueryV2(params.context, traceid, opts)
+	})
 	if err != nil {
-		return GetTraceByIDOutput{}, err
+		return api.NewToolCallResult("", err), nil
 	}
 
-	var output GetTraceByIDOutput
+	var output getTraceByIDOutput
 	if err := json.Unmarshal([]byte(trace), &output); err != nil {
-		return GetTraceByIDOutput{}, fmt.Errorf("failed to unmarshal trace: %w", err)
+		return api.NewToolCallResult("", fmt.Errorf("failed to unmarshal trace: %w", err)), nil
 	}
 	if output.Trace == nil {
-		return GetTraceByIDOutput{}, fmt.Errorf("trace %s not found", traceid)
+		return api.NewToolCallResult("", fmt.Errorf("trace %s not found", traceid)), nil
 	}
-	return output, nil
+	return api.NewToolCallResultFull(trace, output, nil), nil
 }

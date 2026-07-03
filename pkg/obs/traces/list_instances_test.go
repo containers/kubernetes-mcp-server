@@ -12,13 +12,10 @@ func TestListInstancesHandler_Success(t *testing.T) {
 		newTempoStack("ns2", "stack2", []string{"tenant-c"}),
 	)
 
-	toolset := &Toolset{}
-	output, err := toolset.ListInstancesHandler(ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-	})
+	result, err := listInstancesHandler(newTestParams(t, &Config{UseRoute: false}, fakeClient, nil))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(listInstancesOutput)
 	require.Len(t, output.Instances, 2)
 
 	inst := output.Instances[0]
@@ -37,13 +34,10 @@ func TestListInstancesHandler_TempoMonolithic(t *testing.T) {
 		newTempoMonolithic("mono-ns", "mono1", []string{}),
 	)
 
-	toolset := &Toolset{}
-	output, err := toolset.ListInstancesHandler(ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-	})
+	result, err := listInstancesHandler(newTestParams(t, &Config{UseRoute: false}, fakeClient, nil))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(listInstancesOutput)
 	require.Len(t, output.Instances, 1)
 
 	inst := output.Instances[0]
@@ -59,13 +53,10 @@ func TestListInstancesHandler_TempoMonolithic_Multitenancy(t *testing.T) {
 		newTempoMonolithic("mono-ns", "mono-mt", []string{"dev", "prod"}),
 	)
 
-	toolset := &Toolset{}
-	output, err := toolset.ListInstancesHandler(ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-	})
+	result, err := listInstancesHandler(newTestParams(t, &Config{UseRoute: false}, fakeClient, nil))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(listInstancesOutput)
 	require.Len(t, output.Instances, 1)
 
 	inst := output.Instances[0]
@@ -80,13 +71,10 @@ func TestListInstancesHandler_MixedInstances(t *testing.T) {
 		newTempoMonolithic("tracing", "mono1", []string{}),
 	)
 
-	toolset := &Toolset{}
-	output, err := toolset.ListInstancesHandler(ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-	})
+	result, err := listInstancesHandler(newTestParams(t, &Config{UseRoute: false}, fakeClient, nil))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(listInstancesOutput)
 	require.Len(t, output.Instances, 2)
 
 	// TempoStacks are listed first, then TempoMonolithics

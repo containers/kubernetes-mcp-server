@@ -1,342 +1,344 @@
 package traces
 
 import (
-	"context"
-	"errors"
-	"maps"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/require"
-
-	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
-// mockLoader is a test double for tempoclient.Loader that returns configurable responses.
-type mockLoader struct {
-	searchResult       string
-	searchErr          error
-	queryV2Result      string
-	queryV2Err         error
-	searchTagsResult   string
-	searchTagsErr      error
-	searchValuesResult string
-	searchValuesErr    error
+// tempoServer starts an httptest server that responds to Tempo API paths with the given responses.
+// Supported keys: "search", "traces/{traceID}", "api/v2/search/tags", "api/v2/search/tag/{tag}/values".
+func tempoServer(t *testing.T, responses map[string]mockResponse) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		for pattern, resp := range responses {
+			if pathMatches(path, pattern) {
+				if resp.err != "" {
+					http.Error(w, resp.err, http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, resp.body)
+				return
+			}
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
-func (m *mockLoader) Search(_ context.Context, _ tempoclient.SearchOptions) (string, error) {
-	return m.searchResult, m.searchErr
+type mockResponse struct {
+	body string
+	err  string
 }
 
-func (m *mockLoader) QueryV2(_ context.Context, _ string, _ tempoclient.QueryV2Options) (string, error) {
-	return m.queryV2Result, m.queryV2Err
+func pathMatches(actual, pattern string) bool {
+	switch pattern {
+	case "search":
+		return actual == "/api/search"
+	case "traces":
+		return strings.HasPrefix(actual, "/api/v2/traces/")
+	case "tags":
+		return actual == "/api/v2/search/tags"
+	case "tag_values":
+		return strings.HasPrefix(actual, "/api/v2/search/tag/")
+	}
+	return false
 }
 
-func (m *mockLoader) SearchTagsV2(_ context.Context, _ tempoclient.SearchTagsV2Options) (string, error) {
-	return m.searchTagsResult, m.searchTagsErr
+func handlerParams(t *testing.T, tempoURL string, args map[string]any) api.ToolHandlerParams {
+	t.Helper()
+	return newTestParams(t, &Config{TempoURL: tempoURL}, nil, args)
 }
 
-func (m *mockLoader) SearchTagValuesV2(_ context.Context, _ string, _ tempoclient.SearchTagValuesV2Options) (string, error) {
-	return m.searchValuesResult, m.searchValuesErr
-}
-
-// toolParams builds a ToolParams that wires up the mock loader and a fake k8s client
-// pre-populated with a single non-multitenant TempoStack in namespace "ns" named "tempo".
-func toolParams(t *testing.T, loader tempoclient.Loader) ToolParams {
+func discoveryParams(t *testing.T, args map[string]any) api.ToolHandlerParams {
 	t.Helper()
 	fakeClient := newMockK8sClient(newTempoStack("ns", "tempo", []string{}))
-	return ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-		newTempoLoader: func(_ string) (tempoclient.Loader, error) {
-			return loader, nil
-		},
-		arguments: map[string]any{
-			"tempoNamespace": "ns",
-			"tempoName":      "tempo",
-		},
-	}
-}
-
-// withArgs returns a copy of p with the given extra arguments merged in.
-func withArgs(p ToolParams, extra map[string]any) ToolParams {
-	merged := make(map[string]any, len(p.arguments)+len(extra))
-	maps.Copy(merged, p.arguments)
-	maps.Copy(merged, extra)
-	p.arguments = merged
-	return p
+	return newTestParams(t, &Config{UseRoute: false}, fakeClient, args)
 }
 
 // --- SearchTracesHandler ---
 
 func TestSearchTracesHandler_Success(t *testing.T) {
-	mock := &mockLoader{searchResult: `{"traces":[{"traceID":"abc"}],"metrics":{}}`}
-	params := withArgs(toolParams(t, mock), map[string]any{"query": "{}"})
+	srv := tempoServer(t, map[string]mockResponse{
+		"search": {body: `{"traces":[{"traceID":"abc"}],"metrics":{}}`},
+	})
+	params := handlerParams(t, srv.URL, map[string]any{"query": "{}"})
 
-	toolset := &Toolset{}
-	output, err := toolset.SearchTracesHandler(params)
+	result, err := searchTracesHandler(params)
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(searchTracesOutput)
 	require.Len(t, output.Traces, 1)
 }
 
 func TestSearchTracesHandler_EmptyQuery(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{"query": ""}))
-	require.ErrorContains(t, err, "query parameter must not be empty")
+	srv := tempoServer(t, nil)
+	result, err := searchTracesHandler(handlerParams(t, srv.URL, map[string]any{"query": ""}))
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "query parameter must not be empty")
 }
 
 func TestSearchTracesHandler_MissingQuery(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(toolParams(t, &mockLoader{}))
-	require.ErrorContains(t, err, "query parameter must not be empty")
+	srv := tempoServer(t, nil)
+	result, err := searchTracesHandler(handlerParams(t, srv.URL, map[string]any{}))
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "query parameter")
 }
 
 func TestSearchTracesHandler_BackendError(t *testing.T) {
-	mock := &mockLoader{searchErr: errors.New("tempo unavailable")}
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(withArgs(toolParams(t, mock), map[string]any{"query": "{}"}))
-	require.ErrorContains(t, err, "tempo unavailable")
+	srv := tempoServer(t, map[string]mockResponse{
+		"search": {err: "tempo unavailable"},
+	})
+	result, err := searchTracesHandler(handlerParams(t, srv.URL, map[string]any{"query": "{}"}))
+	require.NoError(t, err)
+	require.Error(t, result.Error)
 }
 
 func TestSearchTracesHandler_InvalidStartTime(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{
+	srv := tempoServer(t, nil)
+	result, err := searchTracesHandler(handlerParams(t, srv.URL, map[string]any{
 		"query": "{}",
 		"start": "not-a-timestamp",
 	}))
-	require.ErrorContains(t, err, "invalid start time")
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "invalid start time")
 }
 
 func TestSearchTracesHandler_InvalidEndTime(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{
+	srv := tempoServer(t, nil)
+	result, err := searchTracesHandler(handlerParams(t, srv.URL, map[string]any{
 		"query": "{}",
 		"end":   "not-a-timestamp",
 	}))
-	require.ErrorContains(t, err, "invalid end time")
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "invalid end time")
 }
 
 // --- GetTraceByIDHandler ---
 
 func TestGetTraceByIDHandler_Success(t *testing.T) {
-	mock := &mockLoader{queryV2Result: `{"trace":{"traceID":"abc123","services":[]}}`}
-	params := withArgs(toolParams(t, mock), map[string]any{"traceid": "abc123"})
+	srv := tempoServer(t, map[string]mockResponse{
+		"traces": {body: `{"trace":{"traceID":"abc123","services":[]}}`},
+	})
+	params := handlerParams(t, srv.URL, map[string]any{"traceid": "abc123"})
 
-	toolset := &Toolset{}
-	output, err := toolset.GetTraceByIDHandler(params)
+	result, err := getTraceByIDHandler(params)
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(getTraceByIDOutput)
 	require.NotNil(t, output.Trace)
 }
 
 func TestGetTraceByIDHandler_EmptyTraceID(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.GetTraceByIDHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{"traceid": ""}))
-	require.ErrorContains(t, err, "traceid parameter must not be empty")
+	srv := tempoServer(t, nil)
+	result, err := getTraceByIDHandler(handlerParams(t, srv.URL, map[string]any{"traceid": ""}))
+	require.NoError(t, err)
+	require.Error(t, result.Error)
 }
 
 func TestGetTraceByIDHandler_MissingTraceID(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.GetTraceByIDHandler(toolParams(t, &mockLoader{}))
-	require.ErrorContains(t, err, "traceid parameter must not be empty")
+	srv := tempoServer(t, nil)
+	result, err := getTraceByIDHandler(handlerParams(t, srv.URL, map[string]any{}))
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "traceid parameter")
 }
 
 func TestGetTraceByIDHandler_BackendError(t *testing.T) {
-	mock := &mockLoader{queryV2Err: errors.New("trace not found")}
-	toolset := &Toolset{}
-	_, err := toolset.GetTraceByIDHandler(withArgs(toolParams(t, mock), map[string]any{"traceid": "deadbeef"}))
-	require.ErrorContains(t, err, "trace not found")
+	srv := tempoServer(t, map[string]mockResponse{
+		"traces": {err: "trace not found"},
+	})
+	result, err := getTraceByIDHandler(handlerParams(t, srv.URL, map[string]any{"traceid": "deadbeef"}))
+	require.NoError(t, err)
+	require.Error(t, result.Error)
 }
 
 func TestGetTraceByIDHandler_InvalidStartTime(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.GetTraceByIDHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{
+	srv := tempoServer(t, nil)
+	result, err := getTraceByIDHandler(handlerParams(t, srv.URL, map[string]any{
 		"traceid": "abc",
 		"start":   "bad-time",
 	}))
-	require.ErrorContains(t, err, "invalid start time")
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "invalid start time")
 }
 
 func TestGetTraceByIDHandler_InvalidEndTime(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.GetTraceByIDHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{
+	srv := tempoServer(t, nil)
+	result, err := getTraceByIDHandler(handlerParams(t, srv.URL, map[string]any{
 		"traceid": "abc",
 		"end":     "bad-time",
 	}))
-	require.ErrorContains(t, err, "invalid end time")
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "invalid end time")
 }
 
 func TestGetTraceByIDHandler_NullTrace(t *testing.T) {
-	mock := &mockLoader{queryV2Result: `{"trace":null}`}
-	params := withArgs(toolParams(t, mock), map[string]any{"traceid": "00000000000000000000000000000000"})
-	toolset := &Toolset{}
-	_, err := toolset.GetTraceByIDHandler(params)
-	require.ErrorContains(t, err, "not found")
+	srv := tempoServer(t, map[string]mockResponse{
+		"traces": {body: `{"trace":null}`},
+	})
+	params := handlerParams(t, srv.URL, map[string]any{"traceid": "00000000000000000000000000000000"})
+	result, err := getTraceByIDHandler(params)
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "not found")
 }
 
 // --- SearchTagsHandler ---
 
 func TestSearchTagsHandler_Success(t *testing.T) {
-	mock := &mockLoader{searchTagsResult: `{"scopes":[{"name":"resource","tags":["service.name"]}]}`}
-	toolset := &Toolset{}
-	output, err := toolset.SearchTagsHandler(toolParams(t, mock))
+	srv := tempoServer(t, map[string]mockResponse{
+		"tags": {body: `{"scopes":[{"name":"resource","tags":["service.name"]}]}`},
+	})
+	result, err := searchTagsHandler(handlerParams(t, srv.URL, map[string]any{}))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(searchTagsOutput)
 	require.Len(t, output.Scopes, 1)
 }
 
 func TestSearchTagsHandler_WithScope(t *testing.T) {
-	mock := &mockLoader{searchTagsResult: `{"scopes":[{"name":"span","tags":["http.method"]}]}`}
-	params := withArgs(toolParams(t, mock), map[string]any{"scope": "span"})
-	toolset := &Toolset{}
-	output, err := toolset.SearchTagsHandler(params)
+	srv := tempoServer(t, map[string]mockResponse{
+		"tags": {body: `{"scopes":[{"name":"span","tags":["http.method"]}]}`},
+	})
+	result, err := searchTagsHandler(handlerParams(t, srv.URL, map[string]any{"scope": "span"}))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(searchTagsOutput)
 	require.Len(t, output.Scopes, 1)
 }
 
 func TestSearchTagsHandler_BackendError(t *testing.T) {
-	mock := &mockLoader{searchTagsErr: errors.New("backend error")}
-	toolset := &Toolset{}
-	_, err := toolset.SearchTagsHandler(toolParams(t, mock))
-	require.ErrorContains(t, err, "backend error")
+	srv := tempoServer(t, map[string]mockResponse{
+		"tags": {err: "backend error"},
+	})
+	result, err := searchTagsHandler(handlerParams(t, srv.URL, map[string]any{}))
+	require.NoError(t, err)
+	require.Error(t, result.Error)
 }
 
 func TestSearchTagsHandler_InvalidStartTime(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTagsHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{
+	srv := tempoServer(t, nil)
+	result, err := searchTagsHandler(handlerParams(t, srv.URL, map[string]any{
 		"start": "not-valid",
 	}))
-	require.ErrorContains(t, err, "invalid start time")
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "invalid start time")
 }
 
 func TestSearchTagsHandler_InvalidEndTime(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTagsHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{
+	srv := tempoServer(t, nil)
+	result, err := searchTagsHandler(handlerParams(t, srv.URL, map[string]any{
 		"end": "not-valid",
 	}))
-	require.ErrorContains(t, err, "invalid end time")
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "invalid end time")
 }
 
 // --- SearchTagValuesHandler ---
 
 func TestSearchTagValuesHandler_Success(t *testing.T) {
-	mock := &mockLoader{searchValuesResult: `{"tagValues":{"string":["frontend","backend"]}}`}
-	params := withArgs(toolParams(t, mock), map[string]any{"tag": "resource.service.name"})
-	toolset := &Toolset{}
-	output, err := toolset.SearchTagValuesHandler(params)
+	srv := tempoServer(t, map[string]mockResponse{
+		"tag_values": {body: `{"tagValues":{"string":["frontend","backend"]}}`},
+	})
+	result, err := searchTagValuesHandler(handlerParams(t, srv.URL, map[string]any{"tag": "resource.service.name"}))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(searchTagValuesOutput)
 	require.NotNil(t, output.TagValues)
 }
 
 func TestSearchTagValuesHandler_EmptyTag(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTagValuesHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{"tag": ""}))
-	require.ErrorContains(t, err, "tag parameter must not be empty")
+	srv := tempoServer(t, nil)
+	result, err := searchTagValuesHandler(handlerParams(t, srv.URL, map[string]any{"tag": ""}))
+	require.NoError(t, err)
+	require.Error(t, result.Error)
 }
 
 func TestSearchTagValuesHandler_MissingTag(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTagValuesHandler(toolParams(t, &mockLoader{}))
-	require.ErrorContains(t, err, "tag parameter must not be empty")
+	srv := tempoServer(t, nil)
+	result, err := searchTagValuesHandler(handlerParams(t, srv.URL, map[string]any{}))
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "tag parameter")
 }
 
 func TestSearchTagValuesHandler_BackendError(t *testing.T) {
-	mock := &mockLoader{searchValuesErr: errors.New("values unavailable")}
-	params := withArgs(toolParams(t, mock), map[string]any{"tag": "resource.service.name"})
-	toolset := &Toolset{}
-	_, err := toolset.SearchTagValuesHandler(params)
-	require.ErrorContains(t, err, "values unavailable")
+	srv := tempoServer(t, map[string]mockResponse{
+		"tag_values": {err: "values unavailable"},
+	})
+	result, err := searchTagValuesHandler(handlerParams(t, srv.URL, map[string]any{"tag": "resource.service.name"}))
+	require.NoError(t, err)
+	require.Error(t, result.Error)
 }
 
 func TestSearchTagValuesHandler_InvalidEndTime(t *testing.T) {
-	toolset := &Toolset{}
-	_, err := toolset.SearchTagValuesHandler(withArgs(toolParams(t, &mockLoader{}), map[string]any{
+	srv := tempoServer(t, nil)
+	result, err := searchTagValuesHandler(handlerParams(t, srv.URL, map[string]any{
 		"tag": "resource.service.name",
 		"end": "bad-time",
 	}))
-	require.ErrorContains(t, err, "invalid end time")
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "invalid end time")
 }
 
 // --- Static TempoURL ---
 
 func TestHandler_StaticTempoURL(t *testing.T) {
-	var capturedURL string
-	mock := &mockLoader{searchResult: `{"traces":[{"traceID":"abc"}],"metrics":{}}`}
-	params := ToolParams{
-		context: t.Context(),
-		config:  &Config{TempoURL: "http://my-tempo:3200"},
-		newTempoLoader: func(url string) (tempoclient.Loader, error) {
-			capturedURL = url
-			return mock, nil
-		},
-		arguments: map[string]any{
-			"query": "{}",
-		},
-	}
+	var capturedHost string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedHost = r.Host
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"traces":[{"traceID":"abc"}],"metrics":{}}`)
+	}))
+	t.Cleanup(srv.Close)
 
-	toolset := &Toolset{}
-	output, err := toolset.SearchTracesHandler(params)
+	params := handlerParams(t, srv.URL, map[string]any{"query": "{}"})
+
+	result, err := searchTracesHandler(params)
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(searchTracesOutput)
 	require.Len(t, output.Traces, 1)
-	require.Equal(t, "http://my-tempo:3200", capturedURL)
+	require.NotEmpty(t, capturedHost)
 }
 
 func TestHandler_NoURLAndNoDiscoveryParams(t *testing.T) {
-	// When neither TempoURL nor tempoNamespace/tempoName are provided, an error is returned.
-	params := ToolParams{
-		context: t.Context(),
-		config:  &Config{},
-		newTempoLoader: func(_ string) (tempoclient.Loader, error) {
-			return &mockLoader{}, nil
-		},
-		arguments: map[string]any{
-			"query": "{}",
-		},
-	}
+	params := newTestParams(t, &Config{}, nil, map[string]any{"query": "{}"})
 
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(params)
-	require.ErrorContains(t, err, "tempo URL not configured")
+	result, err := searchTracesHandler(params)
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "tempo URL not configured")
 }
 
 // --- Instance resolution errors ---
 
 func TestHandler_UnknownInstance(t *testing.T) {
-	fakeClient := newMockK8sClient(newTempoStack("ns", "tempo", []string{}))
-	params := ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-		newTempoLoader: func(_ string) (tempoclient.Loader, error) {
-			return &mockLoader{}, nil
-		},
-		arguments: map[string]any{
-			"tempoNamespace": "ns",
-			"tempoName":      "does-not-exist",
-			"query":          "{}",
-		},
-	}
+	params := discoveryParams(t, map[string]any{
+		"tempoNamespace": "ns",
+		"tempoName":      "does-not-exist",
+		"query":          "{}",
+	})
 
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(params)
-	require.ErrorContains(t, err, "not found")
+	result, err := searchTracesHandler(params)
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "not found")
 }
 
 func TestHandler_MultitenantMissingTenant(t *testing.T) {
 	fakeClient := newMockK8sClient(newTempoStack("ns", "mt-tempo", []string{"dev", "prod"}))
-	params := ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-		newTempoLoader: func(_ string) (tempoclient.Loader, error) {
-			return &mockLoader{}, nil
-		},
-		arguments: map[string]any{
-			"tempoNamespace": "ns",
-			"tempoName":      "mt-tempo",
-			"query":          "{}",
-		},
-	}
+	params := newTestParams(t, &Config{UseRoute: false}, fakeClient, map[string]any{
+		"tempoNamespace": "ns",
+		"tempoName":      "mt-tempo",
+		"query":          "{}",
+	})
 
-	toolset := &Toolset{}
-	_, err := toolset.SearchTracesHandler(params)
-	require.ErrorContains(t, err, "tenant parameter must not be empty")
+	result, err := searchTracesHandler(params)
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "tenant parameter must not be empty")
 }

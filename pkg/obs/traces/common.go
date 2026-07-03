@@ -1,66 +1,75 @@
 package traces
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"k8s.io/client-go/dynamic"
+	"github.com/google/jsonschema-go/jsonschema"
 
+	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/prometheus"
-	"github.com/rhobs/obs-mcp/pkg/tools"
 	"github.com/rhobs/obs-mcp/pkg/traces/discovery"
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
 var (
-	tempoNamespaceParameter = tools.ParamDef{
-		Name:        "tempoNamespace",
-		Type:        tools.ParamTypeString,
+	tempoNamespaceSchema = &jsonschema.Schema{
+		Type:        "string",
 		Description: "The Kubernetes namespace where the Tempo instance is deployed. Use tempo_list_instances to discover available namespaces.",
-		Required:    true,
 	}
-	tempoNameParameter = tools.ParamDef{
-		Name:        "tempoName",
-		Type:        tools.ParamTypeString,
+	tempoNameSchema = &jsonschema.Schema{
+		Type:        "string",
 		Description: "The name of the Tempo instance to query. Use tempo_list_instances to discover available instance names.",
-		Required:    true,
 	}
-	tempoTenantParameter = tools.ParamDef{
-		Name:        "tenant",
-		Type:        tools.ParamTypeString,
+	tempoTenantSchema = &jsonschema.Schema{
+		Type:        "string",
 		Description: "The tenant to query. This parameter is required for multi-tenant instances. Use tempo_list_instances to discover available tenants for each instance.",
-		Required:    false,
 	}
 )
 
 // getTempoClient returns a Tempo client based on the config and tempoNamespace, tempoName and tenant parameters.
 // When a static TempoURL is configured, it is used directly without discovery.
 // Otherwise, the Tempo instance is resolved via Kubernetes discovery using the provided parameters.
-func (t *Toolset) getTempoClient(params ToolParams) (tempoclient.Loader, error) {
+func getTempoClient(params api.ToolHandlerParams) (tempoclient.Loader, error) {
+	cfg := getToolsetConfig(params)
+
 	url, err := resolveTempoURL(params)
 	if err != nil {
 		return nil, err
 	}
-	return params.newTempoLoader(url)
-}
 
-func resolveTempoURL(params ToolParams) (string, error) {
-	if params.config != nil && params.config.TempoURL != "" {
-		return params.config.TempoURL, nil
+	tls := strings.HasPrefix(url, "https://")
+	rt, err := auth.BuildRoundTripper(params.Context, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}
 
-	args := params.arguments
+	httpClient := &http.Client{
+		Timeout:   tempoclient.RequestTimeout,
+		Transport: rt,
+	}
+	return tempoclient.NewTempoLoader(httpClient, url), nil
+}
 
-	namespace := tools.GetString(args, "tempoNamespace", "")
-	name := tools.GetString(args, "tempoName", "")
+func resolveTempoURL(params api.ToolHandlerParams) (string, error) {
+	cfg := getToolsetConfig(params)
+	if cfg != nil && cfg.TempoURL != "" {
+		return cfg.TempoURL, nil
+	}
 
+	p := api.WrapParams(params)
+	namespace := p.RequiredString("tempoNamespace")
+	name := p.RequiredString("tempoName")
+	tenant := p.OptionalString("tenant", "")
 	if namespace == "" && name == "" {
 		return "", fmt.Errorf("tempo URL not configured; set tempo_url/--traces.tempo-url/TEMPO_URL or provide tempoNamespace and tempoName")
+	}
+	if err := p.Err(); err != nil {
+		return "", err
 	}
 	if namespace == "" {
 		return "", errors.New("tempoNamespace parameter must not be empty")
@@ -69,7 +78,7 @@ func resolveTempoURL(params ToolParams) (string, error) {
 		return "", errors.New("tempoName parameter must not be empty")
 	}
 
-	instances, err := discovery.ListInstances(params.context, params.dynamicClient, params.config.UseRoute)
+	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
 	if err != nil {
 		return "", err
 	}
@@ -80,7 +89,6 @@ func resolveTempoURL(params ToolParams) (string, error) {
 		return "", err
 	}
 
-	tenant := tools.GetString(args, "tenant", "")
 	if instance.Multitenancy {
 		if tenant == "" {
 			return "", errors.New("tenant parameter must not be empty for multi-tenant instance")
@@ -103,6 +111,14 @@ func findInstanceByName(instances []discovery.TempoInstance, namespace, name str
 	return discovery.TempoInstance{}, fmt.Errorf("instance '%s' in namespace '%s' not found", name, namespace)
 }
 
+func mustSchema[T any]() *jsonschema.Schema {
+	s, err := jsonschema.For[T](nil)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
 func parseTime(s string) (int64, error) {
 	if s == "" {
 		return 0, nil
@@ -113,73 +129,4 @@ func parseTime(s string) (int64, error) {
 		return 0, err
 	}
 	return ts.Unix(), nil
-}
-
-// ToolParams is a subset of api.ToolHandlerParams and contains only fields required by tempo tool handlers.
-type ToolParams struct {
-	context        context.Context
-	arguments      map[string]any
-	dynamicClient  dynamic.Interface
-	newTempoLoader func(url string) (tempoclient.Loader, error)
-	config         *Config
-}
-
-// ToolHandler is the signature shared by all tempo tool handler implementations.
-type ToolHandler[T any] func(params ToolParams) (T, error)
-
-func ToMCPHandler[T any](
-	newTempoLoader func(ctx context.Context, url string) (tempoclient.Loader, error),
-	dynamicClient dynamic.Interface,
-	config *Config,
-	handler ToolHandler[T],
-) mcp.ToolHandlerFor[map[string]any, T] {
-	return func(ctx context.Context, request *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, T, error) {
-		output, err := handler(ToolParams{
-			context:       ctx,
-			arguments:     args,
-			dynamicClient: dynamicClient,
-			newTempoLoader: func(url string) (tempoclient.Loader, error) {
-				return newTempoLoader(ctx, url)
-			},
-			config: config,
-		})
-		return nil, output, err
-	}
-}
-
-func ToServerHandler[T any](
-	newTempoLoader func(params api.ToolHandlerParams, url string) (tempoclient.Loader, error),
-	handler ToolHandler[T],
-) api.ToolHandlerFunc {
-	return func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-		config := GetConfig(params)
-		output, err := handler(ToolParams{
-			context:       params.Context,
-			arguments:     params.GetArguments(),
-			dynamicClient: params.DynamicClient(),
-			newTempoLoader: func(url string) (tempoclient.Loader, error) {
-				return newTempoLoader(params, url)
-			},
-			config: config,
-		})
-		if err != nil {
-			return api.NewToolCallResult("", err), nil
-		}
-
-		jsonBytes, err := json.Marshal(output)
-		if err != nil {
-			return nil, err
-		}
-		return api.NewToolCallResult(string(jsonBytes), nil), nil
-	}
-}
-
-func AllTools() []tools.ToolDefInterface {
-	return []tools.ToolDefInterface{
-		ListInstancesTool,
-		GetTraceByIDTool,
-		SearchTracesTool,
-		SearchTagsTool,
-		SearchTagValuesTool,
-	}
 }
