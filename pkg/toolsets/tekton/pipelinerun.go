@@ -17,37 +17,29 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+type pipelineRunLifecycleAction string
+
+const (
+	pipelineRunActionRestart pipelineRunLifecycleAction = "restart"
+	pipelineRunActionCancel  pipelineRunLifecycleAction = "cancel"
+)
+
 func pipelineRunTools() []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
-				Name:        "tekton_pipelinerun_restart",
-				Description: "Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec.",
-				InputSchema: pipelineRunNameSchema("Name of the PipelineRun to restart", "Namespace of the PipelineRun"),
+				Name:        "tekton_pipelinerun_lifecycle",
+				Description: "Manage a Tekton PipelineRun lifecycle by restarting it with the same spec or cancelling it by setting spec.status to Cancelled.",
+				InputSchema: pipelineRunLifecycleSchema(),
 				Annotations: api.ToolAnnotations{
-					Title:           "Tekton: Restart PipelineRun",
+					Title:           "Tekton: PipelineRun Lifecycle",
 					ReadOnlyHint:    ptr.To(false),
-					DestructiveHint: ptr.To(false),
+					DestructiveHint: ptr.To(true),
 					IdempotentHint:  ptr.To(false),
 					OpenWorldHint:   ptr.To(true),
 				},
 			},
-			Handler: restartPipelineRun,
-		},
-		{
-			Tool: api.Tool{
-				Name:        "tekton_pipelinerun_cancel",
-				Description: "Cancel a running Tekton PipelineRun by setting spec.status to Cancelled. Use when a PipelineRun should stop executing.",
-				InputSchema: pipelineRunNameSchema("Name of the PipelineRun to cancel", "Namespace of the PipelineRun"),
-				Annotations: api.ToolAnnotations{
-					Title:           "Tekton: Cancel PipelineRun",
-					ReadOnlyHint:    ptr.To(false),
-					DestructiveHint: ptr.To(true),
-					IdempotentHint:  ptr.To(true),
-					OpenWorldHint:   ptr.To(true),
-				},
-			},
-			Handler: cancelPipelineRun,
+			Handler: pipelineRunLifecycle,
 		},
 		{
 			Tool: api.Tool{
@@ -86,34 +78,53 @@ func pipelineRunTools() []api.ServerTool {
 	}
 }
 
-func pipelineRunNameSchema(nameDescription, namespaceDescription string) *jsonschema.Schema {
+func pipelineRunLifecycleSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Type: "object",
 		Properties: map[string]*jsonschema.Schema{
 			"name": {
 				Type:        "string",
-				Description: nameDescription,
+				Description: "Name of the PipelineRun to manage",
 			},
 			"namespace": {
 				Type:        "string",
-				Description: namespaceDescription,
+				Description: "Namespace of the PipelineRun",
+			},
+			"action": {
+				Type:        "string",
+				Enum:        []any{string(pipelineRunActionRestart), string(pipelineRunActionCancel)},
+				Description: "Lifecycle action to perform: 'restart' creates a new PipelineRun with the same spec; 'cancel' sets spec.status to Cancelled.",
 			},
 		},
-		Required: []string{"name"},
+		Required: []string{"name", "action"},
 	}
 }
 
-func restartPipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+func pipelineRunLifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
 	name := p.RequiredString("name")
 	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	action := pipelineRunLifecycleAction(p.RequiredString("action"))
 	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to restart pipeline run: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to manage pipeline run lifecycle: %w", err)), nil
 	}
 
-	dynamicClient := params.DynamicClient()
+	switch action {
+	case pipelineRunActionRestart:
+		return restartPipelineRun(params.Context, params.DynamicClient(), namespace, name)
+	case pipelineRunActionCancel:
+		patch := []byte(fmt.Sprintf(`{"spec":{"status":%q}}`, tektonv1.PipelineRunSpecStatusCancelled))
+		if _, err := params.DynamicClient().Resource(pipelineRunGVR).Namespace(namespace).Patch(params.Context, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to cancel PipelineRun %s/%s: %w", namespace, name, err)), nil
+		}
+		return api.NewToolCallResult(fmt.Sprintf("PipelineRun '%s' cancelled in namespace '%s'", name, namespace), nil), nil
+	default:
+		return api.NewToolCallResult("", fmt.Errorf("invalid action %q: must be one of %q or %q", action, pipelineRunActionRestart, pipelineRunActionCancel)), nil
+	}
+}
 
-	existingUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Get(params.Context, name, metav1.GetOptions{})
+func restartPipelineRun(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (*api.ToolCallResult, error) {
+	existingUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
@@ -146,29 +157,13 @@ func restartPipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to convert PipelineRun to unstructured: %w", err)), nil
 	}
 
-	createdUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Create(params.Context, &unstructured.Unstructured{Object: unstructuredObj}, metav1.CreateOptions{})
+	createdUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Create(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.CreateOptions{})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create restart PipelineRun for %s/%s: %w", namespace, name, err)), nil
 	}
 
 	createdName := createdUnstructured.GetName()
 	return api.NewToolCallResult(fmt.Sprintf("PipelineRun '%s' restarted as '%s' in namespace '%s'", name, createdName, namespace), nil), nil
-}
-
-func cancelPipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	p := api.WrapParams(params)
-	name := p.RequiredString("name")
-	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
-	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to cancel pipeline run: %w", err)), nil
-	}
-
-	patch := []byte(fmt.Sprintf(`{"spec":{"status":%q}}`, tektonv1.PipelineRunSpecStatusCancelled))
-	if _, err := params.DynamicClient().Resource(pipelineRunGVR).Namespace(namespace).Patch(params.Context, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to cancel PipelineRun %s/%s: %w", namespace, name, err)), nil
-	}
-
-	return api.NewToolCallResult(fmt.Sprintf("PipelineRun '%s' cancelled in namespace '%s'", name, namespace), nil), nil
 }
 
 func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -184,7 +179,7 @@ func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to get PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
 
-	taskRuns, err := listPipelineRunTaskRuns(params, namespace, name)
+	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, name)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list TaskRuns for PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
@@ -194,17 +189,22 @@ func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 
 	var sb strings.Builder
 	for _, taskRun := range taskRuns {
+		var taskLogs strings.Builder
+		collectTaskRunLogs(params, &taskLogs, namespace, &taskRun, tailLines)
+		taskLogsText := taskLogs.String()
+		if strings.TrimSpace(taskLogsText) == "" {
+			continue
+		}
 		fmt.Fprintf(&sb, "# TaskRun: %s\n", taskRun.Name)
-		collectTaskRunLogs(params, &sb, namespace, &taskRun, tailLines)
+		sb.WriteString(taskLogsText)
+		if !strings.HasSuffix(taskLogsText, "\n") {
+			sb.WriteString("\n")
+		}
 	}
 	if sb.Len() == 0 {
 		return api.NewToolCallResult(fmt.Sprintf("No logs available for PipelineRun '%s' in namespace '%s'", name, namespace), nil), nil
 	}
 	return api.NewToolCallResult(sb.String(), nil), nil
-}
-
-func listPipelineRunTaskRuns(params api.ToolHandlerParams, namespace, pipelineRunName string) ([]tektonv1.TaskRun, error) {
-	return pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName)
 }
 
 func pipelineRunTaskRuns(ctx context.Context, dynamicClient dynamic.Interface, namespace, pipelineRunName string) ([]tektonv1.TaskRun, error) {

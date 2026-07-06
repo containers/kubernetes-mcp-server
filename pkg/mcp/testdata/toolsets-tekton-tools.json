@@ -34,15 +34,22 @@
   {
     "annotations": {
       "destructiveHint": true,
-      "idempotentHint": true,
       "openWorldHint": true,
-      "title": "Tekton: Cancel PipelineRun"
+      "title": "Tekton: PipelineRun Lifecycle"
     },
-    "description": "Cancel a running Tekton PipelineRun by setting spec.status to Cancelled. Use when a PipelineRun should stop executing.",
+    "description": "Manage a Tekton PipelineRun lifecycle by restarting it with the same spec or cancelling it by setting spec.status to Cancelled.",
     "inputSchema": {
       "properties": {
+        "action": {
+          "description": "Lifecycle action to perform: 'restart' creates a new PipelineRun with the same spec; 'cancel' sets spec.status to Cancelled.",
+          "enum": [
+            "restart",
+            "cancel"
+          ],
+          "type": "string"
+        },
         "name": {
-          "description": "Name of the PipelineRun to cancel",
+          "description": "Name of the PipelineRun to manage",
           "type": "string"
         },
         "namespace": {
@@ -51,12 +58,13 @@
         }
       },
       "required": [
-        "name"
+        "name",
+        "action"
       ],
       "type": "object"
     },
-    "name": "tekton_pipelinerun_cancel",
-    "title": "Tekton: Cancel PipelineRun"
+    "name": "tekton_pipelinerun_lifecycle",
+    "title": "Tekton: PipelineRun Lifecycle"
   },
   {
     "annotations": {
@@ -91,32 +99,6 @@
     },
     "name": "tekton_pipelinerun_logs",
     "title": "Tekton: Get PipelineRun Logs"
-  },
-  {
-    "annotations": {
-      "destructiveHint": false,
-      "openWorldHint": true,
-      "title": "Tekton: Restart PipelineRun"
-    },
-    "description": "Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec.",
-    "inputSchema": {
-      "properties": {
-        "name": {
-          "description": "Name of the PipelineRun to restart",
-          "type": "string"
-        },
-        "namespace": {
-          "description": "Namespace of the PipelineRun",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object"
-    },
-    "name": "tekton_pipelinerun_restart",
-    "title": "Tekton: Restart PipelineRun"
   },
   {
     "annotations": {

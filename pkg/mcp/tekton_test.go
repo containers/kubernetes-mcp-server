@@ -2,9 +2,11 @@ package mcp
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
@@ -55,32 +57,58 @@ func (s *TektonMcpSuite) SetupTest() {
 	s.Cfg.Toolsets = append(s.Cfg.Toolsets, "tekton")
 	s.namespace = fmt.Sprintf("tekton-mcp-%d", time.Now().UnixNano())
 	s.tektonConfigName = s.namespace
-	s.dynamic = dynamic.NewForConfigOrDie(envTestRestConfig)
-	_, err := kubernetes.NewForConfigOrDie(envTestRestConfig).CoreV1().Namespaces().Create(s.T().Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: s.namespace}}, metav1.CreateOptions{})
+	s.dynamic = dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
+	_, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Namespaces().Create(s.T().Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: s.namespace}}, metav1.CreateOptions{})
 	s.Require().NoError(err)
 	s.InitMcpClient()
 }
 
 func (s *TektonMcpSuite) TearDownTest() {
 	_ = s.dynamic.Resource(tektonTestConfigGVR).Delete(s.T().Context(), s.tektonConfigName, metav1.DeleteOptions{})
-	_ = kubernetes.NewForConfigOrDie(envTestRestConfig).CoreV1().Namespaces().Delete(s.T().Context(), s.namespace, metav1.DeleteOptions{})
+	_ = kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Namespaces().Delete(s.T().Context(), s.namespace, metav1.DeleteOptions{})
 	s.BaseMcpSuite.TearDownTest()
 }
 
-func (s *TektonMcpSuite) TestPipelineRunCancel() {
-	s.createPipelineRun("cancel-me")
+func (s *TektonMcpSuite) TestPipelineRunLifecycle() {
+	s.Run("cancel", func() {
+		s.createPipelineRun("cancel-me")
 
-	toolResult, err := s.CallTool("tekton_pipelinerun_cancel", map[string]interface{}{
-		"namespace": s.namespace,
-		"name":      "cancel-me",
+		toolResult, err := s.CallTool("tekton_pipelinerun_lifecycle", map[string]interface{}{
+			"namespace": s.namespace,
+			"name":      "cancel-me",
+			"action":    "cancel",
+		})
+		s.Require().NoError(err)
+		s.False(toolResult.IsError)
+
+		pipelineRun, err := s.dynamic.Resource(tektonTestPipelineRunGVR).Namespace(s.namespace).Get(s.T().Context(), "cancel-me", metav1.GetOptions{})
+		s.Require().NoError(err)
+		status, _, _ := unstructured.NestedString(pipelineRun.Object, "spec", "status")
+		s.Equal("Cancelled", status)
 	})
-	s.Require().NoError(err)
-	s.False(toolResult.IsError)
 
-	pipelineRun, err := s.dynamic.Resource(tektonTestPipelineRunGVR).Namespace(s.namespace).Get(s.T().Context(), "cancel-me", metav1.GetOptions{})
-	s.Require().NoError(err)
-	status, _, _ := unstructured.NestedString(pipelineRun.Object, "spec", "status")
-	s.Equal("Cancelled", status)
+	s.Run("restart", func() {
+		s.createPipelineRun("restart-me")
+
+		toolResult, err := s.CallTool("tekton_pipelinerun_lifecycle", map[string]interface{}{
+			"namespace": s.namespace,
+			"name":      "restart-me",
+			"action":    "restart",
+		})
+		s.Require().NoError(err)
+		s.False(toolResult.IsError)
+
+		list, err := s.dynamic.Resource(tektonTestPipelineRunGVR).Namespace(s.namespace).List(s.T().Context(), metav1.ListOptions{})
+		s.Require().NoError(err)
+		foundRestart := false
+		for _, item := range list.Items {
+			if item.GetName() != "restart-me" && strings.HasPrefix(item.GetName(), "restart-me-") {
+				foundRestart = true
+				break
+			}
+		}
+		s.True(foundRestart, "expected restart action to create a new generated PipelineRun")
+	})
 }
 
 func (s *TektonMcpSuite) TestPipelineRunLogsWithoutTaskRuns() {
@@ -99,6 +127,8 @@ func (s *TektonMcpSuite) TestPipelineTroubleshootPrompt() {
 	s.Run("returns gathered PipelineRun data", func() {
 		s.createPipelineRun("broken-run")
 		s.createTaskRun("broken-run-task", "broken-run")
+		s.createEvent("broken-run-event", "PipelineRun", "broken-run", "BrokenPipelineRun")
+		s.createEvent("unrelated-run-event", "PipelineRun", "unrelated-run", "UnrelatedPipelineRun")
 		s.createRepository("eval-repo")
 		s.createTektonConfig()
 
@@ -112,6 +142,8 @@ func (s *TektonMcpSuite) TestPipelineTroubleshootPrompt() {
 		text := result.Messages[0].Content.(*mcp.TextContent).Text
 		s.Contains(text, "PipelineRun: "+s.namespace+"/broken-run")
 		s.Contains(text, "broken-run-task")
+		s.Contains(text, "BrokenPipelineRun")
+		s.NotContains(text, "UnrelatedPipelineRun")
 		s.Contains(text, "eval-repo")
 		s.Contains(text, s.tektonConfigName)
 	})
@@ -160,6 +192,28 @@ func (s *TektonMcpSuite) createTaskRun(name, pipelineRun string) {
 			"taskRef": map[string]interface{}{"name": "demo-task"},
 		},
 	}}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+}
+
+func (s *TektonMcpSuite) createEvent(name, involvedKind, involvedName, reason string) {
+	now := metav1.Now()
+	_, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Events(s.namespace).Create(s.T().Context(), &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: s.namespace,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      involvedKind,
+			Name:      involvedName,
+			Namespace: s.namespace,
+		},
+		Type:           corev1.EventTypeWarning,
+		Reason:         reason,
+		Message:        reason,
+		FirstTimestamp: now,
+		LastTimestamp:  now,
+		Source:         corev1.EventSource{Component: "tekton-test"},
+	}, metav1.CreateOptions{})
 	s.Require().NoError(err)
 }
 

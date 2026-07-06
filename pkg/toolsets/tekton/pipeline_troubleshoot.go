@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 )
 
 func pipelineTroubleshootPrompts() []api.ServerPrompt {
@@ -39,6 +41,18 @@ func pipelineTroubleshootPrompts() []api.ServerPrompt {
 	}
 }
 
+type pipelineTroubleshootData struct {
+	namespace        string
+	name             string
+	pipelineRun      *unstructured.Unstructured
+	pipelineRunText  string
+	taskRunsText     string
+	logsText         string
+	eventsText       string
+	pacText          string
+	tektonConfigText string
+}
+
 func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 	args := params.GetArguments()
 	namespace := args["namespace"]
@@ -52,12 +66,19 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 
 	pipelineRun, pipelineRunText := fetchPipelineRunForPrompt(params, namespace, name)
 	taskRuns, taskRunsText := fetchPipelineRunTaskRunsForPrompt(params, namespace, name)
-	logsText := fetchPipelineRunLogsForPrompt(params, namespace, taskRuns)
-	eventsText := fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns)
-	pacText := fetchPipelineRunPACRepositoriesForPrompt(params, namespace)
-	tektonConfigText := fetchTektonConfigsForPrompt(params)
+	data := pipelineTroubleshootData{
+		namespace:        namespace,
+		name:             name,
+		pipelineRun:      pipelineRun,
+		pipelineRunText:  pipelineRunText,
+		taskRunsText:     taskRunsText,
+		logsText:         fetchPipelineRunLogsForPrompt(params, namespace, taskRuns),
+		eventsText:       fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns),
+		pacText:          fetchPipelineRunPACRepositoriesForPrompt(params, namespace),
+		tektonConfigText: fetchTektonConfigsForPrompt(params),
+	}
 
-	promptText := buildPipelineTroubleshootPrompt(namespace, name, pipelineRun, pipelineRunText, taskRunsText, logsText, eventsText, pacText, tektonConfigText)
+	promptText := buildPipelineTroubleshootPrompt(data)
 	return api.NewPromptCallResult(
 		"PipelineRun troubleshooting data gathered successfully",
 		[]api.PromptMessage{
@@ -102,6 +123,9 @@ func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace
 		fmt.Fprintf(&sb, "### TaskRun: %s\n\n", taskRun.Name)
 		if status, err := output.MarshalYaml(taskRun.Status); err == nil {
 			fmt.Fprintf(&sb, "```yaml\n%s```\n\n", status)
+		} else {
+			klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to marshal TaskRun status for PipelineRun troubleshoot",
+				klogutil.Field("taskrun", taskRun.Name), klogutil.Err(err))
 		}
 	}
 	return taskRuns, sb.String()
@@ -114,30 +138,64 @@ func fetchPipelineRunLogsForPrompt(params api.PromptHandlerParams, namespace str
 
 	var sb strings.Builder
 	for _, taskRun := range taskRuns {
+		var taskLogs strings.Builder
+		collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, &taskLogs, namespace, &taskRun, kubernetes.DefaultTailLines)
+		taskLogsText := taskLogs.String()
+		if strings.TrimSpace(taskLogsText) == "" {
+			continue
+		}
 		fmt.Fprintf(&sb, "### TaskRun: %s\n\n", taskRun.Name)
-		collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, &sb, namespace, &taskRun, kubernetes.DefaultTailLines)
+		sb.WriteString(taskLogsText)
+		if !strings.HasSuffix(taskLogsText, "\n") {
+			sb.WriteString("\n")
+		}
 		sb.WriteString("\n")
+	}
+	if sb.Len() == 0 {
+		return "*No logs available for this PipelineRun*"
 	}
 	return sb.String()
 }
 
-func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun) string {
-	events, err := params.CoreV1().Events(namespace).List(params.Context, metav1.ListOptions{})
-	if err != nil {
-		return fmt.Sprintf("*Error listing events: %v*", err)
-	}
+type pipelineEventTarget struct {
+	kind string
+	name string
+}
 
-	wanted := map[string]bool{pipelineRunName: true}
+func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun) string {
+	targets := []pipelineEventTarget{{kind: "PipelineRun", name: pipelineRunName}}
 	for _, taskRun := range taskRuns {
-		wanted[taskRun.Name] = true
+		targets = append(targets, pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
 		if taskRun.Status.PodName != "" {
-			wanted[taskRun.Status.PodName] = true
+			targets = append(targets, pipelineEventTarget{kind: "Pod", name: taskRun.Status.PodName})
 		}
 	}
 
 	matched := make([]corev1.Event, 0)
-	for _, event := range events.Items {
-		if wanted[event.InvolvedObject.Name] {
+	seen := make(map[string]struct{})
+	for _, target := range targets {
+		if target.name == "" {
+			continue
+		}
+		selector := fields.SelectorFromSet(fields.Set{
+			"involvedObject.kind": target.kind,
+			"involvedObject.name": target.name,
+		}).String()
+		events, err := params.CoreV1().Events(namespace).List(params.Context, metav1.ListOptions{FieldSelector: selector})
+		if err != nil {
+			klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to list events for PipelineRun troubleshoot target",
+				klogutil.Field("kind", target.kind), klogutil.Field("name", target.name), klogutil.Err(err))
+			continue
+		}
+		for _, event := range events.Items {
+			key := string(event.GetUID())
+			if key == "" {
+				key = event.GetNamespace() + "/" + event.GetName()
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
 			matched = append(matched, event)
 		}
 	}
@@ -181,10 +239,10 @@ func fetchTektonConfigsForPrompt(params api.PromptHandlerParams) string {
 	return fmt.Sprintf("```yaml\n%s```", yaml)
 }
 
-func buildPipelineTroubleshootPrompt(namespace, name string, pipelineRun *unstructured.Unstructured, pipelineRunText, taskRunsText, logsText, eventsText, pacText, tektonConfigText string) string {
+func buildPipelineTroubleshootPrompt(data pipelineTroubleshootData) string {
 	statusHint := "unknown"
-	if pipelineRun != nil {
-		if conditions, found, _ := unstructured.NestedSlice(pipelineRun.Object, "status", "conditions"); found && len(conditions) > 0 {
+	if data.pipelineRun != nil {
+		if conditions, found, _ := unstructured.NestedSlice(data.pipelineRun.Object, "status", "conditions"); found && len(conditions) > 0 {
 			if condition, ok := conditions[len(conditions)-1].(map[string]any); ok {
 				statusHint, _ = condition["reason"].(string)
 			}
@@ -241,7 +299,7 @@ Analyze the collected data and report:
 ## Events
 
 %s
-`, namespace, name, time.Now().Format(time.RFC3339), statusHint, pipelineRunText, taskRunsText, logsText, pacText, tektonConfigText, eventsText)
+`, data.namespace, data.name, time.Now().Format(time.RFC3339), statusHint, data.pipelineRunText, data.taskRunsText, data.logsText, data.pacText, data.tektonConfigText, data.eventsText)
 }
 
 func yamlBlock(title string, obj *unstructured.Unstructured) string {

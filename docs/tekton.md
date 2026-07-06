@@ -11,8 +11,7 @@ kubernetes-mcp-server --toolsets core,config,tekton
 ## PipelineRun operations
 
 - `tekton_pipeline_start` starts a Pipeline by creating a PipelineRun.
-- `tekton_pipelinerun_restart` creates a new PipelineRun from an existing PipelineRun spec.
-- `tekton_pipelinerun_cancel` cancels a PipelineRun by setting `spec.status` to `Cancelled`.
+- `tekton_pipelinerun_lifecycle` restarts a PipelineRun from its existing spec or cancels it by setting `spec.status` to `Cancelled`.
 - `tekton_pipelinerun_logs` collects logs from TaskRuns owned by a PipelineRun.
 
 ## TaskRun operations
@@ -35,7 +34,7 @@ Get the usual cluster `TektonConfig` with `resources_get`:
 {"apiVersion":"operator.tekton.dev/v1alpha1","kind":"TektonConfig","name":"config"}
 ```
 
-These tools are read-only except the start, restart, and cancel operations.
+These tools are read-only except the start and lifecycle operations.
 
 ## Troubleshooting prompt
 
