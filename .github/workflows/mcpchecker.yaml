@@ -58,12 +58,15 @@ jobs:
   check-trigger:
     name: Check if evaluation should run
     runs-on: ubuntu-latest
+    # Never run on forks: the evaluation needs model/judge secrets that forks
+    # don't have, so it would only ever fail there.
     if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       contains(github.event.comment.body, '/run-mcpchecker'))
+      github.repository == 'containers/kubernetes-mcp-server' &&
+      (github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '/run-mcpchecker')))
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
       toolsets: ${{ steps.check.outputs.toolsets }}
