@@ -2,9 +2,9 @@ package http
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -21,6 +21,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 // tlsErrorFilterWriter filters out noisy TLS handshake errors from health checks
@@ -121,6 +122,12 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	)
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
 
+	// Inbound TLS min version and cipher suites are fixed for the process lifetime.
+	tlsConfig, err := tlsutil.BuildTLSConfig(staticConfig.GetTLSMinVersionConfig(), staticConfig.GetTLSCipherSuitesConfig())
+	if err != nil {
+		return fmt.Errorf("failed to build TLS config: %w", err)
+	}
+
 	// Note: WriteTimeout is intentionally omitted - it would kill SSE streams.
 	// ReadHeaderTimeout provides Slowloris protection; other timeouts are left
 	// at Go defaults since MCP clients maintain persistent connections.
@@ -128,9 +135,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		Addr:              net.JoinHostPort(staticConfig.BindAddress, staticConfig.Port),
 		Handler:           instrumentedHandler,
 		ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Duration(),
-		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
+		TLSConfig:         tlsConfig,
 		// BaseContext propagates the server context (including the klog logger)
 		// to all incoming request contexts, so klogutil.FromContext(r.Context())
 		// returns the contextual logger rather than the global fallback.

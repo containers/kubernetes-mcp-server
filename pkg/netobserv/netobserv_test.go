@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -42,6 +43,8 @@ func (s *NetObservSuite) TearDownTest() {
 
 func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 	s.Config = test.Must(config.ReadToml([]byte(`
+		tls_min_version = "1.3"
+		tls_cipher_suites = ["TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"]
 		[toolset_configs.netobserv]
 		url = "https://netobserv.example/"
 		insecure = true
@@ -50,6 +53,8 @@ func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 
 	s.Equal("https://netobserv.example/", client.pluginURL)
 	s.True(client.insecure)
+	s.Equal("1.3", client.tlsMinVersion)
+	s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}, client.tlsCipherSuites)
 }
 
 func (s *NetObservSuite) TestExecuteGet() {
@@ -153,6 +158,46 @@ func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
 func (s *NetObservSuite) TestNewNetObserv_usesDefaultURLWithoutConfigSection() {
 	client := NewNetObserv(context.Background(), s.Config, nil, nil)
 	s.Equal(DefaultPluginURL(false), client.pluginURL)
+}
+
+func (s *NetObservSuite) TestCreateHTTPClient_AppliesTLSSettings() {
+	tlsConfigFromClient := func(httpClient *http.Client) *tls.Config {
+		s.T().Helper()
+		enforcing, ok := httpClient.Transport.(*config.TLSEnforcingTransport)
+		s.Require().True(ok, "expected TLSEnforcingTransport wrapper")
+		transport, ok := enforcing.Base.(*http.Transport)
+		s.Require().True(ok, "expected base http.Transport")
+		s.Require().NotNil(transport.TLSClientConfig)
+		return transport.TLSClientConfig
+	}
+
+	s.Run("uses configured min version and cipher suites", func() {
+		s.Config = test.Must(config.ReadToml([]byte(`
+			tls_min_version = "1.3"
+			tls_cipher_suites = ["TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"]
+			[toolset_configs.netobserv]
+			url = "https://netobserv.example/"
+			insecure = true
+		`)))
+		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+
+		httpClient, err := client.createHTTPClient(s.T().Context())
+		s.Require().NoError(err)
+		tlsConfig := tlsConfigFromClient(httpClient)
+		s.Equal(uint16(tls.VersionTLS13), tlsConfig.MinVersion)
+		s.Equal([]uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256}, tlsConfig.CipherSuites)
+		s.True(tlsConfig.InsecureSkipVerify)
+	})
+
+	s.Run("returns error for invalid TLS min version", func() {
+		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+		client.tlsMinVersion = "9.9"
+
+		httpClient, err := client.createHTTPClient(s.T().Context())
+		s.Error(err, "expected error for invalid TLS min version")
+		s.Nil(httpClient, "client should be nil when TLS config fails")
+		s.ErrorContains(err, "failed to build TLS config")
+	})
 }
 
 func (s *NetObservSuite) TestRequireTLS_ConfigValidation() {

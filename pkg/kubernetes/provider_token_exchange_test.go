@@ -252,6 +252,45 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 		})
+
+		s.Run("tls_min_version", func() {
+			snap := s.newSnapshot()
+			cfg := config.Default()
+			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
+			cfg.StsClientId = "client"
+			cfg.StsAudience = "audience"
+			cfg.TLSMinVersion = "1.2"
+			p := newProvider(cfg)
+
+			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(first)
+			s.Equal("1.2", first.TLSMinVersion)
+
+			cfg.TLSMinVersion = "1.3"
+			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second)
+			s.Equal("1.3", second.TLSMinVersion)
+		})
+
+		s.Run("tls_cipher_suites", func() {
+			snap := s.newSnapshot()
+			cfg := config.Default()
+			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
+			cfg.StsClientId = "client"
+			cfg.StsAudience = "audience"
+			cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
+			p := newProvider(cfg)
+
+			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(first)
+
+			cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}
+			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second)
+			s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, second.TLSCipherSuites)
+		})
 	})
 
 	s.Run("wires require_tls enforcement into the built config", func() {

@@ -1,15 +1,16 @@
 package tokenexchange
 
 import (
-	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 const (
@@ -66,11 +67,19 @@ type TargetTokenExchangeConfig struct {
 	// identity provider (e.g., SPIRE JWT-SVID). Used with AuthStyleFederated.
 	// The file is re-read on each token request to support token rotation.
 	FederatedTokenFile string `toml:"federated_token_file,omitempty"`
+	// TLSMinVersion is the effective global TLS min version (from GetTLSMinVersionConfig).
+	TLSMinVersion string `toml:"-"`
+	// TLSCipherSuites is the effective global TLS cipher suites (from GetTLSCipherSuitesConfig).
+	TLSCipherSuites []string `toml:"-"`
 
 	// client is a http client configured to work with the IdP for this target
 	client *http.Client `toml:"-"`
 	// clientCAFile tracks which CAFile was used to build the cached client
 	clientCAFile string `toml:"-"`
+	// clientTLSMinVersion tracks the TLS min version used to build the cached client
+	clientTLSMinVersion string `toml:"-"`
+	// clientTLSCipherSuites tracks the TLS cipher suites used to build the cached client
+	clientTLSCipherSuites []string `toml:"-"`
 	// cachedAssertion stores the most recently generated JWT assertion
 	cachedAssertion string `toml:"-"`
 	// cachedAssertionExpiry is when the cached assertion expires
@@ -162,16 +171,16 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
 
-	if c.client != nil && c.clientCAFile == c.CAFile {
+	if c.client != nil && c.clientCAFile == c.CAFile &&
+		c.clientTLSMinVersion == c.TLSMinVersion &&
+		slices.Equal(c.clientTLSCipherSuites, c.TLSCipherSuites) {
 		return c.client, nil
 	}
 
 	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
 
-	// Always set MinVersion for security, regardless of CAFile
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
+	// Build TLS options for outbound client
+	var tlsOpts []tlsutil.TLSConfigOption
 
 	if c.CAFile != "" {
 		caCert, err := os.ReadFile(c.CAFile)
@@ -184,7 +193,13 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 			return nil, fmt.Errorf("failed to parse CA certificate from '%s'", c.CAFile)
 		}
 
-		tlsConfig.RootCAs = caCertPool
+		tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(caCertPool))
+	}
+
+	// Build TLS config from stored min version and cipher suites.
+	tlsConfig, err := tlsutil.BuildTLSConfig(c.TLSMinVersion, c.TLSCipherSuites, tlsOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
 	}
 
 	baseTransport.TLSClientConfig = tlsConfig
@@ -203,6 +218,8 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 		Transport: transport,
 	}
 	c.clientCAFile = c.CAFile
+	c.clientTLSMinVersion = c.TLSMinVersion
+	c.clientTLSCipherSuites = append([]string(nil), c.TLSCipherSuites...)
 
 	return c.client, nil
 }

@@ -52,6 +52,32 @@ func (s *OAuthStateSuite) TestHasProviderConfigChanged() {
 		b := &Snapshot{AuthorizationURL: "https://auth.example.com", OAuthScopes: []string{"b"}}
 		s.False(a.HasProviderConfigChanged(b))
 	})
+
+	s.Run("TLS min version changed", func() {
+		a := &Snapshot{TLSMinVersion: "1.2"}
+		b := &Snapshot{TLSMinVersion: "1.3"}
+		s.True(a.HasProviderConfigChanged(b))
+	})
+
+	s.Run("TLS cipher suites changed", func() {
+		a := &Snapshot{TLSCipherSuites: []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}}
+		b := &Snapshot{TLSCipherSuites: []string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}}
+		s.True(a.HasProviderConfigChanged(b))
+	})
+
+	s.Run("same TLS settings do not trigger change", func() {
+		a := &Snapshot{
+			AuthorizationURL: "https://auth.example.com",
+			TLSMinVersion:    "1.3",
+			TLSCipherSuites:  []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+		}
+		b := &Snapshot{
+			AuthorizationURL: "https://auth.example.com",
+			TLSMinVersion:    "1.3",
+			TLSCipherSuites:  []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+		}
+		s.False(a.HasProviderConfigChanged(b))
+	})
 }
 
 func (s *OAuthStateSuite) TestHasWellKnownConfigChanged() {

@@ -1191,6 +1191,48 @@ func (s *ConfigSuite) TestConfirmationRulesParsing() {
 	})
 }
 
+func (s *ConfigSuite) TestGetTLSConfig() {
+	s.Run("returns TOML value when env is unset", func() {
+		s.Require().NoError(os.Unsetenv(EnvTLSMinVersion))
+		s.Require().NoError(os.Unsetenv(EnvTLSCipherSuites))
+		cfg := BaseDefault()
+		cfg.TLSMinVersion = "1.3"
+		cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
+		s.Equal("1.3", cfg.GetTLSMinVersionConfig())
+		s.Equal(cfg.TLSCipherSuites, cfg.GetTLSCipherSuitesConfig())
+	})
+
+	s.Run("env overrides TOML in getters", func() {
+		s.Require().NoError(os.Setenv(EnvTLSMinVersion, "1.3"))
+		s.Require().NoError(os.Setenv(EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"))
+		defer func() {
+			_ = os.Unsetenv(EnvTLSMinVersion)
+			_ = os.Unsetenv(EnvTLSCipherSuites)
+		}()
+		cfg := BaseDefault()
+		cfg.TLSMinVersion = "1.2"
+		cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
+		s.Equal("1.3", cfg.GetTLSMinVersionConfig())
+		s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, cfg.GetTLSCipherSuitesConfig())
+	})
+
+	s.Run("parses comma-separated TLS_CIPHER_SUITES env var", func() {
+		s.Require().NoError(os.Setenv(EnvTLSCipherSuites, "SUITE_A,SUITE_B"))
+		defer func() { _ = os.Unsetenv(EnvTLSCipherSuites) }()
+
+		cfg := BaseDefault()
+		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.GetTLSCipherSuitesConfig())
+	})
+
+	s.Run("trims whitespace from TLS_CIPHER_SUITES env var", func() {
+		s.Require().NoError(os.Setenv(EnvTLSCipherSuites, " SUITE_A , SUITE_B "))
+		defer func() { _ = os.Unsetenv(EnvTLSCipherSuites) }()
+
+		cfg := BaseDefault()
+		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.GetTLSCipherSuitesConfig())
+	})
+}
+
 func TestConfig(t *testing.T) {
 	suite.Run(t, new(ConfigSuite))
 }

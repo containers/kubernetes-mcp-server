@@ -2,7 +2,6 @@ package netobserv
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 	"k8s.io/client-go/rest"
 )
 
@@ -25,6 +25,8 @@ type NetObserv struct {
 	pluginURL            string
 	insecure             bool
 	certificateAuthority string
+	tlsMinVersion        string
+	tlsCipherSuites      []string
 	requireTLS           func() bool
 }
 
@@ -35,8 +37,10 @@ func NewNetObserv(ctx context.Context, configProvider api.BaseConfig, k8s api.Ku
 		restConfig = k8s.RESTConfig()
 	}
 	client := &NetObserv{
-		bearerToken: "",
-		requireTLS:  configProvider.IsRequireTLS,
+		bearerToken:     "",
+		tlsMinVersion:   configProvider.GetTLSMinVersionConfig(),
+		tlsCipherSuites: configProvider.GetTLSCipherSuitesConfig(),
+		requireTLS:      configProvider.IsRequireTLS,
 	}
 	if restConfig != nil {
 		client.bearerToken = strings.TrimSpace(restConfig.BearerToken)
@@ -100,14 +104,12 @@ var errRedirectsNotAllowed = errors.New("redirects are not allowed for netobserv
 
 func (n *NetObserv) createHTTPClient(ctx context.Context) (*http.Client, error) {
 	logger := klogutil.FromContext(ctx)
-	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: n.insecure,
+	var tlsOpts []tlsutil.TLSConfigOption
+
+	if n.insecure {
+		tlsOpts = append(tlsOpts, tlsutil.WithInsecureSkipVerify(true))
 	}
-	transport := &http.Transport{
-		TLSClientConfig:       tlsConfig,
-		ResponseHeaderTimeout: DefaultPluginHTTPTimeout,
-	}
+
 	if caValue := strings.TrimSpace(n.certificateAuthority); caValue != "" {
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
@@ -117,11 +119,20 @@ func (n *NetObserv) createHTTPClient(ctx context.Context) (*http.Client, error) 
 		if !certPool.AppendCertsFromPEM(caPEM) {
 			return nil, fmt.Errorf("failed to parse certificate authority %q", caValue)
 		}
-		tlsConfig.RootCAs = certPool
+		tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(certPool))
 	}
+
+	tlsConfig, err := tlsutil.BuildTLSConfig(n.tlsMinVersion, n.tlsCipherSuites, tlsOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
+	}
+
 	client := &http.Client{
-		Transport: transport,
-		Timeout:   DefaultPluginHTTPTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig:       tlsConfig,
+			ResponseHeaderTimeout: DefaultPluginHTTPTimeout,
+		},
+		Timeout: DefaultPluginHTTPTimeout,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return errRedirectsNotAllowed
 		},

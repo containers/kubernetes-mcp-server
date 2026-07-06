@@ -17,12 +17,17 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
 const (
 	DefaultDropInConfigDir = "conf.d"
+
+	// Environment variable names for TLS configuration.
+	EnvTLSMinVersion   = "TLS_MIN_VERSION"
+	EnvTLSCipherSuites = "TLS_CIPHER_SUITES"
 )
 
 // ToolOverride contains per-tool configuration overrides.
@@ -126,6 +131,12 @@ type StaticConfig struct {
 	// When true, the server will refuse to start without TLS certificates,
 	// and outbound connections to non-HTTPS endpoints will be rejected.
 	RequireTLS bool `toml:"require_tls,omitempty"`
+	// TLSMinVersion is the minimum TLS version to accept (e.g., "1.2", "1.3").
+	// Defaults to TLS 1.2 if not set. Can be overridden by TLS_MIN_VERSION env var.
+	TLSMinVersion string `toml:"tls_min_version,omitempty"`
+	// TLSCipherSuites is a list of supported cipher suites for TLS connections.
+	// If empty, Go's default cipher suites are used. Can be overridden by TLS_CIPHER_SUITES env var.
+	TLSCipherSuites []string `toml:"tls_cipher_suites,omitempty"`
 
 	// HTTP server configuration (timeouts, size limits)
 	HTTP HTTPConfig `toml:"http,omitempty"`
@@ -471,6 +482,28 @@ func (c *StaticConfig) IsRequireTLS() bool {
 	return c.RequireTLS
 }
 
+// GetTLSMinVersionConfig returns the effective tls_min_version, with TLS_MIN_VERSION
+// env var taking precedence over the TOML/CLI value.
+func (c *StaticConfig) GetTLSMinVersionConfig() string {
+	if envValue := os.Getenv(EnvTLSMinVersion); envValue != "" {
+		return envValue
+	}
+	return c.TLSMinVersion
+}
+
+// GetTLSCipherSuitesConfig returns the effective tls_cipher_suites, with
+// TLS_CIPHER_SUITES env var taking precedence over the TOML/CLI value.
+func (c *StaticConfig) GetTLSCipherSuitesConfig() []string {
+	if envValue := os.Getenv(EnvTLSCipherSuites); envValue != "" {
+		suites := strings.Split(envValue, ",")
+		for i, suite := range suites {
+			suites[i] = strings.TrimSpace(suite)
+		}
+		return suites
+	}
+	return c.TLSCipherSuites
+}
+
 func (c *StaticConfig) IsRequireOAuth() bool {
 	return c.RequireOAuth
 }
@@ -556,6 +589,9 @@ func (c *StaticConfig) Validate(ctx context.Context) error {
 		if _, err := os.Stat(c.TLSKey); err != nil {
 			return fmt.Errorf("tls-key must be a valid file path: %w", err)
 		}
+	}
+	if err := c.validateTLSSettings(ctx); err != nil {
+		return err
 	}
 	if err := c.ValidateRequireTLS(); err != nil {
 		return err
@@ -651,6 +687,33 @@ func (c *StaticConfig) validateTokenExchange() error {
 		}
 	default:
 		return fmt.Errorf("invalid sts_auth_style %q: must be %q, %q, %q, or %q", c.StsAuthStyle, tokenexchange.AuthStyleParams, tokenexchange.AuthStyleHeader, tokenexchange.AuthStyleAssertion, tokenexchange.AuthStyleFederated)
+	}
+	return nil
+}
+
+// validateTLSSettings validates TLS settings via the getters so env overrides are included,
+// and logs once at startup/reload when TLS env vars override TOML.
+func (c *StaticConfig) validateTLSSettings(ctx context.Context) error {
+	logger := klogutil.FromContext(ctx).V(1)
+	if os.Getenv(EnvTLSMinVersion) != "" {
+		klogutil.LogInfo(logger, "TLS min version overridden by environment variable",
+			klogutil.Field("env", EnvTLSMinVersion),
+			klogutil.Field("value", c.GetTLSMinVersionConfig()),
+		)
+	}
+	if os.Getenv(EnvTLSCipherSuites) != "" {
+		klogutil.LogInfo(logger, "TLS cipher suites overridden by environment variable",
+			klogutil.Field("env", EnvTLSCipherSuites),
+		)
+	}
+
+	minVersion := c.GetTLSMinVersionConfig()
+	if _, err := tlsutil.ParseTLSVersion(minVersion); err != nil {
+		return err
+	}
+	cipherSuites := c.GetTLSCipherSuitesConfig()
+	if _, err := tlsutil.ParseTLSCipherSuites(cipherSuites); err != nil {
+		return err
 	}
 	return nil
 }

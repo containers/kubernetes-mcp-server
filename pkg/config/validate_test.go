@@ -243,6 +243,65 @@ func (s *ValidateSuite) TestTLSCertKey() {
 	})
 }
 
+func (s *ValidateSuite) TestTLSSettings() {
+	s.Run("default config passes with empty TLS settings", func() {
+		s.Require().NoError(os.Unsetenv(config.EnvTLSMinVersion))
+		s.Require().NoError(os.Unsetenv(config.EnvTLSCipherSuites))
+		cfg := s.validConfig()
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("valid tls_min_version in config is accepted", func() {
+		s.Require().NoError(os.Unsetenv(config.EnvTLSMinVersion))
+		s.Require().NoError(os.Unsetenv(config.EnvTLSCipherSuites))
+		cfg := s.validConfig()
+		cfg.TLSMinVersion = "1.3"
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("valid tls_cipher_suites in config is accepted", func() {
+		s.Require().NoError(os.Unsetenv(config.EnvTLSMinVersion))
+		s.Require().NoError(os.Unsetenv(config.EnvTLSCipherSuites))
+		cfg := s.validConfig()
+		cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("TLS_MIN_VERSION env overrides invalid config value", func() {
+		s.Require().NoError(os.Setenv(config.EnvTLSMinVersion, "1.3"))
+		defer func() { _ = os.Unsetenv(config.EnvTLSMinVersion) }()
+		cfg := s.validConfig()
+		cfg.TLSMinVersion = "invalid"
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("invalid TLS_MIN_VERSION env is rejected", func() {
+		s.Require().NoError(os.Setenv(config.EnvTLSMinVersion, "bad"))
+		defer func() { _ = os.Unsetenv(config.EnvTLSMinVersion) }()
+		cfg := s.validConfig()
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid TLS version")
+	})
+
+	s.Run("TLS_CIPHER_SUITES env overrides invalid config value", func() {
+		s.Require().NoError(os.Setenv(config.EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"))
+		defer func() { _ = os.Unsetenv(config.EnvTLSCipherSuites) }()
+		cfg := s.validConfig()
+		cfg.TLSCipherSuites = []string{"UNKNOWN_CIPHER"}
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("invalid TLS_CIPHER_SUITES env is rejected", func() {
+		s.Require().NoError(os.Setenv(config.EnvTLSCipherSuites, "UNKNOWN_CIPHER"))
+		defer func() { _ = os.Unsetenv(config.EnvTLSCipherSuites) }()
+		cfg := s.validConfig()
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid cipher suites")
+	})
+}
+
 func (s *ValidateSuite) TestTokenExchangeStrategy() {
 	s.Run("unknown strategy is skipped without WithTokenExchangeStrategies", func() {
 		cfg := s.validConfig()

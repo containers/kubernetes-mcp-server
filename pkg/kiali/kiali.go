@@ -2,7 +2,6 @@ package kiali
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -17,6 +16,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 type Kiali struct {
@@ -24,14 +24,18 @@ type Kiali struct {
 	kialiURL             string
 	kialiInsecure        bool
 	certificateAuthority string
+	tlsMinVersion        string
+	tlsCipherSuites      []string
 	requireTLS           func() bool
 }
 
 // NewKiali creates a new Kiali instance
 func NewKiali(configProvider api.BaseConfig, kubernetes *rest.Config) *Kiali {
 	kiali := &Kiali{
-		bearerToken: kubernetes.BearerToken,
-		requireTLS:  configProvider.IsRequireTLS,
+		bearerToken:     kubernetes.BearerToken,
+		tlsMinVersion:   configProvider.GetTLSMinVersionConfig(),
+		tlsCipherSuites: configProvider.GetTLSCipherSuitesConfig(),
+		requireTLS:      configProvider.IsRequireTLS,
 	}
 	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
 		if kc, ok := cfg.(*Config); ok && kc != nil {
@@ -87,46 +91,48 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 	return u.String(), nil
 }
 
-func (k *Kiali) createHTTPClient(ctx context.Context) *http.Client {
+func (k *Kiali) createHTTPClient(ctx context.Context) (*http.Client, error) {
 	logger := klogutil.FromContext(ctx)
-	// Base TLS configuration with minimum version for security
-	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: k.kialiInsecure,
+	// Build TLS options based on configuration
+	var tlsOpts []tlsutil.TLSConfigOption
+
+	// Apply InsecureSkipVerify if configured
+	if k.kialiInsecure {
+		tlsOpts = append(tlsOpts, tlsutil.WithInsecureSkipVerify(true))
 	}
 
 	// If a custom Certificate Authority is configured, load and add it
 	if caValue := strings.TrimSpace(k.certificateAuthority); caValue != "" {
-		// Read the certificate from file
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
 			logger.Error(err, "failed to read CA certificate from file, proceeding without custom CA", "ca_file", caValue)
-			return k.wrapWithTLSEnforcement(&http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: tlsConfig,
-				},
-			})
+		} else {
+			// Start with the host system pool when possible so we don't drop system roots
+			var certPool *x509.CertPool
+			if systemPool, err := x509.SystemCertPool(); err == nil && systemPool != nil {
+				certPool = systemPool
+			} else {
+				certPool = x509.NewCertPool()
+			}
+			if ok := certPool.AppendCertsFromPEM(caPEM); ok {
+				tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(certPool))
+			} else {
+				logger.V(0).Info("failed to append provided certificate authority; proceeding without custom CA")
+			}
 		}
+	}
 
-		// Start with the host system pool when possible so we don't drop system roots
-		var certPool *x509.CertPool
-		if systemPool, err := x509.SystemCertPool(); err == nil && systemPool != nil {
-			certPool = systemPool
-		} else {
-			certPool = x509.NewCertPool()
-		}
-		if ok := certPool.AppendCertsFromPEM(caPEM); ok {
-			tlsConfig.RootCAs = certPool
-		} else {
-			logger.V(0).Info("failed to append provided certificate authority; proceeding without custom CA")
-		}
+	// Build TLS config from stored min version and cipher suites.
+	tlsConfig, err := tlsutil.BuildTLSConfig(k.tlsMinVersion, k.tlsCipherSuites, tlsOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
 	}
 
 	return k.wrapWithTLSEnforcement(&http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: tlsConfig,
 		},
-	})
+	}), nil
 }
 
 // wrapWithTLSEnforcement wraps the HTTP client with TLS enforcement if require_tls is configured.
@@ -186,7 +192,10 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
-	client := k.createHTTPClient(ctx)
+	client, err := k.createHTTPClient(ctx)
+	if err != nil {
+		return "", err
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

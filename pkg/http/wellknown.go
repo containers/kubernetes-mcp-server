@@ -16,6 +16,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 const maxWellKnownResponseSize = 1 << 20 // 1 MB
@@ -123,13 +124,26 @@ func (w *WellKnown) authorizationURL() string {
 }
 
 // wellKnownHTTPClient returns the current HTTP client from the oauth snapshot,
-// falling back to a TLS-enforcing client if none is available.
-func (w *WellKnown) wellKnownHTTPClient() *http.Client {
+// falling back to a TLS-enforcing client with operator TLS settings if none is available.
+func (w *WellKnown) wellKnownHTTPClient() (*http.Client, error) {
 	snap := w.oauthState.Load()
 	if snap != nil && snap.HTTPClient != nil {
-		return snap.HTTPClient
+		return snap.HTTPClient, nil
 	}
-	return config.NewTLSEnforcingClient(nil, w.cfgState.Load().IsRequireTLS)
+
+	cfg := w.cfgState.Load()
+	tlsConfig, err := tlsutil.BuildTLSConfig(
+		cfg.GetTLSMinVersionConfig(),
+		cfg.GetTLSCipherSuitesConfig(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
+	}
+
+	transport := config.NewTLSEnforcingTransport(&http.Transport{
+		TLSClientConfig: tlsConfig,
+	}, cfg.IsRequireTLS)
+	return &http.Client{Transport: transport}, nil
 }
 
 func (w *WellKnown) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -234,7 +248,11 @@ func (w *WellKnown) fetchWellKnownEndpoint(request *http.Request, url string) (m
 // fetchWellKnownEndpointFromRequest performs the HTTP fetch using a pre-built request.
 // Returns nil metadata if the endpoint returns 404 or an empty body (to allow fallback).
 func (w *WellKnown) fetchWellKnownEndpointFromRequest(req *http.Request) (map[string]interface{}, http.Header, error) {
-	resp, err := w.wellKnownHTTPClient().Do(req)
+	client, err := w.wellKnownHTTPClient()
+	if err != nil {
+		return nil, nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to perform request: %w", err)
 	}

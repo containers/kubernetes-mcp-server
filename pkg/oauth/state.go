@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 	"github.com/coreos/go-oidc/v3/oidc"
 )
 
@@ -21,6 +21,8 @@ type Snapshot struct {
 	HTTPClient                       *http.Client
 	AuthorizationURL                 string
 	CertificateAuthority             string
+	TLSMinVersion                    string
+	TLSCipherSuites                  []string
 	OAuthScopes                      []string
 	DisableDynamicClientRegistration bool
 }
@@ -32,7 +34,9 @@ func (s *Snapshot) HasProviderConfigChanged(other *Snapshot) bool {
 		return s != other
 	}
 	return s.AuthorizationURL != other.AuthorizationURL ||
-		s.CertificateAuthority != other.CertificateAuthority
+		s.CertificateAuthority != other.CertificateAuthority ||
+		s.TLSMinVersion != other.TLSMinVersion ||
+		!slices.Equal(s.TLSCipherSuites, other.TLSCipherSuites)
 }
 
 // HasWellKnownConfigChanged reports whether any WellKnown-serving fields changed.
@@ -82,6 +86,8 @@ func SnapshotFromConfig(cfg *config.StaticConfig, provider *oidc.Provider, httpC
 		HTTPClient:                       httpClient,
 		AuthorizationURL:                 cfg.AuthorizationURL,
 		CertificateAuthority:             cfg.CertificateAuthority,
+		TLSMinVersion:                    cfg.GetTLSMinVersionConfig(),
+		TLSCipherSuites:                  append([]string(nil), cfg.GetTLSCipherSuitesConfig()...),
 		OAuthScopes:                      cfg.OAuthScopes,
 		DisableDynamicClientRegistration: cfg.DisableDynamicClientRegistration,
 	}
@@ -95,7 +101,9 @@ func CreateOIDCProviderAndClient(cfg *config.StaticConfig) (*oidc.Provider, *htt
 	}
 
 	ctx := context.Background()
-	var httpClient *http.Client
+
+	// Build TLS options for outbound client
+	var tlsOpts []tlsutil.TLSConfigOption
 
 	if cfg.CertificateAuthority != "" {
 		caCert, err := os.ReadFile(cfg.CertificateAuthority)
@@ -106,20 +114,20 @@ func CreateOIDCProviderAndClient(cfg *config.StaticConfig) (*oidc.Provider, *htt
 		if !caCertPool.AppendCertsFromPEM(caCert) {
 			return nil, nil, fmt.Errorf("failed to append CA certificate from %s to pool", cfg.CertificateAuthority)
 		}
-		if caCertPool.Equal(x509.NewCertPool()) {
-			caCertPool = nil
-		}
-		var transport http.RoundTripper = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-				RootCAs:    caCertPool,
-			},
-		}
-		transport = config.NewTLSEnforcingTransport(transport, cfg.IsRequireTLS)
-		httpClient = &http.Client{Transport: transport}
-	} else {
-		httpClient = config.NewTLSEnforcingClient(nil, cfg.IsRequireTLS)
+		tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(caCertPool))
 	}
+
+	// Build TLS config from config getters (env/TOML already resolved).
+	tlsConfig, err := tlsutil.BuildTLSConfig(cfg.GetTLSMinVersionConfig(), cfg.GetTLSCipherSuitesConfig(), tlsOpts...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build TLS config: %w", err)
+	}
+
+	var transport http.RoundTripper = &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+	transport = config.NewTLSEnforcingTransport(transport, cfg.IsRequireTLS)
+	httpClient := &http.Client{Transport: transport}
 
 	ctx = oidc.ClientContext(ctx, httpClient)
 	provider, err := oidc.NewProvider(ctx, cfg.AuthorizationURL)

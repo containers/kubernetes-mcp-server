@@ -84,6 +84,8 @@ Grant the release ServiceAccount permission to:
 
 On OpenShift, synthesized plugin URLs use HTTPS. Mount the pod service account so the server can use the cluster service CA. For a custom `url` over HTTPS, set `certificate_authority` or `insecure = true` (development only).
 
+Global `tls_min_version` / `tls_cipher_suites` (and `TLS_MIN_VERSION` / `TLS_CIPHER_SUITES` env overrides) apply to the NetObserv HTTP client. See [configuration.md](configuration.md#server-settings).
+
 ## Configuration reference
 
 | Field | Default (OpenShift in-cluster) | Description |

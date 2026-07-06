@@ -150,6 +150,8 @@ The server will:
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
+| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Can be overridden by `TLS_MIN_VERSION`. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, OAuth, token exchange, well-known metadata). |
+| `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Can be overridden by `TLS_CIPHER_SUITES` (comma-separated). Applies to inbound HTTPS and outbound clients. |
 
 **Example:**
 ```toml
@@ -165,7 +167,42 @@ tls_key = "/etc/tls/tls.key"
 
 # Enforce TLS for all connections (requires tls_cert and tls_key)
 require_tls = true
+
+# Global TLS version and cipher suites (inbound + outbound; env vars override)
+tls_min_version = "1.2"
+tls_cipher_suites = [
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+]
 ```
+
+**TLS Environment Variables:**
+
+`TLS_MIN_VERSION` and `TLS_CIPHER_SUITES` configure TLS for **both** inbound and outbound connections. When set, they override the corresponding global TOML values (`tls_min_version`, `tls_cipher_suites`):
+
+| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, OAuth, token exchange, well-known metadata) |
+|---------|----------------------|-------------------------------------------------------------------------|
+| `tls_min_version` / `tls_cipher_suites` (TOML) | ✅ fallback | ✅ fallback |
+| `TLS_MIN_VERSION` / `TLS_CIPHER_SUITES` (env) | ✅ overrides TOML (at startup) | ✅ overrides TOML |
+
+When neither TOML nor env is set, both inbound and outbound default to TLS 1.2 with Go's default cipher suites.
+
+> **Note:** Inbound HTTPS (`tls_min_version`, `tls_cipher_suites`, and their env overrides) is applied when the server starts. Changing these settings requires a **process restart**; they are not updated on SIGHUP config reload. Outbound clients (OAuth, token exchange, well-known metadata) pick up changes on reload; Kiali and NetObserv re-read TLS settings on each tool invocation.
+
+```bash
+# Example: Enforce TLS 1.3 minimum version (inbound + outbound)
+export TLS_MIN_VERSION="1.3"
+
+# Example: Restrict TLS 1.2 cipher suites (inbound + outbound; TLS 1.3 ciphers are not configurable)
+export TLS_MIN_VERSION="1.2"
+export TLS_CIPHER_SUITES="TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+```
+
+> **Note:** TLS 1.3 uses a fixed set of cipher suites that cannot be configured. The `TLS_CIPHER_SUITES` setting only affects TLS 1.2 and earlier connections.
+
+> **Note:** When the minimum TLS version is below `"1.3"` and you set a custom cipher list, include at least one HTTP/2-compatible suite (for example, `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`). Omitting it can break HTTPS/HTTP2 clients even when TLS 1.2 handshakes succeed.
+
+> **Note:** `TLS_MIN_VERSION` values `"1.0"` and `"1.1"` are accepted for operator parity with cluster-wide TLS settings but are not recommended for production use.
 
 ### HTTP Server Security
 

@@ -97,6 +97,13 @@ type RequireTLSProvider interface {
 	IsRequireTLS() bool
 }
 
+// TLSConfigProvider provides access to global TLS min version and cipher suite settings.
+// Values include TLS_MIN_VERSION and TLS_CIPHER_SUITES env overrides when set.
+type TLSConfigProvider interface {
+	GetTLSMinVersionConfig() string
+	GetTLSCipherSuitesConfig() []string
+}
+
 // RequireOAuthProvider provides access to require_oauth setting.
 type RequireOAuthProvider interface {
 	IsRequireOAuth() bool
@@ -113,5 +120,6 @@ type BaseConfig interface {
 	ValidationEnabledProvider
 	TargetCompatibilityToolFiltersEnabledProvider
 	RequireTLSProvider
+	TLSConfigProvider
 	RequireOAuthProvider
 }

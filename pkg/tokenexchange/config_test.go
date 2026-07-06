@@ -113,6 +113,51 @@ func (s *TargetTokenExchangeConfigSuite) TestHTTPClientCAFile() {
 	})
 }
 
+func (s *TargetTokenExchangeConfigSuite) TestHTTPClientTLSSettings() {
+	s.Run("rebuilds client when TLSMinVersion changes", func() {
+		cfg := &TargetTokenExchangeConfig{TLSMinVersion: "1.2"}
+
+		first, err := cfg.HTTPClient()
+		s.Require().NoError(err)
+
+		same, err := cfg.HTTPClient()
+		s.Require().NoError(err)
+		s.Same(first, same, "unchanged TLSMinVersion must reuse the memoized client")
+
+		cfg.TLSMinVersion = "1.3"
+		second, err := cfg.HTTPClient()
+		s.Require().NoError(err)
+		s.NotSame(first, second, "changed TLSMinVersion must rebuild the client")
+
+		wrapper, ok := second.Transport.(*tlsEnforcingTransport)
+		s.Require().True(ok)
+		transport, ok := wrapper.Base.(*http.Transport)
+		s.Require().True(ok)
+		s.Equal(uint16(tls.VersionTLS13), transport.TLSClientConfig.MinVersion)
+	})
+
+	s.Run("rebuilds client when TLSCipherSuites changes", func() {
+		cfg := &TargetTokenExchangeConfig{
+			TLSCipherSuites: []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+		}
+
+		first, err := cfg.HTTPClient()
+		s.Require().NoError(err)
+
+		cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}
+		second, err := cfg.HTTPClient()
+		s.Require().NoError(err)
+		s.NotSame(first, second, "changed TLSCipherSuites must rebuild the client")
+
+		wrapper, ok := second.Transport.(*tlsEnforcingTransport)
+		s.Require().True(ok)
+		transport, ok := wrapper.Base.(*http.Transport)
+		s.Require().True(ok)
+		s.Require().Len(transport.TLSClientConfig.CipherSuites, 1)
+		s.Equal(tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, transport.TLSClientConfig.CipherSuites[0])
+	})
+}
+
 func (s *TargetTokenExchangeConfigSuite) TestSetRequireTLS() {
 	s.Run("no enforcement when requireTLS is nil", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
