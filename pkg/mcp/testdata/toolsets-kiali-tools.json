@@ -2,6 +2,7 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "Workload: Logs"
@@ -64,6 +65,7 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "Get Mesh Status"
@@ -79,6 +81,7 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "Get Mesh Traffic Graph"
@@ -380,6 +383,7 @@
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true,
+      "readOnlyHint": false,
       "title": "Manage Istio, Gateway API, and Inference API Config: Create, Patch, Delete"
     },
     "description": "Create, patch, or delete Istio, Gateway API, and Inference API config. Supports Istio resources (networking.istio.io, security.istio.io), Gateway API resources (gateway.networking.k8s.io), and Inference API resources (inference.networking.k8s.io) when installed on the cluster. For list and get (read-only) use manage_istio_config_read.",

@@ -2,7 +2,9 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": false,
+      "readOnlyHint": false,
       "title": "Tekton: Start Pipeline"
     },
     "description": "Start a Tekton Pipeline by creating a PipelineRun that references it",
@@ -34,7 +36,9 @@
   {
     "annotations": {
       "destructiveHint": true,
+      "idempotentHint": false,
       "openWorldHint": true,
+      "readOnlyHint": false,
       "title": "Tekton: PipelineRun Lifecycle"
     },
     "description": "Manage a Tekton PipelineRun lifecycle by restarting it with the same spec or cancelling it by setting spec.status to Cancelled.",
@@ -103,7 +107,9 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": false,
+      "readOnlyHint": false,
       "title": "Tekton: Start Task"
     },
     "description": "Start a Tekton Task by creating a TaskRun that references it",
@@ -169,7 +175,9 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": false,
+      "readOnlyHint": false,
       "title": "Tekton: Restart TaskRun"
     },
     "description": "Restart a Tekton TaskRun by creating a new TaskRun with the same spec",
