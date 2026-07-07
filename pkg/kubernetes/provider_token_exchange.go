@@ -195,7 +195,3 @@ func (p *tokenExchangingProvider) Close() {
 func (p *tokenExchangingProvider) AnyTargetHasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
 	return p.provider.AnyTargetHasGVKs(ctx, gvks)
 }
-
-func (p *tokenExchangingProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	return p.provider.IsTargetCompatibilityToolFiltersEnabled()
-}

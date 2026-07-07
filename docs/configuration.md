@@ -10,9 +10,17 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
 - [Configuration Loading](#configuration-loading)
+  - [Usage](#usage)
 - [Drop-in Configuration](#drop-in-configuration)
+  - [How Drop-in Files Work](#how-drop-in-files-work)
+  - [Example Directory Structure](#example-directory-structure)
+  - [Example Drop-in Files](#example-drop-in-files)
 - [Dynamic Configuration Reload](#dynamic-configuration-reload)
+  - [How to Reload](#how-to-reload)
+  - [What Gets Reloaded](#what-gets-reloaded)
+  - [Limitations](#limitations)
 - [Configuration Reference](#configuration-reference-1)
   - [Server Settings](#server-settings)
   - [HTTP Server Security](#http-server-security)
@@ -30,9 +38,11 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
   - [Validation](#validation)
   - [Confirmation Rules](#confirmation-rules)
   - [Toolset-Specific Configuration](#toolset-specific-configuration)
+    - [Helm Configuration](#helm-configuration)
   - [Cluster Provider Configuration](#cluster-provider-configuration)
 - [CLI Configuration Options](#cli-configuration-options)
 - [Complete Example](#complete-example)
+- [Related Documentation](#related-documentation)
 
 ## Configuration Loading
 
@@ -273,7 +283,6 @@ Control what operations the MCP server can perform on your Kubernetes cluster. T
 |-------|------|---------|-------------|
 | `read_only` | boolean | `false` | When `true`, only exposes tools annotated with `readOnlyHint=true`. Prevents any write operations on the cluster. |
 | `disable_destructive` | boolean | `false` | When `true`, disables tools annotated with `destructiveHint=true` (delete, update operations). Has no effect when `read_only` is `true`. |
-| `enable_target_compatibility_tool_filters` | boolean | `false` | Controls cluster-capability tool filtering for **multi-target** providers. Tools that require API groups absent from the cluster (for example the OpenShift-only `projects_list`) are hidden. Single-target providers always apply this filtering regardless of the setting; this flag only enables the (potentially expensive) per-target discovery fan-out across every target of a multi-target provider. |
 
 **Example:**
 ```toml
@@ -282,9 +291,6 @@ read_only = true
 
 # Or allow writes but prevent deletions
 disable_destructive = true
-
-# Probe every target of a multi-target provider for API-group compatibility
-enable_target_compatibility_tool_filters = true
 ```
 
 ### Toolsets

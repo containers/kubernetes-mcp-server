@@ -29,10 +29,6 @@ func (p *FilterProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVer
 	return true
 }
 
-func (p *FilterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	return false
-}
-
 var _ api.FilteringProvider = (*FilterProvider)(nil)
 
 func main() {
