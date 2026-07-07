@@ -569,7 +569,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>netobserv</summary>
 
-- **netobserv_list_flows** - Lists network flow records from NetObserv (Loki). Returns aggregated flow log entries with optional filters on namespaces, workloads, IPs, ports, and protocols.
+- **netobserv_list_flows** - Lists NetObserv network flow records from Loki. Use when investigating traffic between workloads, IPs, ports, or protocols in a namespace or time window.
   - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
   - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
 
@@ -610,7 +610,7 @@ Examples:
   - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
 
-- **netobserv_get_flow_metrics** - Returns aggregated NetObserv flow metrics (topology/time series) from Prometheus and/or Loki via the console plugin. See aggregateBy and groups parameter descriptions for topology scopes (namespace, resource, app, …) and field breakdowns (TLSVersion, DnsName, PktDropLatestState, …).
+- **netobserv_get_flow_metrics** - Returns aggregated NetObserv flow metrics as topology or time-series data. Use for throughput, TLS/DNS/drop breakdowns, and namespace or workload traffic analysis; see aggregateBy and groups for grouping options.
   - `aggregateBy` (`string`) **(required)** - Primary dimension for netobserv_get_flow_metrics (console plugin /api/flow/metrics).
 
 Two forms (use exact spelling):
@@ -722,7 +722,7 @@ Examples:
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
   - `type` (`string`) - Metric type to aggregate.
 
-- **netobserv_export_flows** - Exports NetObserv flow records as CSV using the same filters as list_flows. Requires Loki to be enabled on the console plugin backend.
+- **netobserv_export_flows** - Exports NetObserv flow records as CSV with the same filters as list_flows. Use when the user needs downloadable flow data for audits or offline analysis.
   - `columns` (`string`) - Optional comma-separated column names to include (e.g. SrcK8S_Namespace,DstK8S_Namespace,Bytes). Omit to export all columns present in the result.
   - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
   - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
