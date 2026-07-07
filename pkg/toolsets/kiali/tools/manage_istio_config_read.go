@@ -16,8 +16,9 @@ func InitManageIstioConfigRead() []api.ServerTool {
 	name := defaults.ToolsetName() + "_manage_istio_config_read"
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
-			Name:        name,
-			Description: "Read-only Istio config: list or get objects. For action 'list', returns an array of objects with {name, namespace, type, validation}. For create, patch, or delete use manage_istio_config.",
+			Name: name,
+			Description: "Read Istio config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} " +
+				"where valid/invalid arrays contain resource names. 'get' returns full YAML. For writes use manage_istio_config.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{

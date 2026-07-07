@@ -440,7 +440,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **kiali_get_mesh_status** - Retrieves the high-level health, topology, and environment details of the Istio service mesh. Returns multi-cluster control plane status (istiod), data plane namespace health (including ambient mesh status), observability stack health (Prometheus, Grafana...), and component connectivity. Use this tool as the first step to diagnose mesh-wide issues, verify Istio/Kiali versions, or check overall health before drilling into specific workloads.
 
-- **kiali_manage_istio_config_read** - Read-only Istio config: list or get objects. For action 'list', returns an array of objects with {name, namespace, type, validation}. For create, patch, or delete use manage_istio_config.
+- **kiali_manage_istio_config_read** - Read Istio config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names. 'get' returns full YAML. For writes use manage_istio_config.
   - `action` (`string`) **(required)** - Action to perform (read-only)
   - `clusterName` (`string`) - Optional cluster name. Defaults to the cluster name in the Kiali configuration.
   - `group` (`string`) - API group of the Istio object. Required for 'get' action.

@@ -445,7 +445,7 @@
       "readOnlyHint": true,
       "title": "Manage Istio Config: List or Get"
     },
-    "description": "Read-only Istio config: list or get objects. For action 'list', returns an array of objects with {name, namespace, type, validation}. For create, patch, or delete use manage_istio_config.",
+    "description": "Read Istio config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names. 'get' returns full YAML. For writes use manage_istio_config.",
     "inputSchema": {
       "dependentRequired": {
         "object": [

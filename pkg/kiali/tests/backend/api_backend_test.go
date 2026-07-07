@@ -514,20 +514,33 @@ func (s *ContractTestSuite) TestManageIstioConfigRead() {
 		resp, body, err := s.mcpCall(tools.KialiManageIstioConfigReadEndpoint, args)
 		s.Require().NoError(err)
 		s.requireSuccess(tools.KialiManageIstioConfigReadEndpoint, resp, body)
-		obj := s.requireJSONKeys(tools.KialiManageIstioConfigReadEndpoint, body, "cluster", "items")
-		items, ok := obj["items"].([]interface{})
+		obj := s.requireJSONKeys(tools.KialiManageIstioConfigReadEndpoint, body, "cluster", "namespaces")
+		namespaces, ok := obj["namespaces"].(map[string]interface{})
 		s.Require().True(ok,
-			"manage_istio_config_read list 'items' field should be a JSON array, got %T", obj["items"])
-		s.Require().NotEmpty(items,
-			"manage_istio_config_read list response should return at least one item for namespace %q", s.testNS)
+			"manage_istio_config_read list 'namespaces' field should be a JSON object, got %T", obj["namespaces"])
 
-		first, ok := items[0].(map[string]interface{})
+		nsData, ok := namespaces[s.testNS].(map[string]interface{})
 		s.Require().True(ok,
-			"manage_istio_config_read list items should be JSON objects, got %T", items[0])
-		s.Contains(first, "name")
-		s.Contains(first, "namespace")
-		s.Contains(first, "kind")
-		s.Contains(first, "validation")
+			"manage_istio_config_read list response should include namespace %q", s.testNS)
+		s.Require().NotEmpty(nsData,
+			"manage_istio_config_read list response should return at least one GVK group for namespace %q", s.testNS)
+
+		foundResource := false
+		for gvk, val := range nsData {
+			kvr, ok := val.(map[string]interface{})
+			s.Require().True(ok,
+				"manage_istio_config_read list GVK entry %q should be a JSON object, got %T", gvk, val)
+			if valid, ok := kvr["valid"].([]interface{}); ok && len(valid) > 0 {
+				foundResource = true
+				break
+			}
+			if invalid, ok := kvr["invalid"].([]interface{}); ok && len(invalid) > 0 {
+				foundResource = true
+				break
+			}
+		}
+		s.True(foundResource,
+			"manage_istio_config_read list response should contain at least one resource name in valid or invalid for namespace %q", s.testNS)
 	})
 }
 
