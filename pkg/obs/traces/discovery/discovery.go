@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,7 +75,8 @@ func listTempoStacks(ctx context.Context, k8sClient dynamic.Interface, useRoute 
 
 		baseURL, err := resolveBaseURL(ctx, k8sClient, useRoute, tempo.Namespace, serviceName, multitenancy)
 		if err != nil {
-			return nil, err
+			slog.Warn("Failed to resolve base URL for TempoStack, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
+			continue
 		}
 
 		status := getStatusFromConditions(tempo.Status.Conditions)
@@ -122,7 +124,8 @@ func listTempoMonolithics(ctx context.Context, k8sClient dynamic.Interface, useR
 
 		baseURL, err := resolveBaseURL(ctx, k8sClient, useRoute, tempo.Namespace, serviceName, multitenancy)
 		if err != nil {
-			return nil, err
+			slog.Warn("Failed to resolve base URL for TempoMonolithic, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
+			continue
 		}
 
 		status := getStatusFromConditions(tempo.Status.Conditions)
