@@ -17,21 +17,25 @@ import (
 
 type ProviderKubeconfigTestSuite struct {
 	BaseProviderSuite
-	kubeconfigFile string
-	provider       Provider
+	mockServer *test.MockServer
+	provider   Provider
 }
 
 func (s *ProviderKubeconfigTestSuite) SetupTest() {
 	// Kubeconfig provider is used when the multi-cluster feature is enabled with the kubeconfig strategy.
-	// For this test suite we use envtest and create a kubeconfig with multiple contexts.
-	s.kubeconfigFile = test.EnvTestKubeconfigFile(s.T())
-	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: s.kubeconfigFile})
+	// For this test suite we back the kubeconfig context with a mock API server.
+	s.mockServer = test.NewMockServer()
+	// Default discovery simulates a vanilla (non-OpenShift) cluster.
+	s.mockServer.Handle(test.NewDiscoveryClientHandler())
+	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: s.mockServer.KubeconfigFile(s.T())})
 	s.Require().NoError(err, "Expected no error creating provider with kubeconfig")
 	s.provider = provider
 }
 
 func (s *ProviderKubeconfigTestSuite) TearDownTest() {
-	// Cleanup handled by envtest
+	if s.mockServer != nil {
+		s.mockServer.Close()
+	}
 }
 
 func (s *ProviderKubeconfigTestSuite) TestType() {
@@ -39,7 +43,9 @@ func (s *ProviderKubeconfigTestSuite) TestType() {
 }
 
 func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
-	// envtest has OpenShift Project CRD registered, so it should be detected
+	// Serve the OpenShift discovery document so the Project GVK is present.
+	s.mockServer.ResetHandlers()
+	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.Run("has OpenShift Project GVK", func() {
 		hasProjects := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
@@ -50,12 +56,8 @@ func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 
 func (s *ProviderKubeconfigTestSuite) TestWithNonOpenShiftGVK() {
 	s.Run("does not have non-existent GVK", func() {
-		// Test with a GVK that doesn't exist in envtest.
-		// Create a fresh provider that points to envtest to avoid discovery errors.
-		kubeconfigFile := test.EnvTestKubeconfigFile(s.T())
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: kubeconfigFile})
-		s.Require().NoError(err)
-		hasGVK := provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
+		// Default (non-OpenShift) discovery returns a 404 for the missing GroupVersion.
+		hasGVK := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "nonexistent.example.com", Version: "v1", Kind: "Foo"},
 		})
 		s.False(hasGVK, "Expected provider to report no nonexistent GVK")
@@ -67,13 +69,13 @@ func (s *ProviderKubeconfigTestSuite) TestGetTargets() {
 		targets, err := s.provider.GetTargets(s.T().Context())
 		s.Require().NoError(err, "Expected no error from GetTargets")
 		s.NotEmpty(targets, "Expected at least one target from GetTargets")
-		s.Contains(targets, "envtest", "Expected envtest context in targets from GetTargets")
+		s.Contains(targets, "fake-context", "Expected fake-context in targets from GetTargets")
 	})
 }
 
 func (s *ProviderKubeconfigTestSuite) TestGetDerivedKubernetes() {
 	s.Run("GetDerivedKubernetes returns Kubernetes for valid context", func() {
-		k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), "envtest")
+		k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), "fake-context")
 		s.Require().NoError(err, "Expected no error from GetDerivedKubernetes with valid context")
 		s.NotNil(k8s, "Expected Kubernetes from GetDerivedKubernetes with valid context")
 	})
@@ -92,7 +94,7 @@ func (s *ProviderKubeconfigTestSuite) TestGetDerivedKubernetes() {
 
 func (s *ProviderKubeconfigTestSuite) TestGetDefaultTarget() {
 	s.Run("GetDefaultTarget returns current-context defined in kubeconfig", func() {
-		s.Equal("envtest", s.provider.GetDefaultTarget(), "Expected envtest as default target")
+		s.Equal("fake-context", s.provider.GetDefaultTarget(), "Expected fake-context as default target")
 	})
 }
 
@@ -134,7 +136,7 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentReads() {
 					{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
 				})
 			},
-			func() { _, _ = s.provider.GetDerivedKubernetes(context.Background(), "envtest") },
+			func() { _, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context") },
 			func() { _ = s.provider.GetTargetParameterName() },
 		}
 
@@ -228,7 +230,7 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 						_ = provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
 							{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
 						})
-						_, _ = provider.GetDerivedKubernetes(context.Background(), "envtest")
+						_, _ = provider.GetDerivedKubernetes(context.Background(), "fake-context")
 					}
 				}
 			}()

@@ -15,7 +15,10 @@ import (
 )
 
 func initResources(p api.FilteringProvider) []api.ServerTool {
-	// TODO: What purpose is this string serving in Description fields?
+	// commonApiVersion lists example apiVersion/kind pairs that are appended to the
+	// resources_* tool descriptions as hints for the model. It is extended with
+	// target-specific kinds (e.g. OpenShift Route) when a target cluster exposes them,
+	// so the examples the model sees match the cluster it is talking to.
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
 	// TODO: A future config option could be used to decide whether to perform
 	// target compatibility checking/filtering, which may be expensive in

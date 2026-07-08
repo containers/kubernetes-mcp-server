@@ -375,6 +375,17 @@ func NewInOpenShiftHandler(additionalResources ...metav1.APIResourceList) *Disco
 				},
 			},
 		},
+		{
+			GroupVersion: "route.openshift.io/v1",
+			APIResources: []metav1.APIResource{
+				{
+					Name:       "routes",
+					Kind:       "Route",
+					Namespaced: true,
+					Verbs:      metav1.Verbs{"create", "delete", "get", "list", "patch", "update", "watch"},
+				},
+			},
+		},
 	}
 	openShiftResources = append(openShiftResources, additionalResources...)
 	return NewDiscoveryClientHandler(openShiftResources...)
