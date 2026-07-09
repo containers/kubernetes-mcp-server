@@ -25,6 +25,11 @@ istioctl:
 		rm -rf $$TMPDIR ;\
 	}
 
+# Install Gateway API CRDs required for Gateway API eval tasks and Kiali AI tools
+.PHONY: install-gateway-api-crds
+install-gateway-api-crds:
+	@evals/tasks/kiali/scripts/ensure_gateway_api_crds.sh
+
 # Install Istio (demo profile) and enable sidecar injection in default namespace
 .PHONY: install-istio
 install-istio: istioctl
@@ -76,4 +81,4 @@ expose-kiali:
 	echo "Kiali is being exposed on http://localhost:20001"
 
 .PHONY: setup-kiali
-setup-kiali: install-istio update-kiali-version install-bookinfo-demo expose-kiali expose-bookinfo-demo ## Setup Kiali
+setup-kiali: install-istio install-gateway-api-crds update-kiali-version install-bookinfo-demo expose-kiali expose-bookinfo-demo ## Setup Kiali
