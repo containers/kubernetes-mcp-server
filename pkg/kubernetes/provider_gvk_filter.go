@@ -7,7 +7,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/klog/v2"
 )
 
 // ProviderGVKFilter provides GVK-based filtering capabilities for providers.
@@ -31,7 +30,7 @@ func (f *ProviderGVKFilter) AnyTargetHasGVKs(ctx context.Context, gvks []schema.
 		return true
 	}
 
-	logger := klog.FromContext(ctx)
+	logger := klogutil.FromContext(ctx)
 	mgrs, err := f.managerProvider.GetTargetManagers(ctx)
 	// If an error occurs, don't exclude tools
 	if err != nil {
