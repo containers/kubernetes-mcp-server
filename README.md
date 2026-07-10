@@ -70,6 +70,16 @@ For a secure production setup with dedicated ServiceAccount and read-only access
 
 </details>
 
+### Autohand Code
+
+Register the published npm server with [Autohand Code](https://github.com/autohandai/code-cli/):
+
+```shell
+autohand mcp add kubernetes npx -y kubernetes-mcp-server@latest
+```
+
+Add `--scope project` to keep the registration in the current workspace.
+
 ### Claude Desktop
 
 #### Using npx
