@@ -45,7 +45,14 @@ claude-agent-acp: ## Install the claude-agent-acp adapter for the claude-code ev
 		set -e ;\
 		echo "Installing claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) (npm install -g)..." ;\
 		npm install -g @agentclientprotocol/claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) ;\
-		echo "✅ claude-agent-acp installed" ;\
+		if command -v claude-agent-acp >/dev/null 2>&1; then \
+			echo "✅ claude-agent-acp installed" ;\
+		else \
+			NPM_BIN=$$(npm prefix -g)/bin ;\
+			echo "⚠️  claude-agent-acp installed but not found on PATH." ;\
+			echo "   Add the npm global bin directory to your PATH:" ;\
+			echo "   export PATH=\"\$$PATH:$$NPM_BIN\"" ;\
+		fi ;\
 	}
 
 .PHONY: run-evals
