@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/pavolloffay/opentelemetry-mcp-server/modules/collectorschema"
+	"github.com/pavolloffay/opentelemetry-mcp-server/modules/schemagen"
 
 	"github.com/rhobs/obs-mcp/pkg/resultutil"
 	"github.com/rhobs/obs-mcp/pkg/tools"
@@ -22,11 +22,11 @@ func normalizeVersion(version string) string {
 
 // SchemaLoader defines the interface for loading OpenTelemetry Collector schemas.
 type SchemaLoader interface {
-	GetComponentSchema(componentType collectorschema.ComponentType, componentName string, version string) (*collectorschema.ComponentSchema, error)
-	GetComponentSchemaJSON(componentType collectorschema.ComponentType, componentName string, version string) ([]byte, error)
-	ListAvailableComponents(version string) (map[collectorschema.ComponentType][]string, error)
-	ValidateComponentYAML(componentType collectorschema.ComponentType, componentName string, version string, yamlData []byte) (*ValidationResult, error)
-	ValidateComponentJSON(componentType collectorschema.ComponentType, componentName string, version string, jsonData []byte) (*ValidationResult, error)
+	GetComponentSchema(componentType schemagen.ComponentType, componentName string, version string) (*schemagen.ComponentSchema, error)
+	GetComponentSchemaJSON(componentType schemagen.ComponentType, componentName string, version string) ([]byte, error)
+	ListAvailableComponents(version string) (map[schemagen.ComponentType][]string, error)
+	ValidateComponentYAML(componentType schemagen.ComponentType, componentName string, version string, yamlData []byte) (*ValidationResult, error)
+	ValidateComponentJSON(componentType schemagen.ComponentType, componentName string, version string, jsonData []byte) (*ValidationResult, error)
 	GetLatestVersion() (string, error)
 	GetAllVersions() ([]string, error)
 }
@@ -37,9 +37,9 @@ type ValidationResult struct {
 	Errors []ValidationError
 }
 
-// schemaManagerWrapper wraps collectorschema.SchemaManager to implement SchemaLoader.
+// schemaManagerWrapper wraps schemagen.SchemaManager to implement SchemaLoader.
 type schemaManagerWrapper struct {
-	manager *collectorschema.SchemaManager
+	manager *schemagen.SchemaManager
 }
 
 // NewSchemaLoaderFromFS creates a new SchemaLoader using schemas from the provided filesystem.
@@ -47,23 +47,23 @@ type schemaManagerWrapper struct {
 // The basePath should be the path within the filesystem where version subdirectories are located.
 func NewSchemaLoaderFromFS(filesystem fs.FS, basePath string) SchemaLoader {
 	return &schemaManagerWrapper{
-		manager: collectorschema.NewSchemaManagerFromFS(filesystem, basePath),
+		manager: schemagen.NewSchemaManagerFromFS(filesystem, basePath),
 	}
 }
 
-func (w *schemaManagerWrapper) GetComponentSchema(componentType collectorschema.ComponentType, componentName, version string) (*collectorschema.ComponentSchema, error) {
+func (w *schemaManagerWrapper) GetComponentSchema(componentType schemagen.ComponentType, componentName, version string) (*schemagen.ComponentSchema, error) {
 	return w.manager.GetComponentSchema(componentType, componentName, version)
 }
 
-func (w *schemaManagerWrapper) GetComponentSchemaJSON(componentType collectorschema.ComponentType, componentName, version string) ([]byte, error) {
+func (w *schemaManagerWrapper) GetComponentSchemaJSON(componentType schemagen.ComponentType, componentName, version string) ([]byte, error) {
 	return w.manager.GetComponentSchemaJSON(componentType, componentName, version)
 }
 
-func (w *schemaManagerWrapper) ListAvailableComponents(version string) (map[collectorschema.ComponentType][]string, error) {
+func (w *schemaManagerWrapper) ListAvailableComponents(version string) (map[schemagen.ComponentType][]string, error) {
 	return w.manager.ListAvailableComponents(version)
 }
 
-func (w *schemaManagerWrapper) ValidateComponentYAML(componentType collectorschema.ComponentType, componentName, version string, yamlData []byte) (*ValidationResult, error) {
+func (w *schemaManagerWrapper) ValidateComponentYAML(componentType schemagen.ComponentType, componentName, version string, yamlData []byte) (*ValidationResult, error) {
 	result, err := w.manager.ValidateComponentYAML(componentType, componentName, version, yamlData)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (w *schemaManagerWrapper) ValidateComponentYAML(componentType collectorsche
 	return validationResult, nil
 }
 
-func (w *schemaManagerWrapper) ValidateComponentJSON(componentType collectorschema.ComponentType, componentName, version string, jsonData []byte) (*ValidationResult, error) {
+func (w *schemaManagerWrapper) ValidateComponentJSON(componentType schemagen.ComponentType, componentName, version string, jsonData []byte) (*ValidationResult, error) {
 	result, err := w.manager.ValidateComponentJSON(componentType, componentName, version, jsonData)
 	if err != nil {
 		return nil, err
@@ -197,11 +197,11 @@ func ListComponentsHandler(ctx context.Context, loader SchemaLoader, input ListC
 
 	output := ListComponentsOutput{
 		Version:    version,
-		Receivers:  components[collectorschema.ComponentTypeReceiver],
-		Processors: components[collectorschema.ComponentTypeProcessor],
-		Exporters:  components[collectorschema.ComponentTypeExporter],
-		Extensions: components[collectorschema.ComponentTypeExtension],
-		Connectors: components[collectorschema.ComponentTypeConnector],
+		Receivers:  components[schemagen.ComponentTypeReceiver],
+		Processors: components[schemagen.ComponentTypeProcessor],
+		Exporters:  components[schemagen.ComponentTypeExporter],
+		Extensions: components[schemagen.ComponentTypeExtension],
+		Connectors: components[schemagen.ComponentTypeConnector],
 		Components: make(map[string][]string),
 	}
 
@@ -238,7 +238,7 @@ func GetComponentSchemaHandler(ctx context.Context, loader SchemaLoader, input G
 		}
 	}
 
-	componentType := collectorschema.ComponentType(input.ComponentType)
+	componentType := schemagen.ComponentType(input.ComponentType)
 	schema, err := loader.GetComponentSchema(componentType, input.ComponentName, version)
 	if err != nil {
 		return resultutil.NewErrorResult(fmt.Errorf("failed to get component schema: %w", err))
@@ -279,7 +279,7 @@ func ValidateConfigHandler(ctx context.Context, loader SchemaLoader, input Valid
 		}
 	}
 
-	componentType := collectorschema.ComponentType(input.ComponentType)
+	componentType := schemagen.ComponentType(input.ComponentType)
 	configData := []byte(input.Config)
 
 	var result *ValidationResult
