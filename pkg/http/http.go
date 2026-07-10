@@ -170,7 +170,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	signal.Notify(sigHupChan, syscall.SIGHUP)
 	defer signal.Stop(sigHupChan)
 
-	if staticConfig.BindAddress == "0.0.0.0" && staticConfig.TLSCert == "" && !staticConfig.RequireOAuth {
+	if (staticConfig.BindAddress == "0.0.0.0" || staticConfig.BindAddress == "::") && staticConfig.TLSCert == "" && !staticConfig.RequireOAuth {
 		klogutil.LogWarn(logger,
 			"HTTP server is listening on all interfaces without TLS or authentication, "+
 				"consider setting bind_address to 127.0.0.1, enabling TLS, or enabling OAuth",

@@ -290,6 +290,72 @@ func TestHealthCheck(t *testing.T) {
 	})
 }
 
+func TestBindAddress(t *testing.T) {
+	t.Run("binds to specified address", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "127.0.0.1"}}, func(ctx *httpContext) {
+			loopbackAddr := net.JoinHostPort("127.0.0.1", ctx.StaticConfig.Port)
+			resp, err := http.Get(fmt.Sprintf("http://%s/healthz", loopbackAddr))
+			if err != nil {
+				t.Fatalf("Failed to reach server on bound address: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("Expected HTTP 200 OK, got %d", resp.StatusCode)
+			}
+		})
+	})
+	t.Run("warns when on 0.0.0.0 without TLS or OAuth", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "0.0.0.0"}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if !strings.Contains(logStr, "HTTP server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected warning about listening on all interfaces, got: %s", logStr)
+			}
+		})
+	})
+	t.Run("warns when on :: without TLS or OAuth", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "::"}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if !strings.Contains(logStr, "HTTP server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected warning about listening on all interfaces, got: %s", logStr)
+			}
+		})
+	})
+	t.Run("no warning when on 127.0.0.1", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "127.0.0.1"}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if strings.Contains(logStr, "HTTP server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected no warning about listening on all interfaces for 127.0.0.1, got: %s", logStr)
+			}
+		})
+	})
+	t.Run("no warning when TLS is configured", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "0.0.0.0", TLSCert: "/dummy-cert.pem"}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if strings.Contains(logStr, "HTTP server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected no warning when TLS cert is configured, got: %s", logStr)
+			}
+		})
+	})
+	t.Run("no warning when OAuth is enabled", func(t *testing.T) {
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "0.0.0.0", RequireOAuth: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if strings.Contains(logStr, "HTTP server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected no warning when OAuth is enabled, got: %s", logStr)
+			}
+		})
+	})
+}
+
 func TestMiddlewareLogging(t *testing.T) {
 	testCase(t, func(ctx *httpContext) {
 		_, _ = http.Get(fmt.Sprintf("http://%s/.well-known/oauth-protected-resource", ctx.HttpAddress))
