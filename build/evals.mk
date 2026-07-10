@@ -7,6 +7,7 @@ MCP_CONFIG_DIR ?= dev/config/mcp-configs
 
 MCPCHECKER = $(shell pwd)/_output/tools/bin/mcpchecker
 MCPCHECKER_VERSION ?= latest
+CLAUDE_AGENT_ACP = $(shell pwd)/_output/tools/node_modules/.bin/claude-agent-acp
 CLAUDE_AGENT_ACP_VERSION ?= latest
 
 # High-level knobs for local single-suite runs, e.g.:
@@ -37,27 +38,21 @@ mcpchecker:
 
 ##@ Evals
 
-# Install the claude-agent-acp adapter, required by the claude-code eval agent
-# (evals/claude-code/agent.yaml runs `claude-agent-acp`). No-op if already present.
+# Install the claude-agent-acp adapter locally under _output/tools, required by
+# the claude-code eval agent (evals/claude-code/agent.yaml runs `claude-agent-acp`).
 .PHONY: claude-agent-acp
 claude-agent-acp: ## Install the claude-agent-acp adapter for the claude-code eval agent
-	@command -v claude-agent-acp >/dev/null 2>&1 || { \
+	@[ -f $(CLAUDE_AGENT_ACP) ] || { \
 		set -e ;\
-		echo "Installing claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) (npm install -g)..." ;\
-		npm install -g @agentclientprotocol/claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) ;\
-		if command -v claude-agent-acp >/dev/null 2>&1; then \
-			echo "✅ claude-agent-acp installed" ;\
-		else \
-			NPM_BIN=$$(npm prefix -g)/bin ;\
-			echo "⚠️  claude-agent-acp installed but not found on PATH." ;\
-			echo "   Add the npm global bin directory to your PATH:" ;\
-			echo "   export PATH=\"\$$PATH:$$NPM_BIN\"" ;\
-		fi ;\
+		echo "Installing claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) to $(CLAUDE_AGENT_ACP)..." ;\
+		mkdir -p $(shell dirname $(CLAUDE_AGENT_ACP))/.. ;\
+		npm install --prefix $(shell pwd)/_output/tools @agentclientprotocol/claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) ;\
+		echo "✅ claude-agent-acp installed" ;\
 	}
 
 .PHONY: run-evals
 run-evals: mcpchecker $(if $(filter claude-code,$(AGENT)),claude-agent-acp) ## Run mcpchecker evals (knobs: SUITE, AGENT, MODEL; see evals/README.md)
-	$(if $(MODEL),ANTHROPIC_MODEL=$(MODEL) )$(MCPCHECKER) check $(EVAL_CONFIG) \
+	$(if $(MODEL),ANTHROPIC_MODEL=$(MODEL) )PATH="$(shell pwd)/_output/tools/node_modules/.bin:$(PATH)" $(MCPCHECKER) check $(EVAL_CONFIG) \
 		$(if $(EVAL_LABEL_SELECTOR),--label-selector $(EVAL_LABEL_SELECTOR),) \
 		$(if $(EVAL_TASK_FILTER),--run "$(EVAL_TASK_FILTER)",) \
 		$(if $(filter true,$(EVAL_VERBOSE)),--verbose,) \
