@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -29,7 +30,8 @@ const (
 	OAuthAuthorizationHeader  = HeaderKey("Authorization")
 	UserAgentHeader           = HeaderKey("User-Agent")
 
-	CustomUserAgent = "kubernetes-mcp-server/bearer-token-auth"
+	CustomUserAgent         = "kubernetes-mcp-server/bearer-token-auth"
+	defaultDiscoveryTimeout = 10 * time.Second
 )
 
 type CloseWatchKubeConfig func() error
@@ -89,7 +91,13 @@ func NewKubernetes(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
-	discoveryClient, err := discovery.NewDiscoveryClientForConfigAndClient(k.restConfig, k.httpClient)
+	// Discovery runs synchronously while tools are registered. Use a client copy
+	// so an unreachable cluster cannot block startup without timing out watches or execs.
+	discoveryHTTPClient := *k.httpClient
+	if discoveryHTTPClient.Timeout <= 0 {
+		discoveryHTTPClient.Timeout = defaultDiscoveryTimeout
+	}
+	discoveryClient, err := discovery.NewDiscoveryClientForConfigAndClient(k.restConfig, &discoveryHTTPClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discovery client: %w", err)
 	}
