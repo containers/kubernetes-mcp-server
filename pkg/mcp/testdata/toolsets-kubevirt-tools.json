@@ -6,7 +6,7 @@
       "openWorldHint": false,
       "title": "Virtual Machine: Clone"
     },
-    "description": "Clone a KubeVirt VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API",
+    "description": "Clone a VirtualMachine on KubeVirt by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API",
     "inputSchema": {
       "properties": {
         "name": {
@@ -39,7 +39,7 @@
       "openWorldHint": false,
       "title": "Virtual Machine: Create"
     },
-    "description": "Create a KubeVirt VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
+    "description": "Create a VirtualMachine on KubeVirt with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
     "inputSchema": {
       "properties": {
         "autostart": {

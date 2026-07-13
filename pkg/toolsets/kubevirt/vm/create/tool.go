@@ -23,7 +23,7 @@ func Tools() []api.ServerTool {
 		{
 			Tool: api.Tool{
 				Name:        "vm_create",
-				Description: fmt.Sprintf("Create a %s VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.", defaults.ProductName()),
+				Description: fmt.Sprintf("Create a VirtualMachine on %s with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.", defaults.ProductName()),
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{

@@ -17,7 +17,7 @@ func Tools() []api.ServerTool {
 		{
 			Tool: api.Tool{
 				Name:        "vm_clone",
-				Description: fmt.Sprintf("Clone a %s VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the %s Clone API", defaults.ProductName(), defaults.ProductName()),
+				Description: fmt.Sprintf("Clone a VirtualMachine on %s by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the %s Clone API", defaults.ProductName(), defaults.ProductName()),
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
