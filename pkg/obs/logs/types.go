@@ -1,47 +1,27 @@
 package logs
 
-import "github.com/rhobs/obs-mcp/pkg/logs/loki"
-
-type LabelNamesInput struct {
-	LokiNamespace string `json:"lokiNamespace,omitempty"`
-	LokiName      string `json:"lokiName,omitempty"`
-	Tenant        string `json:"tenant,omitempty"`
-	Start         string `json:"start,omitempty"`
-	End           string `json:"end,omitempty"`
-}
+import (
+	"github.com/rhobs/obs-mcp/pkg/logs/loki"
+	"github.com/rhobs/obs-mcp/pkg/tools"
+)
 
 type LabelNamesOutput struct {
 	Labels []string `json:"labels"`
 }
 
-type LabelValuesInput struct {
-	LokiNamespace string `json:"lokiNamespace,omitempty"`
-	LokiName      string `json:"lokiName,omitempty"`
-	Tenant        string `json:"tenant,omitempty"`
-	Label         string `json:"label"`
-	Start         string `json:"start,omitempty"`
-	End           string `json:"end,omitempty"`
-}
+var labelNamesOutputSchema = tools.MustSchema[LabelNamesOutput]()
 
 type LabelValuesOutput struct {
 	Values []string `json:"values"`
 }
 
-type QueryRangeInput struct {
-	LokiNamespace string `json:"lokiNamespace,omitempty"`
-	LokiName      string `json:"lokiName,omitempty"`
-	Tenant        string `json:"tenant,omitempty"`
-	Query         string `json:"query"`
-	Start         string `json:"start,omitempty"`
-	End           string `json:"end,omitempty"`
-	Duration      string `json:"duration,omitempty"`
-	Limit         int    `json:"limit,omitempty"`
-	Direction     string `json:"direction,omitempty"`
-}
+var labelValuesOutputSchema = tools.MustSchema[LabelValuesOutput]()
 
 type ListInstancesOutput struct {
 	Instances []LokiInstance `json:"instances"`
 }
+
+var listInstancesOutputSchema = tools.MustSchema[ListInstancesOutput]()
 
 type LokiInstance struct {
 	LokiNamespace string `json:"lokiNamespace"`
@@ -54,3 +34,5 @@ type QueryRangeOutput struct {
 	ResultType string        `json:"resultType"`
 	Streams    []loki.Stream `json:"streams"`
 }
+
+var queryRangeOutputSchema = tools.MustSchema[QueryRangeOutput]()

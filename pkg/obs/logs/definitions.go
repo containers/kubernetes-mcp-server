@@ -1,158 +1,168 @@
 package logs
 
-import "github.com/rhobs/obs-mcp/pkg/tools"
+import (
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/google/jsonschema-go/jsonschema"
+)
 
 var (
-	lokiNamespaceParameter = tools.ParamDef{
-		Name:        "lokiNamespace",
-		Type:        tools.ParamTypeString,
+	lokiNamespaceSchema = &jsonschema.Schema{
+		Type:        "string",
 		Description: "Kubernetes namespace of the LokiStack. Use loki_list_instances to discover valid values.",
-		Required:    false,
 	}
-	lokiNameParameter = tools.ParamDef{
-		Name:        "lokiName",
-		Type:        tools.ParamTypeString,
+	lokiNameSchema = &jsonschema.Schema{
+		Type:        "string",
 		Description: "Name of the LokiStack. Use loki_list_instances to discover valid values.",
-		Required:    false,
 	}
-	tenantParameter = tools.ParamDef{
-		Name:        "tenant",
-		Type:        tools.ParamTypeString,
+	tenantSchema = &jsonschema.Schema{
+		Type:        "string",
 		Description: "Loki tenant ID (X-Scope-OrgID). For LokiStack gateway modes (e.g. openshift-network) this selects the `/api/logs/v1/<tenant>` path; use `network` for openshift-network.",
-		Required:    false,
 	}
 )
 
-var (
-	ListInstancesTool = tools.ToolDef[ListInstancesOutput]{
-		Name: "loki_list_instances",
-		Description: `List LokiStack instances available in the Kubernetes cluster.
+func initListInstances() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name: "loki_list_instances",
+			Description: `List LokiStack instances available in the Kubernetes cluster.
 Call this first when using Loki Operator managed stacks so you can pass lokiNamespace and lokiName to other Loki tools.`,
-		Title:       "List LokiStack Instances",
-		ReadOnly:    true,
-		Destructive: false,
-		Idempotent:  true,
-		OpenWorld:   true,
-	}
-
-	LabelNamesTool = tools.ToolDef[LabelNamesOutput]{
-		Name:        "loki_label_names",
-		Description: lokiLabelNamesPrompt,
-		Title:       "List Loki Label Names",
-		ReadOnly:    true,
-		Destructive: false,
-		Idempotent:  true,
-		OpenWorld:   true,
-		Params: []tools.ParamDef{
-			lokiNamespaceParameter,
-			lokiNameParameter,
-			tenantParameter,
-			{
-				Name:        "start",
-				Type:        tools.ParamTypeString,
-				Description: "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
-				Required:    false,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
 			},
-			{
-				Name:        "end",
-				Type:        tools.ParamTypeString,
-				Description: "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
-				Required:    false,
+			OutputSchema: listInstancesOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "List LokiStack Instances",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
 			},
 		},
+		Handler: listInstancesHandler,
 	}
+}
 
-	LabelValuesTool = tools.ToolDef[LabelValuesOutput]{
-		Name:        "loki_label_values",
-		Description: lokiLabelValuesPrompt,
-		Title:       "List Loki Label Values",
-		ReadOnly:    true,
-		Destructive: false,
-		Idempotent:  true,
-		OpenWorld:   true,
-		Params: []tools.ParamDef{
-			lokiNamespaceParameter,
-			lokiNameParameter,
-			tenantParameter,
-			{
-				Name:        "label",
-				Type:        tools.ParamTypeString,
-				Description: "Label key to inspect (for example namespace, pod, container).",
-				Required:    true,
+func initLabelNames() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name:        "loki_label_names",
+			Description: lokiLabelNamesPrompt,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"lokiNamespace": lokiNamespaceSchema,
+					"lokiName":      lokiNameSchema,
+					"tenant":        tenantSchema,
+					"start": {
+						Type:        "string",
+						Description: "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+					},
+					"end": {
+						Type:        "string",
+						Description: "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+					},
+				},
 			},
-			{
-				Name:        "start",
-				Type:        tools.ParamTypeString,
-				Description: "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
-				Required:    false,
-			},
-			{
-				Name:        "end",
-				Type:        tools.ParamTypeString,
-				Description: "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
-				Required:    false,
+			OutputSchema: labelNamesOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "List Loki Label Names",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
 			},
 		},
+		Handler: labelNamesHandler,
 	}
+}
 
-	QueryRangeTool = tools.ToolDef[QueryRangeOutput]{
-		Name:        "loki_query_range",
-		Description: lokiQueryRangePrompt,
-		Title:       "Execute Loki Range Query",
-		ReadOnly:    true,
-		Destructive: false,
-		Idempotent:  true,
-		OpenWorld:   true,
-		Params: []tools.ParamDef{
-			lokiNamespaceParameter,
-			lokiNameParameter,
-			tenantParameter,
-			{
-				Name:        "query",
-				Type:        tools.ParamTypeString,
-				Description: "LogQL query string.",
-				Required:    true,
+func initLabelValues() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name:        "loki_label_values",
+			Description: lokiLabelValuesPrompt,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"lokiNamespace": lokiNamespaceSchema,
+					"lokiName":      lokiNameSchema,
+					"tenant":        tenantSchema,
+					"label": {
+						Type:        "string",
+						Description: "Label key to inspect (for example namespace, pod, container).",
+					},
+					"start": {
+						Type:        "string",
+						Description: "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+					},
+					"end": {
+						Type:        "string",
+						Description: "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+					},
+				},
+				Required: []string{"label"},
 			},
-			{
-				Name:        "start",
-				Type:        tools.ParamTypeString,
-				Description: "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
-				Required:    false,
-			},
-			{
-				Name:        "end",
-				Type:        tools.ParamTypeString,
-				Description: "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
-				Required:    false,
-			},
-			{
-				Name:        "duration",
-				Type:        tools.ParamTypeString,
-				Description: "Lookback duration from now when start/end are omitted (for example 5m, 1h). Defaults to 15m.",
-				Required:    false,
-				Pattern:     `^\d+[smhdwy]$`,
-			},
-			{
-				Name:        "limit",
-				Type:        tools.ParamTypeNumber,
-				Description: "Maximum number of log lines to return. Defaults to 100, max 1000.",
-				Required:    false,
-			},
-			{
-				Name:        "direction",
-				Type:        tools.ParamTypeString,
-				Description: "Search direction: backward (default) or forward.",
-				Required:    false,
+			OutputSchema: labelValuesOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "List Loki Label Values",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
 			},
 		},
+		Handler: labelValuesHandler,
 	}
-)
+}
 
-func AllTools() []tools.ToolDefInterface {
-	return []tools.ToolDefInterface{
-		ListInstancesTool,
-		LabelNamesTool,
-		LabelValuesTool,
-		QueryRangeTool,
+func initQueryRange() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name:        "loki_query_range",
+			Description: lokiQueryRangePrompt,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"lokiNamespace": lokiNamespaceSchema,
+					"lokiName":      lokiNameSchema,
+					"tenant":        tenantSchema,
+					"query": {
+						Type:        "string",
+						Description: "LogQL query string.",
+					},
+					"start": {
+						Type:        "string",
+						Description: "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+					},
+					"end": {
+						Type:        "string",
+						Description: "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+					},
+					"duration": {
+						Type:        "string",
+						Description: "Lookback duration from now when start/end are omitted (for example 5m, 1h). Defaults to 15m.",
+						Pattern:     `^\d+[smhdwy]$`,
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "Maximum number of log lines to return. Defaults to 100, max 1000.",
+					},
+					"direction": {
+						Type:        "string",
+						Description: "Search direction: backward (default) or forward.",
+					},
+				},
+				Required: []string{"query"},
+			},
+			OutputSchema: queryRangeOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "Execute Loki Range Query",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
+			},
+		},
+		Handler: queryRangeHandler,
 	}
 }

@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	promapi "github.com/prometheus/client_golang/api"
 )
 
 const (
@@ -20,8 +18,7 @@ const (
 	labelValuesEndpoint = "/loki/api/v1/label/%s/values"
 	queryRangeEndpoint  = "/loki/api/v1/query_range"
 
-	requestTimeout  = 60 * time.Second
-	defaultLimit    = 100
+	RequestTimeout  = 60 * time.Second
 	maxErrBodyBytes = 64 * 1024
 )
 
@@ -68,24 +65,12 @@ type RealLoader struct {
 
 var _ Loader = (*RealLoader)(nil)
 
-func NewLoader(apiConfig promapi.Config, tenant string) (*RealLoader, error) {
-	if strings.TrimSpace(apiConfig.Address) == "" {
-		return nil, fmt.Errorf("loki URL is required")
-	}
-
-	baseURL := strings.TrimSuffix(apiConfig.Address, "/")
-	httpClient := &http.Client{
-		Timeout: requestTimeout,
-	}
-	if apiConfig.RoundTripper != nil {
-		httpClient.Transport = apiConfig.RoundTripper
-	}
-
+func NewHTTPLoader(httpClient *http.Client, baseURL, tenant string) *RealLoader {
 	return &RealLoader{
-		baseURL: baseURL,
+		baseURL: strings.TrimSuffix(baseURL, "/"),
 		tenant:  strings.TrimSpace(tenant),
 		client:  httpClient,
-	}, nil
+	}
 }
 
 func (l *RealLoader) LabelNames(ctx context.Context, start, end time.Time) ([]string, error) {

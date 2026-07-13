@@ -6,8 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	promapi "github.com/prometheus/client_golang/api"
 )
 
 func TestLabelNames(t *testing.T) {
@@ -19,10 +17,7 @@ func TestLabelNames(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader, err := NewLoader(promapi.Config{Address: server.URL}, "")
-	if err != nil {
-		t.Fatalf("failed to create loader: %v", err)
-	}
+	loader := NewHTTPLoader(server.Client(), server.URL, "")
 
 	labels, err := loader.LabelNames(context.Background(), time.Now().Add(-time.Hour), time.Now())
 	if err != nil {
@@ -42,10 +37,7 @@ func TestLabelValues(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader, err := NewLoader(promapi.Config{Address: server.URL}, "")
-	if err != nil {
-		t.Fatalf("failed to create loader: %v", err)
-	}
+	loader := NewHTTPLoader(server.Client(), server.URL, "")
 
 	values, err := loader.LabelValues(context.Background(), "namespace", time.Now().Add(-time.Hour), time.Now())
 	if err != nil {
@@ -76,10 +68,7 @@ func TestQueryRange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader, err := NewLoader(promapi.Config{Address: server.URL}, "")
-	if err != nil {
-		t.Fatalf("failed to create loader: %v", err)
-	}
+	loader := NewHTTPLoader(server.Client(), server.URL, "")
 
 	result, err := loader.QueryRange(context.Background(), QueryRangeInput{
 		Query:     `{namespace="default"}`,
@@ -115,12 +104,9 @@ func TestQueryRangeSetsTenantHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader, err := NewLoader(promapi.Config{Address: server.URL}, "network")
-	if err != nil {
-		t.Fatalf("failed to create loader: %v", err)
-	}
+	loader := NewHTTPLoader(server.Client(), server.URL, "network")
 
-	_, err = loader.QueryRange(context.Background(), QueryRangeInput{
+	_, err := loader.QueryRange(context.Background(), QueryRangeInput{
 		Query:     `{job="test"}`,
 		Start:     time.Now().Add(-time.Minute),
 		End:       time.Now(),
