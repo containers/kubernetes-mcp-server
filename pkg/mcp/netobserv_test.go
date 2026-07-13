@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -64,7 +65,12 @@ func (s *NetObservSuite) TestListFlows() {
 		s.Falsef(toolResult.IsError, "call tool failed")
 		s.Equal("/api/loki/flow/records", capturedURL.Path)
 		s.Equal("default", capturedURL.Query().Get("namespace"))
-		s.Equal("300", capturedURL.Query().Get("timeRange"))
+		s.Empty(capturedURL.Query().Get("timeRange"))
+		startTime, err := strconv.ParseInt(capturedURL.Query().Get("startTime"), 10, 64)
+		s.NoError(err)
+		endTime, err := strconv.ParseInt(capturedURL.Query().Get("endTime"), 10, 64)
+		s.NoError(err)
+		s.Equal(int64(300), endTime-startTime)
 		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "result")
 		s.NotNil(toolResult.StructuredContent)
 	})
@@ -106,7 +112,12 @@ func (s *NetObservSuite) TestGetFlowMetrics() {
 		s.Falsef(toolResult.IsError, "call tool failed")
 		s.Equal("/api/flow/metrics", capturedURL.Path)
 		s.Equal("default", capturedURL.Query().Get("namespace"))
-		s.Equal("300", capturedURL.Query().Get("timeRange"))
+		s.Empty(capturedURL.Query().Get("timeRange"))
+		startTime, err := strconv.ParseInt(capturedURL.Query().Get("startTime"), 10, 64)
+		s.NoError(err)
+		endTime, err := strconv.ParseInt(capturedURL.Query().Get("endTime"), 10, 64)
+		s.NoError(err)
+		s.Equal(int64(300), endTime-startTime)
 		s.Equal("namespace", capturedURL.Query().Get("aggregateBy"))
 		s.Equal("Bytes", capturedURL.Query().Get("type"))
 		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "data")
