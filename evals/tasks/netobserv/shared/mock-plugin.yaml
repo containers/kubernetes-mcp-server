@@ -41,7 +41,16 @@ data:
         "status": "success",
     }
     LAST_REQUESTS = {}
+    REQUEST_HISTORY = {}
 
+
+    def record_request(path, query):
+        entry = {
+            "path": path,
+            "query": {key: values[0] if len(values) == 1 else values for key, values in query.items()},
+        }
+        LAST_REQUESTS[path] = entry
+        REQUEST_HISTORY.setdefault(path, []).append(entry)
 
     def first(query, key, default=""):
         values = query.get(key, [])
@@ -69,19 +78,33 @@ data:
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
             query = urllib.parse.parse_qs(parsed.query)
-            LAST_REQUESTS[path] = {
-                "path": path,
-                "query": {key: values[0] if len(values) == 1 else values for key, values in query.items()},
-            }
 
             if path == "/api/debug/last-request":
                 endpoint = first(query, "endpoint", "/api/loki/flow/records")
-                body = json.dumps(LAST_REQUESTS.get(endpoint, {})).encode()
+                filters = {
+                    key: values[0]
+                    for key, values in query.items()
+                    if key != "endpoint" and values
+                }
+                if filters:
+                    for entry in reversed(REQUEST_HISTORY.get(endpoint, [])):
+                        if all(entry["query"].get(key) == value for key, value in filters.items()):
+                            body = json.dumps(entry).encode()
+                            self.send_response(200)
+                            self.send_header("Content-Type", "application/json")
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                    body = json.dumps({}).encode()
+                else:
+                    body = json.dumps(LAST_REQUESTS.get(endpoint, {})).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(body)
                 return
+
+            record_request(path, query)
 
             if path == "/api/resources/namespaces":
                 body = json.dumps(NAMESPACES).encode()

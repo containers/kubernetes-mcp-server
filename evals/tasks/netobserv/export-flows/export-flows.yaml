@@ -21,7 +21,13 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           set -euo pipefail
-          REQUEST=$(curl -sf "http://127.0.0.1:9001/api/debug/last-request?endpoint=/api/loki/export")
+          for _ in 1 2 3 4 5; do
+            if REQUEST=$(curl -sf "http://127.0.0.1:9001/api/debug/last-request?endpoint=/api/loki/export"); then
+              break
+            fi
+            sleep 1
+          done
+          : "${REQUEST:?mock unreachable}"
           echo "${REQUEST}" | grep -q '"namespace": "default"'
           echo "${REQUEST}" | grep -q '"format": "csv"'
           echo "${REQUEST}" | grep -q '"startTime"'
