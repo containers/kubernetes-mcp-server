@@ -1,33 +1,51 @@
 package traces
 
 import (
-	"github.com/rhobs/obs-mcp/pkg/tools"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/google/jsonschema-go/jsonschema"
+
 	"github.com/rhobs/obs-mcp/pkg/traces/discovery"
 )
 
-// ListInstancesOutput defines the output schema for the tempo_list_instances tool.
-type ListInstancesOutput struct {
+// listInstancesOutput defines the output schema for the tempo_list_instances tool.
+type listInstancesOutput struct {
 	Instances []discovery.TempoInstance `json:"instances" jsonschema:"List of available Tempo instances"`
 }
 
-var ListInstancesTool = tools.ToolDef[ListInstancesOutput]{
-	Name: "tempo_list_instances",
-	Description: `List all Tempo instances available in the Kubernetes cluster.
+var listInstancesOutputSchema = mustSchema[listInstancesOutput]()
+
+func initListInstances() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name: "tempo_list_instances",
+			Description: `List all Tempo instances available in the Kubernetes cluster.
 Call this tool first to discover available Tempo instances before using other Tempo tools,
 as the returned namespace, name, and tenant values are required parameters for all other Tempo tools.
 Always print the output of this tool in a table.`,
-	Title:       "List Tempo instances",
-	ReadOnly:    true,
-	Destructive: false,
-	Idempotent:  true,
-	OpenWorld:   true,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+			},
+			OutputSchema: listInstancesOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "List Tempo instances",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
+			},
+		},
+		Handler: listInstancesHandler,
+	}
 }
 
-func (t *Toolset) ListInstancesHandler(params ToolParams) (ListInstancesOutput, error) {
-	instances, err := discovery.ListInstances(params.context, params.dynamicClient, params.config.UseRoute)
+func listInstancesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	cfg := getToolsetConfig(params)
+	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
 	if err != nil {
-		return ListInstancesOutput{}, err
+		return api.NewToolCallResult("", err), nil
 	}
 
-	return ListInstancesOutput{Instances: instances}, nil
+	return api.NewToolCallResultStructured(listInstancesOutput{
+		Instances: instances,
+	}, nil), nil
 }

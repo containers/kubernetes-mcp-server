@@ -1,12 +1,61 @@
 package traces
 
 import (
+	"testing"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/rest"
 )
+
+type mockKubernetesClient struct {
+	api.KubernetesClient
+	restConfig    *rest.Config
+	dynamicClient *dynamicfake.FakeDynamicClient
+}
+
+func (m *mockKubernetesClient) RESTConfig() *rest.Config {
+	return m.restConfig
+}
+
+func (m *mockKubernetesClient) DynamicClient() dynamic.Interface {
+	return m.dynamicClient
+}
+
+type mockBaseConfig struct {
+	api.BaseConfig
+	config *Config
+}
+
+func (m *mockBaseConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
+	if name == ToolsetName && m.config != nil {
+		return m.config, true
+	}
+	return nil, false
+}
+
+type mockToolCallRequest struct {
+	arguments map[string]any
+}
+
+func (m *mockToolCallRequest) GetArguments() map[string]any {
+	return m.arguments
+}
+
+func newTestParams(t *testing.T, cfg *Config, dynamicClient *dynamicfake.FakeDynamicClient, args map[string]any) api.ToolHandlerParams {
+	t.Helper()
+	return api.ToolHandlerParams{
+		Context:          t.Context(),
+		KubernetesClient: &mockKubernetesClient{restConfig: &rest.Config{}, dynamicClient: dynamicClient},
+		BaseConfig:       &mockBaseConfig{config: cfg},
+		ToolCallRequest:  &mockToolCallRequest{arguments: args},
+	}
+}
 
 var (
 	tempoStackGVR = schema.GroupVersionResource{

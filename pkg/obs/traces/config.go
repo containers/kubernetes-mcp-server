@@ -33,7 +33,7 @@ type Config struct {
 
 var _ api.ExtendedConfig = (*Config)(nil)
 
-var DefaultConfig = &Config{
+var defaultConfig = &Config{
 	UseRoute: false,
 }
 
@@ -59,7 +59,7 @@ func tempoToolsetParser(_ context.Context, primitive toml.Primitive, md toml.Met
 	return &cfg, nil
 }
 
-func GetConfig(params api.ToolHandlerParams) *Config {
+func getToolsetConfig(params api.ToolHandlerParams) *Config {
 	if cfg, ok := params.GetToolsetConfig(ToolsetName); ok {
 		if tempoCfg, ok := cfg.(*Config); ok {
 			return tempoCfg
@@ -67,5 +67,5 @@ func GetConfig(params api.ToolHandlerParams) *Config {
 	}
 
 	// Return default config if not found
-	return DefaultConfig
+	return defaultConfig
 }

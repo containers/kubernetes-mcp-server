@@ -4,108 +4,120 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rhobs/obs-mcp/pkg/tools"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/google/jsonschema-go/jsonschema"
+
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
-// SearchTagsOutput defines the output schema for the tempo_search_tags tool.
-type SearchTagsOutput struct {
+// searchTagsOutput defines the output schema for the tempo_search_tags tool.
+type searchTagsOutput struct {
 	Scopes []any `json:"scopes" jsonschema:"List of tag scopes with their tag names"`
 }
 
-var SearchTagsTool = tools.ToolDef[SearchTagsOutput]{
-	Name: "tempo_search_tags",
-	Description: `List available tag names (attribute keys) in Tempo, grouped by scope.
+var searchTagsOutputSchema = mustSchema[searchTagsOutput]()
+
+func initSearchTags() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name: "tempo_search_tags",
+			Description: `List available tag names (attribute keys) in Tempo, grouped by scope.
 Use this tool to discover which attributes are available for building TraceQL queries with tempo_search_traces.
 For example, this tool may reveal tag names like "service.name" (in the "resource" scope) or "http.response.status_code" (in the "span" scope).
 To use these in TraceQL queries, prefix them with their scope, e.g. "resource.service.name" or "span.http.response.status_code".`,
-	Title: "Search tags",
-	Params: []tools.ParamDef{
-		tempoNamespaceParameter,
-		tempoNameParameter,
-		tempoTenantParameter,
-		{
-			Name: "scope",
-			Type: tools.ParamTypeString,
-			Description: `Filter tags to a specific scope. One of:
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"tempoNamespace": tempoNamespaceSchema,
+					"tempoName":      tempoNameSchema,
+					"tenant":         tempoTenantSchema,
+					"scope": {
+						Type: "string",
+						Description: `Filter tags to a specific scope. One of:
 "resource" (service-level attributes like service.name),
 "span" (individual span attributes like http.response.status_code),
 "intrinsic" (built-in fields like duration, status, name).
 If omitted, tags from all scopes are returned.`,
-		},
-		{
-			Name: "query",
-			Type: tools.ParamTypeString,
-			Description: `Optional TraceQL query to filter which traces are considered when listing tags,
+					},
+					"query": {
+						Type: "string",
+						Description: `Optional TraceQL query to filter which traces are considered when listing tags,
 e.g. '{ resource.service.name="payment-service" }' to only show tags present in traces from the 'payment-service' service.`,
+					},
+					"start": {
+						Type:        "string",
+						Description: `Optional start of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing tags.`,
+					},
+					"end": {
+						Type:        "string",
+						Description: `Optional end of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing tags.`,
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "Maximum number of tag names to return per scope.",
+					},
+					"maxStaleValues": {
+						Type:        "integer",
+						Description: "Maximum number of consecutive blocks without new tag names before the search stops early. Higher values are more thorough but slower.",
+					},
+				},
+				Required: []string{"tempoNamespace", "tempoName"},
+			},
+			OutputSchema: searchTagsOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "Search tags",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
+			},
 		},
-		{
-			Name:        "start",
-			Type:        tools.ParamTypeString,
-			Description: `Optional start of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing tags.`,
-		},
-		{
-			Name:        "end",
-			Type:        tools.ParamTypeString,
-			Description: `Optional end of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing tags.`,
-		},
-		{
-			Name:        "limit",
-			Type:        tools.ParamTypeNumber,
-			Description: "Maximum number of tag names to return per scope.",
-		},
-		{
-			Name:        "maxStaleValues",
-			Type:        tools.ParamTypeNumber,
-			Description: "Maximum number of consecutive blocks without new tag names before the search stops early. Higher values are more thorough but slower.",
-		},
-	},
-	ReadOnly:    true,
-	Destructive: false,
-	Idempotent:  true,
-	OpenWorld:   true,
+		Handler: searchTagsHandler,
+	}
 }
 
-func (t *Toolset) SearchTagsHandler(params ToolParams) (SearchTagsOutput, error) {
-	client, err := t.getTempoClient(params)
-	if err != nil {
-		return SearchTagsOutput{}, err
+func searchTagsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
+	scope := p.OptionalString("scope", "")
+	query := p.OptionalString("query", "")
+	startStr := p.OptionalString("start", "")
+	endStr := p.OptionalString("end", "")
+	limit := int(p.OptionalInt64("limit", 0))
+	maxStaleValues := int(p.OptionalInt64("maxStaleValues", 0))
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to search tags: %w", err)), nil
 	}
 
-	args := params.arguments
-
-	start, err := parseTime(tools.GetString(args, "start", ""))
+	start, err := parseTime(startStr)
 	if err != nil {
-		return SearchTagsOutput{}, fmt.Errorf("invalid start time: %v", err)
+		return api.NewToolCallResult("", fmt.Errorf("invalid start time: %v", err)), nil
 	}
 
-	end, err := parseTime(tools.GetString(args, "end", ""))
+	end, err := parseTime(endStr)
 	if err != nil {
-		return SearchTagsOutput{}, fmt.Errorf("invalid end time: %v", err)
+		return api.NewToolCallResult("", fmt.Errorf("invalid end time: %v", err)), nil
 	}
 
-	scope := tools.GetString(args, "scope", "")
-	query := tools.GetString(args, "query", "")
-	limit := tools.GetInt(args, "limit", 0)
-	maxStaleValues := tools.GetInt(args, "maxStaleValues", 0)
+	client, err := getTempoClient(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 
-	opts := tempoclient.SearchTagsV2Options{
+	result, err := client.SearchTagsV2(params.Context, tempoclient.SearchTagsV2Options{
 		Scope:          scope,
 		Query:          query,
 		Start:          start,
 		End:            end,
 		Limit:          limit,
 		MaxStaleValues: maxStaleValues,
-	}
-
-	result, err := client.SearchTagsV2(params.context, opts)
+	})
 	if err != nil {
-		return SearchTagsOutput{}, err
+		return api.NewToolCallResult("", err), nil
 	}
 
-	var output SearchTagsOutput
+	var output searchTagsOutput
 	if err := json.Unmarshal([]byte(result), &output); err != nil {
-		return SearchTagsOutput{}, fmt.Errorf("failed to unmarshal search tags: %w", err)
+		return api.NewToolCallResult("", fmt.Errorf("failed to unmarshal search tags: %w", err)), nil
 	}
-	return output, nil
+	return api.NewToolCallResultFull(result, output, nil), nil
 }
