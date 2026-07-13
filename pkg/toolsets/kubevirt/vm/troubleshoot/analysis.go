@@ -354,7 +354,7 @@ func isConfigKeyLine(line string) bool {
 	if strings.Contains(lower, ":") && !strings.HasPrefix(lower, "-") && !strings.HasPrefix(lower, "[") {
 		parts := strings.SplitN(lower, ":", 2)
 		key := strings.TrimSpace(parts[0])
-		if strings.Contains(key, "_") || strings.Contains(key, "-") {
+		if len(key) > 0 && !strings.Contains(key, " ") {
 			return true
 		}
 	}
@@ -546,7 +546,7 @@ func checkMigrationStatus(ctx context.Context, dynamicClient dynamic.Interface, 
 	}
 
 	vmimList, err := dynamicClient.Resource(kubevirt.VirtualMachineInstanceMigrationGVR).Namespace(namespace).List(ctx, metav1.ListOptions{
-		Limit: 50,
+		LabelSelector: fmt.Sprintf("kubevirt.io/vmi-name=%s", name),
 	})
 	if err != nil || len(vmimList.Items) == 0 {
 		return nil

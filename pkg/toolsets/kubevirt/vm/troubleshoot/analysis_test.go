@@ -872,7 +872,11 @@ func (s *AnalysisSuite) TestCheckMigrationStatus() {
 		vmim.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
 			"kind":       "VirtualMachineInstanceMigration",
-			"metadata":   map[string]interface{}{"name": "test-vm-migration", "namespace": "test-ns"},
+			"metadata": map[string]interface{}{
+				"name":      "test-vm-migration",
+				"namespace": "test-ns",
+				"labels":    map[string]interface{}{"kubevirt.io/vmi-name": "test-vm"},
+			},
 			"spec": map[string]interface{}{
 				"vmiName": "test-vm",
 			},
@@ -907,7 +911,11 @@ func (s *AnalysisSuite) TestCheckMigrationStatus() {
 		vmim.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
 			"kind":       "VirtualMachineInstanceMigration",
-			"metadata":   map[string]interface{}{"name": "test-vm-migration", "namespace": "test-ns"},
+			"metadata": map[string]interface{}{
+				"name":      "test-vm-migration",
+				"namespace": "test-ns",
+				"labels":    map[string]interface{}{"kubevirt.io/vmi-name": "test-vm"},
+			},
 			"spec": map[string]interface{}{
 				"vmiName": "test-vm",
 			},
@@ -930,7 +938,11 @@ func (s *AnalysisSuite) TestCheckMigrationStatus() {
 		vmim.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
 			"kind":       "VirtualMachineInstanceMigration",
-			"metadata":   map[string]interface{}{"name": "other-vm-migration", "namespace": "test-ns"},
+			"metadata": map[string]interface{}{
+				"name":      "other-vm-migration",
+				"namespace": "test-ns",
+				"labels":    map[string]interface{}{"kubevirt.io/vmi-name": "other-vm"},
+			},
 			"spec": map[string]interface{}{
 				"vmiName": "other-vm",
 			},
@@ -963,7 +975,11 @@ func (s *AnalysisSuite) TestCheckMigrationStatus() {
 		vmim.SetUnstructuredContent(map[string]interface{}{
 			"apiVersion": "kubevirt.io/v1",
 			"kind":       "VirtualMachineInstanceMigration",
-			"metadata":   map[string]interface{}{"name": "aged-migration", "namespace": "test-ns"},
+			"metadata": map[string]interface{}{
+				"name":      "aged-migration",
+				"namespace": "test-ns",
+				"labels":    map[string]interface{}{"kubevirt.io/vmi-name": "test-vm"},
+			},
 			"spec": map[string]interface{}{
 				"vmiName": "test-vm",
 			},
@@ -999,7 +1015,11 @@ func (s *AnalysisSuite) TestCheckMigrationStatus() {
 			vmim.SetUnstructuredContent(map[string]interface{}{
 				"apiVersion": "kubevirt.io/v1",
 				"kind":       "VirtualMachineInstanceMigration",
-				"metadata":   map[string]interface{}{"name": fmt.Sprintf("mig-%d", i), "namespace": "test-ns"},
+				"metadata": map[string]interface{}{
+					"name":      fmt.Sprintf("mig-%d", i),
+					"namespace": "test-ns",
+					"labels":    map[string]interface{}{"kubevirt.io/vmi-name": "test-vm"},
+				},
 				"spec": map[string]interface{}{
 					"vmiName": "test-vm",
 				},

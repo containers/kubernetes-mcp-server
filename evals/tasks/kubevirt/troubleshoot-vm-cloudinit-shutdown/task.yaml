@@ -1,0 +1,100 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "troubleshoot-vm-cloudinit-shutdown"
+  difficulty: medium
+  description: "Diagnose a VM crashlooping due to a shutdown command in cloud-init"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-troubleshoot-ci
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-troubleshoot-ci
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: crashloop-vm
+          namespace: vm-test-troubleshoot-ci
+        spec:
+          runStrategy: Always
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
+                    - name: cloudinit
+                      disk:
+                        bus: virtio
+                resources:
+                  requests:
+                    memory: 2Gi
+              terminationGracePeriodSeconds: 0
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
+                - name: cloudinit
+                  cloudInitNoCloud:
+                    userData: |
+                      #cloud-config
+                      runcmd:
+                        - shutdown -h now
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          echo "Waiting for VM to attempt boot and crash..."
+          sleep 60
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="vm-test-troubleshoot-ci"
+
+          echo "=== Verification: Agent identified cloud-init issue ==="
+
+          if ! kubectl get virtualmachine crashloop-vm -n "$NS" > /dev/null 2>&1; then
+              echo "✗ VirtualMachine crashloop-vm no longer exists"
+              exit 1
+          fi
+          echo "✓ VirtualMachine crashloop-vm still exists"
+          exit 0
+    - llmJudge:
+        contains: "shutdown -h now"
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: crashloop-vm
+          namespace: vm-test-troubleshoot-ci
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-troubleshoot-ci
+        ignoreNotFound: true
+  prompt:
+    inline: |-
+      A VirtualMachine named "crashloop-vm" in the vm-test-troubleshoot-ci namespace keeps restarting.
+      Diagnose why this VM is crashlooping. Report:
+      - The root cause of the crashloop
+      - Which cloud-init command is causing the problem
+      - How to fix it
