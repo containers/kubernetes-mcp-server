@@ -14,8 +14,8 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"k8s.io/client-go/rest"
-	"k8s.io/klog/v2"
 )
 
 // NetObserv is an HTTP client for the NetObserv console plugin backend API.
@@ -42,20 +42,21 @@ func NewNetObserv(configProvider api.BaseConfig, k8s api.KubernetesClient) *NetO
 		client.bearerToken = strings.TrimSpace(restConfig.BearerToken)
 		client.bearerTokenFile = strings.TrimSpace(restConfig.BearerTokenFile)
 	}
-	var nc *Config
+	var shared *Config
 	if cfg, ok := configProvider.GetToolsetConfig("netobserv"); ok {
 		if parsed, ok := cfg.(*Config); ok && parsed != nil {
-			nc = parsed
+			shared = parsed
 		}
 	}
-	if nc == nil {
-		nc = &Config{}
+	resolved := Config{}
+	if shared != nil {
+		resolved = *shared
 	}
 	isOpenShift := clusterIsOpenShift(k8s)
-	nc.applyDefaults(isOpenShift)
-	client.pluginURL = nc.ResolvedURL(isOpenShift)
-	client.insecure = nc.Insecure
-	client.certificateAuthority = nc.CertificateAuthority
+	resolved.applyDefaults(isOpenShift)
+	client.pluginURL = resolved.ResolvedURL(isOpenShift)
+	client.insecure = resolved.Insecure
+	client.certificateAuthority = resolved.CertificateAuthority
 	return client
 }
 
@@ -96,7 +97,7 @@ func (n *NetObserv) validateAndGetURL(endpoint string) (string, error) {
 }
 
 func (n *NetObserv) createHTTPClient(ctx context.Context) *http.Client {
-	logger := klog.FromContext(ctx)
+	logger := klogutil.FromContext(ctx)
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: n.insecure,
@@ -147,7 +148,7 @@ func (n *NetObserv) authorizationHeader(ctx context.Context) string {
 	if token == "" && n.bearerTokenFile != "" {
 		data, err := os.ReadFile(n.bearerTokenFile)
 		if err != nil {
-			klog.FromContext(ctx).Error(err, "failed to read bearer token file", "path", n.bearerTokenFile)
+			klogutil.FromContext(ctx).Error(err, "failed to read bearer token file", "path", n.bearerTokenFile)
 			return ""
 		}
 		token = strings.TrimSpace(string(data))
@@ -161,32 +162,36 @@ func (n *NetObserv) authorizationHeader(ctx context.Context) string {
 	return "Bearer " + token
 }
 
-const maxResponseBodySize = 512 << 10 // 512 KiB
+const maxJSONResponseBodySize = 4 << 20 // 4 MiB
 
 // ExecuteGet performs a GET request against the plugin API with query parameters derived from arguments.
 func (n *NetObserv) ExecuteGet(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
-	return n.executeGet(ctx, endpoint, arguments, "application/json")
+	response, err := n.executeGet(ctx, endpoint, arguments, "application/json", maxJSONResponseBodySize, false)
+	if err != nil {
+		return "", err
+	}
+	return response.Body, nil
 }
 
-func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string) (string, error) {
+func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string, maxBodySize int64, truncate bool) (GetResponse, error) {
 	requestURL, err := n.validateAndGetURL(endpoint)
 	if err != nil {
-		return "", err
+		return GetResponse{}, err
 	}
-	return n.executeGetAbsolute(ctx, requestURL, arguments, accept)
+	return n.executeGetAbsolute(ctx, requestURL, arguments, accept, maxBodySize, truncate)
 }
 
-func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string) (string, error) {
+func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string, maxBodySize int64, truncate bool) (GetResponse, error) {
 	u, err := url.Parse(requestURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse request URL: %w", err)
+		return GetResponse{}, fmt.Errorf("failed to parse request URL: %w", err)
 	}
-	query := ArgumentsToValues(arguments)
+	query := ArgumentsToValues(PrepareQueryArguments(arguments))
 	u.RawQuery = query.Encode()
-	klog.FromContext(ctx).V(0).Info("netobserv API call", "url", u.Redacted())
+	klogutil.LogInfo(klogutil.FromContext(ctx).V(0), "netobserv API call", klogutil.Field("url", u.Redacted()))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return "", err
+		return GetResponse{}, err
 	}
 	if authHeader := n.authorizationHeader(ctx); authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
@@ -199,23 +204,28 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return "", fmt.Errorf("netobserv API call canceled or timed out waiting for %s: %w", u.Redacted(), err)
+			return GetResponse{}, fmt.Errorf("netobserv API call canceled or timed out waiting for %s: %w", u.Redacted(), err)
 		}
-		return "", fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
+		return GetResponse{}, fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return GetResponse{}, fmt.Errorf("failed to read response body: %w", err)
 	}
-	if int64(len(respBody)) > maxResponseBodySize {
-		return "", fmt.Errorf("netobserv API response exceeded maximum allowed size of %d bytes", maxResponseBodySize)
+	truncated := false
+	if int64(len(respBody)) > maxBodySize {
+		if !truncate {
+			return GetResponse{}, fmt.Errorf("netobserv API response exceeded maximum allowed size of %d bytes", maxBodySize)
+		}
+		respBody = respBody[:maxBodySize]
+		truncated = true
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {
-			return "", fmt.Errorf("netobserv API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+			return GetResponse{}, fmt.Errorf("netobserv API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		}
-		return "", fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
+		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
 	}
-	return string(respBody), nil
+	return GetResponse{Body: string(respBody), Truncated: truncated}, nil
 }

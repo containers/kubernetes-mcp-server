@@ -37,11 +37,9 @@ func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 		insecure = true
 	`)))
 	client := NewNetObserv(s.Config, nil)
-	client.bearerToken = "bearer-token"
 
 	s.Equal("https://netobserv.example/", client.pluginURL)
 	s.True(client.insecure)
-	s.Equal("bearer-token", client.bearerToken)
 }
 
 func (s *NetObservSuite) TestExecuteGet() {
@@ -72,7 +70,9 @@ func (s *NetObservSuite) TestExecuteGet() {
 	s.Equal("Bearer token-xyz", seenAuth)
 	s.Equal("/api/loki/flow/records", seenPath)
 	s.Equal("default", seenQuery.Get("namespace"))
-	s.Equal("300", seenQuery.Get("timeRange"))
+	s.NotEmpty(seenQuery.Get("startTime"))
+	s.NotEmpty(seenQuery.Get("endTime"))
+	s.Empty(seenQuery.Get("timeRange"))
 	s.Equal("50", seenQuery.Get("limit"))
 
 	s.Run("reads bearer token from BearerTokenFile", func() {
@@ -91,14 +91,14 @@ func (s *NetObservSuite) TestExecuteGet() {
 		s.Equal(`{"status":"ok"}`, content)
 	})
 
-	s.Run("returns error when response exceeds maximum allowed size", func() {
+	s.Run("returns error when JSON response exceeds maximum allowed size", func() {
 		s.MockServer.ResetHandlers()
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBodySize+1)))
+			_, _ = w.Write([]byte(strings.Repeat("x", maxJSONResponseBodySize+1)))
 		}))
 		_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
 		s.Require().Error(err)
-		s.ErrorContains(err, fmt.Sprintf("exceeded maximum allowed size of %d bytes", maxResponseBodySize))
+		s.ErrorContains(err, fmt.Sprintf("exceeded maximum allowed size of %d bytes", maxJSONResponseBodySize))
 	})
 }
 
@@ -114,12 +114,30 @@ func (s *NetObservSuite) TestExecuteGetAccept_csv() {
 	`, s.MockServer.Config().Host))))
 	client := NewNetObserv(s.Config, nil)
 
-	content, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", map[string]any{
+	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", map[string]any{
 		"format": "csv",
-	}, "text/csv,*/*")
+	}, "text/csv,*/*", 2<<20)
 	s.Require().NoError(err)
-	s.Equal("col1,col2\na,b", content)
+	s.Equal("col1,col2\na,b", response.Body)
+	s.False(response.Truncated)
 	s.Equal("text/csv,*/*", seenAccept)
+}
+
+func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
+	s.MockServer.ResetHandlers()
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 32)))
+	}))
+	s.Config = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
+		[toolset_configs.netobserv]
+		url = "%s"
+	`, s.MockServer.Config().Host))))
+	client := NewNetObserv(s.Config, nil)
+
+	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*", 16)
+	s.Require().NoError(err)
+	s.True(response.Truncated)
+	s.Len(response.Body, 16)
 }
 
 func (s *NetObservSuite) TestNewNetObserv_usesDefaultURLWithoutConfigSection() {

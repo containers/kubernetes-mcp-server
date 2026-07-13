@@ -21,7 +21,13 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           set -euo pipefail
-          curl -sf "http://127.0.0.1:9001/api/flow/metrics?namespace=default&aggregateBy=TLSVersion&type=Bytes&timeRange=300" | grep -q 'TLS 1.3'
+          REQUEST=$(curl -sf "http://127.0.0.1:9001/api/debug/last-request?endpoint=/api/flow/metrics")
+          echo "${REQUEST}" | grep -q '"namespace": "default"'
+          echo "${REQUEST}" | grep -q '"aggregateBy": "TLSVersion"'
+          echo "${REQUEST}" | grep -q '"type": "Bytes"'
+          echo "${REQUEST}" | grep -q '"startTime"'
+          echo "${REQUEST}" | grep -q '"endTime"'
+          ! echo "${REQUEST}" | grep -q '"timeRange"'
     - llmJudge:
         contains: "TLS 1.3"
   prompt:

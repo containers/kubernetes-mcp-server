@@ -12,6 +12,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"k8s.io/klog/v2"
 )
 
@@ -71,9 +72,10 @@ func (c *Config) applyDefaultsWithStat(isOpenShift bool, stat func(string) (os.F
 		c.CertificateAuthority = DefaultPluginServiceCAPath
 		return
 	}
-	klog.Background().Info(
+	klogutil.LogInfo(
+		klog.Background(),
 		"NetObserv plugin TLS: service CA not found; set certificate_authority or insecure=true",
-		"path", DefaultPluginServiceCAPath,
+		klogutil.Field("path", DefaultPluginServiceCAPath),
 	)
 }
 

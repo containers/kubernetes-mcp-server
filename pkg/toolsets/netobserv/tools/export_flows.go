@@ -45,6 +45,10 @@ func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		args["format"] = DefaultExportFormat
 	}
 	client := netobservclient.NewNetObserv(params, params.KubernetesClient)
-	content, err := client.ExecuteGetAccept(params.Context, NetObservExportFlowsEndpoint, args, "text/csv,*/*")
+	response, err := client.ExecuteGetAccept(params.Context, NetObservExportFlowsEndpoint, args, "text/csv,*/*", DefaultExportMaxBodyBytes)
+	content := response.Body
+	if response.Truncated {
+		content += "\n\n[truncated: export exceeded maximum response size]"
+	}
 	return textAPIResult(content, wrapAPIError("export flows", err))
 }

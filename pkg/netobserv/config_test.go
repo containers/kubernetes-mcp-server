@@ -40,6 +40,31 @@ func (s *ConfigSuite) TestReadToml_emptySectionUsesDefaults() {
 	s.False(netobservCfg.Insecure)
 }
 
+func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
+	cfg, err := config.ReadToml([]byte(`
+		toolsets = ["netobserv"]
+		[toolset_configs.netobserv]
+	`))
+	s.Require().NoError(err)
+	shared, ok := cfg.GetToolsetConfig("netobserv")
+	s.Require().True(ok)
+	sharedCfg := shared.(*Config)
+	s.Empty(sharedCfg.CertificateAuthority)
+
+	caFile := filepath.Join(s.T().TempDir(), "service-ca.crt")
+	s.Require().NoError(os.WriteFile(caFile, []byte("test ca"), 0644))
+	resolved := *sharedCfg
+	resolved.applyDefaultsWithStat(true, func(path string) (os.FileInfo, error) {
+		if path == DefaultPluginServiceCAPath {
+			return os.Stat(caFile)
+		}
+		return nil, os.ErrNotExist
+	})
+
+	s.Equal(DefaultPluginServiceCAPath, resolved.CertificateAuthority)
+	s.Empty(sharedCfg.CertificateAuthority)
+}
+
 func (s *ConfigSuite) TestNewNetObserv_withoutToolsetConfigSection() {
 	base := config.BaseDefault()
 	base.Toolsets = append(base.Toolsets, "netobserv")

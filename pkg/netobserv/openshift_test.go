@@ -20,18 +20,18 @@ func (s *OpenShiftSuite) TestClusterIsOpenShift() {
 	})
 
 	s.Run("returns false without discovery client", func() {
-		s.False(isOpenShiftDiscovery(nil))
+		s.False(clusterIsOpenShiftFromDiscovery(nil))
 	})
 }
 
-func (s *OpenShiftSuite) TestIsOpenShiftDiscovery() {
+func (s *OpenShiftSuite) TestClusterIsOpenShiftFromDiscovery() {
 	s.Run("returns true when project.openshift.io is registered", func() {
 		srv := httptest.NewServer(test.NewInOpenShiftHandler())
 		s.T().Cleanup(srv.Close)
 
 		dc, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: srv.URL})
 		s.Require().NoError(err)
-		s.True(isOpenShiftDiscovery(dc))
+		s.True(clusterIsOpenShiftFromDiscovery(dc))
 	})
 
 	s.Run("returns false on plain Kubernetes discovery", func() {
@@ -40,7 +40,7 @@ func (s *OpenShiftSuite) TestIsOpenShiftDiscovery() {
 
 		dc, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: srv.URL})
 		s.Require().NoError(err)
-		s.False(isOpenShiftDiscovery(dc))
+		s.False(clusterIsOpenShiftFromDiscovery(dc))
 	})
 }
 

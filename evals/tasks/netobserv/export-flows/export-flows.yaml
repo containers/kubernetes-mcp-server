@@ -21,7 +21,12 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           set -euo pipefail
-          curl -sf "http://127.0.0.1:9001/api/loki/export?namespace=default&timeRange=300&format=csv" | grep -q TimeFlowStartMs
+          REQUEST=$(curl -sf "http://127.0.0.1:9001/api/debug/last-request?endpoint=/api/loki/export")
+          echo "${REQUEST}" | grep -q '"namespace": "default"'
+          echo "${REQUEST}" | grep -q '"format": "csv"'
+          echo "${REQUEST}" | grep -q '"startTime"'
+          echo "${REQUEST}" | grep -q '"endTime"'
+          ! echo "${REQUEST}" | grep -q '"timeRange"'
     - llmJudge:
         contains: "TimeFlowStartMs"
   prompt:
