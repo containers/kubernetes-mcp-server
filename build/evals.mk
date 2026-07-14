@@ -45,7 +45,6 @@ claude-agent-acp: ## Install the claude-agent-acp adapter for the claude-code ev
 	@[ -f $(CLAUDE_AGENT_ACP) ] || { \
 		set -e ;\
 		echo "Installing claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) to $(CLAUDE_AGENT_ACP)..." ;\
-		mkdir -p $(shell dirname $(CLAUDE_AGENT_ACP))/.. ;\
 		npm install --prefix $(shell pwd)/_output/tools @agentclientprotocol/claude-agent-acp@$(CLAUDE_AGENT_ACP_VERSION) ;\
 		echo "✅ claude-agent-acp installed" ;\
 	}

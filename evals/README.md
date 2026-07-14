@@ -41,10 +41,9 @@ Tasks are grouped into suites via a `suite: <name>` label. The available suites 
     subscription (or an `ANTHROPIC_API_KEY`) covers the agent and no separate key
     is needed. Run `claude` once interactively to log in if you have not already.
   - The `claude-agent-acp` adapter, which bridges mcpchecker to that `claude` CLI,
-    installed with `make claude-agent-acp` (runs
-    `npm install -g @agentclientprotocol/claude-agent-acp`, so it needs Node.js/npm).
-    Without it, `mcpchecker check` fails at agent-spec load with
-    `'claude-agent-acp' binary not found in PATH`.
+    installed with `make claude-agent-acp` (installs locally under                                        
+    `_output/tools/node_modules/`, so it needs Node.js/npm). `make run-evals`                             
+    prepends `_output/tools/node_modules/.bin` to `PATH` automatically.   
 
 ## Quickstart: run one suite locally with Claude Code
 
