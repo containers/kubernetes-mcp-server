@@ -3,7 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: netobserv
+    project: netobserv
     requires: netobserv
+  annotations:
+    project-name: "NetObserv"
+    project-url: "https://netobserv.io"
   name: "Export flows as CSV"
   category: "Export"
   description: "Exports flow records from NetObserv in CSV format."
