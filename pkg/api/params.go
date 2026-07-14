@@ -198,3 +198,22 @@ func (p *Params) OptionalInt64(key string, defaultVal int64) int64 {
 	}
 	return v
 }
+
+// RequiredInt64 extracts a required int64 parameter. A missing or
+// present-but-wrong-type value records a sticky error and returns 0.
+func (p *Params) RequiredInt64(key string) int64 {
+	if p.err != nil {
+		return 0
+	}
+	val, ok := p.GetArguments()[key]
+	if !ok || val == nil {
+		p.err = fmt.Errorf("%s parameter required", key)
+		return 0
+	}
+	v, err := ParseInt64(val)
+	if err != nil {
+		p.err = fmt.Errorf("%s parameter must be an integer: %w", key, err)
+		return 0
+	}
+	return v
+}

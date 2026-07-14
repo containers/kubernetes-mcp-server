@@ -116,7 +116,7 @@ func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, 
 		c.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name, nil)
 }
 
-func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
+func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64, follow bool, sinceSeconds int64) (string, error) {
 	namespace = c.NamespaceOrDefault(namespace)
 	pods := c.CoreV1().Pods(namespace)
 
@@ -131,6 +131,10 @@ func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, p
 	logOptions := &v1.PodLogOptions{
 		Container: container,
 		Previous:  previous,
+		Follow:    follow,
+	}
+	if follow && sinceSeconds > 0 {
+		logOptions.SinceSeconds = &sinceSeconds
 	}
 
 	// Only set tailLines if a value is provided (non-zero)

@@ -344,7 +344,7 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 		fmt.Fprintf(&result, "#### Pod: %s\n\n", podName)
 
 		// Fetch last 50 lines of logs
-		logs, err := core.PodsLog(ctx, namespace, podName, containerName, false, 50)
+		logs, err := core.PodsLog(ctx, namespace, podName, containerName, false, 50, false, 0)
 		if err != nil {
 			return fmt.Sprintf("### virt-launcher Pod Logs\n\n*Error fetching logs: %v*", err)
 		}

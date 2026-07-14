@@ -215,6 +215,17 @@ func initPods() []api.ServerTool {
 						Type:        "boolean",
 						Description: "Return previous terminated container logs (Optional)",
 					},
+					"follow": {
+						Type:        "boolean",
+						Description: "Follow the log output, streaming new log lines as they are produced. The call blocks until the timeout (since_seconds) elapses or the container exits, then returns all lines collected so far (Optional, default: false)",
+						Default:     api.ToRawMessage(false),
+					},
+					"since_seconds": {
+						Type:        "integer",
+						Description: "When follow is true, the maximum number of seconds to stream logs before returning. A value of 0 means no timeout (block until the container exits) (Optional, default: 10). Ignored when follow is false",
+						Default:     api.ToRawMessage(10),
+						Minimum:     ptr.To(float64(0)),
+					},
 				},
 				Required: []string{"name"},
 			},
@@ -389,10 +400,12 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	container := p.OptionalString("container", "")
 	previousBool := p.OptionalBool("previous", false)
 	tailInt := p.OptionalInt64("tail", 0)
+	followBool := p.OptionalBool("follow", false)
+	sinceSeconds := p.OptionalInt64("since_seconds", 10)
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod log: %w", err)), nil
 	}
-	ret, err := kubernetes.NewCore(params).PodsLog(params.Context, ns, name, container, previousBool, tailInt)
+	ret, err := kubernetes.NewCore(params).PodsLog(params.Context, ns, name, container, previousBool, tailInt, followBool, sinceSeconds)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pod %s log in namespace %s: %w", name, ns, err)), nil
 	} else if ret == "" {

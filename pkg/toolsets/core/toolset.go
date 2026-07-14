@@ -30,7 +30,11 @@ func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 		initEvents(),
 		initNamespaces(p),
 		initNodes(),
+		initNodeOps(),
 		initPods(),
+		initPodOps(),
+		initRollout(),
+		initWorkloadResources(),
 		initResources(p),
 	)
 }

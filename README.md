@@ -341,6 +341,33 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `label_selector` (`string`) - Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)
   - `name` (`string`) - Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)
 
+- **nodes_cordon** - Cordon a Kubernetes Node, marking it as unschedulable so no new pods are placed on it. Existing pods are not evicted. Mirrors `kubectl cordon`
+  - `name` (`string`) **(required)** - Name of the Node to cordon
+
+- **nodes_uncordon** - Uncordon a Kubernetes Node, marking it as schedulable again so new pods can be placed on it. Mirrors `kubectl uncordon`
+  - `name` (`string`) **(required)** - Name of the Node to uncordon
+
+- **nodes_drain** - Drain a Kubernetes Node by cordoning it and evicting all its pods. Mirrors `kubectl drain`. Use caution: this evicts running workloads. DaemonSet pods and mirror pods are skipped by default when ignore_all_daemonsets is true
+  - `delete_emptydir_data` (`boolean`) - If true, continue even if pods are using emptyDir volumes (Optional, default: false)
+  - `disable_eviction` (`boolean`) - If true, force-delete pods instead of evicting them. Use only if eviction is blocked (Optional, default: false)
+  - `force` (`boolean`) - If true, continue even if there are pods not managed by a ReplicationController, ReplicaSet, Job, DaemonSet, or StatefulSet (Optional, default: false)
+  - `grace_period_seconds` (`integer`) - Period of time in seconds given to each pod to terminate gracefully. If negative, the default value specified in the pod will be used (Optional, default: -1)
+  - `ignore_all_daemonsets` (`boolean`) - If true, ignore DaemonSet-managed pods and continue draining (Optional, default: true)
+  - `name` (`string`) **(required)** - Name of the Node to drain
+  - `timeout` (`integer`) - The length of time in seconds to wait before giving up on draining a node, zero means infinite (Optional, default: 0)
+
+- **nodes_patch_label** - Set or remove a single label on a Kubernetes Node. Providing an empty value removes the label. Useful for managing scheduling constraints and node grouping
+  - `key` (`string`) **(required)** - Label key to set or remove (e.g. 'node-role.kubernetes.io/worker')
+  - `name` (`string`) **(required)** - Name of the Node to patch
+  - `value` (`string`) - Label value to set. An empty string removes the label
+
+- **nodes_patch_taint** - Set or remove a single taint on a Kubernetes Node. Taints repel pods unless a pod tolerates them. Use effect values NoSchedule, PreferNoSchedule, or NoExecute
+  - `effect` (`string`) **(required)** - Taint effect: NoSchedule, PreferNoSchedule, or NoExecute
+  - `key` (`string`) **(required)** - Taint key (e.g. 'dedicated')
+  - `name` (`string`) **(required)** - Name of the Node to patch
+  - `remove` (`boolean`) - If true, remove the taint matching key/effect instead of adding it (Optional, default: false)
+  - `value` (`string`) - Taint value (e.g. 'gpu'). Optional when removing
+
 - **pods_list** - List all the Kubernetes pods in the current cluster from all namespaces
   - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
   - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
@@ -372,9 +399,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **pods_log** - Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name
   - `container` (`string`) - Name of the Pod container to get the logs from (Optional)
+  - `follow` (`boolean`) - Follow the log output, streaming new log lines as they are produced. The call blocks until the timeout (since_seconds) elapses or the container exits, then returns all lines collected so far (Optional, default: false)
   - `name` (`string`) **(required)** - Name of the Pod to get the logs from
   - `namespace` (`string`) - Namespace to get the Pod logs from
   - `previous` (`boolean`) - Return previous terminated container logs (Optional)
+  - `since_seconds` (`integer`) - When follow is true, the maximum number of seconds to stream logs before returning. A value of 0 means no timeout (block until the container exits) (Optional, default: 10). Ignored when follow is false
   - `tail` (`integer`) - Number of lines to retrieve from the end of the logs (Optional, default: 100)
 
 - **pods_run** - Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name
@@ -382,6 +411,95 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) - Name of the Pod (Optional, random name if not provided)
   - `namespace` (`string`) - Namespace to run the Pod in
   - `port` (`number`) - TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)
+
+- **pods_port_forward** - Start port-forwarding a local port to a port on a Kubernetes Pod. Runs in the background and returns a session id plus the local address you can connect to. Use pods_port_forward_stop with the returned id to terminate the session. Mirrors `kubectl port-forward pod`
+  - `local_port` (`integer`) - Local port to listen on. If 0 or omitted, a free port is chosen automatically
+  - `name` (`string`) **(required)** - Name of the Pod to forward to
+  - `namespace` (`string`) - Namespace of the Pod (Optional, current namespace if not provided)
+  - `remote_port` (`integer`) **(required)** - Port on the Pod to forward to (the container port)
+
+- **pods_port_forward_stop** - Stop a running port-forward session by its session id, releasing the local port. Returns the session details that were stopped
+  - `id` (`string`) **(required)** - Session id returned by pods_port_forward
+
+- **pods_port_forward_list** - List all active port-forward sessions, showing their session id, target pod, namespace, and local/remote ports
+
+- **pods_attach** - Attach to a running container in a Kubernetes Pod, capturing its stdout and stderr. Unlike exec, attach connects to the container's primary process (PID 1) rather than starting a new command. Mirrors `kubectl attach`
+  - `container` (`string`) - Name of the Pod container to attach to (Optional, defaults to the first or kubectl default-container annotation)
+  - `name` (`string`) **(required)** - Name of the Pod to attach to
+  - `namespace` (`string`) - Namespace of the Pod (Optional, current namespace if not provided)
+
+- **rollout_status** - Check the rollout status of a Kubernetes Deployment in the current or provided namespace. Reports whether the rollout is complete, in progress, or has failed (e.g. progress deadline exceeded). Mirrors `kubectl rollout status deployment`
+  - `name` (`string`) **(required)** - Name of the Deployment to check rollout status for
+  - `namespace` (`string`) - Namespace of the Deployment (Optional, current namespace if not provided)
+
+- **rollout_history** - View the rollout history (revisions) of a Kubernetes Deployment in the current or provided namespace. Lists each revision with its image. Mirrors `kubectl rollout history deployment`
+  - `name` (`string`) **(required)** - Name of the Deployment to view rollout history for
+  - `namespace` (`string`) - Namespace of the Deployment (Optional, current namespace if not provided)
+
+- **rollout_undo** - Rollback a Kubernetes Deployment to a previous revision. If to_revision is not provided, rolls back to the immediately previous revision. Mirrors `kubectl rollout undo deployment`
+  - `name` (`string`) **(required)** - Name of the Deployment to roll back
+  - `namespace` (`string`) - Namespace of the Deployment (Optional, current namespace if not provided)
+  - `to_revision` (`integer`) - Revision number to roll back to (Optional, defaults to the previous revision)
+
+- **rollout_restart** - Trigger a rolling restart of a Kubernetes Deployment by patching the pod template with a restart timestamp. Existing pods are replaced gradually. Mirrors `kubectl rollout restart deployment`
+  - `name` (`string`) **(required)** - Name of the Deployment to restart
+  - `namespace` (`string`) - Namespace of the Deployment (Optional, current namespace if not provided)
+
+- **horizontalpodautoscalers_list** - List Kubernetes HorizontalPodAutoscalers (HPAs) in the current cluster from all namespaces or the provided namespace. Shows autoscaling rules and current/target metrics for workloads
+  - `namespace` (`string`) - Optional Namespace to retrieve HPAs from. If not provided, lists HPAs from all namespaces
+
+- **horizontalpodautoscalers_get** - Get a Kubernetes HorizontalPodAutoscaler (HPA) by name in the current or provided namespace, showing its scaling rules, targets, and current status
+  - `name` (`string`) **(required)** - Name of the HPA
+  - `namespace` (`string`) - Namespace to get the HPA from (Optional, current namespace if not provided)
+
+- **horizontalpodautoscalers_create** - Create a Kubernetes HorizontalPodAutoscaler (HPA) from a YAML or JSON manifest. The manifest must be a complete HPA definition with apiVersion autoscaling/v2
+  - `manifest` (`string`) **(required)** - Complete YAML or JSON manifest of the HorizontalPodAutoscaler (apiVersion: autoscaling/v2, kind: HorizontalPodAutoscaler)
+
+- **horizontalpodautoscalers_delete** - Delete a Kubernetes HorizontalPodAutoscaler (HPA) by name in the current or provided namespace, removing its autoscaling rules
+  - `name` (`string`) **(required)** - Name of the HPA to delete
+  - `namespace` (`string`) - Namespace to delete the HPA from (Optional, current namespace if not provided)
+
+- **poddisruptionbudgets_list** - List Kubernetes PodDisruptionBudgets (PDBs) in the current cluster from all namespaces or the provided namespace. Shows the allowed disruptions and current/min available pod counts
+  - `namespace` (`string`) - Optional Namespace to retrieve PDBs from. If not provided, lists PDBs from all namespaces
+
+- **poddisruptionbudgets_get** - Get a Kubernetes PodDisruptionBudget (PDB) by name in the current or provided namespace, showing its selector, allowed disruptions, and status
+  - `name` (`string`) **(required)** - Name of the PDB
+  - `namespace` (`string`) - Namespace to get the PDB from (Optional, current namespace if not provided)
+
+- **poddisruptionbudgets_create** - Create a Kubernetes PodDisruptionBudget (PDB) from a YAML or JSON manifest. The manifest must be a complete PDB definition with apiVersion policy/v1
+  - `manifest` (`string`) **(required)** - Complete YAML or JSON manifest of the PodDisruptionBudget (apiVersion: policy/v1, kind: PodDisruptionBudget)
+
+- **poddisruptionbudgets_delete** - Delete a Kubernetes PodDisruptionBudget (PDB) by name in the current or provided namespace
+  - `name` (`string`) **(required)** - Name of the PDB to delete
+  - `namespace` (`string`) - Namespace to delete the PDB from (Optional, current namespace if not provided)
+
+- **resourcequotas_list** - List Kubernetes ResourceQuotas in the current cluster from all namespaces or the provided namespace. Shows namespace-level resource limits and current usage
+  - `namespace` (`string`) - Optional Namespace to retrieve ResourceQuotas from. If not provided, lists ResourceQuotas from all namespaces
+
+- **resourcequotas_get** - Get a Kubernetes ResourceQuota by name in the current or provided namespace, showing its hard limits and current usage
+  - `name` (`string`) **(required)** - Name of the ResourceQuota
+  - `namespace` (`string`) - Namespace to get the ResourceQuota from (Optional, current namespace if not provided)
+
+- **resourcequotas_create** - Create a Kubernetes ResourceQuota from a YAML or JSON manifest. The manifest must be a complete ResourceQuota definition with apiVersion v1
+  - `manifest` (`string`) **(required)** - Complete YAML or JSON manifest of the ResourceQuota (apiVersion: v1, kind: ResourceQuota)
+
+- **resourcequotas_delete** - Delete a Kubernetes ResourceQuota by name in the current or provided namespace
+  - `name` (`string`) **(required)** - Name of the ResourceQuota to delete
+  - `namespace` (`string`) - Namespace to delete the ResourceQuota from (Optional, current namespace if not provided)
+
+- **limitranges_list** - List Kubernetes LimitRanges in the current cluster from all namespaces or the provided namespace. Shows per-container default resource limits enforced in each namespace
+  - `namespace` (`string`) - Optional Namespace to retrieve LimitRanges from. If not provided, lists LimitRanges from all namespaces
+
+- **limitranges_get** - Get a Kubernetes LimitRange by name in the current or provided namespace, showing its per-container resource default/min/max limits
+  - `name` (`string`) **(required)** - Name of the LimitRange
+  - `namespace` (`string`) - Namespace to get the LimitRange from (Optional, current namespace if not provided)
+
+- **limitranges_create** - Create a Kubernetes LimitRange from a YAML or JSON manifest. The manifest must be a complete LimitRange definition with apiVersion v1
+  - `manifest` (`string`) **(required)** - Complete YAML or JSON manifest of the LimitRange (apiVersion: v1, kind: LimitRange)
+
+- **limitranges_delete** - Delete a Kubernetes LimitRange by name in the current or provided namespace
+  - `name` (`string`) **(required)** - Name of the LimitRange to delete
+  - `namespace` (`string`) - Namespace to delete the LimitRange from (Optional, current namespace if not provided)
 
 - **resources_list** - List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)

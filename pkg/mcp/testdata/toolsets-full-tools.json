@@ -46,6 +46,198 @@
   },
   {
     "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "title": "HorizontalPodAutoscaler: Create"
+    },
+    "description": "Create a Kubernetes HorizontalPodAutoscaler (HPA) from a YAML or JSON manifest. The manifest must be a complete HPA definition with apiVersion autoscaling/v2",
+    "inputSchema": {
+      "properties": {
+        "manifest": {
+          "description": "Complete YAML or JSON manifest of the HorizontalPodAutoscaler (apiVersion: autoscaling/v2, kind: HorizontalPodAutoscaler)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "name": "horizontalpodautoscalers_create",
+    "title": "HorizontalPodAutoscaler: Create"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "HorizontalPodAutoscaler: Delete"
+    },
+    "description": "Delete a Kubernetes HorizontalPodAutoscaler (HPA) by name in the current or provided namespace, removing its autoscaling rules",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the HPA to delete",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to delete the HPA from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "horizontalpodautoscalers_delete",
+    "title": "HorizontalPodAutoscaler: Delete"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "HorizontalPodAutoscaler: Get"
+    },
+    "description": "Get a Kubernetes HorizontalPodAutoscaler (HPA) by name in the current or provided namespace, showing its scaling rules, targets, and current status",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the HPA",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the HPA from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "horizontalpodautoscalers_get",
+    "title": "HorizontalPodAutoscaler: Get"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "HorizontalPodAutoscalers: List"
+    },
+    "description": "List Kubernetes HorizontalPodAutoscalers (HPAs) in the current cluster from all namespaces or the provided namespace. Shows autoscaling rules and current/target metrics for workloads",
+    "inputSchema": {
+      "properties": {
+        "namespace": {
+          "description": "Optional Namespace to retrieve HPAs from. If not provided, lists HPAs from all namespaces",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "horizontalpodautoscalers_list",
+    "title": "HorizontalPodAutoscalers: List"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "title": "LimitRange: Create"
+    },
+    "description": "Create a Kubernetes LimitRange from a YAML or JSON manifest. The manifest must be a complete LimitRange definition with apiVersion v1",
+    "inputSchema": {
+      "properties": {
+        "manifest": {
+          "description": "Complete YAML or JSON manifest of the LimitRange (apiVersion: v1, kind: LimitRange)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "name": "limitranges_create",
+    "title": "LimitRange: Create"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "LimitRange: Delete"
+    },
+    "description": "Delete a Kubernetes LimitRange by name in the current or provided namespace",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the LimitRange to delete",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to delete the LimitRange from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "limitranges_delete",
+    "title": "LimitRange: Delete"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "LimitRange: Get"
+    },
+    "description": "Get a Kubernetes LimitRange by name in the current or provided namespace, showing its per-container resource default/min/max limits",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the LimitRange",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the LimitRange from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "limitranges_get",
+    "title": "LimitRange: Get"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "LimitRanges: List"
+    },
+    "description": "List Kubernetes LimitRanges in the current cluster from all namespaces or the provided namespace. Shows per-container default resource limits enforced in each namespace",
+    "inputSchema": {
+      "properties": {
+        "namespace": {
+          "description": "Optional Namespace to retrieve LimitRanges from. If not provided, lists LimitRanges from all namespaces",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "limitranges_list",
+    "title": "LimitRanges: List"
+  },
+  {
+    "annotations": {
       "destructiveHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,
@@ -64,6 +256,81 @@
     },
     "name": "namespaces_list",
     "title": "Namespaces: List"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Node: Cordon"
+    },
+    "description": "Cordon a Kubernetes Node, marking it as unschedulable so no new pods are placed on it. Existing pods are not evicted. Mirrors `kubectl cordon`",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Node to cordon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "nodes_cordon",
+    "title": "Node: Cordon"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "title": "Node: Drain"
+    },
+    "description": "Drain a Kubernetes Node by cordoning it and evicting all its pods. Mirrors `kubectl drain`. Use caution: this evicts running workloads. DaemonSet pods and mirror pods are skipped by default when ignore_all_daemonsets is true",
+    "inputSchema": {
+      "properties": {
+        "delete_emptydir_data": {
+          "default": false,
+          "description": "If true, continue even if pods are using emptyDir volumes (Optional, default: false)",
+          "type": "boolean"
+        },
+        "disable_eviction": {
+          "default": false,
+          "description": "If true, force-delete pods instead of evicting them. Use only if eviction is blocked (Optional, default: false)",
+          "type": "boolean"
+        },
+        "force": {
+          "default": false,
+          "description": "If true, continue even if there are pods not managed by a ReplicationController, ReplicaSet, Job, DaemonSet, or StatefulSet (Optional, default: false)",
+          "type": "boolean"
+        },
+        "grace_period_seconds": {
+          "default": -1,
+          "description": "Period of time in seconds given to each pod to terminate gracefully. If negative, the default value specified in the pod will be used (Optional, default: -1)",
+          "type": "integer"
+        },
+        "ignore_all_daemonsets": {
+          "default": true,
+          "description": "If true, ignore DaemonSet-managed pods and continue draining (Optional, default: true)",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Name of the Node to drain",
+          "type": "string"
+        },
+        "timeout": {
+          "default": 0,
+          "description": "The length of time in seconds to wait before giving up on draining a node, zero means infinite (Optional, default: 0)",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "nodes_drain",
+    "title": "Node: Drain"
   },
   {
     "annotations": {
@@ -98,6 +365,85 @@
     },
     "name": "nodes_log",
     "title": "Node: Log"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Node: Patch Label"
+    },
+    "description": "Set or remove a single label on a Kubernetes Node. Providing an empty value removes the label. Useful for managing scheduling constraints and node grouping",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Label key to set or remove (e.g. 'node-role.kubernetes.io/worker')",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Node to patch",
+          "type": "string"
+        },
+        "value": {
+          "description": "Label value to set. An empty string removes the label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "key"
+      ],
+      "type": "object"
+    },
+    "name": "nodes_patch_label",
+    "title": "Node: Patch Label"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Node: Patch Taint"
+    },
+    "description": "Set or remove a single taint on a Kubernetes Node. Taints repel pods unless a pod tolerates them. Use effect values NoSchedule, PreferNoSchedule, or NoExecute",
+    "inputSchema": {
+      "properties": {
+        "effect": {
+          "description": "Taint effect: NoSchedule, PreferNoSchedule, or NoExecute",
+          "enum": [
+            "NoSchedule",
+            "PreferNoSchedule",
+            "NoExecute"
+          ],
+          "type": "string"
+        },
+        "key": {
+          "description": "Taint key (e.g. 'dedicated')",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Node to patch",
+          "type": "string"
+        },
+        "remove": {
+          "default": false,
+          "description": "If true, remove the taint matching key/effect instead of adding it (Optional, default: false)",
+          "type": "boolean"
+        },
+        "value": {
+          "description": "Taint value (e.g. 'gpu'). Optional when removing",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "key",
+        "effect"
+      ],
+      "type": "object"
+    },
+    "name": "nodes_patch_taint",
+    "title": "Node: Patch Taint"
   },
   {
     "annotations": {
@@ -147,6 +493,155 @@
     },
     "name": "nodes_top",
     "title": "Nodes: Top"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Node: Uncordon"
+    },
+    "description": "Uncordon a Kubernetes Node, marking it as schedulable again so new pods can be placed on it. Mirrors `kubectl uncordon`",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Node to uncordon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "nodes_uncordon",
+    "title": "Node: Uncordon"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "title": "PodDisruptionBudget: Create"
+    },
+    "description": "Create a Kubernetes PodDisruptionBudget (PDB) from a YAML or JSON manifest. The manifest must be a complete PDB definition with apiVersion policy/v1",
+    "inputSchema": {
+      "properties": {
+        "manifest": {
+          "description": "Complete YAML or JSON manifest of the PodDisruptionBudget (apiVersion: policy/v1, kind: PodDisruptionBudget)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "name": "poddisruptionbudgets_create",
+    "title": "PodDisruptionBudget: Create"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "PodDisruptionBudget: Delete"
+    },
+    "description": "Delete a Kubernetes PodDisruptionBudget (PDB) by name in the current or provided namespace",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the PDB to delete",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to delete the PDB from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "poddisruptionbudgets_delete",
+    "title": "PodDisruptionBudget: Delete"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "PodDisruptionBudget: Get"
+    },
+    "description": "Get a Kubernetes PodDisruptionBudget (PDB) by name in the current or provided namespace, showing its selector, allowed disruptions, and status",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the PDB",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the PDB from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "poddisruptionbudgets_get",
+    "title": "PodDisruptionBudget: Get"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "PodDisruptionBudgets: List"
+    },
+    "description": "List Kubernetes PodDisruptionBudgets (PDBs) in the current cluster from all namespaces or the provided namespace. Shows the allowed disruptions and current/min available pod counts",
+    "inputSchema": {
+      "properties": {
+        "namespace": {
+          "description": "Optional Namespace to retrieve PDBs from. If not provided, lists PDBs from all namespaces",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "poddisruptionbudgets_list",
+    "title": "PodDisruptionBudgets: List"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "title": "Pods: Attach"
+    },
+    "description": "Attach to a running container in a Kubernetes Pod, capturing its stdout and stderr. Unlike exec, attach connects to the container's primary process (PID 1) rather than starting a new command. Mirrors `kubectl attach`",
+    "inputSchema": {
+      "properties": {
+        "container": {
+          "description": "Name of the Pod container to attach to (Optional, defaults to the first or kubectl default-container annotation)",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the Pod to attach to",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Pod (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "pods_attach",
+    "title": "Pods: Attach"
   },
   {
     "annotations": {
@@ -313,6 +808,11 @@
           "description": "Name of the Pod container to get the logs from (Optional)",
           "type": "string"
         },
+        "follow": {
+          "default": false,
+          "description": "Follow the log output, streaming new log lines as they are produced. The call blocks until the timeout (since_seconds) elapses or the container exits, then returns all lines collected so far (Optional, default: false)",
+          "type": "boolean"
+        },
         "name": {
           "description": "Name of the Pod to get the logs from",
           "type": "string"
@@ -324,6 +824,12 @@
         "previous": {
           "description": "Return previous terminated container logs (Optional)",
           "type": "boolean"
+        },
+        "since_seconds": {
+          "default": 10,
+          "description": "When follow is true, the maximum number of seconds to stream logs before returning. A value of 0 means no timeout (block until the container exits) (Optional, default: 10). Ignored when follow is false",
+          "minimum": 0,
+          "type": "integer"
         },
         "tail": {
           "default": 100,
@@ -339,6 +845,82 @@
     },
     "name": "pods_log",
     "title": "Pods: Log"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "title": "Pods: Port Forward"
+    },
+    "description": "Start port-forwarding a local port to a port on a Kubernetes Pod. Runs in the background and returns a session id plus the local address you can connect to. Use pods_port_forward_stop with the returned id to terminate the session. Mirrors `kubectl port-forward pod`",
+    "inputSchema": {
+      "properties": {
+        "local_port": {
+          "description": "Local port to listen on. If 0 or omitted, a free port is chosen automatically",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "Name of the Pod to forward to",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Pod (Optional, current namespace if not provided)",
+          "type": "string"
+        },
+        "remote_port": {
+          "description": "Port on the Pod to forward to (the container port)",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "remote_port"
+      ],
+      "type": "object"
+    },
+    "name": "pods_port_forward",
+    "title": "Pods: Port Forward"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Pods: Port Forward List"
+    },
+    "description": "List all active port-forward sessions, showing their session id, target pod, namespace, and local/remote ports",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "pods_port_forward_list",
+    "title": "Pods: Port Forward List"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Pods: Port Forward Stop"
+    },
+    "description": "Stop a running port-forward session by its session id, releasing the local port. Returns the session details that were stopped",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "Session id returned by pods_port_forward",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "name": "pods_port_forward_stop",
+    "title": "Pods: Port Forward Stop"
   },
   {
     "annotations": {
@@ -423,6 +1005,102 @@
     },
     "name": "projects_list",
     "title": "Projects: List"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true,
+      "title": "ResourceQuota: Create"
+    },
+    "description": "Create a Kubernetes ResourceQuota from a YAML or JSON manifest. The manifest must be a complete ResourceQuota definition with apiVersion v1",
+    "inputSchema": {
+      "properties": {
+        "manifest": {
+          "description": "Complete YAML or JSON manifest of the ResourceQuota (apiVersion: v1, kind: ResourceQuota)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "name": "resourcequotas_create",
+    "title": "ResourceQuota: Create"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "ResourceQuota: Delete"
+    },
+    "description": "Delete a Kubernetes ResourceQuota by name in the current or provided namespace",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the ResourceQuota to delete",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to delete the ResourceQuota from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "resourcequotas_delete",
+    "title": "ResourceQuota: Delete"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ResourceQuota: Get"
+    },
+    "description": "Get a Kubernetes ResourceQuota by name in the current or provided namespace, showing its hard limits and current usage",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the ResourceQuota",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace to get the ResourceQuota from (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "resourcequotas_get",
+    "title": "ResourceQuota: Get"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "ResourceQuotas: List"
+    },
+    "description": "List Kubernetes ResourceQuotas in the current cluster from all namespaces or the provided namespace. Shows namespace-level resource limits and current usage",
+    "inputSchema": {
+      "properties": {
+        "namespace": {
+          "description": "Optional Namespace to retrieve ResourceQuotas from. If not provided, lists ResourceQuotas from all namespaces",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "resourcequotas_list",
+    "title": "ResourceQuotas: List"
   },
   {
     "annotations": {
@@ -607,5 +1285,120 @@
     },
     "name": "resources_scale",
     "title": "Resources: Scale"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Rollout: History"
+    },
+    "description": "View the rollout history (revisions) of a Kubernetes Deployment in the current or provided namespace. Lists each revision with its image. Mirrors `kubectl rollout history deployment`",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Deployment to view rollout history for",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Deployment (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "rollout_history",
+    "title": "Rollout: History"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Rollout: Restart"
+    },
+    "description": "Trigger a rolling restart of a Kubernetes Deployment by patching the pod template with a restart timestamp. Existing pods are replaced gradually. Mirrors `kubectl rollout restart deployment`",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Deployment to restart",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Deployment (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "rollout_restart",
+    "title": "Rollout: Restart"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Rollout: Status"
+    },
+    "description": "Check the rollout status of a Kubernetes Deployment in the current or provided namespace. Reports whether the rollout is complete, in progress, or has failed (e.g. progress deadline exceeded). Mirrors `kubectl rollout status deployment`",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Deployment to check rollout status for",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Deployment (Optional, current namespace if not provided)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "rollout_status",
+    "title": "Rollout: Status"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "title": "Rollout: Undo"
+    },
+    "description": "Rollback a Kubernetes Deployment to a previous revision. If to_revision is not provided, rolls back to the immediately previous revision. Mirrors `kubectl rollout undo deployment`",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name of the Deployment to roll back",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace of the Deployment (Optional, current namespace if not provided)",
+          "type": "string"
+        },
+        "to_revision": {
+          "description": "Revision number to roll back to (Optional, defaults to the previous revision)",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "rollout_undo",
+    "title": "Rollout: Undo"
   }
 ]
