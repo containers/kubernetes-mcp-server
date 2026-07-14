@@ -65,6 +65,9 @@ func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kuber
 func (fakeDerivedProvider) AnyTargetHasGVKs(context.Context, []schema.GroupVersionKind) bool {
 	return true
 }
+func (fakeDerivedProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	return false
+}
 
 func (s *TokenExchangingProviderSuite) TestGetDerivedKubernetes() {
 	s.Run("uses reloaded STS config from live config provider", func() {

@@ -156,6 +156,13 @@ type StaticConfig struct {
 	// Defaults to false.
 	ValidationEnabled bool `toml:"validation_enabled,omitempty"`
 
+	// EnableTargetCompatibilityToolFilters enables filtering of tools based on
+	// cluster target compatibility (e.g., hiding OpenShift-specific tools when
+	// connected to a non-OpenShift cluster). This feature is experimental, and
+	// this option is subject to change or removal in a future release.
+	// Defaults to false.
+	EnableTargetCompatibilityToolFilters bool `toml:"experimental_enable_target_compatibility_tool_filters,omitempty"`
+
 	// ConfirmationFallback is the global default fallback behavior when a client
 	// does not support elicitation. Valid values are "deny" and "allow".
 	ConfirmationFallback string `toml:"confirmation_fallback,omitempty"`
@@ -446,6 +453,10 @@ func (c *StaticConfig) GetCertificateAuthority() string {
 
 func (c *StaticConfig) IsValidationEnabled() bool {
 	return c.ValidationEnabled
+}
+
+func (c *StaticConfig) IsTargetCompatibilityToolFiltersEnabled() bool {
+	return c.EnableTargetCompatibilityToolFilters
 }
 
 func (c *StaticConfig) GetConfirmationRules() []api.ConfirmationRule {

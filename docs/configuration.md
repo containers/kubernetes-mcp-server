@@ -284,6 +284,7 @@ Control what operations the MCP server can perform on your Kubernetes cluster. T
 |-------|------|---------|-------------|
 | `read_only` | boolean | `false` | When `true`, only exposes tools annotated with `readOnlyHint=true`. Prevents any write operations on the cluster. |
 | `disable_destructive` | boolean | `false` | When `true`, disables tools annotated with `destructiveHint=true` (delete, update operations). Has no effect when `read_only` is `true`. |
+| `experimental_enable_target_compatibility_tool_filters` | boolean | `false` | Controls cluster-capability tool filtering. Tools that require API groups absent from the cluster (for example the OpenShift-only `projects_list`) are hidden. **NOTE:** This feature is experimental, and this option is subject to change or removal in a future release. |
 
 **Example:**
 ```toml
@@ -292,6 +293,9 @@ read_only = true
 
 # Or allow writes but prevent deletions
 disable_destructive = true
+
+# Probe every target for API-group compatibility
+experimental_enable_target_compatibility_tool_filters = true
 ```
 
 ### Toolsets

@@ -110,7 +110,8 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsInOpenShift() {
 }
 
 func (s *ToolsetsSuite) TestDefaultToolsetsToolsWithFilteringEnabled() {
-	s.Run("Default configuration toolsets on non-OpenShift", func() {
+	s.Run("Default configuration toolsets with filtering enabled on non-OpenShift", func() {
+		s.Cfg.EnableTargetCompatibilityToolFilters = true
 		s.InitMcpClient()
 		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {
@@ -119,7 +120,7 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsWithFilteringEnabled() {
 		})
 		s.Run("projects_list tool is not present", func() {
 			for _, tool := range tools.Tools {
-				s.Require().NotEqual("projects_list", tool.Name, "Expected projects_list to not be present on non-OpenShift cluster")
+				s.Require().NotEqual("projects_list", tool.Name, "Expected projects_list to not be present when filtering enabled on non-OpenShift cluster")
 			}
 		})
 	})

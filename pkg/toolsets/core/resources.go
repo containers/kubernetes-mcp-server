@@ -20,12 +20,15 @@ func initResources(p api.FilteringProvider) []api.ServerTool {
 	// target-specific kinds (e.g. OpenShift Route) when a target cluster exposes them,
 	// so the examples the model sees match the cluster it is talking to.
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
-	// TODO: A future config option could be used to decide whether to perform
-	// target compatibility checking/filtering, which may be expensive in
-	// environments where multiple endpoints would need to be consulted.
-	if p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{
-		{Group: "route.openshift.io", Version: "v1", Kind: "Route"},
-	}) {
+	// Only check GVKs when target compatibility filtering is enabled
+	if p.IsTargetCompatibilityToolFiltersEnabled() {
+		if p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{
+			{Group: "route.openshift.io", Version: "v1", Kind: "Route"},
+		}) {
+			commonApiVersion += ", route.openshift.io/v1 Route"
+		}
+	} else {
+		// When filtering disabled, optimistically include OpenShift resources in description
 		commonApiVersion += ", route.openshift.io/v1 Route"
 	}
 	commonApiVersion = fmt.Sprintf("(common apiVersion and kind include: %s)", commonApiVersion)

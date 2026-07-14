@@ -59,6 +59,8 @@ func (f *fakeProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersi
 	return true
 }
 
+func (f *fakeProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return false }
+
 func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 	Register(&TestToolset{name: "duplicate"})
 	s.Panics(func() {
