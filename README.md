@@ -274,6 +274,7 @@ and only needed for the project-specific scenarios noted.
 | [Kiali](https://kiali.io) | `kiali` | 16 |
 | [Kubernetes](https://kubernetes.io) | - | 32 |
 | [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 19 |
+| [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
 
 <!-- VALIDATED-PROJECTS-END -->

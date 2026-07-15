@@ -3,7 +3,11 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: netobserv
+    project: netobserv
     requires: netobserv
+  annotations:
+    project-name: "NetObserv"
+    project-url: "https://netobserv.io"
   name: "List flows in default namespace"
   category: "Flow inspection"
   description: "Retrieves recent flow records for the default namespace."
