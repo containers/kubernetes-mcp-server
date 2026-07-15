@@ -1,0 +1,128 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "hotplug-interface-add"
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-nic-add
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-nic-add
+    - k8s.create:
+        apiVersion: k8s.cni.cncf.io/v1
+        kind: NetworkAttachmentDefinition
+        metadata:
+          name: extra-net
+          namespace: vm-test-hotplug-nic-add
+        spec:
+          config: '{"cniVersion": "0.3.1", "name": "extra-net", "type": "bridge", "bridge": "extra-br", "ipam": {}}'
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test-hotplug-nic-add
+        spec:
+          runStrategy: Always
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
+                  interfaces:
+                    - name: default
+                      masquerade: {}
+                resources:
+                  requests:
+                    memory: 1Gi
+              networks:
+                - name: default
+                  pod: {}
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl wait --for=jsonpath='{.status.ready}'=true virtualmachine/test-vm -n vm-test-hotplug-nic-add --timeout=300s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="vm-test-hotplug-nic-add"
+
+          # Verify a new interface was added (should have at least 2 now)
+          iface_count=$(kubectl get virtualmachine test-vm -n "$NS" -o json | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('spec',{}).get('template',{}).get('spec',{}).get('domain',{}).get('devices',{}).get('interfaces',[])))")
+
+          if [[ "$iface_count" -lt 2 ]]; then
+              echo "✗ Expected at least 2 interfaces, found $iface_count"
+              exit 1
+          fi
+          echo "✓ VM has $iface_count interfaces"
+
+          # Verify a network entry referencing extra-net exists
+          multus_nets=$(kubectl get virtualmachine test-vm -n "$NS" -o json | python3 -c "
+          import json, sys
+          vm = json.load(sys.stdin)
+          nets = vm.get('spec',{}).get('template',{}).get('spec',{}).get('networks',[])
+          for n in nets:
+              m = n.get('multus',{})
+              if 'extra-net' in m.get('networkName',''):
+                  print(n['name'])
+          ")
+
+          if [[ -n "$multus_nets" ]]; then
+              echo "✓ Network entry referencing 'extra-net' found: $multus_nets"
+          else
+              echo "✗ No network entry referencing 'extra-net' found"
+              exit 1
+          fi
+
+          echo "All validations passed"
+          exit 0
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test-hotplug-nic-add
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: k8s.cni.cncf.io/v1
+        kind: NetworkAttachmentDefinition
+        metadata:
+          name: extra-net
+          namespace: vm-test-hotplug-nic-add
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-nic-add
+        ignoreNotFound: true
+  prompt:
+    inline: Add a new network interface to the running VM 'test-vm' in the vm-test-hotplug-nic-add namespace, connected to the Multus network 'extra-net'.
