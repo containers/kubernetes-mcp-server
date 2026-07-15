@@ -22,7 +22,7 @@ func (t *Toolset) GetDescription() string {
 }
 
 // GetTools returns all tools provided by this toolset.
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		initListInstances(),
 		initGetTraceByID(),

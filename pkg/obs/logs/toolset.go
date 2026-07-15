@@ -23,7 +23,7 @@ func (t *Toolset) GetDescription() string {
 	return "Toolset for querying Loki logs"
 }
 
-func (t *Toolset) GetTools(_ api.Openshift) []api.ServerTool {
+func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		ListInstancesTool.ToServerTool(ToServerHandler(t.NewLokiLoader, ListInstancesHandler)),
 		LabelNamesTool.ToServerTool(ToServerHandler(t.NewLokiLoader, LabelNamesHandler)),
