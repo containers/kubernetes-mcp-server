@@ -18,7 +18,7 @@ func (t *Toolset) GetName() string {
 
 // GetDescription returns a human-readable description of the toolset.
 func (t *Toolset) GetDescription() string {
-	return "Toolset for querying Tempo"
+	return "Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes."
 }
 
 // GetTools returns all tools provided by this toolset.
