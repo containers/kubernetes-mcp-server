@@ -126,6 +126,10 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 		exit 1; \
 	fi; \
 	echo "Using Kiali hack scripts from: $${KIALI_HACK_DIR}"; \
+	if [ "$(KIALI_MC_VERSION)" = "dev" ]; then \
+		export KIALI_BUILD_DEV_IMAGE="$${KIALI_BUILD_DEV_IMAGE:-true}"; \
+		echo "KIALI_BUILD_DEV_IMAGE=$${KIALI_BUILD_DEV_IMAGE} (dev image requires build-ui + build before push)"; \
+	fi; \
 	echo "Setting up primary-remote multicluster Kind clusters (east/west)..."; \
 	( \
 		cd "$${KIALI_HACK_DIR}"; \
