@@ -41,7 +41,7 @@ jobs:
             kubernetes-mcp-server-*
       # Ensure npm 11.5.1 or later is installed (required for https://docs.npmjs.com/trusted-publishers)
       - name: Setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
