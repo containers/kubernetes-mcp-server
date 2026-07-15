@@ -126,6 +126,27 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsWithFilteringEnabled() {
 	})
 }
 
+func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
+	s.Run("Kubevirt tools are filtered out when VirtualMachine GVK is not present", func() {
+		s.Cfg.Toolsets = []string{"kubevirt"}
+		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+		})
+		s.Run("kubevirt tools are not present", func() {
+			kubevirtTools := []string{"vm_create", "vm_lifecycle", "vm_clone", "vm_guest_info"}
+			for _, tool := range tools.Tools {
+				for _, kvTool := range kubevirtTools {
+					s.Require().NotEqual(kvTool, tool.Name, "Expected %s to not be present when filtering enabled on cluster without KubeVirt", kvTool)
+				}
+			}
+		})
+	})
+}
+
 func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 	s.Run("Default configuration toolsets in multi-cluster (with 11 clusters)", func() {
 		kubeconfig := s.Kubeconfig()

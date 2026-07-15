@@ -23,7 +23,7 @@ const (
 	InfoTypeNetwork    GuestAgentInfoType = "network"
 )
 
-func Tools() []api.ServerTool {
+func Tools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -58,6 +58,9 @@ func Tools() []api.ServerTool {
 				},
 			},
 			Handler: guestInfo,
+			TargetCompatibilityFilters: []func() bool{
+				kubevirt.HasVirtualMachine(p),
+			},
 		},
 	}
 }

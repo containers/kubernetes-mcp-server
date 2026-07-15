@@ -1,6 +1,9 @@
 package kubevirt
 
 import (
+	"context"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -99,6 +102,14 @@ var (
 		Resource: "virtualmachineclones",
 	}
 )
+
+// HasVirtualMachine returns a TargetCompatibilityFilter that checks whether any
+// target cluster has the VirtualMachine GVK registered.
+func HasVirtualMachine(p api.FilteringProvider) func() bool {
+	return func() bool {
+		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{VirtualMachineGVK})
+	}
+}
 
 // Kubernetes core resources
 var (

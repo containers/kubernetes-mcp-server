@@ -21,7 +21,7 @@ const (
 	ActionRestart Action = "restart"
 )
 
-func Tools() []api.ServerTool {
+func Tools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -55,6 +55,9 @@ func Tools() []api.ServerTool {
 				},
 			},
 			Handler: lifecycle,
+			TargetCompatibilityFilters: []func() bool{
+				kubevirt.HasVirtualMachine(p),
+			},
 		},
 	}
 }

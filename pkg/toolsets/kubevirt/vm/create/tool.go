@@ -18,7 +18,7 @@ import (
 //go:embed vm.yaml.tmpl
 var vmYamlTemplate string
 
-func Tools() []api.ServerTool {
+func Tools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -111,6 +111,9 @@ func Tools() []api.ServerTool {
 				},
 			},
 			Handler: create,
+			TargetCompatibilityFilters: []func() bool{
+				kubevirt.HasVirtualMachine(p),
+			},
 		},
 	}
 }

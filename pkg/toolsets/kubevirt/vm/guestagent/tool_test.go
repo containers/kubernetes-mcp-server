@@ -1,10 +1,21 @@
 package guestagent
 
 import (
+	"context"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/stretchr/testify/suite"
 )
+
+type fakeProvider struct{}
+
+func (f *fakeProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
+	return true
+}
+
+func (f *fakeProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return false }
 
 type GuestAgentToolSuite struct {
 	suite.Suite
@@ -12,16 +23,18 @@ type GuestAgentToolSuite struct {
 
 func (s *GuestAgentToolSuite) TestToolRegistration() {
 	s.Run("tool is registered", func() {
-		tools := Tools()
+		tools := Tools(&fakeProvider{})
 		s.Require().Len(tools, 1, "Expected 1 guest agent tool")
 		s.Equal("vm_guest_info", tools[0].Tool.Name)
 		s.Equal("Virtual Machine: Guest Agent Info", tools[0].Tool.Annotations.Title)
 		s.NotNil(tools[0].Tool.InputSchema)
 		s.NotNil(tools[0].Handler)
+		s.Require().Len(tools[0].TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
+		s.True(tools[0].TargetCompatibilityFilters[0](), "Filter should return true with fakeProvider")
 	})
 
 	s.Run("tool has correct properties", func() {
-		tools := Tools()
+		tools := Tools(&fakeProvider{})
 		tool := tools[0].Tool
 
 		// Check annotations

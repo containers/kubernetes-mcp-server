@@ -12,7 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func Tools() []api.ServerTool {
+func Tools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -45,6 +45,9 @@ func Tools() []api.ServerTool {
 				},
 			},
 			Handler: cloneVM,
+			TargetCompatibilityFilters: []func() bool{
+				kubevirt.HasVirtualMachine(p),
+			},
 		},
 	}
 }
