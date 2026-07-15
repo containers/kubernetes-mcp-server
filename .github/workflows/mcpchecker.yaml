@@ -456,6 +456,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Setup multicluster Kind + Istio/Kiali
         run: make setup-kiali-multicluster
 
