@@ -1,5 +1,7 @@
 ##@ Istio/Kiali
 
+SHELL := /bin/bash
+
 ISTIOCTL = $(shell pwd)/_output/tools/bin/istioctl
 ISTIO_ADDONS_DIR = $(shell pwd)/_output/istio-addons
 ISTIO_VERSION = 1.30.1
