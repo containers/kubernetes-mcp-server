@@ -80,6 +80,7 @@ jobs:
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
       is-pr: ${{ steps.check.outputs.is-pr }}
+      suite: ${{ steps.suite.outputs.suite }}
     steps:
       - name: Check trigger conditions
         id: check
@@ -264,6 +265,7 @@ jobs:
           esac
 
           echo "matrix=$(echo "$MATRIX" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "suite=$SUITE" >> "$GITHUB_OUTPUT"
 
   # Run mcpchecker evaluation with Kind cluster
   run-evaluation:
@@ -435,6 +437,60 @@ jobs:
           name: eval-context-${{ matrix.suite }}
           path: eval-context/
           retention-days: 1
+
+  run-evaluation-multicluster:
+    name: Run MCP Multicluster Evaluation
+    needs: check-trigger
+    if: |
+      needs.check-trigger.outputs.should-run == 'true' &&
+      needs.check-trigger.outputs.suite == 'kiali'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check-trigger.outputs.pr-sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup multicluster Kind + Istio/Kiali
+        run: make setup-kiali-multicluster
+
+      - name: Start MCP server
+        run: make run-server
+        env:
+          TOOLSETS: core,config,kiali
+          MCP_CONFIG_DIR: dev/config/mcp-configs-multicluster
+
+      - name: Run mcpchecker multicluster evaluation
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.18
+        with:
+          eval-config: 'evals/tasks/kiali/multicluster/eval.yaml'
+          mcpchecker-version: 'latest'
+          task-filter: ${{ github.event.inputs.task-filter || '' }}
+          output-format: 'json'
+          verbose: ${{ github.event.inputs.verbose || 'false' }}
+          upload-artifacts: 'true'
+          artifact-name: 'mcpchecker-multicluster-results'
+          fail-on-error: 'false'
+          task-pass-threshold: '0.8'
+          assertion-pass-threshold: '0.8'
+          working-directory: '.'
+        env:
+          MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
+          MODEL_KEY: ${{ secrets.MODEL_KEY }}
+          JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
+          JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
+          JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          make stop-server || true
+          make kind-delete-multicluster || true
 
   # Create PR with results (scheduled runs only)
   commit-results:
