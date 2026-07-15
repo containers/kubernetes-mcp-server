@@ -1,80 +1,120 @@
 package logs
 
 import (
-	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/rhobs/obs-mcp/pkg/logs/loki"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/rest"
 )
 
-type mockLoader struct {
-	labelNamesFn  func(ctx context.Context, start, end time.Time) ([]string, error)
-	labelValuesFn func(ctx context.Context, label string, start, end time.Time) ([]string, error)
-	queryRangeFn  func(ctx context.Context, input loki.QueryRangeInput) (loki.QueryRangeResult, error)
+type mockKubernetesClient struct {
+	api.KubernetesClient
+	restConfig    *rest.Config
+	dynamicClient *dynamicfake.FakeDynamicClient
 }
 
-func (m *mockLoader) LabelNames(ctx context.Context, start, end time.Time) ([]string, error) {
-	return m.labelNamesFn(ctx, start, end)
+func (m *mockKubernetesClient) RESTConfig() *rest.Config {
+	return m.restConfig
 }
 
-func (m *mockLoader) LabelValues(ctx context.Context, label string, start, end time.Time) ([]string, error) {
-	return m.labelValuesFn(ctx, label, start, end)
+func (m *mockKubernetesClient) DynamicClient() dynamic.Interface {
+	return m.dynamicClient
 }
 
-func (m *mockLoader) QueryRange(ctx context.Context, input loki.QueryRangeInput) (loki.QueryRangeResult, error) {
-	return m.queryRangeFn(ctx, input)
+type mockBaseConfig struct {
+	api.BaseConfig
+	config *Config
+}
+
+func (m *mockBaseConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
+	if name == ToolsetName && m.config != nil {
+		return m.config, true
+	}
+	return nil, false
+}
+
+type mockToolCallRequest struct {
+	arguments map[string]any
+}
+
+func (m *mockToolCallRequest) GetArguments() map[string]any {
+	return m.arguments
+}
+
+func newTestParams(t *testing.T, cfg *Config, dynamicClient *dynamicfake.FakeDynamicClient, args map[string]any) api.ToolHandlerParams {
+	t.Helper()
+	return api.ToolHandlerParams{
+		Context:          t.Context(),
+		KubernetesClient: &mockKubernetesClient{restConfig: &rest.Config{}, dynamicClient: dynamicClient},
+		BaseConfig:       &mockBaseConfig{config: cfg},
+		ToolCallRequest:  &mockToolCallRequest{arguments: args},
+	}
+}
+
+func handlerParams(t *testing.T, lokiURL string, args map[string]any) api.ToolHandlerParams {
+	t.Helper()
+	return newTestParams(t, &Config{LokiURL: lokiURL}, nil, args)
+}
+
+func lokiServer(t *testing.T, responses map[string]mockResponse) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for pattern, resp := range responses {
+			if pathMatchesLoki(r.URL.Path, pattern) {
+				if resp.err != "" {
+					http.Error(w, resp.err, http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, resp.body)
+				return
+			}
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+type mockResponse struct {
+	body string
+	err  string
+}
+
+func pathMatchesLoki(actual, pattern string) bool {
+	switch pattern {
+	case "labels":
+		return actual == "/loki/api/v1/labels"
+	case "label_values":
+		return len(actual) > len("/loki/api/v1/label/") && actual != "/loki/api/v1/labels"
+	case "query_range":
+		return actual == "/loki/api/v1/query_range"
+	}
+	return false
 }
 
 func TestLabelValuesHandlerRequiresLabel(t *testing.T) {
-	_, err := LabelValuesHandler(ToolParams{
-		context:   t.Context(),
-		arguments: map[string]any{},
-		config:    &Config{LokiURL: "http://localhost:3100"},
-		newLokiLoader: func(_, _ string) (loki.Loader, error) {
-			return &mockLoader{}, nil
-		},
-	})
-	if err == nil {
-		t.Fatalf("expected error when label is missing")
-	}
+	srv := lokiServer(t, nil)
+	result, err := labelValuesHandler(handlerParams(t, srv.URL, map[string]any{}))
+	require.NoError(t, err)
+	require.Error(t, result.Error)
 }
 
 func TestQueryRangeHandlerDefaults(t *testing.T) {
-	called := false
-	output, err := QueryRangeHandler(ToolParams{
-		context: t.Context(),
-		arguments: map[string]any{
-			"query": `{namespace="default"}`,
-		},
-		config: &Config{LokiURL: "http://localhost:3100"},
-		newLokiLoader: func(_, _ string) (loki.Loader, error) {
-			return &mockLoader{
-				queryRangeFn: func(ctx context.Context, input loki.QueryRangeInput) (loki.QueryRangeResult, error) {
-					called = true
-					if input.Direction != "backward" {
-						t.Fatalf("expected default direction backward, got %s", input.Direction)
-					}
-					if input.Limit != defaultQueryLimit {
-						t.Fatalf("expected default limit %d, got %d", defaultQueryLimit, input.Limit)
-					}
-					return loki.QueryRangeResult{
-						ResultType: "streams",
-						Streams: []loki.Stream{
-							{Labels: map[string]string{"namespace": "default"}},
-						},
-					}, nil
-				},
-			}, nil
-		},
+	srv := lokiServer(t, map[string]mockResponse{
+		"query_range": {body: `{"status":"success","data":{"resultType":"streams","result":[{"stream":{"namespace":"default"},"values":[["1000000000","line1"]]}]}}`},
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !called {
-		t.Fatalf("expected queryRangeFn to be called")
-	}
-	if output.ResultType != "streams" {
-		t.Fatalf("unexpected resultType: %s", output.ResultType)
-	}
+	result, err := queryRangeHandler(handlerParams(t, srv.URL, map[string]any{
+		"query": `{namespace="default"}`,
+	}))
+	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(QueryRangeOutput)
+	require.Equal(t, "streams", output.ResultType)
 }

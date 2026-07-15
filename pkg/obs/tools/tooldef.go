@@ -11,6 +11,15 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// MustSchema returns the JSON Schema for type T, panicking on error.
+func MustSchema[T any]() *jsonschema.Schema {
+	s, err := jsonschema.For[T](nil)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
 // ToolDefInterface defines the common interface for all tool definitions
 type ToolDefInterface interface {
 	ToMCPTool() *mcp.Tool

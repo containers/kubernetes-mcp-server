@@ -9,8 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-
-	"github.com/rhobs/obs-mcp/pkg/logs/loki"
 )
 
 var lokiStackGVRForTests = schema.GroupVersionResource{
@@ -24,15 +22,10 @@ func TestListInstancesHandler_Success(t *testing.T) {
 		newLokiStack("openshift-logging", "logging-loki"),
 	)
 
-	output, err := ListInstancesHandler(ToolParams{
-		context:       t.Context(),
-		dynamicClient: fakeClient,
-		config:        &Config{UseRoute: false},
-		newLokiLoader: func(_, _ string) (loki.Loader, error) {
-			return &mockLoader{}, nil
-		},
-	})
+	result, err := listInstancesHandler(newTestParams(t, &Config{UseRoute: false}, fakeClient, nil))
 	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(ListInstancesOutput)
 	require.Len(t, output.Instances, 1)
 	require.Equal(t, "openshift-logging", output.Instances[0].LokiNamespace)
 	require.Equal(t, "logging-loki", output.Instances[0].LokiName)

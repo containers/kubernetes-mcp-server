@@ -1,15 +1,19 @@
 package logs
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/prometheus/common/model"
 
+	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/logs/discovery"
 	"github.com/rhobs/obs-mcp/pkg/logs/loki"
 	"github.com/rhobs/obs-mcp/pkg/prometheus"
-	"github.com/rhobs/obs-mcp/pkg/tools"
 )
 
 const (
@@ -18,73 +22,91 @@ const (
 	maxQueryLimit        = 1000
 )
 
-func LabelNamesHandler(params ToolParams) (LabelNamesOutput, error) {
-	client, err := params.getLokiClient()
-	if err != nil {
-		return LabelNamesOutput{}, err
+func labelNamesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
+	startStr := p.OptionalString("start", "")
+	endStr := p.OptionalString("end", "")
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list label names: %w", err)), nil
 	}
 
-	input := buildLabelNamesInput(params.arguments)
-	start, end, err := parseDefaultTimeRange(input.Start, input.End)
+	start, end, err := parseDefaultTimeRange(startStr, endStr)
 	if err != nil {
-		return LabelNamesOutput{}, err
+		return api.NewToolCallResult("", err), nil
 	}
 
-	labels, err := client.LabelNames(params.context, start, end)
+	client, err := getLokiClient(params)
 	if err != nil {
-		return LabelNamesOutput{}, fmt.Errorf("failed to list Loki label names: %w", err)
+		return api.NewToolCallResult("", err), nil
 	}
-	return LabelNamesOutput{Labels: labels}, nil
+
+	labels, err := client.LabelNames(params.Context, start, end)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list Loki label names: %w", err)), nil
+	}
+
+	return api.NewToolCallResultStructured(LabelNamesOutput{Labels: labels}, nil), nil
 }
 
-func LabelValuesHandler(params ToolParams) (LabelValuesOutput, error) {
-	client, err := params.getLokiClient()
-	if err != nil {
-		return LabelValuesOutput{}, err
+func labelValuesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
+	label := p.RequiredString("label")
+	startStr := p.OptionalString("start", "")
+	endStr := p.OptionalString("end", "")
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list label values: %w", err)), nil
 	}
 
-	input := buildLabelValuesInput(params.arguments)
-	if input.Label == "" {
-		return LabelValuesOutput{}, fmt.Errorf("label parameter is required and must be a string")
+	if label == "" {
+		return api.NewToolCallResult("", fmt.Errorf("label parameter is required and must be a string")), nil
 	}
 
-	start, end, err := parseDefaultTimeRange(input.Start, input.End)
+	start, end, err := parseDefaultTimeRange(startStr, endStr)
 	if err != nil {
-		return LabelValuesOutput{}, err
+		return api.NewToolCallResult("", err), nil
 	}
 
-	values, err := client.LabelValues(params.context, input.Label, start, end)
+	client, err := getLokiClient(params)
 	if err != nil {
-		return LabelValuesOutput{}, fmt.Errorf("failed to list Loki label values: %w", err)
+		return api.NewToolCallResult("", err), nil
 	}
-	return LabelValuesOutput{Values: values}, nil
+
+	values, err := client.LabelValues(params.Context, label, start, end)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list Loki label values: %w", err)), nil
+	}
+
+	return api.NewToolCallResultStructured(LabelValuesOutput{Values: values}, nil), nil
 }
 
-func QueryRangeHandler(params ToolParams) (QueryRangeOutput, error) {
-	client, err := params.getLokiClient()
+func queryRangeHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
+	query := p.RequiredString("query")
+	startStr := p.OptionalString("start", "")
+	endStr := p.OptionalString("end", "")
+	duration := p.OptionalString("duration", "")
+	direction := p.OptionalString("direction", "")
+	limit := int(p.OptionalInt64("limit", int64(defaultQueryLimit)))
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to execute query range: %w", err)), nil
+	}
+
+	if query == "" {
+		return api.NewToolCallResult("", fmt.Errorf("query parameter is required and must be a string")), nil
+	}
+
+	start, end, err := parseQueryTimeRange(startStr, endStr, duration)
 	if err != nil {
-		return QueryRangeOutput{}, err
+		return api.NewToolCallResult("", err), nil
 	}
 
-	input := buildQueryRangeInput(params.arguments)
-	if input.Query == "" {
-		return QueryRangeOutput{}, fmt.Errorf("query parameter is required and must be a string")
-	}
-
-	start, end, err := parseQueryTimeRange(input)
-	if err != nil {
-		return QueryRangeOutput{}, err
-	}
-
-	direction := input.Direction
 	if direction == "" {
 		direction = "backward"
 	}
 	if direction != "backward" && direction != "forward" {
-		return QueryRangeOutput{}, fmt.Errorf("direction must be either backward or forward")
+		return api.NewToolCallResult("", fmt.Errorf("direction must be either backward or forward")), nil
 	}
 
-	limit := input.Limit
 	if limit <= 0 {
 		limit = defaultQueryLimit
 	}
@@ -92,27 +114,33 @@ func QueryRangeHandler(params ToolParams) (QueryRangeOutput, error) {
 		limit = maxQueryLimit
 	}
 
-	result, err := client.QueryRange(params.context, loki.QueryRangeInput{
-		Query:     input.Query,
+	client, err := getLokiClient(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+
+	result, err := client.QueryRange(params.Context, loki.QueryRangeInput{
+		Query:     query,
 		Start:     start,
 		End:       end,
 		Limit:     limit,
 		Direction: direction,
 	})
 	if err != nil {
-		return QueryRangeOutput{}, fmt.Errorf("failed to execute Loki query_range: %w", err)
+		return api.NewToolCallResult("", fmt.Errorf("failed to execute Loki query_range: %w", err)), nil
 	}
 
-	return QueryRangeOutput{
+	return api.NewToolCallResultStructured(QueryRangeOutput{
 		ResultType: result.ResultType,
 		Streams:    result.Streams,
-	}, nil
+	}, nil), nil
 }
 
-func ListInstancesHandler(params ToolParams) (ListInstancesOutput, error) {
-	instances, err := discovery.ListInstances(params.context, params.dynamicClient, params.useRoute())
+func listInstancesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	cfg := GetConfig(params)
+	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
 	if err != nil {
-		return ListInstancesOutput{}, err
+		return api.NewToolCallResult("", err), nil
 	}
 
 	output := make([]LokiInstance, 0, len(instances))
@@ -124,42 +152,9 @@ func ListInstancesHandler(params ToolParams) (ListInstancesOutput, error) {
 			URL:           instance.GetURL(),
 		})
 	}
-	return ListInstancesOutput{Instances: output}, nil
-}
 
-func buildLabelNamesInput(args map[string]any) LabelNamesInput {
-	return LabelNamesInput{
-		LokiNamespace: tools.GetString(args, "lokiNamespace", ""),
-		LokiName:      tools.GetString(args, "lokiName", ""),
-		Tenant:        tools.GetString(args, "tenant", ""),
-		Start:         tools.GetString(args, "start", ""),
-		End:           tools.GetString(args, "end", ""),
-	}
-}
-
-func buildLabelValuesInput(args map[string]any) LabelValuesInput {
-	return LabelValuesInput{
-		LokiNamespace: tools.GetString(args, "lokiNamespace", ""),
-		LokiName:      tools.GetString(args, "lokiName", ""),
-		Tenant:        tools.GetString(args, "tenant", ""),
-		Label:         tools.GetString(args, "label", ""),
-		Start:         tools.GetString(args, "start", ""),
-		End:           tools.GetString(args, "end", ""),
-	}
-}
-
-func buildQueryRangeInput(args map[string]any) QueryRangeInput {
-	return QueryRangeInput{
-		LokiNamespace: tools.GetString(args, "lokiNamespace", ""),
-		LokiName:      tools.GetString(args, "lokiName", ""),
-		Tenant:        tools.GetString(args, "tenant", ""),
-		Query:         tools.GetString(args, "query", ""),
-		Start:         tools.GetString(args, "start", ""),
-		End:           tools.GetString(args, "end", ""),
-		Duration:      tools.GetString(args, "duration", ""),
-		Direction:     tools.GetString(args, "direction", ""),
-		Limit:         tools.GetInt(args, "limit", defaultQueryLimit),
-	}
+	result := ListInstancesOutput{Instances: output}
+	return api.NewToolCallResultStructured(result, nil), nil
 }
 
 func parseDefaultTimeRange(start, end string) (startTime, endTime time.Time, err error) {
@@ -186,49 +181,70 @@ func parseDefaultTimeRange(start, end string) (startTime, endTime time.Time, err
 	return startTime, endTime, nil
 }
 
-func parseQueryTimeRange(input QueryRangeInput) (start, end time.Time, err error) {
-	if input.Start != "" || input.End != "" {
-		return parseDefaultTimeRange(input.Start, input.End)
+func parseQueryTimeRange(startStr, endStr, durationStr string) (start, end time.Time, err error) {
+	if startStr != "" || endStr != "" {
+		return parseDefaultTimeRange(startStr, endStr)
 	}
 
-	duration := defaultQueryLookback
-	if input.Duration != "" {
-		d, parseErr := model.ParseDuration(input.Duration)
+	dur := defaultQueryLookback
+	if durationStr != "" {
+		d, parseErr := model.ParseDuration(durationStr)
 		if parseErr != nil {
 			return time.Time{}, time.Time{}, fmt.Errorf("invalid duration format: %w", parseErr)
 		}
-		duration = time.Duration(d)
-		if duration <= 0 {
+		dur = time.Duration(d)
+		if dur <= 0 {
 			return time.Time{}, time.Time{}, fmt.Errorf("duration must be positive")
 		}
 	}
 
 	end = time.Now()
-	start = end.Add(-duration)
+	start = end.Add(-dur)
 	return start, end, nil
 }
 
-func (params ToolParams) getLokiClient() (loki.Loader, error) {
-	url, err := params.resolveLokiURL()
+func getLokiClient(params api.ToolHandlerParams) (loki.Loader, error) {
+	cfg := GetConfig(params)
+
+	url, err := resolveLokiURL(params)
 	if err != nil {
 		return nil, err
 	}
-	tenant := tools.GetString(params.arguments, "tenant", "")
-	return params.newLokiLoader(url, tenant)
-}
 
-func (params ToolParams) resolveLokiURL() (string, error) {
-	if params.config != nil && params.config.LokiURL != "" {
-		return params.config.LokiURL, nil
+	tenant := api.WrapParams(params).OptionalString("tenant", "")
+
+	tls := strings.HasPrefix(url, "https://")
+	rt, err := auth.BuildRoundTripper(params.Context, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}
 
-	namespace := tools.GetString(params.arguments, "lokiNamespace", "")
-	name := tools.GetString(params.arguments, "lokiName", "")
+	httpClient := &http.Client{
+		Timeout:   loki.RequestTimeout,
+		Transport: rt,
+	}
+	return loki.NewHTTPLoader(httpClient, url, tenant), nil
+}
+
+func resolveLokiURL(params api.ToolHandlerParams) (string, error) {
+	cfg := GetConfig(params)
+	if cfg != nil && cfg.LokiURL != "" {
+		return cfg.LokiURL, nil
+	}
+
+	p := api.WrapParams(params)
+	namespace := p.OptionalString("lokiNamespace", "")
+	name := p.OptionalString("lokiName", "")
+
 	if namespace != "" || name != "" {
 		if namespace == "" || name == "" {
 			return "", fmt.Errorf("both lokiNamespace and lokiName must be provided together")
 		}
-		instances, err := discovery.ListInstances(params.context, params.dynamicClient, params.useRoute())
+		if err := p.Err(); err != nil {
+			return "", err
+		}
+
+		instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
 		if err != nil {
 			return "", err
 		}
@@ -239,12 +255,5 @@ func (params ToolParams) resolveLokiURL() (string, error) {
 		return instance.GetURL(), nil
 	}
 
-	return "", fmt.Errorf("loki URL not configured; set loki_url/--loki-url/LOKI_URL or provide lokiNamespace and lokiName")
-}
-
-func (params ToolParams) useRoute() bool {
-	if params.config == nil {
-		return false
-	}
-	return params.config.UseRoute
+	return "", errors.New("loki URL not configured; set loki_url/--loki-url/LOKI_URL or provide lokiNamespace and lokiName")
 }
