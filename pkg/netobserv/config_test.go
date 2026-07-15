@@ -1,6 +1,7 @@
 package netobserv
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -54,7 +55,7 @@ func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
 	caFile := filepath.Join(s.T().TempDir(), "service-ca.crt")
 	s.Require().NoError(os.WriteFile(caFile, []byte("test ca"), 0644))
 	resolved := *sharedCfg
-	resolved.applyDefaultsWithStat(true, func(path string) (os.FileInfo, error) {
+	resolved.applyDefaultsWithStat(context.Background(), true, func(path string) (os.FileInfo, error) {
 		if path == DefaultPluginServiceCAPath {
 			return os.Stat(caFile)
 		}
@@ -68,21 +69,21 @@ func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
 func (s *ConfigSuite) TestNewNetObserv_withoutToolsetConfigSection() {
 	base := config.BaseDefault()
 	base.Toolsets = append(base.Toolsets, "netobserv")
-	client := NewNetObserv(base, nil)
+	client := NewNetObserv(context.Background(), base, nil, nil)
 	s.Equal(DefaultPluginURL(false), client.pluginURL)
 	s.False(client.insecure)
 }
 
 func (s *ConfigSuite) TestApplyDefaults_explicitURLUnchanged() {
 	cfg := &Config{Url: "http://localhost:9001"}
-	cfg.applyDefaults(true)
+	cfg.applyDefaults(context.Background(), true)
 	s.False(cfg.Insecure)
 	s.Empty(cfg.CertificateAuthority)
 }
 
 func (s *ConfigSuite) TestApplyDefaults_skipsTLSOnNonOpenShift() {
 	cfg := &Config{}
-	cfg.applyDefaults(false)
+	cfg.applyDefaults(context.Background(), false)
 	s.False(cfg.Insecure)
 	s.Empty(cfg.CertificateAuthority)
 }
@@ -91,7 +92,7 @@ func (s *ConfigSuite) TestApplyDefaults_usesServiceCAWhenPresent() {
 	caFile := filepath.Join(s.T().TempDir(), "service-ca.crt")
 	s.Require().NoError(os.WriteFile(caFile, []byte("test ca"), 0644))
 	cfg := &Config{}
-	cfg.applyDefaultsWithStat(true, func(path string) (os.FileInfo, error) {
+	cfg.applyDefaultsWithStat(context.Background(), true, func(path string) (os.FileInfo, error) {
 		if path == DefaultPluginServiceCAPath {
 			return os.Stat(caFile)
 		}
@@ -103,7 +104,7 @@ func (s *ConfigSuite) TestApplyDefaults_usesServiceCAWhenPresent() {
 
 func (s *ConfigSuite) TestApplyDefaults_leavesTLSUnsetWithoutServiceCA() {
 	cfg := &Config{}
-	cfg.applyDefaultsWithStat(true, func(string) (os.FileInfo, error) {
+	cfg.applyDefaultsWithStat(context.Background(), true, func(string) (os.FileInfo, error) {
 		return nil, os.ErrNotExist
 	})
 	s.False(cfg.Insecure)

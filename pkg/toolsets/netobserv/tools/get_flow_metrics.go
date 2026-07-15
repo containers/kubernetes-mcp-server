@@ -33,7 +33,6 @@ func InitGetFlowMetrics() []api.ServerTool {
 	props["aggregateBy"] = &jsonschema.Schema{
 		Type:        "string",
 		Description: aggregateByParameterDescription,
-		Default:     api.ToRawMessage(DefaultAggregateBy),
 	}
 	props["groups"] = &jsonschema.Schema{
 		Type:        "string",
@@ -55,11 +54,7 @@ func InitGetFlowMetrics() []api.ServerTool {
 		Tool: api.Tool{
 			Name:        name,
 			Description: "Returns aggregated NetObserv flow metrics as topology or time-series data. Use for throughput, TLS/DNS/drop breakdowns, and namespace or workload traffic analysis; see aggregateBy and groups for grouping options.",
-			InputSchema: &jsonschema.Schema{
-				Type:       "object",
-				Properties: props,
-				Required:   []string{"aggregateBy"},
-			},
+			InputSchema: toolInputSchema(props, []string{"aggregateBy"}),
 			Annotations: readOnlyAnnotations("Get NetObserv Flow Metrics"),
 		},
 		Handler: getFlowMetricsHandler,
@@ -67,7 +62,7 @@ func InitGetFlowMetrics() []api.ServerTool {
 }
 
 func getFlowMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client := netobservclient.NewNetObserv(params, params.KubernetesClient)
+	client := netobservclient.NewNetObserv(params.Context, params, params.KubernetesClient, params.FilteringProvider)
 	content, err := client.ExecuteGet(params.Context, NetObservFlowMetricsEndpoint, params.GetArguments())
 	return jsonAPIResult(content, wrapAPIError("get flow metrics", err))
 }

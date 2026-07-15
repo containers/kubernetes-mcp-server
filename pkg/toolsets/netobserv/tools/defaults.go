@@ -8,7 +8,6 @@ const (
 	DefaultDataSource         = "auto"
 	DefaultMetricType         = "Bytes"
 	DefaultMetricFunction     = "rate"
-	DefaultAggregateBy        = "namespace"
 	DefaultRateInterval       = "1m"
 	DefaultStep               = "30s"
 	DefaultExportFormat       = "csv"

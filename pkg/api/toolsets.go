@@ -166,6 +166,7 @@ type ToolHandlerParams struct {
 	context.Context
 	BaseConfig
 	KubernetesClient
+	FilteringProvider FilteringProvider
 	ToolCallRequest
 	ListOutput output.Output
 	Elicitor

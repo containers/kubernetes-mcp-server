@@ -13,7 +13,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
-	"k8s.io/klog/v2"
 )
 
 // Config holds NetObserv console plugin backend configuration.
@@ -57,11 +56,11 @@ func (c *Config) usesSynthesizedURL() bool {
 }
 
 // applyDefaults sets certificate_authority from the projected service CA on OpenShift when url is synthesized.
-func (c *Config) applyDefaults(isOpenShift bool) {
-	c.applyDefaultsWithStat(isOpenShift, os.Stat)
+func (c *Config) applyDefaults(ctx context.Context, isOpenShift bool) {
+	c.applyDefaultsWithStat(ctx, isOpenShift, os.Stat)
 }
 
-func (c *Config) applyDefaultsWithStat(isOpenShift bool, stat func(string) (os.FileInfo, error)) {
+func (c *Config) applyDefaultsWithStat(ctx context.Context, isOpenShift bool, stat func(string) (os.FileInfo, error)) {
 	if c == nil || !c.usesSynthesizedURL() || !isOpenShift {
 		return
 	}
@@ -73,7 +72,7 @@ func (c *Config) applyDefaultsWithStat(isOpenShift bool, stat func(string) (os.F
 		return
 	}
 	klogutil.LogInfo(
-		klog.Background(),
+		klogutil.FromContext(ctx),
 		"NetObserv plugin TLS: service CA not found; set certificate_authority or insecure=true",
 		klogutil.Field("path", DefaultPluginServiceCAPath),
 	)
@@ -128,7 +127,7 @@ func netobservToolsetParser(ctx context.Context, primitive toml.Primitive, md to
 		}
 	}
 
-	cfg.applyDefaults(configLoadOpenShift)
+	cfg.applyDefaults(ctx, configLoadOpenShift)
 
 	if err := cfg.validate(configLoadOpenShift); err != nil {
 		return nil, err

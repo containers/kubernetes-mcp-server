@@ -69,7 +69,7 @@ func ArgumentsToValues(arguments map[string]any) url.Values {
 		if value == nil {
 			continue
 		}
-		if s, ok := stringArg(value); ok && s != "" {
+		if s := stringArg(value); s != "" {
 			values.Set(key, s)
 		}
 	}
@@ -101,22 +101,22 @@ func int64Arg(value any) (int64, bool) {
 	}
 }
 
-func stringArg(value any) (string, bool) {
+func stringArg(value any) string {
 	switch v := value.(type) {
 	case string:
-		return v, true
+		return v
 	case bool:
-		return strconv.FormatBool(v), true
+		return strconv.FormatBool(v)
 	case float64:
 		if v == float64(int64(v)) {
-			return strconv.FormatInt(int64(v), 10), true
+			return strconv.FormatInt(int64(v), 10)
 		}
-		return strconv.FormatFloat(v, 'f', -1, 64), true
+		return strconv.FormatFloat(v, 'f', -1, 64)
 	case int:
-		return strconv.Itoa(v), true
+		return strconv.Itoa(v)
 	case int64:
-		return strconv.FormatInt(v, 10), true
+		return strconv.FormatInt(v, 10)
 	default:
-		return fmt.Sprint(v), true
+		return fmt.Sprint(v)
 	}
 }

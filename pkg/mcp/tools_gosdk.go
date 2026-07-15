@@ -83,12 +83,13 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		}
 
 		result, err := tool.Handler(api.ToolHandlerParams{
-			Context:          ctx,
-			BaseConfig:       cfg,
-			KubernetesClient: k,
-			ToolCallRequest:  toolCallRequest,
-			ListOutput:       cfg.ListOutput(),
-			Elicitor:         &sessionElicitor{},
+			Context:           ctx,
+			BaseConfig:        cfg,
+			KubernetesClient:  k,
+			FilteringProvider: s.p,
+			ToolCallRequest:   toolCallRequest,
+			ListOutput:        cfg.ListOutput(),
+			Elicitor:          &sessionElicitor{},
 		})
 		if err != nil {
 			return nil, err

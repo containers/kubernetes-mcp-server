@@ -1,6 +1,7 @@
 package netobserv
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -36,7 +37,7 @@ func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 		url = "https://netobserv.example/"
 		insecure = true
 	`)))
-	client := NewNetObserv(s.Config, nil)
+	client := NewNetObserv(context.Background(), s.Config, nil, nil)
 
 	s.Equal("https://netobserv.example/", client.pluginURL)
 	s.True(client.insecure)
@@ -57,7 +58,7 @@ func (s *NetObservSuite) TestExecuteGet() {
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	client := NewNetObserv(s.Config, nil)
+	client := NewNetObserv(context.Background(), s.Config, nil, nil)
 	client.bearerToken = "token-xyz"
 
 	content, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", map[string]any{
@@ -83,7 +84,7 @@ func (s *NetObservSuite) TestExecuteGet() {
 			s.Equal("Bearer file-sa-token", r.Header.Get("Authorization"))
 			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		}))
-		client := NewNetObserv(s.Config, nil)
+		client := NewNetObserv(context.Background(), s.Config, nil, nil)
 		client.bearerTokenFile = tokenFile
 
 		content, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
@@ -112,7 +113,7 @@ func (s *NetObservSuite) TestExecuteGetAccept_csv() {
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	client := NewNetObserv(s.Config, nil)
+	client := NewNetObserv(context.Background(), s.Config, nil, nil)
 
 	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", map[string]any{
 		"format": "csv",
@@ -132,7 +133,7 @@ func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	client := NewNetObserv(s.Config, nil)
+	client := NewNetObserv(context.Background(), s.Config, nil, nil)
 
 	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*", 16)
 	s.Require().NoError(err)
@@ -141,7 +142,7 @@ func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
 }
 
 func (s *NetObservSuite) TestNewNetObserv_usesDefaultURLWithoutConfigSection() {
-	client := NewNetObserv(s.Config, nil)
+	client := NewNetObserv(context.Background(), s.Config, nil, nil)
 	s.Equal(DefaultPluginURL(false), client.pluginURL)
 }
 
@@ -171,6 +172,36 @@ func (s *NetObservSuite) TestRequireTLS_ConfigValidation() {
 		s.Require().NoError(err)
 		s.NotNil(cfg)
 	})
+}
+
+func (s *NetObservSuite) TestCreateHTTPClient_failsClosedOnInvalidCA() {
+	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+	client.certificateAuthority = filepath.Join(s.T().TempDir(), "missing-ca.crt")
+
+	_, err := client.createHTTPClient(s.T().Context())
+	s.Require().Error(err)
+	s.ErrorContains(err, "failed to read certificate authority")
+}
+
+func (s *NetObservSuite) TestExecuteGet_rejectsRedirects() {
+	redirectTarget := test.NewMockServer()
+	redirectTarget.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Fail("redirect target should not be called")
+	}))
+	s.T().Cleanup(redirectTarget.Close)
+
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTarget.Config().Host+"/stolen", http.StatusFound)
+	}))
+	s.Config = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
+		[toolset_configs.netobserv]
+		url = "%s"
+	`, s.MockServer.Config().Host))))
+	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+
+	_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
+	s.Require().Error(err)
+	s.ErrorContains(err, "redirects are not allowed")
 }
 
 func TestNetObserv(t *testing.T) {

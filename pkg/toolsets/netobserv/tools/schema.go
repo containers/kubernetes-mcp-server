@@ -55,6 +55,18 @@ func flowQueryProperties() map[string]*jsonschema.Schema {
 	}
 }
 
+// noAdditionalProperties rejects unknown tool input fields so they cannot be forwarded as query params.
+var noAdditionalProperties = &jsonschema.Schema{Not: &jsonschema.Schema{}}
+
+func toolInputSchema(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:                 "object",
+		Properties:           properties,
+		Required:             required,
+		AdditionalProperties: noAdditionalProperties,
+	}
+}
+
 func readOnlyAnnotations(title string) api.ToolAnnotations {
 	return api.ToolAnnotations{
 		Title:           title,

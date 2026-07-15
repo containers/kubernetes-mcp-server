@@ -29,7 +29,7 @@ type NetObserv struct {
 }
 
 // NewNetObserv creates a client using toolset config, cluster detection, and the Kubernetes REST config.
-func NewNetObserv(configProvider api.BaseConfig, k8s api.KubernetesClient) *NetObserv {
+func NewNetObserv(ctx context.Context, configProvider api.BaseConfig, k8s api.KubernetesClient, provider api.FilteringProvider) *NetObserv {
 	var restConfig *rest.Config
 	if k8s != nil {
 		restConfig = k8s.RESTConfig()
@@ -52,8 +52,8 @@ func NewNetObserv(configProvider api.BaseConfig, k8s api.KubernetesClient) *NetO
 	if shared != nil {
 		resolved = *shared
 	}
-	isOpenShift := clusterIsOpenShift(k8s)
-	resolved.applyDefaults(isOpenShift)
+	isOpenShift := isOpenShiftFromProvider(ctx, provider)
+	resolved.applyDefaults(ctx, isOpenShift)
 	client.pluginURL = resolved.ResolvedURL(isOpenShift)
 	client.insecure = resolved.Insecure
 	client.certificateAuthority = resolved.CertificateAuthority
@@ -96,7 +96,9 @@ func (n *NetObserv) validateAndGetURL(endpoint string) (string, error) {
 	return u.String(), nil
 }
 
-func (n *NetObserv) createHTTPClient(ctx context.Context) *http.Client {
+var errRedirectsNotAllowed = errors.New("redirects are not allowed for netobserv API requests")
+
+func (n *NetObserv) createHTTPClient(ctx context.Context) (*http.Client, error) {
 	logger := klogutil.FromContext(ctx)
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
@@ -109,28 +111,25 @@ func (n *NetObserv) createHTTPClient(ctx context.Context) *http.Client {
 	if caValue := strings.TrimSpace(n.certificateAuthority); caValue != "" {
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
-			logger.Error(err, "failed to read CA certificate; proceeding without custom CA", "path", caValue)
-			return n.wrapWithTLSEnforcement(&http.Client{
-				Transport: transport,
-				Timeout:   DefaultPluginHTTPTimeout,
-			})
+			return nil, fmt.Errorf("failed to read certificate authority %q: %w", caValue, err)
 		}
-		var certPool *x509.CertPool
-		if systemPool, err := x509.SystemCertPool(); err == nil && systemPool != nil {
-			certPool = systemPool
-		} else {
-			certPool = x509.NewCertPool()
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("failed to parse certificate authority %q", caValue)
 		}
-		if ok := certPool.AppendCertsFromPEM(caPEM); ok {
-			tlsConfig.RootCAs = certPool
-		} else {
-			logger.V(0).Info("failed to append provided certificate authority; proceeding without custom CA")
-		}
+		tlsConfig.RootCAs = certPool
 	}
-	return n.wrapWithTLSEnforcement(&http.Client{
+	client := &http.Client{
 		Transport: transport,
 		Timeout:   DefaultPluginHTTPTimeout,
-	})
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return errRedirectsNotAllowed
+		},
+	}
+	if n.insecure {
+		klogutil.LogInfo(logger.V(1), "NetObserv plugin TLS verification disabled")
+	}
+	return n.wrapWithTLSEnforcement(client), nil
 }
 
 func (n *NetObserv) wrapWithTLSEnforcement(client *http.Client) *http.Client {
@@ -200,7 +199,10 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		req.Header.Set("Accept", accept)
 	}
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
-	client := n.createHTTPClient(ctx)
+	client, err := n.createHTTPClient(ctx)
+	if err != nil {
+		return GetResponse{}, err
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

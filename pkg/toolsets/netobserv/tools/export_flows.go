@@ -26,10 +26,7 @@ func InitExportFlows() []api.ServerTool {
 		Tool: api.Tool{
 			Name:        name,
 			Description: "Exports NetObserv flow records as CSV with the same filters as list_flows. Use when the user needs downloadable flow data for audits or offline analysis.",
-			InputSchema: &jsonschema.Schema{
-				Type:       "object",
-				Properties: props,
-			},
+			InputSchema: toolInputSchema(props, nil),
 			Annotations: readOnlyAnnotations("Export NetObserv Flows as CSV"),
 		},
 		Handler: exportFlowsHandler,
@@ -44,7 +41,7 @@ func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if _, ok := args["format"]; !ok {
 		args["format"] = DefaultExportFormat
 	}
-	client := netobservclient.NewNetObserv(params, params.KubernetesClient)
+	client := netobservclient.NewNetObserv(params.Context, params, params.KubernetesClient, params.FilteringProvider)
 	response, err := client.ExecuteGetAccept(params.Context, NetObservExportFlowsEndpoint, args, "text/csv,*/*", DefaultExportMaxBodyBytes)
 	content := response.Body
 	if response.Truncated {

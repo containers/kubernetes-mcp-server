@@ -1,30 +1,32 @@
 package netobserv
 
 import (
+	"context"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 )
 
-var openshiftProjectGVK = schema.GroupVersionKind{
+var openshiftProjectGVKs = []schema.GroupVersionKind{{
 	Group:   "project.openshift.io",
 	Version: "v1",
 	Kind:    "Project",
-}
+}}
 
-// clusterIsOpenShift reports whether the connected cluster is OpenShift using the
-// framework-provided cached discovery client (same GVK signal as FilteringProvider).
-func clusterIsOpenShift(k8s api.KubernetesClient) bool {
-	if k8s == nil {
+// isOpenShiftFromProvider reports whether the connected cluster is OpenShift using the
+// framework-provided FilteringProvider (same GVK signal as the cluster-state watcher).
+func isOpenShiftFromProvider(ctx context.Context, provider api.FilteringProvider) bool {
+	if provider == nil {
 		return false
 	}
-	return clusterIsOpenShiftFromDiscovery(k8s.DiscoveryClient())
+	return provider.AnyTargetHasGVKs(ctx, openshiftProjectGVKs)
 }
 
 func clusterIsOpenShiftFromDiscovery(dc discovery.DiscoveryInterface) bool {
 	if dc == nil {
 		return false
 	}
-	has, err := api.HasGVKs(dc, []schema.GroupVersionKind{openshiftProjectGVK})
+	has, err := api.HasGVKs(dc, openshiftProjectGVKs)
 	return err == nil && has
 }
