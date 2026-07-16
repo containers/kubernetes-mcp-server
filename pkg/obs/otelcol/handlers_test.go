@@ -1,30 +1,55 @@
 package otelcol
 
 import (
-	"context"
 	"slices"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/os-observability/redhat-opentelemetry-collector/configschemas"
 )
 
+type mockBaseConfig struct {
+	api.BaseConfig
+	config *Config
+}
+
+func (m *mockBaseConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
+	if name == ToolsetName && m.config != nil {
+		return m.config, true
+	}
+	return nil, false
+}
+
+type mockToolCallRequest struct {
+	arguments map[string]any
+}
+
+func (m *mockToolCallRequest) GetArguments() map[string]any {
+	return m.arguments
+}
+
+func handlerParams(t *testing.T, args map[string]any) api.ToolHandlerParams {
+	t.Helper()
+	return api.ToolHandlerParams{
+		Context:         t.Context(),
+		BaseConfig:      &mockBaseConfig{config: &Config{SchemaFS: configschemas.Schemas}},
+		ToolCallRequest: &mockToolCallRequest{arguments: args},
+	}
+}
+
 func TestListComponentsHandler(t *testing.T) {
-	loader := NewSchemaLoaderFromFS(configschemas.Schemas, "schemas")
-	ctx := context.Background()
-
-	input := ListComponentsInput{Version: "0.144.0"}
-	result := ListComponentsHandler(ctx, loader, input)
-
+	result, err := ListComponentsHandler(handlerParams(t, map[string]any{
+		"version": "0.144.0",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
-		t.Fatalf("unexpected error: %v", result.Error)
+		t.Fatalf("unexpected tool error: %v", result.Error)
 	}
 
-	output, ok := result.Data.(ListComponentsOutput)
-	if !ok {
-		t.Fatalf("unexpected result type: %T", result.Data)
-	}
+	output := result.StructuredContent.(ListComponentsOutput)
 
-	// Verify known components are present
 	if len(output.Processors) == 0 {
 		t.Error("expected processors to be non-empty")
 	}
@@ -42,75 +67,70 @@ func TestListComponentsHandler(t *testing.T) {
 }
 
 func TestListComponentsHandler_DefaultVersion(t *testing.T) {
-	loader := NewSchemaLoaderFromFS(configschemas.Schemas, "schemas")
-	ctx := context.Background()
-
 	// Empty version should default to latest
-	input := ListComponentsInput{}
-	result := ListComponentsHandler(ctx, loader, input)
-
+	result, err := ListComponentsHandler(handlerParams(t, map[string]any{}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
-		t.Fatalf("unexpected error: %v", result.Error)
+		t.Fatalf("unexpected tool error: %v", result.Error)
 	}
 }
 
 func TestGetComponentSchemaHandler(t *testing.T) {
-	loader := NewSchemaLoaderFromFS(configschemas.Schemas, "schemas")
-	ctx := context.Background()
-
 	tests := []struct {
 		name    string
-		input   GetComponentSchemaInput
+		args    map[string]any
 		wantErr bool
 	}{
 		{
 			name: "valid receiver",
-			input: GetComponentSchemaInput{
-				ComponentType: ComponentTypeReceiver,
-				ComponentName: "otlp",
-				Version:       "0.144.0",
+			args: map[string]any{
+				"component_type": "receiver",
+				"component_name": "otlp",
+				"version":        "0.144.0",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid processor",
-			input: GetComponentSchemaInput{
-				ComponentType: ComponentTypeProcessor,
-				ComponentName: "batch",
-				Version:       "0.144.0",
+			args: map[string]any{
+				"component_type": "processor",
+				"component_name": "batch",
+				"version":        "0.144.0",
 			},
 			wantErr: false,
 		},
 		{
 			name: "version with v prefix",
-			input: GetComponentSchemaInput{
-				ComponentType: ComponentTypeProcessor,
-				ComponentName: "batch",
-				Version:       "v0.144.0",
+			args: map[string]any{
+				"component_type": "processor",
+				"component_name": "batch",
+				"version":        "v0.144.0",
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid component type",
-			input: GetComponentSchemaInput{
-				ComponentType: "invalid",
-				ComponentName: "otlp",
+			args: map[string]any{
+				"component_type": "invalid",
+				"component_name": "otlp",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing component name",
-			input: GetComponentSchemaInput{
-				ComponentType: ComponentTypeReceiver,
+			args: map[string]any{
+				"component_type": "receiver",
 			},
 			wantErr: true,
 		},
 		{
 			name: "nonexistent component",
-			input: GetComponentSchemaInput{
-				ComponentType: ComponentTypeReceiver,
-				ComponentName: "nonexistent_xyz",
-				Version:       "0.144.0",
+			args: map[string]any{
+				"component_type": "receiver",
+				"component_name": "nonexistent_xyz",
+				"version":        "0.144.0",
 			},
 			wantErr: true,
 		},
@@ -118,33 +138,31 @@ func TestGetComponentSchemaHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GetComponentSchemaHandler(ctx, loader, tt.input)
+			result, err := GetComponentSchemaHandler(handlerParams(t, tt.args))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if (result.Error != nil) != tt.wantErr {
-				t.Errorf("GetComponentSchemaHandler() error = %v, wantErr %v", result.Error, tt.wantErr)
+				t.Errorf("getComponentSchemaHandler() error = %v, wantErr %v", result.Error, tt.wantErr)
 			}
 		})
 	}
 }
 
 func TestGetComponentSchemaHandler_SchemaContent(t *testing.T) {
-	loader := NewSchemaLoaderFromFS(configschemas.Schemas, "schemas")
-	ctx := context.Background()
-
-	input := GetComponentSchemaInput{
-		ComponentType: ComponentTypeProcessor,
-		ComponentName: "batch",
-		Version:       "0.144.0",
+	result, err := GetComponentSchemaHandler(handlerParams(t, map[string]any{
+		"component_type": "processor",
+		"component_name": "batch",
+		"version":        "0.144.0",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	result := GetComponentSchemaHandler(ctx, loader, input)
-
 	if result.Error != nil {
-		t.Fatalf("unexpected error: %v", result.Error)
+		t.Fatalf("unexpected tool error: %v", result.Error)
 	}
 
-	output, ok := result.Data.(GetComponentSchemaOutput)
-	if !ok {
-		t.Fatalf("unexpected result type: %T", result.Data)
-	}
+	output := result.StructuredContent.(GetComponentSchemaOutput)
 
 	if output.Name != "batch" {
 		t.Errorf("expected name 'batch', got %q", output.Name)
@@ -170,85 +188,82 @@ func TestGetComponentSchemaHandler_SchemaContent(t *testing.T) {
 }
 
 func TestValidateConfigHandler(t *testing.T) {
-	loader := NewSchemaLoaderFromFS(configschemas.Schemas, "schemas")
-	ctx := context.Background()
-
 	tests := []struct {
 		name      string
-		input     ValidateConfigInput
+		args      map[string]any
 		wantErr   bool
 		wantValid bool
 	}{
 		{
 			name: "valid yaml config",
-			input: ValidateConfigInput{
-				ComponentType: ComponentTypeProcessor,
-				ComponentName: "batch",
-				Config:        "send_batch_size: 8192\ntimeout: 200ms",
-				Format:        "yaml",
-				Version:       "0.144.0",
+			args: map[string]any{
+				"component_type": "processor",
+				"component_name": "batch",
+				"config":         "send_batch_size: 8192\ntimeout: 200ms",
+				"format":         "yaml",
+				"version":        "0.144.0",
 			},
 			wantErr:   false,
 			wantValid: true,
 		},
 		{
 			name: "valid json config",
-			input: ValidateConfigInput{
-				ComponentType: ComponentTypeProcessor,
-				ComponentName: "batch",
-				Config:        `{"send_batch_size": 8192, "timeout": "200ms"}`,
-				Format:        "json",
-				Version:       "0.144.0",
+			args: map[string]any{
+				"component_type": "processor",
+				"component_name": "batch",
+				"config":         `{"send_batch_size": 8192, "timeout": "200ms"}`,
+				"format":         "json",
+				"version":        "0.144.0",
 			},
 			wantErr:   false,
 			wantValid: true,
 		},
 		{
 			name: "invalid config - unknown field",
-			input: ValidateConfigInput{
-				ComponentType: ComponentTypeProcessor,
-				ComponentName: "batch",
-				Config:        "does_not_exist: 200ms",
-				Format:        "yaml",
-				Version:       "0.144.0",
+			args: map[string]any{
+				"component_type": "processor",
+				"component_name": "batch",
+				"config":         "does_not_exist: 200ms",
+				"format":         "yaml",
+				"version":        "0.144.0",
 			},
 			wantErr:   false,
 			wantValid: false,
 		},
 		{
 			name: "invalid format",
-			input: ValidateConfigInput{
-				ComponentType: ComponentTypeReceiver,
-				ComponentName: "otlp",
-				Config:        "{}",
-				Format:        "xml",
+			args: map[string]any{
+				"component_type": "receiver",
+				"component_name": "otlp",
+				"config":         "{}",
+				"format":         "xml",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing config",
-			input: ValidateConfigInput{
-				ComponentType: ComponentTypeReceiver,
-				ComponentName: "otlp",
+			args: map[string]any{
+				"component_type": "receiver",
+				"component_name": "otlp",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing component name",
-			input: ValidateConfigInput{
-				ComponentType: ComponentTypeReceiver,
-				Config:        "{}",
-				Format:        "json",
+			args: map[string]any{
+				"component_type": "receiver",
+				"config":         "{}",
+				"format":         "json",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid component type",
-			input: ValidateConfigInput{
-				ComponentType: "invalid",
-				ComponentName: "batch",
-				Config:        "{}",
-				Format:        "json",
+			args: map[string]any{
+				"component_type": "invalid",
+				"component_name": "batch",
+				"config":         "{}",
+				"format":         "json",
 			},
 			wantErr: true,
 		},
@@ -256,21 +271,21 @@ func TestValidateConfigHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ValidateConfigHandler(ctx, loader, tt.input)
+			result, err := ValidateConfigHandler(handlerParams(t, tt.args))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if (result.Error != nil) != tt.wantErr {
-				t.Errorf("ValidateConfigHandler() error = %v, wantErr %v", result.Error, tt.wantErr)
+				t.Errorf("validateConfigHandler() error = %v, wantErr %v", result.Error, tt.wantErr)
 				return
 			}
 			if tt.wantErr {
 				return
 			}
 
-			output, ok := result.Data.(ValidateConfigOutput)
-			if !ok {
-				t.Fatalf("unexpected result type: %T", result.Data)
-			}
+			output := result.StructuredContent.(ValidateConfigOutput)
 			if output.Valid != tt.wantValid {
-				t.Errorf("ValidateConfigHandler() valid = %v, wantValid %v, errors = %v",
+				t.Errorf("validateConfigHandler() valid = %v, wantValid %v, errors = %v",
 					output.Valid, tt.wantValid, output.Errors)
 			}
 		})
@@ -278,19 +293,15 @@ func TestValidateConfigHandler(t *testing.T) {
 }
 
 func TestGetVersionsHandler(t *testing.T) {
-	loader := NewSchemaLoaderFromFS(configschemas.Schemas, "schemas")
-	ctx := context.Background()
-
-	result := GetVersionsHandler(ctx, loader, GetVersionsInput{})
-
+	result, err := GetVersionsHandler(handlerParams(t, map[string]any{}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
-		t.Fatalf("unexpected error: %v", result.Error)
+		t.Fatalf("unexpected tool error: %v", result.Error)
 	}
 
-	output, ok := result.Data.(GetVersionsOutput)
-	if !ok {
-		t.Fatalf("unexpected result type: %T", result.Data)
-	}
+	output := result.StructuredContent.(GetVersionsOutput)
 
 	if len(output.Versions) == 0 {
 		t.Error("expected versions to be non-empty")
