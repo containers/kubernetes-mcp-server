@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 
+	"github.com/rhobs/obs-mcp/pkg/tools"
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
@@ -15,7 +16,7 @@ type searchTagValuesOutput struct {
 	TagValues any `json:"tagValues" jsonschema:"Known values for the specified tag, keyed by type"`
 }
 
-var searchTagValuesOutputSchema = mustSchema[searchTagValuesOutput]()
+var searchTagValuesOutputSchema = tools.MustSchema[searchTagValuesOutput]()
 
 func initSearchTagValues() api.ServerTool {
 	return api.ServerTool{
