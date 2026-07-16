@@ -5,11 +5,23 @@ metadata:
   name: calc-app-pod
   namespace: calc-app
 spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: calc-app-executor
     image: python:3.9-slim-buster
     command: ["python"]
     args: ["/etc/config/calc-app.py"]
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     volumeMounts:
     - name: calc-app-volume
       mountPath: /etc/config
