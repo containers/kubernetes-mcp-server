@@ -2,13 +2,22 @@ package netobserv
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -202,6 +211,67 @@ func (s *NetObservSuite) TestExecuteGet_rejectsRedirects() {
 	_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
 	s.Require().Error(err)
 	s.ErrorContains(err, "redirects are not allowed")
+}
+
+func (s *NetObservSuite) TestNewNetObserv_openShiftProviderUsesHTTPSURL() {
+	// A provider that reports the OpenShift Project GVK must synthesize an https:// URL so the
+	// bearer token is never sent in cleartext. This is also the fail-open direction: on a discovery
+	// error AnyTargetHasGVKs returns true, so this same https path is taken instead of leaking over http.
+	provider := &mockFilteringProvider{hasGVKs: true}
+	client := NewNetObserv(context.Background(), s.Config, nil, provider)
+	s.Equal(DefaultPluginURL(true), client.pluginURL)
+}
+
+func (s *NetObservSuite) TestCreateHTTPClient_pinsProvidedCA() {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	s.T().Cleanup(srv.Close)
+	pinnedCA := filepath.Join(s.T().TempDir(), "pinned-ca.crt")
+	s.Require().NoError(os.WriteFile(pinnedCA,
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600))
+
+	// Set the URL and CA directly on the client rather than via TOML: a Windows temp path
+	// (C:\Users\...) is not a valid double-quoted TOML string ("\U" is read as an escape).
+	s.Run("verifies against the pinned CA", func() {
+		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+		client.pluginURL = srv.URL
+		client.certificateAuthority = pinnedCA
+
+		_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
+		s.NoError(err)
+	})
+
+	s.Run("rejects a server cert not signed by the pinned CA", func() {
+		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+		client.pluginURL = srv.URL
+		client.certificateAuthority = s.writeSelfSignedCA()
+
+		_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
+		s.Error(err)
+	})
+}
+
+// writeSelfSignedCA generates a self-signed CA certificate unrelated to the httptest server cert,
+// writes it to a temp file, and returns the path. Used to prove the pinned CA is the sole trust anchor.
+func (s *NetObservSuite) writeSelfSignedCA() string {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	s.Require().NoError(err)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "unrelated-test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	s.Require().NoError(err)
+	path := filepath.Join(s.T().TempDir(), "unrelated-ca.crt")
+	s.Require().NoError(os.WriteFile(path,
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
+	return path
 }
 
 func TestNetObserv(t *testing.T) {

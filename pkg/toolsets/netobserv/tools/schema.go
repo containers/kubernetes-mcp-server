@@ -55,7 +55,10 @@ func flowQueryProperties() map[string]*jsonschema.Schema {
 	}
 }
 
-// noAdditionalProperties rejects unknown tool input fields so they cannot be forwarded as query params.
+// noAdditionalProperties advertises additionalProperties:false so conforming MCP clients reject
+// unknown tool input fields. This is a client-facing schema hint only: the server registers tools
+// via the go-sdk raw AddTool path, which does not validate arguments against the schema, so unknown
+// fields are not rejected server-side (see ArgumentsToValues, which forwards every argument).
 var noAdditionalProperties = &jsonschema.Schema{Not: &jsonschema.Schema{}}
 
 func toolInputSchema(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
