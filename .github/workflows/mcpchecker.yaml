@@ -292,7 +292,7 @@ jobs:
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.18
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.19
         with:
           eval-config: 'evals/openai-agent/eval.yaml'
           mcpchecker-version: 'latest'
@@ -355,7 +355,7 @@ jobs:
       - name: Run mcpchecker diff
         id: mcpchecker-diff
         if: needs.check-trigger.outputs.is-pr == 'true' && steps.diff-check.outputs.has-diff == 'true'
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@v0.0.18
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@v0.0.19
         with:
           base-results: /tmp/baseline-results.json
           current-results: ${{ steps.diff-check.outputs.results-file }}
