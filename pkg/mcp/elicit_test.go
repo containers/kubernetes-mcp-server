@@ -289,6 +289,10 @@ func (m *mockElicitToolset) GetResourceTemplates() []api.ServerResourceTemplate 
 	return nil
 }
 
+func (m *mockElicitToolset) GetAllowedAPIGroups() []string {
+	return nil
+}
+
 func TestElicitationSuite(t *testing.T) {
 	suite.Run(t, new(ElicitationSuite))
 }

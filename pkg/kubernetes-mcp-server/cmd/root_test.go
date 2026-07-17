@@ -757,6 +757,29 @@ func (s *CmdSuite) TestLogFile() {
 	})
 }
 
+func TestCollectAllowedAPIGroups(t *testing.T) {
+	t.Run("returns nil for empty toolset list", func(t *testing.T) {
+		groups := collectAllowedAPIGroups(nil)
+		assert.Nil(t, groups)
+	})
+	t.Run("skips unknown toolset names", func(t *testing.T) {
+		groups := collectAllowedAPIGroups([]string{"nonexistent-toolset"})
+		assert.Nil(t, groups)
+	})
+	t.Run("returns nil for toolsets with no allowed groups", func(t *testing.T) {
+		groups := collectAllowedAPIGroups([]string{"core"})
+		assert.Nil(t, groups)
+	})
+	t.Run("deduplicates groups across toolsets", func(t *testing.T) {
+		groups := collectAllowedAPIGroups([]string{"core", "core"})
+		assert.Nil(t, groups)
+	})
+	t.Run("skips empty string groups", func(t *testing.T) {
+		groups := collectAllowedAPIGroups([]string{"core"})
+		assert.Nil(t, groups)
+	})
+}
+
 func TestTLSValidation(t *testing.T) {
 	t.Run("tls-cert without tls-key returns error", func(t *testing.T) {
 		tempDir := t.TempDir()

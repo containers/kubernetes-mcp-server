@@ -381,6 +381,10 @@ func (m *mockToolsetWithPrompts) GetResourceTemplates() []api.ServerResourceTemp
 	return nil
 }
 
+func (m *mockToolsetWithPrompts) GetAllowedAPIGroups() []string {
+	return nil
+}
+
 func TestMcpToolsetPromptsSuite(t *testing.T) {
 	suite.Run(t, new(McpToolsetPromptsSuite))
 }

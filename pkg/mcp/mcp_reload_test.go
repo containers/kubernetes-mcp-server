@@ -35,6 +35,7 @@ func (brokenToolset) GetTools(api.FilteringProvider) []api.ServerTool {
 func (brokenToolset) GetPrompts() []api.ServerPrompt                     { return nil }
 func (brokenToolset) GetResources() []api.ServerResource                 { return nil }
 func (brokenToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
+func (brokenToolset) GetAllowedAPIGroups() []string                      { return nil }
 
 type ConfigReloadSuite struct {
 	BaseMcpSuite
