@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, or all)'
+        description: 'Which task suite to run (core, helm, kubevirt, kubevirt-multinode, kiali, tekton, netobserv, or all)'
         required: false
         default: 'core'
         type: choice
@@ -22,6 +22,7 @@ on:
           - core
           - helm
           - kubevirt
+          - kubevirt-multinode
           - kiali
           - tekton
           - netobserv
@@ -78,6 +79,7 @@ jobs:
       should-run: ${{ steps.check.outputs.should-run }}
       toolsets: ${{ steps.suite.outputs.toolsets }}
       label-selector: ${{ steps.suite.outputs.label-selector }}
+      kind-cluster-config: ${{ steps.suite.outputs.kind-cluster-config }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
       is-pr: ${{ steps.check.outputs.is-pr }}
@@ -181,7 +183,7 @@ jobs:
 
               // Parse suite from the review body (trusted — fetched from API).
               const suiteMatch = triggerReview.body.match(
-                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|all)/i,
+                /\/run-mcpchecker\s+(core|helm|kubevirt-multinode|kubevirt|kiali|tekton|netobserv|all)/i,
               );
               const suite = suiteMatch ? suiteMatch[1].toLowerCase() : '';
 
@@ -224,6 +226,11 @@ jobs:
             kubevirt)
               echo "label-selector=suite=kubevirt" >> "$GITHUB_OUTPUT"
               echo "toolsets=core,config,kubevirt,tekton" >> "$GITHUB_OUTPUT"
+              ;;
+            kubevirt-multinode)
+              echo "label-selector=suite=kubevirt-multinode" >> "$GITHUB_OUTPUT"
+              echo "toolsets=core,config,kubevirt,tekton" >> "$GITHUB_OUTPUT"
+              echo "kind-cluster-config=dev/config/kind/cluster-kubevirt-multinode.yaml" >> "$GITHUB_OUTPUT"
               ;;
             kiali)
               echo "label-selector=suite=kiali" >> "$GITHUB_OUTPUT"
@@ -275,7 +282,14 @@ jobs:
           go-version-file: go.mod
 
       - name: Setup Kind cluster
-        run: make kind-create-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
+        run: |
+          KIND_ARGS="KIND_CLUSTER_NAME=$KIND_CLUSTER_NAME"
+          if [[ -n "$KIND_CLUSTER_CONFIG" ]]; then
+            KIND_ARGS="$KIND_ARGS KIND_CLUSTER_CONFIG=$KIND_CLUSTER_CONFIG"
+          fi
+          make kind-create-cluster $KIND_ARGS
+        env:
+          KIND_CLUSTER_CONFIG: ${{ needs.check-trigger.outputs.kind-cluster-config }}
 
       # Only the core suite needs a resize-capable StorageClass (for resize-pvc).
       # Runs for suite=core and for the "all" run (empty label-selector).

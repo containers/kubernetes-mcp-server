@@ -14,7 +14,7 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
-
+  - |
     kind: ClusterConfiguration
     apiServer:
       extraArgs:

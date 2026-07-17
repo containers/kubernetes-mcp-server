@@ -2,9 +2,9 @@ kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
-    suite: kubevirt
+    suite: kubevirt-multinode
     project: kubevirt
-    requires: kubevirt
+    requires: kubevirt-multinode
   annotations:
     project-name: "KubeVirt"
     project-url: "https://kubevirt.io"
@@ -58,12 +58,13 @@ spec:
           kubectl wait --for=jsonpath='{.status.ready}'=true virtualmachine/test-vm -n vm-test-hotplug-mem --timeout=300s
   verify:
     - script:
+        timeout: 600s
         inline: |-
           #!/usr/bin/env bash
           source ../helpers/verify-vm.sh
           NS="vm-test-hotplug-mem"
 
-          verify_memory_guest "test-vm" "$NS" "2Gi" || exit 1
+          verify_vmi_memory "test-vm" "$NS" "2Gi" 480 || exit 1
 
           echo "All validations passed"
           exit 0

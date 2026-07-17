@@ -2,9 +2,9 @@ kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
-    suite: kubevirt
+    suite: kubevirt-multinode
     project: kubevirt
-    requires: kubevirt
+    requires: kubevirt-multinode
   annotations:
     project-name: "KubeVirt"
     project-url: "https://kubevirt.io"
@@ -65,7 +65,7 @@ spec:
           source ../helpers/verify-vm.sh
           NS="vm-test-hotplug-cpu"
 
-          verify_cpu_sockets "test-vm" "$NS" "2" || exit 1
+          verify_vmi_cpu_sockets "test-vm" "$NS" "2" 300 || exit 1
 
           echo "All validations passed"
           exit 0

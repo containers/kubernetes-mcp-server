@@ -2,9 +2,9 @@ kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
-    suite: kubevirt
+    suite: kubevirt-multinode
     project: kubevirt
-    requires: kubevirt
+    requires: kubevirt-multinode
   annotations:
     project-name: "KubeVirt"
     project-url: "https://kubevirt.io"
@@ -26,14 +26,18 @@ spec:
         kind: Namespace
         metadata:
           name: vm-test-hotplug-nic-add
-    - k8s.create:
-        apiVersion: k8s.cni.cncf.io/v1
-        kind: NetworkAttachmentDefinition
-        metadata:
-          name: extra-net
-          namespace: vm-test-hotplug-nic-add
-        spec:
-          config: '{"cniVersion": "0.3.1", "name": "extra-net", "type": "bridge", "bridge": "extra-br", "ipam": {}}'
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          cat <<'YAML' | kubectl apply -f -
+          apiVersion: k8s.cni.cncf.io/v1
+          kind: NetworkAttachmentDefinition
+          metadata:
+            name: extra-net
+            namespace: vm-test-hotplug-nic-add
+          spec:
+            config: '{"cniVersion": "0.3.1", "name": "extra-net", "type": "bridge", "bridge": "extra-br", "ipam": {}}'
+          YAML
     - k8s.create:
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
@@ -75,7 +79,7 @@ spec:
           NS="vm-test-hotplug-nic-add"
 
           # Verify a new interface was added (should have at least 2 now)
-          iface_count=$(kubectl get virtualmachine test-vm -n "$NS" -o json | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('spec',{}).get('template',{}).get('spec',{}).get('domain',{}).get('devices',{}).get('interfaces',[])))")
+          iface_count=$(kubectl get virtualmachine test-vm -n "$NS" -o json | jq '[.spec.template.spec.domain.devices.interfaces // [] | length] | .[0]')
 
           if [[ "$iface_count" -lt 2 ]]; then
               echo "✗ Expected at least 2 interfaces, found $iface_count"
@@ -84,18 +88,14 @@ spec:
           echo "✓ VM has $iface_count interfaces"
 
           # Verify a network entry referencing extra-net exists
-          multus_nets=$(kubectl get virtualmachine test-vm -n "$NS" -o json | python3 -c "
-          import json, sys
-          vm = json.load(sys.stdin)
-          nets = vm.get('spec',{}).get('template',{}).get('spec',{}).get('networks',[])
-          for n in nets:
-              m = n.get('multus',{})
-              if 'extra-net' in m.get('networkName',''):
-                  print(n['name'])
-          ")
+          multus_nets=$(kubectl get virtualmachine test-vm -n "$NS" -o json | jq -r '
+            .spec.template.spec.networks[] |
+            select(.multus.networkName // "" | contains("extra-net")) |
+            .name')
 
           if [[ -n "$multus_nets" ]]; then
               echo "✓ Network entry referencing 'extra-net' found: $multus_nets"
+              verify_vmi_interface_exists "test-vm" "$NS" "$multus_nets" || exit 1
           else
               echo "✗ No network entry referencing 'extra-net' found"
               exit 1
