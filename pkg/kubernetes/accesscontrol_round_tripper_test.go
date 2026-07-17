@@ -36,6 +36,14 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	return rec.Result(), nil
 }
 
+type mockAllowedAPIGroupsProvider struct {
+	groups []string
+}
+
+func (m *mockAllowedAPIGroupsProvider) GetAllowedAPIGroups() []string {
+	return m.groups
+}
+
 type AccessControlRoundTripperTestSuite struct {
 	suite.Suite
 	mockServer *test.MockServer
@@ -410,6 +418,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 
 	s.Run("RESTMapper error for unknown resource", func() {
 		rt.deniedResourcesProvider = nil
+		rt.allowedAPIGroupsProvider = nil
 		delegateCalled = false
 		req := httptest.NewRequest("GET", "/api/v1/unknownresources", nil)
 		resp, err := rt.RoundTrip(req)
@@ -418,6 +427,29 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 		s.False(delegateCalled, "Expected delegate not to be called when RESTMapper fails")
 		s.Contains(err.Error(), "RESOURCE_NOT_FOUND")
 		s.Contains(err.Error(), "does not exist in the cluster")
+	})
+
+	s.Run("Allowed API group passes through even if not in REST mapper", func() {
+		rt.deniedResourcesProvider = nil
+		rt.allowedAPIGroupsProvider = &mockAllowedAPIGroupsProvider{groups: []string{"subresources.kubevirt.io"}}
+		delegateCalled = false
+		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/pause", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for allowed API group")
+	})
+
+	s.Run("Unknown API group is rejected even with allowed groups set", func() {
+		rt.deniedResourcesProvider = nil
+		rt.allowedAPIGroupsProvider = &mockAllowedAPIGroupsProvider{groups: []string{"subresources.kubevirt.io"}}
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/unknown.example.io/v1/namespaces/default/things", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Error(err)
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for unknown API group")
+		s.Contains(err.Error(), "RESOURCE_NOT_FOUND")
 	})
 }
 

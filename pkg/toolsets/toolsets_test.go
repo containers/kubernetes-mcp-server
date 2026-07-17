@@ -43,6 +43,8 @@ func (t *TestToolset) GetResources() []api.ServerResource { return nil }
 
 func (t *TestToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
 
+func (t *TestToolset) GetAllowedAPIGroups() []string { return nil }
+
 var _ api.Toolset = (*TestToolset)(nil)
 
 type fakeProvider struct{}
