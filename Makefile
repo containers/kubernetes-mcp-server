@@ -127,7 +127,7 @@ local-env-setup-kubevirt: ## Setup complete local development environment with K
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "           with KubeVirt"
 	@echo "========================================="
-	$(MAKE) kind-create-cluster KIND_CLUSTER_CONFIG=dev/config/kind/cluster-kubevirt.yaml
+	$(MAKE) kind-create-cluster
 	$(MAKE) kubevirt-install
 	$(MAKE) build
 	@echo ""

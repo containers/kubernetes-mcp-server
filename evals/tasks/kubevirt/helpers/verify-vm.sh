@@ -457,40 +457,105 @@ verify_interface_absent() {
     fi
 }
 
-# verify_cpu_sockets: Verifies CPU sockets value in VM spec
-# Usage: verify_cpu_sockets <vm-name> <namespace> <expected-sockets>
-verify_cpu_sockets() {
+# verify_vmi_cpu_sockets: Verifies CPU sockets on the running VMI via status.currentCPUTopology
+# Usage: verify_vmi_cpu_sockets <vm-name> <namespace> <expected-sockets> [timeout]
+verify_vmi_cpu_sockets() {
     local vm_name="$1"
     local namespace="$2"
     local expected="$3"
+    local timeout="${4:-120}"
 
-    local sockets
-    sockets=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.domain.cpu.sockets}')
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local sockets
+        sockets=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.currentCPUTopology.sockets}' 2>/dev/null)
+        if [[ "$sockets" == "$expected" ]]; then
+            echo "✓ VMI CPU sockets is $expected"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
 
-    if [[ "$sockets" == "$expected" ]]; then
-        echo "✓ CPU sockets is $expected"
-        return 0
-    else
-        echo "✗ CPU sockets is '$sockets', expected '$expected'"
-        return 1
-    fi
+    local final
+    final=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.currentCPUTopology.sockets}' 2>/dev/null)
+    echo "✗ VMI CPU sockets is '$final', expected '$expected' (timed out after ${timeout}s)"
+    return 1
 }
 
-# verify_memory_guest: Verifies memory.guest value in VM spec
-# Usage: verify_memory_guest <vm-name> <namespace> <expected-memory>
-verify_memory_guest() {
+# verify_vmi_memory: Verifies memory on the running VMI via status.memory.guestCurrent
+# Usage: verify_vmi_memory <vm-name> <namespace> <expected-memory> [timeout]
+verify_vmi_memory() {
     local vm_name="$1"
     local namespace="$2"
     local expected="$3"
+    local timeout="${4:-120}"
 
-    local guest
-    guest=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.domain.memory.guest}')
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local current
+        current=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.memory.guestCurrent}' 2>/dev/null)
+        if [[ "$current" == "$expected" ]]; then
+            echo "✓ VMI memory guestCurrent is $expected"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
 
-    if [[ "$guest" == "$expected" ]]; then
-        echo "✓ Memory guest is $expected"
-        return 0
-    else
-        echo "✗ Memory guest is '$guest', expected '$expected'"
-        return 1
-    fi
+    local final
+    final=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.memory.guestCurrent}' 2>/dev/null)
+    echo "✗ VMI memory guestCurrent is '$final', expected '$expected' (timed out after ${timeout}s)"
+    return 1
+}
+
+# verify_vmi_volume_ready: Verifies a hotplugged volume reached Ready phase on the VMI
+# Usage: verify_vmi_volume_ready <vm-name> <namespace> <volume-name> [timeout]
+verify_vmi_volume_ready() {
+    local vm_name="$1"
+    local namespace="$2"
+    local vol_name="$3"
+    local timeout="${4:-120}"
+
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local phase
+        phase=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath="{.status.volumeStatus[?(@.name=='$vol_name')].phase}" 2>/dev/null)
+        if [[ "$phase" == "Ready" ]]; then
+            echo "✓ VMI volume '$vol_name' phase is Ready"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    local final
+    final=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath="{.status.volumeStatus[?(@.name=='$vol_name')].phase}" 2>/dev/null)
+    echo "✗ VMI volume '$vol_name' phase is '$final', expected 'Ready' (timed out after ${timeout}s)"
+    return 1
+}
+
+# verify_vmi_interface_exists: Verifies a hotplugged interface appears in VMI status.interfaces
+# Usage: verify_vmi_interface_exists <vm-name> <namespace> <interface-name> [timeout]
+verify_vmi_interface_exists() {
+    local vm_name="$1"
+    local namespace="$2"
+    local iface_name="$3"
+    local timeout="${4:-120}"
+
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local name
+        name=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath="{.status.interfaces[?(@.name=='$iface_name')].name}" 2>/dev/null)
+        if [[ "$name" == "$iface_name" ]]; then
+            echo "✓ VMI interface '$iface_name' present in status"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    echo "✗ VMI interface '$iface_name' not found in status.interfaces (timed out after ${timeout}s)"
+    kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.interfaces[*].name}' 2>/dev/null
+    return 1
 }

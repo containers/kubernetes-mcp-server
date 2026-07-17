@@ -2,9 +2,9 @@ kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
-    suite: kubevirt
+    suite: kubevirt-multinode
     project: kubevirt
-    requires: kubevirt
+    requires: kubevirt-multinode
   annotations:
     project-name: "KubeVirt"
     project-url: "https://kubevirt.io"
@@ -75,6 +75,7 @@ spec:
           verify_volume_exists "test-vm" "$NS" "extra-disk" || exit 1
           verify_volume_hotpluggable "test-vm" "$NS" "extra-disk" || exit 1
           verify_disk_exists "test-vm" "$NS" "extra-disk" || exit 1
+          verify_vmi_volume_ready "test-vm" "$NS" "extra-disk" 300 || exit 1
 
           echo "All validations passed"
           exit 0
