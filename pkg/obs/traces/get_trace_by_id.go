@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 
+	"github.com/rhobs/obs-mcp/pkg/tools"
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
@@ -15,7 +16,7 @@ type getTraceByIDOutput struct {
 	Trace any `json:"trace" jsonschema:"The trace data with services, scopes and spans"`
 }
 
-var getTraceByIDOutputSchema = mustSchema[getTraceByIDOutput]()
+var getTraceByIDOutputSchema = tools.MustSchema[getTraceByIDOutput]()
 
 func initGetTraceByID() api.ServerTool {
 	return api.ServerTool{

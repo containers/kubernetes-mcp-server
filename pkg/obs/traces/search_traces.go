@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 
+	"github.com/rhobs/obs-mcp/pkg/tools"
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
 )
 
@@ -16,7 +17,7 @@ type searchTracesOutput struct {
 	Metrics any   `json:"metrics,omitempty" jsonschema:"Query performance metrics"`
 }
 
-var searchTracesOutputSchema = mustSchema[searchTracesOutput]()
+var searchTracesOutputSchema = tools.MustSchema[searchTracesOutput]()
 
 func initSearchTraces() api.ServerTool {
 	return api.ServerTool{

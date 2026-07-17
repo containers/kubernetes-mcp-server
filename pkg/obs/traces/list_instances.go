@@ -4,6 +4,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 
+	"github.com/rhobs/obs-mcp/pkg/tools"
 	"github.com/rhobs/obs-mcp/pkg/traces/discovery"
 )
 
@@ -12,7 +13,7 @@ type listInstancesOutput struct {
 	Instances []discovery.TempoInstance `json:"instances" jsonschema:"List of available Tempo instances"`
 }
 
-var listInstancesOutputSchema = mustSchema[listInstancesOutput]()
+var listInstancesOutputSchema = tools.MustSchema[listInstancesOutput]()
 
 func initListInstances() api.ServerTool {
 	return api.ServerTool{

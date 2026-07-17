@@ -111,14 +111,6 @@ func findInstanceByName(instances []discovery.TempoInstance, namespace, name str
 	return discovery.TempoInstance{}, fmt.Errorf("instance '%s' in namespace '%s' not found", name, namespace)
 }
 
-func mustSchema[T any]() *jsonschema.Schema {
-	s, err := jsonschema.For[T](nil)
-	if err != nil {
-		panic(err)
-	}
-	return s
-}
-
 func parseTime(s string) (int64, error) {
 	if s == "" {
 		return 0, nil
