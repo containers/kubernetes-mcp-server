@@ -231,6 +231,7 @@ func (t *configProviderToolset) GetTools(_ api.FilteringProvider) []api.ServerTo
 func (t *configProviderToolset) GetPrompts() []api.ServerPrompt                     { return t.prompts }
 func (t *configProviderToolset) GetResources() []api.ServerResource                 { return nil }
 func (t *configProviderToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
+func (t *configProviderToolset) GetAllowedAPIGroups() []string                      { return nil }
 
 func TestMcpConfigProvider(t *testing.T) {
 	suite.Run(t, new(McpConfigProviderSuite))

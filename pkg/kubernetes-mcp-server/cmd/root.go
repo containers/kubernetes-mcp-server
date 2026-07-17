@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
@@ -233,6 +234,8 @@ func (m *MCPServerOptions) Complete(ctx context.Context, cmd *cobra.Command) err
 		klogutil.FromContext(ctx).Error(otelLogErr, "Failed to create OTel log provider, log export disabled")
 	}
 
+	m.StaticConfig.AllowedAPIGroups = collectAllowedAPIGroups(m.StaticConfig.Toolsets)
+
 	if m.StaticConfig.RequireOAuth && m.StaticConfig.Port == "" {
 		// RequireOAuth is not relevant flow for STDIO transport
 		m.StaticConfig.RequireOAuth = false
@@ -437,6 +440,8 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 				continue
 			}
 
+			newConfig.AllowedAPIGroups = collectAllowedAPIGroups(newConfig.Toolsets)
+
 			// Apply the new configuration to the MCP server first — if this fails,
 			// we skip the OAuth state and config state updates to avoid inconsistent state.
 			if err := mcpServer.ReloadConfiguration(ctx, newConfig); err != nil {
@@ -489,4 +494,36 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 		close(sigHupCh)
 		<-done // Wait for goroutine to finish
 	}
+}
+
+// collectAllowedAPIGroups collects the union of API groups declared by all
+// enabled toolsets. If every toolset returns nil (no restrictions declared),
+// the result is nil, meaning any API group may pass through the REST mapper
+// NoMatchError path. Once any toolset returns a non-nil slice the result is
+// non-nil and restricted to the declared groups.
+func collectAllowedAPIGroups(toolsetNames []string) []string {
+	seen := sets.New[string]()
+	var groups []string
+	anyDeclared := false
+	for _, name := range toolsetNames {
+		ts := toolsets.ToolsetFromString(name)
+		if ts == nil {
+			continue
+		}
+		toolsetGroups := ts.GetAllowedAPIGroups()
+		if toolsetGroups == nil {
+			continue
+		}
+		anyDeclared = true
+		for _, group := range toolsetGroups {
+			if !seen.Has(group) {
+				seen.Insert(group)
+				groups = append(groups, group)
+			}
+		}
+	}
+	if !anyDeclared {
+		return nil
+	}
+	return groups
 }
