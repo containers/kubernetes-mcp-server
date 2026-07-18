@@ -15,7 +15,7 @@ import (
 // ServerResourceToGoSdkResource converts an api.ServerResource to MCP SDK types.
 // It validates the URI upfront so callers can surface a wrapped error instead of
 // letting the SDK panic during registration on hot reload.
-func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Resource, mcp.ResourceHandler, error) {
+func ServerResourceToGoSdkResource(s *Server, res api.ServerResource) (*mcp.Resource, mcp.ResourceHandler, error) {
 	if _, err := url.Parse(res.Resource.URI); err != nil {
 		return nil, nil, fmt.Errorf("invalid URI %q: %w", res.Resource.URI, err)
 	}
@@ -26,6 +26,9 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 		MIMEType:    res.Resource.MIMEType,
 	}
 	handler := func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		if err := checkResourceScopePolicy(ctx, s.configuration.Load(), res.Resource.URI); err != nil {
+			return nil, err
+		}
 		content, err := res.Handler(ctx)
 		if err != nil {
 			return nil, err
@@ -55,7 +58,7 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 // ServerResourceTemplateToGoSdkResourceTemplate converts an api.ServerResourceTemplate to MCP SDK types.
 // It validates the URITemplate upfront so callers can surface a wrapped error instead of letting
 // the SDK panic during registration on hot reload.
-func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResourceTemplate) (*mcp.ResourceTemplate, mcp.ResourceHandler, error) {
+func ServerResourceTemplateToGoSdkResourceTemplate(s *Server, rt api.ServerResourceTemplate) (*mcp.ResourceTemplate, mcp.ResourceHandler, error) {
 	if _, err := uritemplate.New(rt.ResourceTemplate.URITemplate); err != nil {
 		return nil, nil, fmt.Errorf("invalid URITemplate %q: %w", rt.ResourceTemplate.URITemplate, err)
 	}
@@ -66,6 +69,9 @@ func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResou
 		MIMEType:    rt.ResourceTemplate.MIMEType,
 	}
 	handler := func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		if err := checkResourceScopePolicy(ctx, s.configuration.Load(), req.Params.URI); err != nil {
+			return nil, err
+		}
 		content, err := rt.Handler(ctx, req.Params.URI)
 		if err != nil {
 			return nil, err

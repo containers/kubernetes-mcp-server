@@ -85,6 +85,14 @@ type StaticConfig struct {
 	DisableDynamicClientRegistration bool `toml:"disable_dynamic_client_registration,omitempty"`
 	// OAuthScopes are the supported **client** scopes requested during the **client/frontend** OAuth flow.
 	OAuthScopes []string `toml:"oauth_scopes,omitempty"`
+	// ScopePolicies maps OAuth scopes to lists of tool names that require them.
+	// A tool listed under a scope can only be called by tokens that carry that scope.
+	// Tools not listed in any scope policy remain accessible to all authenticated users (overlay model).
+	ScopePolicies map[string][]string `toml:"scope_policies,omitempty"`
+	// ResourceScopePolicies maps OAuth scopes to lists of MCP resource URI prefixes.
+	// A resource whose URI matches a prefix can only be read by tokens carrying that scope.
+	// Resources not matching any prefix remain accessible to all authenticated users (overlay model).
+	ResourceScopePolicies map[string][]string `toml:"resource_scope_policies,omitempty"`
 	// StsClientId is the OAuth client ID used for backend token exchange
 	StsClientId string `toml:"sts_client_id,omitempty"`
 	// StsClientSecret is the OAuth client secret used for backend token exchange
@@ -602,6 +610,9 @@ func (c *StaticConfig) Validate(ctx context.Context) error {
 	if err := c.validateTokenExchange(); err != nil {
 		return err
 	}
+	if err := c.validateScopePolicies(); err != nil {
+		return err
+	}
 	if err := c.validateConfirmation(); err != nil {
 		return err
 	}
@@ -653,6 +664,31 @@ func (c *StaticConfig) validateSkipJWTVerification(ctx context.Context) error {
 // validateTokenExchange validates token-exchange-related fields:
 //   - token_exchange_strategy must be a known strategy (when registry is provided)
 //   - sts_auth_style must be one of "params", "header", "assertion", "federated"
+func (c *StaticConfig) validateScopePolicies() error {
+	if len(c.ScopePolicies) == 0 {
+		return nil
+	}
+	if !c.RequireOAuth {
+		return fmt.Errorf("scope_policies requires require_oauth to be enabled")
+	}
+	for scope, tools := range c.ScopePolicies {
+		if len(tools) == 0 {
+			return fmt.Errorf("scope_policies: scope %q has an empty tool list", scope)
+		}
+	}
+	if len(c.ResourceScopePolicies) > 0 {
+		if !c.RequireOAuth {
+			return fmt.Errorf("resource_scope_policies requires require_oauth to be enabled")
+		}
+		for scope, prefixes := range c.ResourceScopePolicies {
+			if len(prefixes) == 0 {
+				return fmt.Errorf("resource_scope_policies: scope %q has an empty prefix list", scope)
+			}
+		}
+	}
+	return nil
+}
+
 //   - when sts_auth_style is "assertion", sts_client_cert_file and sts_client_key_file
 //     must both be set and reference existing files
 //   - when sts_auth_style is "federated", sts_federated_token_file must be set and exist

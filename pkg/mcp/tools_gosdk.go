@@ -67,6 +67,9 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		// Snapshot the live configuration once so a concurrent reload
 		// can't split BaseConfig and ListOutput across two configs.
 		cfg := s.configuration.Load()
+		if err := checkScopePolicy(ctx, cfg, tool.Tool.Name); err != nil {
+			return NewTextResult("", err), nil
+		}
 		// Check confirmation rules before executing the tool
 		if confirmErr := confirmation.CheckToolRules(
 			ctx, cfg, &sessionElicitor{},
