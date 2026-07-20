@@ -55,7 +55,7 @@ install-bookinfo-demo:
 .PHONY: update-kiali-version
 update-kiali-version:
 	@echo "Updating Kiali version to $(KIALI_VERSION)..."
-	@kubectl patch deployment kiali -n istio-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"kiali","image":"quay.io/kiali/kiali:$(KIALI_VERSION)"}]}}}}'
+	@kubectl patch deployment kiali -n istio-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"kiali","image":"quay.io/kiali/kiali_mcp:$(KIALI_VERSION)"}]}}}}'
 	@kubectl delete pod -l app=kiali -n istio-system
 	@kubectl wait --for=condition=available deployment/kiali -n istio-system --timeout=300s
 
