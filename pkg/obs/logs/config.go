@@ -9,6 +9,7 @@ import (
 	serverconfig "github.com/containers/kubernetes-mcp-server/pkg/config"
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
+	"github.com/rhobs/obs-mcp/pkg/instrumentation"
 )
 
 func init() {
@@ -28,6 +29,9 @@ type Config struct {
 
 	// UseRoute controls whether to use OpenShift Routes for discovering LokiStack endpoints.
 	UseRoute bool `toml:"use_route,omitempty"`
+
+	// ClientMetrics holds HTTP client metrics for instrumenting outbound requests.
+	ClientMetrics *instrumentation.ClientMetrics `toml:"-"`
 }
 
 var _ api.ExtendedConfig = (*Config)(nil)
