@@ -13,6 +13,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/logs/discovery"
 	"github.com/rhobs/obs-mcp/pkg/logs/loki"
+	"github.com/rhobs/obs-mcp/pkg/metrics"
 	"github.com/rhobs/obs-mcp/pkg/prometheus"
 )
 
@@ -218,6 +219,8 @@ func getLokiClient(params api.ToolHandlerParams) (loki.Loader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}
+
+	rt = metrics.InstrumentedRoundTripper(rt, cfg.ClientMetrics, "loki")
 
 	httpClient := &http.Client{
 		Timeout:   loki.RequestTimeout,
