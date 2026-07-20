@@ -9,7 +9,7 @@ import (
 	serverconfig "github.com/containers/kubernetes-mcp-server/pkg/config"
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
-	"github.com/rhobs/obs-mcp/pkg/metrics"
+	"github.com/rhobs/obs-mcp/pkg/instrumentation"
 )
 
 func init() {
@@ -31,7 +31,7 @@ type Config struct {
 	UseRoute bool `toml:"use_route,omitempty"`
 
 	// ClientMetrics holds HTTP client metrics for instrumenting outbound requests.
-	ClientMetrics *metrics.ClientMetrics `toml:"-"`
+	ClientMetrics *instrumentation.ClientMetrics `toml:"-"`
 }
 
 var _ api.ExtendedConfig = (*Config)(nil)

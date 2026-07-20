@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package metrics
+package instrumentation
 
 import (
 	"context"
@@ -61,9 +61,9 @@ func NewToolMetrics(reg prometheus.Registerer) *ToolMetrics {
 	}
 }
 
-// InstrumentToolHandler wraps an MCP tool handler with metrics instrumentation.
+// ToolHandler wraps an MCP tool handler with metrics instrumentation.
 // It records call counts, durations, and error details for each tool invocation.
-func InstrumentToolHandler[I, O any](
+func ToolHandler[I, O any](
 	toolName string,
 	metrics *ToolMetrics,
 	handler mcp.ToolHandlerFor[I, O],
@@ -95,10 +95,10 @@ func InstrumentToolHandler[I, O any](
 	}
 }
 
-// InstrumentToolHandlerUntyped wraps an untyped MCP tool handler with metrics instrumentation.
+// ToolHandlerUntyped wraps an untyped MCP tool handler with metrics instrumentation.
 // This is the equivalent of InstrumentToolHandler for handlers that use the base mcp.ToolHandler type
 // (i.e., those registered via the api.Toolset interface) rather than the generic mcp.ToolHandlerFor[I, O].
-func InstrumentToolHandlerUntyped(
+func ToolHandlerUntyped(
 	toolName string,
 	metrics *ToolMetrics,
 	handler mcp.ToolHandler,

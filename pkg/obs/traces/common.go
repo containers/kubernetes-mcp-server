@@ -11,7 +11,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
-	"github.com/rhobs/obs-mcp/pkg/metrics"
+	"github.com/rhobs/obs-mcp/pkg/instrumentation"
 	"github.com/rhobs/obs-mcp/pkg/prometheus"
 	"github.com/rhobs/obs-mcp/pkg/traces/discovery"
 	tempoclient "github.com/rhobs/obs-mcp/pkg/traces/tempo"
@@ -49,7 +49,7 @@ func getTempoClient(params api.ToolHandlerParams) (tempoclient.Loader, error) {
 		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}
 
-	rt = metrics.InstrumentedRoundTripper(rt, cfg.ClientMetrics, "tempo")
+	rt = instrumentation.RoundTripper(rt, cfg.ClientMetrics, "tempo")
 
 	httpClient := &http.Client{
 		Timeout:   tempoclient.RequestTimeout,

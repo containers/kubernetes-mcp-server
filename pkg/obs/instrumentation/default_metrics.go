@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package metrics
+package instrumentation
 
 import (
 	"github.com/prometheus/client_golang/prometheus"

@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package metrics
+package instrumentation
 
 import (
 	"net/http"
@@ -59,10 +59,10 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 	return &m
 }
 
-// InstrumentedRoundTripper instruments the given roundtripper with metrics that are
+// RoundTripper instruments the given roundtripper with metrics that are
 // registered in the provided ClientMetrics. The clientName parameter is used to set the
 // 'client' label on all metrics.
-func InstrumentedRoundTripper(tripper http.RoundTripper, m *ClientMetrics, clientName string) http.RoundTripper {
+func RoundTripper(tripper http.RoundTripper, m *ClientMetrics, clientName string) http.RoundTripper {
 	if m == nil {
 		return tripper
 	}

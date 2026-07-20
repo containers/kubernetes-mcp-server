@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package metrics
+package instrumentation
 
 import (
 	"bufio"
@@ -15,9 +15,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// InstrumentationMiddleware holds necessary metrics to instrument an http.Server
+// Middleware holds necessary metrics to instrument an http.Server
 // and provides necessary behaviors.
-type InstrumentationMiddleware interface {
+type Middleware interface {
 	// NewHandler wraps the given HTTP handler for instrumentation.
 	NewHandler(handlerName string, handler http.Handler) http.HandlerFunc
 }
@@ -30,8 +30,8 @@ func (ins nopInstrumentationMiddleware) NewHandler(handlerName string, handler h
 	}
 }
 
-// NewNopInstrumentationMiddleware provides a InstrumentationMiddleware which does nothing.
-func NewNopInstrumentationMiddleware() InstrumentationMiddleware {
+// NewNopMiddleware provides a Middleware which does nothing.
+func NewNopMiddleware() Middleware {
 	return nopInstrumentationMiddleware{}
 }
 
@@ -39,9 +39,9 @@ type defaultInstrumentationMiddleware struct {
 	metrics *defaultMetrics
 }
 
-// NewInstrumentationMiddleware provides default InstrumentationMiddleware.
+// NewMiddleware provides default Middleware.
 // Passing nil as buckets uses the default buckets.
-func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) InstrumentationMiddleware {
+func NewMiddleware(reg prometheus.Registerer, buckets []float64) Middleware {
 	return &defaultInstrumentationMiddleware{
 		metrics: newDefaultMetrics(reg, buckets, []string{}),
 	}
