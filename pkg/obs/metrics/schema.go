@@ -1,4 +1,4 @@
-package tools
+package metrics
 
 // ListMetricsOutput defines the output schema for the list_metrics tool.
 type ListMetricsOutput struct {

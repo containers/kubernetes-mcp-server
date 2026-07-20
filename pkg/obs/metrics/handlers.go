@@ -1,4 +1,4 @@
-package tools
+package metrics
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"github.com/prometheus/common/model"
 	"k8s.io/utils/ptr"
 
-	"github.com/rhobs/obs-mcp/pkg/alertmanager"
-	"github.com/rhobs/obs-mcp/pkg/prometheus"
+	"github.com/rhobs/obs-mcp/pkg/metrics/alertmanager"
+	"github.com/rhobs/obs-mcp/pkg/metrics/prometheus"
 	"github.com/rhobs/obs-mcp/pkg/resultutil"
 )
 

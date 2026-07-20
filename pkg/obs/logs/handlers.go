@@ -14,7 +14,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/instrumentation"
 	"github.com/rhobs/obs-mcp/pkg/logs/discovery"
 	"github.com/rhobs/obs-mcp/pkg/logs/loki"
-	"github.com/rhobs/obs-mcp/pkg/prometheus"
+	"github.com/rhobs/obs-mcp/pkg/metrics/prometheus"
 )
 
 const (
