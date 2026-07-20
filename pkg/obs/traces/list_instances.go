@@ -15,7 +15,7 @@ type listInstancesOutput struct {
 
 var listInstancesOutputSchema = tools.MustSchema[listInstancesOutput]()
 
-func initListInstances() api.ServerTool {
+func initListInstances(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name: "tempo_list_instances",
@@ -36,6 +36,9 @@ Always print the output of this tool in a table.`,
 			},
 		},
 		Handler: listInstancesHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasTempoStackCRD(p),
+		},
 	}
 }
 

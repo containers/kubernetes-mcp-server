@@ -22,13 +22,13 @@ func (t *Toolset) GetDescription() string {
 }
 
 // GetTools returns all tools provided by this toolset.
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
-		initListInstances(),
-		initGetTraceByID(),
-		initSearchTraces(),
-		initSearchTags(),
-		initSearchTagValues(),
+		initListInstances(p),
+		initGetTraceByID(p),
+		initSearchTraces(p),
+		initSearchTags(p),
+		initSearchTagValues(p),
 	}
 }
 

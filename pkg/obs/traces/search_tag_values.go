@@ -18,7 +18,7 @@ type searchTagValuesOutput struct {
 
 var searchTagValuesOutputSchema = tools.MustSchema[searchTagValuesOutput]()
 
-func initSearchTagValues() api.ServerTool {
+func initSearchTagValues(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name: "tempo_search_tag_values",
@@ -70,6 +70,9 @@ e.g. '{ resource.service.name="payment-service" }' to only show tag values from 
 			},
 		},
 		Handler: searchTagValuesHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasTempoStackCRD(p),
+		},
 	}
 }
 
