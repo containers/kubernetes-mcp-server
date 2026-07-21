@@ -36,7 +36,7 @@ func InitListOrGetResources() []api.ServerTool {
 					},
 					"meshCluster": {
 						Type:        "string",
-						Description: meshClusterDescription,
+						Description: meshClusterDescription(),
 					},
 				},
 				Required: []string{"resourceType"},

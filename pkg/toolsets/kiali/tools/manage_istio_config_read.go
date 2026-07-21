@@ -53,7 +53,7 @@ func InitManageIstioConfigRead() []api.ServerTool {
 					},
 					"meshCluster": {
 						Type:        "string",
-						Description: meshClusterDescription,
+						Description: meshClusterDescription(),
 					},
 					"serviceName": {
 						Type:        "string",

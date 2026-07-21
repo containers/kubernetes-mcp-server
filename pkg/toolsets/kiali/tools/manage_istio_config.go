@@ -54,7 +54,7 @@ func InitManageIstioConfig() []api.ServerTool {
 					},
 					"meshCluster": {
 						Type:        "string",
-						Description: meshClusterDescription,
+						Description: meshClusterDescription(),
 					},
 				},
 				Required: []string{"action", "namespace", "group", "version", "kind", "object"},

@@ -47,7 +47,7 @@ func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
-	return slices.Concat(
+	prompts := slices.Concat(
 		kialiPrompts.InitListApplications(),
 		kialiPrompts.InitListIstioConfig(),
 		kialiPrompts.InitListNamespaces(),
@@ -60,6 +60,11 @@ func (t *Toolset) GetPrompts() []api.ServerPrompt {
 		kialiPrompts.InitTraceAnalysis(),
 		kialiPrompts.InitIstioConfigReview(),
 	)
+	// Same as tools: mesh scope is not selected via provider context.
+	for i := range prompts {
+		prompts[i].ClusterAware = ptr.To(false)
+	}
+	return prompts
 }
 
 func (t *Toolset) GetResources() []api.ServerResource {

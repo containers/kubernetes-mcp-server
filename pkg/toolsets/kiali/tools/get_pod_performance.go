@@ -44,7 +44,7 @@ func InitGetPodPerformance() []api.ServerTool {
 					},
 					"meshCluster": {
 						Type:        "string",
-						Description: meshClusterDescription,
+						Description: meshClusterDescription(),
 					},
 				},
 				Required: []string{"namespace"},

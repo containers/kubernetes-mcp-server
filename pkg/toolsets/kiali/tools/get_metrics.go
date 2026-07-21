@@ -32,7 +32,7 @@ func InitGetMetrics() []api.ServerTool {
 					},
 					"meshCluster": {
 						Type:        "string",
-						Description: meshClusterDescription,
+						Description: meshClusterDescription(),
 					},
 					"resourceName": {
 						Type:        "string",

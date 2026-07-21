@@ -29,9 +29,9 @@ When the `kiali` toolset is enabled, a Kiali toolset configuration is required v
 
 Kiali can manage multiple Kubernetes clusters within an Istio service mesh. Most Kiali tools accept an optional `meshCluster` parameter to target a specific mesh cluster. When omitted, Kiali defaults to its home cluster (where Kiali is deployed).
 
-Use `kiali_list_mesh_clusters` to discover available mesh cluster names before calling other tools. The `name` field from that response is the only valid value for `meshCluster`.
+Use `<toolset>_list_mesh_clusters` (e.g. `kiali_list_mesh_clusters`) to discover available mesh cluster names before calling other tools. The `name` field from that response is the only valid value for `meshCluster`.
 
-Kiali tools are not cluster-aware: the MCP server does not inject a `context` parameter on them. Use `meshCluster` to select mesh scope. Core Kubernetes tools still use `context` when multi-cluster is enabled.
+Kiali tools and prompts are not cluster-aware: the MCP server does not inject a `context` parameter on them. Use `meshCluster` to select mesh scope. Core Kubernetes tools still use `context` when multi-cluster is enabled.
 
 ### Troubleshooting
 

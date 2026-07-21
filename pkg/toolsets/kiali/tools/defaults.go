@@ -1,5 +1,7 @@
 package tools
 
+import "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
+
 // Default values for Kiali API parameters shared across this package.
 const (
 	// DefaultRateInterval is the default rate interval for fetching error rates and metrics.
@@ -17,8 +19,11 @@ const (
 )
 
 // meshClusterDescription is the shared schema description for the meshCluster tool parameter.
-const meshClusterDescription = "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). " +
-	"When omitted, Kiali defaults to its home cluster."
+// Uses ToolsetName() so downstream overrides (e.g. ossm) keep the discovery tool name consistent.
+func meshClusterDescription() string {
+	return "Optional Istio mesh cluster name from " + defaults.ToolsetName() + "_list_mesh_clusters (e.g. west). " +
+		"When omitted, Kiali defaults to its home cluster."
+}
 
 // remapMeshCluster translates the MCP-facing "meshCluster" parameter to the
 // Kiali API's "clusterName" before forwarding the request. This avoids a
