@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           # Use head_sha (not head_branch) to checkout the exact commit that Release validated
           ref: ${{ inputs.tag || github.event.workflow_run.head_sha }}
