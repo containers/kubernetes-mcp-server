@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kubernetes MCP Apps Viewer</title>
+<style>
+INJECT_CSS
+</style>
+</head>
+<body>
+<div id="app"><p class="status">Initializing...</p></div>
+
+<!-- Vendored: htm + Preact standalone UMD -->
+<script>INJECT_VENDOR_HTM_PREACT</script>
+
+<!-- Vendored: Chart.js UMD -->
+<script>INJECT_VENDOR_CHART_JS</script>
+
+<!-- Vendored: Prism.js (YAML syntax highlighting) -->
+<script>window.Prism = { manual: true };</script>
+<script>INJECT_VENDOR_PRISM_CORE</script>
+<script>INJECT_VENDOR_PRISM_YAML</script>
+
+<!-- MCP postMessage protocol -->
+<script>
+INJECT_PROTOCOL_JS
+</script>
+
+<!-- Preact components -->
+<script>
+INJECT_COMPONENTS_JS
+</script>
+
+<!-- Tool name injected per-tool by mcpapps.ViewerHTMLForTool -->
+<script>window.__mcpToolName = 'INJECT_TOOL_NAME';</script>
+
+<!-- App root -->
+<script>
+INJECT_APP_JS
+</script>
+</body>
+</html>
