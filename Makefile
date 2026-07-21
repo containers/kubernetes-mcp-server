@@ -105,7 +105,7 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "========================================="
 	$(MAKE) kind-create-cluster
-	$(MAKE) keycloak-install
+	KUBECONFIG=$(shell pwd)/_output/kubeconfig $(MAKE) keycloak-install
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="
@@ -128,7 +128,7 @@ local-env-setup-kubevirt: ## Setup complete local development environment with K
 	@echo "           with KubeVirt"
 	@echo "========================================="
 	$(MAKE) kind-create-cluster
-	$(MAKE) kubevirt-install
+	KUBECONFIG=$(shell pwd)/_output/kubeconfig $(MAKE) kubevirt-install
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="
@@ -151,7 +151,7 @@ local-env-setup-tekton: ## Setup complete local development environment with Kin
 	@echo "        with Tekton Pipelines"
 	@echo "========================================="
 	$(MAKE) kind-create-cluster
-	$(MAKE) tekton-install
+	KUBECONFIG=$(shell pwd)/_output/kubeconfig $(MAKE) tekton-install
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="
@@ -174,7 +174,7 @@ local-env-setup-kuadrant: ## Setup complete local development environment with K
 	@echo "     with Kuadrant MCP Gateway"
 	@echo "========================================="
 	$(MAKE) kind-create-cluster
-	$(MAKE) kuadrant-setup
+	KUBECONFIG=$(shell pwd)/_output/kubeconfig $(MAKE) kuadrant-setup
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="

@@ -118,6 +118,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
+| hostAliases | list | `[]` | Useful for resolving hostnames that are unreachable via cluster DNS (e.g. sslip.io in Kind). |
 | httpRoute | object | `{"annotations":{},"enabled":false,"hostnames":[],"labels":{},"parentRefs":[],"rules":[{"matches":[{"path":{"type":"PathPrefix","value":"/"}}]}]}` | Disabled by default. When enabled, set `parentRefs`, `rules` (with `matches` / optional `filters` / `timeouts`), and optionally `hostnames`; the chart appends `backendRefs` to the release Service. |
 | image | object | `{"pullPolicy":"IfNotPresent","registry":"quay.io","repository":"containers/kubernetes_mcp_server","version":"latest"}` | This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/ |
 | image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. |

@@ -174,6 +174,7 @@ func strategyBasedTokenExchange(
 			ClientID:           baseConfig.GetStsClientId(),
 			ClientSecret:       baseConfig.GetStsClientSecret(),
 			Audience:           baseConfig.GetStsAudience(),
+			SubjectTokenType:   tokenexchange.TokenTypeAccessToken,
 			Scopes:             baseConfig.GetStsScopes(),
 			AuthStyle:          authStyle,
 			ClientCertFile:     baseConfig.GetStsClientCertFile(),
