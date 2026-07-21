@@ -1,4 +1,4 @@
-package config
+package metrics
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/metrics/prometheus"
 )
 
-const MetricsToolSetName = "observability/metrics"
+const ToolsetName = "observability/metrics"
 
 // Config holds obs-mcp toolset configuration
 type Config struct {
@@ -92,11 +92,13 @@ func (c *Config) GetGuardrails() (*prometheus.Guardrails, error) {
 	}
 
 	if c.MaxMetricCardinality != nil {
+		// Reject cardinality flags that have no effect given the active guardrails.
 		if guardrails == nil || !guardrails.ForceMaxMetricCardinality {
 			return nil, fmt.Errorf(
 				"max_metric_cardinality is set but the %q guardrail is not enabled",
 				prometheus.GuardrailMaxMetricCardinality)
 		}
+		// Reject deprecated use of 0 to disable the metric cardinality guardrail.
 		if *c.MaxMetricCardinality == 0 {
 			return nil, fmt.Errorf(
 				"max_metric_cardinality = 0 is not supported to disable the guardrail; use '!%s' in guardrails instead",
@@ -105,6 +107,7 @@ func (c *Config) GetGuardrails() (*prometheus.Guardrails, error) {
 		guardrails.MaxMetricCardinality = *c.MaxMetricCardinality
 	}
 	if c.MaxLabelCardinality != nil {
+		// Reject cardinality flags that have no effect given the active guardrails.
 		if guardrails == nil || !guardrails.DisallowBlanketRegex {
 			return nil, fmt.Errorf(
 				"max_label_cardinality is set but the %q guardrail is not enabled",
@@ -125,5 +128,5 @@ func obsMCPToolsetParser(_ context.Context, primitive toml.Primitive, md toml.Me
 }
 
 func init() {
-	serverconfig.RegisterToolsetConfig(MetricsToolSetName, obsMCPToolsetParser)
+	serverconfig.RegisterToolsetConfig(ToolsetName, obsMCPToolsetParser)
 }

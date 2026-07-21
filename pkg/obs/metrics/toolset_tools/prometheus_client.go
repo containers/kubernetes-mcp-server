@@ -9,8 +9,8 @@ import (
 	promapi "github.com/prometheus/client_golang/api"
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
+	"github.com/rhobs/obs-mcp/pkg/metrics"
 	"github.com/rhobs/obs-mcp/pkg/metrics/alertmanager"
-	toolsetconfig "github.com/rhobs/obs-mcp/pkg/metrics/config"
 	"github.com/rhobs/obs-mcp/pkg/metrics/prometheus"
 )
 
@@ -19,14 +19,14 @@ const (
 )
 
 // getConfig retrieves the obs-mcp toolset configuration from params.
-func getConfig(params api.ToolHandlerParams) *toolsetconfig.Config {
-	if cfg, ok := params.GetToolsetConfig(toolsetconfig.MetricsToolSetName); ok {
-		if obsCfg, ok := cfg.(*toolsetconfig.Config); ok {
+func getConfig(params api.ToolHandlerParams) *metrics.Config {
+	if cfg, ok := params.GetToolsetConfig(metrics.ToolsetName); ok {
+		if obsCfg, ok := cfg.(*metrics.Config); ok {
 			return obsCfg
 		}
 	}
 	// Return default config if not found
-	return &toolsetconfig.Config{}
+	return &metrics.Config{}
 }
 
 // getPromClient creates a Prometheus client using the toolset configuration.
