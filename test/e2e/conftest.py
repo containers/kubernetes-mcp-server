@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import re
 import subprocess
@@ -27,9 +28,13 @@ from kubernetes_asyncio.client import (
     CustomObjectsApi,
     V1Namespace,
     V1ObjectMeta,
+    V1Secret,
 )
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+
+from fixtures.keycloak import keycloak  # noqa: F401 — re-export fixture
+from fixtures.entra_mock import entra_mock  # noqa: F401 — re-export fixture
 
 SERVER_PORT = 8080
 
@@ -98,14 +103,49 @@ class ServerDeployment:
     @asynccontextmanager
     async def connect_mcp(self):
         """Connect an MCP client session to this server."""
-        async with streamable_http_client(f"{self.server_url}/mcp") as (
-            read,
-            write,
-            _,
-        ):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                yield session
+        async with self.connect_mcp_with_auth(token=None) as session:
+            yield session
+
+    @asynccontextmanager
+    async def connect_mcp_with_auth(self, token: str | None):
+        """Connect an MCP client session, optionally with an OAuth Bearer token."""
+        headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
+        async with httpx.AsyncClient(
+            headers=headers,
+            timeout=httpx.Timeout(30.0, read=300.0),
+            follow_redirects=True,
+        ) as http_client:
+            async with streamable_http_client(
+                f"{self.server_url}/mcp", http_client=http_client,
+            ) as (read, write, _):
+                async with ClientSession(read, write) as session:
+                    session.mcp_init_result = await session.initialize()
+                    yield session
+
+    async def raw_mcp_request(self, token: str | None = None) -> int:
+        """Make a raw HTTP request to the MCP endpoint and return the status code.
+
+        Useful for testing auth rejection without establishing a full session.
+        """
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
+        if token is not None:
+            headers["Authorization"] = f"Bearer {token}"
+        body = (
+            b'{"jsonrpc":"2.0","method":"initialize","id":1,'
+            b'"params":{"protocolVersion":"2025-03-26",'
+            b'"capabilities":{},'
+            b'"clientInfo":{"name":"e2e","version":"0.1"}}}'
+        )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{self.server_url}/mcp",
+                headers=headers,
+                content=body,
+            )
+            return resp.status_code
 
 
 class GatewayConnection:
@@ -132,12 +172,12 @@ class GatewayConnection:
                 f"{self.url}/mcp", http_client=http_client,
             ) as (read, write, _):
                 async with ClientSession(read, write) as session:
-                    await session.initialize()
+                    session.mcp_init_result = await session.initialize()
                     yield session
 
 
-@pytest_asyncio.fixture
-async def deploy_server(k8s_core_v1, chart_path, server_image, helm_bin, kubectl_bin):
+@pytest_asyncio.fixture(loop_scope="session", scope="session")
+async def deploy_server(kubeconfig, chart_path, server_image, helm_bin, kubectl_bin):
     """Factory fixture for deploying MCP server instances.
 
     Usage::
@@ -150,71 +190,95 @@ async def deploy_server(k8s_core_v1, chart_path, server_image, helm_bin, kubectl
             async with server.connect_mcp() as session:
                 result = await session.list_tools()
     """
-    deployments: list[ServerDeployment] = []
+    await k8s_config.load_kube_config(config_file=kubeconfig)
+    async with ApiClient() as api:
+        core_v1 = CoreV1Api(api)
 
-    async def _deploy(
-        name: str, config_toml: str = "", extra_values: dict | None = None,
-    ) -> ServerDeployment:
-        namespace = await _create_namespace(k8s_core_v1, name)
-        await _helm_install(
-            k8s_core_v1, namespace, name, chart_path, server_image, config_toml,
-            helm_bin, extra_values,
-        )
-        server_url, proc = _start_port_forward(namespace, name, kubectl_bin)
-        try:
-            await _wait_for_healthz(server_url)
-        except BaseException as exc:
-            # Capture port-forward stderr before tearing down the process
-            pf_stderr = ""
+        deployments: list[ServerDeployment] = []
+
+        async def _deploy(
+            name: str,
+            config_toml: str = "",
+            extra_values: dict | None = None,
+            namespace_setup=None,
+        ) -> ServerDeployment:
+            namespace = await _create_namespace(core_v1, name)
+            success = False
             try:
-                proc.terminate()
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
+                if namespace_setup is not None:
+                    await namespace_setup(core_v1, namespace)
+                await _helm_install(
+                    core_v1, namespace, name, chart_path, server_image, config_toml,
+                    helm_bin, extra_values,
+                )
+                server_url, proc = _start_port_forward(namespace, name, kubectl_bin)
+                try:
+                    await _wait_for_healthz(server_url)
+                except BaseException as exc:
+                    pf_stderr = ""
+                    _kill_proc(proc)
+                    try:
+                        stderr_file = proc._stderr_file
+                        stderr_file.seek(0)
+                        pf_stderr = stderr_file.read().decode(errors="replace")
+                        stderr_file.close()
+                        proc._stdout_file.close()
+                    except Exception:
+                        pass
+                    if isinstance(exc, TimeoutError):
+                        diag = await _dump_pod_diagnostics(core_v1, namespace, name)
+                        raise RuntimeError(
+                            f"Server at {server_url} failed health check.\n"
+                            f"--- port-forward stderr ---\n{pf_stderr}\n{diag}"
+                        ) from exc
+                    raise
+
+                dep = ServerDeployment(name, namespace, server_url)
+                dep._port_forward_proc = proc
+                deployments.append(dep)
+                success = True
+                return dep
+            finally:
+                if not success:
+                    try:
+                        subprocess.run(
+                            [helm_bin, "uninstall", name, "--namespace", namespace],
+                            capture_output=True, timeout=120,
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        await core_v1.delete_namespace(namespace)
+                    except Exception:
+                        pass
+
+        yield _deploy
+
+        for dep in reversed(deployments):
             try:
-                stderr_file = proc._stderr_file
-                stderr_file.seek(0)
-                pf_stderr = stderr_file.read().decode(errors="replace")
-                stderr_file.close()
-                proc._stdout_file.close()
+                subprocess.run(
+                    [helm_bin, "uninstall", dep.name, "--namespace", dep.namespace],
+                    capture_output=True,
+                    timeout=120,
+                )
             except Exception:
                 pass
-            if isinstance(exc, TimeoutError):
-                diag = await _dump_pod_diagnostics(k8s_core_v1, namespace, name)
-                raise RuntimeError(
-                    f"Server at {server_url} failed health check.\n"
-                    f"--- port-forward stderr ---\n{pf_stderr}\n{diag}"
-                ) from exc
-            raise
-
-        dep = ServerDeployment(name, namespace, server_url)
-        dep._port_forward_proc = proc
-        deployments.append(dep)
-        return dep
-
-    yield _deploy
-
-    for dep in reversed(deployments):
-        subprocess.run(
-            [helm_bin, "uninstall", dep.name, "--namespace", dep.namespace],
-            capture_output=True,
-        )
-        if dep._port_forward_proc:
-            dep._port_forward_proc.terminate()
+            if dep._port_forward_proc:
+                try:
+                    _kill_proc(dep._port_forward_proc)
+                except Exception:
+                    pass
+                for attr in ("_stderr_file", "_stdout_file"):
+                    fh = getattr(dep._port_forward_proc, attr, None)
+                    if fh:
+                        try:
+                            fh.close()
+                        except Exception:
+                            pass
             try:
-                dep._port_forward_proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                dep._port_forward_proc.kill()
-                dep._port_forward_proc.wait()
-            for attr in ("_stderr_file", "_stdout_file"):
-                fh = getattr(dep._port_forward_proc, attr, None)
-                if fh:
-                    fh.close()
-        try:
-            await k8s_core_v1.delete_namespace(dep.namespace)
-        except Exception:
-            pass
+                await core_v1.delete_namespace(dep.namespace)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -223,15 +287,24 @@ async def deploy_server(k8s_core_v1, chart_path, server_image, helm_bin, kubectl
 
 
 async def _create_namespace(core_v1: CoreV1Api, prefix: str) -> str:
-    ns = await core_v1.create_namespace(
-        body=V1Namespace(
-            metadata=V1ObjectMeta(
-                generate_name=f"e2e-{prefix}-",
-                labels={"app.kubernetes.io/managed-by": "e2e-test"},
+    # Retry once on SSL errors caused by stale pooled connections (common
+    # when the API server is reached through a TCP proxy).
+    for attempt in range(2):
+        try:
+            ns = await core_v1.create_namespace(
+                body=V1Namespace(
+                    metadata=V1ObjectMeta(
+                        generate_name=f"e2e-{prefix}-",
+                        labels={"app.kubernetes.io/managed-by": "e2e-test"},
+                    )
+                )
             )
-        )
-    )
-    return ns.metadata.name
+            return ns.metadata.name
+        except OSError:
+            if attempt == 0:
+                await asyncio.sleep(0.5)
+                continue
+            raise
 
 
 def _parse_image(image: str) -> tuple[str, str, str]:
@@ -302,7 +375,7 @@ async def _helm_install(
         "ingress": {"enabled": False},
     }
     if extra_values:
-        values.update(extra_values)
+        values = merge_extra_values(values, extra_values)
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".yaml", delete=False
@@ -321,6 +394,7 @@ async def _helm_install(
             ],
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             diag = await _dump_pod_diagnostics(core_v1, namespace, name)
@@ -345,16 +419,21 @@ def _start_port_forward(
     # it for the "Forwarding from" line to learn the port kubectl chose.
     stdout_file = tempfile.TemporaryFile()
     stderr_file = tempfile.TemporaryFile()
-    proc = subprocess.Popen(
-        [
-            kubectl_bin, "port-forward",
-            "-n", namespace,
-            f"svc/{name}",
-            f":{SERVER_PORT}",
-        ],
-        stdout=stdout_file,
-        stderr=stderr_file,
-    )
+    try:
+        proc = subprocess.Popen(
+            [
+                kubectl_bin, "port-forward",
+                "-n", namespace,
+                f"svc/{name}",
+                f":{SERVER_PORT}",
+            ],
+            stdout=stdout_file,
+            stderr=stderr_file,
+        )
+    except BaseException:
+        stdout_file.close()
+        stderr_file.close()
+        raise
     proc._stdout_file = stdout_file
     proc._stderr_file = stderr_file
 
@@ -380,12 +459,7 @@ def _start_port_forward(
     m = re.search(r"Forwarding from 127\.0\.0\.1:(\d+)", out)
     if m:
         return f"http://127.0.0.1:{int(m.group(1))}", proc
-    try:
-        proc.terminate()
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
+    _kill_proc(proc)
     stderr_file.seek(0)
     err = stderr_file.read().decode(errors="replace")
     stdout_file.close()
@@ -395,6 +469,21 @@ def _start_port_forward(
         f"(exit code {proc.returncode}).\n"
         f"--- stdout ---\n{out}\n--- stderr ---\n{err}"
     )
+
+
+def _kill_proc(proc: subprocess.Popen) -> None:
+    """Terminate a subprocess, escalating to SIGKILL if needed."""
+    try:
+        proc.terminate()
+        proc.wait(timeout=10)
+    except OSError:
+        pass
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=10)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
 
 
 async def _wait_for_healthz(url: str, timeout: float = 30.0) -> None:
@@ -408,6 +497,150 @@ async def _wait_for_healthz(url: str, timeout: float = 30.0) -> None:
     raise TimeoutError(f"Server at {url}/healthz not reachable within {timeout}s")
 
 
+async def create_file_secret(
+    core_v1: CoreV1Api, namespace: str, file_path: str,
+    secret_name: str, data_key: str,
+) -> None:
+    """Create a K8s Secret containing a single file."""
+    raw = Path(file_path).read_bytes()
+    await core_v1.create_namespaced_secret(
+        namespace=namespace,
+        body=V1Secret(
+            metadata=V1ObjectMeta(name=secret_name),
+            data={data_key: base64.b64encode(raw).decode()},
+        ),
+    )
+
+
+async def create_ca_cert_secret(
+    core_v1: CoreV1Api, namespace: str, ca_cert_path: str,
+    secret_name: str = "keycloak-ca-cert",
+) -> None:
+    """Create a K8s Secret containing a CA certificate."""
+    await create_file_secret(core_v1, namespace, ca_cert_path, secret_name, "ca.crt")
+
+
+KEYCLOAK_CA_MOUNT_PATH = "/etc/ssl/keycloak/ca.crt"
+
+
+def _toml_escape(s: str) -> str:
+    """Escape a string for embedding in a TOML double-quoted value."""
+    return (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\b", "\\b")
+        .replace("\f", "\\f")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+
+
+def toml_extra_lines(**kwargs) -> list[str]:
+    """Convert keyword arguments to TOML config lines (bool, int, float, str, list[str])."""
+    lines = []
+    for k, v in kwargs.items():
+        if isinstance(v, bool):
+            lines.append(f'{k} = {"true" if v else "false"}')
+        elif isinstance(v, (int, float)):
+            lines.append(f'{k} = {v}')
+        elif isinstance(v, str):
+            lines.append(f'{k} = "{_toml_escape(v)}"')
+        elif isinstance(v, list):
+            items = ", ".join(f'"{_toml_escape(x)}"' for x in v)
+            lines.append(f'{k} = [{items}]')
+        else:
+            raise TypeError(f"unsupported TOML value type for {k!r}: {type(v)}")
+    return lines
+
+
+def oauth_toml(base_lines: list[str], **extra) -> str:
+    """Build OAuth TOML config from base lines and extra kwargs.
+
+    Raises ValueError if any kwarg conflicts with a key already set in base_lines.
+    """
+    known_keys = set()
+    for line in base_lines:
+        m = re.match(r"(\w+)\s*=", line)
+        if m:
+            known_keys.add(m.group(1))
+    conflicts = known_keys & extra.keys()
+    if conflicts:
+        raise ValueError(f"kwargs conflict with keys already set: {conflicts}")
+    lines = list(base_lines)
+    lines.extend(toml_extra_lines(**extra))
+    return "\n".join(lines)
+
+
+def keycloak_oauth_toml(keycloak_issuer: str, audience: str = "mcp-server", **extra) -> str:
+    """Build common Keycloak OAuth TOML config."""
+    base_lines = [
+        'require_oauth = true',
+        f'authorization_url = "{_toml_escape(keycloak_issuer)}"',
+        f'oauth_audience = "{_toml_escape(audience)}"',
+        'oauth_scopes = ["openid", "mcp-server"]',
+        f'certificate_authority = "{KEYCLOAK_CA_MOUNT_PATH}"',
+    ]
+    return oauth_toml(base_lines, **extra)
+
+
+def merge_extra_values(*dicts):
+    """Merge multiple Helm extra_values dicts, concatenating lists and replacing everything else."""
+    result = {}
+    for d in dicts:
+        for key, val in d.items():
+            if key in result and isinstance(result[key], list) and isinstance(val, list):
+                result[key] = result[key] + val
+            else:
+                result[key] = val
+    return result
+
+
+KEYCLOAK_CA_EXTRA_VALUES = {
+    "extraVolumes": [
+        {"name": "keycloak-ca", "secret": {"secretName": "keycloak-ca-cert"}},
+    ],
+    "extraVolumeMounts": [
+        {"name": "keycloak-ca", "mountPath": "/etc/ssl/keycloak", "readOnly": True},
+    ],
+}
+
+
+@pytest.fixture(scope="session")
+def kind_node_ip(kubectl_bin):
+    """InternalIP of the first cluster node (for hostAliases in Kind)."""
+    result = subprocess.run(
+        [kubectl_bin, "get", "nodes", "-o",
+         'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}'],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout.strip()
+
+
+@pytest.fixture(scope="session")
+def keycloak_extra_values(kind_node_ip):
+    """Helm extra values for Keycloak tests: CA cert volumes + hostAliases."""
+    values = dict(KEYCLOAK_CA_EXTRA_VALUES)
+    if kind_node_ip:
+        values = merge_extra_values(values, {
+            "hostAliases": [
+                {"ip": kind_node_ip, "hostnames": ["keycloak.127-0-0-1.sslip.io"]},
+            ],
+        })
+    return values
+
+
+def ca_namespace_setup(ca_cert_path):
+    """Return an async callable that creates the Keycloak CA cert Secret."""
+
+    async def setup(core_v1, namespace):
+        await create_ca_cert_secret(core_v1, namespace, ca_cert_path)
+
+    return setup
+
+
 # ---------------------------------------------------------------------------
 # Kuadrant MCP Gateway fixtures
 # ---------------------------------------------------------------------------
@@ -417,7 +650,7 @@ GATEWAY_SERVICE = os.environ.get("GATEWAY_SERVICE", "mcp-gateway-istio")
 GATEWAY_HOST = os.environ.get("GATEWAY_HOST", "mcp.127-0-0-1.sslip.io")
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session", scope="session")
 async def k8s_api_client(kubeconfig) -> ApiClient:
     """Shared Kubernetes API client.
 
@@ -432,19 +665,19 @@ async def k8s_api_client(kubeconfig) -> ApiClient:
     await api.close()
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session", scope="session")
 async def k8s_core_v1(k8s_api_client) -> CoreV1Api:
     """Kubernetes CoreV1Api backed by the shared API client."""
     return CoreV1Api(k8s_api_client)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session", scope="session")
 async def k8s_custom_objects(k8s_api_client) -> CustomObjectsApi:
     """Kubernetes CustomObjectsApi backed by the shared API client."""
     return CustomObjectsApi(k8s_api_client)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session", scope="session")
 async def kuadrant_gateway(k8s_core_v1, kubectl_bin) -> GatewayConnection:
     """Port-forward to the Kuadrant MCP Gateway and yield a GatewayConnection.
 
@@ -470,12 +703,7 @@ async def kuadrant_gateway(k8s_core_v1, kubectl_bin) -> GatewayConnection:
     try:
         yield GatewayConnection(gateway_url, GATEWAY_HOST)
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
+        _kill_proc(proc)
         for attr in ("_stderr_file", "_stdout_file"):
             fh = getattr(proc, attr, None)
             if fh:
@@ -483,8 +711,40 @@ async def kuadrant_gateway(k8s_core_v1, kubectl_bin) -> GatewayConnection:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Additional session-scoped fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def keycloak_ca_cert_path():
+    """Path to the cert-manager CA certificate on the test host."""
+    path = os.environ.get(
+        "KEYCLOAK_CA_CERT",
+        str(
+            Path(__file__).resolve().parent.parent.parent
+            / "_output"
+            / "cert-manager-ca"
+            / "ca.crt"
+        ),
+    )
+    if not os.path.isfile(path):
+        pytest.skip(f"CA cert not found: {path}")
+    return path
+
+
+@pytest.fixture(scope="session")
+def server_binary():
+    """Path to the pre-built kubernetes-mcp-server binary."""
+    path = os.environ.get(
+        "SERVER_BINARY",
+        str(
+            Path(__file__).resolve().parent.parent.parent
+            / "kubernetes-mcp-server"
+        ),
+    )
+    if not os.path.isfile(path):
+        pytest.skip(f"Server binary not found: {path}")
+    return path
 
 
 async def _dump_pod_diagnostics(
@@ -534,10 +794,13 @@ async def _dump_pod_diagnostics(
     # Events sorted by timestamp
     try:
         event_list = await core_v1.list_namespaced_event(namespace=namespace)
-        events = sorted(
-            event_list.items,
-            key=lambda e: e.last_timestamp or e.event_time or "",
-        )
+        def _event_sort_key(e):
+            ts = e.last_timestamp or e.event_time
+            if ts is None:
+                return ""
+            return str(ts)
+
+        events = sorted(event_list.items, key=_event_sort_key)
         lines = []
         for event in events:
             ts = event.last_timestamp or event.event_time or ""

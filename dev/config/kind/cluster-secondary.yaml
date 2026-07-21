@@ -10,11 +10,6 @@ nodes:
     readOnly: true
   kubeadmConfigPatches:
   - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-
     kind: ClusterConfiguration
     apiServer:
       extraArgs:
@@ -23,10 +18,3 @@ nodes:
         oidc-username-claim: preferred_username
         oidc-groups-claim: groups
         oidc-ca-file: /etc/kubernetes/pki/keycloak-ca.crt
-  extraPortMappings:
-  - containerPort: 80
-    hostPort: 8000
-    protocol: TCP
-  - containerPort: 443
-    hostPort: 8443
-    protocol: TCP

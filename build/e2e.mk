@@ -5,11 +5,15 @@ UV_VERSION = 0.7.15
 E2E_IMAGE ?= localhost/kubernetes-mcp-server:e2e
 E2E_DIR = test/e2e
 
-KUBECTL = $(shell pwd)/_output/tools/bin/kubectl
+KUBECTL ?= $(shell pwd)/_output/tools/bin/kubectl
 KUBECTL_VERSION ?= v1.36.2
 
 HELM = $(shell pwd)/_output/tools/bin/helm
 HELM_VERSION ?= v3.21.2
+
+KEYCLOAK_CA_CERT ?= $(shell pwd)/_output/cert-manager-ca/ca.crt
+SERVER_BINARY ?= $(shell pwd)/kubernetes-mcp-server
+MULTICLUSTER_KUBECONFIG ?= $(shell pwd)/_output/multicluster-kubeconfig
 
 .PHONY: uv
 uv:
@@ -54,11 +58,19 @@ e2e-image: ## Build the e2e container image and load it into the Kind cluster
 	@if [ "$(shell uname -s)" != "Darwin" ] && echo "$(CONTAINER_ENGINE)" | grep -q "podman"; then \
 		export KIND_EXPERIMENTAL_PROVIDER=podman; \
 	fi; \
-	$(KIND) load docker-image $(E2E_IMAGE) --name $(KIND_CLUSTER_NAME)
+	$(CONTAINER_ENGINE) save $(E2E_IMAGE) -o _output/e2e-image.tar
+	@if [ "$(shell uname -s)" != "Darwin" ] && echo "$(CONTAINER_ENGINE)" | grep -q "podman"; then \
+		export KIND_EXPERIMENTAL_PROVIDER=podman; \
+	fi; \
+	$(KIND) load image-archive _output/e2e-image.tar --name $(KIND_CLUSTER_NAME)
+	@rm -f _output/e2e-image.tar
 
 .PHONY: e2e-full-setup
 e2e-full-setup: kind-create-cluster kuadrant-setup e2e-image ## Create Kind cluster, install Kuadrant MCP Gateway, and build e2e image
 
 .PHONY: e2e-test
 e2e-test: uv kubectl helm ## Run all e2e tests (auto-skips tests whose infrastructure is missing)
-	KUBECTL_BIN=$(KUBECTL) HELM_BIN=$(HELM) MCP_SERVER_IMAGE=$(E2E_IMAGE) $(UV) run --directory $(E2E_DIR) --locked pytest -v $(PYTEST_ARGS)
+	KUBECTL_BIN=$(KUBECTL) HELM_BIN=$(HELM) MCP_SERVER_IMAGE=$(E2E_IMAGE) \
+	KEYCLOAK_CA_CERT=$(KEYCLOAK_CA_CERT) SERVER_BINARY=$(SERVER_BINARY) \
+	MULTICLUSTER_KUBECONFIG=$(MULTICLUSTER_KUBECONFIG) \
+	$(UV) run --directory $(E2E_DIR) --locked pytest -v $(PYTEST_ARGS)
