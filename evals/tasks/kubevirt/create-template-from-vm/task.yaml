@@ -1,0 +1,104 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "create-template-from-vm"
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-from-vm
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-from-vm
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: source-web-server
+          namespace: vmt-test-from-vm
+          labels:
+            app: web-server
+            tier: frontend
+        spec:
+          runStrategy: Halted
+          template:
+            metadata:
+              labels:
+                app: web-server
+            spec:
+              domain:
+                cpu:
+                  cores: 2
+                memory:
+                  guest: 2Gi
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
+              terminationGracePeriodSeconds: 180
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          NS="vmt-test-from-vm"
+          VMT_API="template.kubevirt.io/v1beta1"
+
+          kubectl wait --for=jsonpath='{.metadata.name}'=web-server-vmtr \
+            virtualmachinetemplaterequest.${VMT_API}/web-server-vmtr -n "$NS" --timeout=30s
+
+          SOURCE_VM=$(kubectl get virtualmachinetemplaterequest.${VMT_API} web-server-vmtr -n "$NS" \
+            -o jsonpath='{.spec.virtualMachineRef.name}')
+          [ "$SOURCE_VM" = "source-web-server" ] || { echo "ERROR: source VM is '$SOURCE_VM', expected 'source-web-server'"; exit 1; }
+
+          TEMPLATE_NAME=$(kubectl get virtualmachinetemplaterequest.${VMT_API} web-server-vmtr -n "$NS" \
+            -o jsonpath='{.spec.templateName}')
+          [ "$TEMPLATE_NAME" = "web-server-template" ] || { echo "ERROR: templateName is '$TEMPLATE_NAME', expected 'web-server-template'"; exit 1; }
+
+          echo "All validations passed"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete virtualmachinetemplaterequest.template.kubevirt.io/v1beta1 web-server-vmtr -n vmt-test-from-vm --ignore-not-found=true 2>/dev/null || true
+          kubectl delete virtualmachinetemplate.template.kubevirt.io/v1beta1 web-server-template -n vmt-test-from-vm --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: source-web-server
+          namespace: vmt-test-from-vm
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-from-vm
+        ignoreNotFound: true
+  prompt:
+    inline: |
+      A VirtualMachine named source-web-server exists in the vmt-test-from-vm namespace.
+
+      Create a template from this VM so it can be reused.
+      Name the request web-server-vmtr and the resulting template web-server-template.

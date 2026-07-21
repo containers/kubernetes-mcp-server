@@ -137,7 +137,7 @@ func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
 			s.NoError(err, "Expected no error from ListTools")
 		})
 		s.Run("kubevirt tools are not present", func() {
-			kubevirtTools := []string{"vm_create", "vm_lifecycle", "vm_clone", "vm_guest_info"}
+			kubevirtTools := []string{"vm_create", "vm_create_from_template", "vm_lifecycle", "vm_clone", "vm_guest_info"}
 			for _, tool := range tools.Tools {
 				for _, kvTool := range kubevirtTools {
 					s.Require().NotEqual(kvTool, tool.Name, "Expected %s to not be present when filtering enabled on cluster without KubeVirt", kvTool)

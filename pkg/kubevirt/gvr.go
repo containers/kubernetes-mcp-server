@@ -6,10 +6,14 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
 // Scheme is the runtime scheme for KubeVirt resources
 var Scheme = runtime.NewScheme()
+
+// subresourcesCodec is the codec for encoding/decoding subresources
+var subresourcesCodec = serializer.NewCodecFactory(Scheme)
 
 // KubeVirt core resources
 var (
@@ -112,6 +116,24 @@ var (
 		Resource: "virtualmachineinstancemigrations",
 	}
 )
+
+// virt-template resources
+var (
+	// VirtualMachineTemplateGVK is the GroupVersionKind for VirtualMachineTemplate resources
+	VirtualMachineTemplateGVK = schema.GroupVersionKind{
+		Group:   "template.kubevirt.io",
+		Version: "v1beta1",
+		Kind:    "VirtualMachineTemplate",
+	}
+)
+
+// HasVirtualMachineTemplate returns a TargetCompatibilityFilter that checks whether any
+// target cluster has the VirtualMachineTemplate GVK registered.
+func HasVirtualMachineTemplate(p api.FilteringProvider) func() bool {
+	return func() bool {
+		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{VirtualMachineTemplateGVK})
+	}
+}
 
 // HasVirtualMachine returns a TargetCompatibilityFilter that checks whether any
 // target cluster has the VirtualMachine GVK registered.

@@ -30,6 +30,7 @@ var kubevirtApis = []schema.GroupVersionResource{
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineinstancetypes"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineclusterpreferences"},
 	{Group: "instancetype.kubevirt.io", Version: "v1beta1", Resource: "virtualmachinepreferences"},
+	{Group: "template.kubevirt.io", Version: "v1beta1", Resource: "virtualmachinetemplates"},
 }
 
 type KubevirtSuite struct {
@@ -1239,6 +1240,62 @@ func (s *KubevirtSuite) TestVMGuestInfo() {
 			Version:  "v1",
 			Resource: "virtualmachineinstances",
 		}).Namespace("default").Delete(s.T().Context(), "default-info-vm", metav1.DeleteOptions{})
+	})
+}
+
+func (s *KubevirtSuite) TestCreateFromTemplate() {
+	s.Run("vm_create_from_template missing required params", func() {
+		testCases := []string{"namespace", "template_name"}
+		for _, param := range testCases {
+			s.Run("missing "+param, func() {
+				params := map[string]interface{}{
+					"namespace":     "default",
+					"template_name": "test-template",
+				}
+				delete(params, param)
+				toolResult, err := s.CallTool("vm_create_from_template", params)
+				s.Require().Nilf(err, "call tool failed %v", err)
+				s.Truef(toolResult.IsError, "expected call tool to fail due to missing %s", param)
+				s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, param+" parameter required")
+			})
+		}
+	})
+
+	s.Run("vm_create_from_template with non-existent template", func() {
+		toolResult, err := s.CallTool("vm_create_from_template", map[string]interface{}{
+			"namespace":     "default",
+			"template_name": "non-existent-template",
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail for non-existent template")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "failed to create VM from template")
+	})
+
+	s.Run("vm_create_from_template with parameters", func() {
+		toolResult, err := s.CallTool("vm_create_from_template", map[string]interface{}{
+			"namespace":     "default",
+			"template_name": "test-template",
+			"parameters": map[string]interface{}{
+				"VM_NAME": "my-vm",
+				"MEMORY":  "4Gi",
+			},
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail without virt-template API server")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "failed to create VM from template")
+	})
+
+	s.Run("vm_create_from_template with invalid parameter types", func() {
+		toolResult, err := s.CallTool("vm_create_from_template", map[string]interface{}{
+			"namespace":     "default",
+			"template_name": "test-template",
+			"parameters": map[string]interface{}{
+				"VM_NAME": 123,
+			},
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected call tool to fail for invalid parameter types")
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "must be a string")
 	})
 }
 

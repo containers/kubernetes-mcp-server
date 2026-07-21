@@ -6,7 +6,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/rest"
 )
 
@@ -16,13 +15,6 @@ const (
 	subresourceFilesystemList = "filesystemlist"
 	subresourceUserList       = "userlist"
 	subresourceInterfaceList  = "interfacelist"
-)
-
-var (
-	// subresourcesScheme is the scheme for subresources API
-	subresourcesScheme = Scheme
-	// subresourcesCodec is the codec for encoding/decoding subresources
-	subresourcesCodec = serializer.NewCodecFactory(subresourcesScheme)
 )
 
 // AllGuestInfo holds all guest agent information with error tracking

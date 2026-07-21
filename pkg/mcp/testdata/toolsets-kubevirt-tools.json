@@ -160,6 +160,42 @@
   },
   {
     "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Virtual Machine: Create from Template"
+    },
+    "description": "Create a VirtualMachine from a VirtualMachineTemplate (virt-template) on KubeVirt. Processes the template server-side to substitute parameters (required values, defaults, and auto-generated values like passwords), then creates the resulting VirtualMachine in the same namespace. Cross-namespace template usage is not supported.",
+    "inputSchema": {
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the VirtualMachineTemplate and the resulting VirtualMachine (must be the same)",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Parameter values to substitute in the template. Keys are parameter names (e.g. VM_NAME), values are strings. Required parameters must be provided; optional parameters use their defaults if omitted; parameters with generate/from will be auto-generated if not provided.",
+          "type": "object"
+        },
+        "template_name": {
+          "description": "The name of the VirtualMachineTemplate to create the VM from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "template_name"
+      ],
+      "type": "object"
+    },
+    "name": "vm_create_from_template",
+    "title": "Virtual Machine: Create from Template"
+  },
+  {
+    "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
       "openWorldHint": false,

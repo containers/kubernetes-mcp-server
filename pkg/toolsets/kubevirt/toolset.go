@@ -10,6 +10,7 @@ import (
 	vm_create "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/create"
 	vm_guestagent "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/guestagent"
 	vm_lifecycle "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/lifecycle"
+	vm_template "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/template"
 	vm_troubleshoot "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/vm/troubleshoot"
 )
 
@@ -31,6 +32,7 @@ func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 		vm_create.Tools(p),
 		vm_guestagent.Tools(p),
 		vm_lifecycle.Tools(p),
+		vm_template.Tools(p),
 		vm_troubleshoot.Tools(p),
 	)
 }

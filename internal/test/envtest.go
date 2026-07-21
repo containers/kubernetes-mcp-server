@@ -102,6 +102,8 @@ func EnvTest() *envtest.Environment {
 				CRD("tekton.dev", "v1", "taskruns", "TaskRun", "taskrun", true),
 				CRD("pipelinesascode.tekton.dev", "v1alpha1", "repositories", "Repository", "repository", true),
 				CRD("operator.tekton.dev", "v1alpha1", "tektonconfigs", "TektonConfig", "tektonconfig", false),
+				// virt-template
+				CRD("template.kubevirt.io", "v1beta1", "virtualmachinetemplates", "VirtualMachineTemplate", "virtualmachinetemplate", true),
 			},
 		}
 
