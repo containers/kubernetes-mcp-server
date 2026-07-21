@@ -19,6 +19,35 @@ func (f *fakeFilteringProvider) AnyTargetHasGVKs(_ context.Context, gvks []schem
 
 func (f *fakeFilteringProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return true }
 
+func TestHasVirtualMachineTemplate(t *testing.T) {
+	t.Run("queries for VirtualMachineTemplate GVK", func(t *testing.T) {
+		p := &fakeFilteringProvider{hasGVKs: true}
+		filter := HasVirtualMachineTemplate(p)
+		filter()
+
+		if len(p.queriedGVKs) != 1 {
+			t.Fatalf("expected 1 GVK query, got %d", len(p.queriedGVKs))
+		}
+		if p.queriedGVKs[0] != VirtualMachineTemplateGVK {
+			t.Errorf("expected query for %v, got %v", VirtualMachineTemplateGVK, p.queriedGVKs[0])
+		}
+	})
+
+	t.Run("returns true when provider has VirtualMachineTemplate GVK", func(t *testing.T) {
+		filter := HasVirtualMachineTemplate(&fakeFilteringProvider{hasGVKs: true})
+		if !filter() {
+			t.Error("expected HasVirtualMachineTemplate to return true")
+		}
+	})
+
+	t.Run("returns false when provider does not have VirtualMachineTemplate GVK", func(t *testing.T) {
+		filter := HasVirtualMachineTemplate(&fakeFilteringProvider{hasGVKs: false})
+		if filter() {
+			t.Error("expected HasVirtualMachineTemplate to return false")
+		}
+	})
+}
+
 func TestHasVirtualMachine(t *testing.T) {
 	t.Run("queries for VirtualMachine GVK", func(t *testing.T) {
 		p := &fakeFilteringProvider{hasGVKs: true}

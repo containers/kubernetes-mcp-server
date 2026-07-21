@@ -1,0 +1,129 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "inspect-vm-template"
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-inspect
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-inspect
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: template.kubevirt.io/v1beta1
+          kind: VirtualMachineTemplate
+          metadata:
+            name: web-server-template
+            namespace: vmt-test-inspect
+          spec:
+            parameters:
+              - name: VM_NAME
+                displayName: "Virtual Machine Name"
+                description: "Name of the virtual machine to create"
+                required: true
+              - name: MEMORY
+                displayName: "Memory Size"
+                description: "Amount of memory for the VM"
+                value: "4Gi"
+              - name: CPU_CORES
+                displayName: "CPU Cores"
+                description: "Number of CPU cores"
+                value: "2"
+              - name: ROOT_PASSWORD
+                displayName: "Root Password"
+                description: "Root password for the VM (auto-generated if not provided)"
+                generate: "expression"
+                from: "[a-zA-Z0-9]{16}"
+            virtualMachine:
+              metadata:
+                name: ${VM_NAME}
+              spec:
+                runStrategy: Halted
+                template:
+                  spec:
+                    domain:
+                      cpu:
+                        cores: ${CPU_CORES}
+                      memory:
+                        guest: ${MEMORY}
+                      devices:
+                        disks:
+                          - name: containerdisk
+                            disk:
+                              bus: virtio
+                          - name: cloudinitdisk
+                            disk:
+                              bus: virtio
+                    volumes:
+                      - name: containerdisk
+                        containerDisk:
+                          image: quay.io/containerdisks/fedora:latest
+                      - name: cloudinitdisk
+                        cloudInitNoCloud:
+                          userData: |
+                            #cloud-config
+                            password: ${ROOT_PASSWORD}
+                            chpasswd:
+                              expire: false
+          EOF
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          NS="vmt-test-inspect"
+          VMT_API="template.kubevirt.io/v1beta1"
+
+          kubectl wait --for=jsonpath='{.metadata.name}'=web-server-template \
+            virtualmachinetemplate.${VMT_API}/web-server-template -n "$NS" --timeout=30s
+
+          PARAMS=$(kubectl get virtualmachinetemplate.${VMT_API} web-server-template -n "$NS" -o json | jq -r '.spec.parameters[].name')
+          for p in VM_NAME MEMORY CPU_CORES ROOT_PASSWORD; do
+            echo "$PARAMS" | grep -qx "$p" || { echo "ERROR: parameter $p not found"; exit 1; }
+          done
+
+          COUNT=$(kubectl get virtualmachinetemplate.${VMT_API} web-server-template -n "$NS" -o json | jq '.spec.parameters | length')
+          [ "$COUNT" -eq 4 ] || { echo "ERROR: expected 4 parameters, got $COUNT"; exit 1; }
+
+          VM_SPEC=$(kubectl get virtualmachinetemplate.${VMT_API} web-server-template -n "$NS" -o jsonpath='{.spec.virtualMachine}')
+          [ -n "$VM_SPEC" ] || { echo "ERROR: missing spec.virtualMachine"; exit 1; }
+
+          echo "All validations passed"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete virtualmachinetemplate.template.kubevirt.io/v1beta1 web-server-template -n vmt-test-inspect --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-inspect
+        ignoreNotFound: true
+  prompt:
+    inline: |
+      Get the VirtualMachineTemplate named web-server-template in the vmt-test-inspect namespace.
+      Examine its parameters and tell me:
+      1. Which parameters are required?
+      2. Which parameters have default values, and what are those defaults?
+      3. Which parameters use auto-generation?
