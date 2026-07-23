@@ -54,12 +54,12 @@ func (t *Toolset) GetDescription() string {
 }
 
 // GetTools returns all tools provided by this toolset.
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
-		initListComponents(),
-		initGetComponentSchema(),
-		initValidateConfig(),
-		initGetVersions(),
+		initListComponents(p),
+		initGetComponentSchema(p),
+		initValidateConfig(p),
+		initGetVersions(p),
 	}
 }
 
