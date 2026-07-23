@@ -22,8 +22,6 @@ type AuthMode string
 const (
 	// AuthModeKubeConfig reads the bearer token from the kubeconfig or from the mounted service account token file.
 	AuthModeKubeConfig AuthMode = "kubeconfig"
-	// AuthModeServiceAccount reads the bearer token from the mounted service account token file.
-	AuthModeServiceAccount AuthMode = "serviceaccount"
 	// AuthModeHeader reads the bearer token from the incoming request's authorization header.
 	// The caller must store the token in the context.
 	AuthModeHeader AuthMode = "header"
@@ -38,12 +36,10 @@ func ParseAuthMode(mode string) (AuthMode, error) {
 	switch mode {
 	case string(AuthModeKubeConfig):
 		return AuthModeKubeConfig, nil
-	case string(AuthModeServiceAccount):
-		return AuthModeServiceAccount, nil
 	case string(AuthModeHeader):
 		return AuthModeHeader, nil
 	default:
-		return "", fmt.Errorf("invalid auth mode: %s (valid options: kubeconfig, serviceaccount, header)", mode)
+		return "", fmt.Errorf("invalid auth mode: %q (valid options: %q, %q)", mode, AuthModeKubeConfig, AuthModeHeader)
 	}
 }
 

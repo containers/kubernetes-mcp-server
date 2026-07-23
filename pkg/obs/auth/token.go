@@ -11,21 +11,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-const (
-	serviceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-)
-
 func readToken(ctx context.Context, restConfig *rest.Config, authMode AuthMode) (string, error) {
 	switch authMode {
 	case AuthModeKubeConfig:
 		return readTokenFromRestConfig(restConfig)
-
-	case AuthModeServiceAccount:
-		token, err := readTokenFromServiceAccountTokenFile()
-		if err != nil {
-			return "", fmt.Errorf("failed to read service account token: %w", err)
-		}
-		return string(token), nil
 
 	case AuthModeHeader:
 		// Read token from context.
@@ -60,10 +49,6 @@ func readTokenFromRestConfig(restConfig *rest.Config) (string, error) {
 	}
 
 	return "", nil
-}
-
-func readTokenFromServiceAccountTokenFile() ([]byte, error) {
-	return os.ReadFile(serviceAccountTokenPath)
 }
 
 // readTokenFromContext reads a token from the context and strips the Bearer prefix
