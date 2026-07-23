@@ -288,4 +288,4 @@ When reviewing a toolset PR, verify:
 - [ ] **Results use NewToolCallResultStructured**: Not manual `json.Marshal` + `NewToolCallResult`
 - [ ] **Container targeting**: If exec-ing into multi-container pods, is the correct container selected?
 - [ ] **Snapshot tests added**: Is the toolset in `TestGranularToolsetsTools` with a snapshot file?
-- [ ] **All eval configs updated**: claude-code, openai-agent
+- [ ] **All eval configs updated**: `evals/core-eval-testing/<agent>/eval-<suite>.yaml` (one per toolset per agent)

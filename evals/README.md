@@ -129,12 +129,14 @@ task. The assertions accept either, for example `toolPattern: "(pods_.*|resource
 
 `make run-evals` resolves the eval config in priority order:
 
-1. **Per-suite per-agent** (`evals/tasks/<suite>/<agent>/eval.yaml`) — scoped to
-   a single suite. Currently only `kubevirt` has these.
+1. **Per-suite override** (`evals/tasks/<suite>/<agent>/eval.yaml`) — takes
+   precedence when present. No suite currently ships one; this is a hook for
+   dropping in a one-off local override.
 2. **Core-eval-testing** (`evals/core-eval-testing/<agent>/eval-<suite>.yaml`) —
-   per-suite configs for each agent. **CI** runs `builtin-openai` here. Available
-   agents: `builtin-openai`, `builtin-anthropic`, `builtin-google`,
-   `acp-anthropic`, `acp-google` (not all have eval configs yet).
+   the canonical per-suite config for each agent, and what every suite resolves to
+   today. **CI** runs `builtin-openai` here. Available agents: `builtin-openai`,
+   `builtin-anthropic`, `builtin-google`, `acp-anthropic`, `acp-google` (not all
+   have eval configs yet).
 
 Each eval config's `llmJudge` references the same `agent.yaml` used by the agent
 itself, so the judge reuses the agent's model and credentials — no separate judge
