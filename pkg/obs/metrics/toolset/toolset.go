@@ -4,13 +4,9 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
-	"github.com/rhobs/obs-mcp/pkg/logs"
 	"github.com/rhobs/obs-mcp/pkg/metrics/config"
 	"github.com/rhobs/obs-mcp/pkg/metrics/toolset_tools"
-	"github.com/rhobs/obs-mcp/pkg/otelcol"
-	tempo "github.com/rhobs/obs-mcp/pkg/traces"
 )
 
 // Toolset implements the observability toolset for advanced Prometheus monitoring.
@@ -58,11 +54,4 @@ func (t *Toolset) GetResources() []api.ServerResource {
 // GetResourceTemplates returns resource templates provided by this toolset.
 func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
 	return nil
-}
-
-func init() {
-	toolsets.Register(&Toolset{})
-	toolsets.Register(&tempo.Toolset{})
-	toolsets.Register(&logs.Toolset{})
-	toolsets.Register(&otelcol.Toolset{})
 }
