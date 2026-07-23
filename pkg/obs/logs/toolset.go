@@ -19,12 +19,12 @@ func (t *Toolset) GetDescription() string {
 	return "Toolset for querying Loki logs"
 }
 
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
-		initListInstances(),
-		initLabelNames(),
-		initLabelValues(),
-		initQueryRange(),
+		initListInstances(p),
+		initLabelNames(p),
+		initLabelValues(p),
+		initQueryRange(p),
 	}
 }
 
