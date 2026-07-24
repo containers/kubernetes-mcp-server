@@ -1,10 +1,12 @@
 package otelcol
 
 import (
+	"context"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/rhobs/obs-mcp/pkg/tools"
 )
@@ -24,9 +26,23 @@ var (
 	getComponentSchemaOutputSchema = tools.MustSchema[GetComponentSchemaOutput]()
 	validateConfigOutputSchema     = tools.MustSchema[ValidateConfigOutput]()
 	getVersionsOutputSchema        = tools.MustSchema[GetVersionsOutput]()
+
+	openTelemetryCollectorGVK = schema.GroupVersionKind{
+		Group:   "opentelemetry.io",
+		Version: "v1beta1",
+		Kind:    "OpenTelemetryCollector",
+	}
 )
 
-func initListComponents() api.ServerTool {
+func hasOpenTelemetryCollectorCRD(p api.FilteringProvider) func() bool {
+	return func() bool {
+		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{
+			openTelemetryCollectorGVK,
+		})
+	}
+}
+
+func initListComponents(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_list_components",
@@ -50,10 +66,13 @@ func initListComponents() api.ServerTool {
 			},
 		},
 		Handler: ListComponentsHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasOpenTelemetryCollectorCRD(p),
+		},
 	}
 }
 
-func initGetComponentSchema() api.ServerTool {
+func initGetComponentSchema(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_get_component_schema",
@@ -86,10 +105,13 @@ func initGetComponentSchema() api.ServerTool {
 			},
 		},
 		Handler: GetComponentSchemaHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasOpenTelemetryCollectorCRD(p),
+		},
 	}
 }
 
-func initValidateConfig() api.ServerTool {
+func initValidateConfig(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_validate_config",
@@ -130,10 +152,13 @@ func initValidateConfig() api.ServerTool {
 			},
 		},
 		Handler: ValidateConfigHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasOpenTelemetryCollectorCRD(p),
+		},
 	}
 }
 
-func initGetVersions() api.ServerTool {
+func initGetVersions(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_get_versions",
@@ -151,5 +176,8 @@ func initGetVersions() api.ServerTool {
 			},
 		},
 		Handler: GetVersionsHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasOpenTelemetryCollectorCRD(p),
+		},
 	}
 }
