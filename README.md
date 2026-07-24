@@ -562,9 +562,10 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
 
 - **vm_lifecycle** - Manage KubeVirt VirtualMachine lifecycle: start, stop, or restart a VM
-  - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
+  - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (sets runStrategy from run_policy), 'stop' (sets runStrategy to Halted), or 'restart' (stops then starts; see run_policy)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+  - `run_policy` (`string`) - The run policy for 'start' and 'restart' (ignored for 'stop'): 'HighAvailability' (Always), 'RestartOnFailure' (RerunOnFailure), or 'Once' (Once). Defaults to 'HighAvailability'.
 
 </details>
 
