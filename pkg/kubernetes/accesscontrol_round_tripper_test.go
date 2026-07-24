@@ -440,6 +440,17 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 		s.True(delegateCalled, "Expected delegate to be called for allowed API group")
 	})
 
+	s.Run("Guest agent subresource URL passes through with allowed group", func() {
+		rt.deniedResourcesProvider = nil
+		rt.allowedAPIGroupsProvider = &mockAllowedAPIGroupsProvider{groups: []string{"subresources.kubevirt.io"}}
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/guestosinfo", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for guest agent subresource")
+	})
+
 	s.Run("Unknown API group is rejected even with allowed groups set", func() {
 		rt.deniedResourcesProvider = nil
 		rt.allowedAPIGroupsProvider = &mockAllowedAPIGroupsProvider{groups: []string{"subresources.kubevirt.io"}}

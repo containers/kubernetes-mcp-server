@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/rest"
 )
 
@@ -16,13 +14,6 @@ const (
 	subresourceFilesystemList = "filesystemlist"
 	subresourceUserList       = "userlist"
 	subresourceInterfaceList  = "interfacelist"
-)
-
-var (
-	// subresourcesScheme is the scheme for subresources API
-	subresourcesScheme = Scheme
-	// subresourcesCodec is the codec for encoding/decoding subresources
-	subresourcesCodec = serializer.NewCodecFactory(subresourcesScheme)
 )
 
 // AllGuestInfo holds all guest agent information with error tracking
@@ -39,21 +30,11 @@ type AllGuestInfo struct {
 
 // getVMISubresource retrieves a VMI subresource using the REST client
 func getVMISubresource(ctx context.Context, restConfig *rest.Config, namespace, vmiName, subresource string) (map[string]any, error) {
-	// Create a copy to avoid mutating the original config
-	config := rest.CopyConfig(restConfig)
-
-	// Create a REST client configured for the subresources.kubevirt.io API group
-	gv := schema.GroupVersion{Group: "subresources.kubevirt.io", Version: "v1"}
-	config.GroupVersion = &gv
-	config.APIPath = "/apis"
-	config.NegotiatedSerializer = subresourcesCodec.WithoutConversion()
-
-	restClient, err := rest.RESTClientFor(config)
+	restClient, err := newSubresourceClient(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create REST client for subresources: %w", err)
 	}
 
-	// Make the request using SubResource() to properly construct the URL
 	result := &unstructured.Unstructured{}
 	err = restClient.Get().
 		Namespace(namespace).
