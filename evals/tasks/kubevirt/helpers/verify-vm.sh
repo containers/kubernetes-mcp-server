@@ -321,3 +321,241 @@ verify_multus_secondary_network() {
 
     return 0
 }
+
+# verify_volume_exists: Verifies a volume exists in the VM spec
+# Usage: verify_volume_exists <vm-name> <namespace> <volume-name>
+verify_volume_exists() {
+    local vm_name="$1"
+    local namespace="$2"
+    local vol_name="$3"
+
+    local volumes
+    volumes=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath="{.spec.template.spec.volumes[?(@.name=='$vol_name')].name}")
+
+    if [[ "$volumes" == "$vol_name" ]]; then
+        echo "✓ Volume '$vol_name' exists in VM spec"
+        return 0
+    else
+        echo "✗ Volume '$vol_name' not found in VM spec"
+        kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.volumes[*].name}'
+        return 1
+    fi
+}
+
+# verify_volume_not_exists: Verifies a volume does NOT exist in the VM spec
+# Usage: verify_volume_not_exists <vm-name> <namespace> <volume-name>
+verify_volume_not_exists() {
+    local vm_name="$1"
+    local namespace="$2"
+    local vol_name="$3"
+
+    local volumes
+    volumes=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath="{.spec.template.spec.volumes[?(@.name=='$vol_name')].name}")
+
+    if [[ -z "$volumes" ]]; then
+        echo "✓ Volume '$vol_name' not present in VM spec"
+        return 0
+    else
+        echo "✗ Volume '$vol_name' still exists in VM spec"
+        return 1
+    fi
+}
+
+# verify_volume_hotpluggable: Verifies a volume has hotpluggable: true on its source
+# Usage: verify_volume_hotpluggable <vm-name> <namespace> <volume-name>
+verify_volume_hotpluggable() {
+    local vm_name="$1"
+    local namespace="$2"
+    local vol_name="$3"
+
+    local vm_json
+    vm_json=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o json)
+
+    local hotpluggable
+    hotpluggable=$(echo "$vm_json" | python3 -c "
+import json, sys
+vm = json.load(sys.stdin)
+for v in vm.get('spec',{}).get('template',{}).get('spec',{}).get('volumes',[]):
+    if v.get('name') == '$vol_name':
+        pvc = v.get('persistentVolumeClaim',{})
+        dv = v.get('dataVolume',{})
+        if pvc.get('hotpluggable') or dv.get('hotpluggable'):
+            print('true')
+        else:
+            print('false')
+        sys.exit(0)
+print('not_found')
+")
+
+    if [[ "$hotpluggable" == "true" ]]; then
+        echo "✓ Volume '$vol_name' has hotpluggable: true"
+        return 0
+    elif [[ "$hotpluggable" == "not_found" ]]; then
+        echo "✗ Volume '$vol_name' not found in VM spec"
+        return 1
+    else
+        echo "✗ Volume '$vol_name' does not have hotpluggable: true"
+        return 1
+    fi
+}
+
+# verify_disk_exists: Verifies a disk exists in domain.devices.disks
+# Usage: verify_disk_exists <vm-name> <namespace> <disk-name>
+verify_disk_exists() {
+    local vm_name="$1"
+    local namespace="$2"
+    local disk_name="$3"
+
+    local disks
+    disks=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath="{.spec.template.spec.domain.devices.disks[?(@.name=='$disk_name')].name}")
+
+    if [[ "$disks" == "$disk_name" ]]; then
+        echo "✓ Disk '$disk_name' exists in domain devices"
+        return 0
+    else
+        echo "✗ Disk '$disk_name' not found in domain devices"
+        kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath='{.spec.template.spec.domain.devices.disks[*].name}'
+        return 1
+    fi
+}
+
+# verify_disk_not_exists: Verifies a disk does NOT exist in domain.devices.disks
+# Usage: verify_disk_not_exists <vm-name> <namespace> <disk-name>
+verify_disk_not_exists() {
+    local vm_name="$1"
+    local namespace="$2"
+    local disk_name="$3"
+
+    local disks
+    disks=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath="{.spec.template.spec.domain.devices.disks[?(@.name=='$disk_name')].name}")
+
+    if [[ -z "$disks" ]]; then
+        echo "✓ Disk '$disk_name' not present in domain devices"
+        return 0
+    else
+        echo "✗ Disk '$disk_name' still exists in domain devices"
+        return 1
+    fi
+}
+
+# verify_interface_absent: Verifies an interface has state: "absent"
+# Usage: verify_interface_absent <vm-name> <namespace> <interface-name>
+verify_interface_absent() {
+    local vm_name="$1"
+    local namespace="$2"
+    local iface_name="$3"
+
+    local state
+    state=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o jsonpath="{.spec.template.spec.domain.devices.interfaces[?(@.name=='$iface_name')].state}")
+
+    if [[ "$state" == "absent" ]]; then
+        echo "✓ Interface '$iface_name' has state: absent"
+        return 0
+    else
+        echo "✗ Interface '$iface_name' state is '$state', expected 'absent'"
+        return 1
+    fi
+}
+
+# verify_vmi_cpu_sockets: Verifies CPU sockets on the running VMI via status.currentCPUTopology
+# Usage: verify_vmi_cpu_sockets <vm-name> <namespace> <expected-sockets> [timeout]
+verify_vmi_cpu_sockets() {
+    local vm_name="$1"
+    local namespace="$2"
+    local expected="$3"
+    local timeout="${4:-120}"
+
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local sockets
+        sockets=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.currentCPUTopology.sockets}' 2>/dev/null)
+        if [[ "$sockets" == "$expected" ]]; then
+            echo "✓ VMI CPU sockets is $expected"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    local final
+    final=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.currentCPUTopology.sockets}' 2>/dev/null)
+    echo "✗ VMI CPU sockets is '$final', expected '$expected' (timed out after ${timeout}s)"
+    return 1
+}
+
+# verify_vmi_memory: Verifies memory on the running VMI via status.memory.guestCurrent
+# Usage: verify_vmi_memory <vm-name> <namespace> <expected-memory> [timeout]
+verify_vmi_memory() {
+    local vm_name="$1"
+    local namespace="$2"
+    local expected="$3"
+    local timeout="${4:-120}"
+
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local current
+        current=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.memory.guestCurrent}' 2>/dev/null)
+        if [[ "$current" == "$expected" ]]; then
+            echo "✓ VMI memory guestCurrent is $expected"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    local final
+    final=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.memory.guestCurrent}' 2>/dev/null)
+    echo "✗ VMI memory guestCurrent is '$final', expected '$expected' (timed out after ${timeout}s)"
+    return 1
+}
+
+# verify_vmi_volume_ready: Verifies a hotplugged volume reached Ready phase on the VMI
+# Usage: verify_vmi_volume_ready <vm-name> <namespace> <volume-name> [timeout]
+verify_vmi_volume_ready() {
+    local vm_name="$1"
+    local namespace="$2"
+    local vol_name="$3"
+    local timeout="${4:-120}"
+
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local phase
+        phase=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath="{.status.volumeStatus[?(@.name=='$vol_name')].phase}" 2>/dev/null)
+        if [[ "$phase" == "Ready" ]]; then
+            echo "✓ VMI volume '$vol_name' phase is Ready"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    local final
+    final=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath="{.status.volumeStatus[?(@.name=='$vol_name')].phase}" 2>/dev/null)
+    echo "✗ VMI volume '$vol_name' phase is '$final', expected 'Ready' (timed out after ${timeout}s)"
+    return 1
+}
+
+# verify_vmi_interface_exists: Verifies a hotplugged interface appears in VMI status.interfaces
+# Usage: verify_vmi_interface_exists <vm-name> <namespace> <interface-name> [timeout]
+verify_vmi_interface_exists() {
+    local vm_name="$1"
+    local namespace="$2"
+    local iface_name="$3"
+    local timeout="${4:-120}"
+
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local name
+        name=$(kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath="{.status.interfaces[?(@.name=='$iface_name')].name}" 2>/dev/null)
+        if [[ "$name" == "$iface_name" ]]; then
+            echo "✓ VMI interface '$iface_name' present in status"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    echo "✗ VMI interface '$iface_name' not found in status.interfaces (timed out after ${timeout}s)"
+    kubectl get virtualmachineinstance "$vm_name" -n "$namespace" -o jsonpath='{.status.interfaces[*].name}' 2>/dev/null
+    return 1
+}

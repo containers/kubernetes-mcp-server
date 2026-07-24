@@ -1,0 +1,87 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt-multinode
+    project: kubevirt
+    requires: kubevirt-multinode
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "hotplug-cpu-sockets"
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-cpu
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-cpu
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test-hotplug-cpu
+        spec:
+          runStrategy: Always
+          template:
+            spec:
+              domain:
+                cpu:
+                  sockets: 1
+                  cores: 1
+                  threads: 1
+                  maxSockets: 4
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
+                resources:
+                  requests:
+                    memory: 1Gi
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl wait --for=jsonpath='{.status.ready}'=true virtualmachine/test-vm -n vm-test-hotplug-cpu --timeout=300s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="vm-test-hotplug-cpu"
+
+          verify_vmi_cpu_sockets "test-vm" "$NS" "2" 300 || exit 1
+
+          echo "All validations passed"
+          exit 0
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test-hotplug-cpu
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-cpu
+        ignoreNotFound: true
+  prompt:
+    inline: Increase the CPU sockets on the running VM 'test-vm' in the vm-test-hotplug-cpu namespace from 1 to 2.

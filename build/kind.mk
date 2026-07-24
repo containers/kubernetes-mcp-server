@@ -14,6 +14,7 @@ kind:
 	}
 
 KIND_CLUSTER_NAME ?= kubernetes-mcp-server
+KIND_CLUSTER_CONFIG ?= dev/config/kind/cluster.yaml
 
 # Detect container engine (docker or podman)
 CONTAINER_ENGINE ?= $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
@@ -37,7 +38,7 @@ kind-create-cluster: kind kind-create-certs
 		echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping creation"; \
 	else \
 		echo "Creating Kind cluster '$(KIND_CLUSTER_NAME)'..."; \
-		$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config dev/config/kind/cluster.yaml; \
+		$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config $(KIND_CLUSTER_CONFIG); \
 		echo "Adding ingress-ready label to control-plane node..."; \
 		kubectl label node $(KIND_CLUSTER_NAME)-control-plane ingress-ready=true --overwrite; \
 		echo "Installing nginx ingress controller..."; \
