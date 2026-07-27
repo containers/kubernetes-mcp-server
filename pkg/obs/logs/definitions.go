@@ -1,8 +1,11 @@
 package logs
 
 import (
+	"context"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 var (
@@ -18,9 +21,23 @@ var (
 		Type:        "string",
 		Description: "Loki tenant ID (X-Scope-OrgID). For LokiStack gateway modes (e.g. openshift-network) this selects the `/api/logs/v1/<tenant>` path; use `network` for openshift-network.",
 	}
+
+	lokiStackGVK = schema.GroupVersionKind{
+		Group:   "loki.grafana.com",
+		Version: "v1",
+		Kind:    "LokiStack",
+	}
 )
 
-func initListInstances() api.ServerTool {
+func hasLokiStackCRD(p api.FilteringProvider) func() bool {
+	return func() bool {
+		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{
+			lokiStackGVK,
+		})
+	}
+}
+
+func initListInstances(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name: "loki_list_instances",
@@ -39,10 +56,13 @@ Call this first when using Loki Operator managed stacks so you can pass lokiName
 			},
 		},
 		Handler: listInstancesHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasLokiStackCRD(p),
+		},
 	}
 }
 
-func initLabelNames() api.ServerTool {
+func initLabelNames(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "loki_label_names",
@@ -73,10 +93,13 @@ func initLabelNames() api.ServerTool {
 			},
 		},
 		Handler: labelNamesHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasLokiStackCRD(p),
+		},
 	}
 }
 
-func initLabelValues() api.ServerTool {
+func initLabelValues(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "loki_label_values",
@@ -112,10 +135,13 @@ func initLabelValues() api.ServerTool {
 			},
 		},
 		Handler: labelValuesHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasLokiStackCRD(p),
+		},
 	}
 }
 
-func initQueryRange() api.ServerTool {
+func initQueryRange(p api.FilteringProvider) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "loki_query_range",
@@ -164,5 +190,8 @@ func initQueryRange() api.ServerTool {
 			},
 		},
 		Handler: queryRangeHandler,
+		TargetCompatibilityFilters: []func() bool{
+			hasLokiStackCRD(p),
+		},
 	}
 }
