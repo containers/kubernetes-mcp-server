@@ -1,6 +1,6 @@
 module github.com/containers/kubernetes-mcp-server
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -17,7 +17,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
-	github.com/tektoncd/pipeline v1.13.1
+	github.com/tektoncd/pipeline v1.14.1
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.opentelemetry.io/contrib/bridges/otellogr v0.19.0
 	go.opentelemetry.io/otel v1.44.0
@@ -158,7 +158,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiserver v0.36.3 // indirect
 	k8s.io/component-base v0.36.3 // indirect
-	knative.dev/pkg v0.0.0-20260318013857-98d5a706d4fd // indirect
+	knative.dev/pkg v0.0.0-20260531000007-52dbd5ece63f // indirect
 	oras.land/oras-go/v2 v2.6.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
