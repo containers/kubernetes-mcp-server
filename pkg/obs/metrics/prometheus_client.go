@@ -17,6 +17,13 @@ const (
 	defaultPrometheusURL = "http://localhost:9090"
 )
 
+type contextKey string
+
+const (
+	testPromClientKey contextKey = "testPromClient"
+	testAMClientKey   contextKey = "testAMClient"
+)
+
 // getConfig retrieves the obs-mcp toolset configuration from params.
 func getConfig(params api.ToolHandlerParams) *Config {
 	if cfg, ok := params.GetToolsetConfig(ToolsetName); ok {
@@ -30,6 +37,10 @@ func getConfig(params api.ToolHandlerParams) *Config {
 
 // getPromClient creates a Prometheus client using the toolset configuration.
 func getPromClient(params api.ToolHandlerParams) (prometheus.Loader, error) {
+	if client, ok := params.Value(testPromClientKey).(prometheus.Loader); ok {
+		return client, nil
+	}
+
 	cfg := getConfig(params)
 
 	// Get metrics backend URL from config, fallback to default
@@ -76,6 +87,10 @@ func buildAPIConfig(params api.ToolHandlerParams, prometheusURL string, insecure
 
 // getAlertmanagerClient creates an Alertmanager client using the toolset configuration.
 func getAlertmanagerClient(params api.ToolHandlerParams) (alertmanager.Loader, error) {
+	if client, ok := params.Value(testAMClientKey).(alertmanager.Loader); ok {
+		return client, nil
+	}
+
 	cfg := getConfig(params)
 
 	alertmanagerURL := cfg.AlertmanagerURL

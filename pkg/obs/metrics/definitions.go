@@ -44,7 +44,7 @@ func initListMetrics() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      ListMetricsToolsetHandler,
+		Handler:      listMetricsHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -77,7 +77,7 @@ func initExecuteInstantQuery() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      ExecuteInstantQueryToolsetHandler,
+		Handler:      executeInstantQueryHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -126,7 +126,7 @@ func initExecuteRangeQuery() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      ExecuteRangeQueryToolsetHandler,
+		Handler:      executeRangeQueryHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -165,7 +165,7 @@ func initShowTimeseries() api.ServerTool {
 				},
 			},
 		},
-		Handler:      ShowTimeseriesToolsetHandler,
+		Handler:      showTimeseriesHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -201,7 +201,7 @@ func initGetLabelNames() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      GetLabelNamesToolsetHandler,
+		Handler:      getLabelNamesHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -242,7 +242,7 @@ func initGetLabelValues() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      GetLabelValuesToolsetHandler,
+		Handler:      getLabelValuesHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -279,7 +279,7 @@ func initGetSeries() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      GetSeriesToolsetHandler,
+		Handler:      getSeriesHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -327,7 +327,7 @@ func initGetAlerts() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      GetAlertsToolsetHandler,
+		Handler:      getAlertsHandler,
 		ClusterAware: new(false),
 	}
 }
@@ -355,7 +355,7 @@ func initGetSilences() api.ServerTool {
 				OpenWorldHint:   new(true),
 			},
 		},
-		Handler:      GetSilencesToolsetHandler,
+		Handler:      getSilencesHandler,
 		ClusterAware: new(false),
 	}
 }

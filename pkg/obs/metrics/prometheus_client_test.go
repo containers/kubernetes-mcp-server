@@ -35,10 +35,12 @@ func (m *mockConfigProvider) GetToolsetConfig(name string) (api.ExtendedConfig, 
 	return nil, false
 }
 
-type mockToolCallRequest struct{}
+type mockToolCallRequest struct {
+	arguments map[string]any
+}
 
 func (m *mockToolCallRequest) GetArguments() map[string]any {
-	return nil
+	return m.arguments
 }
 
 func newTestParams(ctx context.Context, restConfig *rest.Config, cfg *Config) api.ToolHandlerParams {

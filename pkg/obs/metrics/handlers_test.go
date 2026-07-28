@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/go-openapi/strfmt"
 	"github.com/prometheus/alertmanager/api/v2/models"
 
@@ -97,6 +98,26 @@ func (m *MockedAlertmanagerLoader) GetSilences(ctx context.Context, filter []str
 // Ensure MockedAlertmanagerLoader implements alertmanager.Loader at compile time
 var _ alertmanager.Loader = (*MockedAlertmanagerLoader)(nil)
 
+func newPromParams(t *testing.T, mockClient *MockedLoader, args map[string]any) api.ToolHandlerParams {
+	t.Helper()
+	ctx := context.WithValue(t.Context(), testPromClientKey, prometheus.Loader(mockClient))
+	return api.ToolHandlerParams{
+		Context:         ctx,
+		BaseConfig:      &mockConfigProvider{},
+		ToolCallRequest: &mockToolCallRequest{arguments: args},
+	}
+}
+
+func newAlertmanagerParams(t *testing.T, mockClient *MockedAlertmanagerLoader, args map[string]any) api.ToolHandlerParams {
+	t.Helper()
+	ctx := context.WithValue(t.Context(), testAMClientKey, alertmanager.Loader(mockClient))
+	return api.ToolHandlerParams{
+		Context:         ctx,
+		BaseConfig:      &mockConfigProvider{},
+		ToolCallRequest: &mockToolCallRequest{arguments: args},
+	}
+}
+
 func TestExecuteRangeQueryHandler_ExplicitTimeRange_RFC3339(t *testing.T) {
 	expectedStart, _ := prometheus.ParseTimestamp("2024-01-01T00:00:00Z")
 	expectedEnd, _ := prometheus.ParseTimestamp("2024-01-01T01:00:00Z")
@@ -119,13 +140,16 @@ func TestExecuteRangeQueryHandler_ExplicitTimeRange_RFC3339(t *testing.T) {
 		},
 	}
 
-	input := BuildRangeQueryInput(map[string]any{
+	params := newPromParams(t, mockClient, map[string]any{
 		"query": "up{job=\"api\"}",
 		"step":  "1m",
 		"start": "2024-01-01T00:00:00Z",
 		"end":   "2024-01-01T01:00:00Z",
 	})
-	result := ExecuteRangeQueryHandler(context.Background(), mockClient, input, false)
+	result, err := executeRangeQueryHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -140,11 +164,14 @@ func TestExecuteRangeQueryHandler_StepParsing_ValidSteps(t *testing.T) {
 
 	for _, step := range []string{"30s", "5m", "1h"} {
 		t.Run(step, func(t *testing.T) {
-			input := BuildRangeQueryInput(map[string]any{
+			params := newPromParams(t, mockClient, map[string]any{
 				"query": "up{job=\"api\"}",
 				"step":  step,
 			})
-			result := ExecuteRangeQueryHandler(t.Context(), mockClient, input, false)
+			result, err := executeRangeQueryHandler(params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if result.Error != nil {
 				t.Fatalf("%s step failed: %v", step, result.Error)
 			}
@@ -161,12 +188,12 @@ func TestExecuteRangeQueryHandler_RequiredParameters(t *testing.T) {
 		{
 			name:          "missing query parameter",
 			params:        map[string]any{"step": "1m"},
-			expectedError: "query parameter is required and must be a string",
+			expectedError: "failed to execute range query: query parameter required",
 		},
 		{
 			name:          "missing step parameter",
 			params:        map[string]any{"query": "up{job=\"api\"}"},
-			expectedError: "step parameter is required and must be a string",
+			expectedError: "failed to execute range query: step parameter required",
 		},
 		{
 			name: "invalid step format",
@@ -228,8 +255,11 @@ func TestExecuteRangeQueryHandler_RequiredParameters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := &MockedLoader{}
-			input := BuildRangeQueryInput(tt.params)
-			result := ExecuteRangeQueryHandler(t.Context(), mockClient, input, false)
+			params := newPromParams(t, mockClient, tt.params)
+			result, err := executeRangeQueryHandler(params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			if result.Error == nil {
 				t.Errorf("expected error %q, got nil", tt.expectedError)
@@ -260,11 +290,14 @@ func TestExecuteRangeQueryHandler_DurationMode_DefaultOneHour(t *testing.T) {
 		},
 	}
 
-	input := BuildRangeQueryInput(map[string]any{
+	params := newPromParams(t, mockClient, map[string]any{
 		"query": "up{job=\"api\"}",
 		"step":  "1m",
 	})
-	result := ExecuteRangeQueryHandler(t.Context(), mockClient, input, false)
+	result, err := executeRangeQueryHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -287,12 +320,15 @@ func TestExecuteRangeQueryHandler_DurationMode_CustomDuration(t *testing.T) {
 		},
 	}
 
-	input := BuildRangeQueryInput(map[string]any{
+	params := newPromParams(t, mockClient, map[string]any{
 		"query":    "rate(http_requests_total{job=\"api\"}[5m])",
 		"step":     "30s",
 		"duration": "30m",
 	})
-	result := ExecuteRangeQueryHandler(t.Context(), mockClient, input, false)
+	result, err := executeRangeQueryHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -309,12 +345,15 @@ func TestExecuteRangeQueryHandler_DurationMode_NOWKeyword(t *testing.T) {
 		},
 	}
 
-	input := BuildRangeQueryInput(map[string]any{
+	params := newPromParams(t, mockClient, map[string]any{
 		"query":    "up{job=\"api\"}",
 		"step":     "1m",
 		"duration": "1h",
 	})
-	result := ExecuteRangeQueryHandler(t.Context(), mockClient, input, false)
+	result, err := executeRangeQueryHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -338,13 +377,16 @@ func TestExecuteRangeQueryHandler_NOWKeyword_CaseInsensitive(t *testing.T) {
 				},
 			}
 
-			input := BuildRangeQueryInput(map[string]any{
+			params := newPromParams(t, mockClient, map[string]any{
 				"query": "up{job=\"api\"}",
 				"step":  "1m",
 				"start": "2024-01-01T00:00:00Z",
 				"end":   nowStr,
 			})
-			result := ExecuteRangeQueryHandler(context.Background(), mockClient, input, false)
+			result, err := executeRangeQueryHandler(params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if result.Error != nil {
 				t.Fatalf("unexpected error with %q: %v", nowStr, result.Error)
 			}
@@ -366,11 +408,14 @@ func TestExecuteInstantQueryHandler_NOWKeyword_CaseInsensitive(t *testing.T) {
 				},
 			}
 
-			input := BuildInstantQueryInput(map[string]any{
+			params := newPromParams(t, mockClient, map[string]any{
 				"query": "up{job=\"api\"}",
 				"time":  nowStr,
 			})
-			result := ExecuteInstantQueryHandler(context.Background(), mockClient, input)
+			result, err := executeInstantQueryHandler(params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if result.Error != nil {
 				t.Fatalf("unexpected error with %q: %v", nowStr, result.Error)
 			}
@@ -459,13 +504,16 @@ func TestExecuteRangeQueryHandler_RelativeTime(t *testing.T) {
 				},
 			}
 
-			input := BuildRangeQueryInput(map[string]any{
+			params := newPromParams(t, mockClient, map[string]any{
 				"query": "up{job=\"api\"}",
 				"step":  "1m",
 				"start": tt.start,
 				"end":   tt.end,
 			})
-			result := ExecuteRangeQueryHandler(context.Background(), mockClient, input, false)
+			result, err := executeRangeQueryHandler(params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if result.Error != nil {
 				t.Fatalf("unexpected error: %v", result.Error)
 			}
@@ -485,13 +533,16 @@ func TestShowTimeseriesHandler(t *testing.T) {
 		},
 	}
 
-	input := BuildShowTimeseriesInput(map[string]any{
+	params := newPromParams(t, mockClient, map[string]any{
 		"query": "up{job=\"api\"}",
 		"step":  "1m",
 		"start": "2024-01-01T00:00:00Z",
 		"end":   "2024-01-01T01:00:00Z",
 	})
-	result := ShowTimeseriesHandler(context.Background(), mockClient, input)
+	result, err := showTimeseriesHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -563,11 +614,14 @@ func TestExecuteInstantQueryHandler_RelativeTime(t *testing.T) {
 				},
 			}
 
-			input := BuildInstantQueryInput(map[string]any{
+			params := newPromParams(t, mockClient, map[string]any{
 				"query": "up{job=\"api\"}",
 				"time":  tt.time,
 			})
-			result := ExecuteInstantQueryHandler(context.Background(), mockClient, input)
+			result, err := executeInstantQueryHandler(params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if result.Error != nil {
 				t.Fatalf("unexpected error: %v", result.Error)
 			}
@@ -613,8 +667,11 @@ func TestGetAlertsHandler_AllAlerts(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -649,8 +706,11 @@ func TestGetAlertsHandler_WithActiveFilter(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{"active": active})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{"active": active})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -684,8 +744,11 @@ func TestGetAlertsHandler_WithFilter(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{"filter": "alertname=HighCPU"})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{"filter": "alertname=HighCPU"})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -719,8 +782,11 @@ func TestGetAlertsHandler_WithReceiver(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{"receiver": "team-notifications"})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{"receiver": "team-notifications"})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -762,8 +828,11 @@ func TestGetSilencesHandler_AllSilences(t *testing.T) {
 		},
 	}
 
-	input := BuildSilencesInput(map[string]any{})
-	result := GetSilencesHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{})
+	result, err := getSilencesHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -805,8 +874,11 @@ func TestGetSilencesHandler_WithFilter(t *testing.T) {
 		},
 	}
 
-	input := BuildSilencesInput(map[string]any{"filter": "alertname=HighCPU"})
-	result := GetSilencesHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{"filter": "alertname=HighCPU"})
+	result, err := getSilencesHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -819,8 +891,11 @@ func TestGetSilencesHandler_EmptyResult(t *testing.T) {
 		},
 	}
 
-	input := BuildSilencesInput(map[string]any{})
-	result := GetSilencesHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{})
+	result, err := getSilencesHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -833,8 +908,11 @@ func TestGetAlertsHandler_ClientError(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error == nil {
 		t.Fatal("expected error result, got success")
 	}
@@ -877,8 +955,11 @@ func TestGetAlertsHandler_WithMultipleFilters(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{"filter": "alertname=HighCPU, severity=critical"})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{"filter": "alertname=HighCPU, severity=critical"})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -918,8 +999,11 @@ func TestGetAlertsHandler_WithMultipleFiltersNoSpaces(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{"filter": "alertname=HighCPU,severity=warning,job=api"})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{"filter": "alertname=HighCPU,severity=warning,job=api"})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -932,8 +1016,11 @@ func TestGetAlertsHandler_EmptyResult(t *testing.T) {
 		},
 	}
 
-	input := BuildAlertsInput(map[string]any{})
-	result := GetAlertsHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{})
+	result, err := getAlertsHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)
 	}
@@ -946,8 +1033,11 @@ func TestGetSilencesHandler_ClientError(t *testing.T) {
 		},
 	}
 
-	input := BuildSilencesInput(map[string]any{})
-	result := GetSilencesHandler(context.Background(), mockClient, input)
+	params := newAlertmanagerParams(t, mockClient, map[string]any{})
+	result, err := getSilencesHandler(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.Error == nil {
 		t.Fatal("expected error result, got success")
 	}
