@@ -1,4 +1,4 @@
-package toolset_tools
+package metrics
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
-	"github.com/rhobs/obs-mcp/pkg/metrics"
 )
 
 type mockKubernetesClient struct {
@@ -22,7 +21,7 @@ func (m *mockKubernetesClient) RESTConfig() *rest.Config {
 
 type mockConfigProvider struct {
 	api.BaseConfig
-	config *metrics.Config
+	config *Config
 }
 
 func (m *mockConfigProvider) GetProviderConfig(string) (api.ExtendedConfig, bool) {
@@ -30,7 +29,7 @@ func (m *mockConfigProvider) GetProviderConfig(string) (api.ExtendedConfig, bool
 }
 
 func (m *mockConfigProvider) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
-	if name == metrics.ToolsetName && m.config != nil {
+	if name == ToolsetName && m.config != nil {
 		return m.config, true
 	}
 	return nil, false
@@ -42,7 +41,7 @@ func (m *mockToolCallRequest) GetArguments() map[string]any {
 	return nil
 }
 
-func newTestParams(ctx context.Context, restConfig *rest.Config, cfg *metrics.Config) api.ToolHandlerParams {
+func newTestParams(ctx context.Context, restConfig *rest.Config, cfg *Config) api.ToolHandlerParams {
 	return api.ToolHandlerParams{
 		Context:          ctx,
 		KubernetesClient: &mockKubernetesClient{restConfig: restConfig},
@@ -60,7 +59,7 @@ func TestGetConfig_DefaultAuthMode(t *testing.T) {
 }
 
 func TestGetConfig_CustomAuthMode(t *testing.T) {
-	cfg := &metrics.Config{AuthMode: auth.AuthModeKubeConfig}
+	cfg := &Config{AuthMode: auth.AuthModeKubeConfig}
 	params := newTestParams(context.Background(), &rest.Config{}, cfg)
 	got := getConfig(params)
 	if got.GetAuthMode() != auth.AuthModeKubeConfig {
