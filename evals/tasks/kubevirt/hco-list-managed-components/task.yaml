@@ -1,0 +1,42 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-list-managed-components"
+  difficulty: medium
+  description: "List all components managed by HCO and their individual status and versions"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          if ! kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+          echo "HCO is deployed and ready for evaluation"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1 || { echo "✗ HyperConverged CR not found"; exit 1; }
+          kubectl wait hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged --for condition=Available --timeout=60s 2>/dev/null || { echo "✗ HyperConverged is not Available"; exit 1; }
+          VERSIONS=$(kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged \
+              -o jsonpath='{.status.versions}' 2>/dev/null)
+          [[ -n "$VERSIONS" ]] || { echo "✗ No version information found in HCO status"; exit 1; }
+          echo "✓ HCO status contains version information"
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "KubeVirt"
+    - llmJudge:
+        contains: "CDI"
+  prompt:
+    inline: |-
+      List all components managed by HCO, their versions, and whether each one is healthy.

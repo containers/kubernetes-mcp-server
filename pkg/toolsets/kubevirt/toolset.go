@@ -37,6 +37,7 @@ func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	return slices.Concat(
 		initVMTroubleshoot(),
 		initWindowsGoldenImage(),
+		initHCOStatus(),
 	)
 }
 

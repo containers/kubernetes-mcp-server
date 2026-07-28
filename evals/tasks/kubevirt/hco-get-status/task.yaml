@@ -1,0 +1,44 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-get-status"
+  difficulty: easy
+  description: "Retrieve and interpret the HyperConverged CR status and conditions"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          # Verify HCO is deployed and available before running the eval
+          if ! kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+          echo "HCO is deployed and ready for evaluation"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged > /dev/null 2>&1 || { echo "✗ HyperConverged CR not found"; exit 1; }
+          ACTUAL=$(kubectl get hyperconverged kubevirt-hyperconverged -n kubevirt-hyperconverged \
+              -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)
+          [[ "$ACTUAL" == "True" ]] || { echo "✗ Available condition is '$ACTUAL', expected 'True'"; exit 1; }
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "Available"
+    - llmJudge:
+        contains: "Progressing"
+    - llmJudge:
+        contains: "Degraded"
+  prompt:
+    inline: |-
+      Describe the status of HCO. Report the current conditions (Available, Progressing, Degraded),
+      whether the cluster is healthy, and any conditions that indicate problems.
