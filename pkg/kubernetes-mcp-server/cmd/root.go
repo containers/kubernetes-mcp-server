@@ -58,6 +58,11 @@ kubernetes-mcp-server --cluster-provider kubeconfig
 # start with kcp cluster provider for multi-workspace support
 kubernetes-mcp-server --cluster-provider kcp
 `))
+
+	// config_path_env_var is the name of an environment variable whose value
+	// is the path to the main configuration TOML file. It is ignored if
+	// `--config` is provided on the command line.
+	config_path_env_var = "K8S_MCP_CONFIG_PATH"
 )
 
 const (
@@ -129,6 +134,8 @@ func NewMCPServerOptions(streams genericiooptions.IOStreams) *MCPServerOptions {
 }
 
 func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
+	// Allow downstreams to customize variable values
+	varOverrides()
 	o := NewMCPServerOptions(streams)
 	cmd := &cobra.Command{
 		Use:     "kubernetes-mcp-server [command] [options]",
@@ -198,6 +205,11 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 }
 
 func (m *MCPServerOptions) Complete(ctx context.Context, cmd *cobra.Command) error {
+	// If ConfigPath was not provided on the CLI, allow an env var to specify it.
+	if cp := os.Getenv(config_path_env_var); m.ConfigPath == "" && cp != "" {
+		m.ConfigPath = cp
+	}
+
 	if m.ConfigPath != "" || m.ConfigDir != "" {
 		cnf, err := config.Read(ctx, m.ConfigPath, m.ConfigDir)
 		if err != nil {

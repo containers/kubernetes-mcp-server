@@ -49,7 +49,7 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
 Configuration values are loaded and merged in the following order (later sources override earlier ones):
 
 1. **Internal Defaults** - Built-in default values
-2. **Main Configuration File** - Loaded via `--config` flag
+2. **Main Configuration File** - Loaded via `--config` flag or `$K8S_MCP_CONFIG_PATH` (the flag takes precedence)
 3. **Drop-in Files** - Loaded from `--config-dir` in lexical (alphabetical) order
 
 ### Usage
@@ -57,6 +57,8 @@ Configuration values are loaded and merged in the following order (later sources
 ```bash
 # Use a main configuration file
 kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml
+# or
+K8S_MCP_CONFIG_PATH=/etc/kubernetes-mcp-server/config.toml kubernetes-mcp-server
 
 # Use only drop-in configuration files (no main config)
 kubernetes-mcp-server --config-dir /etc/kubernetes-mcp-server/conf.d/
