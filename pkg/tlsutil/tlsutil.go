@@ -14,10 +14,14 @@ import (
 
 // tlsVersionMap maps version strings to tls.Version constants
 var tlsVersionMap = map[string]uint16{
-	"1.0": tls.VersionTLS10,
-	"1.1": tls.VersionTLS11,
-	"1.2": tls.VersionTLS12,
-	"1.3": tls.VersionTLS13,
+	"1.0":          tls.VersionTLS10,
+	"1.1":          tls.VersionTLS11,
+	"1.2":          tls.VersionTLS12,
+	"1.3":          tls.VersionTLS13,
+	"VersionTLS10": tls.VersionTLS10,
+	"VersionTLS11": tls.VersionTLS11,
+	"VersionTLS12": tls.VersionTLS12,
+	"VersionTLS13": tls.VersionTLS13,
 }
 
 // tlsCipherSuiteMap maps cipher suite names to their IDs.

@@ -53,6 +53,30 @@ func (s *TLSUtilSuite) TestParseTLSVersion() {
 		s.Equal(tls.VersionTLS13, int(v))
 	})
 
+	s.Run("parses VersionTLS10 format", func() {
+		v, err := ParseTLSVersion("VersionTLS10")
+		s.Require().NoError(err)
+		s.Equal(tls.VersionTLS10, int(v))
+	})
+
+	s.Run("parses VersionTLS11 format", func() {
+		v, err := ParseTLSVersion("VersionTLS11")
+		s.Require().NoError(err)
+		s.Equal(tls.VersionTLS11, int(v))
+	})
+
+	s.Run("parses VersionTLS12 format", func() {
+		v, err := ParseTLSVersion("VersionTLS12")
+		s.Require().NoError(err)
+		s.Equal(tls.VersionTLS12, int(v))
+	})
+
+	s.Run("parses VersionTLS13 format", func() {
+		v, err := ParseTLSVersion("VersionTLS13")
+		s.Require().NoError(err)
+		s.Equal(tls.VersionTLS13, int(v))
+	})
+
 	s.Run("returns error for invalid version", func() {
 		_, err := ParseTLSVersion("1.4")
 		s.Error(err)
@@ -117,6 +141,22 @@ func (s *TLSUtilSuite) TestParseTLSCipherSuites() {
 		s.Error(err)
 		s.Contains(err.Error(), "INVALID_1")
 		s.Contains(err.Error(), "INVALID_2")
+	})
+
+	s.Run("parses list of many valid ciphers", func() {
+		result, err := ParseTLSCipherSuites([]string{
+			"TLS_AES_128_GCM_SHA256",
+			"TLS_AES_256_GCM_SHA384",
+			"TLS_CHACHA20_POLY1305_SHA256",
+			"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+			"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+			"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+			"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+		})
+		s.Require().NoError(err)
+		s.Len(result, 9)
 	})
 }
 
