@@ -42,7 +42,7 @@ spec:
           kubectl get argocd argocd-main -n argocd-eval-get-inst -o name || exit 1
           echo "ArgoCD instance argocd-main exists"
     - llmJudge:
-        contains: "route"
+        contains: "false"
 
   cleanup:
     - k8s.delete:
