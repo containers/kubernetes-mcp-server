@@ -543,8 +543,11 @@ func (m *mockPrometheusAPI) DeleteSeries(ctx context.Context, matches []string, 
 func (m *mockPrometheusAPI) Flags(ctx context.Context) (v1.FlagsResult, error) {
 	return v1.FlagsResult{}, nil
 }
-func (m *mockPrometheusAPI) LabelNames(ctx context.Context, matches []string, startTime, endTime time.Time, opts ...v1.Option) ([]string, v1.Warnings, error) {
+func (m *mockPrometheusAPI) LabelNames(ctx context.Context, matches []string, startTime, endTime time.Time, opts ...v1.Option) (model.LabelNames, v1.Warnings, error) {
 	return nil, nil, nil
+}
+func (m *mockPrometheusAPI) FormatQuery(ctx context.Context, query string) (string, error) {
+	return query, nil
 }
 func (m *mockPrometheusAPI) LabelValues(ctx context.Context, label string, matches []string, startTime, endTime time.Time, opts ...v1.Option) (model.LabelValues, v1.Warnings, error) {
 	// Only handle __name__ label for metric listing
@@ -578,8 +581,11 @@ func (m *mockPrometheusAPI) Series(ctx context.Context, matches []string, startT
 func (m *mockPrometheusAPI) Snapshot(ctx context.Context, skipHead bool) (v1.SnapshotResult, error) {
 	return v1.SnapshotResult{}, nil
 }
-func (m *mockPrometheusAPI) Rules(ctx context.Context) (v1.RulesResult, error) {
+func (m *mockPrometheusAPI) Rules(ctx context.Context, matches []string) (v1.RulesResult, error) {
 	return v1.RulesResult{}, nil
+}
+func (m *mockPrometheusAPI) TSDBBlocks(ctx context.Context) (v1.TSDBBlocksResult, error) {
+	return v1.TSDBBlocksResult{}, nil
 }
 func (m *mockPrometheusAPI) Targets(ctx context.Context) (v1.TargetsResult, error) {
 	return v1.TargetsResult{}, nil
