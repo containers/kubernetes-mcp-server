@@ -7,6 +7,7 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 - [Core tasks](core/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
 - [Config tasks](config/) – workflows that exercise the configuration toolset (contexts, current config).
 - [Helm tasks](helm/) – workflows that exercise the Helm toolset (install, list, uninstall releases).
+- [ArgoCD tasks](argocd/) – GitOps workflows that exercise ArgoCD CRDs (Application, AppProject, ApplicationSet, ArgoCD instance management).
 - [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing).
 - [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
 - [Tekton tasks](tekton/) – CI/CD workflows that exercise the Tekton toolset (pipelines, tasks, pipeline runs).

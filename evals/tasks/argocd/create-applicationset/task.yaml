@@ -34,7 +34,28 @@ spec:
           for ENV in dev staging prod; do
             echo "$ELEMENTS" | grep -q "$ENV" || { echo "ERROR: Environment $ENV not found in list generator"; exit 1; }
           done
-          echo "ApplicationSet env-apps created with dev, staging, prod environments"
+
+          REPO_URL=$(kubectl get applicationset env-apps -n argocd-eval-create-appset -o jsonpath='{.spec.template.spec.source.repoURL}')
+          if [ "$REPO_URL" != "https://github.com/company/app" ]; then
+            echo "ERROR: template repoURL is '$REPO_URL', expected 'https://github.com/company/app'"
+            exit 1
+          fi
+          TMPL_PATH=$(kubectl get applicationset env-apps -n argocd-eval-create-appset -o jsonpath='{.spec.template.spec.source.path}')
+          if [ "$TMPL_PATH" != "deploy" ]; then
+            echo "ERROR: template path is '$TMPL_PATH', expected 'deploy'"
+            exit 1
+          fi
+          TMPL_PROJECT=$(kubectl get applicationset env-apps -n argocd-eval-create-appset -o jsonpath='{.spec.template.spec.project}')
+          if [ "$TMPL_PROJECT" != "default" ]; then
+            echo "ERROR: template project is '$TMPL_PROJECT', expected 'default'"
+            exit 1
+          fi
+          TMPL_SERVER=$(kubectl get applicationset env-apps -n argocd-eval-create-appset -o jsonpath='{.spec.template.spec.destination.server}')
+          if [ "$TMPL_SERVER" != "https://kubernetes.default.svc" ]; then
+            echo "ERROR: template destination server is '$TMPL_SERVER', expected 'https://kubernetes.default.svc'"
+            exit 1
+          fi
+          echo "ApplicationSet env-apps created with dev, staging, prod environments and correct template"
     - llmJudge:
         contains: "env-apps"
 

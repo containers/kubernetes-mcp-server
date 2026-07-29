@@ -45,7 +45,7 @@ spec:
           kubectl get appproject team-platform -n argocd-eval-get-proj -o name || exit 1
           echo "AppProject team-platform exists"
     - llmJudge:
-        contains: "team-platform"
+        contains: "Platform team project"
 
   cleanup:
     - k8s.delete:

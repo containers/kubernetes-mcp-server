@@ -30,12 +30,12 @@ spec:
           #!/usr/bin/env bash
           set -e
           kubectl get argocd argocd-dev -n argocd-eval-create-inst -o name || { echo "ERROR: ArgoCD instance not found"; exit 1; }
-          ROUTE=$(kubectl get argocd argocd-dev -n argocd-eval-create-inst -o jsonpath='{.spec.server.route}')
-          if [ -z "$ROUTE" ]; then
-            echo "ERROR: spec.server.route not configured"
+          ROUTE_ENABLED=$(kubectl get argocd argocd-dev -n argocd-eval-create-inst -o jsonpath='{.spec.server.route.enabled}')
+          if [ "$ROUTE_ENABLED" != "true" ]; then
+            echo "ERROR: spec.server.route.enabled is '$ROUTE_ENABLED', expected 'true'"
             exit 1
           fi
-          echo "ArgoCD instance argocd-dev created with server route"
+          echo "ArgoCD instance argocd-dev created with server route enabled"
     - llmJudge:
         contains: "argocd-dev"
 

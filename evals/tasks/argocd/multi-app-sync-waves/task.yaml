@@ -39,11 +39,19 @@ spec:
           API_WAVE=$(kubectl get application api-server -n argocd-eval-sync-waves -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/sync-wave}')
           WEB_WAVE=$(kubectl get application web-frontend -n argocd-eval-sync-waves -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/sync-wave}')
 
-          if [ "$DB_WAVE" -ge "$API_WAVE" ] 2>/dev/null; then
+          for WAVE_VAR in DB_WAVE API_WAVE WEB_WAVE; do
+            WAVE_VAL="${!WAVE_VAR}"
+            if ! [[ "$WAVE_VAL" =~ ^-?[0-9]+$ ]]; then
+              echo "ERROR: $WAVE_VAR is not a valid integer ('$WAVE_VAL')"
+              exit 1
+            fi
+          done
+
+          if [ "$DB_WAVE" -ge "$API_WAVE" ]; then
             echo "ERROR: db-migration sync-wave ($DB_WAVE) should be less than api-server ($API_WAVE)"
             exit 1
           fi
-          if [ "$API_WAVE" -ge "$WEB_WAVE" ] 2>/dev/null; then
+          if [ "$API_WAVE" -ge "$WEB_WAVE" ]; then
             echo "ERROR: api-server sync-wave ($API_WAVE) should be less than web-frontend ($WEB_WAVE)"
             exit 1
           fi
