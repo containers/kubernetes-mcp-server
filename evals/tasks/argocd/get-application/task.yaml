@@ -40,14 +40,10 @@ spec:
             namespace: default
 
   verify:
-    - script:
-        inline: |-
-          #!/usr/bin/env bash
-          set -e
-          kubectl get application app-frontend -n argocd-eval-get-app -o name || exit 1
-          echo "Application app-frontend exists"
     - llmJudge:
         contains: "https://github.com/example/frontend"
+    - llmJudge:
+        contains: "manifests"
 
   cleanup:
     - k8s.delete:

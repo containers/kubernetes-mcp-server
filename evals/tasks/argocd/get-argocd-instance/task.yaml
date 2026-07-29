@@ -31,18 +31,13 @@ spec:
           namespace: argocd-eval-get-inst
         spec:
           server:
+            host: argocd.eval.example.com
             route:
               enabled: false
 
   verify:
-    - script:
-        inline: |-
-          #!/usr/bin/env bash
-          set -e
-          kubectl get argocd argocd-main -n argocd-eval-get-inst -o name || exit 1
-          echo "ArgoCD instance argocd-main exists"
     - llmJudge:
-        contains: "false"
+        contains: "argocd.eval.example.com"
 
   cleanup:
     - k8s.delete:

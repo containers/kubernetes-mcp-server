@@ -38,14 +38,10 @@ spec:
               server: "https://kubernetes.default.svc"
 
   verify:
-    - script:
-        inline: |-
-          #!/usr/bin/env bash
-          set -e
-          kubectl get appproject team-platform -n argocd-eval-get-proj -o name || exit 1
-          echo "AppProject team-platform exists"
     - llmJudge:
         contains: "Platform team project"
+    - llmJudge:
+        contains: "https://github.com/platform/*"
 
   cleanup:
     - k8s.delete:
