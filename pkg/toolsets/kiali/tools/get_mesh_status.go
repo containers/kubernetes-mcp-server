@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetMeshStatus() []api.ServerTool {
+func InitGetMeshStatus(p api.FilteringProvider) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_mesh_status"
 	ret = append(ret, api.ServerTool{
@@ -29,7 +29,11 @@ func InitGetMeshStatus() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: getMeshStatusHandler,
+		},
+		Handler: getMeshStatusHandler,
+		TargetCompatibilityFilters: []func() bool{
+			kialiclient.HasKiali(p),
+		},
 	})
 	return ret
 }
