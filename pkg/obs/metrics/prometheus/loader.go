@@ -238,7 +238,9 @@ func (p *RealLoader) GetLabelNames(ctx context.Context, metricName string, start
 		"duration_ms", duration.Milliseconds(), "result_count", len(labelNames))
 
 	labels := make([]string, len(labelNames))
-	copy(labels, labelNames)
+	for i, ln := range labelNames {
+		labels[i] = string(ln)
+	}
 	return labels, nil
 }
 
