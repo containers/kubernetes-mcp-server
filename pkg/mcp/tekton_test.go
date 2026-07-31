@@ -27,6 +27,7 @@ var tektonTestAPIs = []schema.GroupVersionResource{
 }
 
 var (
+	tektonTestPipelineGVR    = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelines"}
 	tektonTestPipelineRunGVR = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
 	tektonTestTaskRunGVR     = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
 	tektonTestRepositoryGVR  = schema.GroupVersionResource{Group: "pipelinesascode.tekton.dev", Version: "v1alpha1", Resource: "repositories"}
@@ -123,8 +124,70 @@ func (s *TektonMcpSuite) TestPipelineRunLogsWithoutTaskRuns() {
 	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "No TaskRuns found")
 }
 
+func (s *TektonMcpSuite) TestPipelineRunLogFilters() {
+	s.createPipelineRun("filtered-run")
+	s.createLogTaskRun("compile-run", "filtered-run", "compile", []string{"build", "test"}, []string{"cache"})
+	s.createLogTaskRun("deploy-run", "filtered-run", "deploy", []string{"release"}, nil)
+
+	toolResult, err := s.CallTool("tekton_pipelinerun_logs", map[string]interface{}{
+		"namespace": s.namespace,
+		"name":      "filtered-run",
+		"task":      "compile",
+		"step":      "build",
+	})
+	s.Require().NoError(err)
+	s.False(toolResult.IsError)
+	text := toolResult.Content[0].(*mcp.TextContent).Text
+	s.Contains(text, "# TaskRun: compile-run")
+	s.Contains(text, "[step: build]")
+	s.NotContains(text, "[step: test]")
+	s.NotContains(text, "[sidecar: cache]")
+	s.NotContains(text, "# TaskRun: deploy-run")
+}
+
+func (s *TektonMcpSuite) TestTaskRunLogStepFilter() {
+	s.createLogTaskRun("filtered-taskrun", "standalone-run", "compile", []string{"build", "test"}, []string{"cache"})
+
+	s.Run("returns only the selected step", func() {
+		toolResult, err := s.CallTool("tekton_taskrun_logs", map[string]interface{}{
+			"namespace": s.namespace,
+			"name":      "filtered-taskrun",
+			"step":      "test",
+		})
+		s.Require().NoError(err)
+		s.False(toolResult.IsError)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+		s.Contains(text, "[step: test]")
+		s.NotContains(text, "[step: build]")
+		s.NotContains(text, "[sidecar: cache]")
+	})
+
+	s.Run("returns no logs for an unknown step", func() {
+		toolResult, err := s.CallTool("tekton_taskrun_logs", map[string]interface{}{
+			"namespace": s.namespace,
+			"name":      "filtered-taskrun",
+			"step":      "unknown",
+		})
+		s.Require().NoError(err)
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "No logs available")
+	})
+
+	s.Run("preserves all steps and sidecars when no filter is set", func() {
+		toolResult, err := s.CallTool("tekton_taskrun_logs", map[string]interface{}{
+			"namespace": s.namespace,
+			"name":      "filtered-taskrun",
+		})
+		s.Require().NoError(err)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+		s.Contains(text, "[step: build]")
+		s.Contains(text, "[step: test]")
+		s.Contains(text, "[sidecar: cache]")
+	})
+}
+
 func (s *TektonMcpSuite) TestPipelineTroubleshootPrompt() {
 	s.Run("returns gathered PipelineRun data", func() {
+		s.createPipeline("demo-pipeline", "diagnostic-task")
 		s.createPipelineRun("broken-run")
 		s.createTaskRun("broken-run-task", "broken-run")
 		s.createEvent("broken-run-event", "PipelineRun", "broken-run", "BrokenPipelineRun")
@@ -141,11 +204,51 @@ func (s *TektonMcpSuite) TestPipelineTroubleshootPrompt() {
 		s.Require().Len(result.Messages, 2)
 		text := result.Messages[0].Content.(*mcp.TextContent).Text
 		s.Contains(text, "PipelineRun: "+s.namespace+"/broken-run")
+		s.Contains(text, "diagnostic-task")
 		s.Contains(text, "broken-run-task")
 		s.Contains(text, "BrokenPipelineRun")
 		s.NotContains(text, "UnrelatedPipelineRun")
 		s.Contains(text, "eval-repo")
 		s.Contains(text, s.tektonConfigName)
+	})
+
+	s.Run("returns an embedded PipelineSpec", func() {
+		s.createEmbeddedPipelineRun("embedded-run", "embedded-diagnostic-task")
+
+		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{
+			"namespace": s.namespace,
+			"name":      "embedded-run",
+		})
+		s.Require().NoError(err)
+		text := result.Messages[0].Content.(*mcp.TextContent).Text
+		s.Contains(text, "Embedded PipelineSpec")
+		s.Contains(text, "embedded-diagnostic-task")
+	})
+
+	s.Run("continues when a referenced Pipeline is missing", func() {
+		s.createReferencedPipelineRun("missing-pipeline-run", "does-not-exist")
+
+		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{
+			"namespace": s.namespace,
+			"name":      "missing-pipeline-run",
+		})
+		s.Require().NoError(err)
+		text := result.Messages[0].Content.(*mcp.TextContent).Text
+		s.Contains(text, "Pipeline definition unavailable")
+		s.Contains(text, "does-not-exist")
+	})
+
+	s.Run("returns the resolved PipelineSpec for a resolver-based Pipeline", func() {
+		s.createResolverPipelineRun("resolver-pipeline-run", "resolved-diagnostic-task")
+
+		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{
+			"namespace": s.namespace,
+			"name":      "resolver-pipeline-run",
+		})
+		s.Require().NoError(err)
+		text := result.Messages[0].Content.(*mcp.TextContent).Text
+		s.Contains(text, "Resolved PipelineSpec")
+		s.Contains(text, "resolved-diagnostic-task")
 	})
 
 	s.Run("requires namespace", func() {
@@ -155,7 +258,29 @@ func (s *TektonMcpSuite) TestPipelineTroubleshootPrompt() {
 	})
 }
 
+func (s *TektonMcpSuite) createPipeline(name, pipelineTaskName string) {
+	_, err := s.dynamic.Resource(tektonTestPipelineGVR).Namespace(s.namespace).Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "Pipeline",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": s.namespace,
+		},
+		"spec": map[string]interface{}{
+			"tasks": []interface{}{map[string]interface{}{
+				"name":    pipelineTaskName,
+				"taskRef": map[string]interface{}{"name": "demo-task"},
+			}},
+		},
+	}}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+}
+
 func (s *TektonMcpSuite) createPipelineRun(name string) {
+	s.createReferencedPipelineRun(name, "demo-pipeline")
+}
+
+func (s *TektonMcpSuite) createReferencedPipelineRun(name, pipelineName string) {
 	_, err := s.dynamic.Resource(tektonTestPipelineRunGVR).Namespace(s.namespace).Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
 		"apiVersion": "tekton.dev/v1",
 		"kind":       "PipelineRun",
@@ -164,7 +289,7 @@ func (s *TektonMcpSuite) createPipelineRun(name string) {
 			"namespace": s.namespace,
 		},
 		"spec": map[string]interface{}{
-			"pipelineRef": map[string]interface{}{"name": "demo-pipeline"},
+			"pipelineRef": map[string]interface{}{"name": pipelineName},
 		},
 		"status": map[string]interface{}{
 			"conditions": []interface{}{map[string]interface{}{
@@ -172,6 +297,49 @@ func (s *TektonMcpSuite) createPipelineRun(name string) {
 				"status": "False",
 				"reason": "Failed",
 			}},
+		},
+	}}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+}
+
+func (s *TektonMcpSuite) createResolverPipelineRun(name, pipelineTaskName string) {
+	_, err := s.dynamic.Resource(tektonTestPipelineRunGVR).Namespace(s.namespace).Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "PipelineRun",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": s.namespace,
+		},
+		"spec": map[string]interface{}{
+			"pipelineRef": map[string]interface{}{"resolver": "git"},
+		},
+		"status": map[string]interface{}{
+			"pipelineSpec": map[string]interface{}{
+				"tasks": []interface{}{map[string]interface{}{
+					"name":    pipelineTaskName,
+					"taskRef": map[string]interface{}{"name": "demo-task"},
+				}},
+			},
+		},
+	}}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+}
+
+func (s *TektonMcpSuite) createEmbeddedPipelineRun(name, pipelineTaskName string) {
+	_, err := s.dynamic.Resource(tektonTestPipelineRunGVR).Namespace(s.namespace).Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "PipelineRun",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": s.namespace,
+		},
+		"spec": map[string]interface{}{
+			"pipelineSpec": map[string]interface{}{
+				"tasks": []interface{}{map[string]interface{}{
+					"name":    pipelineTaskName,
+					"taskRef": map[string]interface{}{"name": "demo-task"},
+				}},
+			},
 		},
 	}}, metav1.CreateOptions{})
 	s.Require().NoError(err)
@@ -190,6 +358,39 @@ func (s *TektonMcpSuite) createTaskRun(name, pipelineRun string) {
 		},
 		"spec": map[string]interface{}{
 			"taskRef": map[string]interface{}{"name": "demo-task"},
+		},
+	}}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+}
+
+func (s *TektonMcpSuite) createLogTaskRun(name, pipelineRun, pipelineTask string, steps, sidecars []string) {
+	stepStates := make([]interface{}, 0, len(steps))
+	for _, step := range steps {
+		stepStates = append(stepStates, map[string]interface{}{"name": step, "container": "step-" + step})
+	}
+	sidecarStates := make([]interface{}, 0, len(sidecars))
+	for _, sidecar := range sidecars {
+		sidecarStates = append(sidecarStates, map[string]interface{}{"name": sidecar, "container": "sidecar-" + sidecar})
+	}
+
+	_, err := s.dynamic.Resource(tektonTestTaskRunGVR).Namespace(s.namespace).Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "TaskRun",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": s.namespace,
+			"labels": map[string]interface{}{
+				"tekton.dev/pipelineRun":  pipelineRun,
+				"tekton.dev/pipelineTask": pipelineTask,
+			},
+		},
+		"spec": map[string]interface{}{
+			"taskRef": map[string]interface{}{"name": "demo-task"},
+		},
+		"status": map[string]interface{}{
+			"podName":  "pod-" + name,
+			"steps":    stepStates,
+			"sidecars": sidecarStates,
 		},
 	}}, metav1.CreateOptions{})
 	s.Require().NoError(err)

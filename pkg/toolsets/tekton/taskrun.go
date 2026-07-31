@@ -64,6 +64,10 @@ func taskRunTools() []api.ServerTool {
 							Type:        "string",
 							Description: "Namespace of the TaskRun",
 						},
+						"step": {
+							Type:        "string",
+							Description: "Step name to include. If omitted, logs from all steps and sidecars are returned",
+						},
 						"tail": {
 							Type:        "integer",
 							Description: "Number of lines to retrieve from the end of the logs (Optional, default: 100)",
@@ -142,6 +146,7 @@ func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
 	name := p.RequiredString("name")
 	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	stepName := p.OptionalString("step", "")
 	tailInt := p.OptionalInt64("tail", kubernetes.DefaultTailLines)
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get task run logs: %w", err)), nil
@@ -161,7 +166,7 @@ func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	var sb strings.Builder
-	collectTaskRunLogs(params, &sb, namespace, &tr, tailInt)
+	collectTaskRunLogs(params, &sb, namespace, &tr, stepName, tailInt)
 
 	if sb.Len() == 0 {
 		return api.NewToolCallResult(fmt.Sprintf("No logs available for TaskRun '%s' in namespace '%s'", name, namespace), nil), nil
@@ -170,20 +175,34 @@ func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	return api.NewToolCallResult(sb.String(), nil), nil
 }
 
-func collectTaskRunLogs(params api.ToolHandlerParams, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, tailLines int64) {
-	collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, sb, namespace, tr, tailLines)
+func collectTaskRunLogs(params api.ToolHandlerParams, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
+	collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, sb, namespace, tr, stepName, tailLines)
 }
 
-func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, tailLines int64) {
+func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
+	hasStep := stepName == ""
+	for _, step := range tr.Status.Steps {
+		if step.Name == stepName {
+			hasStep = true
+			break
+		}
+	}
+	if !hasStep {
+		return
+	}
 	if tr.Status.PodName == "" {
 		fmt.Fprintf(sb, "TaskRun '%s' in namespace '%s' has not started a pod yet\n", tr.Name, namespace)
 		return
 	}
 	for _, step := range tr.Status.Steps {
-		collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailLines)
+		if stepName == "" || step.Name == stepName {
+			collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailLines)
+		}
 	}
-	for _, sidecar := range tr.Status.Sidecars {
-		collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailLines)
+	if stepName == "" {
+		for _, sidecar := range tr.Status.Sidecars {
+			collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailLines)
+		}
 	}
 }
 

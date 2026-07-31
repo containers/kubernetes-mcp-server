@@ -22,7 +22,7 @@ func pipelineTroubleshootPrompts() []api.ServerPrompt {
 			Prompt: api.Prompt{
 				Name:        "pipeline-troubleshoot",
 				Title:       "Tekton PipelineRun Troubleshoot",
-				Description: "Gather PipelineRun status, TaskRuns, logs, events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting",
+				Description: "Gather PipelineRun status, its Pipeline definition, TaskRuns, logs, events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting",
 				Arguments: []api.PromptArgument{
 					{
 						Name:        "namespace",
@@ -46,6 +46,7 @@ type pipelineTroubleshootData struct {
 	name             string
 	pipelineRun      *unstructured.Unstructured
 	pipelineRunText  string
+	pipelineText     string
 	taskRunsText     string
 	logsText         string
 	eventsText       string
@@ -71,6 +72,7 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 		name:             name,
 		pipelineRun:      pipelineRun,
 		pipelineRunText:  pipelineRunText,
+		pipelineText:     fetchPipelineDefinitionForPrompt(params, namespace, pipelineRun),
 		taskRunsText:     taskRunsText,
 		logsText:         fetchPipelineRunLogsForPrompt(params, namespace, taskRuns),
 		eventsText:       fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns),
@@ -109,8 +111,52 @@ func fetchPipelineRunForPrompt(params api.PromptHandlerParams, namespace, name s
 	return pipelineRun, yamlBlock("PipelineRun", pipelineRun)
 }
 
+func fetchPipelineDefinitionForPrompt(params api.PromptHandlerParams, namespace string, pipelineRun *unstructured.Unstructured) string {
+	if pipelineRun == nil {
+		return "*Pipeline definition unavailable because the PipelineRun could not be fetched*"
+	}
+
+	pipelineSpec, found, err := unstructured.NestedMap(pipelineRun.Object, "spec", "pipelineSpec")
+	if err != nil {
+		return fmt.Sprintf("*Pipeline definition unavailable: invalid embedded PipelineSpec: %v*", err)
+	}
+	if found {
+		return pipelineSpecBlock("Embedded", pipelineSpec)
+	}
+
+	pipelineSpec, found, err = unstructured.NestedMap(pipelineRun.Object, "status", "pipelineSpec")
+	if err != nil {
+		return fmt.Sprintf("*Pipeline definition unavailable: invalid resolved PipelineSpec: %v*", err)
+	}
+	if found {
+		return pipelineSpecBlock("Resolved", pipelineSpec)
+	}
+
+	pipelineName, found, err := unstructured.NestedString(pipelineRun.Object, "spec", "pipelineRef", "name")
+	if err != nil {
+		return fmt.Sprintf("*Pipeline definition unavailable: invalid Pipeline reference: %v*", err)
+	}
+	if !found || pipelineName == "" {
+		return "*Pipeline definition unavailable because the PipelineRun has no named Pipeline reference or embedded PipelineSpec*"
+	}
+
+	pipeline, err := params.DynamicClient().Resource(pipelineGVR).Namespace(namespace).Get(params.Context, pipelineName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Sprintf("*Pipeline definition unavailable: failed to fetch Pipeline %q: %v*", pipelineName, err)
+	}
+	return yamlBlock("Pipeline", pipeline)
+}
+
+func pipelineSpecBlock(source string, pipelineSpec map[string]interface{}) string {
+	yaml, err := output.MarshalYaml(pipelineSpec)
+	if err != nil {
+		return fmt.Sprintf("*Error formatting %s PipelineSpec: %v*", strings.ToLower(source), err)
+	}
+	return fmt.Sprintf("**%s PipelineSpec**\n\n```yaml\n%s```", source, yaml)
+}
+
 func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string) ([]tektonv1.TaskRun, string) {
-	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName)
+	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "")
 	if err != nil {
 		return nil, fmt.Sprintf("*Error listing TaskRuns: %v*", err)
 	}
@@ -139,7 +185,7 @@ func fetchPipelineRunLogsForPrompt(params api.PromptHandlerParams, namespace str
 	var sb strings.Builder
 	for _, taskRun := range taskRuns {
 		var taskLogs strings.Builder
-		collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, &taskLogs, namespace, &taskRun, kubernetes.DefaultTailLines)
+		collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, &taskLogs, namespace, &taskRun, "", kubernetes.DefaultTailLines)
 		taskLogsText := taskLogs.String()
 		if strings.TrimSpace(taskLogsText) == "" {
 			continue
@@ -258,15 +304,22 @@ func buildPipelineTroubleshootPrompt(data pipelineTroubleshootData) string {
 
 Analyze the collected data and report:
 1. Overall PipelineRun state
-2. Failed or blocked TaskRuns
-3. Relevant log errors
-4. Pipeline-as-Code Repository or TektonConfig context that may affect this run
-5. Warning events
-6. Recommended next action
+2. Pipeline definition and expected task flow
+3. Failed or blocked TaskRuns
+4. Relevant log errors
+5. Pipeline-as-Code Repository or TektonConfig context that may affect this run
+6. Warning events
+7. Recommended next action
 
 ---
 
 ## PipelineRun
+
+%s
+
+---
+
+## Pipeline Definition
 
 %s
 
@@ -299,7 +352,7 @@ Analyze the collected data and report:
 ## Events
 
 %s
-`, data.namespace, data.name, time.Now().Format(time.RFC3339), statusHint, data.pipelineRunText, data.taskRunsText, data.logsText, data.pacText, data.tektonConfigText, data.eventsText)
+`, data.namespace, data.name, time.Now().Format(time.RFC3339), statusHint, data.pipelineRunText, data.pipelineText, data.taskRunsText, data.logsText, data.pacText, data.tektonConfigText, data.eventsText)
 }
 
 func yamlBlock(title string, obj *unstructured.Unstructured) string {
