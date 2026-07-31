@@ -1,6 +1,7 @@
 package troubleshoot
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -175,6 +176,50 @@ func (s *TroubleshootToolSuite) TestStripCloudInitBodies() {
 		ciData := ciVol["cloudInitNoCloud"].(map[string]interface{})
 		ref := ciData["userDataSecretRef"].(map[string]interface{})
 		s.Equal("my-secret", ref["name"])
+	})
+
+	s.Run("replaces base64 userData and networkData variants", func() {
+		volumes := []any{
+			map[string]interface{}{
+				"name": "cloudinitdisk",
+				"cloudInitNoCloud": map[string]interface{}{
+					"userDataBase64":    base64.StdEncoding.EncodeToString([]byte("#cloud-config\npassword: secret123")),
+					"networkDataBase64": base64.StdEncoding.EncodeToString([]byte("network:\n  version: 2")),
+				},
+			},
+		}
+
+		result := stripCloudInitBodies(volumes)
+		ciVol := result[0].(map[string]interface{})
+		ciData := ciVol["cloudInitNoCloud"].(map[string]interface{})
+		s.Equal("<see Cloud-Init Configuration section>", ciData["userDataBase64"])
+		s.Equal("<see Cloud-Init Configuration section>", ciData["networkDataBase64"])
+	})
+}
+
+func (s *TroubleshootToolSuite) TestCloudInitData() {
+	s.Run("prefers plain-text over base64", func() {
+		ciData := map[string]interface{}{
+			"userData":       "#cloud-config\nplain",
+			"userDataBase64": base64.StdEncoding.EncodeToString([]byte("#cloud-config\nencoded")),
+		}
+		s.Equal("#cloud-config\nplain", cloudInitData(ciData, "userData", "userDataBase64"))
+	})
+
+	s.Run("decodes base64 variant when plain-text absent", func() {
+		ciData := map[string]interface{}{
+			"userDataBase64": base64.StdEncoding.EncodeToString([]byte("#cloud-config\npassword: secret123")),
+		}
+		s.Equal("#cloud-config\npassword: secret123", cloudInitData(ciData, "userData", "userDataBase64"))
+	})
+
+	s.Run("returns empty for invalid base64", func() {
+		ciData := map[string]interface{}{"userDataBase64": "not valid base64 !!!"}
+		s.Equal("", cloudInitData(ciData, "userData", "userDataBase64"))
+	})
+
+	s.Run("returns empty when neither present", func() {
+		s.Equal("", cloudInitData(map[string]interface{}{}, "userData", "userDataBase64"))
 	})
 }
 

@@ -2,6 +2,7 @@ package troubleshoot
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -216,7 +217,7 @@ func stripCloudInitBodies(volumes []any) []any {
 				stripped := make(map[string]interface{}, len(ciMap))
 				for ck, cv := range ciMap {
 					switch ck {
-					case "userData", "networkData":
+					case "userData", "networkData", "userDataBase64", "networkDataBase64":
 						stripped[ck] = "<see Cloud-Init Configuration section>"
 					default:
 						stripped[ck] = cv
@@ -496,11 +497,11 @@ func extractCloudInit(vm, vmi *unstructured.Unstructured) string {
 			volName, _ := volMap["name"].(string)
 			fmt.Fprintf(&result, "### %s (type: %s)\n\n", volName, ciKey)
 
-			userData, _ := ciData["userData"].(string)
+			userData := cloudInitData(ciData, "userData", "userDataBase64")
 			if userData != "" {
 				fmt.Fprintf(&result, "```yaml\n%s\n```\n\n", redactCloudInitSensitiveFields(userData))
 			}
-			networkData, _ := ciData["networkData"].(string)
+			networkData := cloudInitData(ciData, "networkData", "networkDataBase64")
 			if networkData != "" {
 				fmt.Fprintf(&result, "**networkData:**\n```yaml\n%s\n```\n\n", redactCloudInitSensitiveFields(networkData))
 			}
@@ -517,6 +518,25 @@ func extractCloudInit(vm, vmi *unstructured.Unstructured) string {
 		return "## Cloud-Init Configuration\n\n*No cloud-init volumes configured*"
 	}
 	return result.String()
+}
+
+// cloudInitData returns the cloud-init payload for a field, preferring the
+// plain-text key and falling back to the base64-encoded variant. This keeps the
+// content diagnosable while ensuring it always flows through redaction (the raw
+// volume dump strips both variants, see stripCloudInitBodies).
+func cloudInitData(ciData map[string]interface{}, plainKey, base64Key string) string {
+	if plain, _ := ciData[plainKey].(string); plain != "" {
+		return plain
+	}
+	encoded, _ := ciData[base64Key].(string)
+	if encoded == "" {
+		return ""
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+	if err != nil {
+		return ""
+	}
+	return string(decoded)
 }
 
 var sensitiveYAMLKeys = []string{
