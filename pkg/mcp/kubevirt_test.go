@@ -874,6 +874,113 @@ func (s *KubevirtSuite) TestVMTroubleshoot() {
 			"Expected diagnostic report header, got %v", text)
 		s.Contains(text, "not found")
 	})
+
+	s.Run("vm_troubleshoot detects and reports a root cause for a broken VM", func() {
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
+		vmGVR := schema.GroupVersionResource{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"}
+		vm := &unstructured.Unstructured{}
+		vm.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachine",
+			"metadata": map[string]interface{}{
+				"name":      "broken-vm",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"runStrategy": "Always",
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"volumes": []interface{}{
+							map[string]interface{}{
+								"name": "cloudinit",
+								"cloudInitNoCloud": map[string]interface{}{
+									"userData": "#cloud-config\nruncmd:\n  - shutdown -h now\n",
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		_, err := dynamicClient.Resource(vmGVR).Namespace("default").Create(s.T().Context(), vm, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create broken test VM")
+		defer func() {
+			_ = dynamicClient.Resource(vmGVR).Namespace("default").Delete(s.T().Context(), "broken-vm", metav1.DeleteOptions{})
+		}()
+
+		toolResult, err := s.CallTool("vm_troubleshoot", map[string]interface{}{
+			"namespace": "default",
+			"name":      "broken-vm",
+		})
+		s.Require().Nilf(err, "call tool failed %v", err)
+		s.Require().Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+
+		s.Run("surfaces the Detected Issues section", func() {
+			s.Contains(text, "## Detected Issues")
+		})
+		s.Run("flags the dangerous cloud-init command as CRITICAL", func() {
+			s.Regexp(`(?s)## Detected Issues.*CRITICAL.*shutdown`, text)
+		})
+		s.Run("provides a Suggested Fixes section", func() {
+			s.Contains(text, "## Suggested Fixes")
+		})
+		// Guards the troubleshoot-vm-cloudinit-shutdown eval: its llmJudge asserts
+		// the agent's answer contains "shutdown -h now", which the agent can only
+		// relay if the tool surfaces it.
+		s.Run("surfaces the exact string the cloud-init eval judges on", func() {
+			s.Contains(text, "shutdown -h now")
+		})
+	})
+
+	s.Run("vm_troubleshoot flags a missing StorageClass with the name and available alternatives", func() {
+		dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
+		vmGVR := schema.GroupVersionResource{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"}
+		vm := &unstructured.Unstructured{}
+		vm.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachine",
+			"metadata": map[string]interface{}{
+				"name":      "broken-sc-vm",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"runStrategy": "Always",
+				"dataVolumeTemplates": []interface{}{
+					map[string]interface{}{
+						"metadata": map[string]interface{}{"name": "broken-sc-vm-rootdisk"},
+						"spec": map[string]interface{}{
+							"storage": map[string]interface{}{
+								"storageClassName": "non-existent-sc-xyz",
+							},
+						},
+					},
+				},
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{},
+				},
+			},
+		})
+		_, err := dynamicClient.Resource(vmGVR).Namespace("default").Create(s.T().Context(), vm, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create broken-sc test VM")
+		defer func() {
+			_ = dynamicClient.Resource(vmGVR).Namespace("default").Delete(s.T().Context(), "broken-sc-vm", metav1.DeleteOptions{})
+		}()
+
+		toolResult, err := s.CallTool("vm_troubleshoot", map[string]interface{}{
+			"namespace": "default",
+			"name":      "broken-sc-vm",
+		})
+		s.Require().Nilf(err, "call tool failed %v", err)
+		s.Require().Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+
+		// Guards the troubleshoot-vm-missing-storageclass eval, whose llmJudge
+		// asserts the agent's answer contains "non-existent-sc-xyz".
+		s.Run("names the missing StorageClass as a CRITICAL detected issue", func() {
+			s.Regexp(`(?s)## Detected Issues.*CRITICAL.*non-existent-sc-xyz`, text)
+		})
+	})
 }
 
 func (s *KubevirtSuite) TestVMGuestInfo() {
