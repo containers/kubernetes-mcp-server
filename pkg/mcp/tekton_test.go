@@ -268,6 +268,64 @@ func (s *TektonMcpSuite) TestPipelineTroubleshootPrompt() {
 		s.Contains(text, "resolved-diagnostic-task")
 	})
 
+	s.Run("returns only failed step logs and warning events", func() {
+		s.createPipeline("failed-step-pipeline", "diagnostic-task")
+		s.createReferencedPipelineRun("failed-step-run", "failed-step-pipeline")
+		s.createLogTaskRunWithStepStates("failed-step-taskrun", "failed-step-run", "diagnostic-task", []interface{}{
+			map[string]interface{}{
+				"name":      "failed",
+				"container": "step-failed",
+				"terminated": map[string]interface{}{
+					"exitCode": int64(1),
+					"reason":   "Error",
+				},
+			},
+			map[string]interface{}{
+				"name":      "passed",
+				"container": "step-passed",
+				"terminated": map[string]interface{}{
+					"exitCode": int64(0),
+					"reason":   "Completed",
+				},
+			},
+			map[string]interface{}{
+				"name":      "errored",
+				"container": "step-errored",
+				"waiting": map[string]interface{}{
+					"reason": "ErrImagePull",
+				},
+			},
+			map[string]interface{}{
+				"name":      "starting",
+				"container": "step-starting",
+				"waiting": map[string]interface{}{
+					"reason": "ContainerCreating",
+				},
+			},
+		}, []string{"cache"})
+		s.createEvent("failed-step-warning", "PipelineRun", "failed-step-run", "WarningEvent")
+		s.createEventWithType("failed-step-normal", "PipelineRun", "failed-step-run", "NormalEvent", corev1.EventTypeNormal)
+
+		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{
+			"namespace": s.namespace,
+			"name":      "failed-step-run",
+		})
+		s.Require().NoError(err)
+		text := result.Messages[0].Content.(*mcp.TextContent).Text
+		s.Contains(text, "## PipelineRun Status")
+		s.Contains(text, "## TaskRun Status")
+		s.Contains(text, "## Failed Step Logs")
+		s.Contains(text, "## Troubleshooting Analysis")
+		s.Contains(text, "## Fix Suggestions")
+		s.Contains(text, "[step: failed]")
+		s.Contains(text, "[step: errored]")
+		s.NotContains(text, "[step: passed]")
+		s.NotContains(text, "[step: starting]")
+		s.NotContains(text, "[sidecar: cache]")
+		s.Contains(text, "WarningEvent")
+		s.NotContains(text, "NormalEvent")
+	})
+
 	s.Run("requires namespace", func() {
 		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{"name": "broken-run"})
 		s.Error(err)
@@ -385,6 +443,10 @@ func (s *TektonMcpSuite) createLogTaskRun(name, pipelineRun, pipelineTask string
 	for _, step := range steps {
 		stepStates = append(stepStates, map[string]interface{}{"name": step, "container": "step-" + step})
 	}
+	s.createLogTaskRunWithStepStates(name, pipelineRun, pipelineTask, stepStates, sidecars)
+}
+
+func (s *TektonMcpSuite) createLogTaskRunWithStepStates(name, pipelineRun, pipelineTask string, stepStates []interface{}, sidecars []string) {
 	sidecarStates := make([]interface{}, 0, len(sidecars))
 	for _, sidecar := range sidecars {
 		sidecarStates = append(sidecarStates, map[string]interface{}{"name": sidecar, "container": "sidecar-" + sidecar})
@@ -414,6 +476,10 @@ func (s *TektonMcpSuite) createLogTaskRun(name, pipelineRun, pipelineTask string
 }
 
 func (s *TektonMcpSuite) createEvent(name, involvedKind, involvedName, reason string) {
+	s.createEventWithType(name, involvedKind, involvedName, reason, corev1.EventTypeWarning)
+}
+
+func (s *TektonMcpSuite) createEventWithType(name, involvedKind, involvedName, reason, eventType string) {
 	now := metav1.Now()
 	_, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Events(s.namespace).Create(s.T().Context(), &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -425,7 +491,7 @@ func (s *TektonMcpSuite) createEvent(name, involvedKind, involvedName, reason st
 			Name:      involvedName,
 			Namespace: s.namespace,
 		},
-		Type:           corev1.EventTypeWarning,
+		Type:           eventType,
 		Reason:         reason,
 		Message:        reason,
 		FirstTimestamp: now,

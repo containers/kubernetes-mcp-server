@@ -889,7 +889,7 @@ Examples:
 
 <summary>tekton</summary>
 
-- **pipeline-troubleshoot** - Gather PipelineRun status, its Pipeline definition, TaskRuns, logs, events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting
+- **pipeline-troubleshoot** - Gather PipelineRun status, its Pipeline definition, TaskRuns, failed or errored step logs, warning events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting
   - `namespace` (`string`) **(required)** - Namespace of the PipelineRun to troubleshoot
   - `name` (`string`) **(required)** - Name of the PipelineRun to troubleshoot
 

@@ -125,6 +125,18 @@ spec:
 
   verify:
     - llmJudge:
+        contains: "PipelineRun Status"
+    - llmJudge:
+        contains: "TaskRun Status"
+    - llmJudge:
+        contains: "Failed Step Logs"
+    - llmJudge:
+        contains: "Events"
+    - llmJudge:
+        contains: "Troubleshooting Analysis"
+    - llmJudge:
+        contains: "Fix Suggestions"
+    - llmJudge:
         contains: "failed-run"
     - llmJudge:
         contains: "missing"
