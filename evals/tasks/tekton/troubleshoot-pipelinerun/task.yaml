@@ -129,6 +129,8 @@ spec:
     - llmJudge:
         contains: "missing"
     - llmJudge:
+        contains: "missing-task-stage"
+    - llmJudge:
         contains: "eval-repo"
     - llmJudge:
         contains: "tekton-eval-config"

@@ -96,7 +96,7 @@
           "type": "integer"
         },
         "task": {
-          "description": "Pipeline task name to include",
+          "description": "Pipeline task name to filter by (tekton.dev/pipelineTask label)",
           "type": "string"
         }
       },

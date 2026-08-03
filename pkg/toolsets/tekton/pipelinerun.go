@@ -60,7 +60,7 @@ func pipelineRunTools() []api.ServerTool {
 						},
 						"task": {
 							Type:        "string",
-							Description: "Pipeline task name to include",
+							Description: "Pipeline task name to filter by (tekton.dev/pipelineTask label)",
 						},
 						"step": {
 							Type:        "string",
@@ -196,6 +196,9 @@ func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to list TaskRuns for PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
 	if len(taskRuns) == 0 {
+		if pipelineTaskName != "" {
+			return api.NewToolCallResult(fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s' matching pipeline task '%s'", name, namespace, pipelineTaskName), nil), nil
+		}
 		return api.NewToolCallResult(fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s'", name, namespace), nil), nil
 	}
 

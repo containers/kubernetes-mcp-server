@@ -124,6 +124,23 @@ func (s *TektonMcpSuite) TestPipelineRunLogsWithoutTaskRuns() {
 	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "No TaskRuns found")
 }
 
+func (s *TektonMcpSuite) TestPipelineRunLogsWithoutMatchingPipelineTask() {
+	s.createPipelineRun("filtered-run")
+	s.createLogTaskRun("compile-run", "filtered-run", "compile", []string{"build"}, nil)
+
+	toolResult, err := s.CallTool("tekton_pipelinerun_logs", map[string]interface{}{
+		"namespace": s.namespace,
+		"name":      "filtered-run",
+		"task":      "deploy",
+	})
+	s.Require().NoError(err)
+	s.False(toolResult.IsError)
+	s.Equal(
+		fmt.Sprintf("No TaskRuns found for PipelineRun 'filtered-run' in namespace '%s' matching pipeline task 'deploy'", s.namespace),
+		toolResult.Content[0].(*mcp.TextContent).Text,
+	)
+}
+
 func (s *TektonMcpSuite) TestPipelineRunLogFilters() {
 	s.createPipelineRun("filtered-run")
 	s.createLogTaskRun("compile-run", "filtered-run", "compile", []string{"build", "test"}, []string{"cache"})

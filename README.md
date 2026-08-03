@@ -793,7 +793,7 @@ Examples:
   - `namespace` (`string`) - Namespace of the PipelineRun
   - `step` (`string`) - Step name to include within matching TaskRuns
   - `tail` (`integer`) - Number of lines to retrieve from the end of each container log (default: 100)
-  - `task` (`string`) - Pipeline task name to include
+  - `task` (`string`) - Pipeline task name to filter by (tekton.dev/pipelineTask label)
 
 - **tekton_task_start** - Start a Tekton Task by creating a TaskRun that references it
   - `name` (`string`) **(required)** - Name of the Task to start
