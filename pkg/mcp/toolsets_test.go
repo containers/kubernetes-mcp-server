@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -145,6 +146,71 @@ func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
 			}
 		})
 	})
+}
+
+func (s *ToolsetsSuite) TestKialiToolsFilteredWithoutCRDs() {
+	s.Run("Kiali tools are filtered out when Kiali GVK is not present and URL is unset", func() {
+		toolsetName := (&kiali.Toolset{}).GetName()
+		s.Cfg.Toolsets = []string{toolsetName}
+		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+		})
+		s.Run("kiali tools are not present", func() {
+			for _, tool := range tools.Tools {
+				for _, kialiTool := range s.kialiToolNames(toolsetName) {
+					s.Require().NotEqual(kialiTool, tool.Name, "Expected %s to not be present when filtering enabled on cluster without Kiali CRD or URL", kialiTool)
+				}
+			}
+		})
+	})
+}
+
+func (s *ToolsetsSuite) TestKialiToolsVisibleWithConfiguredURL() {
+	s.Run("Kiali tools remain visible when URL is set even without Kiali GVK", func() {
+		toolsetName := (&kiali.Toolset{}).GetName()
+		kubeConfig := s.Cfg.KubeConfig
+		cfg, err := configuration.ReadToml([]byte(fmt.Sprintf(`
+			toolsets = ["%s"]
+			experimental_enable_target_compatibility_tool_filters = true
+			[toolset_configs.kiali]
+			url = "https://kiali.example"
+			insecure = true
+		`, toolsetName)))
+		s.Require().NoError(err, "failed to parse kiali toolset config")
+		s.Cfg = cfg
+		s.Cfg.KubeConfig = kubeConfig
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Require().NoError(err, "Expected no error from ListTools")
+		s.Require().NotNil(tools, "Expected tools from ListTools")
+		present := make(map[string]bool, len(tools.Tools))
+		for _, tool := range tools.Tools {
+			present[tool.Name] = true
+		}
+		for _, kialiTool := range s.kialiToolNames(toolsetName) {
+			s.Truef(present[kialiTool], "Expected %s to be present when URL is configured", kialiTool)
+		}
+	})
+}
+
+func (s *ToolsetsSuite) kialiToolNames(toolsetName string) []string {
+	return []string{
+		toolsetName + "_get_logs",
+		toolsetName + "_get_mesh_status",
+		toolsetName + "_get_mesh_traffic_graph",
+		toolsetName + "_get_metrics",
+		toolsetName + "_get_pod_performance",
+		toolsetName + "_get_resource_details",
+		toolsetName + "_get_trace_details",
+		toolsetName + "_list_mesh_clusters",
+		toolsetName + "_list_traces",
+		toolsetName + "_manage_istio_config",
+		toolsetName + "_manage_istio_config_read",
+	}
 }
 
 func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {

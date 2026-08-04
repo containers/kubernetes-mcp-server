@@ -395,9 +395,13 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 		WithToolOverrides(cfg.ToolOverrides),
 	)
 
+	// Wrap the filtering provider with live config so toolsets that optionally
+	// type-assert to ExtendedConfigProvider (e.g. Kiali URL checks) see the
+	// current toolset_configs without changing the Toolset.GetTools signature.
+	provider := filteringProviderWithConfig{FilteringProvider: s.p, cfg: cfg.StaticConfig}
 	tools := make([]api.ServerTool, 0)
 	for _, toolset := range cfg.Toolsets() {
-		for _, tool := range toolset.GetTools(s.p) {
+		for _, tool := range toolset.GetTools(provider) {
 			tool = mutator(tool)
 			if filter(tool) {
 				tools = append(tools, tool)
@@ -405,6 +409,27 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 		}
 	}
 	return tools
+}
+
+// filteringProviderWithConfig embeds FilteringProvider and exposes the live
+// ExtendedConfigProvider so target-compatibility filters can inspect toolset_configs.
+type filteringProviderWithConfig struct {
+	api.FilteringProvider
+	cfg api.ExtendedConfigProvider
+}
+
+func (f filteringProviderWithConfig) GetProviderConfig(strategy string) (api.ExtendedConfig, bool) {
+	if f.cfg == nil {
+		return nil, false
+	}
+	return f.cfg.GetProviderConfig(strategy)
+}
+
+func (f filteringProviderWithConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
+	if f.cfg == nil {
+		return nil, false
+	}
+	return f.cfg.GetToolsetConfig(name)
 }
 
 // collectApplicablePrompts returns prompts after applying mutation and merging toolset and config prompts
