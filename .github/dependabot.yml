@@ -16,6 +16,16 @@ updates:
       golang-x:
         patterns:
           - "golang.org/x/*"
+  - package-ecosystem: "pip"
+    directory: "/test/e2e"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    versioning-strategy: "lockfile-only"
+    groups:
+      python-test:
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
