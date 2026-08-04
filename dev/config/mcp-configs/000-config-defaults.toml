@@ -1,0 +1,3 @@
+# !CAUTION! Destructive mode enabled by default for development.
+read_only = false
+disable_destructive = false
