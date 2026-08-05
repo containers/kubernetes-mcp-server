@@ -104,3 +104,97 @@ jobs:
           [View full results](https://github.com/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID})
           EOF
           )"
+
+  # Kiali only: posts a separate PR comment when suite=kiali triggers multicluster eval.
+  report-multicluster:
+    name: Post Kiali Multicluster Results
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'issue_comment'
+    steps:
+      - name: Check if multicluster evaluation ran
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          JOB_CONCLUSION=$(gh api "repos/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}/jobs" \
+            --jq '.jobs[] | select(.name == "Run MCP Multicluster Evaluation") | .conclusion')
+
+          if [[ -n "$JOB_CONCLUSION" && "$JOB_CONCLUSION" != "skipped" ]]; then
+            echo "should-report=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-report=false" >> $GITHUB_OUTPUT
+            echo "Kiali multicluster job was skipped, no report needed"
+          fi
+
+      - name: Download kiali multicluster evaluation context
+        if: steps.check.outputs.should-report == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: eval-context-multicluster
+          path: eval-context-multicluster/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post multicluster results comment
+        if: steps.check.outputs.should-report == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          PR_NUMBER=$(jq -r '.pr_number' eval-context-multicluster/context.json)
+          PR_SHA=$(jq -r '.pr_sha' eval-context-multicluster/context.json)
+          TASKS_PASSED=$(jq -r '.tasks_passed' eval-context-multicluster/context.json)
+          TASKS_TOTAL=$(jq -r '.tasks_total' eval-context-multicluster/context.json)
+          TASK_PASS_RATE=$(jq -r '.task_pass_rate' eval-context-multicluster/context.json)
+          ASSERTIONS_PASSED=$(jq -r '.assertions_passed' eval-context-multicluster/context.json)
+          ASSERTIONS_TOTAL=$(jq -r '.assertions_total' eval-context-multicluster/context.json)
+          PASSED=$(jq -r '.passed' eval-context-multicluster/context.json)
+          HAS_DIFF=$(jq -r '.has_diff // "false"' eval-context-multicluster/context.json)
+
+          PASS_RATE=$(awk "BEGIN {printf \"%.1f\", $TASK_PASS_RATE * 100}")
+
+          if [[ "$RUN_CONCLUSION" != "success" ]]; then
+            OVERALL="⚠️ Workflow failed"
+          elif [[ "$PASSED" == "true" ]]; then
+            OVERALL="✅ Passed"
+          else
+            OVERALL="❌ Failed"
+          fi
+
+          DIFF_SECTION=""
+          if [[ "$HAS_DIFF" == "true" ]] && [[ -f eval-context-multicluster/diff-output.txt ]]; then
+            DIFF_CONTENT=$(cat eval-context-multicluster/diff-output.txt)
+            DIFF_SECTION=$(cat <<DIFF_EOF
+
+          ### Diff vs. Baseline (main)
+
+          <details>
+          <summary>Click to expand mcpchecker diff</summary>
+
+          ${DIFF_CONTENT}
+
+          </details>
+          DIFF_EOF
+          )
+          fi
+
+          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body "$(cat <<EOF
+          ## mcpchecker Kiali Multicluster Evaluation Results
+
+          **Commit:** \`${PR_SHA:0:7}\`
+          **Summary:** ${TASKS_PASSED}/${TASKS_TOTAL} tasks passed (${PASS_RATE}%)
+
+          | Metric | Result |
+          |--------|--------|
+          | Tasks Passed | ${TASKS_PASSED}/${TASKS_TOTAL} |
+          | Assertions Passed | ${ASSERTIONS_PASSED}/${ASSERTIONS_TOTAL} |
+          | Overall | ${OVERALL} |
+          ${DIFF_SECTION}
+
+          [View full results](https://github.com/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID})
+          EOF
+          )"

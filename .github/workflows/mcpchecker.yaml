@@ -80,7 +80,6 @@ jobs:
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
       is-pr: ${{ steps.check.outputs.is-pr }}
-      suite: ${{ steps.suite.outputs.suite }}
     steps:
       - name: Check trigger conditions
         id: check
@@ -443,7 +442,7 @@ jobs:
     needs: check-trigger
     if: |
       needs.check-trigger.outputs.should-run == 'true' &&
-      needs.check-trigger.outputs.suite == 'kiali'
+      needs.check-trigger.outputs.label-selector == 'suite=kiali'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -474,6 +473,7 @@ jobs:
           MCP_CONFIG_DIR: dev/config/mcp-configs-multicluster
 
       - name: Run mcpchecker multicluster evaluation
+        id: mcpchecker
         uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.18
         with:
           eval-config: 'evals/tasks/kiali/multicluster/eval.yaml'
@@ -493,6 +493,79 @@ jobs:
           JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
           JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
+
+      - name: Fetch multicluster baseline results from main
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        run: |
+          git fetch origin main --depth=1
+          git show "origin/main:evals/results/openai-agent-multicluster-latest.json" > /tmp/baseline-multicluster-results.json 2>/dev/null || true
+
+      - name: Check multicluster diff prerequisites
+        id: diff-check
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        run: |
+          RESULTS_FILE=$(ls -t mcpchecker-*-out.json 2>/dev/null | head -1)
+          if [ -z "$RESULTS_FILE" ]; then
+            echo "No multicluster mcpchecker results file found, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [ ! -s /tmp/baseline-multicluster-results.json ]; then
+            echo "No multicluster baseline results found on main branch, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "has-diff=true" >> $GITHUB_OUTPUT
+          echo "results-file=$RESULTS_FILE" >> $GITHUB_OUTPUT
+
+      - name: Run multicluster mcpchecker diff
+        id: mcpchecker-diff
+        if: needs.check-trigger.outputs.is-pr == 'true' && steps.diff-check.outputs.has-diff == 'true'
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@v0.0.18
+        with:
+          base-results: /tmp/baseline-multicluster-results.json
+          current-results: ${{ steps.diff-check.outputs.results-file }}
+          mcpchecker-version: 'latest'
+
+      - name: Save multicluster evaluation context
+        if: always() && needs.check-trigger.outputs.is-pr == 'true'
+        env:
+          DIFF_OUTPUT: ${{ steps.mcpchecker-diff.outputs.diff-output }}
+          PR_NUMBER: ${{ needs.check-trigger.outputs.pr-number }}
+          PR_SHA: ${{ needs.check-trigger.outputs.pr-sha }}
+          TASKS_PASSED: ${{ steps.mcpchecker.outputs.tasks-passed }}
+          TASKS_TOTAL: ${{ steps.mcpchecker.outputs.tasks-total }}
+          TASK_PASS_RATE: ${{ steps.mcpchecker.outputs.task-pass-rate }}
+          ASSERTIONS_PASSED: ${{ steps.mcpchecker.outputs.assertions-passed }}
+          ASSERTIONS_TOTAL: ${{ steps.mcpchecker.outputs.assertions-total }}
+          PASSED: ${{ steps.mcpchecker.outputs.passed }}
+          HAS_DIFF: ${{ steps.diff-check.outputs.has-diff || 'false' }}
+        run: |
+          mkdir -p eval-context-multicluster
+          cat > eval-context-multicluster/context.json << EOF
+          {
+            "pr_number": "${PR_NUMBER}",
+            "pr_sha": "${PR_SHA}",
+            "tasks_passed": "${TASKS_PASSED}",
+            "tasks_total": "${TASKS_TOTAL}",
+            "task_pass_rate": "${TASK_PASS_RATE}",
+            "assertions_passed": "${ASSERTIONS_PASSED}",
+            "assertions_total": "${ASSERTIONS_TOTAL}",
+            "passed": "${PASSED}",
+            "has_diff": "${HAS_DIFF}"
+          }
+          EOF
+          if [ -n "$DIFF_OUTPUT" ]; then
+            echo "$DIFF_OUTPUT" > eval-context-multicluster/diff-output.txt
+          fi
+
+      - name: Upload multicluster PR context
+        if: always() && needs.check-trigger.outputs.is-pr == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-context-multicluster
+          path: eval-context-multicluster/
+          retention-days: 1
 
       - name: Cleanup
         if: always()
@@ -596,6 +669,93 @@ jobs:
             echo "Creating new PR"
             gh pr create \
               --title "chore: update mcpchecker evaluation results" \
+              --body "$PR_BODY" \
+              --base main \
+              --head "$BRANCH"
+          fi
+
+  # Kiali multicluster results only (suite=kiali scheduled runs)
+  commit-multicluster-results:
+    name: Commit Kiali Multicluster Results
+    needs: [check-trigger, run-evaluation-multicluster]
+    if: |
+      always() &&
+      github.event_name == 'schedule' &&
+      needs.check-trigger.outputs.label-selector == 'suite=kiali' &&
+      needs.run-evaluation-multicluster.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+        with:
+          ref: main
+
+      - name: Download mcpchecker multicluster results
+        uses: actions/download-artifact@v8
+        with:
+          name: mcpchecker-multicluster-results
+          path: mcpchecker-multicluster-results/
+
+      - name: Copy multicluster results to evals/results
+        run: |
+          mkdir -p evals/results
+          MC_RESULTS_FILE=$(ls -t mcpchecker-multicluster-results/mcpchecker-*-out.json 2>/dev/null | head -1)
+          if [ -z "$MC_RESULTS_FILE" ]; then
+            echo "Error: No multicluster mcpchecker results file found"
+            exit 1
+          fi
+          cp "$MC_RESULTS_FILE" "evals/results/openai-agent-multicluster-latest.json"
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRIGGER: ${{ github.event_name }}
+          COMMIT_SHA: ${{ needs.check-trigger.outputs.pr-sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          BRANCH="chore/update-eval-results"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -B "$BRANCH"
+          git add evals/results/openai-agent-multicluster-latest.json
+
+          if git diff --staged --quiet; then
+            echo "No multicluster result changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore(evals): update kiali multicluster mcpchecker results"
+          git push -f origin "$BRANCH"
+
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' || echo "")
+
+          PR_BODY=$(cat <<EOF
+          ## Automated Kiali Multicluster Evaluation Results Update
+
+          This PR updates the kiali multicluster mcpchecker results from the weekly scheduled run.
+
+          **Run details:**
+          - Trigger: $TRIGGER
+          - Commit: $COMMIT_SHA
+          - Workflow run: $RUN_URL
+
+          ---
+          This PR was automatically generated by the mcpchecker workflow.
+          EOF
+          )
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updating existing PR #$EXISTING_PR"
+            gh pr edit "$EXISTING_PR" --body "$PR_BODY"
+          else
+            echo "Creating new PR"
+            gh pr create \
+              --title "chore: update kiali multicluster mcpchecker results" \
               --body "$PR_BODY" \
               --base main \
               --head "$BRANCH"
