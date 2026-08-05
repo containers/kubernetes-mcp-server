@@ -77,4 +77,4 @@ curl -sk -X POST "${KIALI_URL}api/chat/mcp/list_clusters" \
   - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the path to the CA certificate file. Relative paths are resolved relative to the directory containing the config file.
   - For non-production environments you can set `[toolset_configs.kiali].insecure = true` to skip certificate verification.
 - Multicluster eval: `Tool 'list_clusters' not found` → Kiali too old; run `KIALI_SRC=~/path/to/kiali make redeploy-kiali-multicluster-dev`
-- Multicluster eval: agent returns empty output → check `MODEL_BASE_URL` / `MODEL_KEY` (same as `evals/openai-agent/agent.yaml`)
+- Multicluster eval: agent returns empty output → check `MODEL_BASE_URL` / `MODEL_KEY` (same credentials as other mcpchecker evals)
