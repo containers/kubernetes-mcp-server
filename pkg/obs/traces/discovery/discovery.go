@@ -157,7 +157,11 @@ func getStatusFromConditions(conditions []metav1.Condition) string {
 
 func resolveBaseURL(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver, namespace, serviceName string, multitenancy bool) (string, error) {
 	if resolver != nil {
-		return resolver.ResolveEndpoint(ctx, k8sClient, namespace, serviceName)
+		endpoint, err := resolver.ResolveEndpoint(ctx, k8sClient, namespace, serviceName)
+		if err == nil {
+			return endpoint, nil
+		}
+		slog.Debug("Route not found, falling back to service DNS", "namespace", namespace, "service", serviceName, "error", err)
 	}
 	if multitenancy {
 		return fmt.Sprintf("https://%s.%s.svc:8080", serviceName, namespace), nil
