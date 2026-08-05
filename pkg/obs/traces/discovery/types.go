@@ -16,11 +16,6 @@ var (
 		Version:  "v1alpha1",
 		Resource: "tempomonolithics",
 	}
-	routeGVR = schema.GroupVersionResource{
-		Group:    "route.openshift.io",
-		Version:  "v1",
-		Resource: "routes",
-	}
 )
 
 // TempoStack represents the TempoStack CR
@@ -68,15 +63,4 @@ type TempoMonolithicMultitenancy struct {
 
 type TempoMonolithicStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-// Route represents the OpenShift Route CR
-type Route struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata"`
-	Spec              RouteSpec `json:"spec"`
-}
-
-type RouteSpec struct {
-	Host string `json:"host,omitempty"`
 }

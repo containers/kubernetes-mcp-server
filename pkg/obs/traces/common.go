@@ -97,7 +97,7 @@ func resolveTempoURL(params api.ToolHandlerParams) (string, error) {
 		return "", errors.New("tempoName parameter must not be empty")
 	}
 
-	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
+	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.Resolver)
 	if err != nil {
 		return "", err
 	}

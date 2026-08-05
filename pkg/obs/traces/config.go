@@ -10,6 +10,7 @@ import (
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/instrumentation"
+	"github.com/rhobs/obs-mcp/pkg/traces/discovery"
 )
 
 func init() {
@@ -29,7 +30,14 @@ type Config struct {
 	TempoURL string `toml:"tempo_url,omitempty"`
 
 	// UseRoute controls whether to use OpenShift Routes for discovering Tempo endpoints.
+	//
+	// Deprecated: set Resolver instead. UseRoute is kept for backward-compatible TOML/flag parsing;
+	// main.go translates it into a Resolver at startup.
 	UseRoute bool `toml:"use_route,omitempty"`
+
+	// Resolver performs cluster-based endpoint discovery (e.g., OpenShift Routes).
+	// When nil, plain service DNS is used. Not exposed in TOML; set programmatically.
+	Resolver discovery.EndpointResolver `toml:"-"`
 
 	// ClientMetrics holds HTTP client metrics for instrumenting outbound requests.
 	ClientMetrics *instrumentation.ClientMetrics `toml:"-"`

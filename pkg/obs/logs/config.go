@@ -10,6 +10,7 @@ import (
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/instrumentation"
+	"github.com/rhobs/obs-mcp/pkg/logs/discovery"
 )
 
 func init() {
@@ -28,7 +29,14 @@ type Config struct {
 	Insecure bool `toml:"insecure,omitempty"`
 
 	// UseRoute controls whether to use OpenShift Routes for discovering LokiStack endpoints.
+	//
+	// Deprecated: set Resolver instead. UseRoute is kept for backward-compatible TOML/flag parsing;
+	// main.go translates it into a Resolver at startup.
 	UseRoute bool `toml:"use_route,omitempty"`
+
+	// Resolver performs cluster-based endpoint discovery (e.g., OpenShift Routes).
+	// When nil, plain HTTP service DNS is used. Not exposed in TOML; set programmatically.
+	Resolver discovery.GatewayResolver `toml:"-"`
 
 	// ClientMetrics holds HTTP client metrics for instrumenting outbound requests.
 	ClientMetrics *instrumentation.ClientMetrics `toml:"-"`
