@@ -126,7 +126,7 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 		exit 1; \
 	fi; \
 	echo "Using Kiali hack scripts from: $${KIALI_HACK_DIR}"; \
-	if [ "$(KIALI_MC_VERSION)" = "dev" ]; then \
+	if [ "$(KIALI_VERSION)" = "dev" ]; then \
 		export KIALI_BUILD_DEV_IMAGE="$${KIALI_BUILD_DEV_IMAGE:-true}"; \
 		echo "KIALI_BUILD_DEV_IMAGE=$${KIALI_BUILD_DEV_IMAGE} (dev image requires build-ui + build before push)"; \
 	fi; \
@@ -137,7 +137,7 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 			--multicluster primary-remote \
 			--tempo false \
 			--auth-strategy anonymous \
-			-kv "$(KIALI_MC_VERSION)" \
+			-kv "$(KIALI_VERSION)" \
 			--istio-version "$(ISTIO_VERSION)" \
 			--deploy-kiali true; \
 	); \
@@ -162,7 +162,7 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 		-H 'Content-Type: application/json' -d '{"mcp_mode":true}'); \
 	if ! echo "$$list_clusters" | jq -e 'type == "array"' >/dev/null 2>&1; then \
 		echo "ERROR: Kiali MCP list_clusters unavailable: $$list_clusters" >&2; \
-		echo "Multicluster evals require Kiali master (KIALI_MC_VERSION=dev). Try:" >&2; \
+		echo "Try a newer Kiali image or rebuild from source:" >&2; \
 		echo "  KIALI_SRC=~/dev/kiali_sources/kiali make redeploy-kiali-multicluster-dev" >&2; \
 		exit 1; \
 	fi; \

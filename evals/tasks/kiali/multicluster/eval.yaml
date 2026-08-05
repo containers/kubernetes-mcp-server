@@ -7,15 +7,15 @@ config:
     cleanupTimeout: 2m
   agent:
     type: "file"
-    path: ../../../openai-agent/agent.yaml
+    path: ../../../core-eval-testing/builtin-openai/agent.yaml
   mcpConfigFile: ../../../mcp-config.yaml
   extensions:
     kubernetes:
       package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
   llmJudge:
     ref:
-      type: builtin.llm-agent
-      model: "openai:gpt-5"
+      type: file
+      path: ../../../core-eval-testing/builtin-openai/agent.yaml
   taskSets:
     - glob: "*/*.yaml"
       labelSelector:
