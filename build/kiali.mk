@@ -6,6 +6,11 @@ ISTIOCTL = $(shell pwd)/_output/tools/bin/istioctl
 ISTIO_ADDONS_DIR = $(shell pwd)/_output/istio-addons
 ISTIO_VERSION = 1.30.1
 KIALI_VERSION = v2.27
+# Multicluster evals call Kiali MCP tools (e.g. list_clusters) that exist only on
+# Kiali master today. Upstream setup-kind-in-ci.sh also hardcodes -kudi true for
+# MC, so a released -kv (e.g. v2.27) still tries to push a local image without
+# building it unless KIALI_BUILD_DEV_IMAGE=true (set below when this is "dev").
+KIALI_MC_VERSION = dev
 # Release version without patch (e.g. 1.28.0 -> 1.28)
 
 # Download and install istioctl (also copies samples/addons for install-istio)
@@ -124,7 +129,7 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 		exit 1; \
 	fi; \
 	echo "Using Kiali hack scripts from: $${KIALI_HACK_DIR}"; \
-	if [ "$(KIALI_VERSION)" = "dev" ]; then \
+	if [ "$(KIALI_MC_VERSION)" = "dev" ]; then \
 		export KIALI_BUILD_DEV_IMAGE="$${KIALI_BUILD_DEV_IMAGE:-true}"; \
 		echo "KIALI_BUILD_DEV_IMAGE=$${KIALI_BUILD_DEV_IMAGE} (dev image requires build-ui + build before push)"; \
 	fi; \
@@ -135,7 +140,7 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 			--multicluster primary-remote \
 			--tempo false \
 			--auth-strategy anonymous \
-			-kv "$(KIALI_VERSION)" \
+			-kv "$(KIALI_MC_VERSION)" \
 			--istio-version "$(ISTIO_VERSION)" \
 			--deploy-kiali true; \
 	); \
@@ -160,7 +165,7 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 		-H 'Content-Type: application/json' -d '{"mcp_mode":true}'); \
 	if ! echo "$$list_clusters" | jq -e 'type == "array"' >/dev/null 2>&1; then \
 		echo "ERROR: Kiali MCP list_clusters unavailable: $$list_clusters" >&2; \
-		echo "Try a newer Kiali image or rebuild from source:" >&2; \
+		echo "Multicluster evals require Kiali master (KIALI_MC_VERSION=dev). Try:" >&2; \
 		echo "  KIALI_SRC=~/dev/kiali_sources/kiali make redeploy-kiali-multicluster-dev" >&2; \
 		exit 1; \
 	fi; \
