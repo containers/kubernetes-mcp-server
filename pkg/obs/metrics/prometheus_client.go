@@ -1,4 +1,4 @@
-package toolset_tools
+package metrics
 
 import (
 	"fmt"
@@ -9,7 +9,6 @@ import (
 	promapi "github.com/prometheus/client_golang/api"
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
-	"github.com/rhobs/obs-mcp/pkg/metrics"
 	"github.com/rhobs/obs-mcp/pkg/metrics/alertmanager"
 	"github.com/rhobs/obs-mcp/pkg/metrics/prometheus"
 )
@@ -18,19 +17,30 @@ const (
 	defaultPrometheusURL = "http://localhost:9090"
 )
 
+type contextKey string
+
+const (
+	testPromClientKey contextKey = "testPromClient"
+	testAMClientKey   contextKey = "testAMClient"
+)
+
 // getConfig retrieves the obs-mcp toolset configuration from params.
-func getConfig(params api.ToolHandlerParams) *metrics.Config {
-	if cfg, ok := params.GetToolsetConfig(metrics.ToolsetName); ok {
-		if obsCfg, ok := cfg.(*metrics.Config); ok {
+func getConfig(params api.ToolHandlerParams) *Config {
+	if cfg, ok := params.GetToolsetConfig(ToolsetName); ok {
+		if obsCfg, ok := cfg.(*Config); ok {
 			return obsCfg
 		}
 	}
 	// Return default config if not found
-	return &metrics.Config{}
+	return &Config{}
 }
 
 // getPromClient creates a Prometheus client using the toolset configuration.
 func getPromClient(params api.ToolHandlerParams) (prometheus.Loader, error) {
+	if client, ok := params.Value(testPromClientKey).(prometheus.Loader); ok {
+		return client, nil
+	}
+
 	cfg := getConfig(params)
 
 	// Get metrics backend URL from config, fallback to default
@@ -77,6 +87,10 @@ func buildAPIConfig(params api.ToolHandlerParams, prometheusURL string, insecure
 
 // getAlertmanagerClient creates an Alertmanager client using the toolset configuration.
 func getAlertmanagerClient(params api.ToolHandlerParams) (alertmanager.Loader, error) {
+	if client, ok := params.Value(testAMClientKey).(alertmanager.Loader); ok {
+		return client, nil
+	}
+
 	cfg := getConfig(params)
 
 	alertmanagerURL := cfg.AlertmanagerURL
