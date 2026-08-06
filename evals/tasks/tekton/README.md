@@ -42,7 +42,7 @@ All tasks use the `tekton-eval` namespace and require Tekton Pipelines to be ins
   - **Prompt:** *Cancel the Tekton PipelineRun named cancel-me in the tekton-eval namespace.*
   - **Tests:** `tekton_pipelinerun_lifecycle` tool with `action=cancel`
 
-- **[hard] troubleshoot-pipelinerun** – Gather PipelineRun status, TaskRuns, logs, events, Pipeline-as-Code Repository, and TektonConfig context for diagnosis
+- **[hard] troubleshoot-pipelinerun** – Gather PipelineRun status, its Pipeline definition, TaskRuns, failed or errored step logs, warning events, Pipeline-as-Code Repository, and TektonConfig context for diagnosis
   - **Prompt:** *The Tekton PipelineRun named failed-run in the tekton-eval namespace is failing. Diagnose the likely root cause, include any Pipeline-as-Code Repository and TektonConfig context that may be relevant, and recommend the next action.*
   - **Tests:** `pipeline-troubleshoot` prompt and PAC/TektonConfig visibility
 

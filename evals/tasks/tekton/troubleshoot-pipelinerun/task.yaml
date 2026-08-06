@@ -66,19 +66,30 @@ spec:
           ensure_crd tektonconfigs.operator.tekton.dev operator.tekton.dev v1alpha1 tektonconfigs tektonconfig TektonConfig Cluster
     - k8s.create:
         apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: broken-pipeline
+          namespace: tekton-eval
+        spec:
+          tasks:
+            - name: missing-task-stage
+              taskRef:
+                name: missing-task
+    - k8s.create:
+        apiVersion: tekton.dev/v1
         kind: PipelineRun
         metadata:
           name: failed-run
           namespace: tekton-eval
         spec:
           pipelineRef:
-            name: missing-pipeline
+            name: broken-pipeline
         status:
           conditions:
             - type: Succeeded
               status: "False"
               reason: Failed
-              message: "Pipeline missing-pipeline was not found"
+              message: "Task missing-task was not found"
     - k8s.create:
         apiVersion: tekton.dev/v1
         kind: TaskRun
@@ -114,9 +125,23 @@ spec:
 
   verify:
     - llmJudge:
+        contains: "PipelineRun Status"
+    - llmJudge:
+        contains: "TaskRun Status"
+    - llmJudge:
+        contains: "Failed Step Logs"
+    - llmJudge:
+        contains: "Events"
+    - llmJudge:
+        contains: "Troubleshooting Analysis"
+    - llmJudge:
+        contains: "Fix Suggestions"
+    - llmJudge:
         contains: "failed-run"
     - llmJudge:
         contains: "missing"
+    - llmJudge:
+        contains: "missing-task-stage"
     - llmJudge:
         contains: "eval-repo"
     - llmJudge:
@@ -140,6 +165,13 @@ spec:
         kind: PipelineRun
         metadata:
           name: failed-run
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: broken-pipeline
           namespace: tekton-eval
         ignoreNotFound: true
     - k8s.delete:

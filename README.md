@@ -791,7 +791,9 @@ Examples:
 - **tekton_pipelinerun_logs** - Get logs for all TaskRuns owned by a Tekton PipelineRun. Use this to inspect PipelineRun execution output without locating pods manually.
   - `name` (`string`) **(required)** - Name of the PipelineRun to get logs from
   - `namespace` (`string`) - Namespace of the PipelineRun
+  - `step` (`string`) - Step name to include within matching TaskRuns
   - `tail` (`integer`) - Number of lines to retrieve from the end of each container log (default: 100)
+  - `task` (`string`) - Pipeline task name to filter by (tekton.dev/pipelineTask label)
 
 - **tekton_task_start** - Start a Tekton Task by creating a TaskRun that references it
   - `name` (`string`) **(required)** - Name of the Task to start
@@ -805,6 +807,7 @@ Examples:
 - **tekton_taskrun_logs** - Get the logs from a Tekton TaskRun by resolving its underlying pod
   - `name` (`string`) **(required)** - Name of the TaskRun to get logs from
   - `namespace` (`string`) - Namespace of the TaskRun
+  - `step` (`string`) - Step name to include. If omitted, logs from all steps and sidecars are returned
   - `tail` (`integer`) - Number of lines to retrieve from the end of the logs (Optional, default: 100)
 
 </details>
@@ -886,7 +889,7 @@ Examples:
 
 <summary>tekton</summary>
 
-- **pipeline-troubleshoot** - Gather PipelineRun status, TaskRuns, logs, events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting
+- **pipeline-troubleshoot** - Gather PipelineRun status, its Pipeline definition, TaskRuns, failed or errored step logs, warning events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting
   - `namespace` (`string`) **(required)** - Namespace of the PipelineRun to troubleshoot
   - `name` (`string`) **(required)** - Name of the PipelineRun to troubleshoot
 

@@ -89,11 +89,19 @@
           "description": "Namespace of the PipelineRun",
           "type": "string"
         },
+        "step": {
+          "description": "Step name to include within matching TaskRuns",
+          "type": "string"
+        },
         "tail": {
           "default": 100,
           "description": "Number of lines to retrieve from the end of each container log (default: 100)",
           "minimum": 0,
           "type": "integer"
+        },
+        "task": {
+          "description": "Pipeline task name to filter by (tekton.dev/pipelineTask label)",
+          "type": "string"
         }
       },
       "required": [
@@ -155,6 +163,10 @@
         },
         "namespace": {
           "description": "Namespace of the TaskRun",
+          "type": "string"
+        },
+        "step": {
+          "description": "Step name to include. If omitted, logs from all steps and sidecars are returned",
           "type": "string"
         },
         "tail": {
