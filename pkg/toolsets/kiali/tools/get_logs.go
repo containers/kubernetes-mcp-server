@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetLogs() []api.ServerTool {
+func InitGetLogs(p api.FilteringProvider) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_logs"
 	// Workload logs tool
@@ -71,7 +71,11 @@ func InitGetLogs() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: workloadLogsHandler,
+		},
+		Handler: workloadLogsHandler,
+		TargetCompatibilityFilters: []func() bool{
+			kialiclient.HasKiali(p),
+		},
 	})
 
 	return ret

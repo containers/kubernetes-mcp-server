@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitListOrGetResources() []api.ServerTool {
+func InitListOrGetResources(p api.FilteringProvider) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_resource_details"
 	ret = append(ret, api.ServerTool{
@@ -51,7 +51,11 @@ func InitListOrGetResources() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listOrGetResourcesHandler,
+		},
+		Handler: listOrGetResourcesHandler,
+		TargetCompatibilityFilters: []func() bool{
+			kialiclient.HasKiali(p),
+		},
 	})
 
 	return ret

@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetMetrics() []api.ServerTool {
+func InitGetMetrics(p api.FilteringProvider) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_metrics"
 	ret = append(ret, api.ServerTool{
@@ -82,7 +82,11 @@ func InitGetMetrics() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: resourceMetricsHandler,
+		},
+		Handler: resourceMetricsHandler,
+		TargetCompatibilityFilters: []func() bool{
+			kialiclient.HasKiali(p),
+		},
 	})
 
 	return ret
