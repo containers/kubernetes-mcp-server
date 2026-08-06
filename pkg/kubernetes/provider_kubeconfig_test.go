@@ -27,7 +27,11 @@ func (s *ProviderKubeconfigTestSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
 	// Default discovery simulates a vanilla (non-OpenShift) cluster.
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
-	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: s.mockServer.KubeconfigFile(s.T())})
+	cfg := test.Must(config.ReadToml([]byte(`
+		kubeconfig = "` + s.mockServer.KubeconfigFile(s.T()) + `"
+		experimental_enable_target_compatibility_tool_filters = true
+	`)))
+	provider, err := NewProvider(s.T().Context(), cfg)
 	s.Require().NoError(err, "Expected no error creating provider with kubeconfig")
 	s.provider = provider
 }

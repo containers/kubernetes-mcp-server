@@ -12,20 +12,27 @@ import (
 // ProviderGVKFilter provides GVK-based filtering capabilities for providers.
 // It can be embedded in provider implementations to add AnyTargetHasGVKs functionality.
 type ProviderGVKFilter struct {
-	managerProvider ManagerProvider
+	managerProvider  ManagerProvider
+	filteringEnabled func() bool
 }
 
 // NewProviderGVKFilter creates a new ProviderGVKFilter that wraps a ManagerProvider.
-func NewProviderGVKFilter(mp ManagerProvider) *ProviderGVKFilter {
+// The filteringEnabled function controls whether filtering is active; when it returns
+// false, AnyTargetHasGVKs unconditionally returns true so that all tools remain visible.
+func NewProviderGVKFilter(mp ManagerProvider, filteringEnabled func() bool) *ProviderGVKFilter {
 	return &ProviderGVKFilter{
-		managerProvider: mp,
+		managerProvider:  mp,
+		filteringEnabled: filteringEnabled,
 	}
 }
 
 // AnyTargetHasGVKs reports whether every GVK in gvks is available on at least one target
-// exposed by this provider. Returns true if an error occurs during discovery to avoid
-// excluding tools due to transient issues.
+// exposed by this provider. Returns true when filtering is disabled or if an error occurs
+// during discovery to avoid excluding tools due to transient issues.
 func (f *ProviderGVKFilter) AnyTargetHasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
+	if !f.filteringEnabled() {
+		return true
+	}
 	if len(gvks) == 0 {
 		return true
 	}
