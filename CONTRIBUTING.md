@@ -55,7 +55,7 @@ The `build` target runs `clean`, `tidy`, `format`, and `lint` before compiling. 
 make test
 ```
 
-The test suite uses `setup-envtest` from `sigs.k8s.io/controller-runtime`, which provides a lightweight Kubernetes API server and etcd binary -- no real cluster is required. The first run downloads the `envtest` environment, so network access is needed.
+The test suite uses `setup-envtest` from `sigs.k8s.io/controller-runtime`, which provides a lightweight Kubernetes API server and etcd binary — no real cluster is required. The first run downloads the `envtest` environment, so network access is needed.
 
 When writing tests:
 
@@ -88,7 +88,7 @@ No Pull Request (PR) is too small! Typos, additional comments in the code, new t
 
 All PRs should be submitted against the `main` branch. Maintainers will take care of backporting if needed.
 
-While bug fixes can first be identified via an issue, that is not required. It's ok to just open up a PR with the fix, but make sure you include the same information you would have included in an issue, like how to reproduce it.
+While bug fixes can first be identified via an issue, that is not required. It's OK to just open a PR with the fix, but make sure you include the same information you would have included in an issue, like how to reproduce it.
 
 For larger new features, please open an issue or discussion first so the approach can be agreed upon before you invest significant time in the implementation. PRs for new features should include some background on what use cases the new code is trying to address. When possible and when it makes sense, try to break up larger PRs into smaller ones -- it's easier to review smaller code changes. But only if those smaller ones make sense as stand-alone PRs.
 
