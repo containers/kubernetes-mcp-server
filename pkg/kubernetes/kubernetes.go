@@ -28,6 +28,7 @@ type HeaderKey string
 const (
 	CustomAuthorizationHeader = HeaderKey("kubernetes-authorization")
 	OAuthAuthorizationHeader  = HeaderKey("Authorization")
+	OAuthScopesKey            = HeaderKey("oauth-scopes")
 	UserAgentHeader           = HeaderKey("User-Agent")
 
 	CustomUserAgent         = "kubernetes-mcp-server/bearer-token-auth"
