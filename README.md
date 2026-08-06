@@ -562,9 +562,10 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
 
 - **vm_lifecycle** - Manage KubeVirt VirtualMachine lifecycle: start, stop, or restart a VM
-  - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)
+  - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (sets runStrategy from run_policy), 'stop' (sets runStrategy to Halted), or 'restart' (stops then starts; see run_policy)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+  - `run_policy` (`string`) - The run policy for 'start' and 'restart' (ignored for 'stop'): 'HighAvailability' (Always), 'RestartOnFailure' (RerunOnFailure), or 'Once' (Once). Defaults to 'HighAvailability'.
 
 - **vm_troubleshoot** - Diagnose KubeVirt VirtualMachine issues with automated root-cause detection. Collects VM status, VMI status, volumes, DataVolume/PVC state, cloud-init configuration, pod state, logs, and events, then runs heuristic checks to identify specific problems and suggest fixes. Returns a 'Detected Issues' section with CRITICAL/WARNING findings and actionable remediation steps, followed by raw diagnostic data. Use this tool FIRST whenever a user asks why a VM is not starting, stuck in Provisioning, crashlooping, failing to migrate, or exhibiting unexpected behavior. Automatically detects: missing StorageClasses, invalid PVC specs, dangerous cloud-init commands (shutdown/halt), nodeSelector migration blockers, failed migrations, and pod crashloops. If the user asks to fix or remediate the issue, use the Suggested Fixes from the report with vm_lifecycle (restart) or resources_create_or_update.
   - `name` (`string`) **(required)** - The name of the VirtualMachine to troubleshoot
