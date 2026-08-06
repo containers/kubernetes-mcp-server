@@ -693,6 +693,10 @@ func (m *mockResourceToolset) GetResourceTemplates() []api.ServerResourceTemplat
 	return m.resourceTemplates
 }
 
+func (m *mockResourceToolset) GetAllowedAPIGroups() []string {
+	return nil
+}
+
 func TestResourceSuite(t *testing.T) {
 	suite.Run(t, new(ResourceSuite))
 }

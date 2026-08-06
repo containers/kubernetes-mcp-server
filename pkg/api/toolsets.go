@@ -56,6 +56,11 @@ type Toolset interface {
 	// GetResourceTemplates returns the resource templates provided by this toolset.
 	// Returns nil if the toolset doesn't provide any resource templates.
 	GetResourceTemplates() []ServerResourceTemplate
+	// GetAllowedAPIGroups returns API group names that should bypass REST mapper
+	// validation in the AccessControlRoundTripper. This allows toolsets to declare
+	// virtual API groups (e.g. subresources.kubevirt.io) that are not present in
+	// standard API discovery but are required for the toolset's functionality.
+	GetAllowedAPIGroups() []string
 }
 
 type ToolCallRequest interface {

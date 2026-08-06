@@ -50,6 +50,10 @@ func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
 	return nil
 }
 
+func (t *Toolset) GetAllowedAPIGroups() []string {
+	return []string{"subresources.kubevirt.io"}
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

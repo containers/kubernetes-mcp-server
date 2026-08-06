@@ -19,6 +19,8 @@ const (
 	ActionStart   Action = "start"
 	ActionStop    Action = "stop"
 	ActionRestart Action = "restart"
+	ActionPause   Action = "pause"
+	ActionUnpause Action = "unpause"
 )
 
 func Tools(p api.FilteringProvider) []api.ServerTool {
@@ -26,7 +28,7 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 		{
 			Tool: api.Tool{
 				Name:        "vm_lifecycle",
-				Description: fmt.Sprintf("Manage %s VirtualMachine lifecycle: start, stop, or restart a VM", defaults.ProductName()),
+				Description: fmt.Sprintf("Manage %s VirtualMachine lifecycle: start, stop, restart, pause, or unpause a VM", defaults.ProductName()),
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
@@ -40,8 +42,8 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 						},
 						"action": {
 							Type:        "string",
-							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart)},
-							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart), string(ActionPause), string(ActionUnpause)},
+							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), 'restart' (stops then starts the VM), 'pause' (suspends the running VMI in-place), or 'unpause' (resumes a paused VMI)",
 						},
 					},
 					Required: []string{"namespace", "name", "action"},
@@ -116,8 +118,22 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 		message = "# VirtualMachine restarted successfully\n"
 
+	case ActionPause:
+		vm, err = kubevirt.PauseVM(params.Context, dynamicClient, params.RESTConfig(), namespace, name)
+		if err != nil {
+			return api.NewToolCallResult("", err), nil
+		}
+		message = "# VirtualMachine paused successfully\n"
+
+	case ActionUnpause:
+		vm, err = kubevirt.UnpauseVM(params.Context, dynamicClient, params.RESTConfig(), namespace, name)
+		if err != nil {
+			return api.NewToolCallResult("", err), nil
+		}
+		message = "# VirtualMachine unpaused successfully\n"
+
 	default:
-		return api.NewToolCallResult("", fmt.Errorf("invalid action '%s': must be one of 'start', 'stop', 'restart'", action)), nil
+		return api.NewToolCallResult("", fmt.Errorf("invalid action '%s': must be one of 'start', 'stop', 'restart', 'pause', 'unpause'", action)), nil
 	}
 
 	// Format the output

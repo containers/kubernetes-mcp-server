@@ -63,6 +63,13 @@ type DeniedResourcesProvider interface {
 	GetDeniedResources() []GroupVersionKind
 }
 
+// AllowedAPIGroupsProvider provides a list of API groups that should bypass
+// REST mapper validation. These are virtual API groups declared by enabled
+// toolsets that are not present in the API server's standard discovery.
+type AllowedAPIGroupsProvider interface {
+	GetAllowedAPIGroups() []string
+}
+
 type StsConfigProvider interface {
 	GetStsClientId() string
 	GetStsClientSecret() string
@@ -114,6 +121,7 @@ type BaseConfig interface {
 	ClusterProvider
 	ConfirmationRulesProvider
 	DeniedResourcesProvider
+	AllowedAPIGroupsProvider
 	ExtendedConfigProvider
 	StsConfigProvider
 	CertificateAuthorityProvider
