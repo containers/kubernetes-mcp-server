@@ -28,16 +28,18 @@ const (
 	KindTempoMonolithic KindType = "TempoMonolithic"
 )
 
-func ListInstances(ctx context.Context, k8sClient dynamic.Interface, useRoute bool) ([]TempoInstance, error) {
+// ListInstances lists all Tempo CRs and resolves their base URLs.
+// resolver is used for cluster-based discovery (e.g. OpenShift Routes); nil falls back to service DNS.
+func ListInstances(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver) ([]TempoInstance, error) {
 	tempos := []TempoInstance{}
 
-	tempoStacks, err := listTempoStacks(ctx, k8sClient, useRoute)
+	tempoStacks, err := listTempoStacks(ctx, k8sClient, resolver)
 	if err != nil {
 		return nil, err
 	}
 	tempos = append(tempos, tempoStacks...)
 
-	tempoMonolithics, err := listTempoMonolithics(ctx, k8sClient, useRoute)
+	tempoMonolithics, err := listTempoMonolithics(ctx, k8sClient, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +48,7 @@ func ListInstances(ctx context.Context, k8sClient dynamic.Interface, useRoute bo
 	return tempos, nil
 }
 
-func listTempoStacks(ctx context.Context, k8sClient dynamic.Interface, useRoute bool) ([]TempoInstance, error) {
+func listTempoStacks(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver) ([]TempoInstance, error) {
 	list, err := k8sClient.Resource(tempoStackGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list TempoStacks: %w", err)
@@ -73,7 +75,7 @@ func listTempoStacks(ctx context.Context, k8sClient dynamic.Interface, useRoute 
 			serviceName = DNSName(fmt.Sprintf("tempo-%s-query-frontend", tempo.Name))
 		}
 
-		baseURL, err := resolveBaseURL(ctx, k8sClient, useRoute, tempo.Namespace, serviceName, multitenancy)
+		baseURL, err := resolveBaseURL(ctx, k8sClient, resolver, tempo.Namespace, serviceName, multitenancy)
 		if err != nil {
 			slog.Warn("Failed to resolve base URL for TempoStack, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
 			continue
@@ -95,7 +97,7 @@ func listTempoStacks(ctx context.Context, k8sClient dynamic.Interface, useRoute 
 	return instances, nil
 }
 
-func listTempoMonolithics(ctx context.Context, k8sClient dynamic.Interface, useRoute bool) ([]TempoInstance, error) {
+func listTempoMonolithics(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver) ([]TempoInstance, error) {
 	list, err := k8sClient.Resource(tempoMonolithicGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list TempoMonolithics: %w", err)
@@ -122,7 +124,7 @@ func listTempoMonolithics(ctx context.Context, k8sClient dynamic.Interface, useR
 			serviceName = DNSName(fmt.Sprintf("tempo-%s", tempo.Name))
 		}
 
-		baseURL, err := resolveBaseURL(ctx, k8sClient, useRoute, tempo.Namespace, serviceName, multitenancy)
+		baseURL, err := resolveBaseURL(ctx, k8sClient, resolver, tempo.Namespace, serviceName, multitenancy)
 		if err != nil {
 			slog.Warn("Failed to resolve base URL for TempoMonolithic, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
 			continue
@@ -153,33 +155,18 @@ func getStatusFromConditions(conditions []metav1.Condition) string {
 	return ""
 }
 
-func resolveBaseURL(ctx context.Context, k8sClient dynamic.Interface, useRoute bool, namespace, serviceName string, multitenancy bool) (string, error) {
-	if useRoute {
-		routeHost, err := resolveRoute(ctx, k8sClient, namespace, serviceName)
-		if err != nil {
-			return "", err
+func resolveBaseURL(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver, namespace, serviceName string, multitenancy bool) (string, error) {
+	if resolver != nil {
+		endpoint, err := resolver.ResolveEndpoint(ctx, k8sClient, namespace, serviceName)
+		if err == nil {
+			return endpoint, nil
 		}
-		return fmt.Sprintf("https://%s", routeHost), nil
+		slog.Debug("Route not found, falling back to service DNS", "namespace", namespace, "service", serviceName, "error", err)
 	}
 	if multitenancy {
 		return fmt.Sprintf("https://%s.%s.svc:8080", serviceName, namespace), nil
 	}
 	return fmt.Sprintf("http://%s.%s.svc:3200", serviceName, namespace), nil
-}
-
-func resolveRoute(ctx context.Context, k8sClient dynamic.Interface, namespace, routeName string) (string, error) {
-	unstructured, err := k8sClient.Resource(routeGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("failed to get route %s/%s: %w", namespace, routeName, err)
-	}
-
-	var route Route
-	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unstructured.Object, &route)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse route %s/%s: %w", namespace, routeName, err)
-	}
-
-	return route.Spec.Host, nil
 }
 
 func (t *TempoInstance) GetURL(tenant string) string {

@@ -44,7 +44,7 @@ Always print the output of this tool in a table.`,
 
 func listInstancesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	cfg := getToolsetConfig(params)
-	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
+	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.Resolver)
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}

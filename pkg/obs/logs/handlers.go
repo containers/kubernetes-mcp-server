@@ -139,7 +139,7 @@ func queryRangeHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error
 
 func listInstancesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	cfg := GetConfig(params)
-	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
+	instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.Resolver)
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
@@ -247,7 +247,7 @@ func resolveLokiURL(params api.ToolHandlerParams) (string, error) {
 			return "", err
 		}
 
-		instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.UseRoute)
+		instances, err := discovery.ListInstances(params.Context, params.DynamicClient(), cfg.Resolver)
 		if err != nil {
 			return "", err
 		}
