@@ -29,8 +29,8 @@ func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	return slices.Concat(
 		initEvents(),
 		initNamespaces(p),
-		initNodes(),
-		initPods(),
+		initNodes(p),
+		initPods(p),
 		initResources(p),
 	)
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
-func initNodes() []api.ServerTool {
+func initNodes(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "nodes_log",
@@ -92,7 +92,11 @@ func initNodes() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: nodesTop},
+		}, Handler: nodesTop,
+			TargetCompatibilityFilters: []func() bool{
+				kubernetes.HasNodeMetrics(p),
+			},
+		},
 	}
 }
 
