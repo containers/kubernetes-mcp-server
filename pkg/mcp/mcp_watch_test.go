@@ -313,6 +313,71 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 	})
 }
 
+func (s *WatchClusterStateSuite) TestDetectsMetricsServerClusterStateChange() {
+	s.Run("with target compatibility filtering enabled", func() {
+		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.InitMcpClient()
+
+		s.Run("metrics tools are not available initially", func() {
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			for _, tool := range tools.Tools {
+				s.Require().NotEqual("pods_top", tool.Name, "expected pods_top to not be available initially")
+				s.Require().NotEqual("nodes_top", tool.Name, "expected nodes_top to not be available initially")
+			}
+		})
+
+		s.Run("metrics tools are added after metrics API becomes available", func() {
+			capture := s.StartCapturingNotifications()
+
+			s.handler.AddAPIResourceList(metav1.APIResourceList{
+				GroupVersion: "metrics.k8s.io/v1beta1",
+				APIResources: []metav1.APIResource{
+					{Name: "nodes", Kind: "NodeMetrics", Namespaced: false, Verbs: metav1.Verbs{"get", "list"}},
+					{Name: "pods", Kind: "PodMetrics", Namespaced: true, Verbs: metav1.Verbs{"get", "list"}},
+				},
+			})
+
+			capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+			time.Sleep(serverSettleDelay)
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+
+			found := map[string]bool{}
+			for _, tool := range tools.Tools {
+				if tool.Name == "pods_top" || tool.Name == "nodes_top" {
+					found[tool.Name] = true
+				}
+			}
+			s.True(found["pods_top"], "expected pods_top to be available after metrics API is added")
+			s.True(found["nodes_top"], "expected nodes_top to be available after metrics API is added")
+		})
+
+		s.Run("metrics tools are removed after metrics API becomes unavailable", func() {
+			capture := s.StartCapturingNotifications()
+
+			// Replace discovery with a handler that has no metrics API
+			s.mockServer.ResetHandlers()
+			s.handler = test.NewDiscoveryClientHandler()
+			s.mockServer.Handle(s.handler)
+
+			capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+			time.Sleep(serverSettleDelay)
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			for _, tool := range tools.Tools {
+				s.Require().NotEqual("pods_top", tool.Name, "expected pods_top to be removed when metrics API is gone")
+				s.Require().NotEqual("nodes_top", tool.Name, "expected nodes_top to be removed when metrics API is gone")
+			}
+		})
+	})
+}
+
 func TestWatchClusterState(t *testing.T) {
 	suite.Run(t, new(WatchClusterStateSuite))
 }
