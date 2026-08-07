@@ -75,6 +75,7 @@ func NewKubernetes(
 		return NewAccessControlRoundTripper(ctx, AccessControlRoundTripperConfig{
 			Delegate:                  original,
 			DeniedResourcesProvider:   baseConfig,
+			AllowedAPIGroupsProvider:  baseConfig,
 			RestMapperProvider:        func() meta.RESTMapper { return k.restMapper },
 			HostURL:                   k.restConfig.Host,
 			DiscoveryProvider:         func() discovery.DiscoveryInterface { return k.discoveryClient },
