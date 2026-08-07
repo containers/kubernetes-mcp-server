@@ -22,6 +22,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -123,6 +124,39 @@ func (s *ToolsetsSuite) TestDefaultToolsetsToolsWithFilteringEnabled() {
 				s.Require().NotEqual("projects_list", tool.Name, "Expected projects_list to not be present when filtering enabled on non-OpenShift cluster")
 			}
 		})
+		s.Run("metrics tools are not present without metrics API", func() {
+			for _, tool := range tools.Tools {
+				s.Require().NotEqual("pods_top", tool.Name, "Expected pods_top to not be present when filtering enabled without metrics API")
+				s.Require().NotEqual("nodes_top", tool.Name, "Expected nodes_top to not be present when filtering enabled without metrics API")
+			}
+		})
+	})
+}
+
+func (s *ToolsetsSuite) TestMetricsToolsPresentWithFilteringEnabled() {
+	s.Run("pods_top and nodes_top are present when metrics API is available", func() {
+		s.ResetHandlers()
+		s.Handle(test.NewDiscoveryClientHandler(metav1.APIResourceList{
+			GroupVersion: "metrics.k8s.io/v1beta1",
+			APIResources: []metav1.APIResource{
+				{Name: "nodes", Kind: "NodeMetrics", Namespaced: false, Verbs: metav1.Verbs{"get", "list"}},
+				{Name: "pods", Kind: "PodMetrics", Namespaced: true, Verbs: metav1.Verbs{"get", "list"}},
+			},
+		}))
+		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Require().NoError(err, "Expected no error from ListTools")
+		s.Require().NotNil(tools, "Expected tools from ListTools")
+
+		found := map[string]bool{}
+		for _, tool := range tools.Tools {
+			if tool.Name == "pods_top" || tool.Name == "nodes_top" {
+				found[tool.Name] = true
+			}
+		}
+		s.True(found["pods_top"], "Expected pods_top to be present when metrics API is available")
+		s.True(found["nodes_top"], "Expected nodes_top to be present when metrics API is available")
 	})
 }
 
