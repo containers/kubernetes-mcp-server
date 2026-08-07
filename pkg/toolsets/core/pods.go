@@ -14,7 +14,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initPods() []api.ServerTool {
+func initPods(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "pods_list",
@@ -152,7 +152,11 @@ func initPods() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsTop},
+		}, Handler: podsTop,
+			TargetCompatibilityFilters: []func() bool{
+				kubernetes.HasPodMetrics(p),
+			},
+		},
 		{Tool: api.Tool{
 			Name:        "pods_exec",
 			Description: "Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command",
