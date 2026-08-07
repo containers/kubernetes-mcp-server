@@ -245,6 +245,8 @@ func (m *MCPServerOptions) Complete(ctx context.Context, cmd *cobra.Command) err
 		klogutil.FromContext(ctx).Error(otelLogErr, "Failed to create OTel log provider, log export disabled")
 	}
 
+	m.StaticConfig.AllowedAPIGroups = collectAllowedAPIGroups(m.StaticConfig.Toolsets)
+
 	if m.StaticConfig.RequireOAuth && m.StaticConfig.Port == "" {
 		// RequireOAuth is not relevant flow for STDIO transport
 		m.StaticConfig.RequireOAuth = false
@@ -449,6 +451,8 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 				continue
 			}
 
+			newConfig.AllowedAPIGroups = collectAllowedAPIGroups(newConfig.Toolsets)
+
 			// Apply the new configuration to the MCP server first — if this fails,
 			// we skip the OAuth state and config state updates to avoid inconsistent state.
 			if err := mcpServer.ReloadConfiguration(ctx, newConfig); err != nil {
@@ -501,4 +505,25 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 		close(sigHupCh)
 		<-done // Wait for goroutine to finish
 	}
+}
+
+func collectAllowedAPIGroups(toolsetNames []string) []string {
+	seen := make(map[string]struct{})
+	var groups []string
+	for _, name := range toolsetNames {
+		ts := toolsets.ToolsetFromString(name)
+		if ts == nil {
+			continue
+		}
+		for _, group := range ts.GetAllowedAPIGroups() {
+			if group == "" {
+				continue
+			}
+			if _, exists := seen[group]; !exists {
+				seen[group] = struct{}{}
+				groups = append(groups, group)
+			}
+		}
+	}
+	return groups
 }

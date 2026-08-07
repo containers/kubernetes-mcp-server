@@ -38,7 +38,8 @@ type ToolOverride struct {
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
-	DeniedResources []api.GroupVersionKind `toml:"denied_resources"`
+	DeniedResources  []api.GroupVersionKind `toml:"denied_resources"`
+	AllowedAPIGroups []string               `toml:"-"`
 
 	LogLevel    int    `toml:"log_level,omitzero"`
 	LogFile     string `toml:"log_file,omitempty"`
@@ -506,6 +507,10 @@ func (c *StaticConfig) GetTLSCipherSuitesConfig() []string {
 
 func (c *StaticConfig) IsRequireOAuth() bool {
 	return c.RequireOAuth
+}
+
+func (c *StaticConfig) GetAllowedAPIGroups() []string {
+	return c.AllowedAPIGroups
 }
 
 // WithProviderStrategies sets the known cluster-provider strategies for

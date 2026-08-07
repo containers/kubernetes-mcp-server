@@ -75,6 +75,10 @@ func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
 	return nil
 }
 
+func (t *Toolset) GetAllowedAPIGroups() []string {
+	return nil
+}
+
 func init() {
 	toolsets.Register(&Toolset{})
 }

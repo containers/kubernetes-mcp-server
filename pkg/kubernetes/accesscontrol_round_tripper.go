@@ -21,17 +21,19 @@ import (
 // AccessControlRoundTripper intercepts HTTP requests to enforce access control
 // and optionally run validators before they reach the Kubernetes API.
 type AccessControlRoundTripper struct {
-	delegate                http.RoundTripper
-	deniedResourcesProvider api.DeniedResourcesProvider
-	restMapperProvider      func() meta.RESTMapper
-	apiPathPrefix           string
-	validators              []api.HTTPValidator
+	delegate                 http.RoundTripper
+	deniedResourcesProvider  api.DeniedResourcesProvider
+	allowedAPIGroupsProvider api.AllowedAPIGroupsProvider
+	restMapperProvider       func() meta.RESTMapper
+	apiPathPrefix            string
+	validators               []api.HTTPValidator
 }
 
 // AccessControlRoundTripperConfig configures the AccessControlRoundTripper.
 type AccessControlRoundTripperConfig struct {
 	Delegate                  http.RoundTripper
 	DeniedResourcesProvider   api.DeniedResourcesProvider
+	AllowedAPIGroupsProvider  api.AllowedAPIGroupsProvider
 	RestMapperProvider        func() meta.RESTMapper
 	HostURL                   string
 	DiscoveryProvider         func() discovery.DiscoveryInterface
@@ -55,10 +57,11 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 		}
 	}
 	rt := &AccessControlRoundTripper{
-		delegate:                cfg.Delegate,
-		deniedResourcesProvider: cfg.DeniedResourcesProvider,
-		restMapperProvider:      cfg.RestMapperProvider,
-		apiPathPrefix:           apiPathPrefix,
+		delegate:                 cfg.Delegate,
+		deniedResourcesProvider:  cfg.DeniedResourcesProvider,
+		allowedAPIGroupsProvider: cfg.AllowedAPIGroupsProvider,
+		restMapperProvider:       cfg.RestMapperProvider,
+		apiPathPrefix:            apiPathPrefix,
 	}
 
 	// Schema/RBAC validators run first so the user isn't prompted for
@@ -103,6 +106,9 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	gvk, err := restMapper.KindFor(gvr)
 	if err != nil {
 		if meta.IsNoMatchError(err) {
+			if rt.isAPIGroupAllowed(gvr.Group) {
+				return rt.delegate.RoundTrip(req)
+			}
 			return nil, &api.ValidationError{
 				Code:    api.ErrorCodeResourceNotFound,
 				Message: fmt.Sprintf("Resource %s does not exist in the cluster", api.FormatResourceName(&gvr)),
@@ -179,6 +185,20 @@ func (rt *AccessControlRoundTripper) isAllowed(
 	}
 
 	return true
+}
+
+// isAPIGroupAllowed checks whether the given API group has been explicitly
+// declared as allowed by an enabled toolset.
+func (rt *AccessControlRoundTripper) isAPIGroupAllowed(group string) bool {
+	if group == "" || rt.allowedAPIGroupsProvider == nil {
+		return false
+	}
+	for _, allowed := range rt.allowedAPIGroupsProvider.GetAllowedAPIGroups() {
+		if allowed == group {
+			return true
+		}
+	}
+	return false
 }
 
 func parseURLToGVR(path string) (gvr schema.GroupVersionResource, ok bool) {
