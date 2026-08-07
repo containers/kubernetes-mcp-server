@@ -234,7 +234,8 @@ func (c *Core) PodsRun(ctx context.Context, namespace, name, image string, port 
 }
 
 func (c *Core) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metrics.PodMetricsList, error) {
-	// TODO, maybe move to mcp Tools setup and omit in case metrics aren't available in the target cluster
+	// When experimental_enable_target_compatibility_tool_filters is enabled,
+	// TargetCompatibilityFilters also omit the pods_top tool if this API is absent.
 	if !c.supportsGroupVersion(metrics.GroupName + "/" + metricsv1beta1api.SchemeGroupVersion.Version) {
 		return nil, errors.New("metrics API is not available")
 	}
