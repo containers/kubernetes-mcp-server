@@ -245,6 +245,10 @@ nodeSelector: {}
 
 tolerations: []
 
+# -- Host aliases to inject into the pod's /etc/hosts file.
+# -- Useful for resolving hostnames that are unreachable via cluster DNS (e.g. sslip.io in Kind).
+hostAliases: []
+
 affinity: {}  
 
 # Path to the configuration file inside the container

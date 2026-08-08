@@ -12,23 +12,62 @@ keycloak-install:
 	@kubectl apply -f dev/config/keycloak/deployment.yaml
 	@echo "Applying Keycloak ingress (cert-manager will create TLS certificate)..."
 	@kubectl apply -f dev/config/keycloak/ingress.yaml
+	@echo "Waiting for cert-manager CA secret to be created..."
+	@for i in $$(seq 1 30); do \
+		if kubectl get secret selfsigned-ca-secret -n cert-manager >/dev/null 2>&1; then \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "ERROR: selfsigned-ca-secret not found after 30 attempts"; \
+			echo "  Check cert-manager status: kubectl get pods -n cert-manager"; \
+			echo "  Check ClusterIssuer: kubectl get clusterissuer"; \
+			exit 1; \
+		fi; \
+		echo "  Attempt $$i/30: waiting for selfsigned-ca-secret..."; \
+		sleep 2; \
+	done
 	@echo "Extracting cert-manager CA certificate..."
 	@mkdir -p _output/cert-manager-ca
-	@kubectl get secret selfsigned-ca-secret -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d > _output/cert-manager-ca/ca.crt
+	@kubectl get secret selfsigned-ca-secret -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d > _output/cert-manager-ca/ca.crt || \
+		{ echo "ERROR: failed to extract cert-manager CA certificate"; exit 1; }
 	@echo "✅ cert-manager CA certificate extracted to _output/cert-manager-ca/ca.crt (bind-mounted to API server)"
 	@echo "Restarting Kubernetes API server to pick up new CA..."
-	@docker exec kubernetes-mcp-server-control-plane pkill -f kube-apiserver || \
-		podman exec kubernetes-mcp-server-control-plane pkill -f kube-apiserver
+	@# Delete the static pod manifest and restore it so the kubelet restarts
+	@# the API server cleanly.  Do NOT pkill the process — on rootless podman
+	@# with pasta networking, killing a process breaks the host port mapping
+	@# permanently.
+	@$(CONTAINER_ENGINE) exec $(KIND_CLUSTER_NAME)-control-plane bash -c '\
+		MANIFEST=/etc/kubernetes/manifests/kube-apiserver.yaml; \
+		cp $$MANIFEST /tmp/kube-apiserver.yaml.bak; \
+		rm $$MANIFEST; \
+		sleep 2; \
+		cp /tmp/kube-apiserver.yaml.bak $$MANIFEST'
 	@echo "Waiting for API server to restart..."
-	@sleep 5
-	@echo "Waiting for API server to be ready..."
-	@for i in $$(seq 1 30); do \
+	@for i in $$(seq 1 60); do \
 		if kubectl get --raw /healthz >/dev/null 2>&1; then \
 			echo "✅ Kubernetes API server updated with cert-manager CA"; \
 			break; \
 		fi; \
+		if [ $$i -eq 60 ]; then \
+			echo "ERROR: API server did not restart within 120s"; \
+			exit 1; \
+		fi; \
 		sleep 2; \
 	done
+	@echo "Flushing conntrack and re-patching CNI portmap rules..."
+	@$(CONTAINER_ENGINE) exec $(KIND_CLUSTER_NAME)-control-plane bash -c '\
+		if nft list chain ip cni_hostport prerouting 2>/dev/null | grep -q "fib daddr type local jump hostports"; then \
+			echo "nft rules OK"; \
+		else \
+			HANDLE=$$(nft -a list chain ip cni_hostport prerouting 2>/dev/null | grep "jump hostports" | grep -v fib | sed "s/.*handle //"); \
+			if [ -n "$$HANDLE" ]; then \
+				nft delete rule ip cni_hostport prerouting handle $$HANDLE; \
+				nft add rule ip cni_hostport prerouting fib daddr type local jump hostports; \
+				echo "re-patched prerouting chain"; \
+			fi; \
+		fi; \
+		conntrack -F 2>/dev/null || true'
+	@echo "✅ Network state refreshed"
 	@echo "Waiting for Keycloak to be ready..."
 	@kubectl wait --for=condition=ready pod -l app=keycloak -n $(KEYCLOAK_NAMESPACE) --timeout=120s || true
 	@echo "Waiting for Keycloak HTTP endpoint to be available..."

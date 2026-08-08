@@ -24,7 +24,7 @@ jobs:
   e2e:
     name: Run E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,11 +37,28 @@ jobs:
       - name: Setup cluster and build e2e image
         run: make e2e-full-setup
 
+      - name: Build server binary
+        run: make build
+
+      - name: Install Keycloak
+        run: make keycloak-install
+
+      - name: Create secondary cluster
+        run: make kind-create-secondary-cluster
+
+      - name: Generate multicluster kubeconfig
+        run: make kind-multicluster-kubeconfig
+
       - name: Run e2e tests
         env:
           KUBECONFIG: ${{ github.workspace }}/_output/kubeconfig
+          KEYCLOAK_CA_CERT: ${{ github.workspace }}/_output/cert-manager-ca/ca.crt
+          SERVER_BINARY: ${{ github.workspace }}/kubernetes-mcp-server
+          MULTICLUSTER_KUBECONFIG: ${{ github.workspace }}/_output/multicluster-kubeconfig
         run: make e2e-test
 
       - name: Cleanup
         if: always()
-        run: make kind-delete-cluster
+        run: |
+          make kind-delete-secondary-cluster || true
+          make kind-delete-cluster

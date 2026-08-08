@@ -219,7 +219,8 @@ func (c *JWTClaims) ValidateOffline(audience string) error {
 func (c *JWTClaims) ValidateWithProvider(ctx context.Context, audience string, provider *oidc.Provider) error {
 	if provider != nil {
 		verifier := provider.Verifier(&oidc.Config{
-			ClientID: audience,
+			ClientID:          audience,
+			SkipClientIDCheck: audience == "",
 		})
 		_, err := verifier.Verify(ctx, c.Token)
 		if err != nil {
