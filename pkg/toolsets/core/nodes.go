@@ -30,11 +30,11 @@ func initNodes() []api.ServerTool {
 					},
 					"query": {
 						Type:        "string",
-						Description: `query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "/var/log/kubelet.log" or "/var/log/kube-proxy.log")`,
+						Description: `query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file relative to /var/log on the node (e.g., "/kubelet.log" or "/kube-proxy.log")`,
 					},
 					"tailLines": {
 						Type:        "integer",
-						Description: "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
+						Description: "Number of lines to retrieve from the end of service logs (Optional, 0 means all logs; ignored for file queries)",
 						Default:     api.ToRawMessage(100),
 						Minimum:     ptr.To(float64(0)),
 					},
