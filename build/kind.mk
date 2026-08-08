@@ -98,8 +98,18 @@ kind-create-secondary-cluster: kind kind-create-certs ## Create a secondary Kind
 	if $(KIND) get clusters 2>/dev/null | grep -q "^$(SECONDARY_CLUSTER_NAME)$$"; then \
 		echo "Kind cluster '$(SECONDARY_CLUSTER_NAME)' already exists, skipping creation"; \
 	else \
+		INOTIFY_INSTANCES=$$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo ""); \
+		if [ -n "$${INOTIFY_INSTANCES}" ] && [ "$${INOTIFY_INSTANCES}" -lt 512 ]; then \
+			echo "⚠️  Skipping secondary cluster: fs.inotify.max_user_instances=$${INOTIFY_INSTANCES} (need ≥512 for two Kind clusters)"; \
+			echo "   Fix with: sudo sysctl fs.inotify.max_user_instances=512"; \
+			exit 1; \
+		fi; \
 		echo "Creating secondary Kind cluster '$(SECONDARY_CLUSTER_NAME)'..."; \
 		$(KIND) create cluster --name $(SECONDARY_CLUSTER_NAME) --config dev/config/kind/cluster-secondary.yaml; \
+		if echo "$(CONTAINER_ENGINE)" | grep -q "podman"; then \
+			echo "Increasing podman PID limit for Kind node..."; \
+			$(CONTAINER_ENGINE) update --pids-limit 4096 $(SECONDARY_CLUSTER_NAME)-control-plane 2>/dev/null || true; \
+		fi; \
 		echo "Routing Keycloak traffic from secondary cluster to primary..."; \
 		PRIMARY_IP=$$($(CONTAINER_ENGINE) inspect $(KIND_CLUSTER_NAME)-control-plane -f '{{.NetworkSettings.Networks.kind.IPAddress}}' 2>/dev/null || echo ""); \
 		if [ -n "$${PRIMARY_IP}" ]; then \
@@ -117,9 +127,10 @@ kind-create-secondary-cluster: kind kind-create-certs ## Create a secondary Kind
 	echo "✅ Secondary kubeconfig exported to _output/kubeconfig-secondary"
 
 .PHONY: kind-multicluster-kubeconfig
-kind-multicluster-kubeconfig: ## Generate a merged kubeconfig with internal Docker IPs for multi-cluster testing
+kind-multicluster-kubeconfig: kubectl ## Generate a merged kubeconfig with internal Docker IPs for multi-cluster testing
 	@echo "Generating multi-cluster kubeconfig with internal IPs..."
-	@PRIMARY_IP=$$($(CONTAINER_ENGINE) inspect $(KIND_CLUSTER_NAME)-control-plane -f '{{.NetworkSettings.Networks.kind.IPAddress}}' 2>/dev/null || echo ""); \
+	@set -e; \
+	PRIMARY_IP=$$($(CONTAINER_ENGINE) inspect $(KIND_CLUSTER_NAME)-control-plane -f '{{.NetworkSettings.Networks.kind.IPAddress}}' 2>/dev/null || echo ""); \
 	SECONDARY_IP=$$($(CONTAINER_ENGINE) inspect $(SECONDARY_CLUSTER_NAME)-control-plane -f '{{.NetworkSettings.Networks.kind.IPAddress}}' 2>/dev/null || echo ""); \
 	if [ -z "$${PRIMARY_IP}" ] || [ -z "$${SECONDARY_IP}" ]; then \
 		echo "ERROR: could not determine cluster IPs (primary=$${PRIMARY_IP}, secondary=$${SECONDARY_IP})"; \

@@ -1,143 +1,89 @@
-"""Mock Entra ID (Azure AD) STS server for e2e tests.
+"""In-cluster mock Entra ID (Azure AD) STS fixture for e2e tests.
 
-Provides a lightweight HTTP server that mimics the Azure AD v2.0 OBO
-(On-Behalf-Of) token exchange flow.  Runs on the test host and is
-reachable from Kind pods via the Docker bridge gateway IP.
+Deploys a lightweight mock STS as a Kubernetes Deployment+Service inside
+the Kind cluster, eliminating host-networking dependencies.  Works
+identically on Docker and rootless podman.
 """
 
 from __future__ import annotations
 
-import base64
-import socket
+import json
+import os
 import subprocess
 import time
+import urllib.request
 import uuid
-import warnings
+from pathlib import Path
 
-import pytest
 import jwt
+import pytest
 import pytest_asyncio
-from aiohttp import web
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+
+from fixtures.kubectl_helpers import kill_proc, start_port_forward
+
+# ---------------------------------------------------------------------------
+# Static RSA private key (test-only, matches the key in entra-mock/server.py)
+# ---------------------------------------------------------------------------
+
+_PRIVATE_KEY_PEM = b"""-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDLfPD73zFrTmF6
+5DNS9jT0mNo+/oo0+2iRJ9yxW9IYVoDO5jNkf81PEaukoEZmBops95tspU3XHM1s
+djDjAwYkC/bEl2s9GBVNJ8QRdh1glLXyrs6xXJr7dEtQ+RWH+o8GeaV/2UmEZBD8
+tkbxLwoLgxQgm3cTeFjF9wNkTayC3LDgWPxZbANPl6QOHybINctS+4dLL+mZzSpg
+MvnQJYY5PQg8KZORYUSvOeO5ICSByLU/T5WMo31RsuwPOwO51hOfsdPBkfp/K7Wm
+eOUJYL7ASvpQgm1lQ2xz8iv5yTp8gvj/B8pJHxhw6aTM+TeMuC3o5TWNdW6+pKGP
++0Bj74SHAgMBAAECggEASUmM83HttxOKOTwCHiGNbgC1LdX4Cd/4R7s/GWOUFe7l
+wl6XaN08oPsgwhB1el5lsZw2Dpm0oMJ/W85vifs3VXk3nZNZbK4FUf39+Dn9l6DH
+rQl3aNqM+P5n99hWAFzl8TOTvymPeE6f7ZxqjYffCslhUOMdLlZ8RoRR5OiytohI
+BhysqWclbrZduWyq53O/jXzI8fnA0Z5nFbX2U1U2k1S9utR00OAqSb/940v3GHy5
+q3NDc7YfeXqyb5Q0ccmHh8gP0OEGBlBfycaCyw0zpe3WFRE3ZfJouR9dDk6dh04f
+zHBK/MdSkugcV5bCJTBIpCXN9IGkaGSSzEbAoQEFLQKBgQDklVWiKE1OqM5kGwSp
+uc/75kRjZ8njFlboVI1hTOdXNxT8892Mr0qakCt/3bLG1llIpQ5ekwQK3+G1WNl8
+Y36EzZeCflKkDqcen8WopTrPR/R1Yz27MkbWq16ab1a+qHPGCGCBgkadG38SGRIi
+pZybXarVuAexRYy2amfuEAqeRQKBgQDj5Q32Rg30vyBb4qgrcJ8ZFOoh9zpfhXiw
+0BupzDlla+v1GLFJnpbvxjb+1JGdKAdlAjD1N4vhDgzCI2QdefiOP3iqF0DCbvOp
+QwhIayeXucmTysfdvPFJjDUe9T6SY3pRJZUbgWFJmPe5QfBWBvk8f8JWOI2iHpGZ
++mMCgUFaWwKBgBJ5o3c8zKrL6AqdSG4zb4ULooFqVR3+oz2Z/+daYORitlaPm1uQ
+m3YMqwdlstpxXrwJYzTvqwb5+3M94C42mHZBa7qHXUSXTpiiD0bHPA6e4TpPsCCe
+Oq2FIltXHmrAkMLz0GEHV4/BNi8PSbD1M8g29OTbP/vrBCmGRiour70FAoGBAJbj
+kdr9h0AFS+eKqs4YQz7YGi1jA8M7HC31nFtQXLBKRHCDaN7Vohofo0oWdFMZrcuz
+J7c0j+jy5H+l7yOVHn0QiVQVEUurKqlnOJS6XfyXhl/UY4DtGNUZgBJ/Tm6ebt5L
+g+4yO7f/EAYZIofTFjJ4ZLOxvhUZKE5K+kMuUZcBAoGBAIlktIff/2JkKO4DQK8G
+55dtOr2Z1OHsQo0Ej7pX8gj//RodYoRISYFIkddht/Ygxo/ulN63fWNJ+lKusV2z
+SNX2YhL0m0K/JX27Kj+8izu2ZOmxfegSsOpiAcsgN3n4g+HIyto/64rh1z1hoSRk
++zr3trSTSwFbdzs3l+xNUYVT
+-----END PRIVATE KEY-----
+"""
+
+# ---------------------------------------------------------------------------
+# Constants (must match entra-mock/deployment.yaml and entra-mock/server.py)
+# ---------------------------------------------------------------------------
+
+_NAMESPACE = "entra-mock"
+_SERVICE_URL = "http://entra-mock.entra-mock.svc.cluster.local:8080"
+_MANIFEST = str(
+    Path(__file__).resolve().parent.parent / "entra-mock" / "deployment.yaml"
+)
 
 
-def _generate_rsa_keypair():
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    private_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    public_key = private_key.public_key()
-    public_numbers = public_key.public_numbers()
+class EntraMockClient:
+    """Client for the in-cluster Entra mock STS.
 
-    def _b64_uint(n: int) -> str:
-        length = (n.bit_length() + 7) // 8
-        return base64.urlsafe_b64encode(n.to_bytes(length, "big")).rstrip(b"=").decode()
-
-    jwk = {
-        "kty": "RSA",
-        "use": "sig",
-        "alg": "RS256",
-        "kid": "test-kid",
-        "n": _b64_uint(public_numbers.n),
-        "e": _b64_uint(public_numbers.e),
-    }
-    return private_pem, jwk
-
-
-def _find_free_port() -> int:
-    # TOCTOU: port can be stolen before bind, but acceptable for a
-    # session-scoped fixture that runs once.
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
-
-
-def _kind_gateway_ip() -> str:
-    """Discover the Docker/podman bridge gateway IP so Kind pods can reach the host.
-
-    Prefers IPv4 because the mock STS binds to 0.0.0.0 (IPv4 only).
-    Uses JSON output (not Go templates) for reliable parsing across versions.
+    Provides the same API surface as the old host-based EntraMockSTS so
+    that test code requires zero changes.
     """
-    import json as _json
-
-    # Docker: IPAM.Config[].Gateway
-    for engine in ("docker", "podman"):
-        try:
-            raw = subprocess.check_output(
-                [engine, "network", "inspect", "kind"],
-                text=True, timeout=10,
-            ).strip()
-            data = _json.loads(raw)
-        except (subprocess.CalledProcessError, FileNotFoundError,
-                subprocess.TimeoutExpired, ValueError):
-            continue
-
-        gateways = []
-        if isinstance(data, list) and data:
-            item = data[0]
-            # Docker format: .IPAM.Config[].Gateway
-            for cfg in (item.get("IPAM", {}).get("Config") or []):
-                gw = (cfg.get("Gateway") or "").strip()
-                if gw:
-                    gateways.append(gw)
-            # Podman format: .subnets[].gateway
-            for sub in (item.get("subnets") or []):
-                gw = (sub.get("gateway") or "").strip()
-                if gw:
-                    gateways.append(gw)
-
-        # Prefer IPv4
-        for gw in gateways:
-            if ":" not in gw:
-                return gw
-        if gateways:
-            return gateways[0]
-
-    warnings.warn(
-        "Could not detect Kind gateway IP via docker/podman; "
-        "falling back to 172.18.0.1 — mock STS may be unreachable from pods",
-        stacklevel=2,
-    )
-    return "172.18.0.1"
-
-
-class EntraMockSTS:
-    """Mock Azure AD v2.0 STS server."""
 
     CLIENT_ID = "mock-entra-client"
     CLIENT_SECRET = "mock-entra-secret"
     VALID_SCOPE = "api://default/.default"
 
-    def __init__(self):
-        self._port = _find_free_port()
-        self._gateway_ip = _kind_gateway_ip()
-        self._private_pem, self._jwk = _generate_rsa_keypair()
-        self._app = web.Application()
-        self._runner: web.AppRunner | None = None
-        self.oauth_authz_server_enabled = True
-
-        self._app.router.add_get(
-            "/.well-known/oauth-authorization-server",
-            self._handle_oauth_authorization_server,
-        )
-        self._app.router.add_get(
-            "/.well-known/openid-configuration",
-            self._handle_openid_configuration,
-        )
-        self._app.router.add_get(
-            "/discovery/v2.0/keys", self._handle_jwks,
-        )
-        self._app.router.add_post(
-            "/oauth2/v2.0/token", self._handle_token,
-        )
+    def __init__(self, admin_url: str):
+        self._admin_url = admin_url
+        self._oauth_authz_server_enabled = True
 
     @property
     def issuer_url(self) -> str:
-        host = f"[{self._gateway_ip}]" if ":" in self._gateway_ip else self._gateway_ip
-        return f"http://{host}:{self._port}"
+        return _SERVICE_URL
 
     @property
     def client_id(self) -> str:
@@ -148,165 +94,127 @@ class EntraMockSTS:
         return self.CLIENT_SECRET
 
     def get_user_token(self) -> str:
-        """Generate a user token that the mock will accept as a subject token."""
+        """Generate a user token locally using the static keypair."""
         return jwt.encode(
             {
                 "sub": "test-user",
                 "aud": self.CLIENT_ID,
-                "iss": self.issuer_url,
+                "iss": _SERVICE_URL,
                 "exp": int(time.time()) + 3600,
                 "iat": int(time.time()),
                 "jti": str(uuid.uuid4()),
             },
-            self._private_pem,
+            _PRIVATE_KEY_PEM,
             algorithm="RS256",
             headers={"kid": "test-kid"},
         )
 
-    async def start(self):
-        self._runner = web.AppRunner(self._app)
-        await self._runner.setup()
-        try:
-            site = web.TCPSite(self._runner, "0.0.0.0", self._port)
-            await site.start()
-        except BaseException:
-            try:
-                await self._runner.cleanup()
-            except Exception:
-                pass
-            self._runner = None
-            raise
+    @property
+    def oauth_authz_server_enabled(self) -> bool:
+        return self._oauth_authz_server_enabled
 
-    async def stop(self):
-        if self._runner:
-            await self._runner.cleanup()
-
-    # -- Handlers --
-
-    def _discovery_response(self):
-        return {
-            "issuer": self.issuer_url,
-            "token_endpoint": f"{self.issuer_url}/oauth2/v2.0/token",
-            "jwks_uri": f"{self.issuer_url}/discovery/v2.0/keys",
-            "authorization_endpoint": f"{self.issuer_url}/oauth2/v2.0/authorize",
-            "response_types_supported": ["code", "token"],
-            "grant_types_supported": [
-                "authorization_code",
-                "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            ],
-            "subject_types_supported": ["pairwise"],
-            "id_token_signing_alg_values_supported": ["RS256"],
-            "token_endpoint_auth_methods_supported": [
-                "client_secret_post",
-                "client_secret_basic",
-                "private_key_jwt",
-            ],
-        }
-
-    async def _handle_oauth_authorization_server(self, request: web.Request):
-        if not self.oauth_authz_server_enabled:
-            return web.Response(status=404)
-        return web.json_response(self._discovery_response())
-
-    async def _handle_openid_configuration(self, request: web.Request):
-        return web.json_response(self._discovery_response())
-
-    async def _handle_jwks(self, request: web.Request):
-        return web.json_response({"keys": [self._jwk]})
-
-    def _extract_client_credentials(self, request: web.Request, data):
-        """Extract client_id/client_secret from params or Basic auth header."""
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Basic "):
-            try:
-                decoded = base64.b64decode(auth_header[6:]).decode()
-                cid, secret = decoded.split(":", 1)
-                return cid, secret
-            except Exception:
-                return None, None
-        return data.get("client_id", ""), data.get("client_secret", "")
-
-    async def _handle_token(self, request: web.Request):
-        data = await request.post()
-
-        client_id, client_secret = self._extract_client_credentials(request, data)
-        if client_id != self.CLIENT_ID or client_secret != self.CLIENT_SECRET:
-            return web.json_response(
-                {"error": "invalid_client"}, status=401,
-            )
-
-        grant_type = data.get("grant_type", "")
-        if grant_type != "urn:ietf:params:oauth:grant-type:jwt-bearer":
-            return web.json_response(
-                {"error": "unsupported_grant_type"}, status=400,
-            )
-
-        assertion = data.get("assertion", "")
-        if not assertion:
-            return web.json_response(
-                {"error": "invalid_request", "error_description": "missing assertion"},
-                status=400,
-            )
-
-        requested_token_use = data.get("requested_token_use", "")
-        if requested_token_use != "on_behalf_of":
-            return web.json_response(
-                {"error": "invalid_request", "error_description": "missing requested_token_use"},
-                status=400,
-            )
-
-        exchanged_token = jwt.encode(
-            {
-                "sub": "exchanged-user",
-                "aud": data.get("scope", self.VALID_SCOPE),
-                "iss": self.issuer_url,
-                "exp": int(time.time()) + 3600,
-                "iat": int(time.time()),
-                "jti": str(uuid.uuid4()),
-            },
-            self._private_pem,
-            algorithm="RS256",
-            headers={"kid": "test-kid"},
+    @oauth_authz_server_enabled.setter
+    def oauth_authz_server_enabled(self, value: bool):
+        self._oauth_authz_server_enabled = value
+        body = json.dumps({"oauth_authz_server_enabled": value}).encode()
+        req = urllib.request.Request(
+            f"{self._admin_url}/admin/config",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
-
-        return web.json_response({
-            "access_token": exchanged_token,
-            "token_type": "Bearer",
-            "expires_in": 3600,
-            "scope": data.get("scope", self.VALID_SCOPE),
-        })
+        urllib.request.urlopen(req, timeout=5)
 
 
-def _kind_node_can_reach(url: str, kind_node: str = "kubernetes-mcp-server-control-plane") -> bool:
-    """Check if the Kind node container can reach a URL."""
-    for engine in ("docker", "podman"):
+def _wait_for_mock(url: str, timeout: float = 30.0) -> None:
+    """Poll the mock's OIDC discovery endpoint until it responds."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         try:
-            result = subprocess.run(
-                [engine, "exec", kind_node, "curl", "-sf",
-                 "--connect-timeout", "2", "--max-time", "3", url],
-                capture_output=True, timeout=10,
+            urllib.request.urlopen(
+                f"{url}/.well-known/openid-configuration", timeout=2,
             )
-            return result.returncode == 0
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-    return False
+            return
+        except (urllib.error.URLError, OSError):
+            time.sleep(0.5)
+    raise TimeoutError(f"Entra mock at {url} not reachable within {timeout}s")
 
 
 @pytest_asyncio.fixture(loop_scope="session", scope="session")
-async def entra_mock():
-    """Session-scoped mock Entra ID STS server.
+async def entra_mock(kubectl_bin):
+    """Session-scoped in-cluster Entra mock STS.
 
-    Skips all dependent tests if the mock is unreachable from Kind pods
-    (e.g. rootless podman where the bridge gateway doesn't route to the host).
+    Deploys the mock as a Deployment+Service, starts a port-forward for
+    the admin API, and yields an EntraMockClient.
+
+    Skips all dependent tests if the mock image is not loaded into Kind
+    or the pod fails to start.
     """
-    server = EntraMockSTS()
-    await server.start()
-    discovery = f"{server.issuer_url}/.well-known/openid-configuration"
-    if not _kind_node_can_reach(discovery):
-        await server.stop()
+    result = subprocess.run(
+        [kubectl_bin, "apply", "-f", _MANIFEST],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
         pytest.skip(
-            f"Entra mock STS unreachable from Kind node at {discovery} "
-            "(common with rootless podman — bridge gateway doesn't route to host)"
+            f"Failed to deploy entra-mock (is the image loaded? "
+            f"run 'make e2e-image'): {result.stderr.strip()}"
         )
-    yield server
-    await server.stop()
+
+    try:
+        result = subprocess.run(
+            [kubectl_bin, "wait", "--for=condition=ready", "pod",
+             "-l", "app=entra-mock", "-n", _NAMESPACE,
+             "--timeout=60s"],
+            capture_output=True, text=True, timeout=90,
+        )
+        if result.returncode != 0:
+            _dump_and_skip(kubectl_bin, result.stderr)
+
+        admin_url, proc = start_port_forward(
+            _NAMESPACE, "entra-mock", kubectl_bin,
+        )
+        try:
+            _wait_for_mock(admin_url)
+            yield EntraMockClient(admin_url)
+        finally:
+            kill_proc(proc)
+            for attr in ("_stderr_file", "_stdout_file"):
+                fh = getattr(proc, attr, None)
+                if fh:
+                    try:
+                        fh.close()
+                    except Exception:
+                        pass
+    finally:
+        subprocess.run(
+            [kubectl_bin, "delete", "namespace", _NAMESPACE,
+             "--ignore-not-found", "--wait=false"],
+            capture_output=True, timeout=30,
+        )
+
+
+def _dump_and_skip(kubectl_bin: str, wait_stderr: str):
+    """Collect pod diagnostics and skip with a useful message."""
+    diag_parts = [f"kubectl wait failed: {wait_stderr.strip()}"]
+    for cmd_label, cmd in [
+        ("pods", [kubectl_bin, "get", "pods", "-n", _NAMESPACE, "-o", "wide"]),
+        ("events", [kubectl_bin, "get", "events", "-n", _NAMESPACE,
+                    "--sort-by=.lastTimestamp"]),
+        ("logs", [kubectl_bin, "logs", "-n", _NAMESPACE, "-l", "app=entra-mock",
+                  "--tail=20"]),
+    ]:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            diag_parts.append(f"--- {cmd_label} ---\n{r.stdout.strip()}")
+        except Exception:
+            pass
+
+    subprocess.run(
+        [kubectl_bin, "delete", "namespace", _NAMESPACE,
+         "--ignore-not-found", "--wait=false"],
+        capture_output=True, timeout=30,
+    )
+    pytest.skip(
+        "Entra mock pod not ready (is the image loaded? "
+        f"run 'make e2e-image'):\n" + "\n".join(diag_parts)
+    )

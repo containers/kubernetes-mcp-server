@@ -35,8 +35,10 @@ from mcp.client.streamable_http import streamable_http_client
 
 from fixtures.keycloak import keycloak  # noqa: F401 — re-export fixture
 from fixtures.entra_mock import entra_mock  # noqa: F401 — re-export fixture
-
-SERVER_PORT = 8080
+from fixtures.kubectl_helpers import (
+    kill_proc as _kill_proc,
+    start_port_forward as _start_port_forward,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -405,85 +407,6 @@ async def _helm_install(
         os.unlink(values_file)
 
 
-def _start_port_forward(
-    namespace: str, name: str, kubectl_bin: str,
-) -> tuple[str, subprocess.Popen]:
-    # Use ":SERVER_PORT" so kubectl picks a free port *and* binds it
-    # atomically, avoiding the TOCTOU race of finding a port then hoping it
-    # stays free until kubectl binds it.
-    #
-    # Both streams go to temp files rather than PIPEs: kubectl is long-lived
-    # and keeps writing to stdout ("Handling connection for <port>" on every
-    # forwarded connection), so an undrained PIPE would deadlock once the
-    # ~64 KB OS buffer fills.  A file never blocks the writer, and we can poll
-    # it for the "Forwarding from" line to learn the port kubectl chose.
-    stdout_file = tempfile.TemporaryFile()
-    stderr_file = tempfile.TemporaryFile()
-    try:
-        proc = subprocess.Popen(
-            [
-                kubectl_bin, "port-forward",
-                "-n", namespace,
-                f"svc/{name}",
-                f":{SERVER_PORT}",
-            ],
-            stdout=stdout_file,
-            stderr=stderr_file,
-        )
-    except BaseException:
-        stdout_file.close()
-        stderr_file.close()
-        raise
-    proc._stdout_file = stdout_file
-    proc._stderr_file = stderr_file
-
-    # kubectl prints "Forwarding from 127.0.0.1:<port> -> <remote>" once the
-    # local socket is bound (on dual-stack hosts a "[::1]:<port>" line follows;
-    # scanning the whole output makes us order-independent).  Poll with a hard
-    # deadline so a kubectl that wedges during setup can't hang the suite.
-    deadline = time.monotonic() + 30.0
-    while time.monotonic() < deadline:
-        stdout_file.seek(0)
-        output = stdout_file.read().decode(errors="replace")
-        m = re.search(r"Forwarding from 127\.0\.0\.1:(\d+)", output)
-        if m:
-            return f"http://127.0.0.1:{int(m.group(1))}", proc
-        if proc.poll() is not None:
-            break
-        time.sleep(0.1)
-
-    # Failed to learn the port: kubectl exited early or never bound in time.
-    # Re-read once more in case a final flush landed after the last poll.
-    stdout_file.seek(0)
-    out = stdout_file.read().decode(errors="replace")
-    m = re.search(r"Forwarding from 127\.0\.0\.1:(\d+)", out)
-    if m:
-        return f"http://127.0.0.1:{int(m.group(1))}", proc
-    _kill_proc(proc)
-    stderr_file.seek(0)
-    err = stderr_file.read().decode(errors="replace")
-    stdout_file.close()
-    stderr_file.close()
-    raise RuntimeError(
-        "kubectl port-forward did not report a local port within 30s "
-        f"(exit code {proc.returncode}).\n"
-        f"--- stdout ---\n{out}\n--- stderr ---\n{err}"
-    )
-
-
-def _kill_proc(proc: subprocess.Popen) -> None:
-    """Terminate a subprocess, escalating to SIGKILL if needed."""
-    try:
-        proc.terminate()
-        proc.wait(timeout=10)
-    except OSError:
-        pass
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        try:
-            proc.wait(timeout=10)
-        except (subprocess.TimeoutExpired, OSError):
-            pass
 
 
 async def _wait_for_healthz(url: str, timeout: float = 30.0) -> None:
@@ -681,7 +604,8 @@ async def k8s_custom_objects(k8s_api_client) -> CustomObjectsApi:
 async def kuadrant_gateway(k8s_core_v1, kubectl_bin) -> GatewayConnection:
     """Port-forward to the Kuadrant MCP Gateway and yield a GatewayConnection.
 
-    Auto-skips the test if the gateway service is not present in the cluster.
+    Auto-skips the test if the gateway service is not present in the cluster
+    or the broker pod is not healthy.
     Use the returned object's ``connect_mcp()`` context manager to open an MCP
     session through the gateway.
     """
@@ -696,6 +620,46 @@ async def kuadrant_gateway(k8s_core_v1, kubectl_bin) -> GatewayConnection:
             f"Kuadrant MCP Gateway service {GATEWAY_NAMESPACE}/{GATEWAY_SERVICE} "
             f"not found — install with 'make kuadrant-setup'"
         )
+
+    # Check that the broker pod is actually healthy — on rootless podman it
+    # may crash-loop due to resource limits (e.g. "too many open files").
+    try:
+        from kubernetes_asyncio.client import AppsV1Api
+        apps_v1 = AppsV1Api(k8s_core_v1.api_client)
+        try:
+            deploy = await apps_v1.read_namespaced_deployment(
+                name="mcp-gateway", namespace="mcp-system",
+            )
+        except ApiException as exc:
+            if exc.status == 404:
+                pytest.skip("Kuadrant MCP Gateway broker deployment not found")
+            raise
+        selector = deploy.spec.selector.match_labels or {}
+        label_selector = ",".join(f"{k}={v}" for k, v in selector.items())
+        pods = await k8s_core_v1.list_namespaced_pod(
+            namespace="mcp-system", label_selector=label_selector,
+        )
+        if not pods.items:
+            pytest.skip(
+                "Kuadrant MCP Gateway broker pod not found in mcp-system"
+            )
+        for pod in pods.items:
+            phase = pod.status.phase
+            ready = any(
+                cs.ready for cs in (pod.status.container_statuses or [])
+            )
+            if phase != "Running" or not ready:
+                waiting = None
+                for cs in (pod.status.container_statuses or []):
+                    if cs.state and cs.state.waiting:
+                        waiting = cs.state.waiting.reason
+                pytest.skip(
+                    f"Kuadrant MCP Gateway broker pod not healthy "
+                    f"(phase={phase}, ready={ready}, waiting={waiting}) "
+                    f"— may need higher ulimits for rootless podman"
+                )
+    except ApiException:
+        pass
 
     gateway_url, proc = _start_port_forward(
         GATEWAY_NAMESPACE, GATEWAY_SERVICE, kubectl_bin,

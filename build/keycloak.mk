@@ -32,14 +32,25 @@ keycloak-install:
 		{ echo "ERROR: failed to extract cert-manager CA certificate"; exit 1; }
 	@echo "✅ cert-manager CA certificate extracted to _output/cert-manager-ca/ca.crt (bind-mounted to API server)"
 	@echo "Restarting Kubernetes API server to pick up new CA..."
-	@$(CONTAINER_ENGINE) exec $(KIND_CLUSTER_NAME)-control-plane pkill -f kube-apiserver
+	@# Delete the static pod manifest and restore it so the kubelet restarts
+	@# the API server cleanly.  Do NOT pkill the process — on rootless podman
+	@# with pasta networking, killing a process breaks the host port mapping
+	@# permanently.
+	@$(CONTAINER_ENGINE) exec $(KIND_CLUSTER_NAME)-control-plane bash -c '\
+		MANIFEST=/etc/kubernetes/manifests/kube-apiserver.yaml; \
+		cp $$MANIFEST /tmp/kube-apiserver.yaml.bak; \
+		rm $$MANIFEST; \
+		sleep 2; \
+		cp /tmp/kube-apiserver.yaml.bak $$MANIFEST'
 	@echo "Waiting for API server to restart..."
-	@sleep 5
-	@echo "Waiting for API server to be ready..."
-	@for i in $$(seq 1 30); do \
+	@for i in $$(seq 1 60); do \
 		if kubectl get --raw /healthz >/dev/null 2>&1; then \
 			echo "✅ Kubernetes API server updated with cert-manager CA"; \
 			break; \
+		fi; \
+		if [ $$i -eq 60 ]; then \
+			echo "ERROR: API server did not restart within 120s"; \
+			exit 1; \
 		fi; \
 		sleep 2; \
 	done
