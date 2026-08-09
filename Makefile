@@ -16,6 +16,8 @@ LD_FLAGS = -s -w \
 	-X '$(PACKAGE)/pkg/version.BinaryName=$(BINARY_NAME)' \
 	-X '$(PACKAGE)/pkg/version.WebsiteURL=$(WEBSITE_URL)'
 COMMON_BUILD_ARGS = -ldflags "$(LD_FLAGS)"
+CONTAINER_CLI ?= $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null || echo docker)
+KUBECONFIG ?= $(or $(wildcard _output/kubeconfig),$(HOME)/.kube/config)
 
 GOLANGCI_LINT = $(shell pwd)/_output/tools/bin/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.11.4
@@ -193,6 +195,15 @@ local-env-setup-kuadrant: ## Setup complete local development environment with K
 .PHONY: local-env-teardown
 local-env-teardown: ## Tear down the local Kind cluster
 	$(MAKE) kind-delete-cluster
+
+.PHONY: inspect
+inspect: ## Start kubernetes-mcp-server + MCP Inspector via compose
+	@mkdir -p _output && \
+	sed -e 's|https://127\.0\.0\.1|https://host.docker.internal|g' \
+	    -e 's|https://localhost|https://host.docker.internal|g' \
+	    -e 's|certificate-authority-data:.*|insecure-skip-tls-verify: true|' \
+	    $(KUBECONFIG) > _output/compose-kubeconfig && \
+	$(CONTAINER_CLI) compose up --build
 
 .PHONY: print-git-tag-version
 print-git-tag-version: ## Print the GIT_TAG_VERSION
