@@ -4,6 +4,10 @@ ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 
 WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY ./ ./
 
 RUN make build-multiarch TARGETOS=${TARGETOS} TARGETARCH=${TARGETARCH}

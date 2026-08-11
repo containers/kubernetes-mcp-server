@@ -32,51 +32,51 @@ install-gateway-api-crds:
 
 # Install Istio (demo profile) and enable sidecar injection in default namespace
 .PHONY: install-istio
-install-istio: istioctl
+install-istio: istioctl kubectl
 	$(ISTIOCTL) install --set profile=demo \
 		--set meshConfig.defaultConfig.tracing.zipkin.address=zipkin.istio-system:9411 \
 		-y
-	kubectl apply -f $(ISTIO_ADDONS_DIR)/prometheus.yaml -n istio-system
-	kubectl apply -f $(ISTIO_ADDONS_DIR)/kiali.yaml -n istio-system
-	kubectl apply -f $(ISTIO_ADDONS_DIR)/jaeger.yaml -n istio-system
-	kubectl wait --namespace istio-system --for=condition=available deployment/kiali --timeout=300s
-	kubectl wait --namespace istio-system --for=condition=available deployment/prometheus --timeout=300s
-	kubectl wait --for=condition=Ready pod --all -n istio-system --timeout=300s
-	kubectl rollout status deployment/kiali -n istio-system
-	kubectl label namespace default istio-injection=enabled --overwrite
-	kubectl wait --for=condition=Ready pod --all -n istio-system --timeout=300s
+	$(KUBECTL) apply -f $(ISTIO_ADDONS_DIR)/prometheus.yaml -n istio-system
+	$(KUBECTL) apply -f $(ISTIO_ADDONS_DIR)/kiali.yaml -n istio-system
+	$(KUBECTL) apply -f $(ISTIO_ADDONS_DIR)/jaeger.yaml -n istio-system
+	$(KUBECTL) wait --namespace istio-system --for=condition=available deployment/kiali --timeout=300s
+	$(KUBECTL) wait --namespace istio-system --for=condition=available deployment/prometheus --timeout=300s
+	$(KUBECTL) wait --for=condition=Ready pod --all -n istio-system --timeout=300s
+	$(KUBECTL) rollout status deployment/kiali -n istio-system
+	$(KUBECTL) label namespace default istio-injection=enabled --overwrite
+	$(KUBECTL) wait --for=condition=Ready pod --all -n istio-system --timeout=300s
 	
 # Install Bookinfo demo
 .PHONY: install-bookinfo-demo
-install-bookinfo-demo:
-	kubectl create ns bookinfo
-	kubectl label namespace bookinfo istio-discovery=enabled istio.io/rev=default istio-injection=enabled
-	kubectl apply -f https://raw.githubusercontent.com/openshift-service-mesh/istio/refs/heads/master/samples/bookinfo/platform/kube/bookinfo.yaml -n bookinfo
-	kubectl apply -n bookinfo -f https://raw.githubusercontent.com/istio-ecosystem/sail-operator/main/chart/samples/ingress-gateway.yaml
-	kubectl apply -f https://raw.githubusercontent.com/openshift-service-mesh/istio/refs/heads/master/samples/bookinfo/networking/bookinfo-gateway.yaml -n bookinfo
-	kubectl wait --for=condition=Ready pod --all -n bookinfo --timeout=300s
+install-bookinfo-demo: kubectl
+	$(KUBECTL) create ns bookinfo
+	$(KUBECTL) label namespace bookinfo istio-discovery=enabled istio.io/rev=default istio-injection=enabled
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/openshift-service-mesh/istio/refs/heads/master/samples/bookinfo/platform/kube/bookinfo.yaml -n bookinfo
+	$(KUBECTL) apply -n bookinfo -f https://raw.githubusercontent.com/istio-ecosystem/sail-operator/main/chart/samples/ingress-gateway.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/openshift-service-mesh/istio/refs/heads/master/samples/bookinfo/networking/bookinfo-gateway.yaml -n bookinfo
+	$(KUBECTL) wait --for=condition=Ready pod --all -n bookinfo --timeout=300s
 
 # Update Kiali version
 .PHONY: update-kiali-version
-update-kiali-version:
+update-kiali-version: kubectl
 	@echo "Updating Kiali version to $(KIALI_VERSION)..."
-	@kubectl patch deployment kiali -n istio-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"kiali","image":"quay.io/kiali/kiali_mcp:$(KIALI_VERSION)"}]}}}}'
-	@kubectl delete pod -l app=kiali -n istio-system
-	@kubectl wait --for=condition=available deployment/kiali -n istio-system --timeout=300s
+	@$(KUBECTL) patch deployment kiali -n istio-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"kiali","image":"quay.io/kiali/kiali_mcp:$(KIALI_VERSION)"}]}}}}'
+	@$(KUBECTL) delete pod -l app=kiali -n istio-system
+	@$(KUBECTL) wait --for=condition=available deployment/kiali -n istio-system --timeout=300s
 
 # Expose Bookinfo demo
 .PHONY: expose-bookinfo-demo
-expose-bookinfo-demo:
+expose-bookinfo-demo: kubectl
 	@echo "Exposing Bookinfo demo..."
-	@kubectl port-forward svc/istio-ingressgateway 20002:80 -n bookinfo >/dev/null 2>&1 & \
+	@$(KUBECTL) port-forward svc/istio-ingressgateway 20002:80 -n bookinfo >/dev/null 2>&1 & \
 	while true; do curl -s -o /dev/null http://localhost:20002/productpage; sleep 1; done & \
 	echo "Bookinfo demo is being exposed on http://localhost:20002/productpage and generator is running"
 
 # Expose Kiali service
 .PHONY: expose-kiali
-expose-kiali:
+expose-kiali: kubectl
 	@echo "Exposing Kiali service..."
-	kubectl -n istio-system port-forward svc/kiali 20001:20001 & \
+	$(KUBECTL) -n istio-system port-forward svc/kiali 20001:20001 & \
 	timeout 30s bash -c 'until curl -s localhost:20001; do sleep 1; done' && \
 	echo "Kiali is being exposed on http://localhost:20001"
 

@@ -1,6 +1,6 @@
 # Keycloak OIDC Setup for Kubernetes MCP Server
 
-> **⚠️ Preview Feature**
+> **Warning: Preview Feature**
 >
 > OIDC/OAuth authentication setup is currently in **preview**. Configuration flags or fields may change. Use for **development and testing only**.
 
@@ -9,7 +9,7 @@ This guide shows you how to set up a local development environment with Keycloak
 ## Overview
 
 The local development environment includes:
-- **Kind cluster** with OIDC-enabled API server
+- **Minikube cluster** with OIDC-enabled API server
 - **Keycloak** (deployed in the cluster) for OIDC provider
 - **Kubernetes MCP Server** configured for OAuth/OIDC authentication
 
@@ -22,8 +22,8 @@ make local-env-setup
 ```
 
 This will:
-1. Install required tools (kind) to `./_output/bin/`
-2. Create a Kind cluster with OIDC configuration
+1. Install required tools (minikube) to `./_output/tools/bin/`
+2. Create a Minikube cluster with OIDC configuration
 3. Deploy Keycloak in the cluster
 4. Configure Keycloak realm and clients
 5. Build the MCP server binary
@@ -75,12 +75,12 @@ After authentication, you can use the **Tools** from the Kubernetes-MCP-Server f
 ## Architecture
 
 ### Keycloak Deployment
-- Runs as a StatefulSet in the `keycloak` namespace
-- Exposed via Ingress with TLS at `https://keycloak.127-0-0-1.sslip.io:8443`
-- Uses cert-manager for TLS certificates
-- Accessible from both host and cluster pods
+- Runs as a Deployment in the `keycloak` namespace
+- Terminates TLS natively using a cert-manager certificate for `keycloak.keycloak.svc`
+- Accessible in-cluster at `https://keycloak.keycloak.svc:8443`
+- For browser access, use `make keycloak-port-forward` then open `https://localhost:8443`
 
-### Kind Cluster with OIDC
+### Minikube Cluster with OIDC
 - Kubernetes API server configured with OIDC authentication
 - Points to Keycloak's `openshift` realm as the OIDC issuer
 - Validates bearer tokens against Keycloak's JWKS endpoint
@@ -91,9 +91,9 @@ After authentication, you can use the **Tools** from the Kubernetes-MCP-Server f
 ```
 User Browser
     |
-    | 1. OAuth login (https://keycloak.127-0-0-1.sslip.io:8443)
+    | 1. OAuth login (via port-forward to Keycloak)
     v
-Keycloak
+Keycloak (https://keycloak.keycloak.svc)
     |
     | 2. ID Token (aud: mcp-server)
     v
@@ -117,7 +117,7 @@ Keycloak JWKS
     |
     | 7. Token valid, execute tool
     v
-MCP Server → User
+MCP Server -> User
 ```
 
 ## Keycloak Configuration
@@ -167,7 +167,7 @@ require_oauth = true
 oauth_audience = "mcp-server"
 oauth_scopes = ["openid", "mcp-server"]
 validate_token = false  # Validation done by K8s API server
-authorization_url = "https://keycloak.127-0-0-1.sslip.io:8443/realms/openshift"
+authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
 
 sts_client_id = "mcp-server"
 sts_client_secret = "..."  # Auto-generated
@@ -199,9 +199,13 @@ make keycloak-logs
 
 ### Access Keycloak Admin Console
 
-Open your browser to:
-```
-https://keycloak.127-0-0-1.sslip.io:8443
+Start a port-forward and open your browser:
+```bash
+# One-time setup: add hosts entry so Keycloak redirects resolve locally
+echo '127.0.0.1 keycloak.keycloak.svc' | sudo tee -a /etc/hosts
+
+make keycloak-port-forward
+# Then open https://keycloak.keycloak.svc:8443
 ```
 
 **Admin credentials:**
@@ -218,4 +222,4 @@ Remove the local environment:
 make local-env-teardown
 ```
 
-This deletes the Kind cluster (Keycloak is removed with it).
+This deletes the Minikube cluster (Keycloak is removed with it).

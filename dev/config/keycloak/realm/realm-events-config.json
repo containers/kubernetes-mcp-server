@@ -1,8 +1,0 @@
-{
-  "realm": "openshift",
-  "enabled": true,
-  "eventsEnabled": true,
-  "eventsListeners": ["jboss-logging"],
-  "adminEventsEnabled": true,
-  "adminEventsDetailsEnabled": true
-}

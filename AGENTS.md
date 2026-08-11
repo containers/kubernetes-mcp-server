@@ -89,7 +89,7 @@ This MCP server is designed to run both locally and remotely.
 When running locally, the server connects to a Kubernetes or OpenShift cluster using the kubeconfig file.
 It reads the kubeconfig from the `--kubeconfig` flag, the `KUBECONFIG` environment variable, or defaults to `~/.kube/config`.
 
-This means that `npx -y kubernetes-mcp-server@latest` on a workstation will talk to whatever cluster your current kubeconfig points to (e.g. a local Kind cluster).
+This means that `npx -y kubernetes-mcp-server@latest` on a workstation will talk to whatever cluster your current kubeconfig points to (e.g. a local Minikube cluster).
 
 ### Remote Execution
 
@@ -127,10 +127,10 @@ Beyond the basic build, test, and lint targets, the Makefile provides additional
 
 **Local Development:**
 ```bash
-# Setup a complete local development environment with Kind cluster
+# Setup a complete local development environment with Minikube cluster
 make local-env-setup
 
-# Tear down the local Kind cluster
+# Tear down the local Minikube cluster
 make local-env-teardown
 
 # Show Keycloak status and connection info (for OIDC testing)

@@ -36,12 +36,12 @@ helm-docs: helm-docs-install ## Generate Helm chart documentation using helm-doc
 	$(HELM_DOCS) -c $(HELM_CHART_DIR) -t README.md.gotmpl
 
 .PHONY: helm-lint
-helm-lint: ## Lint the Helm chart
-	helm lint $(HELM_CHART_DIR)
+helm-lint: helm ## Lint the Helm chart
+	$(HELM) lint $(HELM_CHART_DIR)
 
 .PHONY: helm-template
-helm-template: ## Render Helm chart templates (dry run)
-	helm template test-release $(HELM_CHART_DIR) --set ingress.host=localhost --debug
+helm-template: helm ## Render Helm chart templates (dry run)
+	$(HELM) template test-release $(HELM_CHART_DIR) --set ingress.host=localhost --debug
 
 # Download and install kubeconform if not already installed
 .PHONY: kubeconform
@@ -57,21 +57,21 @@ kubeconform:
 	}
 
 .PHONY: helm-validate
-helm-validate: kubeconform ## Validate Helm chart manifests with kubeconform
+helm-validate: helm kubeconform ## Validate Helm chart manifests with kubeconform
 	@echo "Validating with default values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""
 	@echo "Validating with tpl-exercising values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tpl-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tpl-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""
 	@echo "Validating with configmap-numeric-test values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""
 	@echo "Validating with Gateway API HTTPRoute values..."
-	@bash -o pipefail -c 'helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/httproute-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/httproute-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""
 	@echo "Testing ConfigMap numeric .0 cleanup..."
-	@output=$$(helm template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml 2>&1); \
+	@output=$$($(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml 2>&1); \
 	failed=0; \
 	if echo "$$output" | grep -q 'log_level = 2\.0'; then echo "FAIL: log_level has unwanted .0 suffix"; failed=1; else echo "PASS: log_level integer .0 stripped"; fi; \
 	if echo "$$output" | grep -q 'positive_port = 8080\.0'; then echo "FAIL: positive_port has unwanted .0 suffix"; failed=1; else echo "PASS: positive_port integer .0 stripped"; fi; \
@@ -91,7 +91,7 @@ helm-package: helm-lint helm-template ## Package the Helm chart (supports HELM_C
 	             $(HELM_CHART_DIR)/Chart.yaml
 	@echo "Updated Chart.yaml:"
 	@cat $(HELM_CHART_DIR)/Chart.yaml
-	helm package $(HELM_CHART_DIR) --destination $(HELM_PACKAGE_DIR)
+	$(HELM) package $(HELM_CHART_DIR) --destination $(HELM_PACKAGE_DIR)
 	@mv $(HELM_CHART_DIR)/Chart.yaml.bak $(HELM_CHART_DIR)/Chart.yaml
 	@echo "Chart packaged as version $(HELM_CHART_VERSION)"
 
@@ -100,13 +100,13 @@ helm-push: helm-package ## Push Helm chart to OCI registry (assumes helm registr
 	@chart_package=$$(ls $(HELM_PACKAGE_DIR)/$(HELM_CHART_NAME)-*.tgz 2>/dev/null | head -n 1); \
 	if [ -z "$$chart_package" ]; then echo "Error: No chart package found in $(HELM_PACKAGE_DIR)"; exit 1; fi; \
 	echo "Pushing chart package: $$chart_package"; \
-	helm push "$$chart_package" oci://$(HELM_REGISTRY)/$(HELM_REGISTRY_ORG)/charts
+	$(HELM) push "$$chart_package" oci://$(HELM_REGISTRY)/$(HELM_REGISTRY_ORG)/charts
 
 
 .PHONY: helm-verify
-helm-verify: ## Verify chart installation from OCI registry
+helm-verify: helm ## Verify chart installation from OCI registry
 	@echo "Testing chart template rendering from OCI registry..."
-	helm template test-install oci://$(HELM_REGISTRY)/$(HELM_REGISTRY_ORG)/charts/$(HELM_CHART_NAME) \
+	$(HELM) template test-install oci://$(HELM_REGISTRY)/$(HELM_REGISTRY_ORG)/charts/$(HELM_CHART_NAME) \
 		--set ingress.host=localhost --version $(HELM_CHART_VERSION) --debug
 
 .PHONY: helm-publish

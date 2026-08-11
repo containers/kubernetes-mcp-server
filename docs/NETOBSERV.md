@@ -128,12 +128,12 @@ If you deploy a separate OAuth proxy in front of this server, clients authentica
 
 ## Evaluations
 
-Agent evaluation tasks for this toolset live under [`evals/tasks/netobserv/`](../evals/tasks/netobserv/). Each task deploys the mock console plugin via `shared/setup-mock.sh` (Kind/local) so evals are self-contained. On OpenShift you can run the same tasks against a real FlowCollector.
+Agent evaluation tasks for this toolset live under [`evals/tasks/netobserv/`](../evals/tasks/netobserv/). Each task deploys the mock console plugin via `shared/setup-mock.sh` (Minikube/local) so evals are self-contained. On OpenShift you can run the same tasks against a real FlowCollector.
 
 ```bash
 export MODEL_BASE_URL='https://your-api-endpoint/v1'
 export MODEL_KEY='your-api-key'
-make kind-create-cluster   # if needed
+make minikube-create-cluster   # if needed
 make run-netobserv-evals   # mock + MCP server + mcpchecker (target: >= 80% pass rate)
 ```
 

@@ -34,14 +34,12 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Setup cluster and build e2e image
+      - name: Setup e2e environment
         run: make e2e-full-setup
 
       - name: Run e2e tests
-        env:
-          KUBECONFIG: ${{ github.workspace }}/_output/kubeconfig
         run: make e2e-test
 
       - name: Cleanup
         if: always()
-        run: make kind-delete-cluster
+        run: make e2e-teardown

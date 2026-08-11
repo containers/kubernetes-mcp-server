@@ -13,38 +13,38 @@ MULTUS_RELEASE_URL = https://raw.githubusercontent.com/k8snetworkplumbingwg/mult
 ##@ KubeVirt
 
 .PHONY: kubevirt-install
-kubevirt-install: ## Install KubeVirt, CDI, and Multus on the cluster
+kubevirt-install: kubectl ## Install KubeVirt, CDI, and Multus on the cluster
 	@echo "========================================="
 	@echo "Installing KubeVirt $(KUBEVIRT_VERSION)"
 	@echo "========================================="
 	@echo ""
 	@echo "Installing KubeVirt operator..."
-	@kubectl apply -f $(KUBEVIRT_RELEASE_URL)/kubevirt-operator.yaml
+	@$(KUBECTL) apply -f $(KUBEVIRT_RELEASE_URL)/kubevirt-operator.yaml
 	@echo ""
 	@echo "Installing KubeVirt CR..."
-	@kubectl apply -f $(KUBEVIRT_RELEASE_URL)/kubevirt-cr.yaml
+	@$(KUBECTL) apply -f $(KUBEVIRT_RELEASE_URL)/kubevirt-cr.yaml
 	@echo ""
 	@echo "Waiting for KubeVirt to become ready (this can take a few minutes)..."
-	@kubectl -n kubevirt wait kv kubevirt --for condition=Available --timeout=15m
+	@$(KUBECTL) -n kubevirt wait kv kubevirt --for condition=Available --timeout=15m
 	@echo "✅ KubeVirt is ready"
 	@echo ""
 	@echo "Enabling Snapshot feature gate and software emulation..."
-	@kubectl patch kubevirt kubevirt -n kubevirt --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"],"useEmulation":true}}}}'
+	@$(KUBECTL) patch kubevirt kubevirt -n kubevirt --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"],"useEmulation":true}}}}'
 	@echo "✅ Snapshot feature gate and software emulation enabled"
 	@echo ""
 	@echo "Installing CDI (Containerized Data Importer) $(CDI_VERSION)..."
-	@kubectl apply -f $(CDI_RELEASE_URL)/cdi-operator.yaml
-	@kubectl apply -f $(CDI_RELEASE_URL)/cdi-cr.yaml
+	@$(KUBECTL) apply -f $(CDI_RELEASE_URL)/cdi-operator.yaml
+	@$(KUBECTL) apply -f $(CDI_RELEASE_URL)/cdi-cr.yaml
 	@echo ""
 	@echo "Waiting for CDI to become ready..."
-	@kubectl wait --for=condition=Available cdi/cdi -n cdi --timeout=5m
+	@$(KUBECTL) wait --for=condition=Available cdi/cdi -n cdi --timeout=5m
 	@echo "✅ CDI is ready"
 	@echo ""
 	@echo "Installing Multus CNI $(MULTUS_VERSION)..."
-	@kubectl apply -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml
+	@$(KUBECTL) apply -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml
 	@echo ""
 	@echo "Waiting for Multus daemonset to be ready..."
-	@kubectl -n kube-system rollout status daemonset/kube-multus-ds --timeout=5m
+	@$(KUBECTL) -n kube-system rollout status daemonset/kube-multus-ds --timeout=5m
 	@echo "✅ Multus is ready"
 	@echo ""
 	@echo "========================================="
@@ -62,59 +62,59 @@ kubevirt-install: ## Install KubeVirt, CDI, and Multus on the cluster
 	@echo ""
 
 .PHONY: kubevirt-uninstall
-kubevirt-uninstall: ## Uninstall KubeVirt, CDI, and Multus from the cluster
+kubevirt-uninstall: kubectl ## Uninstall KubeVirt, CDI, and Multus from the cluster
 	@echo "Uninstalling KubeVirt, CDI, and Multus..."
-	@kubectl delete -f $(KUBEVIRT_RELEASE_URL)/kubevirt-cr.yaml --ignore-not-found
-	@kubectl delete -f $(KUBEVIRT_RELEASE_URL)/kubevirt-operator.yaml --ignore-not-found
-	@kubectl delete -f $(CDI_RELEASE_URL)/cdi-cr.yaml --ignore-not-found
-	@kubectl delete -f $(CDI_RELEASE_URL)/cdi-operator.yaml --ignore-not-found
-	@kubectl delete -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml --ignore-not-found
+	@$(KUBECTL) delete -f $(KUBEVIRT_RELEASE_URL)/kubevirt-cr.yaml --ignore-not-found
+	@$(KUBECTL) delete -f $(KUBEVIRT_RELEASE_URL)/kubevirt-operator.yaml --ignore-not-found
+	@$(KUBECTL) delete -f $(CDI_RELEASE_URL)/cdi-cr.yaml --ignore-not-found
+	@$(KUBECTL) delete -f $(CDI_RELEASE_URL)/cdi-operator.yaml --ignore-not-found
+	@$(KUBECTL) delete -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml --ignore-not-found
 	@echo "✅ KubeVirt, CDI, and Multus uninstalled"
 
 .PHONY: kubevirt-status
-kubevirt-status: ## Show KubeVirt, CDI, and Multus status
+kubevirt-status: kubectl ## Show KubeVirt, CDI, and Multus status
 	@echo "========================================="
 	@echo "KubeVirt Status"
 	@echo "========================================="
 	@echo ""
 	@echo "KubeVirt:"
-	@kubectl get kubevirt -n kubevirt -o wide || { echo "KubeVirt not installed"; exit 1; }
+	@$(KUBECTL) get kubevirt -n kubevirt -o wide || { echo "KubeVirt not installed"; exit 1; }
 	@echo ""
 	@echo "CDI:"
-	@kubectl get cdi -n cdi -o wide || { echo "CDI not installed"; exit 1; }
+	@$(KUBECTL) get cdi -n cdi -o wide || { echo "CDI not installed"; exit 1; }
 	@echo ""
 	@echo "Multus Pods:"
-	@kubectl get pods -n kube-system -l app=multus || echo "Multus not installed"
+	@$(KUBECTL) get pods -n kube-system -l app=multus || echo "Multus not installed"
 	@echo ""
 	@echo "KubeVirt Pods:"
-	@kubectl get pods -n kubevirt
+	@$(KUBECTL) get pods -n kubevirt
 	@echo ""
 	@echo "CDI Pods:"
-	@kubectl get pods -n cdi
+	@$(KUBECTL) get pods -n cdi
 	@echo ""
 	@echo "VirtualMachines (all namespaces):"
-	@kubectl get virtualmachines --all-namespaces || echo "No VirtualMachines found"
+	@$(KUBECTL) get virtualmachines --all-namespaces || echo "No VirtualMachines found"
 	@echo ""
 	@echo "VirtualMachineInstances (all namespaces):"
-	@kubectl get virtualmachineinstances --all-namespaces || echo "No VirtualMachineInstances found"
+	@$(KUBECTL) get virtualmachineinstances --all-namespaces || echo "No VirtualMachineInstances found"
 	@echo ""
 	@echo "Network Attachment Definitions (all namespaces):"
-	@kubectl get network-attachment-definitions --all-namespaces || echo "No NetworkAttachmentDefinitions found"
+	@$(KUBECTL) get network-attachment-definitions --all-namespaces || echo "No NetworkAttachmentDefinitions found"
 	@echo ""
 
 ##@ Multus CNI
 
 .PHONY: multus-install
-multus-install: ## Install Multus CNI on the cluster
+multus-install: kubectl ## Install Multus CNI on the cluster
 	@echo "========================================="
 	@echo "Installing Multus CNI $(MULTUS_VERSION)"
 	@echo "========================================="
 	@echo ""
 	@echo "Installing Multus thick plugin daemonset..."
-	@kubectl apply -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml
+	@$(KUBECTL) apply -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml
 	@echo ""
 	@echo "Waiting for Multus daemonset to be ready..."
-	@kubectl -n kube-system rollout status daemonset/kube-multus-ds --timeout=5m
+	@$(KUBECTL) -n kube-system rollout status daemonset/kube-multus-ds --timeout=5m
 	@echo "Multus is ready"
 	@echo ""
 	@echo "========================================="
@@ -129,20 +129,20 @@ multus-install: ## Install Multus CNI on the cluster
 	@echo ""
 
 .PHONY: multus-uninstall
-multus-uninstall: ## Uninstall Multus CNI from the cluster
+multus-uninstall: kubectl ## Uninstall Multus CNI from the cluster
 	@echo "Uninstalling Multus CNI..."
-	@kubectl delete -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml --ignore-not-found
+	@$(KUBECTL) delete -f $(MULTUS_RELEASE_URL)/multus-daemonset-thick.yml --ignore-not-found
 	@echo "Multus CNI uninstalled"
 
 .PHONY: multus-status
-multus-status: ## Show Multus CNI status
+multus-status: kubectl ## Show Multus CNI status
 	@echo "========================================="
 	@echo "Multus CNI Status"
 	@echo "========================================="
 	@echo ""
 	@echo "Multus Pods:"
-	@kubectl get pods -n kube-system -l app=multus || echo "Multus not installed"
+	@$(KUBECTL) get pods -n kube-system -l app=multus || echo "Multus not installed"
 	@echo ""
 	@echo "Network Attachment Definitions (all namespaces):"
-	@kubectl get network-attachment-definitions --all-namespaces || echo "No NetworkAttachmentDefinitions found"
+	@$(KUBECTL) get network-attachment-definitions --all-namespaces || echo "No NetworkAttachmentDefinitions found"
 	@echo ""
