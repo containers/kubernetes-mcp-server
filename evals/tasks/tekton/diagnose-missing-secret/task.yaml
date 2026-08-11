@@ -1,0 +1,42 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "diagnose-tekton-missing-secret-failure"
+  difficulty: medium
+  labels:
+    suite: tekton
+    requires: tekton
+    workflow: pipelinerun-diagnosis
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          source ../helpers/cleanup-namespace.sh
+          source ../helpers/diagnosis-scenario.sh
+          setup_diagnosis_scenario missing-secret
+
+  verify:
+    - llmJudge:
+        contains: "failed-run"
+    - llmJudge:
+        contains: "missing-diagnosis-secret"
+    - llmJudge:
+        contains: "Secret"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: |-
+      The Tekton PipelineRun named failed-run in the tekton-eval namespace failed. Use the observed runtime evidence to explain which task and step failed and why. Do not change any resources.
