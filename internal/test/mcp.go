@@ -136,7 +136,11 @@ type headerRoundTripper struct {
 
 func (h *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	for k, v := range h.headers {
-		req.Header.Set(k, v)
+		if strings.EqualFold(k, "Host") {
+			req.Host = v
+		} else {
+			req.Header.Set(k, v)
+		}
 	}
 	return h.base.RoundTrip(req)
 }
@@ -150,6 +154,7 @@ type CapturedNotification struct {
 type McpClient struct {
 	ctx              context.Context
 	testServer       *httptest.Server
+	endpoint         string
 	client           *mcp.Client
 	Session          *mcp.ClientSession
 	InitializeResult *mcp.InitializeResult
@@ -196,13 +201,12 @@ func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...McpClient
 	// Determine the endpoint URL
 	var endpoint string
 	if cfg.endpoint != "" {
-		// Use provided endpoint directly
 		endpoint = cfg.endpoint
 	} else {
-		// Create httptest.Server from handler
 		ret.testServer = httptest.NewServer(mcpHttpServer)
 		endpoint = ret.testServer.URL + "/mcp"
 	}
+	ret.endpoint = endpoint
 
 	// Create HTTP client with custom headers if provided
 	httpClient := http.DefaultClient
@@ -295,7 +299,7 @@ func (m *McpClient) CallTool(name string, args map[string]any) (*mcp.CallToolRes
 func (m *McpClient) CallToolRaw(t *testing.T, jsonParams string) *http.Response {
 	t.Helper()
 	body := fmt.Sprintf(`{"jsonrpc":"2.0","id":99,"method":"tools/call","params":%s}`, jsonParams)
-	return McpRawPost(t, m.testServer.URL+"/mcp", m.Session.ID(), body)
+	return McpRawPost(t, m.endpoint, m.Session.ID(), body)
 }
 
 // McpRawPost sends a raw JSON-RPC request to an MCP HTTP endpoint.

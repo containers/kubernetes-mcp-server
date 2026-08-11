@@ -50,7 +50,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  KIND_CLUSTER_NAME: mcp-eval-cluster
+  MINIKUBE_PROFILE: mcp-eval-cluster
 
 defaults:
   run:
@@ -265,7 +265,7 @@ jobs:
 
           echo "matrix=$(echo "$MATRIX" | jq -c .)" >> "$GITHUB_OUTPUT"
 
-  # Run mcpchecker evaluation with Kind cluster
+  # Run mcpchecker evaluation with Minikube cluster
   run-evaluation:
     name: 'Run MCP Evaluation (${{ matrix.suite }})'
     needs: check-trigger
@@ -294,8 +294,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Setup Kind cluster
-        run: make kind-create-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
+      - name: Setup Minikube cluster
+        run: make minikube-create-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE"
 
       # Core tasks always run (every eval includes them) and the resize-pvc
       # task needs a resize-capable StorageClass, so always install the CSI driver.
@@ -354,7 +354,7 @@ jobs:
           make stop-server || true
           make stop-netobserv || true
           make teardown-netobserv || true
-          make kind-delete-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" || true
+          make minikube-delete-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE" || true
 
       # Compare PR results against baseline from main branch
       - name: Fetch baseline results from main

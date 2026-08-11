@@ -26,7 +26,7 @@ No NetObserv operator is required. The mock in `shared/mock-plugin.yaml` impleme
 **One-command reproducer** (deploy mock, start MCP server, run evals, clean up):
 
 ```bash
-make kind-create-cluster   # skip if you already have kubectl context
+make minikube-create-cluster   # skip if you already have kubectl context
 export MODEL_BASE_URL='https://your-api-endpoint/v1'
 export MODEL_KEY='your-api-key'
 # Optional: separate judge endpoint (defaults to MODEL_* when unset)
@@ -40,7 +40,7 @@ make run-netobserv-evals
 **Manual steps** (same flow, useful for debugging):
 
 ```bash
-make kind-create-cluster
+make minikube-create-cluster
 make setup-netobserv          # deploy mock + port-forward :9001
 make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
 make run-evals EVAL_LABEL_SELECTOR=suite=netobserv

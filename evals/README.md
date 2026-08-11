@@ -57,7 +57,7 @@ make build mcpchecker claude-agent-acp
 # 2. Create a cluster and point KUBECONFIG at it.
 #    KUBECONFIG must be EXPORTED so both the kubernetes extension's setup steps
 #    and each task's verify.sh kubectl target the same cluster.
-kind create cluster --name mcp-eval-cluster --kubeconfig "$PWD/_output/kubeconfig"
+make minikube-create-cluster MINIKUBE_PROFILE=mcp-eval-cluster
 export KUBECONFIG="$PWD/_output/kubeconfig"
 
 # 3. Install KubeVirt (only needed for the kubevirt suite).
@@ -74,13 +74,12 @@ make run-evals SUITE=kubevirt AGENT=acp-anthropic MODEL=sonnet
 
 # 6. Tear down
 make stop-server
-kind delete cluster --name mcp-eval-cluster
+make minikube-delete-cluster MINIKUBE_PROFILE=mcp-eval-cluster
 ```
 
-> A bare `kind create cluster` is enough for kubevirt and most toolset suites.
-> `make kind-create-cluster` also installs nginx-ingress, cert-manager, and a
-> Keycloak hosts entry, which toolset evals do not need (and which pull from
-> registries that are not always reachable).
+> A bare `make minikube-create-cluster` is enough for kubevirt and most toolset suites.
+> `make local-env-setup` also installs cert-manager and Keycloak, which toolset
+> evals do not need (and which pull from registries that are not always reachable).
 
 The make-target invocation in step 5 is equivalent to the underlying command:
 
