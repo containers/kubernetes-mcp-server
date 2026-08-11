@@ -13,6 +13,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/kubernetes"
@@ -34,6 +35,14 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	rec := httptest.NewRecorder()
 	m.onRequest(rec, req)
 	return rec.Result(), nil
+}
+
+type mockDeniedResourcesProvider struct {
+	resources []api.GroupVersionKind
+}
+
+func (m *mockDeniedResourcesProvider) GetDeniedResources() []api.GroupVersionKind {
+	return m.resources
 }
 
 type AccessControlRoundTripperTestSuite struct {
@@ -475,4 +484,140 @@ func TestAccessControlRoundTripper(t *testing.T) {
 
 func TestStripAPIPathPrefix(t *testing.T) {
 	suite.Run(t, new(StripAPIPathPrefixTestSuite))
+}
+
+// SubresourceOnlyAPIGroupSuite tests the AccessControlRoundTripper behavior
+// with API groups that only expose subresource entries (all with empty Kind).
+// This reproduces the problem where subresources.kubevirt.io/v1 is rejected
+// with RESOURCE_NOT_FOUND because the REST mapper cannot build GVR→GVK
+// mappings from entries that have no Kind set.
+type SubresourceOnlyAPIGroupSuite struct {
+	suite.Suite
+	mockServer       *test.MockServer
+	discoveryHandler *test.DiscoveryClientHandler
+	restMapper       *restmapper.DeferredDiscoveryRESTMapper
+	discoveryClient  discovery.DiscoveryInterface
+}
+
+func (s *SubresourceOnlyAPIGroupSuite) SetupTest() {
+	s.mockServer = test.NewMockServer()
+	// Register subresources.kubevirt.io/v1 with subresource-only entries.
+	// All entries have zero-value Kind ("") and nil Verbs — this matches
+	// what KubeVirt actually advertises for its subresource API group.
+	// The REST mapper will see these during discovery but cannot build
+	// GVR→GVK mappings, so KindFor() returns NoMatchError.
+	s.discoveryHandler = test.NewDiscoveryClientHandler(metav1.APIResourceList{
+		GroupVersion: "subresources.kubevirt.io/v1",
+		APIResources: []metav1.APIResource{
+			{Name: "virtualmachineinstances/pause", Namespaced: true},
+			{Name: "virtualmachineinstances/unpause", Namespaced: true},
+			{Name: "virtualmachineinstances/guestosinfo", Namespaced: true},
+			{Name: "virtualmachineinstances/userlist", Namespaced: true},
+			{Name: "virtualmachineinstances/filesystemlist", Namespaced: true},
+			{Name: "virtualmachines/start", Namespaced: true},
+			{Name: "virtualmachines/stop", Namespaced: true},
+			{Name: "virtualmachines/restart", Namespaced: true},
+		},
+	})
+	s.mockServer.Handle(s.discoveryHandler)
+
+	clientSet, err := kubernetes.NewForConfig(s.mockServer.Config())
+	s.Require().NoError(err, "Expected no error creating clientset")
+
+	s.discoveryClient = clientSet.Discovery()
+	s.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(s.discoveryClient))
+}
+
+func (s *SubresourceOnlyAPIGroupSuite) TearDownTest() {
+	s.mockServer.Close()
+}
+
+func (s *SubresourceOnlyAPIGroupSuite) TestRoundTripForSubresourceOnlyAPIGroups() {
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+		Delegate:           mockDelegate,
+		RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
+		DiscoveryProvider:  func() discovery.DiscoveryInterface { return s.discoveryClient },
+	})
+
+	s.Run("subresource-only API group passes through for pause action", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/pause", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err, "Expected request to subresources.kubevirt.io to pass through")
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for subresource-only API group")
+	})
+
+	s.Run("subresource-only API group passes through for guest agent query", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/guestosinfo", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err, "Expected request to subresources.kubevirt.io guest agent subresource to pass through")
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for guest agent subresource")
+	})
+
+	s.Run("non-existent API group is still rejected", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/totally.fake.io/v1/namespaces/default/things", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Error(err, "Expected error for non-existent API group")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for non-existent API group")
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+	})
+
+	s.Run("non-existent resource in discoverable group is still rejected", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/subresources.kubevirt.io/v1/namespaces/default/totallynotreal/foo", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Error(err, "Expected error for non-existent resource in discoverable group")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for non-existent resource in discoverable group")
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+	})
+
+	s.Run("non-existent subresource on valid resource is still rejected", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/bogusaction", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Error(err, "Expected error for non-existent subresource")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for non-existent subresource")
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+	})
+
+	s.Run("denied group/version is blocked even for discoverable subresource-only API groups", func() {
+		delegateCalled = false
+		deniedRT := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+			Delegate:                mockDelegate,
+			DeniedResourcesProvider: &mockDeniedResourcesProvider{resources: []api.GroupVersionKind{{Group: "subresources.kubevirt.io", Version: "v1"}}},
+			RestMapperProvider:      func() meta.RESTMapper { return s.restMapper },
+			DiscoveryProvider:       func() discovery.DiscoveryInterface { return s.discoveryClient },
+		})
+		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/pause", nil)
+		resp, err := deniedRT.RoundTrip(req)
+		s.Error(err, "Expected error for denied group/version in discovery fallback path")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for denied group/version")
+		s.Contains(err.Error(), "resource not allowed")
+	})
+}
+
+func TestSubresourceOnlyAPIGroup(t *testing.T) {
+	suite.Run(t, new(SubresourceOnlyAPIGroupSuite))
 }
