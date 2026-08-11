@@ -2,11 +2,16 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
+
+// ErrUnknownTarget is returned by GetDerivedKubernetes when the requested
+// target (context, workspace, etc.) does not exist or cannot be used.
+var ErrUnknownTarget = errors.New("unknown target")
 
 // McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
 type McpReload func() error

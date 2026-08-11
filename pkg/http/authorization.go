@@ -218,9 +218,11 @@ func (c *JWTClaims) ValidateOffline(audience string) error {
 // ValidateWithProvider validates the JWT claims against the OIDC provider.
 func (c *JWTClaims) ValidateWithProvider(ctx context.Context, audience string, provider *oidc.Provider) error {
 	if provider != nil {
-		verifier := provider.Verifier(&oidc.Config{
-			ClientID: audience,
-		})
+		cfg := &oidc.Config{ClientID: audience}
+		if audience == "" {
+			cfg.SkipClientIDCheck = true
+		}
+		verifier := provider.Verifier(cfg)
 		_, err := verifier.Verify(ctx, c.Token)
 		if err != nil {
 			return fmt.Errorf("OIDC token validation error: %w", err)

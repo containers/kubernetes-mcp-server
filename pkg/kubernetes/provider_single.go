@@ -89,7 +89,7 @@ func (p *singleClusterProvider) GetTargetManagers(_ context.Context) ([]*Manager
 
 func (p *singleClusterProvider) GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error) {
 	if target != "" {
-		return nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy", p.strategy)
+		return nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy: %w", p.strategy, ErrUnknownTarget)
 	}
 
 	return p.manager.Derived(ctx)

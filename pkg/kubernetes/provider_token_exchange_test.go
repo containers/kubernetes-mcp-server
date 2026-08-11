@@ -27,10 +27,11 @@ type TokenExchangingProviderSuite struct {
 }
 
 type observedTokenRequest struct {
-	clientID     string
-	clientSecret string
-	audience     string
-	scope        string
+	clientID         string
+	clientSecret     string
+	audience         string
+	scope            string
+	subjectTokenType string
 }
 
 type exchangeTestOIDCServer struct {
@@ -104,16 +105,18 @@ func (s *TokenExchangingProviderSuite) TestGetDerivedKubernetes() {
 		requests := authServer.recordedRequests()
 		s.Require().Len(requests, 2)
 		s.Equal(observedTokenRequest{
-			clientID:     "old-client",
-			clientSecret: "old-secret",
-			audience:     "old-audience",
-			scope:        "old-scope",
+			clientID:         "old-client",
+			clientSecret:     "old-secret",
+			audience:         "old-audience",
+			scope:            "old-scope",
+			subjectTokenType: tokenexchange.TokenTypeAccessToken,
 		}, requests[0])
 		s.Equal(observedTokenRequest{
-			clientID:     "new-client",
-			clientSecret: "new-secret",
-			audience:     "new-audience",
-			scope:        "new-scope",
+			clientID:         "new-client",
+			clientSecret:     "new-secret",
+			audience:         "new-audience",
+			scope:            "new-scope",
+			subjectTokenType: tokenexchange.TokenTypeAccessToken,
 		}, requests[1])
 	})
 }
@@ -335,10 +338,11 @@ func (s *TokenExchangingProviderSuite) newExchangeTestOIDCServer() *exchangeTest
 		case "/token":
 			s.Require().NoError(r.ParseForm())
 			authServer.record(observedTokenRequest{
-				clientID:     r.PostForm.Get(tokenexchange.FormKeyClientID),
-				clientSecret: r.PostForm.Get(tokenexchange.FormKeyClientSecret),
-				audience:     r.PostForm.Get(tokenexchange.FormKeyAudience),
-				scope:        strings.TrimSpace(r.PostForm.Get(tokenexchange.FormKeyScope)),
+				clientID:         r.PostForm.Get(tokenexchange.FormKeyClientID),
+				clientSecret:     r.PostForm.Get(tokenexchange.FormKeyClientSecret),
+				audience:         r.PostForm.Get(tokenexchange.FormKeyAudience),
+				scope:            strings.TrimSpace(r.PostForm.Get(tokenexchange.FormKeyScope)),
+				subjectTokenType: r.PostForm.Get(tokenexchange.FormKeySubjectTokenType),
 			})
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"access_token":"exchanged-token","token_type":"Bearer","expires_in":3600}`))

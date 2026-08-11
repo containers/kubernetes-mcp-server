@@ -110,6 +110,7 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 		ClientID:           baseConfig.GetStsClientId(),
 		ClientSecret:       baseConfig.GetStsClientSecret(),
 		Audience:           baseConfig.GetStsAudience(),
+		SubjectTokenType:   tokenexchange.TokenTypeAccessToken,
 		Scopes:             scopes,
 		AuthStyle:          authStyle,
 		ClientCertFile:     baseConfig.GetStsClientCertFile(),

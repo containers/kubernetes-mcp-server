@@ -189,7 +189,7 @@ func (p *kcpClusterProvider) managerForWorkspace(ctx context.Context, workspace 
 	}
 
 	if _, exists := p.managers[workspace]; !exists {
-		return nil, fmt.Errorf("workspace %s not found", workspace)
+		return nil, fmt.Errorf("workspace %s not found: %w", workspace, kubernetes.ErrUnknownTarget)
 	}
 
 	// Create REST config for this workspace

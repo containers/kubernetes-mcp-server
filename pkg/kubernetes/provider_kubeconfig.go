@@ -134,7 +134,7 @@ func (p *kubeConfigClusterProvider) managerForContext(ctx context.Context, kubeC
 
 	m, err := NewKubeconfigManager(ctx, baseManager.config, kubeContext)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrUnknownTarget, err)
 	}
 
 	p.managers[kubeContext] = m

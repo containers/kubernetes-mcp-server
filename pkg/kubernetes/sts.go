@@ -8,6 +8,7 @@ import (
 	"golang.org/x/oauth2/google/externalaccount"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
 
 type staticSubjectTokenSupplier struct {
@@ -48,7 +49,7 @@ func (sts *SecurityTokenService) ExternalAccountTokenExchange(ctx context.Contex
 		ClientID:             sts.ClientId,
 		ClientSecret:         sts.ClientSecret,
 		Audience:             sts.ExternalAccountAudience,
-		SubjectTokenType:     "urn:ietf:params:oauth:token-type:access_token",
+		SubjectTokenType:     tokenexchange.TokenTypeAccessToken,
 		SubjectTokenSupplier: &staticSubjectTokenSupplier{token: originalToken.AccessToken},
 		Scopes:               sts.ExternalAccountScopes,
 	})
