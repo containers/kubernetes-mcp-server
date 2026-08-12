@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/textlogger"
 )
 
 func captureOutput(f func() error) (string, error) {
@@ -837,5 +839,62 @@ func TestTLSValidation(t *testing.T) {
 		err := rootCmd.Execute()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "--tls-cert and --tls-key require --port to be set")
+	})
+}
+
+func TestOriginalMetricsPort(t *testing.T) {
+	t.Run("prefers StaticConfig over cfgState", func(t *testing.T) {
+		m := &MCPServerOptions{StaticConfig: &config.StaticConfig{MetricsPort: "9092"}}
+		state := config.NewStaticConfigState(&config.StaticConfig{MetricsPort: "9090"})
+		assert.Equal(t, "9092", originalMetricsPort(m, state))
+	})
+	t.Run("falls back to cfgState when StaticConfig is unset", func(t *testing.T) {
+		m := &MCPServerOptions{}
+		state := config.NewStaticConfigState(&config.StaticConfig{MetricsPort: "9090"})
+		assert.Equal(t, "9090", originalMetricsPort(m, state))
+	})
+	t.Run("empty when neither is set", func(t *testing.T) {
+		assert.Equal(t, "", originalMetricsPort(nil, nil))
+	})
+}
+
+func TestPinMetricsPortOnReload(t *testing.T) {
+	klogState := klog.CaptureState()
+	t.Cleanup(klogState.Restore)
+	buf := &bytes.Buffer{}
+	klog.SetLoggerWithOptions(textlogger.NewLogger(textlogger.NewConfig(textlogger.Output(buf))))
+	ctx := context.Background()
+
+	t.Run("unchanged value is a no-op", func(t *testing.T) {
+		buf.Reset()
+		cfg := &config.StaticConfig{MetricsPort: "9090"}
+		pinMetricsPortOnReload(ctx, "9090", cfg)
+		assert.Equal(t, "9090", cfg.MetricsPort)
+		assert.NotContains(t, buf.String(), "Ignoring metrics_port change on config reload")
+	})
+	t.Run("changed value is restored and warned", func(t *testing.T) {
+		buf.Reset()
+		cfg := &config.StaticConfig{MetricsPort: "9091"}
+		pinMetricsPortOnReload(ctx, "9090", cfg)
+		assert.Equal(t, "9090", cfg.MetricsPort)
+		assert.Contains(t, buf.String(), "Ignoring metrics_port change on config reload")
+		assert.Contains(t, buf.String(), "9091")
+	})
+	t.Run("cleared value is restored and warned", func(t *testing.T) {
+		buf.Reset()
+		cfg := &config.StaticConfig{MetricsPort: ""}
+		pinMetricsPortOnReload(ctx, "9090", cfg)
+		assert.Equal(t, "9090", cfg.MetricsPort)
+		assert.Contains(t, buf.String(), "Ignoring metrics_port change on config reload")
+	})
+	t.Run("newly set value is cleared back to original empty", func(t *testing.T) {
+		buf.Reset()
+		cfg := &config.StaticConfig{MetricsPort: "9090"}
+		pinMetricsPortOnReload(ctx, "", cfg)
+		assert.Equal(t, "", cfg.MetricsPort)
+		assert.Contains(t, buf.String(), "Ignoring metrics_port change on config reload")
+	})
+	t.Run("nil config is a no-op", func(t *testing.T) {
+		assert.NotPanics(t, func() { pinMetricsPortOnReload(ctx, "9090", nil) })
 	})
 }

@@ -739,6 +739,51 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 	})
 }
 
+func (s *ValidateSuite) TestMetricsPort() {
+	s.Run("metrics_port without port is rejected", func() {
+		cfg := s.validConfig()
+		cfg.MetricsPort = "9090"
+		cfg.Port = ""
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "metrics_port requires port")
+	})
+
+	s.Run("metrics_port same as port is rejected", func() {
+		cfg := s.validConfig()
+		cfg.Port = "8080"
+		cfg.MetricsPort = "8080"
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "metrics_port must be different from port")
+	})
+
+	s.Run("metrics_port with different port is accepted", func() {
+		cfg := s.validConfig()
+		cfg.Port = "8080"
+		cfg.MetricsPort = "9090"
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("metrics_port with non-numeric value is rejected", func() {
+		cfg := s.validConfig()
+		cfg.Port = "8080"
+		cfg.MetricsPort = "abc"
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "metrics_port must be a valid port number")
+	})
+
+	s.Run("metrics_port with out-of-range value is rejected", func() {
+		cfg := s.validConfig()
+		cfg.Port = "8080"
+		cfg.MetricsPort = "99999"
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "metrics_port must be a valid port number")
+	})
+}
+
 func TestValidate(t *testing.T) {
 	suite.Run(t, new(ValidateSuite))
 }

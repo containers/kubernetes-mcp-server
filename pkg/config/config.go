@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -44,6 +45,7 @@ type StaticConfig struct {
 	LogFile     string `toml:"log_file,omitempty"`
 	Port        string `toml:"port,omitempty"`
 	BindAddress string `toml:"bind_address,omitempty"`
+	MetricsPort string `toml:"metrics_port,omitempty"`
 	KubeConfig  string `toml:"kubeconfig,omitempty"`
 	ListOutput  string `toml:"list_output,omitempty"`
 	// Stateless configures the MCP server to operate in stateless mode.
@@ -565,6 +567,18 @@ func (c *StaticConfig) Validate(ctx context.Context) error {
 	}
 	if err := toolsets.Validate(c.Toolsets); err != nil {
 		return err
+	}
+	if c.MetricsPort != "" && c.Port == "" {
+		return fmt.Errorf("metrics_port requires port to be set (metrics port is only supported in HTTP mode)")
+	}
+	if c.MetricsPort != "" && c.MetricsPort == c.Port {
+		return fmt.Errorf("metrics_port must be different from port")
+	}
+	if c.MetricsPort != "" {
+		p, err := strconv.Atoi(c.MetricsPort)
+		if err != nil || p < 1 || p > 65535 {
+			return fmt.Errorf("metrics_port must be a valid port number (1-65535), got %q", c.MetricsPort)
+		}
 	}
 	if c.ClusterProviderStrategy != "" && len(c.providerStrategies) > 0 {
 		if !slices.Contains(c.providerStrategies, c.ClusterProviderStrategy) {

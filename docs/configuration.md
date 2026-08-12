@@ -133,7 +133,7 @@ The server will:
 
 ### Limitations
 
-- **Requires restart**: `kubeconfig` or cluster-related settings
+- **Requires restart**: `kubeconfig`, cluster-related settings, `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`
 - **Not available on Windows**: Restart the server to reload configuration
 
 ## Configuration Reference
@@ -145,7 +145,8 @@ The server will:
 | `log_level` | integer | `0` | Logging verbosity level (0-9). Higher values produce more verbose output. Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
 | `log_file` | string | `""` | Path to a server log file. Required for logging in stdio mode (where stdout is reserved for the MCP protocol); replaces stdout logging in HTTP mode. The file is created if it does not exist and opened in append mode (`O_APPEND`, `0o600`). Use the special value `stderr` to route logs to stderr without opening a file. |
 | `port` | string | `""` | When set, starts the MCP server in HTTP mode (Streamable HTTP at `/mcp`) on the specified port. |
-| `bind_address` | string | `"0.0.0.0"` | Address to bind the HTTP server to. Set to `127.0.0.1` to restrict to localhost. A warning is logged when listening on all interfaces (`0.0.0.0` or `::`) without TLS or OAuth. |
+| `bind_address` | string | `"0.0.0.0"` | Address to bind the HTTP server to. Set to `127.0.0.1` to restrict to localhost. A warning is logged when listening on all interfaces (`0.0.0.0` or `::`) without TLS or OAuth, and when a separate metrics port is bound to all interfaces (the metrics server never uses TLS or OAuth). |
+| `metrics_port` | string | `""` | When set (in HTTP mode), starts a separate HTTP server on this port serving only `/metrics`, `/stats`, and `/healthz` endpoints. Useful for Kubernetes deployments with network policies to separate metrics scraping from MCP protocol access. The metrics server uses the same `bind_address` but does not use TLS or OAuth. A warning is logged if `bind_address` is all interfaces (`0.0.0.0` or `::`). |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
@@ -159,6 +160,7 @@ The server will:
 log_level = 2
 log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
+metrics_port = "9090"  # Separate port for metrics/stats (e.g. for network policy isolation)
 list_output = "yaml"
 stateless = true
 
@@ -763,6 +765,7 @@ The following options can be set via command-line arguments. CLI arguments overr
 |--------|-------------|
 | `--port` | Start in HTTP mode on the specified port |
 | `--bind-address` | Address to bind the HTTP server to (default: `0.0.0.0`) |
+| `--metrics-port` | Start a separate metrics server on the specified port (only valid with `--port`) |
 | `--log-level` | Logging verbosity (0-9) |
 | `--log-file` | Path to a server log file. Required for logging in stdio mode; replaces stdout logging in HTTP mode. Use `stderr` to log to the standard error stream. |
 | `--config` | Path to main TOML configuration file |
