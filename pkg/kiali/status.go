@@ -7,7 +7,10 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
@@ -106,8 +109,6 @@ func isTemporaryDNSProbeError(err error) bool {
 	return errors.As(err, &dnsErr) && dnsErr.IsTemporary
 }
 
-// probeStatusURL GETs {baseURL}/api/status and returns true when the response
-// is HTTP 2xx and contains a non-empty status object (Kiali is reachable).
 func probeStatusURL(ctx context.Context, baseURL string, cfg *Config, bearerToken string) bool {
 	k := kialiForStatusProbe(baseURL, cfg, bearerToken)
 	if k == nil {
@@ -137,4 +138,40 @@ func kialiForStatusProbe(baseURL string, cfg *Config, bearerToken string) *Kiali
 		kialiInsecure:        probeCfg.Insecure,
 		certificateAuthority: probeCfg.CertificateAuthority,
 	}
+}
+
+func probeCandidateURLs(ctx context.Context, candidates []string, cfg *Config, bearerToken string) (string, bool) {
+	if len(candidates) == 0 {
+		return "", false
+	}
+	if len(candidates) == 1 {
+		if probeStatusURL(ctx, candidates[0], cfg, bearerToken) {
+			return candidates[0], true
+		}
+		return "", false
+	}
+
+	probeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu    sync.Mutex
+		found string
+	)
+	g, gctx := errgroup.WithContext(probeCtx)
+	for _, candidate := range candidates {
+		g.Go(func() error {
+			if probeStatusURL(gctx, candidate, cfg, bearerToken) {
+				mu.Lock()
+				if found == "" {
+					found = candidate
+					cancel()
+				}
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return found, found != ""
 }

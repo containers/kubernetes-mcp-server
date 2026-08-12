@@ -1,7 +1,6 @@
 package prompts
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -11,7 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
-func InitIstioConfigReview(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
+func InitIstioConfigReview() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: config.Prompt{
@@ -26,7 +25,7 @@ func InitIstioConfigReview(ctx context.Context, inspector api.ClusterInspector) 
 					},
 				},
 			},
-			RBAC:    tools.MergeRBACBounded(tools.IstioConfigReadRBAC(), tools.ResourcesRBAC(ctx, inspector)),
+			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 			Handler: istioConfigReviewHandler,
 		},
 	}

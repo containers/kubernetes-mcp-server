@@ -5,12 +5,12 @@ import (
 	"slices"
 	"sync"
 
-	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
@@ -36,7 +36,7 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 		warnKialiValidationDisabledOnce.Do(func() {
 			klogutil.LogWarn(
 				klogutil.FromContext(ctx),
-				"experimental_enable_target_compatibility_tool_filters is disabled; Kiali URL reachability is not validated",
+				"experimental_enable_target_compatibility_tool_filters is disabled; Kiali URL reachability and in-cluster discovery are not validated",
 			)
 		})
 	} else if !kialiAvailable(ctx, toolsetContext) {
@@ -53,15 +53,8 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 }
 
 func kialiAvailable(ctx context.Context, toolsetContext api.ToolsetContext) bool {
-	restConfig := &rest.Config{}
-	if toolsetContext.Inspector != nil {
-		restConfig.BearerToken, _ = toolsetContext.Inspector.BearerToken(ctx).Default()
-	}
-	kiali, err := kialiclient.NewKiali(toolsetContext.Config, restConfig)
-	if err != nil {
-		return false
-	}
-	return kiali.Available(ctx)
+	kp := kubernetes.ClusterProvider(toolsetContext.Inspector)
+	return kialiclient.HasKiali(ctx, toolsetContext.Config, kp, toolsetContext.Inspector)
 }
 
 func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerPrompt {
@@ -82,7 +75,6 @@ func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetCont
 		kialiPrompts.InitTraceAnalysis(),
 		kialiPrompts.InitIstioConfigReview(ctx, toolsetContext.Inspector),
 	)
-	// Same as tools: mesh scope is not selected via provider context.
 	for i := range prompts {
 		prompts[i].ClusterAware = ptr.To(false)
 	}
