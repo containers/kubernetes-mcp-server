@@ -105,3 +105,36 @@ func isTemporaryDNSProbeError(err error) bool {
 	var dnsErr *net.DNSError
 	return errors.As(err, &dnsErr) && dnsErr.IsTemporary
 }
+
+// probeStatusURL GETs {baseURL}/api/status and returns true when the response
+// is HTTP 2xx and contains a non-empty status object (Kiali is reachable).
+func probeStatusURL(ctx context.Context, baseURL string, cfg *Config, bearerToken string) bool {
+	k := kialiForStatusProbe(baseURL, cfg, bearerToken)
+	if k == nil {
+		return false
+	}
+	return k.probeStatus(ctx)
+}
+
+func kialiForStatusProbe(baseURL string, cfg *Config, bearerToken string) *Kiali {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return nil
+	}
+
+	probeCfg := cfg
+	if probeCfg == nil {
+		probeCfg = &Config{Url: baseURL}
+	} else if strings.TrimSpace(probeCfg.Url) == "" {
+		cp := *probeCfg
+		cp.Url = baseURL
+		probeCfg = &cp
+	}
+
+	return &Kiali{
+		bearerToken:          bearerToken,
+		kialiURL:             probeCfg.Url,
+		kialiInsecure:        probeCfg.Insecure,
+		certificateAuthority: probeCfg.CertificateAuthority,
+	}
+}

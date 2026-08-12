@@ -19,9 +19,12 @@ url = "https://kiali.example" # Endpoint/route to reach Kiali console
 # When url is https and insecure is false, certificate_authority is required.
 ```
 
-URL reachability checks require `experimental_enable_target_compatibility_tool_filters = true` (default `false`). Without it, Kiali tools are always registered and no `/api/status` probe runs.
+Reachability checks and in-cluster URL discovery require `experimental_enable_target_compatibility_tool_filters = true` (default `false`). Without it, Kiali tools are always registered and no `/api/status` probe or CR-based discovery runs.
 
-When that flag is enabled and `[toolset_configs.kiali].url` is set, the server probes `GET {url}/api/status` and only exposes Kiali tools if that call succeeds.
+When that flag is enabled:
+
+- If `url` is set, the server probes `GET {url}/api/status` and only exposes Kiali tools if that call succeeds.
+- If `url` is unset and a Kiali CR is present, the server tries to discover the in-cluster Service URL (`http://<instance>.<namespace>.svc:<port>[/web_root]`), probes `/api/status`, and injects a working URL into the live config.
 
 When the `kiali` toolset is enabled with an explicit HTTPS URL and `insecure = false`, `certificate_authority` is still required at config load time.
 
@@ -81,7 +84,7 @@ curl -sk -X POST "${KIALI_URL}api/chat/mcp/list_clusters" \
 
 ### Troubleshooting
 
-- Kiali tools missing from `tools/list` → enable `experimental_enable_target_compatibility_tool_filters = true` and set a reachable `[toolset_configs.kiali].url`.
+- Kiali tools missing from `tools/list` → enable `experimental_enable_target_compatibility_tool_filters = true`, then set `[toolset_configs.kiali].url` or ensure a Kiali CR is installed so the in-cluster Service URL can be discovered.
 - Invalid or unreachable URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL and that `GET {url}/api/status` succeeds from the MCP server.
 - TLS certificate validation:
   - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the path to the CA certificate file. Relative paths are resolved relative to the directory containing the config file.

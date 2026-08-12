@@ -51,6 +51,9 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 			kiali.certificateAuthority = kc.CertificateAuthority
 		}
 	}
+	if strings.TrimSpace(kiali.kialiURL) == "" {
+		kiali.kialiURL = getDiscoveredURL()
+	}
 	return kiali, nil
 }
 
@@ -166,6 +169,9 @@ func (k *Kiali) authorizationHeader() string {
 	}
 	return "Bearer " + token
 }
+
+// maxResponseBodySize caps bytes read from Kiali status probes.
+const maxResponseBodySize = 512 << 10 // 512 KiB
 
 func (k *Kiali) backendLimit() (int64, error) {
 	// Unreachable today: NewKiali rejects a nil config and stores it. The error
