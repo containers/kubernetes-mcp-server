@@ -23,8 +23,8 @@ import (
 //     Service DNS candidates after the Kiali GVK is detected).
 //
 // URL / config checks use api.ExtendedConfigProvider on the FilteringProvider
-// value (the MCP server wraps it with live toolset_configs). Cluster listing
-// for CRs is optional and only used when the provider also implements
+// (kubernetes.Provider embeds api.BaseConfig). Cluster listing for CRs is
+// optional and only used when the provider also implements
 // kubernetes.Provider — no generic MCP changes are required for the URL-probe path.
 var KialiGVK = schema.GroupVersionKind{
 	Group:   "kiali.io",

@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetMeshTrafficGraph(p api.FilteringProvider) []api.ServerTool {
+func InitGetMeshTrafficGraph() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_mesh_traffic_graph"
 	ret = append(ret, api.ServerTool{
@@ -47,9 +47,6 @@ func InitGetMeshTrafficGraph(p api.FilteringProvider) []api.ServerTool {
 			},
 		},
 		Handler: getMeshGraphHandler,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 	return ret
 }

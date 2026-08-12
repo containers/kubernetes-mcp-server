@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitManageIstioConfigRead(p api.FilteringProvider) []api.ServerTool {
+func InitManageIstioConfigRead() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_manage_istio_config_read"
 	ret = append(ret, api.ServerTool{
@@ -74,9 +74,6 @@ func InitManageIstioConfigRead(p api.FilteringProvider) []api.ServerTool {
 			},
 		},
 		Handler: istioConfigHandlerRead,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 	return ret
 }

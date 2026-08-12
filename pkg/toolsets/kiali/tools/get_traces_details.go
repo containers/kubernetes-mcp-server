@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetTraceDetails(p api.FilteringProvider) []api.ServerTool {
+func InitGetTraceDetails() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_trace_details"
 	ret = append(ret, api.ServerTool{
@@ -37,9 +37,6 @@ func InitGetTraceDetails(p api.FilteringProvider) []api.ServerTool {
 			},
 		},
 		Handler: tracesHandler,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 
 	return ret
