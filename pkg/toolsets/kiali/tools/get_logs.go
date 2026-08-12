@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetLogs(p api.FilteringProvider) []api.ServerTool {
+func InitGetLogs() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_logs"
 	// Workload logs tool
@@ -74,9 +74,6 @@ func InitGetLogs(p api.FilteringProvider) []api.ServerTool {
 		},
 		RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 		Handler: workloadLogsHandler,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 
 	return ret

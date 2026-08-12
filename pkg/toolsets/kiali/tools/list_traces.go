@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitListTraces(p api.FilteringProvider) []api.ServerTool {
+func InitListTraces() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_list_traces"
 	ret = append(ret, api.ServerTool{
@@ -61,9 +61,6 @@ func InitListTraces(p api.FilteringProvider) []api.ServerTool {
 		},
 		RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 		Handler: listTracesHandler,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 
 	return ret

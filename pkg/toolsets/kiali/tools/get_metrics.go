@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetMetrics(p api.FilteringProvider) []api.ServerTool {
+func InitGetMetrics() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_metrics"
 	ret = append(ret, api.ServerTool{
@@ -85,9 +85,6 @@ func InitGetMetrics(p api.FilteringProvider) []api.ServerTool {
 		},
 		RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 		Handler: resourceMetricsHandler,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 
 	return ret

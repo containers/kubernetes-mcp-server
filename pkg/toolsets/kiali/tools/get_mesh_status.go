@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetMeshStatus(p api.FilteringProvider) []api.ServerTool {
+func InitGetMeshStatus() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_mesh_status"
 	ret = append(ret, api.ServerTool{
@@ -32,9 +32,6 @@ func InitGetMeshStatus(p api.FilteringProvider) []api.ServerTool {
 		},
 		RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 		Handler: getMeshStatusHandler,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 	return ret
 }

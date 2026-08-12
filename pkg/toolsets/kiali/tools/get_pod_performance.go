@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetPodPerformance(p api.FilteringProvider) []api.ServerTool {
+func InitGetPodPerformance() []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_pod_performance"
 	ret = append(ret, api.ServerTool{
@@ -59,9 +59,6 @@ func InitGetPodPerformance(p api.FilteringProvider) []api.ServerTool {
 		},
 		RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 		Handler: getPodPerformanceHandler,
-		TargetCompatibilityFilters: []func() bool{
-			kialiclient.HasKiali(p),
-		},
 	})
 
 	return ret
