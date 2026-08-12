@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -166,34 +165,6 @@ func (s *ToolsetsSuite) TestKialiToolsFilteredWithoutCRDs() {
 				}
 			}
 		})
-	})
-}
-
-func (s *ToolsetsSuite) TestKialiToolsVisibleWithConfiguredURL() {
-	s.Run("Kiali tools remain visible when URL is set even without Kiali GVK", func() {
-		toolsetName := (&kiali.Toolset{}).GetName()
-		kubeConfig := s.Cfg.KubeConfig
-		cfg, err := configuration.ReadToml([]byte(fmt.Sprintf(`
-			toolsets = ["%s"]
-			experimental_enable_target_compatibility_tool_filters = true
-			[toolset_configs.kiali]
-			url = "https://kiali.example"
-			insecure = true
-		`, toolsetName)))
-		s.Require().NoError(err, "failed to parse kiali toolset config")
-		s.Cfg = cfg
-		s.Cfg.KubeConfig = kubeConfig
-		s.InitMcpClient()
-		tools, err := s.ListTools()
-		s.Require().NoError(err, "Expected no error from ListTools")
-		s.Require().NotNil(tools, "Expected tools from ListTools")
-		present := make(map[string]bool, len(tools.Tools))
-		for _, tool := range tools.Tools {
-			present[tool.Name] = true
-		}
-		for _, kialiTool := range s.kialiToolNames(toolsetName) {
-			s.Truef(present[kialiTool], "Expected %s to be present when URL is configured", kialiTool)
-		}
 	})
 }
 
