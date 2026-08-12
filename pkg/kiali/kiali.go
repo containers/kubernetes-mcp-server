@@ -49,6 +49,9 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 			kiali.certificateAuthority = kc.CertificateAuthority
 		}
 	}
+	if strings.TrimSpace(kiali.kialiURL) == "" {
+		kiali.kialiURL = getDiscoveredURL()
+	}
 	return kiali, nil
 }
 
