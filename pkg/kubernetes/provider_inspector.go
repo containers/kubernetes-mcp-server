@@ -14,6 +14,15 @@ func NewClusterInspector(provider Provider) api.ClusterInspector {
 	return &providerInspector{provider: provider}
 }
 
+// ClusterProvider returns the Kubernetes provider behind an inspector created
+// by NewClusterInspector, or nil for other inspectors.
+func ClusterProvider(inspector api.ClusterInspector) Provider {
+	if pi, ok := inspector.(*providerInspector); ok {
+		return pi.provider
+	}
+	return nil
+}
+
 type providerInspector struct {
 	provider Provider
 }

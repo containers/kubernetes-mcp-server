@@ -13,7 +13,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
-func InitTrafficTopology(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
+func InitTrafficTopology() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: config.Prompt{
@@ -28,7 +28,7 @@ func InitTrafficTopology(ctx context.Context, inspector api.ClusterInspector) []
 					},
 				},
 			},
-			RBAC:    tools.GraphRBAC(ctx, inspector),
+			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 			Handler: trafficTopologyHandler,
 		},
 	}
