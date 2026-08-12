@@ -85,11 +85,6 @@ type diagnosisPartialError struct {
 	Message string `json:"message"`
 }
 
-type eventTarget struct {
-	kind string
-	name string
-}
-
 var pipelineRunDiagnosisOutputSchema = func() *jsonschema.Schema {
 	schema, err := jsonschema.For[pipelineRunDiagnosis](nil)
 	if err != nil {
@@ -294,16 +289,16 @@ func diagnoseStep(diagnosis *pipelineRunDiagnosis, step tektonv1.StepState) diag
 	return result
 }
 
-func eventsFieldSelector(target eventTarget) string {
+func eventsFieldSelector(target pipelineEventTarget) string {
 	return fmt.Sprintf("involvedObject.kind=%s,involvedObject.name=%s", target.kind, target.name)
 }
 
 func warningEventsForPipelineRun(ctx context.Context, params api.ToolHandlerParams, namespace, pipelineRunName string, taskRuns []*tektonv1.TaskRun, diagnosis *pipelineRunDiagnosis) []diagnosedEvent {
-	targets := []eventTarget{{kind: "PipelineRun", name: pipelineRunName}}
+	targets := []pipelineEventTarget{{kind: "PipelineRun", name: pipelineRunName}}
 	for _, taskRun := range taskRuns {
-		targets = append(targets, eventTarget{kind: "TaskRun", name: taskRun.Name})
+		targets = append(targets, pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
 		if taskRun.Status.PodName != "" {
-			targets = append(targets, eventTarget{kind: "Pod", name: taskRun.Status.PodName})
+			targets = append(targets, pipelineEventTarget{kind: "Pod", name: taskRun.Status.PodName})
 		}
 	}
 
