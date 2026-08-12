@@ -44,14 +44,15 @@ var ParameterCodec = runtime.NewParameterCodec(Scheme)
 // apiVersion and kinds are checked for allowed access
 type Kubernetes struct {
 	kubernetes.Interface
-	config          api.BaseConfig
-	clientCmdConfig clientcmd.ClientConfig
-	restConfig      *rest.Config
-	httpClient      *http.Client
-	restMapper      meta.ResettableRESTMapper
-	discoveryClient discovery.CachedDiscoveryInterface
-	dynamicClient   dynamic.Interface
-	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
+	config             api.BaseConfig
+	clientCmdConfig    clientcmd.ClientConfig
+	restConfig         *rest.Config
+	httpClient         *http.Client
+	restMapper         meta.ResettableRESTMapper
+	discoveryClient    discovery.CachedDiscoveryInterface
+	rawDiscoveryClient discovery.DiscoveryInterface
+	dynamicClient      dynamic.Interface
+	metricsV1beta1     *metricsv1beta1.MetricsV1beta1Client
 }
 
 var _ api.KubernetesClient = (*Kubernetes)(nil)
@@ -78,6 +79,7 @@ func NewKubernetes(
 			RestMapperProvider:        func() meta.RESTMapper { return k.restMapper },
 			HostURL:                   k.restConfig.Host,
 			DiscoveryProvider:         func() discovery.DiscoveryInterface { return k.discoveryClient },
+			RawDiscoveryProvider:      func() discovery.DiscoveryInterface { return k.rawDiscoveryClient },
 			AuthClientProvider:        func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
 			ValidationEnabled:         baseConfig.IsValidationEnabled(),
 			ConfirmationRulesProvider: baseConfig,
@@ -101,6 +103,7 @@ func NewKubernetes(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discovery client: %w", err)
 	}
+	k.rawDiscoveryClient = discoveryClient
 	k.discoveryClient = memory.NewMemCacheClient(discoveryClient)
 	k.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(k.discoveryClient)
 	k.Interface, err = kubernetes.NewForConfigAndClient(k.restConfig, k.httpClient)

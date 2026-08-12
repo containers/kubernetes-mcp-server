@@ -542,9 +542,9 @@ func (s *SubresourceOnlyAPIGroupSuite) TestRoundTripForSubresourceOnlyAPIGroups(
 	}
 
 	rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
-		Delegate:           mockDelegate,
-		RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
-		DiscoveryProvider:  func() discovery.DiscoveryInterface { return s.discoveryClient },
+		Delegate:             mockDelegate,
+		RestMapperProvider:   func() meta.RESTMapper { return s.restMapper },
+		RawDiscoveryProvider: func() discovery.DiscoveryInterface { return s.discoveryClient },
 	})
 
 	s.Run("subresource-only API group passes through for pause action", func() {
@@ -607,7 +607,7 @@ func (s *SubresourceOnlyAPIGroupSuite) TestRoundTripForSubresourceOnlyAPIGroups(
 			Delegate:                mockDelegate,
 			DeniedResourcesProvider: &mockDeniedResourcesProvider{resources: []api.GroupVersionKind{{Group: "subresources.kubevirt.io", Version: "v1"}}},
 			RestMapperProvider:      func() meta.RESTMapper { return s.restMapper },
-			DiscoveryProvider:       func() discovery.DiscoveryInterface { return s.discoveryClient },
+			RawDiscoveryProvider:    func() discovery.DiscoveryInterface { return s.discoveryClient },
 		})
 		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/pause", nil)
 		resp, err := deniedRT.RoundTrip(req)
