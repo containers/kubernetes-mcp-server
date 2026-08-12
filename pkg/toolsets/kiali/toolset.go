@@ -6,6 +6,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
@@ -25,6 +26,8 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
+	// Evaluate reachability once and share the filter across all Kiali tools.
+	hasKiali := kialiclient.HasKiali(p)
 	tools := slices.Concat(
 		kialiTools.InitGetMeshTrafficGraph(p),
 		kialiTools.InitGetMeshStatus(p),
@@ -42,6 +45,7 @@ func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	// not the provider-level context parameter injected for core Kubernetes tools.
 	for i := range tools {
 		tools[i].ClusterAware = ptr.To(false)
+		tools[i].TargetCompatibilityFilters = []func() bool{hasKiali}
 	}
 	return tools
 }
