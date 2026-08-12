@@ -41,7 +41,7 @@ These tools are read-only except the start and lifecycle operations. Tekton tool
 
 `tekton_pipelinerun_diagnose` accepts `namespace` and `name`. Its versioned structured response is also serialized as JSON text for clients that do not support MCP structured content. Arrays and partial errors are sorted for repeatable output. Workload-provided conditions, Events, and logs are marked as untrusted data; credentials in those fields are redacted on a best-effort basis.
 
-Collection is bounded to 50 failed TaskRuns, 20 failed steps per TaskRun, 50 warning Events, 100 tail lines and 32 KiB per failed-step log, and 128 KiB of logs in total. `truncated` is set when a bound is reached. An unavailable TaskRun list, Event list, or failed-step log is reported in `partialErrors`; a missing PipelineRun is a tool error.
+Collection is bounded to 50 failed TaskRuns, 20 failed steps per TaskRun, 50 warning Events, 100 tail lines and 32 KiB per failed-step log, and 128 KiB of logs in total. `truncated` is set when a bound is reached. These limits intentionally are not configurable or paginated: the tool returns one bounded diagnostic snapshot, while `tekton_pipelinerun_logs` and the generic resource tools support narrower follow-up queries. An unavailable TaskRun list, Event list, or failed-step log is reported in `partialErrors`; a missing PipelineRun is a tool error.
 
 The tool reads only PipelineRuns, TaskRuns, Events, and `pods/log`. It never reads Secrets. Kubernetes authorization remains the access boundary, so grant only same-namespace `get`/`list` access needed by the caller.
 

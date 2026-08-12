@@ -152,8 +152,21 @@ func diagnosePipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, err
 		PartialErrors:  []diagnosisPartialError{},
 	}
 	result.PipelineRun.Conditions = diagnoseConditions(&result, pipelineRun.Status.Conditions)
+	failedTaskRuns := failedPipelineRunTaskRuns(params.Context, params, namespace, name, &result)
+	result.FailedTaskRuns = diagnoseFailedTaskRuns(params, namespace, failedTaskRuns, &result)
+	result.WarningEvents = warningEventsForPipelineRun(params.Context, params, namespace, name, failedTaskRuns, &result)
+	sort.Slice(result.PartialErrors, func(i, j int) bool {
+		if result.PartialErrors[i].Source == result.PartialErrors[j].Source {
+			return result.PartialErrors[i].Message < result.PartialErrors[j].Message
+		}
+		return result.PartialErrors[i].Source < result.PartialErrors[j].Source
+	})
 
-	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, name, "")
+	return api.NewToolCallResultStructured(result, nil), nil
+}
+
+func failedPipelineRunTaskRuns(ctx context.Context, params api.ToolHandlerParams, namespace, name string, result *pipelineRunDiagnosis) []*tektonv1.TaskRun {
+	taskRuns, err := pipelineRunTaskRuns(ctx, params.DynamicClient(), namespace, name, "")
 	if err != nil {
 		result.addPartialError("taskruns", err)
 	}
@@ -169,15 +182,19 @@ func diagnosePipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, err
 		failedTaskRuns = failedTaskRuns[:maxDiagnosisTaskRuns]
 		result.Truncated = true
 	}
+	return failedTaskRuns
+}
 
+func diagnoseFailedTaskRuns(params api.ToolHandlerParams, namespace string, taskRuns []*tektonv1.TaskRun, result *pipelineRunDiagnosis) []diagnosedTaskRun {
+	diagnosedTaskRuns := make([]diagnosedTaskRun, 0, len(taskRuns))
 	remainingLogReadBytes := maxDiagnosisLogBytesTotal
 	remainingLogOutputBytes := maxDiagnosisLogBytesTotal
-	for _, taskRun := range failedTaskRuns {
+	for _, taskRun := range taskRuns {
 		diagnosed := diagnosedTaskRun{
 			Name:         taskRun.Name,
 			PipelineTask: taskRun.Labels[pipeline.PipelineTaskLabelKey],
 			PodName:      taskRun.Status.PodName,
-			Conditions:   diagnoseConditions(&result, taskRun.Status.Conditions),
+			Conditions:   diagnoseConditions(result, taskRun.Status.Conditions),
 			FailedSteps:  []diagnosedStep{},
 		}
 
@@ -192,7 +209,7 @@ func diagnosePipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, err
 				break
 			}
 
-			diagnosedStep := diagnoseStep(&result, step)
+			diagnosedStep := diagnoseStep(result, step)
 			if taskRun.Status.PodName != "" && step.Container != "" {
 				if remainingLogReadBytes <= 0 || remainingLogOutputBytes <= 0 {
 					diagnosedStep.LogTruncated = true
@@ -215,18 +232,9 @@ func diagnosePipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, err
 			}
 			diagnosed.FailedSteps = append(diagnosed.FailedSteps, diagnosedStep)
 		}
-		result.FailedTaskRuns = append(result.FailedTaskRuns, diagnosed)
+		diagnosedTaskRuns = append(diagnosedTaskRuns, diagnosed)
 	}
-
-	result.WarningEvents = warningEventsForPipelineRun(params.Context, params, namespace, name, failedTaskRuns, &result)
-	sort.Slice(result.PartialErrors, func(i, j int) bool {
-		if result.PartialErrors[i].Source == result.PartialErrors[j].Source {
-			return result.PartialErrors[i].Message < result.PartialErrors[j].Message
-		}
-		return result.PartialErrors[i].Source < result.PartialErrors[j].Source
-	})
-
-	return api.NewToolCallResultStructured(result, nil), nil
+	return diagnosedTaskRuns
 }
 
 func getPipelineRun(ctx context.Context, params api.ToolHandlerParams, namespace, name string) (*tektonv1.PipelineRun, error) {

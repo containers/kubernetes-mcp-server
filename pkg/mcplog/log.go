@@ -153,14 +153,23 @@ func Sanitize(msg string) string {
 	return msg
 }
 
-var logSecretPatterns = []string{
-	"bearer ", "authorization:", "authorization=",
-	"-u ", "--user ", "-----begin",
-	"ssh-rsa ", "ssh-ed25519 ", "ssh-dss ",
-	"password=", "password:", "passwd=", "passwd:",
-	"token=", "token:", "secret=", "secret:",
-	"api_key=", "api_key:", "api-key=", "api-key:",
-}
+var logSecretPattern = func() *regexp.Regexp {
+	patterns := []string{
+		"bearer ", "authorization:", "authorization=",
+		"-u ", "--user ",
+		"ssh-rsa ", "ssh-ed25519 ", "ssh-dss ",
+		"password=", "password:", "passwd=", "passwd:",
+		"token=", "token:", "secret=", "secret:",
+		"credential=", "credential:", "credentials=", "credentials:",
+		"api_key=", "api_key:", "api-key=", "api-key:", "apikey=", "apikey:",
+		"aws_secret_access_key=", "aws_secret_access_key:",
+		"auth=", "auth:", `"auth"=`, `"auth":`,
+	}
+	for i := range patterns {
+		patterns[i] = regexp.QuoteMeta(patterns[i])
+	}
+	return regexp.MustCompile(`(?i)(?:` + strings.Join(patterns, "|") + `)`)
+}()
 
 // SanitizeLog applies the standard sanitizer and best-effort line redaction for
 // credential formats commonly printed by command-line tools.
@@ -185,12 +194,8 @@ func SanitizeLog(content string) string {
 		}
 
 		line := Sanitize(rawLine)
-		lower = strings.ToLower(line)
-		for _, pattern := range logSecretPatterns {
-			if index := strings.Index(lower, pattern); index >= 0 {
-				line = line[:index+len(pattern)] + "[REDACTED]"
-				break
-			}
+		if match := logSecretPattern.FindStringIndex(line); match != nil {
+			line = line[:match[1]] + "[REDACTED]"
 		}
 		result = append(result, line)
 	}
