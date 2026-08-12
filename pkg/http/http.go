@@ -52,10 +52,12 @@ const (
 	sseMessageEndpoint = "/message"
 )
 
-var (
-	// infraPaths contains infrastructure endpoints which should not have oauth applied
-	infraPaths = []string{healthEndpoint, metricsEndpoint, statsEndpoint}
-)
+func infraPaths(metricsOnSeparatePort bool) []string {
+	if metricsOnSeparatePort {
+		return []string{healthEndpoint}
+	}
+	return []string{healthEndpoint, metricsEndpoint, statsEndpoint}
+}
 
 // metricsMiddleware wraps an HTTP handler to record metrics for all requests
 func metricsMiddleware(next http.Handler, metrics *mcp.Server) http.Handler {
@@ -156,9 +158,30 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	mux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
-	mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
 	mux.Handle("/.well-known/", WellKnownHandler(cfgState, oauthState))
+
+	metricsOnSeparatePort := staticConfig.MetricsPort != ""
+
+	if !metricsOnSeparatePort {
+		mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
+		mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
+	}
+
+	var metricsServer *http.Server
+	if metricsOnSeparatePort {
+		metricsMux := http.NewServeMux()
+		metricsMux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		metricsMux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
+		metricsMux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
+		metricsServer = &http.Server{
+			Addr:              net.JoinHostPort(staticConfig.BindAddress, staticConfig.MetricsPort),
+			Handler:           metricsMux,
+			ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Duration(),
+			BaseContext:       func(_ net.Listener) context.Context { return ctx },
+		}
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -183,19 +206,23 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		)
 	}
 
-	serverErr := make(chan error, 1)
+	serverErr := make(chan error, 2)
 	go func() {
 		var err error
+		endpoints := "/mcp, /sse, /message, /healthz, /stats, /metrics"
+		if metricsOnSeparatePort {
+			endpoints = "/mcp, /sse, /message, /healthz"
+		}
 		if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
 			logger.Info("HTTPS server starting",
 				"server.addr", httpServer.Addr,
-				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+				"endpoints", endpoints,
 			)
 			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert, staticConfig.TLSKey)
 		} else {
 			logger.Info("HTTP server starting",
 				"server.addr", httpServer.Addr,
-				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+				"endpoints", endpoints,
 			)
 			err = httpServer.ListenAndServe()
 		}
@@ -204,6 +231,19 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		}
 	}()
 
+	if metricsServer != nil {
+		go func() {
+			logger.Info("Metrics server starting",
+				"server.addr", metricsServer.Addr,
+				"endpoints", "/metrics, /stats, /healthz",
+			)
+			if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- err
+			}
+		}()
+	}
+
+	var serveErr error
 	select {
 	case sig := <-sigChan:
 		logger.Info("Received signal, initiating graceful shutdown", "signal", sig.String())
@@ -212,7 +252,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		logger.Info("Context cancelled, initiating graceful shutdown")
 	case err := <-serverErr:
 		logger.Error(err, "HTTP server error")
-		return err
+		serveErr = err
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -225,6 +265,12 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		logger.Error(err, "HTTP server shutdown error")
 	}
 
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error(err, "Metrics server shutdown error")
+		}
+	}
+
 	// Always attempt MCP server shutdown (flushes metrics) even if HTTP shutdown failed
 	if err := mcpServer.Shutdown(shutdownCtx); err != nil {
 		// Don't fail Run() for errors during shutdown
@@ -232,5 +278,5 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	}
 
 	logger.Info("HTTP server shutdown complete")
-	return nil
+	return serveErr
 }
