@@ -9,6 +9,16 @@ MCPCHECKER = $(shell pwd)/_output/tools/bin/mcpchecker
 MCPCHECKER_VERSION ?= latest
 CLAUDE_AGENT_ACP = $(shell pwd)/_output/tools/node_modules/.bin/claude-agent-acp
 CLAUDE_AGENT_ACP_VERSION ?= latest
+JQ = $(shell pwd)/_output/tools/bin/jq
+JQ_VERSION ?= 1.7.1
+# Derive the jq release asset for the host from the Go toolchain (already a
+# dependency of this eval flow). jq names assets macos/i386 where Go says
+# darwin/386, and suffixes Windows binaries with .exe.
+JQ_GO_OS ?= $(shell go env GOHOSTOS)
+JQ_GO_ARCH ?= $(shell go env GOHOSTARCH)
+JQ_OS = $(patsubst darwin,macos,$(JQ_GO_OS))
+JQ_ARCH = $(patsubst 386,i386,$(JQ_GO_ARCH))
+JQ_ASSET = jq-$(JQ_OS)-$(JQ_ARCH)$(if $(filter windows,$(JQ_GO_OS)),.exe,)
 
 # High-level knobs for local single-suite runs, e.g.:
 #   make run-evals SUITE=kubevirt AGENT=acp-anthropic MODEL=sonnet
@@ -26,6 +36,18 @@ EVAL_CONFIG ?= $(or $(wildcard evals/tasks/$(SUITE)/$(AGENT)/eval.yaml),evals/co
 EVAL_LABEL_SELECTOR ?= suite=$(SUITE)
 EVAL_TASK_FILTER ?=
 EVAL_VERBOSE ?= false
+
+# Download and install jq static binary if not already installed
+.PHONY: jq
+jq:
+	@[ -f $(JQ) ] || { \
+		set -e ;\
+		echo "Installing jq $(JQ_VERSION) ($(JQ_ASSET)) to $(JQ)..." ;\
+		mkdir -p $(shell dirname $(JQ)) ;\
+		curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/$(JQ_ASSET)" \
+			-o $(JQ) ;\
+		chmod +x $(JQ) ;\
+	}
 
 # Download and install mcpchecker if not already installed
 .PHONY: mcpchecker
@@ -51,7 +73,7 @@ claude-agent-acp: ## Install the claude-agent-acp adapter for the acp-anthropic 
 	}
 
 .PHONY: run-evals
-run-evals: mcpchecker $(if $(filter acp-anthropic,$(AGENT)),claude-agent-acp) ## Run mcpchecker evals (knobs: SUITE, AGENT, MODEL; see evals/README.md)
+run-evals: mcpchecker jq $(if $(filter acp-anthropic,$(AGENT)),claude-agent-acp) ## Run mcpchecker evals (knobs: SUITE, AGENT, MODEL; see evals/README.md)
 	$(if $(MODEL),ANTHROPIC_MODEL=$(MODEL) )PATH="$(shell pwd)/_output/tools/node_modules/.bin:$(PATH)" $(MCPCHECKER) check $(EVAL_CONFIG) \
 		$(if $(EVAL_LABEL_SELECTOR),--label-selector $(EVAL_LABEL_SELECTOR),) \
 		$(if $(EVAL_TASK_FILTER),--run "$(EVAL_TASK_FILTER)",) \
