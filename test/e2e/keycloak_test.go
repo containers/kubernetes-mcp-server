@@ -9,43 +9,24 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/stretchr/testify/require"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
-
-const keycloakRealm = "openshift"
-
-type keycloakCtxKey struct{}
 
 type keycloakState struct {
 	localURL string
 }
 
+var keycloakTS testState[keycloakState]
+
 func TestKeycloakOIDC(t *testing.T) {
 	f := features.New("keycloak-oidc").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			clientset, err := clientsetFromKubeconfig(cfg.KubeconfigFile())
-			require.NoError(t, err)
-
-			_, err = clientset.CoreV1().Services("keycloak").Get(ctx, "keycloak", metav1.GetOptions{})
-			if apierrors.IsNotFound(err) {
-				t.Skip("Keycloak not installed, skipping OIDC tests (run 'make keycloak-install' first)")
-			}
-			require.NoError(t, err, "check keycloak service")
-
-			restCfg, err := clientcmd.BuildConfigFromFlags("", cfg.KubeconfigFile())
-			require.NoError(t, err, "build rest config")
-
-			localURL, stopPF := portForwardService(ctx, t, restCfg, clientset, "keycloak", "keycloak", 8080)
-			t.Cleanup(stopPF)
-
-			return context.WithValue(ctx, keycloakCtxKey{}, &keycloakState{localURL: localURL})
+			keycloakURL := requireKeycloak(ctx, t, cfg)
+			return keycloakTS.set(ctx, &keycloakState{localURL: keycloakURL})
 		}).
 		Assess("OIDC discovery returns correct issuer URL", func(ctx context.Context, t *testing.T, _ *envconf.Config) context.Context {
-			s := ctx.Value(keycloakCtxKey{}).(*keycloakState)
+			s := keycloakTS.get(ctx)
 
 			d := discoverOIDC(t, s.localURL, keycloakRealm)
 			require.Contains(t, d.Issuer, "keycloak.keycloak.svc",
@@ -57,7 +38,7 @@ func TestKeycloakOIDC(t *testing.T) {
 			return ctx
 		}).
 		Assess("token endpoint issues valid tokens", func(ctx context.Context, t *testing.T, _ *envconf.Config) context.Context {
-			s := ctx.Value(keycloakCtxKey{}).(*keycloakState)
+			s := keycloakTS.get(ctx)
 
 			tr := requestToken(t, tokenRequest{
 				baseURL:  s.localURL,
@@ -74,35 +55,16 @@ func TestKeycloakOIDC(t *testing.T) {
 			return ctx
 		}).
 		Assess("OIDC-authenticated MCP tool call succeeds", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			s := ctx.Value(keycloakCtxKey{}).(*keycloakState)
+			s := keycloakTS.get(ctx)
 
 			// 1. Get a user token from Keycloak (mcp-client, public client).
-			token := fetchToken(t, tokenRequest{
-				baseURL:  s.localURL,
-				realm:    keycloakRealm,
-				clientID: "mcp-client",
-				username: "mcp",
-				password: "mcp",
-				scopes:   []string{"openid", "mcp-server"},
-			})
+			token := mcpUserToken(t, s.localURL, "openid", "mcp-server")
 
 			// 2. Deploy the MCP server with OIDC config and the cert-manager CA
 			//    mounted so it can trust Keycloak's TLS. The CA secret is created
 			//    by the copyKeycloakCASecret pre-install hook before Helm install.
-			configTOML := `
-				require_oauth = true
-				oauth_audience = "mcp-server"
-				oauth_scopes = ["openid", "mcp-server"]
-				validate_token = false
-				authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
-				sts_client_id = "mcp-server"
-				sts_client_secret = "mcp-server-dev-secret"
-				sts_audience = "openshift"
-				sts_scopes = ["mcp:openshift"]
-				certificate_authority = "/etc/keycloak-ca/ca.crt"
-			`
 			dep := deployServer(ctx, t, cfg, "keycloak-oidc",
-				withConfig(configTOML),
+				withConfig(oidcServerConfig(nil)),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -127,10 +89,7 @@ func TestKeycloakOIDC(t *testing.T) {
 
 			// 5. Actually call a tool — this exercises the full chain:
 			//    user token → MCP server → STS exchange → kube-apiserver OIDC auth.
-			callResult, err := mcpClient.CallTool("namespaces_list", map[string]any{})
-			require.NoError(t, err, "call namespaces_list through OIDC")
-			require.False(t, callResult.IsError, "namespaces_list returned error: %s", textContent(callResult))
-			output := textContent(callResult)
+			output := requireToolCallSuccess(t, mcpClient, "namespaces_list", map[string]any{})
 			require.Contains(t, output, dep.namespace,
 				"OIDC-authenticated namespaces_list should include the server's own namespace")
 

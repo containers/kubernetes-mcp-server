@@ -6,16 +6,26 @@ KEYCLOAK_ADMIN_PASSWORD = admin
 
 ##@ Keycloak
 
+.PHONY: keycloak-gen-sts-keypair
+keycloak-gen-sts-keypair: ## Generate the throwaway D4 STS-assertion keypair (gitignored, never committed)
+	@dev/config/keycloak/gen-sts-assertion-keypair.sh
+
 .PHONY: keycloak-install
-keycloak-install: minikube kubectl install-cert-manager ## Install Keycloak with pre-configured OpenShift realm
+keycloak-install: minikube kubectl install-cert-manager keycloak-gen-sts-keypair ## Install Keycloak with pre-configured OpenShift realm
 	@echo "Installing Keycloak..."
 	@$(KUBECTL) create namespace $(KEYCLOAK_NAMESPACE) --dry-run=client -o yaml | $(KUBECTL) apply -f -
-	@$(KUBECTL) apply -f dev/config/keycloak/realm-import.yaml
+	@echo "Rendering realm with the generated STS-assertion cert..."
+	@mkdir -p _output/keycloak
+	@sed "s|@@STS_ASSERTION_CERT_DER@@|$$(grep -v -- '-----' test/e2e/testdata/generated/sts-assertion.crt | tr -d '\n')|" \
+		dev/config/keycloak/realm-import.yaml > _output/keycloak/realm-import.rendered.yaml
+	@$(KUBECTL) apply -f _output/keycloak/realm-import.rendered.yaml
 	@$(KUBECTL) apply -f dev/config/keycloak/deployment.yaml
+	@echo "Restarting Keycloak to re-import the realm..."
+	@$(KUBECTL) rollout restart deployment/keycloak -n $(KEYCLOAK_NAMESPACE)
 	@echo "Waiting for Keycloak TLS certificate to be issued..."
 	@$(KUBECTL) wait --for=condition=ready certificate/keycloak-tls -n $(KEYCLOAK_NAMESPACE) --timeout=120s
 	@echo "Waiting for Keycloak to be ready..."
-	@$(KUBECTL) wait --for=condition=ready pod -l app=keycloak -n $(KEYCLOAK_NAMESPACE) --timeout=180s
+	@$(KUBECTL) rollout status deployment/keycloak -n $(KEYCLOAK_NAMESPACE) --timeout=180s
 	@echo "Extracting cert-manager CA certificate..."
 	@mkdir -p _output/cert-manager-ca
 	@$(KUBECTL) get secret selfsigned-ca-secret -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d > _output/cert-manager-ca/ca.crt

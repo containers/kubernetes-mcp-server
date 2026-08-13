@@ -13,12 +13,12 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-type smokeCtxKey struct{}
-
 type smokeState struct {
 	dep       *serverDeployment
 	mcpClient *test.McpClient
 }
+
+var smokeTS testState[smokeState]
 
 func TestSmoke(t *testing.T) {
 	f := features.New("smoke").
@@ -26,10 +26,10 @@ func TestSmoke(t *testing.T) {
 			dep := deployServer(ctx, t, cfg, "smoke", withValues(viewClusterRoleBindingValues()))
 			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
 			t.Cleanup(mcpClient.Close)
-			return context.WithValue(ctx, smokeCtxKey{}, &smokeState{dep: dep, mcpClient: mcpClient})
+			return smokeTS.set(ctx, &smokeState{dep: dep, mcpClient: mcpClient})
 		}).
 		Assess("server exposes expected tools", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			s := ctx.Value(smokeCtxKey{}).(*smokeState)
+			s := smokeTS.get(ctx)
 
 			result, err := s.mcpClient.ListTools()
 			require.NoError(t, err)
@@ -41,13 +41,9 @@ func TestSmoke(t *testing.T) {
 			return ctx
 		}).
 		Assess("namespaces_list returns real cluster data", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			s := ctx.Value(smokeCtxKey{}).(*smokeState)
+			s := smokeTS.get(ctx)
 
-			callResult, err := s.mcpClient.CallTool("namespaces_list", map[string]any{})
-			require.NoError(t, err)
-			require.False(t, callResult.IsError, "namespaces_list returned tool error: %s", textContent(callResult))
-
-			output := textContent(callResult)
+			output := requireToolCallSuccess(t, s.mcpClient, "namespaces_list", map[string]any{})
 			require.NotEmpty(t, output, "expected text content from namespaces_list")
 
 			// The server's own namespace must appear.
@@ -67,15 +63,11 @@ func TestSmoke(t *testing.T) {
 			return ctx
 		}).
 		Assess("pods_list returns the server pod", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			s := ctx.Value(smokeCtxKey{}).(*smokeState)
+			s := smokeTS.get(ctx)
 
-			callResult, err := s.mcpClient.CallTool("pods_list_in_namespace", map[string]any{
+			output := requireToolCallSuccess(t, s.mcpClient, "pods_list_in_namespace", map[string]any{
 				"namespace": s.dep.namespace,
 			})
-			require.NoError(t, err)
-			require.False(t, callResult.IsError, "pods_list_in_namespace returned tool error: %s", textContent(callResult))
-
-			output := textContent(callResult)
 			require.Contains(t, output, s.dep.name,
 				"server pod not found in pods_list output for namespace %s", s.dep.namespace)
 

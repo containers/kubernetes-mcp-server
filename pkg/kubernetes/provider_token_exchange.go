@@ -17,9 +17,11 @@ type tokenExchangingProvider struct {
 	provider           Provider
 	baseConfigProvider func() api.BaseConfig
 	oauthState         *oauth.State
-	// stsConfig is cached and reused across calls so that assertion caching
-	// in TargetTokenExchangeConfig is effective. Rebuilt when the token URL or
-	// any STS/TLS config field changes after a reload.
+	// stsConfig is cached and reused across calls so the memoized HTTP client in
+	// TargetTokenExchangeConfig (and its keep-alive connections to the IdP) is
+	// reused. Rebuilt when the token URL or any STS/TLS config field changes after
+	// a reload. Client assertions themselves are never cached — a fresh, single-use
+	// jti is minted per exchange (see TargetTokenExchangeConfig.BuildAssertion).
 	stsConfig    *tokenexchange.TargetTokenExchangeConfig
 	stsConfigMu  sync.Mutex
 	stsConfigKey stsConfigCacheKey

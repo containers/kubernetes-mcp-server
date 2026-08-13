@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/distribution/reference"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -136,17 +137,38 @@ func deployServer(
 	}
 }
 
-// mergeValues shallow-merges Helm value maps left to right; later maps win.
-// Callers must ensure top-level keys are disjoint when both values matter
-// (e.g. "rbac" vs "extraVolumes"), since nested maps are not deep-merged.
+// mergeValues deep-merges Helm value maps left to right. Nested maps are merged
+// recursively; slices of maps (e.g. extraVolumes) are concatenated; all other
+// collisions are won by the rightmost map.
 func mergeValues(maps ...map[string]any) map[string]any {
 	out := map[string]any{}
 	for _, m := range maps {
-		for k, v := range m {
-			out[k] = v
-		}
+		deepMerge(out, m)
 	}
 	return out
+}
+
+func deepMerge(dst, src map[string]any) {
+	for k, sv := range src {
+		dv, exists := dst[k]
+		if !exists {
+			dst[k] = sv
+			continue
+		}
+		if dm, ok := dv.(map[string]any); ok {
+			if sm, ok := sv.(map[string]any); ok {
+				deepMerge(dm, sm)
+				continue
+			}
+		}
+		if ds, ok := dv.([]map[string]any); ok {
+			if ss, ok := sv.([]map[string]any); ok {
+				dst[k] = append(ds, ss...)
+				continue
+			}
+		}
+		dst[k] = sv
+	}
 }
 
 // viewClusterRoleBindingValues returns Helm values binding the server's
@@ -193,17 +215,14 @@ func helmInstall(t *testing.T, kubeconfig, namespace, name, configTOML string, e
 		t.Fatal("[http] config section not supported in Helm values — Helm's toToml mangles large integers (helm/helm#32040)")
 	}
 
-	values := map[string]any{
+	values := mergeValues(map[string]any{
 		"fullnameOverride": name,
 		"config":           config,
 		"image":            imageSpec(serverImage()),
 		"ingress": map[string]any{
 			"enabled": false,
 		},
-	}
-	for k, v := range extraValues {
-		values[k] = v
-	}
+	}, extraValues)
 
 	valuesJSON, err := json.Marshal(values)
 	require.NoError(t, err, "marshal values")
@@ -396,7 +415,7 @@ func waitForHealthz(ctx context.Context, serverURL string, timeout time.Duration
 		}
 		resp, err := client.Do(req)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
@@ -422,6 +441,34 @@ func toolNames(tools []*mcp.Tool) []string {
 		names[i] = t.Name
 	}
 	return names
+}
+
+// testState provides type-safe context storage for e2e test state, replacing
+// per-test xxxCtxKey+xxxState boilerplate.
+type testState[T any] struct{}
+
+func (testState[T]) set(ctx context.Context, v *T) context.Context {
+	return context.WithValue(ctx, testState[T]{}, v)
+}
+
+func (testState[T]) get(ctx context.Context) *T {
+	return ctx.Value(testState[T]{}).(*T)
+}
+
+func requireToolCallSuccess(t *testing.T, mcpClient *test.McpClient, tool string, args map[string]any) string {
+	t.Helper()
+	result, err := mcpClient.CallTool(tool, args)
+	require.NoError(t, err, "%s transport error", tool)
+	require.False(t, result.IsError, "%s returned tool error: %s", tool, textContent(result))
+	return textContent(result)
+}
+
+func requireToolCallError(t *testing.T, mcpClient *test.McpClient, tool string, args map[string]any) string {
+	t.Helper()
+	result, err := mcpClient.CallTool(tool, args)
+	require.NoError(t, err, "%s transport error", tool)
+	require.True(t, result.IsError, "%s should have returned tool error but succeeded: %s", tool, textContent(result))
+	return textContent(result)
 }
 
 // imageSpec parses a container image reference and returns Helm values
