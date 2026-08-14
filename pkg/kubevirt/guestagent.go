@@ -37,18 +37,19 @@ type AllGuestInfo struct {
 	NetworkInterfacesError string `json:"networkInterfacesError,omitempty" yaml:"networkInterfacesError,omitempty"`
 }
 
-// getVMISubresource retrieves a VMI subresource using the REST client
-func getVMISubresource(ctx context.Context, restConfig *rest.Config, namespace, vmiName, subresource string) (map[string]any, error) {
-	// Create a copy to avoid mutating the original config
+// newSubresourceClient creates a REST client for the KubeVirt subresources API group
+func newSubresourceClient(restConfig *rest.Config) (rest.Interface, error) {
 	config := rest.CopyConfig(restConfig)
-
-	// Create a REST client configured for the subresources.kubevirt.io API group
 	gv := schema.GroupVersion{Group: "subresources.kubevirt.io", Version: "v1"}
 	config.GroupVersion = &gv
 	config.APIPath = "/apis"
 	config.NegotiatedSerializer = subresourcesCodec.WithoutConversion()
+	return rest.RESTClientFor(config)
+}
 
-	restClient, err := rest.RESTClientFor(config)
+// getVMISubresource retrieves a VMI subresource using the REST client
+func getVMISubresource(ctx context.Context, restConfig *rest.Config, namespace, vmiName, subresource string) (map[string]any, error) {
+	restClient, err := newSubresourceClient(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create REST client for subresources: %w", err)
 	}
