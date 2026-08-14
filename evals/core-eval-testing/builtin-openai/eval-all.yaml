@@ -53,6 +53,15 @@ config:
             toolPattern: ".*"
         minToolCalls: 1
         maxToolCalls: 20
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: kubevirt-multinode
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
     # Kiali tasks
     - glob: ../../tasks/*/*/*.yaml
       labelSelector:
