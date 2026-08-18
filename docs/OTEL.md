@@ -101,9 +101,9 @@ If the tool call triggers an HTTP request (in HTTP mode), you'll also see:
 Trace ID: abc123def456789
 Duration: 150ms
 
-├─ POST /message [150ms]
+├─ POST /mcp [150ms]
 │  ├─ http.request.method: POST
-│  ├─ url.path: /message
+│  ├─ url.path: /mcp
 │  ├─ http.response.status_code: 200
 │  ├─ client.address: 192.168.1.100
 │  │
@@ -363,7 +363,7 @@ Each tool call creates a span following MCP and OpenTelemetry semantic conventio
 
 HTTP requests create spans following [OpenTelemetry HTTP semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-spans/):
 
-**Span Name Format**: `{METHOD} {path}` (e.g., "POST /message")
+**Span Name Format**: `{METHOD} {path}` (e.g., "POST /mcp")
 
 **Attributes**:
 - `http.request.method` - Request method (GET, POST, etc.) **[Required]**
@@ -402,9 +402,7 @@ Example response:
   },
   "total_http_requests": 100,
   "http_requests_by_path": {
-    "/mcp": 50,
-    "/sse": 30,
-    "/message": 20
+    "/mcp": 100
   },
   "uptime_seconds": 3600.5
 }

@@ -44,7 +44,6 @@ type StaticConfig struct {
 	LogFile     string `toml:"log_file,omitempty"`
 	Port        string `toml:"port,omitempty"`
 	BindAddress string `toml:"bind_address,omitempty"`
-	SSEBaseURL  string `toml:"sse_base_url,omitempty"`
 	KubeConfig  string `toml:"kubeconfig,omitempty"`
 	ListOutput  string `toml:"list_output,omitempty"`
 	// Stateless configures the MCP server to operate in stateless mode.
@@ -727,7 +726,6 @@ func (c *StaticConfig) ValidateRequireTLS() error {
 	return ValidateURLsRequireTLS(map[string]string{
 		"authorization_url": c.AuthorizationURL,
 		"server_url":        c.ServerURL,
-		"sse_base_url":      c.SSEBaseURL,
 	})
 }
 

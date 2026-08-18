@@ -167,7 +167,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			}
 
 			// Store the validated Authorization header in context for MCP handlers
-			// This is necessary because SSE transport doesn't propagate HTTP headers to MCP requests
+			// so cluster passthrough and token exchange can read the bearer token.
 			ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

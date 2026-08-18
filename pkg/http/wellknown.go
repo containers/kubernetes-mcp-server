@@ -415,7 +415,7 @@ func copyMap(src map[string]interface{}) map[string]interface{} {
 }
 
 // matchWellKnownEndpoint returns the hardcoded well-known endpoint constant
-// that matches path (exact or sub-path, e.g. /sse suffix), or "" if none match.
+// that matches path (exact or sub-path, e.g. /mcp suffix), or "" if none match.
 // Paths containing ".." are rejected to prevent path traversal bypasses.
 // Returning the constant (not the user-supplied path) breaks the taint chain
 // for SSRF analysis.

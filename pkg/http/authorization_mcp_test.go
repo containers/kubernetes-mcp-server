@@ -21,22 +21,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-// bearerRoundTripper adds a static Authorization: Bearer header to every
-// outbound request. Used by the SSE transport test below, since
-// mcp.SSEClientTransport does not expose a headers option.
-type bearerRoundTripper struct {
-	token string
-	base  http.RoundTripper
-}
-
-func (b *bearerRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	// http.RoundTripper must not modify the request it is given; clone before
-	// adding the Authorization header.
-	clone := r.Clone(r.Context())
-	clone.Header.Set("Authorization", "Bearer "+b.token)
-	return b.base.RoundTrip(clone)
-}
-
 type AuthorizationSuite struct {
 	BaseHttpSuite
 	mcpClient *test.McpClient
@@ -398,12 +382,8 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 }
 
 // TestAuthorizationOidcTokenExchange verifies RFC 8693 / On-Behalf-Of token
-// exchange on both MCP transports. StreamableHTTP propagates the bearer via
-// request headers directly; SSE relies on AuthorizationMiddleware writing the
-// validated token into the request context (OAuthAuthorizationHeader) and
-// authHeaderPropagationMiddleware bridging it into the MCP RequestExtra, so
-// both transports must be exercised end-to-end.
-// SSE coverage: https://github.com/containers/kubernetes-mcp-server/issues/1043
+// exchange on Streamable HTTP. The bearer is propagated via request headers
+// and exchanged before the Kubernetes backend is called.
 func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	oidcTestServer := NewOidcTestServer(s.T())
 	s.T().Cleanup(oidcTestServer.Close)
@@ -428,84 +408,41 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	s.StaticConfig.StsAudience = "backend-audience"
 	s.StaticConfig.StsScopes = []string{"backend-scope"}
 
-	testCases := []struct {
-		name    string
-		connect func() *mcp.ClientSession
-	}{
-		{
-			name: "StreamableHTTP transport",
-			connect: func() *mcp.ClientSession {
-				s.StartClient(map[string]string{
-					"Authorization": "Bearer " + validOidcClientToken,
-				})
-				s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
-				return s.mcpClient.Session
-			},
-		},
-		{
-			name: "SSE transport",
-			connect: func() *mcp.ClientSession {
-				httpClient := &http.Client{
-					Transport: &bearerRoundTripper{token: validOidcClientToken, base: http.DefaultTransport},
-				}
-				sseClient := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1.33.7"}, nil)
-				transport := &mcp.SSEClientTransport{
-					Endpoint:   fmt.Sprintf("http://127.0.0.1:%s/sse", s.StaticConfig.Port),
-					HTTPClient: httpClient,
-				}
-				session, err := sseClient.Connect(s.T().Context(), transport, nil)
-				s.Require().NoError(err, "Expected no error connecting SSE MCP client")
-				return session
-			},
-		},
-	}
+	s.MockServer.ResetHandlers()
+	var backendAuth atomic.Value
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			backendAuth.Store(auth)
+		}
+	}))
+	s.logBuffer.Reset()
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + validOidcClientToken,
+	})
+	s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
 
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			s.MockServer.ResetHandlers()
-			// Capture the Authorization header the MCP server sends to the
-			// Kubernetes backend. The downstream credential is the
-			// security-relevant observable: token exchange must replace the
-			// user token with the exchanged token before reaching the cluster.
-			var backendAuth atomic.Value
-			s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if auth := r.Header.Get("Authorization"); auth != "" {
-					backendAuth.Store(auth)
-				}
-			}))
-			s.logBuffer.Reset()
-			s.StartServer()
-
-			session := tc.connect()
-
-			s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {
-				s.Require().NotNil(session.InitializeResult(), "Expected initial request to not be nil")
-			})
-			s.Run("Call tool exchanges token for VALID OIDC EXCHANGE Authorization header", func() {
-				toolResult, err := session.CallTool(s.T().Context(), &mcp.CallToolParams{
-					Name:      "events_list",
-					Arguments: map[string]any{},
-				})
-				s.Require().NoError(err, "Expected no error calling tool")
-				s.Require().NotNil(toolResult, "Expected tool result to not be nil")
-			})
-			s.Run("Backend receives exchanged token, not original user token", func() {
-				got, _ := backendAuth.Load().(string)
-				s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
-				s.Equal("Bearer "+validOidcBackendToken, got,
-					"Backend must receive the exchanged token; receiving the original user token would mean token exchange silently no-op'd")
-			})
-
-			if s.mcpClient != nil {
-				// McpClient.Close closes the underlying Session for us.
-				s.mcpClient.Close()
-				s.mcpClient = nil
-			} else {
-				s.Require().NoError(session.Close(), "Expected SSE session to close cleanly")
-			}
-			s.stopRunningServer()
+	s.Run("Initialize returns OK for VALID OIDC EXCHANGE Authorization header", func() {
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initial request to not be nil")
+	})
+	s.Run("Call tool exchanges token for VALID OIDC EXCHANGE Authorization header", func() {
+		toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+			Name:      "events_list",
+			Arguments: map[string]any{},
 		})
-	}
+		s.Require().NoError(err, "Expected no error calling tool")
+		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
+	})
+	s.Run("Backend receives exchanged token, not original user token", func() {
+		got, _ := backendAuth.Load().(string)
+		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
+		s.Equal("Bearer "+validOidcBackendToken, got,
+			"Backend must receive the exchanged token; receiving the original user token would mean token exchange silently no-op'd")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.stopRunningServer()
 }
 
 func (s *AuthorizationSuite) TestAuthorizationPassthroughWarning() {
@@ -677,59 +614,6 @@ func (s *AuthorizationSuite) TestAuthorizationRawPassthroughStreamableHTTP() {
 
 	s.mcpClient.Close()
 	s.mcpClient = nil
-	s.stopRunningServer()
-}
-
-// TestAuthorizationRawPassthroughSSE is the SSE counterpart to
-// TestAuthorizationRawPassthroughStreamableHTTP. SSE does not propagate HTTP
-// headers into the MCP RequestExtra, so the Authorization header must be
-// extracted by AuthorizationMiddleware (even in the require_oauth=false branch)
-// and bridged into the MCP context via authHeaderPropagationMiddleware.
-// SSE coverage: https://github.com/containers/kubernetes-mcp-server/issues/1043
-func (s *AuthorizationSuite) TestAuthorizationRawPassthroughSSE() {
-	s.MockServer.ResetHandlers()
-	rawK8sToken := "k8s-service-account-token-not-a-jwt"
-
-	var backendAuth atomic.Value
-	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth := r.Header.Get("Authorization"); auth != "" {
-			backendAuth.Store(auth)
-		}
-	}))
-
-	s.StaticConfig.RequireOAuth = false
-	s.StartServer()
-
-	httpClient := &http.Client{
-		Transport: &bearerRoundTripper{token: rawK8sToken, base: http.DefaultTransport},
-	}
-	sseClient := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1.33.7"}, nil)
-	transport := &mcp.SSEClientTransport{
-		Endpoint:   fmt.Sprintf("http://127.0.0.1:%s/sse", s.StaticConfig.Port),
-		HTTPClient: httpClient,
-	}
-	session, err := sseClient.Connect(s.T().Context(), transport, nil)
-	s.Require().NoError(err, "Expected no error connecting SSE MCP client")
-
-	s.Run("Initialize succeeds without OAuth", func() {
-		s.Require().NotNil(session.InitializeResult(), "Expected initial request to not be nil")
-	})
-	s.Run("Tool call forwards raw token to backend", func() {
-		toolResult, err := session.CallTool(s.T().Context(), &mcp.CallToolParams{
-			Name:      "events_list",
-			Arguments: map[string]any{},
-		})
-		s.Require().NoError(err, "Expected no error calling tool")
-		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
-	})
-	s.Run("Backend receives the raw token", func() {
-		got, _ := backendAuth.Load().(string)
-		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
-		s.Equal("Bearer "+rawK8sToken, got,
-			"Backend must receive the original raw token passed in the Authorization header")
-	})
-
-	s.Require().NoError(session.Close(), "Expected SSE session to close cleanly")
 	s.stopRunningServer()
 }
 

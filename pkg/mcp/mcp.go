@@ -489,12 +489,6 @@ func (s *Server) ServeStdio(ctx context.Context) error {
 	return s.server.Run(ctx, &mcp.StdioTransport{})
 }
 
-func (s *Server) ServeSse() *mcp.SSEHandler {
-	return mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
-		return s.server
-	}, &mcp.SSEOptions{})
-}
-
 func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
 	return mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
 		return s.server

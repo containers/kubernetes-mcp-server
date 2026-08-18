@@ -44,12 +44,10 @@ func (w *tlsErrorFilterWriter) Write(p []byte) (n int, err error) {
 }
 
 const (
-	healthEndpoint     = "/healthz"
-	statsEndpoint      = "/stats"
-	metricsEndpoint    = "/metrics"
-	mcpEndpoint        = "/mcp"
-	sseEndpoint        = "/sse"
-	sseMessageEndpoint = "/message"
+	healthEndpoint  = "/healthz"
+	statsEndpoint   = "/stats"
+	metricsEndpoint = "/metrics"
+	mcpEndpoint     = "/mcp"
 )
 
 var (
@@ -128,9 +126,10 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		return fmt.Errorf("failed to build TLS config: %w", err)
 	}
 
-	// Note: WriteTimeout is intentionally omitted - it would kill SSE streams.
-	// ReadHeaderTimeout provides Slowloris protection; other timeouts are left
-	// at Go defaults since MCP clients maintain persistent connections.
+	// Note: WriteTimeout is intentionally omitted — it would kill long-lived
+	// Streamable HTTP connections. ReadHeaderTimeout provides Slowloris
+	// protection; other timeouts are left at Go defaults since MCP clients
+	// maintain persistent connections.
 	httpServer := &http.Server{
 		Addr:              net.JoinHostPort(staticConfig.BindAddress, staticConfig.Port),
 		Handler:           instrumentedHandler,
@@ -148,10 +147,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		httpServer.ErrorLog = log.New(&tlsErrorFilterWriter{underlying: os.Stderr, logger: logger}, "", 0)
 	}
 
-	sseServer := mcpServer.ServeSse()
 	streamableHttpServer := mcpServer.ServeHTTP()
-	mux.Handle(sseEndpoint, sseServer)
-	mux.Handle(sseMessageEndpoint, sseServer)
 	mux.Handle(mcpEndpoint, streamableHttpServer)
 	mux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -189,13 +185,13 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
 			logger.Info("HTTPS server starting",
 				"server.addr", httpServer.Addr,
-				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+				"endpoints", "/mcp, /healthz, /stats, /metrics",
 			)
 			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert, staticConfig.TLSKey)
 		} else {
 			logger.Info("HTTP server starting",
 				"server.addr", httpServer.Addr,
-				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+				"endpoints", "/mcp, /healthz, /stats, /metrics",
 			)
 			err = httpServer.ListenAndServe()
 		}

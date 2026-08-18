@@ -169,8 +169,7 @@ func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 			}
 		}
 
-		// If no auth header in RequestExtra, context may already have it from HTTP middleware
-		// (used by SSE transport where HTTP headers aren't propagated to RequestExtra)
+		// If no auth header in RequestExtra, context may already have it from HTTP middleware.
 		return next(ctx, method, req)
 	}
 }

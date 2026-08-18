@@ -69,7 +69,7 @@ func getClientIP(r *http.Request, trustProxy bool) string {
 func getHTTPRoute(path string) string {
 	// Known routes for this server
 	switch path {
-	case "/healthz", "/mcp", "/sse", "/message", "/stats":
+	case "/healthz", "/mcp", "/stats":
 		return path
 	}
 	// Check for well-known prefix

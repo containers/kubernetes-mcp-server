@@ -98,7 +98,6 @@ func (s *ConfigSuite) TestReadConfigValid() {
 	validConfigPath := s.writeConfig(`
 		log_level = 1
 		port = "9999"
-		sse_base_url = "https://example.com"
 		kubeconfig = "./path/to/config"
 		list_output = "yaml"
 		read_only = true
@@ -144,9 +143,6 @@ func (s *ConfigSuite) TestReadConfigValid() {
 	})
 	s.Run("port parsed correctly", func() {
 		s.Equalf("9999", config.Port, "Expected Port to be 9999, got %s", config.Port)
-	})
-	s.Run("sse_base_url parsed correctly", func() {
-		s.Equalf("https://example.com", config.SSEBaseURL, "Expected SSEBaseURL to be https://example.com, got %s", config.SSEBaseURL)
 	})
 	s.Run("kubeconfig parsed correctly", func() {
 		s.Equalf("./path/to/config", config.KubeConfig, "Expected KubeConfig to be ./path/to/config, got %s", config.KubeConfig)
