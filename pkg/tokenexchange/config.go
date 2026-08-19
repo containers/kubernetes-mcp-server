@@ -80,12 +80,6 @@ type TargetTokenExchangeConfig struct {
 	clientTLSMinVersion string `toml:"-"`
 	// clientTLSCipherSuites tracks the TLS cipher suites used to build the cached client
 	clientTLSCipherSuites []string `toml:"-"`
-	// cachedAssertion stores the most recently generated JWT assertion
-	cachedAssertion string `toml:"-"`
-	// cachedAssertionExpiry is when the cached assertion expires
-	cachedAssertionExpiry time.Time `toml:"-"`
-	// assertionMutex protects assertion caching from race conditions
-	assertionMutex sync.Mutex `toml:"-"`
 	// clientMutex protects HTTP client creation from race conditions
 	clientMutex sync.Mutex `toml:"-"`
 

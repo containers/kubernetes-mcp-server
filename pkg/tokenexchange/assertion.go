@@ -33,9 +33,6 @@ const (
 
 	// DefaultAssertionLifetime is the default validity period for assertions
 	DefaultAssertionLifetime = 5 * time.Minute
-
-	// AssertionRefreshMargin is how early to refresh before expiry
-	AssertionRefreshMargin = 30 * time.Second
 )
 
 // loadCertificateAndKey reads the certificate and private key from PEM files
@@ -151,6 +148,7 @@ func BuildClientAssertion(
 		Subject:   clientID,
 		Audience:  jwt.Audience{tokenURL},
 		ID:        uuid.New().String(),
+		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
 		Expiry:    jwt.NewNumericDate(expiry),
 	}
@@ -183,28 +181,20 @@ func BuildClientAssertion(
 	return signedJWT, expiry, nil
 }
 
-// GetOrBuildAssertion returns a cached assertion or builds a new one
-func (c *TargetTokenExchangeConfig) GetOrBuildAssertion(ctx context.Context) (string, error) {
-	c.assertionMutex.Lock()
-	defer c.assertionMutex.Unlock()
-
-	logger := klogutil.FromContext(ctx)
-
-	// Check if cached assertion is still valid (with margin)
-	if c.cachedAssertion != "" && time.Now().Add(AssertionRefreshMargin).Before(c.cachedAssertionExpiry) {
-		logger.V(4).Info("Using cached JWT client assertion",
-			"jwt.client_assertion.expires", c.cachedAssertionExpiry.Format(time.RFC3339),
-		)
-		return c.cachedAssertion, nil
-	}
-
-	logger.V(4).Info("Building new JWT client assertion",
+// BuildAssertion mints a fresh signed JWT client assertion for a single exchange.
+// A new assertion (with a unique jti) is generated on every call and never cached:
+// OIDC private_key_jwt requires the jti to be single-use, and strict providers
+// (e.g. Keycloak) reject a reused assertion with "Token reuse detected". Signing is
+// cheap relative to the token-exchange round trip it accompanies, so there is no
+// caching to trade correctness against.
+func (c *TargetTokenExchangeConfig) BuildAssertion(ctx context.Context) (string, error) {
+	klogutil.FromContext(ctx).V(4).Info("Building JWT client assertion",
 		"jwt.client_assertion.client_id", c.ClientID,
 		"jwt.client_assertion.token_url", c.TokenURL,
 		"jwt.client_assertion.cert_file", c.ClientCertFile,
 	)
 
-	assertion, expiry, err := BuildClientAssertion(
+	assertion, _, err := BuildClientAssertion(
 		ctx,
 		c.ClientID,
 		c.TokenURL,
@@ -215,9 +205,6 @@ func (c *TargetTokenExchangeConfig) GetOrBuildAssertion(ctx context.Context) (st
 	if err != nil {
 		return "", err
 	}
-
-	c.cachedAssertion = assertion
-	c.cachedAssertionExpiry = expiry
 
 	return assertion, nil
 }
