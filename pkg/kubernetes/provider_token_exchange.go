@@ -146,6 +146,8 @@ type stsConfigCacheKey struct {
 	ClientID           string
 	ClientSecret       string
 	Audience           string
+	SubjectTokenType   string
+	RequestedTokenType string
 	Scopes             string
 	AuthStyle          string
 	ClientCertFile     string
@@ -164,6 +166,8 @@ func newStsConfigCacheKey(tokenURL string, cfg api.BaseConfig) stsConfigCacheKey
 		ClientID:           cfg.GetStsClientId(),
 		ClientSecret:       cfg.GetStsClientSecret(),
 		Audience:           cfg.GetStsAudience(),
+		SubjectTokenType:   cfg.GetStsSubjectTokenType(),
+		RequestedTokenType: cfg.GetStsRequestedTokenType(),
 		Scopes:             strings.Join(cfg.GetStsScopes(), "\x00"),
 		AuthStyle:          cfg.GetStsAuthStyle(),
 		ClientCertFile:     cfg.GetStsClientCertFile(),

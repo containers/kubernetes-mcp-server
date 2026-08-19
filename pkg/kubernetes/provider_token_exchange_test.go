@@ -294,6 +294,44 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			s.NotSame(first, second)
 			s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, second.TLSCipherSuites)
 		})
+
+		s.Run("sts_subject_token_type", func() {
+			snap := s.newSnapshot()
+			cfg := config.Default()
+			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
+			cfg.StsClientId = "client"
+			cfg.StsAudience = "audience"
+			cfg.StsSubjectTokenType = "urn:ietf:params:oauth:token-type:access_token"
+			p := newProvider(cfg)
+
+			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(first)
+
+			cfg.StsSubjectTokenType = "urn:ietf:params:oauth:token-type:jwt"
+			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second, "a reload that only changes sts_subject_token_type must not reuse the stale cached config")
+			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.SubjectTokenType)
+		})
+
+		s.Run("sts_requested_token_type", func() {
+			snap := s.newSnapshot()
+			cfg := config.Default()
+			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
+			cfg.StsClientId = "client"
+			cfg.StsAudience = "audience"
+			cfg.StsRequestedTokenType = "urn:ietf:params:oauth:token-type:access_token"
+			p := newProvider(cfg)
+
+			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(first)
+
+			cfg.StsRequestedTokenType = "urn:ietf:params:oauth:token-type:jwt"
+			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second, "a reload that only changes sts_requested_token_type must not reuse the stale cached config")
+			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.RequestedTokenType)
+		})
 	})
 
 	s.Run("wires require_tls enforcement into the built config", func() {
