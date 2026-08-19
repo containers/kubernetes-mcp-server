@@ -14,7 +14,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 )
 
@@ -67,13 +66,6 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			// SIGHUP-reloaded auth settings take effect immediately.
 			staticConfig := cfgState.Load()
 			if !staticConfig.RequireOAuth {
-				// Always extract the Authorization header so it can be forwarded
-				// to the cluster, even without OAuth validation.
-				if authHeader := r.Header.Get("Authorization"); authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-					ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
-					next.ServeHTTP(w, r.WithContext(ctx))
-					return
-				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -113,8 +105,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 				skipJWTWarningOnce.Do(func() {
 					klogutil.LogWarn(logger, "Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
 				})
-				ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
-				next.ServeHTTP(w, r.WithContext(ctx))
+				next.ServeHTTP(w, r)
 				return
 			}
 
@@ -166,10 +157,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 				return
 			}
 
-			// Store the validated Authorization header in context for MCP handlers
-			// so cluster passthrough and token exchange can read the bearer token.
-			ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r)
 		})
 	}
 }

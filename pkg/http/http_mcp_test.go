@@ -22,13 +22,15 @@ func (s *McpTransportSuite) TearDownTest() {
 	s.BaseHttpSuite.TearDownTest()
 }
 
-func (s *McpTransportSuite) TestSseTransportRemoved() {
+func (s *McpTransportSuite) TestSseEndpointsRemoved() {
 	s.StartServer()
 
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/sse", s.StaticConfig.Port))
-	s.Require().NoError(err, "Expected GET /sse to complete")
-	defer func() { _ = resp.Body.Close() }()
-	s.Equal(http.StatusNotFound, resp.StatusCode, "SSE endpoint must not be served")
+	for _, path := range []string{"/sse", "/message"} {
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s%s", s.StaticConfig.Port, path))
+		s.Require().NoError(err, "Expected GET %s to complete", path)
+		_ = resp.Body.Close()
+		s.Equal(http.StatusNotFound, resp.StatusCode, "SSE endpoint %s must not be served", path)
+	}
 }
 
 func (s *McpTransportSuite) TestStreamableHttpTransport() {
