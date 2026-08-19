@@ -114,6 +114,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 					klogutil.LogWarn(logger, "Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
 				})
 				ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+				ctx = context.WithValue(ctx, internalk8s.OAuthScopesKey, []string(nil))
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -169,6 +170,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			// Store the validated Authorization header in context for MCP handlers
 			// so cluster passthrough and token exchange can read the bearer token.
 			ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
+			ctx = context.WithValue(ctx, internalk8s.OAuthScopesKey, claims.GetScopes())
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
