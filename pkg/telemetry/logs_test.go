@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/logtest"
 
@@ -185,7 +186,7 @@ func allRecords(recording logtest.Recording) []logtest.Record {
 	return out
 }
 
-func hasAttr(r logtest.Record, key, value string) bool {
+func hasAttr(r logtest.Record, key attribute.Key, value string) bool {
 	for _, a := range r.Attributes {
 		if a.Key == key && a.Value.AsString() == value {
 			return true
