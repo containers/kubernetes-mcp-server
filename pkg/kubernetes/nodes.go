@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,10 +15,11 @@ import (
 func (c *Core) NodesLog(ctx context.Context, name string, query string, tailLines int64) (string, error) {
 	// Use the node proxy API to access logs from the kubelet
 	// https://kubernetes.io/docs/concepts/cluster-administration/system-logs/#log-query
-	// Common log paths:
-	// - /var/log/kubelet.log - kubelet logs
-	// - /var/log/kube-proxy.log - kube-proxy logs
-	// - /var/log/containers/ - container logs
+	// Query paths are relative to the kubelet's log directory (/var/log).
+	// The kubelet SecureJoin normalizes the query against that root, so:
+	//   - Service logs: use the service name (e.g. "kubelet", "kube-proxy")
+	//   - File logs:    use a path relative to /var/log (e.g. "/kubelet.log", not "/var/log/kubelet.log")
+	// See: https://github.com/kubernetes/kubernetes/blob/70d3cc9/pkg/kubelet/kubelet_server_journal.go#L231-L232
 
 	if _, err := c.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
 		return "", fmt.Errorf("failed to get node %s: %w", name, err)
@@ -27,8 +29,11 @@ func (c *Core) NodesLog(ctx context.Context, name string, query string, tailLine
 		Get().
 		AbsPath("api", "v1", "nodes", name, "proxy", "logs")
 	req.Param("query", query)
-	// Query parameters for tail
-	if tailLines > 0 {
+	// Only forward tailLines for service-style queries.
+	// The kubelet rejects options on file queries (see
+	// https://github.com/kubernetes/kubernetes/blob/70d3cc9/pkg/kubelet/kubelet_server_journal.go#L229-L230)
+	// because tailLines is only supported for service logs.
+	if tailLines > 0 && !strings.ContainsAny(query, `/\\`) {
 		req.Param("tailLines", fmt.Sprintf("%d", tailLines))
 	}
 

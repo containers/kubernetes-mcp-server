@@ -53,7 +53,7 @@ func (s *NodesSuite) TestNodesLog() {
 			switch query {
 			case "/empty.log":
 				logContent = ""
-			case "/kubelet.log":
+			case "/kubelet.log", "kubelet":
 				logContent = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
 			default:
 				w.WriteHeader(http.StatusNotFound)
@@ -162,42 +162,44 @@ func (s *NodesSuite) TestNodesLog() {
 				"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
-	for _, tailCase := range []interface{}{2, int64(2), float64(2)} {
+		for _, tailCase := range []interface{}{2, int64(2), float64(2)} {
+			s.Run("nodes_log(name=existing-node, query=kubelet, tailLines=2)", func() {
+				toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
+					"name":      "existing-node",
+					"query":     "kubelet",
+					"tailLines": tailCase,
+				})
+				s.Require().NotNil(toolResult, "toolResult should not be nil")
+				s.Run("no error", func() {
+					s.Falsef(toolResult.IsError, "call tool should succeed")
+					s.Nilf(err, "call tool should not return error object")
+				})
+				s.Run("returns tail log", func() {
+					expectedMessage := "Line 4\nLine 5\n"
+					s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
+						"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
+				})
+			})
+		}
+		// File queries should NOT forward tailLines to avoid kubelet 406 errors
 		s.Run("nodes_log(name=existing-node, query=/kubelet.log, tailLines=2)", func() {
 			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
 				"name":      "existing-node",
 				"query":     "/kubelet.log",
-				"tailLines": tailCase,
+				"tailLines": 2,
 			})
 			s.Require().NotNil(toolResult, "toolResult should not be nil")
 			s.Run("no error", func() {
 				s.Falsef(toolResult.IsError, "call tool should succeed")
 				s.Nilf(err, "call tool should not return error object")
 			})
-			s.Run("returns tail log", func() {
-				expectedMessage := "Line 4\nLine 5\n"
-				s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
-					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
-			})
-		})
-		s.Run("nodes_log(name=existing-node, query=/kubelet.log, tailLines=-1)", func() {
-			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-				"name":  "existing-node",
-				"query": "/kubelet.log",
-				"tail":  -1,
-			})
-			s.Require().NotNil(toolResult, "toolResult should not be nil")
-			s.Run("no error", func() {
-				s.Falsef(toolResult.IsError, "call tool should succeed")
-				s.Nilf(err, "call tool should not return error object")
-			})
-			s.Run("returns full log", func() {
+			s.Run("returns full log (tailLines ignored for file queries)", func() {
+				// Since tailLines is not forwarded for file queries, we get the full log
 				expectedMessage := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
 				s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
 					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 			})
 		})
-	}
 }
 
 func (s *NodesSuite) TestNodesLogDenied() {
