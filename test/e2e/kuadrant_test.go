@@ -167,12 +167,7 @@ func TestKuadrantGatewayTools(t *testing.T) {
 			namespacesTool := toolPrefix + "namespaces_list"
 			require.Contains(t, names, namespacesTool)
 
-			callResult, err := mcpClient.CallTool(namespacesTool, map[string]any{})
-			require.NoError(t, err, "call %s", namespacesTool)
-			require.False(t, callResult.IsError, "%s returned tool error: %s", namespacesTool, textContent(callResult))
-			require.NotEmpty(t, callResult.Content, "expected content from %s", namespacesTool)
-
-			toolOutput := textContent(callResult)
+			toolOutput := requireToolCallSuccess(t, mcpClient, namespacesTool, map[string]any{})
 
 			// Cross-reference against direct K8s API.
 			nsList, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
