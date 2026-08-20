@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, or all)'
+        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, argocd, or all)'
         required: false
         default: 'core'
         type: choice
@@ -25,6 +25,7 @@ on:
           - kiali
           - tekton
           - netobserv
+          - argocd
           - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
@@ -254,6 +255,10 @@ jobs:
             netobserv)
               MATRIX=$(single_matrix netobserv "${EVAL_DIR}/eval-netobserv.yaml" "core,config,netobserv")
               ;;
+            argocd)
+              echo "label-selector=suite=argocd" >> $GITHUB_OUTPUT
+              echo "toolsets=core,config" >> $GITHUB_OUTPUT
+              ;;
             all)
               MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")
               ;;
@@ -317,6 +322,9 @@ jobs:
       - name: Install NetObserv mock plugin
         if: contains(matrix.toolsets, 'netobserv')
         run: make setup-netobserv
+      - name: Install ArgoCD CRDs
+        if: contains(matrix.toolsets, 'argocd')
+        run: make argocd-install
 
       - name: Start MCP server
         run: make run-server
