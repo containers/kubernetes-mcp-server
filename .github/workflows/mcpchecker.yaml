@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, or all)'
+        description: 'Which task suite to run (core, helm, kubevirt, kubevirt-multinode, kiali, tekton, netobserv, or all)'
         required: false
         default: 'core'
         type: choice
@@ -22,6 +22,7 @@ on:
           - core
           - helm
           - kubevirt
+          - kubevirt-multinode
           - kiali
           - tekton
           - netobserv
@@ -180,7 +181,7 @@ jobs:
 
               // Parse suite from the review body (trusted — fetched from API).
               const suiteMatch = triggerReview.body.match(
-                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|all)/i,
+                /\/run-mcpchecker\s+(core|helm|kubevirt-multinode|kubevirt|kiali|tekton|netobserv|all)/i,
               );
               const suite = suiteMatch ? suiteMatch[1].toLowerCase() : '';
 
@@ -219,9 +220,17 @@ jobs:
           # Each entry carries suite name, eval config path, and required toolsets.
           EVAL_DIR="evals/core-eval-testing/builtin-openai"
 
-          # Helper: emit a single-entry matrix for the given suite/config/toolsets.
+          # Helper: emit a single-entry matrix for the given suite/config/toolsets/cluster-config.
           single_matrix() {
-            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s"}]}' "$1" "$2" "$3"
+            local suite="$1"
+            local config="$2"
+            local toolsets="$3"
+            local cluster_config="${4:-}"
+            if [[ -n "$cluster_config" ]]; then
+              printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s","kind-cluster-config":"%s"}]}' "$suite" "$config" "$toolsets" "$cluster_config"
+            else
+              printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s"}]}' "$suite" "$config" "$toolsets"
+            fi
           }
 
           case "$SUITE" in
@@ -231,7 +240,7 @@ jobs:
           {"include":[
             {"suite":"core","eval-config":"evals/core-eval-testing/builtin-openai/eval-core.yaml","toolsets":"core,config"},
             {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm"},
-            {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
+            {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton","kind-cluster-config":"dev/config/kind/cluster-kubevirt-multinode.yaml"},
             {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
             {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
             {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"}
@@ -245,6 +254,9 @@ jobs:
             kubevirt)
               MATRIX=$(single_matrix kubevirt "${EVAL_DIR}/eval-kubevirt.yaml" "core,config,kubevirt,tekton")
               ;;
+            kubevirt-multinode)
+              MATRIX=$(single_matrix kubevirt-multinode "${EVAL_DIR}/eval-kubevirt.yaml" "core,config,kubevirt,tekton" "dev/config/kind/cluster-kubevirt-multinode.yaml")
+              ;;
             kiali)
               MATRIX=$(single_matrix kiali "${EVAL_DIR}/eval-kiali.yaml" "core,config,kiali")
               ;;
@@ -255,7 +267,7 @@ jobs:
               MATRIX=$(single_matrix netobserv "${EVAL_DIR}/eval-netobserv.yaml" "core,config,netobserv")
               ;;
             all)
-              MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")
+              MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv" "dev/config/kind/cluster-kubevirt-multinode.yaml")
               ;;
             *)
               # Default to core suite (matches 'core' or any unrecognized suite)
@@ -295,7 +307,14 @@ jobs:
           go-version-file: go.mod
 
       - name: Setup Kind cluster
-        run: make kind-create-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
+        run: |
+          KIND_ARGS="KIND_CLUSTER_NAME=$KIND_CLUSTER_NAME"
+          if [[ -n "$KIND_CLUSTER_CONFIG" ]]; then
+            KIND_ARGS="$KIND_ARGS KIND_CLUSTER_CONFIG=$KIND_CLUSTER_CONFIG"
+          fi
+          make kind-create-cluster $KIND_ARGS
+        env:
+          KIND_CLUSTER_CONFIG: ${{ matrix.kind-cluster-config }}
 
       # Core tasks always run (every eval includes them) and the resize-pvc
       # task needs a resize-capable StorageClass, so always install the CSI driver.

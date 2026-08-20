@@ -28,9 +28,9 @@ kubevirt-install: ## Install KubeVirt, CDI, and Multus on the cluster
 	@kubectl -n kubevirt wait kv kubevirt --for condition=Available --timeout=15m
 	@echo "✅ KubeVirt is ready"
 	@echo ""
-	@echo "Enabling Snapshot feature gate and software emulation..."
-	@kubectl patch kubevirt kubevirt -n kubevirt --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"],"useEmulation":true}}}}'
-	@echo "✅ Snapshot feature gate and software emulation enabled"
+	@echo "Enabling feature gates, software emulation, and live migration support..."
+	@kubectl patch kubevirt kubevirt -n kubevirt --type=merge -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["Snapshot"],"useEmulation":true},"vmRolloutStrategy":"LiveUpdate"},"workloadUpdateStrategy":{"workloadUpdateMethods":["LiveMigrate"]}}}'
+	@echo "✅ Feature gates, software emulation, and live migration support enabled"
 	@echo ""
 	@echo "Installing CDI (Containerized Data Importer) $(CDI_VERSION)..."
 	@kubectl apply -f $(CDI_RELEASE_URL)/cdi-operator.yaml

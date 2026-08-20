@@ -1,0 +1,124 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt-multinode
+    project: kubevirt
+    requires: kubevirt-multinode
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "hotplug-instancetype"
+  difficulty: hard
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-it
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-it
+    - k8s.create:
+        apiVersion: instancetype.kubevirt.io/v1beta1
+        kind: VirtualMachineInstancetype
+        metadata:
+          name: hotplug-small
+          namespace: vm-test-hotplug-it
+        spec:
+          cpu:
+            guest: 1
+          memory:
+            guest: 1Gi
+    - k8s.create:
+        apiVersion: instancetype.kubevirt.io/v1beta1
+        kind: VirtualMachineInstancetype
+        metadata:
+          name: hotplug-medium
+          namespace: vm-test-hotplug-it
+        spec:
+          cpu:
+            guest: 2
+          memory:
+            guest: 2Gi
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test-hotplug-it
+        spec:
+          runStrategy: Always
+          instancetype:
+            name: hotplug-small
+            kind: VirtualMachineInstancetype
+          template:
+            spec:
+              domain:
+                cpu:
+                  maxSockets: 4
+                memory:
+                  maxGuest: 4Gi
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl wait --for=jsonpath='{.status.ready}'=true virtualmachine/test-vm -n vm-test-hotplug-it --timeout=300s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="vm-test-hotplug-it"
+
+          verify_instancetype "test-vm" "$NS" "hotplug-medium" "VirtualMachineInstancetype" || exit 1
+          verify_vmi_cpu_sockets "test-vm" "$NS" "2" || exit 1
+          verify_vmi_memory "test-vm" "$NS" "2Gi" || exit 1
+
+          echo "All validations passed"
+          exit 0
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test-hotplug-it
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: instancetype.kubevirt.io/v1beta1
+        kind: VirtualMachineInstancetype
+        metadata:
+          name: hotplug-small
+          namespace: vm-test-hotplug-it
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: instancetype.kubevirt.io/v1beta1
+        kind: VirtualMachineInstancetype
+        metadata:
+          name: hotplug-medium
+          namespace: vm-test-hotplug-it
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-hotplug-it
+        ignoreNotFound: true
+  prompt:
+    inline: Change the instancetype of the running VM 'test-vm' in the vm-test-hotplug-it namespace from 'hotplug-small' to 'hotplug-medium'.
