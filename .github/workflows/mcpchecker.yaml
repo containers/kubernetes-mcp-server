@@ -77,6 +77,7 @@ jobs:
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
       matrix: ${{ steps.suite.outputs.matrix }}
+      run-multicluster: ${{ steps.suite.outputs.run-multicluster }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
       is-pr: ${{ steps.check.outputs.is-pr }}
@@ -265,6 +266,13 @@ jobs:
 
           echo "matrix=$(echo "$MATRIX" | jq -c .)" >> "$GITHUB_OUTPUT"
 
+          # Multicluster Kiali evals: weekly schedule, explicit kiali suite, or all.
+          if [[ "$SUITE" == "kiali" || "$SUITE" == "all" || "$SUITE" == "schedule-matrix" ]]; then
+            echo "run-multicluster=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run-multicluster=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Run mcpchecker evaluation with Kind cluster
   run-evaluation:
     name: 'Run MCP Evaluation (${{ matrix.suite }})'
@@ -436,12 +444,150 @@ jobs:
           path: eval-context/
           retention-days: 1
 
+  run-evaluation-multicluster:
+    name: Run MCP Multicluster Evaluation
+    needs: check-trigger
+    if: |
+      needs.check-trigger.outputs.should-run == 'true' &&
+      needs.check-trigger.outputs.run-multicluster == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.check-trigger.outputs.pr-sha }}
+          allow-unsafe-pr-checkout: true
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup multicluster Kind + Istio/Kiali
+        run: make setup-kiali-multicluster
+
+      - name: Start MCP server
+        run: make run-server
+        env:
+          TOOLSETS: core,config,kiali
+          MCP_CONFIG_DIR: dev/config/mcp-configs-multicluster
+
+      - name: Run mcpchecker multicluster evaluation
+        id: mcpchecker
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.19
+        with:
+          eval-config: 'evals/tasks/kiali/multicluster/eval.yaml'
+          mcpchecker-version: 'latest'
+          task-filter: ${{ github.event.inputs.task-filter || '' }}
+          output-format: 'json'
+          verbose: ${{ github.event.inputs.verbose || 'false' }}
+          upload-artifacts: 'true'
+          artifact-name: 'mcpchecker-multicluster-results'
+          fail-on-error: 'false'
+          task-pass-threshold: '0.8'
+          assertion-pass-threshold: '0.8'
+          working-directory: '.'
+        env:
+          MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
+          MODEL_KEY: ${{ secrets.MODEL_KEY }}
+          JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
+          JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
+          JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
+
+      - name: Fetch multicluster baseline results from main
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        run: |
+          git fetch origin main --depth=1
+          git show "origin/main:evals/results/openai-agent-multicluster-latest.json" > /tmp/baseline-multicluster-results.json 2>/dev/null || true
+
+      - name: Check multicluster diff prerequisites
+        id: diff-check
+        if: needs.check-trigger.outputs.is-pr == 'true'
+        run: |
+          RESULTS_FILE=$(ls -t mcpchecker-*-out.json 2>/dev/null | head -1)
+          if [ -z "$RESULTS_FILE" ]; then
+            echo "No multicluster mcpchecker results file found, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [ ! -s /tmp/baseline-multicluster-results.json ]; then
+            echo "No multicluster baseline results found on main branch, skipping diff"
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "has-diff=true" >> $GITHUB_OUTPUT
+          echo "results-file=$RESULTS_FILE" >> $GITHUB_OUTPUT
+
+      - name: Run multicluster mcpchecker diff
+        id: mcpchecker-diff
+        if: needs.check-trigger.outputs.is-pr == 'true' && steps.diff-check.outputs.has-diff == 'true'
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@v0.0.19
+        with:
+          base-results: /tmp/baseline-multicluster-results.json
+          current-results: ${{ steps.diff-check.outputs.results-file }}
+          mcpchecker-version: 'latest'
+
+      - name: Save multicluster evaluation context
+        if: always() && needs.check-trigger.outputs.is-pr == 'true'
+        env:
+          DIFF_OUTPUT: ${{ steps.mcpchecker-diff.outputs.diff-output }}
+          PR_NUMBER: ${{ needs.check-trigger.outputs.pr-number }}
+          PR_SHA: ${{ needs.check-trigger.outputs.pr-sha }}
+          TASKS_PASSED: ${{ steps.mcpchecker.outputs.tasks-passed }}
+          TASKS_TOTAL: ${{ steps.mcpchecker.outputs.tasks-total }}
+          TASK_PASS_RATE: ${{ steps.mcpchecker.outputs.task-pass-rate }}
+          ASSERTIONS_PASSED: ${{ steps.mcpchecker.outputs.assertions-passed }}
+          ASSERTIONS_TOTAL: ${{ steps.mcpchecker.outputs.assertions-total }}
+          PASSED: ${{ steps.mcpchecker.outputs.passed }}
+          HAS_DIFF: ${{ steps.diff-check.outputs.has-diff || 'false' }}
+        run: |
+          mkdir -p eval-context-multicluster
+          cat > eval-context-multicluster/context.json << EOF
+          {
+            "pr_number": "${PR_NUMBER}",
+            "pr_sha": "${PR_SHA}",
+            "tasks_passed": "${TASKS_PASSED}",
+            "tasks_total": "${TASKS_TOTAL}",
+            "task_pass_rate": "${TASK_PASS_RATE}",
+            "assertions_passed": "${ASSERTIONS_PASSED}",
+            "assertions_total": "${ASSERTIONS_TOTAL}",
+            "passed": "${PASSED}",
+            "has_diff": "${HAS_DIFF}"
+          }
+          EOF
+          if [ -n "$DIFF_OUTPUT" ]; then
+            echo "$DIFF_OUTPUT" > eval-context-multicluster/diff-output.txt
+          fi
+
+      - name: Upload multicluster PR context
+        if: always() && needs.check-trigger.outputs.is-pr == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-context-multicluster
+          path: eval-context-multicluster/
+          retention-days: 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          make stop-server || true
+          make kind-delete-multicluster || true
+
   # Create PR with results (scheduled runs only)
   commit-results:
     name: Commit Evaluation Results
-    needs: [check-trigger, run-evaluation]
+    needs: [check-trigger, run-evaluation, run-evaluation-multicluster]
     # Only commit results on scheduled runs. Use != 'cancelled' so partial
     # results from passing suites are still committed when some matrix jobs fail.
+    # Multicluster results are included here to avoid racing on chore/update-eval-results.
     if: always() && github.event_name == 'schedule' && needs.run-evaluation.result != 'cancelled'
     runs-on: ubuntu-latest
     permissions:
@@ -458,6 +604,13 @@ jobs:
         with:
           pattern: mcpchecker-results-*
           path: mcpchecker-results/
+
+      - name: Download mcpchecker multicluster results
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: mcpchecker-multicluster-results
+          path: mcpchecker-multicluster-results/
 
       - name: Copy results to evals/results
         run: |
@@ -481,6 +634,14 @@ jobs:
             cp "$RESULTS_FILE" "evals/results/${RESULT_NAME}-latest.json"
             echo "Copied ${SUITE} results to evals/results/${RESULT_NAME}-latest.json"
           done
+
+          MC_RESULTS_FILE=$(ls -t mcpchecker-multicluster-results/mcpchecker-*-out.json 2>/dev/null | head -1)
+          if [ -n "$MC_RESULTS_FILE" ]; then
+            cp "$MC_RESULTS_FILE" "evals/results/openai-agent-multicluster-latest.json"
+            echo "Copied multicluster results to evals/results/openai-agent-multicluster-latest.json"
+          else
+            echo "No multicluster results artifact present (job skipped or failed); continuing"
+          fi
 
       - name: Create Pull Request
         env:
