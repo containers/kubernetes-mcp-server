@@ -24,26 +24,8 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
-	tools := slices.Concat(
-		kialiTools.InitGetMeshTrafficGraph(),
-		kialiTools.InitGetMeshStatus(),
-		kialiTools.InitManageIstioConfigRead(),
-		kialiTools.InitManageIstioConfig(),
-		kialiTools.InitListMeshClusters(),
-		kialiTools.InitListOrGetResources(),
-		kialiTools.InitListTraces(),
-		kialiTools.InitGetTraceDetails(),
-		kialiTools.InitGetPodPerformance(),
-		kialiTools.InitGetLogs(),
-		kialiTools.InitGetMetrics(),
-	)
-	// Kiali calls a single configured endpoint; mesh scope is selected via meshCluster,
-	// not the provider-level context parameter injected for core Kubernetes tools.
-	for i := range tools {
-		tools[i].ClusterAware = ptr.To(false)
-	}
-	return tools
+func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
+	return kialiTools.All(p)
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {

@@ -29,7 +29,8 @@ func InitGetMeshStatus() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: getMeshStatusHandler,
+		},
+		Handler: getMeshStatusHandler,
 	})
 	return ret
 }
