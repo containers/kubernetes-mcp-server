@@ -41,7 +41,18 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 						"action": {
 							Type:        "string",
 							Enum:        []any{string(ActionStart), string(ActionStop), string(ActionRestart)},
-							Description: "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+							Description: "The lifecycle action to perform: 'start' (sets runStrategy from run_policy), 'stop' (sets runStrategy to Halted), or 'restart' (stops then starts; see run_policy)",
+						},
+						"run_policy": {
+							Type: "string",
+							Enum: []any{
+								string(kubevirt.RunPolicyHighAvailability),
+								string(kubevirt.RunPolicyRestartOnFailure),
+								string(kubevirt.RunPolicyOnce),
+							},
+							Description: "The run policy for 'start' and 'restart' (ignored for 'stop'): " +
+								"'HighAvailability' (Always), 'RestartOnFailure' (RerunOnFailure), or 'Once' (Once). " +
+								"Defaults to 'HighAvailability'.",
 						},
 					},
 					Required: []string{"namespace", "name", "action"},
@@ -64,18 +75,12 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 
 func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	// Parse input parameters
-	namespace, err := api.RequiredString(params, "namespace")
-	if err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
+	p := api.WrapParams(params)
+	namespace := p.RequiredString("namespace")
+	name := p.RequiredString("name")
+	action := p.RequiredString("action")
 
-	name, err := api.RequiredString(params, "name")
-	if err != nil {
-		return api.NewToolCallResult("", err), nil
-	}
-
-	action, err := api.RequiredString(params, "action")
-	if err != nil {
+	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
 
@@ -83,38 +88,44 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	var vm *unstructured.Unstructured
 	var message string
+	var err error
 
 	switch Action(action) {
 	case ActionStart:
-		var wasStarted bool
-		vm, wasStarted, err = kubevirt.StartVM(params.Context, dynamicClient, namespace, name)
+		var wasStarted, strategyChanged bool
+		runPolicy := kubevirt.RunPolicy(p.OptionalString("run_policy", string(kubevirt.RunPolicyHighAvailability)))
+		vm, wasStarted, strategyChanged, err = kubevirt.StartVM(params.Context, dynamicClient, namespace, name, runPolicy)
 		if err != nil {
 			return api.NewToolCallResult("", err), nil
 		}
-		if wasStarted {
-			message = "# VirtualMachine started successfully\n"
-		} else {
-			message = fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already running\n", name, namespace)
+		switch {
+		case wasStarted:
+			message = fmt.Sprintf("# VirtualMachine started successfully with run policy '%s'\n", runPolicy)
+		case strategyChanged:
+			message = fmt.Sprintf("# VirtualMachine run strategy updated to run policy '%s'\n", runPolicy)
+		default:
+			message = fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already running with the desired run strategy\n", name, namespace)
 		}
 
 	case ActionStop:
-		var wasRunning bool
-		vm, wasRunning, err = kubevirt.StopVM(params.Context, dynamicClient, namespace, name)
+		var wasStopped bool
+		vm, wasStopped, err = kubevirt.StopVM(params.Context, dynamicClient, namespace, name)
 		if err != nil {
 			return api.NewToolCallResult("", err), nil
 		}
-		if wasRunning {
+		if wasStopped {
 			message = "# VirtualMachine stopped successfully\n"
 		} else {
 			message = fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already stopped\n", name, namespace)
 		}
 
 	case ActionRestart:
-		vm, err = kubevirt.RestartVM(params.Context, dynamicClient, namespace, name)
+		runPolicy := kubevirt.RunPolicy(p.OptionalString("run_policy", string(kubevirt.RunPolicyHighAvailability)))
+		vm, err = kubevirt.RestartVM(params.Context, dynamicClient, namespace, name, runPolicy)
 		if err != nil {
 			return api.NewToolCallResult("", err), nil
 		}
-		message = "# VirtualMachine restarted successfully\n"
+		message = fmt.Sprintf("# VirtualMachine restarted successfully with run policy '%s'\n", runPolicy)
 
 	default:
 		return api.NewToolCallResult("", fmt.Errorf("invalid action '%s': must be one of 'start', 'stop', 'restart'", action)), nil
