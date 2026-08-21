@@ -14,20 +14,34 @@ type RFC8693ExchangerTestSuite struct {
 	suite.Suite
 }
 
-// newRecordingServer returns an httptest.Server that decodes the form body of the
-// inbound request into the supplied url.Values pointer and replies with a valid
-// token exchange response.
-func (s *RFC8693ExchangerTestSuite) newRecordingServer(captured *map[string]string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.Equal(http.MethodPost, r.Method)
-		s.Equal(ContentTypeXWWWFormUrlEncoded, r.Header.Get(HeaderContentType))
+// recordedRequest captures what the handler observed. Assertions happen in the
+// test goroutine after Exchange returns — require.NoError/FailNow from inside
+// the httptest handler goroutine only unwinds that goroutine, which can hang
+// or mask the real failure instead of failing the test.
+type recordedRequest struct {
+	method      string
+	contentType string
+	parseErr    error
+	form        map[string]string
+}
 
-		s.Require().NoError(r.ParseForm())
-		out := make(map[string]string, len(r.Form))
-		for k := range r.Form {
-			out[k] = r.Form.Get(k)
+// newRecordingServer returns an httptest.Server that decodes the form body of the
+// inbound request into the supplied recordedRequest and replies with a valid
+// token exchange response.
+func (s *RFC8693ExchangerTestSuite) newRecordingServer(captured *recordedRequest) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured.method = r.Method
+		captured.contentType = r.Header.Get(HeaderContentType)
+
+		if err := r.ParseForm(); err != nil {
+			captured.parseErr = err
+		} else {
+			out := make(map[string]string, len(r.Form))
+			for k := range r.Form {
+				out[k] = r.Form.Get(k)
+			}
+			captured.form = out
 		}
-		*captured = out
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -40,8 +54,8 @@ func (s *RFC8693ExchangerTestSuite) newRecordingServer(captured *map[string]stri
 
 func (s *RFC8693ExchangerTestSuite) TestExchange() {
 	s.Run("defaults subject_token_type to access_token when empty", func() {
-		var form map[string]string
-		server := s.newRecordingServer(&form)
+		var captured recordedRequest
+		server := s.newRecordingServer(&captured)
 		defer server.Close()
 
 		exchanger := &rfc8693Exchanger{}
@@ -53,14 +67,17 @@ func (s *RFC8693ExchangerTestSuite) TestExchange() {
 
 		token, err := exchanger.Exchange(context.Background(), cfg, "incoming-token")
 		s.Require().NoError(err)
+		s.Require().NoError(captured.parseErr)
+		s.Equal(http.MethodPost, captured.method)
+		s.Equal(ContentTypeXWWWFormUrlEncoded, captured.contentType)
 		s.Equal("exchanged-token", token.AccessToken)
-		s.Equal(TokenTypeAccessToken, form[FormKeySubjectTokenType],
+		s.Equal(TokenTypeAccessToken, captured.form[FormKeySubjectTokenType],
 			"empty SubjectTokenType should default to access_token (RFC 8693 section 2.1)")
 	})
 
 	s.Run("defaults requested_token_type to access_token when empty", func() {
-		var form map[string]string
-		server := s.newRecordingServer(&form)
+		var captured recordedRequest
+		server := s.newRecordingServer(&captured)
 		defer server.Close()
 
 		exchanger := &rfc8693Exchanger{}
@@ -72,13 +89,14 @@ func (s *RFC8693ExchangerTestSuite) TestExchange() {
 
 		_, err := exchanger.Exchange(context.Background(), cfg, "incoming-token")
 		s.Require().NoError(err)
-		s.Equal(TokenTypeAccessToken, form[FormKeyRequestedTokenType],
+		s.Require().NoError(captured.parseErr)
+		s.Equal(TokenTypeAccessToken, captured.form[FormKeyRequestedTokenType],
 			"empty RequestedTokenType should default to access_token (RFC 8693 section 2.1)")
 	})
 
 	s.Run("overrides subject_token_type with configured value", func() {
-		var form map[string]string
-		server := s.newRecordingServer(&form)
+		var captured recordedRequest
+		server := s.newRecordingServer(&captured)
 		defer server.Close()
 
 		exchanger := &rfc8693Exchanger{}
@@ -90,13 +108,14 @@ func (s *RFC8693ExchangerTestSuite) TestExchange() {
 
 		_, err := exchanger.Exchange(context.Background(), cfg, "incoming-token")
 		s.Require().NoError(err)
-		s.Equal(TokenTypeJWT, form[FormKeySubjectTokenType],
+		s.Require().NoError(captured.parseErr)
+		s.Equal(TokenTypeJWT, captured.form[FormKeySubjectTokenType],
 			"configured SubjectTokenType should be sent verbatim")
 	})
 
 	s.Run("overrides requested_token_type with configured value", func() {
-		var form map[string]string
-		server := s.newRecordingServer(&form)
+		var captured recordedRequest
+		server := s.newRecordingServer(&captured)
 		defer server.Close()
 
 		exchanger := &rfc8693Exchanger{}
@@ -108,13 +127,14 @@ func (s *RFC8693ExchangerTestSuite) TestExchange() {
 
 		_, err := exchanger.Exchange(context.Background(), cfg, "incoming-token")
 		s.Require().NoError(err)
-		s.Equal(TokenTypeJWT, form[FormKeyRequestedTokenType],
+		s.Require().NoError(captured.parseErr)
+		s.Equal(TokenTypeJWT, captured.form[FormKeyRequestedTokenType],
 			"configured RequestedTokenType should be sent verbatim")
 	})
 
 	s.Run("sends both overrides independently", func() {
-		var form map[string]string
-		server := s.newRecordingServer(&form)
+		var captured recordedRequest
+		server := s.newRecordingServer(&captured)
 		defer server.Close()
 
 		exchanger := &rfc8693Exchanger{}
@@ -127,13 +147,14 @@ func (s *RFC8693ExchangerTestSuite) TestExchange() {
 
 		_, err := exchanger.Exchange(context.Background(), cfg, "incoming-token")
 		s.Require().NoError(err)
-		s.Equal(TokenTypeJWT, form[FormKeySubjectTokenType])
-		s.Equal(TokenTypeJWT, form[FormKeyRequestedTokenType])
+		s.Require().NoError(captured.parseErr)
+		s.Equal(TokenTypeJWT, captured.form[FormKeySubjectTokenType])
+		s.Equal(TokenTypeJWT, captured.form[FormKeyRequestedTokenType])
 	})
 
 	s.Run("sends mandatory form fields", func() {
-		var form map[string]string
-		server := s.newRecordingServer(&form)
+		var captured recordedRequest
+		server := s.newRecordingServer(&captured)
 		defer server.Close()
 
 		exchanger := &rfc8693Exchanger{}
@@ -145,10 +166,11 @@ func (s *RFC8693ExchangerTestSuite) TestExchange() {
 
 		_, err := exchanger.Exchange(context.Background(), cfg, "incoming-token")
 		s.Require().NoError(err)
-		s.Equal(GrantTypeTokenExchange, form[FormKeyGrantType])
-		s.Equal("incoming-token", form[FormKeySubjectToken])
-		s.Equal("kubernetes-api", form[FormKeyAudience])
-		s.Equal("openid profile", form[FormKeyScope])
+		s.Require().NoError(captured.parseErr)
+		s.Equal(GrantTypeTokenExchange, captured.form[FormKeyGrantType])
+		s.Equal("incoming-token", captured.form[FormKeySubjectToken])
+		s.Equal("kubernetes-api", captured.form[FormKeyAudience])
+		s.Equal("openid profile", captured.form[FormKeyScope])
 	})
 
 	s.Run("returns error on failed exchange", func() {
