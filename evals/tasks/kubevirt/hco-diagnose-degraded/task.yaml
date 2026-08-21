@@ -1,0 +1,82 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-diagnose-degraded"
+  difficulty: hard
+  description: "Diagnose why HCO is reporting an issue by correlating conditions across managed components"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          # Discover the HCO namespace/name so the eval works on both Kind
+          # (kubevirt-hyperconverged) and OpenShift (openshift-cnv).
+          NS=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          HCO_NAME=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "kubevirt-hyperconverged")
+
+          if ! kubectl get hyperconverged "$HCO_NAME" -n "$NS" > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+
+          echo "Injecting bad infra nodePlacements to trigger degraded state..."
+          kubectl patch hco "$HCO_NAME" -n "$NS" --type merge \
+              -p '{"spec":{"deployment":{"nodePlacements":{"infra":{"nodeSelector":{"non-existent-node/test":"true"}}}}}}'
+
+          sleep 15
+
+          echo "Forcing infra pod rescheduling..."
+          kubectl delete pods -n "$NS" -l kubevirt.io=virt-api 2>/dev/null || true
+          kubectl delete pods -n "$NS" -l kubevirt.io=virt-controller 2>/dev/null || true
+
+          echo "Waiting for HCO to report degraded state..."
+          for i in $(seq 1 36); do
+              CONDITIONS=$(kubectl get hyperconverged "$HCO_NAME" -n "$NS" \
+                  -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}' 2>/dev/null)
+              if echo "$CONDITIONS" | grep -q "Degraded=True" || \
+                 echo "$CONDITIONS" | grep -q "Available=False"; then
+                  echo "HCO is now in a degraded state"
+                  exit 0
+              fi
+              sleep 5
+          done
+
+          echo "Warning: timed out waiting for degraded state, continuing anyway"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          NS=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          HCO_NAME=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          kubectl get hyperconverged "$HCO_NAME" -n "$NS" \
+              -o jsonpath='{.status.conditions}' > /dev/null 2>&1 \
+              || { echo "✗ HyperConverged CR not found"; exit 1; }
+          echo "✓ HCO is accessible for investigation"
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "non-existent-node"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          HCO_NAME=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "kubevirt-hyperconverged")
+
+          kubectl patch hco "$HCO_NAME" -n "$NS" --type merge \
+              -p '{"spec":{"deployment":{"nodePlacements":{"infra":null}}}}' 2>/dev/null || true
+
+          echo "Waiting for HCO to recover..."
+          kubectl wait hyperconverged "$HCO_NAME" -n "$NS" --for condition=Available --timeout=300s 2>/dev/null || true
+          echo "Degraded scenario cleaned up"
+  prompt:
+    inline: |-
+      HCO seems to be reporting an unusual condition. Investigate the issue, determine the
+      root cause, and recommend remediation steps.
