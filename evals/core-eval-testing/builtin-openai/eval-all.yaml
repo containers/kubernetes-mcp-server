@@ -84,7 +84,7 @@ config:
         minToolCalls: 1
         maxToolCalls: 10
     # ArgoCD tasks
-    - glob: ../tasks/argocd/*/*.yaml
+    - glob: ../../tasks/*/*/*.yaml
       labelSelector:
         suite: argocd
       assertions:
