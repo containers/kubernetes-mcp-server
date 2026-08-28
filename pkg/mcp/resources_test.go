@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"regexp"
 	"strings"
@@ -1070,6 +1071,100 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
+}
+
+// apiResourceEntry and apiResourcesListToolResult mirror the JSON shape of
+// the api_resources_list tool's structured output. Defined locally (rather
+// than importing pkg/toolsets/core, whose result type is unexported anyway)
+// to keep this a black-box test of the tool's public wire contract, per
+// docs/dev/testing.md's "test the public API only" rule.
+type apiResourceEntry struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	Namespaced bool   `json:"namespaced"`
+}
+
+type apiResourcesListToolResult struct {
+	Resources []apiResourceEntry `json:"resources"`
+	Warning   string             `json:"warning,omitempty"`
+}
+
+func (s *ResourcesSuite) TestAPIResourcesList() {
+	s.InitMcpClient()
+	s.Run("api_resources_list without a kind filter returns an error", func() {
+		// kind is mandatory: an unfiltered call would dump every API resource
+		// type on the cluster (core kinds plus every CRD from every installed
+		// operator/service mesh) into the LLM's context, which is both a token
+		// cost and a source of confusion when the model already knows which
+		// kind it's after. Forcing a filter keeps this a targeted lookup.
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected an error when kind is omitted, got: %v", toolResult.Content)
+		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "kind",
+			"error message should mention the missing kind parameter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("api_resources_list with a kind filter returns known core and builtin kinds", func() {
+		s.Run("includes the core Pod resource with its apiVersion and namespaced flag", func() {
+			toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "pod"})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+			var decoded apiResourcesListToolResult
+			s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+			pod := findAPIResourceByKind(decoded.Resources, "Pod")
+			s.Require().NotNil(pod, "expected a Pod entry in api_resources_list output")
+			s.Equal("v1", pod.APIVersion, "Pod's apiVersion should be v1")
+			s.Equal("pods", pod.Name, "Pod's plural resource name should be pods")
+			s.True(pod.Namespaced, "Pod should be reported as namespaced")
+		})
+		s.Run("includes the apps/v1 Deployment resource", func() {
+			toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "deployment"})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+			var decoded apiResourcesListToolResult
+			s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+			deployment := findAPIResourceByKind(decoded.Resources, "Deployment")
+			s.Require().NotNil(deployment, "expected a Deployment entry in api_resources_list output")
+			s.Equal("apps/v1", deployment.APIVersion, "Deployment's apiVersion should be apps/v1")
+		})
+	})
+	s.Run("api_resources_list with kind filter narrows the results", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "deployment"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Run("only matching kinds are returned", func() {
+			for _, r := range decoded.Resources {
+				s.Containsf(strings.ToLower(r.Kind), "deployment",
+					"expected only kinds containing 'deployment', got %s", r.Kind)
+			}
+		})
+		s.Run("still finds the known Deployment kind", func() {
+			s.NotNilf(findAPIResourceByKind(decoded.Resources, "Deployment"), "expected filter to still match Deployment")
+		})
+	})
+	s.Run("api_resources_list with a filter matching nothing returns an empty list, not an error", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "nonexistentkindxyz"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Empty(decoded.Resources, "expected no resources to match a nonexistent kind filter")
+	})
+}
+
+func findAPIResourceByKind(resources []apiResourceEntry, kind string) *apiResourceEntry {
+	for _, r := range resources {
+		if r.Kind == kind {
+			return &r
+		}
+	}
+	return nil
 }
 
 func TestResources(t *testing.T) {
