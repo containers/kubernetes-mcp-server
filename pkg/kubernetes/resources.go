@@ -205,6 +205,56 @@ func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstruc
 	return resources, nil
 }
 
+// APIResourceInfo describes one Kubernetes API resource type registered on
+// the cluster: its preferred apiVersion, kind, plural resource name, and
+// whether it's namespaced. Mirrors the fields `kubectl api-resources` shows.
+type APIResourceInfo struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	Namespaced bool   `json:"namespaced"`
+}
+
+// APIResourcesList returns the API resource types registered on the cluster,
+// using the server's preferred version for each kind -- the same data
+// `kubectl api-resources` shows. Unlike ResourcesList/ResourcesGet, callers
+// don't need to already know a kind's apiVersion; this is how they discover
+// it, including for CRDs the caller has no built-in knowledge of.
+//
+// When kindFilter is non-empty, only kinds whose name contains kindFilter
+// (case-insensitive) are returned; an empty kindFilter returns every
+// registered resource type. This function itself imposes no requirement on
+// kindFilter -- the api_resources_list tool handler is what makes it
+// mandatory, since an LLM caller dumping every API resource type on a
+// cluster with many CRDs into its own context is a token cost and a source
+// of confusion, not a useful default. ServerPreferredResources can return
+// partial results alongside a non-nil error (e.g. one API group temporarily
+// unavailable, or a large CRD catalog slowing discovery -- see
+// containers/kubernetes-mcp-server#283); this returns whatever resources
+// were discovered together with that error rather than discarding them, so
+// callers can decide whether partial results are still useful.
+func (c *Core) APIResourcesList(kindFilter string) ([]APIResourceInfo, error) {
+	lists, err := c.DiscoveryClient().ServerPreferredResources()
+	resources := make([]APIResourceInfo, 0, len(lists))
+	for _, list := range lists {
+		if list == nil {
+			continue
+		}
+		for _, r := range list.APIResources {
+			if kindFilter != "" && !strings.Contains(strings.ToLower(r.Kind), strings.ToLower(kindFilter)) {
+				continue
+			}
+			resources = append(resources, APIResourceInfo{
+				APIVersion: list.GroupVersion,
+				Kind:       r.Kind,
+				Name:       r.Name,
+				Namespaced: r.Namespaced,
+			})
+		}
+	}
+	return resources, err
+}
+
 func (c *Core) resourceFor(gvk *schema.GroupVersionKind) (*schema.GroupVersionResource, error) {
 	m, err := c.RESTMapper().RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
 	if err != nil {
