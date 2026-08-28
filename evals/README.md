@@ -144,7 +144,7 @@ setup is needed.
 A task is "judge-backed" when its verify phase has an `llmJudge` step —
 **including the legacy `verify: contains:` short form, which is judge-evaluated
 (semantic), not a literal string match.** Judge-backed task counts per suite:
-`helm` 0, `core` 4, `kubevirt` 4, `tekton` 5, `config` 3, `kiali` 18. Filter
+`helm` 0, `core` 5, `kubevirt` 4, `tekton` 5, `config` 3, `kiali` 18. Filter
 any config to one suite with `--label-selector suite=<name>`.
 
 ## Agent configuration
