@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 
@@ -258,7 +259,22 @@ func (c *Core) APIResourcesList(kindFilter string) ([]APIResourceInfo, error) {
 func (c *Core) resourceFor(gvk *schema.GroupVersionKind) (*schema.GroupVersionResource, error) {
 	m, err := c.RESTMapper().RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
 	if err != nil {
-		return nil, err
+		if !meta.IsNoMatchError(err) {
+			return nil, err
+		}
+		// The RESTMapper builds and caches its full group/resource snapshot on
+		// first use and never refreshes it on its own -- resourcesCreateOrUpdate
+		// resets it, but only when a CustomResourceDefinition is applied
+		// through *this server's own* resources_create_or_update tool. A CRD
+		// installed any other way (kubectl, an operator, Helm, a different MCP
+		// client) after the mapper was already warmed left every other
+		// resource tool permanently unable to find it without a server
+		// restart. Reset once and retry so a fresh CRD resolves without one.
+		c.RESTMapper().Reset()
+		m, err = c.RESTMapper().RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &m.Resource, nil
 }

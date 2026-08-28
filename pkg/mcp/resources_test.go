@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
+	apiextensionsapiv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -608,6 +610,74 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 			s.Falsef(hasStatus, "status should not be present on the persisted resource")
 		})
 	})
+}
+
+// TestResourcesGetSelfHealsStaleRESTMapperForExternallyCreatedCRD proves
+// resources_get succeeds for a CRD kind that was installed directly against
+// the cluster (kubectl, an operator, Helm -- anything other than this
+// server's own resources_create_or_update tool) after the RESTMapper had
+// already cached its group/resource snapshot. resourceFor's only existing
+// cache-invalidation path is resourcesCreateOrUpdate noticing a
+// CustomResourceDefinition apply through *this* tool; a CRD installed any
+// other way left resources_get/list/delete/scale permanently unable to find
+// it without a server restart, which api_resources_list (its own fresh,
+// uncached discovery.ServerPreferredResources() call) surfaced as a live
+// discrepancy: discovery reports the kind, but every "regular" resource tool
+// still can't resolve it.
+func (s *ResourcesSuite) TestResourcesGetSelfHealsStaleRESTMapperForExternallyCreatedCRD() {
+	s.InitMcpClient()
+
+	// Force the RESTMapper to build and cache its full group/resource
+	// snapshot now, before the CRD below exists -- DeferredDiscoveryRESTMapper
+	// fetches everything in one shot on first use, not per-GVK, so any
+	// resourceFor call is enough to reproduce the staleness.
+	warmupResult, err := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "v1", "kind": "Namespace", "name": "default"})
+	s.Require().NoError(err)
+	s.Require().False(warmupResult.IsError, "warm-up call should succeed: %v", warmupResult.Content)
+
+	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(test.EnvTestRestConfig())
+	crd := &apiextensionsapiv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "freshwidgets.freshgroup.example.com"},
+		Spec: apiextensionsapiv1.CustomResourceDefinitionSpec{
+			Group: "freshgroup.example.com",
+			Names: apiextensionsapiv1.CustomResourceDefinitionNames{Plural: "freshwidgets", Singular: "freshwidget", Kind: "FreshWidget"},
+			Scope: apiextensionsapiv1.NamespaceScoped,
+			Versions: []apiextensionsapiv1.CustomResourceDefinitionVersion{{
+				Name: "v1", Served: true, Storage: true,
+				Schema: &apiextensionsapiv1.CustomResourceValidation{OpenAPIV3Schema: &apiextensionsapiv1.JSONSchemaProps{
+					Type:                   "object",
+					XPreserveUnknownFields: ptr.To(true),
+				}},
+			}},
+		},
+	}
+	_, err = apiExtensionsV1Client.CustomResourceDefinitions().Create(s.T().Context(), crd, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create freshwidgets CRD directly against the cluster (bypassing resources_create_or_update)")
+	s.T().Cleanup(func() {
+		_ = apiExtensionsV1Client.CustomResourceDefinitions().Delete(context.Background(), crd.Name, metav1.DeleteOptions{})
+	})
+	s.Require().NoError(EnvTestWaitForAPIResourceCondition(s.T().Context(), "freshgroup.example.com", "v1", "freshwidgets", true))
+
+	dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
+	_, err = dynamicClient.Resource(schema.GroupVersionResource{Group: "freshgroup.example.com", Version: "v1", Resource: "freshwidgets"}).
+		Namespace("default").
+		Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "freshgroup.example.com/v1",
+			"kind":       "FreshWidget",
+			"metadata":   map[string]interface{}{"name": "fresh-instance"},
+		}}, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create the FreshWidget instance directly against the cluster")
+
+	toolResult, err := s.CallTool("resources_get", map[string]interface{}{
+		"apiVersion": "freshgroup.example.com/v1",
+		"kind":       "FreshWidget",
+		"namespace":  "default",
+		"name":       "fresh-instance",
+	})
+	s.Require().NoError(err)
+	s.Falsef(toolResult.IsError,
+		"resources_get must succeed for a CRD installed directly against the cluster after the RESTMapper's cache was already warmed -- "+
+			"got: %v", toolResult.Content)
 }
 
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateForcesSSA() {
