@@ -298,8 +298,8 @@ github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
-github.com/tektoncd/pipeline v1.15.0 h1:ZGboFUaEdpYurZWqeGT5rn9e6qmomGL/gLSKhHp2vvQ=
-github.com/tektoncd/pipeline v1.15.0/go.mod h1:HghtkZ1D9b91o0YiXABDUd+c2C6R4kbk+PumnHqs3Bk=
+github.com/tektoncd/pipeline v1.15.1 h1:eCGlMonJr7OhiLaaykO/+qXZv15eijswriT7JrLW9aQ=
+github.com/tektoncd/pipeline v1.15.1/go.mod h1:t2/vjjHPODK3hvx1OFgWVyo9Va/gGE1gR3o/beAsXKg=
 github.com/vladimirvivien/gexe v0.5.0 h1:AWBVaYnrTsGYBktXvcO0DfWPeSiZxn6mnQ5nvL+A1/A=
 github.com/vladimirvivien/gexe v0.5.0/go.mod h1:3gjgTqE2c0VyHnU5UOIwk7gyNzZDGulPb/DJPgcw64E=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
