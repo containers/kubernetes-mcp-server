@@ -35,6 +35,39 @@
   },
   {
     "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Virtual Machine: Console Screenshot"
+    },
+    "description": "Capture a screenshot of a KubeVirt VirtualMachine's graphical (VNC) console as a PNG image. Use this to see what is currently displayed on the VM's screen (for example firmware, a bootloader, or a login prompt). Read-only: it never sends input to the guest.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "The name of the virtual machine",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        },
+        "wake_screen": {
+          "description": "Move the mouse cursor before capturing to wake a blanked screen. Defaults to false.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "namespace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "vm_console_screenshot",
+    "title": "Virtual Machine: Console Screenshot"
+  },
+  {
+    "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": false,
