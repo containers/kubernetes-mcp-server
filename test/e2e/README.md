@@ -123,8 +123,8 @@ Value composition helpers: `mergeValues(...)` (shallow, top-level keys must be d
 | `TestOAuthOIDCFlows` | OIDC-mode rejection surface (A1–A8) and unauthenticated well-known metadata (E1–E5, E7, E8), plus the scope-not-enforced guard (F1) |
 | `TestOAuthServerModes` | Unprotected anonymous tool call (C1); passthrough rejects a missing token and hides well-known (C4, E6) |
 | `TestOAuthForwardedIdentity` | Forwarded-token identity: `require_oauth=false` (C2) and passthrough (C3) act as the cluster-admin user, not the `view` SA (Secrets discriminator) |
-| `TestOAuthSTSVariants` | STS variant D3: `rfc8693` strategy + `sts_auth_style=header` (Basic client auth) completes the exchange chain and preserves identity |
-| `TestOAuthSTSAssertion` | STS variant D4: `sts_auth_style=assertion` — the server signs an RFC 7523 `client_assertion` (mounted throwaway cert/key) to the `mcp-server-jwt` `client-jwt` Keycloak client, completing the exchange and preserving cluster-admin identity |
+| `TestOAuthSTSVariants` | Token-exchange variant D3: `rfc8693` strategy + `client_secret_basic` completes the exchange chain and preserves identity |
+| `TestOAuthSTSAssertion` | Token-exchange variant D4: `private_key_jwt` signs an RFC 7523 `client_assertion` with a mounted throwaway cert/key to the `mcp-server-jwt` `client-jwt` Keycloak client, completing the exchange and preserving cluster-admin identity |
 | `TestOAuthGroupRBAC` | OIDC groups claim drives K8s RBAC (G1): `mcp-viewer` (group `mcp-viewers` → `view`) is denied Secrets while `mcp` (cluster-admin) is allowed, through the same server |
 
 ## Server auth contract (reference)
@@ -213,13 +213,13 @@ Legend — ✅ covered · ⊘ not testable through a healthy e2e-deployed server
 | # | Scenario | Config | | |
 |---|----------|--------|---|---|
 | D1 | `rfc8693` + `params` (defaults) | current | implicit in C5 | ✅ |
-| D3 | `rfc8693` strategy + `sts_auth_style="header"` | client creds in Basic header | `TestOAuthSTSVariants` | ✅ |
-| D4 | `sts_auth_style="assertion"` (private-key-JWT, RFC 7523) | client cert/key + Keycloak `client-jwt` client | `TestOAuthSTSAssertion` | ✅ |
-| D2 | `keycloak-v1` strategy | `token_exchange_strategy="keycloak-v1"` | needs legacy exchange feature | deferred |
-| D5 | `sts_auth_style="federated"` (SPIRE JWT-SVID) | federated token file | needs real SPIRE | deferred |
+| D3 | `rfc8693` + `client_secret_basic` | client creds in Basic header | `TestOAuthSTSVariants` | ✅ |
+| D4 | `private_key_jwt` (RFC 7523) | client cert/key + Keycloak `client-jwt` client | `TestOAuthSTSAssertion` | ✅ |
+| D2 | `keycloak-v1` strategy | `token_exchange.strategy="keycloak-v1"` | needs legacy exchange feature | deferred |
+| D5 | `jwt_file` (SPIRE JWT-SVID) | federated token file | needs real SPIRE | deferred |
 | D6 | `entra-obo` strategy | Entra ID only | Azure-specific | ⊘ |
 
-> **D4 uses a dedicated Keycloak client.** `sts_auth_style="assertion"` is private-key-JWT
+> **D4 uses a dedicated Keycloak client.** `token_exchange.client_auth.method="private_key_jwt"` uses private-key-JWT
 > client authentication (RFC 7523): the server signs a `client_assertion` JWT with a private
 > key instead of sending a client secret. A Keycloak client has exactly one
 > `clientAuthenticatorType`, and `mcp-server` uses `client-secret` (relied on by
@@ -246,8 +246,8 @@ Legend — ✅ covered · ⊘ not testable through a healthy e2e-deployed server
 > behavior for the existing standard-exchange clients that C5/D3/D4 depend on, so a dedicated
 > client would be needed to contain the blast radius.
 >
-> **D5 (`federated`) is deferred.** `sts_auth_style="federated"` re-reads a JWT from
-> `sts_federated_token_file` on every request and sends it as the `client_assertion`
+> **D5 (`jwt_file`) is deferred.** `token_exchange.client_auth.method="jwt_file"` re-reads a JWT from
+> `token_exchange.client_auth.token_file` on every request and sends it as the `client_assertion`
 > (`exchanger.go`). Against Keycloak's `client-jwt` authenticator the file JWT would have to be
 > trusted (as in D4) *and* carry a single-use `jti` — but a static file is reused on the second
 > exchange, which Keycloak rejects ("Token reuse detected"). Exercising this honestly needs

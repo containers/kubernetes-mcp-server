@@ -36,7 +36,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// Deploy the server in OIDC mode; well-known assertions rely on it
 			// proxying to Keycloak over the in-cluster service DNS + mounted CA.
 			dep := deployServer(ctx, t, cfg, "oauth-oidc",
-				withConfig(oidcServerConfig(nil)),
+				withConfig(oidcServerConfig(nil, "client_secret_post")),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -149,7 +149,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// still be accepted. This guards against a regression that starts
 			// gating requests on oauth_scopes.
 			dep := deployServer(ctx, t, cfg, "oauth-scope",
-				withConfig(oidcServerConfig([]string{"mcp:absent"})),
+				withConfig(oidcServerConfig([]string{"mcp:absent"}, "client_secret_post")),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -171,7 +171,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// strip registration_endpoint from the proxied metadata and advertise
 			// require_request_uri_registration=false (applyConfigOverrides).
 			dep := deployServer(ctx, t, cfg, "oauth-nodcr",
-				withConfig(oidcServerConfig(nil)+"\ndisable_dynamic_client_registration = true\n"),
+				withConfig("disable_dynamic_client_registration = true\n"+oidcServerConfig(nil, "client_secret_post")),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -317,10 +317,10 @@ type oauthSTSState struct {
 var oauthSTSTS testState[oauthSTSState]
 
 // TestOAuthSTSVariants exercises a token-exchange variant that differs from the
-// built-in STS path covered by TestKeycloakOIDC (C5): an explicit
-// token_exchange_strategy="rfc8693" with sts_auth_style="header" (client
+// global token exchange path covered by TestKeycloakOIDC (C5): an explicit
+// token_exchange configuration with client_secret_basic authentication (client
 // credentials sent as an HTTP Basic header rather than form params). This routes
-// through the pluggable strategy exchanger (strategyBasedTokenExchange +
+// through the pluggable strategy exchanger (exchangeToken +
 // injectClientAuth). A successful tool call proves the exchanged token is
 // accepted by the apiserver, and listing Secrets proves the cluster-admin user
 // identity is preserved through the strategy path.
@@ -338,7 +338,7 @@ func TestOAuthSTSVariants(t *testing.T) {
 			userToken := mcpUserToken(t, s.keycloakURL, "openid", "mcp-server")
 
 			dep := deployServer(ctx, t, cfg, "oauth-sts-header",
-				withConfig(oidcServerConfig(nil)+"\ntoken_exchange_strategy = \"rfc8693\"\nsts_auth_style = \"header\"\n"),
+				withConfig(oidcServerConfig(nil, "client_secret_basic")),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -382,7 +382,7 @@ func TestOAuthGroupRBAC(t *testing.T) {
 			// One OIDC+STS server; both users' tokens are exchanged by it to the
 			// openshift audience the apiserver requires (same path as C5).
 			dep := deployServer(ctx, t, cfg, "oauth-group-rbac",
-				withConfig(oidcServerConfig(nil)),
+				withConfig(oidcServerConfig(nil, "client_secret_post")),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -431,7 +431,7 @@ func TestOAuthGroupRBAC(t *testing.T) {
 }
 
 // TestOAuthSTSAssertion exercises D4: STS token exchange with
-// sts_auth_style="assertion" — private-key-JWT client authentication (RFC 7523),
+// private_key_jwt client authentication (RFC 7523),
 // distinct from the client-secret auth used everywhere else (C5/D3). Instead of a
 // shared secret, the server signs a client_assertion JWT with a committed throwaway
 // cert/key (mounted from a Secret) and presents it to Keycloak's mcp-server-jwt
@@ -466,23 +466,26 @@ func TestOAuthSTSAssertion(t *testing.T) {
 			// Dedicated config: unlike oidcServerConfig, this authenticates the
 			// exchange as mcp-server-jwt with a signed assertion (cert/key files),
 			// not the mcp-server client secret, and validates incoming tokens against
-			// its own audience. Built as its own literal because TOML rejects the
-			// duplicate sts_client_id that appending would create.
+			// its own audience.
 			assertionConfig := fmt.Sprintf(`
 				require_oauth = true
 				oauth_audience = "mcp-server-jwt"
 				oauth_scopes = ["openid", "mcp-server-jwt"]
 				validate_token = false
 				authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
-				sts_client_id = "mcp-server-jwt"
-				sts_audience = "openshift"
-				sts_scopes = ["mcp:openshift"]
-				token_exchange_strategy = "rfc8693"
-				sts_auth_style = "assertion"
-				sts_client_cert_file = %q
-				sts_client_key_file = %q
 				certificate_authority = "%s/ca.crt"
-			`, stsAssertionCertPath, stsAssertionKeyPath, caMountPath)
+
+				[token_exchange]
+				strategy = "rfc8693"
+				audience = "openshift"
+				scopes = ["mcp:openshift"]
+
+				[token_exchange.client_auth]
+				method = "private_key_jwt"
+				client_id = "mcp-server-jwt"
+				certificate_file = %q
+				private_key_file = %q
+			`, caMountPath, stsAssertionCertPath, stsAssertionKeyPath)
 
 			dep := deployServer(ctx, t, cfg, "oauth-sts-assertion",
 				withConfig(assertionConfig),
