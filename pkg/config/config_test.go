@@ -1123,28 +1123,50 @@ func (s *ConfigSuite) TestToolOverridesDropInMerge() {
 	})
 }
 
-func (s *ConfigSuite) TestStsTokenTypesParsing() {
-	s.Run("explicit values are parsed and exposed via getters", func() {
+func (s *ConfigSuite) TestTokenExchangeParsing() {
+	s.Run("nested configuration is parsed through the declarative accessor", func() {
 		configPath := s.writeConfig(`
-			sts_subject_token_type = "urn:ietf:params:oauth:token-type:jwt"
-			sts_requested_token_type = "urn:ietf:params:oauth:token-type:jwt"
+			[token_exchange]
+			strategy = "rfc8693"
+			audience = "kubernetes-api"
+			scopes = ["scope"]
+			subject_token_type = "urn:ietf:params:oauth:token-type:access_token"
+			requested_token_type = "urn:ietf:params:oauth:token-type:access_token"
+
+			[token_exchange.client_auth]
+			method = "client_secret_basic"
+			client_id = "mcp-server"
+			client_secret = "secret"
 		`)
-		config, err := Read(s.T().Context(), configPath, "")
+		cfg, err := Read(s.T().Context(), configPath, "")
 		s.Require().NoError(err)
-		s.Require().NotNil(config)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.StsSubjectTokenType)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.StsRequestedTokenType)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.GetStsSubjectTokenType())
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.GetStsRequestedTokenType())
+		exchange := cfg.GetTokenExchangeConfig()
+		s.Require().NotNil(exchange)
+		s.Equal("rfc8693", exchange.GetStrategy())
+		s.Equal("kubernetes-api", exchange.GetAudience())
+		s.Equal([]string{"scope"}, exchange.GetScopes())
+		s.Equal("urn:ietf:params:oauth:token-type:access_token", exchange.GetSubjectTokenType())
+		s.Equal("urn:ietf:params:oauth:token-type:access_token", exchange.GetRequestedTokenType())
+		s.Require().NotNil(exchange.GetClientAuth())
+		s.Equal("mcp-server", exchange.GetClientAuth().GetClientID())
 	})
 
-	s.Run("default to empty when omitted", func() {
-		configPath := s.writeConfig(``)
-		config, err := Read(s.T().Context(), configPath, "")
+	s.Run("absent block leaves token exchange disabled", func() {
+		configPath := s.writeConfig("")
+		cfg, err := Read(s.T().Context(), configPath, "")
 		s.Require().NoError(err)
-		s.Require().NotNil(config)
-		s.Empty(config.StsSubjectTokenType, "sts_subject_token_type should default to empty (rfc8693 exchanger applies access_token default)")
-		s.Empty(config.StsRequestedTokenType, "sts_requested_token_type should default to empty (rfc8693 exchanger applies access_token default)")
+		s.Nil(cfg.GetTokenExchangeConfig())
+	})
+
+	s.Run("removed keys identify their replacement", func() {
+		configPath := s.writeConfig(`
+			sts_audience = "kubernetes-api"
+			sts_client_id = "mcp-server"
+		`)
+		_, err := Read(s.T().Context(), configPath, "")
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_audience -> token_exchange.audience")
+		s.Contains(err.Error(), "sts_client_id -> token_exchange.client_auth.client_id")
 	})
 }
 
