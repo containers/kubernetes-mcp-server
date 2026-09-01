@@ -8,7 +8,9 @@ CONTAINER_ENGINE ?= $(MINIKUBE_DRIVER)
 
 # Enable rootless mode for podman driver on Linux
 ifeq ($(MINIKUBE_DRIVER),podman)
+ifeq ($(shell uname -s),Linux)
 export MINIKUBE_ROOTLESS ?= true
+endif
 endif
 
 CERT_MANAGER_VERSION ?= v1.16.2
