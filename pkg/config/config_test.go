@@ -1155,19 +1155,95 @@ func (s *ConfigSuite) TestTokenExchangeParsing() {
 		configPath := s.writeConfig("")
 		cfg, err := Read(s.T().Context(), configPath, "")
 		s.Require().NoError(err)
-		s.Nil(cfg.GetTokenExchangeConfig())
+		s.True(cfg.GetTokenExchangeConfig() == nil)
 	})
 
-	s.Run("removed keys identify their replacement", func() {
+	s.Run("all removed keys identify their replacement", func() {
 		configPath := s.writeConfig(`
+			token_exchange_strategy = "rfc8693"
 			sts_audience = "kubernetes-api"
+			sts_scopes = ["scope"]
+			sts_subject_token_type = "subject"
+			sts_requested_token_type = "requested"
 			sts_client_id = "mcp-server"
+			sts_client_secret = "secret"
+			sts_auth_style = "header"
+			sts_client_cert_file = "cert.pem"
+			sts_client_key_file = "key.pem"
+			sts_federated_token_file = "token"
 		`)
 		_, err := Read(s.T().Context(), configPath, "")
 		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_audience -> token_exchange.audience")
-		s.Contains(err.Error(), "sts_client_id -> token_exchange.client_auth.client_id")
+		mappings := map[string]string{
+			"token_exchange_strategy":  "token_exchange.strategy",
+			"sts_audience":             "token_exchange.audience",
+			"sts_scopes":               "token_exchange.scopes",
+			"sts_subject_token_type":   "token_exchange.subject_token_type",
+			"sts_requested_token_type": "token_exchange.requested_token_type",
+			"sts_client_id":            "token_exchange.client_auth.client_id",
+			"sts_client_secret":        "token_exchange.client_auth.client_secret",
+			"sts_auth_style":           "token_exchange.client_auth.method",
+			"sts_client_cert_file":     "token_exchange.client_auth.certificate_file",
+			"sts_client_key_file":      "token_exchange.client_auth.private_key_file",
+			"sts_federated_token_file": "token_exchange.client_auth.token_file",
+		}
+		for legacy, replacement := range mappings {
+			s.Contains(err.Error(), legacy+" -> "+replacement)
+		}
+		s.Contains(err.Error(), "params -> client_secret_post")
+		s.Contains(err.Error(), "header -> client_secret_basic")
+		s.Contains(err.Error(), "assertion -> private_key_jwt")
+		s.Contains(err.Error(), "federated -> jwt_file")
 	})
+
+	s.Run("legacy built-in STS recommends Basic authentication", func() {
+		configPath := s.writeConfig(`sts_client_id = "mcp-server"`)
+		_, err := Read(s.T().Context(), configPath, "")
+		s.Require().Error(err)
+		s.Contains(err.Error(), "legacy built-in STS used HTTP Basic authentication")
+		s.Contains(err.Error(), "client_secret_basic")
+	})
+
+	s.Run("removed keys are detected inside token exchange tables", func() {
+		configPath := s.writeConfig(`
+			[token_exchange]
+			strategy = "rfc8693"
+			sts_audience = "kubernetes-api"
+		`)
+		_, err := Read(s.T().Context(), configPath, "")
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.sts_audience -> token_exchange.audience")
+	})
+
+	s.Run("unknown nested keys are rejected", func() {
+		configPath := s.writeConfig(`
+			[token_exchange]
+			strategy = "rfc8693"
+
+			[token_exchange.client_auth]
+			methd = "client_secret_basic"
+		`)
+		_, err := Read(s.T().Context(), configPath, "")
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown token exchange configuration keys: token_exchange.client_auth.methd")
+		s.Contains(err.Error(), configPath)
+	})
+}
+
+func (s *ConfigSuite) TestTokenExchangePartialDefaultOverride() {
+	base := StaticConfig{TokenExchange: &TokenExchangeConfig{
+		Strategy: "rfc8693",
+		Audience: "kubernetes-api",
+	}}
+	override := StaticConfig{TokenExchange: &TokenExchangeConfig{
+		Scopes: []string{"scope"},
+	}}
+
+	merged := mergeConfig(base, override)
+	s.Require().NotNil(merged.TokenExchange)
+	s.Equal("rfc8693", merged.TokenExchange.Strategy)
+	s.Equal("kubernetes-api", merged.TokenExchange.Audience)
+	s.Equal([]string{"scope"}, merged.TokenExchange.Scopes)
 }
 
 func (s *ConfigSuite) TestConfirmationRulesDefaults() {

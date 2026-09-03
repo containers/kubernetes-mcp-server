@@ -103,7 +103,9 @@ Value composition helpers: `mergeValues(...)` (shallow, top-level keys must be d
 - `requireWellKnown` + `requireHTTPStatus` — assert well-known metadata endpoints.
 - `callResourcesListSecrets(...)` — identity discriminator: cluster-admin lists Secrets
   (`IsError=false`); a `view`-bound identity cannot (`IsError=true`).
-- `oidcServerConfig(scopes)` — shared OIDC + STS server config (scopes overridable).
+- `oidcServerConfig(scopes, clientAuthMethod)` — shared OIDC + token-exchange server
+  config with overridable scopes and client authentication. The flow matrix uses both
+  `client_secret_post` and `client_secret_basic` to cover body and HTTP Basic credentials.
 - `copyKeycloakCASecret` (`withPreInstall` hook) + `keycloakCAVolumeValues()` — copy the
   cert-manager self-signed CA into the namespace and mount it so the server trusts
   Keycloak's TLS.

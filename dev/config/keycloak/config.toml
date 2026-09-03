@@ -11,6 +11,6 @@ audience = "openshift"
 scopes = ["mcp:openshift"]
 
 [token_exchange.client_auth]
-method = "client_secret_post"
+method = "client_secret_basic"
 client_id = "mcp-server"
 client_secret = "mcp-server-dev-secret"

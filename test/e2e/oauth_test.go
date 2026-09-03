@@ -281,6 +281,9 @@ func keycloakCAVolumeValues() map[string]any {
 }
 
 const (
+	clientAuthMethodSecretBasic = "client_secret_basic"
+	clientAuthMethodSecretPost  = "client_secret_post"
+
 	// stsAssertionSecretName is the secret holding the client cert+key the server
 	// signs assertions with; stsAssertionMountPath is where the chart mounts it.
 	stsAssertionSecretName = "sts-assertion"

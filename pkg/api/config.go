@@ -64,6 +64,9 @@ type DeniedResourcesProvider interface {
 }
 
 // TokenExchangeConfig provides declarative global token exchange settings.
+// Implementations must return an untyped nil from GetClientAuth when client
+// authentication is not configured. A typed nil stored in the interface is
+// non-nil and may panic when its methods are called.
 type TokenExchangeConfig interface {
 	GetStrategy() string
 	GetAudience() string
@@ -83,6 +86,8 @@ const (
 )
 
 // TokenExchangeClientAuth provides optional declarative client authentication.
+// Providers returning this interface must use an untyped nil when no client
+// authentication configuration exists.
 type TokenExchangeClientAuth interface {
 	GetMethod() TokenExchangeClientAuthMethod
 	GetClientID() string

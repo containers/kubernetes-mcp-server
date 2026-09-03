@@ -141,9 +141,9 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 		cfg.TokenExchange = exchangeConfig("client", "", "audience", nil)
 		p := newProvider(cfg)
 
-		first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(first)
-		second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+		second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Same(first, second, "unchanged config must reuse the cached struct so assertion caching stays effective")
 	})
 
@@ -154,14 +154,14 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 		cfg.CertificateAuthority = "/old-ca.pem"
 		p := newProvider(cfg)
 
-		first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(first)
 		s.Equal("old-client", first.ClientID)
 
 		cfg.TokenExchange = exchangeConfig("new-client", "new-secret", "new-audience", []string{"new-scope"})
 		cfg.CertificateAuthority = "/new-ca.pem"
 
-		second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+		second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(second)
 		s.NotSame(first, second)
 		s.Equal("new-client", second.ClientID)
@@ -178,11 +178,11 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.TokenExchange = exchangeConfig("client", "secret", "audience", nil)
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
 			cfg.TokenExchange.ClientAuth.Method = api.TokenExchangeClientAuthMethodSecretBasic
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal(tokenexchange.AuthStyleHeader, second.AuthStyle)
@@ -197,12 +197,12 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.TokenExchange.ClientAuth.PrivateKeyFile = "/old-key.pem"
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
 			cfg.TokenExchange.ClientAuth.CertificateFile = "/new-cert.pem"
 			cfg.TokenExchange.ClientAuth.PrivateKeyFile = "/new-key.pem"
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal("/new-cert.pem", second.ClientCertFile)
@@ -217,11 +217,11 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.TokenExchange.ClientAuth.TokenFile = "/old-token"
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
 			cfg.TokenExchange.ClientAuth.TokenFile = "/new-token"
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal("/new-token", second.FederatedTokenFile)
@@ -234,11 +234,11 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.RequireTLS = false
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
 			cfg.RequireTLS = true
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 		})
@@ -250,12 +250,12 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.TLSMinVersion = "1.2"
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 			s.Equal("1.2", first.TLSMinVersion)
 
 			cfg.TLSMinVersion = "1.3"
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal("1.3", second.TLSMinVersion)
@@ -268,11 +268,11 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
 			cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, second.TLSCipherSuites)
@@ -285,11 +285,11 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.TokenExchange.SubjectTokenType = "urn:ietf:params:oauth:token-type:access_token"
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
 			cfg.TokenExchange.SubjectTokenType = "urn:ietf:params:oauth:token-type:jwt"
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second, "a reload that only changes token_exchange.subject_token_type must not reuse the stale cached config")
 			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.SubjectTokenType)
@@ -302,11 +302,11 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			cfg.TokenExchange.RequestedTokenType = "urn:ietf:params:oauth:token-type:access_token"
 			p := newProvider(cfg)
 
-			first := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
 			cfg.TokenExchange.RequestedTokenType = "urn:ietf:params:oauth:token-type:jwt"
-			second := p.getOrBuildTokenExchangeConfig(snap, cfg)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second, "a reload that only changes token_exchange.requested_token_type must not reuse the stale cached config")
 			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.RequestedTokenType)
@@ -325,7 +325,7 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 		cfg.RequireTLS = true
 		p := newProvider(cfg)
 
-		built := p.getOrBuildTokenExchangeConfig(snap, cfg)
+		built := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(built)
 
 		// getOrBuildTokenExchangeConfig must wire the enforcer into the config it returns,
@@ -335,6 +335,35 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 		_, err = client.Get(server.URL)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "require_tls is enabled")
+	})
+
+	s.Run("clears cached config when token exchange is disabled", func() {
+		snap := s.newSnapshot()
+		cfg := config.Default()
+		cfg.TokenExchange = exchangeConfig("client", "secret", "audience", nil)
+		p := newProvider(cfg)
+
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.Require().NotNil(first)
+		cfg.TokenExchange = nil
+		s.Nil(p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg))
+		cfg.TokenExchange = exchangeConfig("client", "secret", "audience", nil)
+		rebuilt := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.NotSame(first, rebuilt)
+	})
+
+	s.Run("Close clears cached config", func() {
+		snap := s.newSnapshot()
+		cfg := config.Default()
+		cfg.TokenExchange = exchangeConfig("client", "secret", "audience", nil)
+		p := newProvider(cfg)
+		p.provider = fakeDerivedProvider{}
+
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.Require().NotNil(first)
+		p.Close()
+		rebuilt := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.NotSame(first, rebuilt)
 	})
 }
 

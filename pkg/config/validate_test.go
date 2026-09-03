@@ -333,10 +333,35 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	}
 
 	s.Run("method is required when client authentication fields are configured", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{ClientID: "client"})
+		cfg := newConfig(&config.TokenExchangeClientAuth{ClientSecret: "secret"})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "token_exchange.client_auth.method is required")
+	})
+
+	s.Run("public client with only a client ID is accepted", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{ClientID: "public-client"})
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("configured method requires a client ID", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:       api.TokenExchangeClientAuthMethodSecretBasic,
+			ClientSecret: "secret",
+		})
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.client_auth.client_id is required")
+	})
+
+	s.Run("invalid method is rejected", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:   api.TokenExchangeClientAuthMethod("unknown"),
+			ClientID: "client",
+		})
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid token_exchange.client_auth.method")
 	})
 
 	s.Run("client_secret_basic requires a client secret", func() {
@@ -430,6 +455,49 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 		})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
+
+	s.Run("jwt_file rejects a missing token file", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:    api.TokenExchangeClientAuthMethodJWTFile,
+			ClientID:  "client",
+			TokenFile: filepath.Join(s.T().TempDir(), "missing-token"),
+		})
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.client_auth.token_file must be a valid file path")
+	})
+}
+
+func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {
+	cfg := s.validConfig()
+	cfg.RequireOAuth = true
+	cfg.AuthorizationURL = "https://example.com/auth"
+	cfg.TokenExchange = &config.TokenExchangeConfig{
+		Strategy:           " rfc8693 ",
+		Audience:           " audience ",
+		SubjectTokenType:   " subject-token-type ",
+		RequestedTokenType: " requested-token-type ",
+		ClientAuth: &config.TokenExchangeClientAuth{
+			Method:          api.TokenExchangeClientAuthMethod(" client_secret_basic "),
+			ClientID:        " client ",
+			ClientSecret:    " secret ",
+			CertificateFile: " cert.pem ",
+			PrivateKeyFile:  " key.pem ",
+			TokenFile:       " token ",
+		},
+	}
+
+	s.Require().NoError(cfg.Validate(s.T().Context()))
+	s.Equal("rfc8693", cfg.TokenExchange.Strategy)
+	s.Equal("audience", cfg.TokenExchange.Audience)
+	s.Equal("subject-token-type", cfg.TokenExchange.SubjectTokenType)
+	s.Equal("requested-token-type", cfg.TokenExchange.RequestedTokenType)
+	s.Equal(api.TokenExchangeClientAuthMethodSecretBasic, cfg.TokenExchange.ClientAuth.Method)
+	s.Equal("client", cfg.TokenExchange.ClientAuth.ClientID)
+	s.Equal("secret", cfg.TokenExchange.ClientAuth.ClientSecret)
+	s.Equal("cert.pem", cfg.TokenExchange.ClientAuth.CertificateFile)
+	s.Equal("key.pem", cfg.TokenExchange.ClientAuth.PrivateKeyFile)
+	s.Equal("token", cfg.TokenExchange.ClientAuth.TokenFile)
 }
 
 func (s *ValidateSuite) TestConfirmationFallback() {

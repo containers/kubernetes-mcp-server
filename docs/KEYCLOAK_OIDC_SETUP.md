@@ -168,6 +168,7 @@ oauth_audience = "mcp-server"
 oauth_scopes = ["openid", "mcp-server"]
 validate_token = false  # Validation done by K8s API server
 authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
+certificate_authority = "_output/cert-manager-ca/ca.crt"  # For HTTPS validation
 
 [token_exchange]
 strategy = "rfc8693"
@@ -175,11 +176,9 @@ audience = "openshift"
 scopes = ["mcp:openshift"]
 
 [token_exchange.client_auth]
-method = "client_secret_post"
+method = "client_secret_basic"
 client_id = "mcp-server"
 client_secret = "..."  # Auto-generated
-
-certificate_authority = "_output/cert-manager-ca/ca.crt"  # For HTTPS validation
 ```
 
 ## Useful Commands

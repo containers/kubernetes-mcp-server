@@ -37,8 +37,8 @@ type ToolOverride struct {
 
 // TokenExchangeConfig is the TOML configuration for global token exchange.
 type TokenExchangeConfig struct {
-	Strategy           string                   `toml:"strategy"`
-	Audience           string                   `toml:"audience"`
+	Strategy           string                   `toml:"strategy,omitempty"`
+	Audience           string                   `toml:"audience,omitempty"`
 	Scopes             []string                 `toml:"scopes,omitempty"`
 	SubjectTokenType   string                   `toml:"subject_token_type,omitempty"`
 	RequestedTokenType string                   `toml:"requested_token_type,omitempty"`
@@ -353,9 +353,18 @@ func readAndMergeFiles(ctx context.Context, files []string) ([]byte, error) {
 			return nil, fmt.Errorf("failed to read config %s: %w", file, err)
 		}
 
-		dropInConfig := make(map[string]interface{})
-		if _, err = toml.NewDecoder(bytes.NewReader(configData)).Decode(&dropInConfig); err != nil {
+		var fileConfig StaticConfig
+		md, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(&fileConfig)
+		if err != nil {
 			return nil, fmt.Errorf("failed to decode config %s: %w", file, err)
+		}
+		if err := validateConfigMetadata(md); err != nil {
+			return nil, fmt.Errorf("invalid config %s: %w", file, err)
+		}
+
+		dropInConfig := make(map[string]interface{})
+		if _, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(&dropInConfig); err != nil {
+			return nil, fmt.Errorf("failed to decode config %s for merging: %w", file, err)
 		}
 
 		deepMerge(rawConfig, dropInConfig)
@@ -395,7 +404,7 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateRemovedTokenExchangeKeys(md); err != nil {
+	if err := validateConfigMetadata(md); err != nil {
 		return nil, err
 	}
 
@@ -511,7 +520,7 @@ func (c *StaticConfig) WithProviderStrategies(strategies []string) *StaticConfig
 
 // WithTokenExchangeStrategies sets the known token exchange strategies for
 // validation. Callers that have access to the token exchange registry should
-// chain this before Validate so that token_exchange_strategy is checked:
+// chain this before Validate so that token_exchange.strategy is checked:
 //
 //	cfg.WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).Validate()
 func (c *StaticConfig) WithTokenExchangeStrategies(strategies []string) *StaticConfig {
@@ -657,6 +666,9 @@ func (c *StaticConfig) validateTokenExchange() error {
 		return nil
 	}
 	if auth.Method == "" {
+		if auth.ClientID != "" && auth.ClientSecret == "" && auth.CertificateFile == "" && auth.PrivateKeyFile == "" && auth.TokenFile == "" {
+			return nil
+		}
 		return fmt.Errorf("token_exchange.client_auth.method is required when client authentication fields are configured")
 	}
 	if auth.ClientID == "" {
@@ -789,7 +801,7 @@ func validateTokenExchangeFile(name, path string) error {
 	return nil
 }
 
-func validateRemovedTokenExchangeKeys(md toml.MetaData) error {
+func validateConfigMetadata(md toml.MetaData) error {
 	locations := map[string]string{
 		"token_exchange_strategy":  "token_exchange.strategy",
 		"sts_audience":             "token_exchange.audience",
@@ -804,14 +816,41 @@ func validateRemovedTokenExchangeKeys(md toml.MetaData) error {
 		"sts_federated_token_file": "token_exchange.client_auth.token_file",
 	}
 	var removed []string
+	var unknown []string
+	hasLegacyClientID := false
+	hasLegacyStrategy := false
 	for _, key := range md.Undecoded() {
-		if replacement, ok := locations[key.String()]; ok {
-			removed = append(removed, key.String()+" -> "+replacement)
+		path := key.String()
+		name := path
+		if index := strings.LastIndexByte(path, '.'); index >= 0 {
+			name = path[index+1:]
+		}
+		if replacement, ok := locations[name]; ok {
+			removed = append(removed, path+" -> "+replacement)
+			hasLegacyClientID = hasLegacyClientID || name == "sts_client_id"
+			hasLegacyStrategy = hasLegacyStrategy || name == "token_exchange_strategy"
+			continue
+		}
+		if strings.HasPrefix(path, "token_exchange.") {
+			unknown = append(unknown, path)
 		}
 	}
-	if len(removed) == 0 {
-		return nil
+	var diagnostics []string
+	if len(removed) > 0 {
+		sort.Strings(removed)
+		diagnostic := "removed token exchange configuration keys: " + strings.Join(removed, ", ") +
+			"; sts_auth_style values map as follows: params -> client_secret_post, header -> client_secret_basic, assertion -> private_key_jwt, federated -> jwt_file"
+		if hasLegacyClientID && !hasLegacyStrategy {
+			diagnostic += "; legacy built-in STS used HTTP Basic authentication, so set token_exchange.client_auth.method to client_secret_basic"
+		}
+		diagnostics = append(diagnostics, diagnostic)
 	}
-	sort.Strings(removed)
-	return fmt.Errorf("removed token exchange configuration keys: %s", strings.Join(removed, ", "))
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		diagnostics = append(diagnostics, "unknown token exchange configuration keys: "+strings.Join(unknown, ", "))
+	}
+	if len(diagnostics) > 0 {
+		return errors.New(strings.Join(diagnostics, "; "))
+	}
+	return nil
 }

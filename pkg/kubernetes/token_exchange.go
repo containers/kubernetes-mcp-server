@@ -35,13 +35,13 @@ func ExchangeTokenInContext(
 	case api.ClusterAuthKubeconfig:
 		return context.WithValue(ctx, OAuthAuthorizationHeader, ""), nil
 	case api.ClusterAuthPassthrough:
-		if globalConfig == nil {
-			if baseConfig.GetTokenExchangeConfig() != nil {
-				return ctx, fmt.Errorf("token exchange failed for target %q: no token endpoint available from OIDC provider", target)
-			}
+		global := baseConfig.GetTokenExchangeConfig()
+		if global == nil {
 			return ctx, nil
 		}
-		global := baseConfig.GetTokenExchangeConfig()
+		if globalConfig == nil {
+			return ctx, fmt.Errorf("token exchange failed using strategy %q: no token endpoint available from OIDC provider", global.GetStrategy())
+		}
 		return exchangeToken(ctx, baseConfig, subjectToken, target, global.GetStrategy(), globalConfig)
 	default:
 		return ctx, fmt.Errorf("unknown cluster_auth_mode %q", baseConfig.ResolveClusterAuthMode())
@@ -55,6 +55,9 @@ func exchangeToken(
 	target, strategy string,
 	cfg *tokenexchange.TargetTokenExchangeConfig,
 ) (context.Context, error) {
+	if err := cfg.Validate(); err != nil {
+		return ctx, fmt.Errorf("invalid token exchange configuration for strategy %q: %w", strategy, err)
+	}
 	exchanger, ok := tokenexchange.GetTokenExchanger(strategy)
 	if !ok {
 		return ctx, fmt.Errorf("token exchange strategy %q not found", strategy)
@@ -62,6 +65,9 @@ func exchangeToken(
 	cfg.SetRequireTLS(baseConfig.IsRequireTLS)
 	exchanged, err := exchanger.Exchange(ctx, cfg, subjectToken)
 	if err != nil {
+		if target == "" {
+			return ctx, fmt.Errorf("token exchange failed using strategy %q: %w", strategy, err)
+		}
 		return ctx, fmt.Errorf("token exchange failed for target %q: %w", target, err)
 	}
 	return context.WithValue(ctx, OAuthAuthorizationHeader, "Bearer "+exchanged.AccessToken), nil

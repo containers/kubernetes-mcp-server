@@ -84,6 +84,17 @@ func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 		_, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "no token endpoint available from OIDC provider")
+		s.Contains(err.Error(), `strategy "rfc8693"`)
+	})
+
+	s.Run("ignores an orphaned built config when declarative config is absent", func() {
+		cfg := config.Default()
+		built := &tokenexchange.TargetTokenExchangeConfig{TokenURL: "https://example.com/token"}
+
+		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
+		result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", built)
+		s.Require().NoError(err)
+		s.Equal("Bearer original-token", result.Value(OAuthAuthorizationHeader))
 	})
 }
 
@@ -201,6 +212,22 @@ func (s *TokenExchangeRoutingSuite) TestUnknownStrategyReturnsError() {
 	_, err := ExchangeTokenInContext(ctx, cfg, provider, "", nil)
 	s.Require().Error(err)
 	s.Contains(err.Error(), `token exchange strategy "unknown" not found`)
+}
+
+func (s *TokenExchangeRoutingSuite) TestInvalidPerTargetClientAuthReturnsError() {
+	cfg := config.Default()
+	ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer subject-token")
+	provider := fakeTokenExchangeProvider{
+		exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{
+			TokenURL:  "https://example.com/token",
+			AuthStyle: "unknown",
+		},
+		strategy: tokenexchange.StrategyRFC8693,
+	}
+
+	_, err := ExchangeTokenInContext(ctx, cfg, provider, "", nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `invalid auth_style "unknown"`)
 }
 
 func TestTokenExchangeRouting(t *testing.T) {

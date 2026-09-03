@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
@@ -16,14 +17,7 @@ type tokenExchangingProvider struct {
 	provider           Provider
 	baseConfigProvider func() api.BaseConfig
 	oauthState         *oauth.State
-	// tokenExchangeConfig is cached and reused across calls so the memoized HTTP client in
-	// TargetTokenExchangeConfig (and its keep-alive connections to the IdP) is
-	// reused. Rebuilt when the token URL or any token_exchange/TLS field changes after
-	// a reload. Client assertions themselves are never cached — a fresh, single-use
-	// jti is minted per exchange (see TargetTokenExchangeConfig.BuildAssertion).
-	tokenExchangeConfig    *tokenexchange.TargetTokenExchangeConfig
-	tokenExchangeConfigMu  sync.Mutex
-	tokenExchangeConfigKey tokenExchangeConfigCacheKey
+	tokenExchangeCache tokenExchangeConfigCache
 }
 
 var _ Provider = &tokenExchangingProvider{}
@@ -54,7 +48,7 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 		// provider rather than panicking; token exchange is simply skipped.
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
-	tokenExchangeConfig := p.getOrBuildTokenExchangeConfig(snap, baseConfig)
+	tokenExchangeConfig := p.getOrBuildTokenExchangeConfig(ctx, snap, baseConfig)
 	ctx, err := ExchangeTokenInContext(ctx, baseConfig, p.provider, target, tokenExchangeConfig)
 	if err != nil {
 		return nil, err
@@ -69,9 +63,10 @@ func (p *tokenExchangingProvider) baseConfig() api.BaseConfig {
 	return p.baseConfigProvider()
 }
 
-func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(snap *oauth.Snapshot, baseConfig api.BaseConfig) *tokenexchange.TargetTokenExchangeConfig {
+func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Context, snap *oauth.Snapshot, baseConfig api.BaseConfig) *tokenexchange.TargetTokenExchangeConfig {
 	global := baseConfig.GetTokenExchangeConfig()
 	if global == nil {
+		p.tokenExchangeCache.clear()
 		return nil
 	}
 
@@ -82,38 +77,28 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(snap *oauth.Snap
 		}
 	}
 	if tokenURL == "" {
+		p.tokenExchangeCache.clear()
+		klogutil.LogWarn(klogutil.FromContext(ctx), "OIDC provider returned no token endpoint; token exchange is unavailable",
+			klogutil.Field("strategy", global.GetStrategy()))
 		return nil
 	}
 
-	p.tokenExchangeConfigMu.Lock()
-	defer p.tokenExchangeConfigMu.Unlock()
-
 	key := newTokenExchangeConfigCacheKey(tokenURL, baseConfig)
-	if p.tokenExchangeConfig != nil && p.tokenExchangeConfigKey == key {
-		return p.tokenExchangeConfig
-	}
-
-	cfg := &tokenexchange.TargetTokenExchangeConfig{
-		TokenURL:           tokenURL,
-		Audience:           global.GetAudience(),
-		SubjectTokenType:   global.GetSubjectTokenType(),
-		RequestedTokenType: global.GetRequestedTokenType(),
-		Scopes:             append([]string(nil), global.GetScopes()...),
-		CAFile:             baseConfig.GetCertificateAuthority(),
-		TLSMinVersion:      baseConfig.GetTLSMinVersionConfig(),
-		TLSCipherSuites:    append([]string(nil), baseConfig.GetTLSCipherSuitesConfig()...),
-	}
-	applyClientAuth(cfg, global.GetClientAuth())
-	cfg.SetRequireTLS(baseConfig.IsRequireTLS)
-
-	// Release the previous client's idle connections before swapping in the
-	// rebuilt config so they don't linger until garbage collection.
-	if p.tokenExchangeConfig != nil {
-		p.tokenExchangeConfig.CloseIdleConnections()
-	}
-	p.tokenExchangeConfig = cfg
-	p.tokenExchangeConfigKey = key
-	return p.tokenExchangeConfig
+	return p.tokenExchangeCache.getOrReplace(key, func() *tokenexchange.TargetTokenExchangeConfig {
+		cfg := &tokenexchange.TargetTokenExchangeConfig{
+			TokenURL:           tokenURL,
+			Audience:           global.GetAudience(),
+			SubjectTokenType:   global.GetSubjectTokenType(),
+			RequestedTokenType: global.GetRequestedTokenType(),
+			Scopes:             append([]string(nil), global.GetScopes()...),
+			CAFile:             baseConfig.GetCertificateAuthority(),
+			TLSMinVersion:      baseConfig.GetTLSMinVersionConfig(),
+			TLSCipherSuites:    append([]string(nil), baseConfig.GetTLSCipherSuitesConfig()...),
+		}
+		applyClientAuth(cfg, global.GetClientAuth())
+		cfg.SetRequireTLS(baseConfig.IsRequireTLS)
+		return cfg
+	})
 }
 
 func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth api.TokenExchangeClientAuth) {
@@ -134,6 +119,10 @@ func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth api.Toke
 	case api.TokenExchangeClientAuthMethodJWTFile:
 		cfg.AuthStyle = tokenexchange.AuthStyleFederated
 		cfg.FederatedTokenFile = auth.GetTokenFile()
+	default:
+		// Preserve invalid methods so TargetTokenExchangeConfig.Validate rejects
+		// them instead of treating an empty style as form-body authentication.
+		cfg.AuthStyle = string(auth.GetMethod())
 	}
 }
 
@@ -205,6 +194,7 @@ func (p *tokenExchangingProvider) WatchTargets(ctx context.Context, reload McpRe
 }
 
 func (p *tokenExchangingProvider) Close() {
+	p.tokenExchangeCache.clear()
 	p.provider.Close()
 }
 
@@ -214,4 +204,39 @@ func (p *tokenExchangingProvider) AnyTargetHasGVKs(ctx context.Context, gvks []s
 
 func (p *tokenExchangingProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
 	return p.provider.IsTargetCompatibilityToolFiltersEnabled()
+}
+
+// tokenExchangeConfigCache owns synchronization and lifecycle management for
+// the memoized config and its HTTP client's idle connections.
+type tokenExchangeConfigCache struct {
+	mu     sync.Mutex
+	config *tokenexchange.TargetTokenExchangeConfig
+	key    tokenExchangeConfigCacheKey
+}
+
+func (c *tokenExchangeConfigCache) getOrReplace(key tokenExchangeConfigCacheKey, build func() *tokenexchange.TargetTokenExchangeConfig) *tokenexchange.TargetTokenExchangeConfig {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.config != nil && c.key == key {
+		return c.config
+	}
+	next := build()
+	if c.config != nil {
+		c.config.CloseIdleConnections()
+	}
+	c.config = next
+	c.key = key
+	return c.config
+}
+
+func (c *tokenExchangeConfigCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.config != nil {
+		c.config.CloseIdleConnections()
+	}
+	c.config = nil
+	c.key = tokenExchangeConfigCacheKey{}
 }

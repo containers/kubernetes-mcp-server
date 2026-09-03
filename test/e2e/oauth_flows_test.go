@@ -36,7 +36,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// Deploy the server in OIDC mode; well-known assertions rely on it
 			// proxying to Keycloak over the in-cluster service DNS + mounted CA.
 			dep := deployServer(ctx, t, cfg, "oauth-oidc",
-				withConfig(oidcServerConfig(nil, "client_secret_post")),
+				withConfig(oidcServerConfig(nil, clientAuthMethodSecretPost)),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -149,7 +149,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// still be accepted. This guards against a regression that starts
 			// gating requests on oauth_scopes.
 			dep := deployServer(ctx, t, cfg, "oauth-scope",
-				withConfig(oidcServerConfig([]string{"mcp:absent"}, "client_secret_post")),
+				withConfig(oidcServerConfig([]string{"mcp:absent"}, clientAuthMethodSecretPost)),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -171,7 +171,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// strip registration_endpoint from the proxied metadata and advertise
 			// require_request_uri_registration=false (applyConfigOverrides).
 			dep := deployServer(ctx, t, cfg, "oauth-nodcr",
-				withConfig("disable_dynamic_client_registration = true\n"+oidcServerConfig(nil, "client_secret_post")),
+				withConfig("disable_dynamic_client_registration = true\n"+oidcServerConfig(nil, clientAuthMethodSecretPost)),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -338,7 +338,7 @@ func TestOAuthSTSVariants(t *testing.T) {
 			userToken := mcpUserToken(t, s.keycloakURL, "openid", "mcp-server")
 
 			dep := deployServer(ctx, t, cfg, "oauth-sts-header",
-				withConfig(oidcServerConfig(nil, "client_secret_basic")),
+				withConfig(oidcServerConfig(nil, clientAuthMethodSecretBasic)),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)
@@ -382,7 +382,7 @@ func TestOAuthGroupRBAC(t *testing.T) {
 			// One OIDC+STS server; both users' tokens are exchanged by it to the
 			// openshift audience the apiserver requires (same path as C5).
 			dep := deployServer(ctx, t, cfg, "oauth-group-rbac",
-				withConfig(oidcServerConfig(nil, "client_secret_post")),
+				withConfig(oidcServerConfig(nil, clientAuthMethodSecretPost)),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)

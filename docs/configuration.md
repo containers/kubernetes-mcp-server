@@ -540,13 +540,13 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `skip_jwt_verification` | boolean | `false` | When true and authorization_url is unset, the server forwards the bearer token without any local validation (no parse, no claims check, no audience check). Required to enable pure passthrough with non-JWT tokens (e.g., OpenShift OAuth sha256~…). When true and authorization_url is set, this flag has no effect — the configured OIDC provider validates tokens normally. Only use the no-authorization_url form when a downstream component (cluster, reverse proxy) is the authority. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
-| `token_exchange.strategy` | string | none | Registered token exchange strategy. The block enables global exchange. |
+| `token_exchange.strategy` | string | required | Registered token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. The block enables global exchange and requires `require_oauth = true` and `authorization_url`. |
 | `token_exchange.audience` | string | `""` | Audience for the exchanged token. |
 | `token_exchange.scopes` | string[] | `[]` | Scopes for the exchanged token. |
 | `token_exchange.subject_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `subject_token_type`. |
 | `token_exchange.requested_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `requested_token_type`. |
-| `token_exchange.client_auth.method` | string | none | Required when any client-auth field is set: `client_secret_basic`, `client_secret_post`, `private_key_jwt`, or `jwt_file`. |
-| `token_exchange.client_auth.client_id` | string | `""` | OAuth client ID. |
+| `token_exchange.client_auth.method` | string | none | Required when client credentials are configured: `client_secret_basic`, `client_secret_post`, `private_key_jwt`, or `jwt_file`. May be omitted when only `client_id` is set for a public client. |
+| `token_exchange.client_auth.client_id` | string | `""` | OAuth client ID. May be configured without a method or secret for a public client. |
 | `token_exchange.client_auth.client_secret` | string | `""` | Required by the client-secret methods. |
 | `token_exchange.client_auth.certificate_file` | string | `""` | Certificate PEM required by `private_key_jwt`. |
 | `token_exchange.client_auth.private_key_file` | string | `""` | Private-key PEM required by `private_key_jwt`. |
@@ -554,6 +554,24 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
+
+**Breaking-change migration:** The legacy top-level `token_exchange_strategy` and `sts_*` settings are removed and rejected at startup. Migrate them as follows:
+
+| Legacy setting | Replacement |
+|----------------|-------------|
+| `token_exchange_strategy` | `token_exchange.strategy` |
+| `sts_audience` | `token_exchange.audience` |
+| `sts_scopes` | `token_exchange.scopes` |
+| `sts_subject_token_type` | `token_exchange.subject_token_type` |
+| `sts_requested_token_type` | `token_exchange.requested_token_type` |
+| `sts_client_id` | `token_exchange.client_auth.client_id` |
+| `sts_client_secret` | `token_exchange.client_auth.client_secret` |
+| `sts_auth_style` | `token_exchange.client_auth.method` |
+| `sts_client_cert_file` | `token_exchange.client_auth.certificate_file` |
+| `sts_client_key_file` | `token_exchange.client_auth.private_key_file` |
+| `sts_federated_token_file` | `token_exchange.client_auth.token_file` |
+
+Map legacy `sts_auth_style` values as follows: `params` to `client_secret_post`, `header` to `client_secret_basic`, `assertion` to `private_key_jwt`, and `federated` to `jwt_file`. Configurations that omitted `token_exchange_strategy` used the built-in STS path and should use `client_secret_basic` to preserve HTTP Basic client authentication.
 
 **Example (with client secret):**
 ```toml
@@ -567,7 +585,7 @@ strategy = "rfc8693"
 audience = "kubernetes-api"
 
 [token_exchange.client_auth]
-method = "client_secret_post"
+method = "client_secret_basic"
 client_id = "mcp-backend"
 client_secret = "your-client-secret"
 ```
