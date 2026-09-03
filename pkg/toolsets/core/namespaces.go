@@ -34,7 +34,12 @@ func initNamespaces(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: namespacesList,
+		},
+		RBAC: api.RBACBounded(api.RBACRequirement{
+			Verbs:  []string{"list"},
+			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "namespaces"}},
+		}),
+		Handler: namespacesList,
 	})
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
@@ -50,6 +55,13 @@ func initNamespaces(p api.FilteringProvider) []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		},
+		RBAC: api.RBACBounded(api.RBACRequirement{
+			Verbs: []string{"list"},
+			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+				APIGroup: "project.openshift.io",
+				Resource: "projects",
+			}},
+		}),
 		Handler: projectsList,
 		TargetCompatibilityFilters: []func() bool{
 			func() bool {
