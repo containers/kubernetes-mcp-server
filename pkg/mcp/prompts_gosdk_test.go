@@ -138,3 +138,19 @@ func TestServerPromptToGoSdkPrompt_EmptyArguments(t *testing.T) {
 	assert.Equal(t, "no-args-prompt", mcpPrompt.Name)
 	assert.Len(t, mcpPrompt.Arguments, 0)
 }
+
+func TestServerPromptToGoSdkPrompt_RBACMetadata(t *testing.T) {
+	rbac := api.RBACNone()
+	serverPrompt := api.ServerPrompt{
+		Prompt: api.Prompt{Name: "rbac-prompt"},
+		RBAC:   rbac,
+	}
+
+	mcpPrompt, _, err := ServerPromptToGoSdkPrompt(nil, serverPrompt)
+	require.NoError(t, err)
+	assert.Same(t, rbac, mcpPrompt.Meta[api.RBACMetadataKey])
+
+	serverPrompt.RBAC = api.RBACBounded()
+	_, _, err = ServerPromptToGoSdkPrompt(nil, serverPrompt)
+	require.ErrorContains(t, err, "invalid RBAC metadata")
+}
