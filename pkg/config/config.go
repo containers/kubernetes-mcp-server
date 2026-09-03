@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -45,7 +46,19 @@ type StaticConfig struct {
 	Port        string `toml:"port,omitempty"`
 	BindAddress string `toml:"bind_address,omitempty"`
 	KubeConfig  string `toml:"kubeconfig,omitempty"`
-	ListOutput  string `toml:"list_output,omitempty"`
+	// CACacheDir is where CA certificates fetched via the caURL kubeconfig
+	// cluster extension are cached. Empty means the default: a subdirectory
+	// of the system temp dir, which must be writable (mount an emptyDir
+	// there when the root filesystem is read-only).
+	CACacheDir string `toml:"ca_cache_dir,omitempty"`
+	// CARefreshInterval is how often cached CA certificates are re-fetched
+	// so a rotated cluster CA is picked up without a restart. Zero disables
+	// re-fetching; the CA is then only refreshed when a manager is rebuilt.
+	// omitzero (not omitempty): the toml encoder never omits a zero
+	// int64-backed Duration with omitempty, which would clobber the
+	// BaseDefault value during Default()'s merge round-trip.
+	CARefreshInterval Duration `toml:"ca_refresh_interval,omitzero"`
+	ListOutput        string   `toml:"list_output,omitempty"`
 	// Stateless configures the MCP server to operate in stateless mode.
 	// When true, the server will not send notifications to clients (e.g., tools/list_changed, prompts/list_changed).
 	// This is useful for container deployments, load balancing, and serverless environments where
@@ -412,6 +425,14 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 
 func (c *StaticConfig) GetClusterProviderStrategy() string {
 	return c.ClusterProviderStrategy
+}
+
+func (c *StaticConfig) GetCACacheDir() string {
+	return c.CACacheDir
+}
+
+func (c *StaticConfig) GetCARefreshInterval() time.Duration {
+	return c.CARefreshInterval.Duration()
 }
 
 func (c *StaticConfig) GetDeniedResources() []api.GroupVersionKind {

@@ -84,6 +84,8 @@ const (
 	flagCertificateAuthority = "certificate-authority"
 	flagDisableMultiCluster  = "disable-multi-cluster"
 	flagClusterProvider      = "cluster-provider"
+	flagCACacheDir           = "ca-cache-dir"
+	flagCARefreshInterval    = "ca-refresh-interval"
 	flagTLSCert              = "tls-cert"
 	flagTLSKey               = "tls-key"
 	flagRequireTLS           = "require-tls"
@@ -109,6 +111,8 @@ type MCPServerOptions struct {
 	ServerURL            string
 	DisableMultiCluster  bool
 	ClusterProvider      string
+	CACacheDir           string
+	CARefreshInterval    time.Duration
 	TLSCert              string
 	TLSKey               string
 	RequireTLS           bool
@@ -122,9 +126,11 @@ type MCPServerOptions struct {
 }
 
 func NewMCPServerOptions(streams genericiooptions.IOStreams) *MCPServerOptions {
+	defaults := config.Default()
 	return &MCPServerOptions{
-		IOStreams:    streams,
-		StaticConfig: config.Default(),
+		IOStreams:         streams,
+		StaticConfig:      defaults,
+		CARefreshInterval: defaults.CARefreshInterval.Duration(),
 	}
 }
 
@@ -191,6 +197,8 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	_ = cmd.Flags().MarkHidden(flagCertificateAuthority)
 	cmd.Flags().BoolVar(&o.DisableMultiCluster, flagDisableMultiCluster, o.DisableMultiCluster, "Disable multi cluster tools. Optional. If true, all tools will be run against the default cluster/context.")
 	cmd.Flags().StringVar(&o.ClusterProvider, flagClusterProvider, o.ClusterProvider, "Cluster provider strategy to use (one of: "+strings.Join(kubernetes.GetRegisteredStrategies(), ", ")+"). If not set, the server will auto-detect based on the environment.")
+	cmd.Flags().StringVar(&o.CACacheDir, flagCACacheDir, o.CACacheDir, "Directory used to cache CA certificates fetched via the caURL kubeconfig cluster extension. Defaults to a subdirectory of the system temp dir, which must be writable (with a read-only root filesystem, mount an emptyDir there).")
+	cmd.Flags().DurationVar(&o.CARefreshInterval, flagCARefreshInterval, o.CARefreshInterval, "How often to re-fetch CA certificates fetched via the caURL kubeconfig cluster extension, so a rotated cluster CA is picked up without a restart. Set to 0 to disable re-fetching.")
 	cmd.Flags().StringVar(&o.TLSCert, flagTLSCert, o.TLSCert, "Path to TLS certificate file for HTTPS. Must be used together with --tls-key.")
 	cmd.Flags().StringVar(&o.TLSKey, flagTLSKey, o.TLSKey, "Path to TLS private key file for HTTPS. Must be used together with --tls-cert.")
 	cmd.Flags().BoolVar(&o.RequireTLS, flagRequireTLS, o.RequireTLS, "Require TLS for server and all outbound connections")
@@ -298,6 +306,12 @@ func (m *MCPServerOptions) loadFlags(cmd *cobra.Command) {
 	}
 	if cmd.Flag(flagClusterProvider).Changed {
 		m.StaticConfig.ClusterProviderStrategy = m.ClusterProvider
+	}
+	if cmd.Flag(flagCACacheDir).Changed {
+		m.StaticConfig.CACacheDir = m.CACacheDir
+	}
+	if cmd.Flag(flagCARefreshInterval).Changed {
+		m.StaticConfig.CARefreshInterval = config.Duration(m.CARefreshInterval)
 	}
 	if cmd.Flag(flagDisableMultiCluster).Changed && m.DisableMultiCluster {
 		m.StaticConfig.ClusterProviderStrategy = api.ClusterProviderDisabled
