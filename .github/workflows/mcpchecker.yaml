@@ -274,6 +274,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.check-trigger.outputs.matrix) }}
+    env:
+      MINIKUBE_DRIVER: ${{ contains(matrix.toolsets, 'kubevirt') && 'docker' || 'podman' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
