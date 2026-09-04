@@ -1,0 +1,71 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "delete-argocd-application"
+  difficulty: easy
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-del-app
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-del-app
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-to-delete
+          namespace: argocd-eval-del-app
+        spec:
+          project: default
+          source:
+            repoURL: https://github.com/example/app
+            targetRevision: HEAD
+            path: manifests
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          if kubectl get application app-to-delete -n argocd-eval-del-app 2>/dev/null; then
+            echo "ERROR: Application app-to-delete still exists"
+            exit 1
+          fi
+          echo "Application app-to-delete successfully deleted"
+    - llmJudge:
+        contains: "app-to-delete"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: app-to-delete
+          namespace: argocd-eval-del-app
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-del-app
+        ignoreNotFound: true
+
+  prompt:
+    inline: Delete the ArgoCD Application (apiVersion argoproj.io/v1alpha1) named 'app-to-delete' in namespace 'argocd-eval-del-app'.

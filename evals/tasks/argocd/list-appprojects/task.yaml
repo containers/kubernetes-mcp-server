@@ -1,0 +1,92 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "list-argocd-appprojects"
+  difficulty: easy
+  labels:
+    suite: argocd
+    requires: argocd
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-list-proj
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-list-proj
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-platform
+          namespace: argocd-eval-list-proj
+        spec:
+          description: "Platform team project"
+          sourceRepos:
+            - "https://github.com/platform/*"
+          destinations:
+            - namespace: "*"
+              server: "https://kubernetes.default.svc"
+    - k8s.create:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-backend
+          namespace: argocd-eval-list-proj
+        spec:
+          description: "Backend team project"
+          sourceRepos:
+            - "https://github.com/backend/*"
+          destinations:
+            - namespace: "backend"
+              server: "https://kubernetes.default.svc"
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          COUNT=$(kubectl get appproject -n argocd-eval-list-proj --no-headers 2>/dev/null | wc -l)
+          if [ "$COUNT" -lt "2" ]; then
+            echo "ERROR: Expected at least 2 AppProjects, found $COUNT"
+            exit 1
+          fi
+          echo "Found $COUNT AppProjects in argocd-eval-list-proj"
+    - llmJudge:
+        contains: "team-platform"
+    - llmJudge:
+        contains: "team-backend"
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-platform
+          namespace: argocd-eval-list-proj
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: team-backend
+          namespace: argocd-eval-list-proj
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: argocd-eval-list-proj
+        ignoreNotFound: true
+
+  prompt:
+    inline: List all ArgoCD AppProjects in the argocd-eval-list-proj namespace.
