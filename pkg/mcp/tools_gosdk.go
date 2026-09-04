@@ -101,6 +101,11 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		if result.Error != nil {
 			mcplog.HandleK8sError(ctx, result.Error, tool.Tool.Name)
 		}
+		// If result has multi-content blocks, use the multi-content converter;
+		// otherwise fall back to legacy Content field.
+		if len(result.ContentBlocks) > 0 {
+			return NewMultiContentResult(result.ContentBlocks, result.StructuredContent, result.Error), nil
+		}
 		return NewStructuredResult(result.Content, result.StructuredContent, result.Error), nil
 	}
 	return goSdkTool, goSdkHandler, nil

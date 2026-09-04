@@ -103,6 +103,57 @@ func (s *ToolsetsSuite) TestNewToolCallResultStructured() {
 	})
 }
 
+func (s *ToolsetsSuite) TestToolContent() {
+	s.Run("NewTextToolContent", func() {
+		content := NewTextToolContent("hello world")
+		s.Equal(ToolContentTypeText, content.Type)
+		s.Equal("hello world", content.Text)
+		s.Empty(content.Data)
+		s.Empty(content.MIMEType)
+	})
+	s.Run("NewImageToolContent copies bytes for safety", func() {
+		original := []byte{0x89, 0x50, 0x4e, 0x47}
+		content := NewImageToolContent(original, "image/png")
+		s.Equal(ToolContentTypeImage, content.Type)
+		s.Equal("image/png", content.MIMEType)
+		s.Equal(original, content.Data)
+		s.Empty(content.Text)
+
+		// Verify mutation safety: modifying original doesn't affect content
+		original[0] = 0xFF
+		s.NotEqual(0xFF, content.Data[0], "NewImageToolContent must copy bytes, not reference")
+	})
+}
+
+func (s *ToolsetsSuite) TestNewToolCallResultWithContent() {
+	s.Run("text-only content", func() {
+		blocks := []*ToolContent{NewTextToolContent("screenshot description")}
+		result := NewToolCallResultWithContent(blocks, nil, nil)
+		s.Len(result.ContentBlocks, 1)
+		s.Equal(blocks, result.ContentBlocks)
+		s.Nil(result.Error)
+		s.Nil(result.StructuredContent)
+	})
+	s.Run("text and image blocks", func() {
+		pngBytes := []byte{0x89, 0x50, 0x4e, 0x47}
+		blocks := []*ToolContent{
+			NewTextToolContent("The VM is showing a boot prompt"),
+			NewImageToolContent(pngBytes, "image/png"),
+		}
+		result := NewToolCallResultWithContent(blocks, nil, nil)
+		s.Len(result.ContentBlocks, 2)
+		s.Equal(ToolContentTypeText, result.ContentBlocks[0].Type)
+		s.Equal(ToolContentTypeImage, result.ContentBlocks[1].Type)
+	})
+	s.Run("preserves error", func() {
+		err := errors.New("graphics not available")
+		blocks := []*ToolContent{NewTextToolContent("error: graphics disabled")}
+		result := NewToolCallResultWithContent(blocks, nil, err)
+		s.Equal(err, result.Error)
+		s.Len(result.ContentBlocks, 1)
+	})
+}
+
 func (s *ToolsetsSuite) TestNewToolCallResultFull() {
 	s.Run("sets text, structured, and nil error", func() {
 		structured := []map[string]any{{"name": "pod-1"}}
