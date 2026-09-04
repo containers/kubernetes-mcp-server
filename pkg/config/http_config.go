@@ -10,7 +10,7 @@ const DefaultRateLimitBurst = 10
 type HTTPConfig struct {
 	// ReadHeaderTimeout is the amount of time allowed to read request headers.
 	// This is the primary defense against Slowloris attacks.
-	ReadHeaderTimeout Duration `toml:"read_header_timeout,omitempty"`
+	ReadHeaderTimeout Duration `toml:"read_header_timeout,omitzero"`
 
 	// MaxBodyBytes is the maximum size of request body in bytes.
 	// MCP payloads (tools/call with Kubernetes manifests) can be large,

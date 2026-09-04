@@ -20,7 +20,8 @@ import (
 type Manager struct {
 	kubernetes *Kubernetes
 
-	config api.BaseConfig
+	config      api.BaseConfig
+	caRefresher *caRefresher
 }
 
 var (
@@ -55,7 +56,31 @@ func NewKubeconfigManager(ctx context.Context, config api.BaseConfig, kubeconfig
 		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %w", err)
 	}
 
-	return NewManager(ctx, config, restConfig, clientCmdConfig)
+	// A cluster entry may serve its CA over HTTPS via the caURL kubeconfig
+	// extension. Fetch it into a cache file so client-go reloads the CA when
+	// it rotates, then keep the cache fresh in the background. RawConfig
+	// reuses the kubeconfig already loaded by ClientConfig above instead of
+	// parsing the file a third time.
+	rawConfig, err := clientCmdConfig.RawConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+	caRefresher, err := applyClusterCAURL(ctx, config, &rawConfig, resolvedContext, restConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	manager, err := NewManager(ctx, config, restConfig, clientCmdConfig)
+	if err != nil {
+		return nil, err
+	}
+	// Start the refresher only once the manager is fully built so a
+	// construction error leaves no goroutine behind to stop.
+	if caRefresher != nil {
+		caRefresher.start()
+	}
+	manager.caRefresher = caRefresher
+	return manager, nil
 }
 
 // resolveKubeconfigContext determines which kubeconfig context to use.
@@ -220,10 +245,19 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	return derived, nil
 }
 
-// Close releases HTTP transport resources held by this manager.
+// RESTConfig returns the REST config this manager's clients are built from.
+func (m *Manager) RESTConfig() *rest.Config {
+	return m.kubernetes.RESTConfig()
+}
+
+// Close releases HTTP transport resources held by this manager and stops
+// any background CA refresh loop.
 func (m *Manager) Close() {
 	if m != nil {
 		m.kubernetes.close()
+		if m.caRefresher != nil {
+			m.caRefresher.Close()
+		}
 	}
 }
 

@@ -240,6 +240,8 @@ rate_limit_burst = 10        # allow bursts of up to 10 requests
 |-------|------|---------|-------------|
 | `kubeconfig` | string | `""` | Path to the Kubernetes configuration file. If not provided, the server uses the in-cluster configuration or the default kubeconfig location (`~/.kube/config`). |
 | `cluster_provider_strategy` | string | auto-detect | How the server finds clusters. Valid values: `kubeconfig`, `in-cluster`, `kcp`, `disabled`. |
+| `ca_cache_dir` | string | `""` | Directory where CA certificates fetched via the `caURL` kubeconfig cluster extension are cached. Empty means the default: a subdirectory of the system temp dir. The directory must be writable; with a read-only root filesystem, mount an emptyDir there. |
+| `ca_refresh_interval` | duration | `"24h"` | How often cached CA certificates are re-fetched so a rotated cluster CA is picked up without a restart. Use `0s` to disable re-fetching; the CA is then only refreshed when a manager is rebuilt (e.g. kubeconfig change or restart). |
 
 **Example:**
 ```toml
@@ -315,6 +317,33 @@ If the server starts but operations fail (e.g., `failed to list namespaces: unkn
 2. **Kubeconfig validity** — Ensure the kubeconfig contains valid credentials (token, client certificate, etc.) and points to the correct API server address.
 3. **Permissions** — The credentials in the kubeconfig must have sufficient RBAC permissions on the target cluster.
 4. **TLS certificates** — If the external cluster uses a private CA, the CA certificate must be included in the kubeconfig or mounted separately.
+
+#### CA served over HTTPS
+
+When a cluster's API-server CA is served over HTTPS (e.g. an endpoint mirroring the cluster CA for cross-cluster consumers), a kubeconfig cluster entry can point at that URL instead of embedding the CA:
+
+```yaml
+apiVersion: v1
+clusters:
+- name: production
+  cluster:
+    server: https://kubernetes.default.svc
+    extensions:
+    - name: kubernetes-mcp-server
+      extension:
+        caURL: https://ca.production.example.com/
+```
+
+At manager creation the server fetches the CA from `caURL`, caches it to a file and points the Kubernetes client at that file. Because the client reloads CA files it is pointed at, a rotated CA (e.g. after the cluster is re-provisioned) is picked up without a restart; `ca_refresh_interval` controls how often the cache is re-fetched (default `24h`, `0s` disables). Other tools ignore the extension entirely.
+
+Notes:
+
+- The URL must be `https`. A trust root fetched over cleartext could be swapped by a network attacker, who could then impersonate the cluster the CA is meant to authenticate.
+- The response must be a PEM CA certificate; other content fails fast with a clear error.
+- client-go re-checks the cached file every few minutes, so a rotation converges once the refresher writes the new CA; setting `ca_refresh_interval` below that cadence does not speed it up.
+- The cache directory (system temp dir by default, or `ca_cache_dir`) must be writable. With a read-only root filesystem, mount an emptyDir at the cache location — e.g. `emptyDir: {}` mounted at `/tmp`.
+- The initial fetch happens at manager creation; if it fails (unreachable endpoint, non-PEM response), manager creation fails rather than silently using an empty trust store. For the default context that is startup; lazily-created contexts (other targets) surface the error on first use.
+- Applies to every cluster provider strategy backed by a kubeconfig (`kubeconfig` and `kcp`).
 
 ### Access Control
 
@@ -778,6 +807,8 @@ The following options can be set via command-line arguments. CLI arguments overr
 | `--toolsets` | Comma-separated list of toolsets to enable |
 | `--disable-multi-cluster` | Disable multi-cluster support |
 | `--cluster-provider` | Cluster provider strategy (`kubeconfig`, `in-cluster`, `kcp`, `disabled`) |
+| `--ca-cache-dir` | Directory where CA certificates fetched via the `caURL` kubeconfig cluster extension are cached (default: subdirectory of the system temp dir) |
+| `--ca-refresh-interval` | How often cached CA certificates are re-fetched so a rotated cluster CA is picked up without a restart; `0` disables re-fetching (default: `24h`) |
 | `--tls-cert` | Path to TLS certificate file for HTTPS (must be used with `--tls-key`) |
 | `--tls-key` | Path to TLS private key file for HTTPS (must be used with `--tls-cert`) |
 | `--require-tls` | Enforce TLS for server and all outbound connections |
