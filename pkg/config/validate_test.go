@@ -303,254 +303,201 @@ func (s *ValidateSuite) TestTLSSettings() {
 }
 
 func (s *ValidateSuite) TestTokenExchangeStrategy() {
-	s.Run("unknown strategy is skipped without WithTokenExchangeStrategies", func() {
+	s.Run("unknown strategy is rejected", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
 		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.TokenExchangeStrategy = "nonexistent-strategy"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("unknown strategy is rejected with WithTokenExchangeStrategies", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.TokenExchangeStrategy = "nonexistent-strategy"
-		err := cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate(s.T().Context())
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "nonexistent-strategy"}
+		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid token_exchange_strategy")
+		s.Contains(err.Error(), "invalid token_exchange.strategy")
 		s.Contains(err.Error(), "nonexistent-strategy")
 	})
 
-	s.Run("valid strategy is accepted with WithTokenExchangeStrategies", func() {
+	s.Run("registered strategy is accepted", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
 		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.TokenExchangeStrategy = "rfc8693"
-		s.NoError(cfg.WithTokenExchangeStrategies([]string{"rfc8693", "keycloak-v1", "entra-obo"}).Validate(s.T().Context()))
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
+		s.NoError(cfg.Validate(s.T().Context()))
 	})
 }
 
-func (s *ValidateSuite) TestStsAuthStyle() {
-	s.Run("invalid sts_auth_style is rejected", func() {
+func (s *ValidateSuite) TestTokenExchangeClientAuth() {
+	newConfig := func(auth *config.TokenExchangeClientAuth) *config.StaticConfig {
 		cfg := s.validConfig()
-		cfg.StsAuthStyle = "invalid-style"
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693", ClientAuth: auth}
+		return cfg
+	}
+
+	s.Run("method is required when client authentication fields are configured", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{ClientSecret: "secret"})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid sts_auth_style")
-		s.Contains(err.Error(), "invalid-style")
+		s.Contains(err.Error(), "token_exchange.client_auth.method is required")
 	})
 
-	s.Run("empty sts_auth_style is accepted", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = ""
+	s.Run("public client with only a client ID is accepted", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{ClientID: "public-client"})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
-	s.Run("params sts_auth_style is accepted", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "params"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("header sts_auth_style is accepted", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "header"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("whitespace-only sts_auth_style is treated as empty", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "   "
-		s.NoError(cfg.Validate(s.T().Context()))
-		s.Equal("", cfg.StsAuthStyle, "whitespace should be trimmed from sts_auth_style")
-	})
-}
-
-func (s *ValidateSuite) TestStsClientCertKey() {
-	s.Run("assertion auth_style without cert file is rejected", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "assertion"
+	s.Run("configured method requires a client ID", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:       api.TokenExchangeClientAuthMethodSecretBasic,
+			ClientSecret: "secret",
+		})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_client_cert_file is required")
+		s.Contains(err.Error(), "token_exchange.client_auth.client_id is required")
 	})
 
-	s.Run("assertion auth_style without key file is rejected", func() {
+	s.Run("invalid method is rejected", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:   api.TokenExchangeClientAuthMethod("unknown"),
+			ClientID: "client",
+		})
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid token_exchange.client_auth.method")
+	})
+
+	s.Run("client_secret_basic requires a client secret", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:   api.TokenExchangeClientAuthMethodSecretBasic,
+			ClientID: "client",
+		})
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.client_auth.client_secret is required")
+	})
+
+	s.Run("client_secret_basic with client credentials is accepted", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:       api.TokenExchangeClientAuthMethodSecretBasic,
+			ClientID:     "client",
+			ClientSecret: "secret",
+		})
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("client_secret_post with client credentials is accepted", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:       api.TokenExchangeClientAuthMethodSecretPost,
+			ClientID:     "client",
+			ClientSecret: "secret",
+		})
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("private_key_jwt requires certificate and private key files", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:   api.TokenExchangeClientAuthMethodPrivateKey,
+			ClientID: "client",
+		})
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.client_auth.certificate_file is required")
+	})
+
+	s.Run("private_key_jwt requires a private key file when certificate is configured", func() {
 		tmpDir := s.T().TempDir()
 		certPath := filepath.Join(tmpDir, "cert.pem")
 		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
 
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "assertion"
-		cfg.StsClientCertFile = certPath
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:          api.TokenExchangeClientAuthMethodPrivateKey,
+			ClientID:        "client",
+			CertificateFile: certPath,
+		})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_client_key_file is required")
+		s.Contains(err.Error(), "token_exchange.client_auth.private_key_file is required")
 	})
 
-	s.Run("non-existent sts_client_cert_file is rejected", func() {
+	s.Run("private_key_jwt with valid certificate and private key files is accepted", func() {
 		tmpDir := s.T().TempDir()
+		certPath := filepath.Join(tmpDir, "cert.pem")
 		keyPath := filepath.Join(tmpDir, "key.pem")
+		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
 		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
 
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "assertion"
-		cfg.StsClientCertFile = "/nonexistent/cert.pem"
-		cfg.StsClientKeyFile = keyPath
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_client_cert_file must be a valid file path")
-	})
-
-	s.Run("non-existent sts_client_key_file is rejected", func() {
-		tmpDir := s.T().TempDir()
-		certPath := filepath.Join(tmpDir, "cert.pem")
-		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
-
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "assertion"
-		cfg.StsClientCertFile = certPath
-		cfg.StsClientKeyFile = "/nonexistent/key.pem"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_client_key_file must be a valid file path")
-	})
-
-	s.Run("assertion auth_style with valid cert and key is accepted", func() {
-		tmpDir := s.T().TempDir()
-		certPath := filepath.Join(tmpDir, "cert.pem")
-		keyPath := filepath.Join(tmpDir, "key.pem")
-		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
-		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
-
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "assertion"
-		cfg.StsClientCertFile = certPath
-		cfg.StsClientKeyFile = keyPath
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:          api.TokenExchangeClientAuthMethodPrivateKey,
+			ClientID:        "client",
+			CertificateFile: certPath,
+			PrivateKeyFile:  keyPath,
+		})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
-	s.Run("whitespace-only sts_client_cert_file is treated as empty", func() {
-		tmpDir := s.T().TempDir()
-		keyPath := filepath.Join(tmpDir, "key.pem")
-		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
-
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "assertion"
-		cfg.StsClientCertFile = "   "
-		cfg.StsClientKeyFile = keyPath
+	s.Run("jwt_file requires a token file", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:   api.TokenExchangeClientAuthMethodJWTFile,
+			ClientID: "client",
+		})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_client_cert_file is required")
-		s.Equal("", cfg.StsClientCertFile, "whitespace should be trimmed from sts_client_cert_file")
+		s.Contains(err.Error(), "token_exchange.client_auth.token_file is required")
 	})
 
-	s.Run("whitespace-only sts_client_key_file is treated as empty", func() {
-		tmpDir := s.T().TempDir()
-		certPath := filepath.Join(tmpDir, "cert.pem")
-		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
-
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "assertion"
-		cfg.StsClientCertFile = certPath
-		cfg.StsClientKeyFile = "   "
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_client_key_file is required")
-		s.Equal("", cfg.StsClientKeyFile, "whitespace should be trimmed from sts_client_key_file")
-	})
-}
-
-func (s *ValidateSuite) TestStsFederatedTokenFile() {
-	s.Run("federated auth_style without token file is rejected", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "federated"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_federated_token_file is required")
-	})
-
-	s.Run("federated auth_style with non-existent token file is rejected", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "federated"
-		cfg.StsFederatedTokenFile = "/nonexistent/token"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_federated_token_file must be a valid file path")
-	})
-
-	s.Run("federated auth_style with valid token file is accepted", func() {
+	s.Run("jwt_file with a valid token file is accepted", func() {
 		tmpDir := s.T().TempDir()
 		tokenPath := filepath.Join(tmpDir, "token")
 		s.Require().NoError(os.WriteFile(tokenPath, []byte("jwt-token"), 0600))
 
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "federated"
-		cfg.StsFederatedTokenFile = tokenPath
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:    api.TokenExchangeClientAuthMethodJWTFile,
+			ClientID:  "client",
+			TokenFile: tokenPath,
+		})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
-	s.Run("whitespace-only sts_federated_token_file is treated as empty", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "federated"
-		cfg.StsFederatedTokenFile = "   "
+	s.Run("jwt_file rejects a missing token file", func() {
+		cfg := newConfig(&config.TokenExchangeClientAuth{
+			Method:    api.TokenExchangeClientAuthMethodJWTFile,
+			ClientID:  "client",
+			TokenFile: filepath.Join(s.T().TempDir(), "missing-token"),
+		})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "sts_federated_token_file is required")
-		s.Equal("", cfg.StsFederatedTokenFile, "whitespace should be trimmed")
-	})
-
-	s.Run("federated sts_auth_style is accepted in auth_style list", func() {
-		cfg := s.validConfig()
-		cfg.StsAuthStyle = "federated"
-		tmpDir := s.T().TempDir()
-		tokenPath := filepath.Join(tmpDir, "token")
-		s.Require().NoError(os.WriteFile(tokenPath, []byte("jwt-token"), 0600))
-		cfg.StsFederatedTokenFile = tokenPath
-		s.NoError(cfg.Validate(s.T().Context()))
+		s.Contains(err.Error(), "token_exchange.client_auth.token_file must be a valid file path")
 	})
 }
 
-func (s *ValidateSuite) TestStsTokenTypes() {
-	s.Run("empty values are accepted (rfc8693 exchanger applies default)", func() {
-		cfg := s.validConfig()
-		cfg.StsSubjectTokenType = ""
-		cfg.StsRequestedTokenType = ""
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
+func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {
+	cfg := s.validConfig()
+	cfg.RequireOAuth = true
+	cfg.AuthorizationURL = "https://example.com/auth"
+	cfg.TokenExchange = &config.TokenExchangeConfig{
+		Strategy:           " rfc8693 ",
+		Audience:           " audience ",
+		SubjectTokenType:   " subject-token-type ",
+		RequestedTokenType: " requested-token-type ",
+		ClientAuth: &config.TokenExchangeClientAuth{
+			Method:          api.TokenExchangeClientAuthMethod(" client_secret_basic "),
+			ClientID:        " client ",
+			ClientSecret:    " secret ",
+			CertificateFile: " cert.pem ",
+			PrivateKeyFile:  " key.pem ",
+			TokenFile:       " token ",
+		},
+	}
 
-	s.Run("non-empty values are accepted", func() {
-		cfg := s.validConfig()
-		cfg.StsSubjectTokenType = "urn:ietf:params:oauth:token-type:jwt"
-		cfg.StsRequestedTokenType = "urn:ietf:params:oauth:token-type:jwt"
-		s.NoError(cfg.Validate(s.T().Context()))
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsSubjectTokenType)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsRequestedTokenType)
-	})
-
-	s.Run("whitespace-only sts_subject_token_type is trimmed to empty", func() {
-		cfg := s.validConfig()
-		cfg.StsSubjectTokenType = "   "
-		s.NoError(cfg.Validate(s.T().Context()))
-		s.Equal("", cfg.StsSubjectTokenType, "whitespace should be trimmed from sts_subject_token_type")
-	})
-
-	s.Run("whitespace-only sts_requested_token_type is trimmed to empty", func() {
-		cfg := s.validConfig()
-		cfg.StsRequestedTokenType = "   "
-		s.NoError(cfg.Validate(s.T().Context()))
-		s.Equal("", cfg.StsRequestedTokenType, "whitespace should be trimmed from sts_requested_token_type")
-	})
-
-	s.Run("padded values are trimmed but preserved", func() {
-		cfg := s.validConfig()
-		cfg.StsSubjectTokenType = "  urn:ietf:params:oauth:token-type:jwt  "
-		cfg.StsRequestedTokenType = "  urn:ietf:params:oauth:token-type:jwt  "
-		s.NoError(cfg.Validate(s.T().Context()))
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsSubjectTokenType)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", cfg.StsRequestedTokenType)
-	})
+	s.Require().NoError(cfg.Validate(s.T().Context()))
+	s.Equal("rfc8693", cfg.TokenExchange.Strategy)
+	s.Equal("audience", cfg.TokenExchange.Audience)
+	s.Equal("subject-token-type", cfg.TokenExchange.SubjectTokenType)
+	s.Equal("requested-token-type", cfg.TokenExchange.RequestedTokenType)
+	s.Equal(api.TokenExchangeClientAuthMethodSecretBasic, cfg.TokenExchange.ClientAuth.Method)
+	s.Equal("client", cfg.TokenExchange.ClientAuth.ClientID)
+	s.Equal("secret", cfg.TokenExchange.ClientAuth.ClientSecret)
+	s.Equal("cert.pem", cfg.TokenExchange.ClientAuth.CertificateFile)
+	s.Equal("key.pem", cfg.TokenExchange.ClientAuth.PrivateKeyFile)
+	s.Equal("token", cfg.TokenExchange.ClientAuth.TokenFile)
 }
 
 func (s *ValidateSuite) TestConfirmationFallback() {
@@ -720,22 +667,33 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 		s.Contains(err.Error(), "invalid cluster_auth_mode")
 	})
 
-	s.Run("token_exchange_strategy without require_oauth is rejected", func() {
+	s.Run("token exchange without require_oauth is rejected", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = false
-		cfg.TokenExchangeStrategy = "rfc8693"
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "token exchange requires require_oauth=true")
 	})
 
-	s.Run("sts_audience without require_oauth is rejected", func() {
+	s.Run("token exchange without authorization_url is rejected", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		cfg.StsAudience = "backend-audience"
+		cfg.RequireOAuth = true
+		cfg.SkipJWTVerification = true
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "token exchange requires require_oauth=true")
+		s.Contains(err.Error(), "token exchange requires authorization_url")
+	})
+
+	s.Run("token exchange with kubeconfig mode is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = false
+		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange is incompatible with cluster_auth_mode")
 	})
 }
 

@@ -281,12 +281,15 @@ func keycloakCAVolumeValues() map[string]any {
 }
 
 const (
+	clientAuthMethodSecretBasic = "client_secret_basic"
+	clientAuthMethodSecretPost  = "client_secret_post"
+
 	// stsAssertionSecretName is the secret holding the client cert+key the server
 	// signs assertions with; stsAssertionMountPath is where the chart mounts it.
 	stsAssertionSecretName = "sts-assertion"
 	stsAssertionMountPath  = "/etc/sts-assertion"
 	// stsAssertionCertPath/KeyPath are the in-pod paths to reference as
-	// sts_client_cert_file / sts_client_key_file in config.
+	// token_exchange.client_auth certificate_file/private_key_file in config.
 	stsAssertionCertPath = stsAssertionMountPath + "/tls.crt"
 	stsAssertionKeyPath  = stsAssertionMountPath + "/tls.key"
 
@@ -428,12 +431,12 @@ func requireHTTPStatus(t *testing.T, url string, want int) {
 	require.Equal(t, want, resp.StatusCode, "GET %s status", url)
 }
 
-// oidcServerConfig returns the standard OIDC + STS token-exchange server config
+// oidcServerConfig returns the standard OIDC + token-exchange server config
 // used by the Keycloak-backed flow tests. When oauthScopes is nil it advertises
 // the default ["openid", "mcp-server"] scopes; pass a value to override (e.g. to
 // prove scope is not enforced). The config points at the in-cluster Keycloak
 // service and trusts the CA mounted by keycloakCAVolumeValues/copyKeycloakCASecret.
-func oidcServerConfig(oauthScopes []string) string {
+func oidcServerConfig(oauthScopes []string, clientAuthMethod string) string {
 	scopes := `["openid", "mcp-server"]`
 	if oauthScopes != nil {
 		scopes = tomlStringArray(oauthScopes)
@@ -444,12 +447,18 @@ func oidcServerConfig(oauthScopes []string) string {
 		oauth_scopes = %s
 		validate_token = false
 		authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
-		sts_client_id = "mcp-server"
-		sts_client_secret = "mcp-server-dev-secret"
-		sts_audience = "openshift"
-		sts_scopes = ["mcp:openshift"]
 		certificate_authority = "%s/ca.crt"
-	`, scopes, caMountPath)
+
+		[token_exchange]
+		strategy = "rfc8693"
+		audience = "openshift"
+		scopes = ["mcp:openshift"]
+
+		[token_exchange.client_auth]
+		method = %q
+		client_id = "mcp-server"
+		client_secret = "mcp-server-dev-secret"
+	`, scopes, caMountPath, clientAuthMethod)
 }
 
 // tomlStringArray renders a Go string slice as a TOML array literal.

@@ -36,6 +36,45 @@ type ToolOverride struct {
 	Description string `toml:"description,omitempty"`
 }
 
+// TokenExchangeConfig is the TOML configuration for global token exchange.
+type TokenExchangeConfig struct {
+	Strategy           string                   `toml:"strategy,omitempty"`
+	Audience           string                   `toml:"audience,omitempty"`
+	Scopes             []string                 `toml:"scopes,omitempty"`
+	SubjectTokenType   string                   `toml:"subject_token_type,omitempty"`
+	RequestedTokenType string                   `toml:"requested_token_type,omitempty"`
+	ClientAuth         *TokenExchangeClientAuth `toml:"client_auth,omitempty"`
+}
+
+func (c *TokenExchangeConfig) GetStrategy() string           { return c.Strategy }
+func (c *TokenExchangeConfig) GetAudience() string           { return c.Audience }
+func (c *TokenExchangeConfig) GetScopes() []string           { return c.Scopes }
+func (c *TokenExchangeConfig) GetSubjectTokenType() string   { return c.SubjectTokenType }
+func (c *TokenExchangeConfig) GetRequestedTokenType() string { return c.RequestedTokenType }
+func (c *TokenExchangeConfig) GetClientAuth() api.TokenExchangeClientAuth {
+	if c.ClientAuth == nil {
+		return nil
+	}
+	return c.ClientAuth
+}
+
+// TokenExchangeClientAuth is the TOML configuration for token exchange client authentication.
+type TokenExchangeClientAuth struct {
+	Method          api.TokenExchangeClientAuthMethod `toml:"method"`
+	ClientID        string                            `toml:"client_id,omitempty"`
+	ClientSecret    string                            `toml:"client_secret,omitempty"`
+	CertificateFile string                            `toml:"certificate_file,omitempty"`
+	PrivateKeyFile  string                            `toml:"private_key_file,omitempty"`
+	TokenFile       string                            `toml:"token_file,omitempty"`
+}
+
+func (c *TokenExchangeClientAuth) GetMethod() api.TokenExchangeClientAuthMethod { return c.Method }
+func (c *TokenExchangeClientAuth) GetClientID() string                          { return c.ClientID }
+func (c *TokenExchangeClientAuth) GetClientSecret() string                      { return c.ClientSecret }
+func (c *TokenExchangeClientAuth) GetCertificateFile() string                   { return c.CertificateFile }
+func (c *TokenExchangeClientAuth) GetPrivateKeyFile() string                    { return c.PrivateKeyFile }
+func (c *TokenExchangeClientAuth) GetTokenFile() string                         { return c.TokenFile }
+
 // StaticConfig is the configuration for the server.
 // It allows to configure server specific settings and tools to be enabled or disabled.
 type StaticConfig struct {
@@ -86,42 +125,9 @@ type StaticConfig struct {
 	DisableDynamicClientRegistration bool `toml:"disable_dynamic_client_registration,omitempty"`
 	// OAuthScopes are the supported **client** scopes requested during the **client/frontend** OAuth flow.
 	OAuthScopes []string `toml:"oauth_scopes,omitempty"`
-	// StsClientId is the OAuth client ID used for backend token exchange
-	StsClientId string `toml:"sts_client_id,omitempty"`
-	// StsClientSecret is the OAuth client secret used for backend token exchange
-	StsClientSecret string `toml:"sts_client_secret,omitempty"`
-	// StsAudience is the audience for the STS token exchange.
-	StsAudience string `toml:"sts_audience,omitempty"`
-	// StsScopes is the scopes for the STS token exchange.
-	StsScopes []string `toml:"sts_scopes,omitempty"`
-	// TokenExchangeStrategy is the token exchange strategy to use (rfc8693, keycloak-v1, entra-obo).
-	// When set with passthrough mode, the token is exchanged before being passed to the cluster.
-	TokenExchangeStrategy string `toml:"token_exchange_strategy,omitempty"`
-	// StsAuthStyle specifies how client credentials are sent during token exchange.
-	// "params" (default): client_id/secret in request body
-	// "header": HTTP Basic Authentication header
-	// "assertion": JWT client assertion (RFC 7523, for Entra ID certificate auth)
-	// "federated": JWT from an external identity provider file (workload identity federation)
-	StsAuthStyle string `toml:"sts_auth_style,omitempty"`
-	// StsClientCertFile is the path to the client certificate PEM file for JWT assertion auth
-	StsClientCertFile string `toml:"sts_client_cert_file,omitempty"`
-	// StsClientKeyFile is the path to the client private key PEM file for JWT assertion auth
-	StsClientKeyFile string `toml:"sts_client_key_file,omitempty"`
-	// StsFederatedTokenFile is the path to a file containing a JWT from an external identity
-	// provider (e.g., SPIRE JWT-SVID). Used with sts_auth_style="federated".
-	StsFederatedTokenFile string `toml:"sts_federated_token_file,omitempty"`
-	// StsSubjectTokenType overrides the subject_token_type form parameter sent during
-	// RFC 8693 token exchange. RFC 8693 section 2.1 mandates this field. Defaults to
-	// "urn:ietf:params:oauth:token-type:access_token" — the canonical value for an
-	// inbound OAuth access token. Override to "...token-type:jwt" for cross-realm flows.
-	StsSubjectTokenType string `toml:"sts_subject_token_type,omitempty"`
-	// StsRequestedTokenType overrides the requested_token_type form parameter sent during
-	// RFC 8693 token exchange. RFC 8693 section 2.1 makes this parameter OPTIONAL, and
-	// leaves the issued token type to the authorization server's discretion when it is
-	// unspecified. This server sends access_token when unset, preserving existing
-	// behaviour; some deployments require "urn:ietf:params:oauth:token-type:jwt" to
-	// signal the AS should mint a fresh JWT rather than echo the subject token type.
-	StsRequestedTokenType string `toml:"sts_requested_token_type,omitempty"`
+	// TokenExchange configures global token exchange before tokens are passed to the cluster.
+	// A missing block leaves OAuth tokens unchanged.
+	TokenExchange *TokenExchangeConfig `toml:"token_exchange,omitempty"`
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
 	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
@@ -349,9 +355,18 @@ func readAndMergeFiles(ctx context.Context, files []string) ([]byte, error) {
 			return nil, fmt.Errorf("failed to read config %s: %w", file, err)
 		}
 
-		dropInConfig := make(map[string]interface{})
-		if _, err = toml.NewDecoder(bytes.NewReader(configData)).Decode(&dropInConfig); err != nil {
+		var fileConfig StaticConfig
+		md, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(&fileConfig)
+		if err != nil {
 			return nil, fmt.Errorf("failed to decode config %s: %w", file, err)
+		}
+		if err := validateConfigMetadata(md); err != nil {
+			return nil, fmt.Errorf("invalid config %s: %w", file, err)
+		}
+
+		dropInConfig := make(map[string]interface{})
+		if _, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(&dropInConfig); err != nil {
+			return nil, fmt.Errorf("failed to decode config %s for merging: %w", file, err)
 		}
 
 		deepMerge(rawConfig, dropInConfig)
@@ -389,6 +404,9 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 	config := Default()
 	md, err := toml.NewDecoder(bytes.NewReader(configData)).Decode(config)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateConfigMetadata(md); err != nil {
 		return nil, err
 	}
 
@@ -435,48 +453,11 @@ func (c *StaticConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) 
 	return cfg, ok
 }
 
-func (c *StaticConfig) GetStsClientId() string {
-	return c.StsClientId
-}
-
-func (c *StaticConfig) GetStsClientSecret() string {
-	return c.StsClientSecret
-}
-
-func (c *StaticConfig) GetStsAudience() string {
-	return c.StsAudience
-}
-
-func (c *StaticConfig) GetStsScopes() []string {
-	return c.StsScopes
-}
-
-func (c *StaticConfig) GetStsStrategy() string {
-	return c.TokenExchangeStrategy
-}
-
-func (c *StaticConfig) GetStsAuthStyle() string {
-	return c.StsAuthStyle
-}
-
-func (c *StaticConfig) GetStsClientCertFile() string {
-	return c.StsClientCertFile
-}
-
-func (c *StaticConfig) GetStsClientKeyFile() string {
-	return c.StsClientKeyFile
-}
-
-func (c *StaticConfig) GetStsFederatedTokenFile() string {
-	return c.StsFederatedTokenFile
-}
-
-func (c *StaticConfig) GetStsSubjectTokenType() string {
-	return c.StsSubjectTokenType
-}
-
-func (c *StaticConfig) GetStsRequestedTokenType() string {
-	return c.StsRequestedTokenType
+func (c *StaticConfig) GetTokenExchangeConfig() api.TokenExchangeConfig {
+	if c.TokenExchange == nil {
+		return nil
+	}
+	return c.TokenExchange
 }
 
 func (c *StaticConfig) GetCertificateAuthority() string {
@@ -541,7 +522,7 @@ func (c *StaticConfig) WithProviderStrategies(strategies []string) *StaticConfig
 
 // WithTokenExchangeStrategies sets the known token exchange strategies for
 // validation. Callers that have access to the token exchange registry should
-// chain this before Validate so that token_exchange_strategy is checked:
+// chain this before Validate so that token_exchange.strategy is checked:
 //
 //	cfg.WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).Validate()
 func (c *StaticConfig) WithTokenExchangeStrategies(strategies []string) *StaticConfig {
@@ -556,12 +537,7 @@ func (c *StaticConfig) Validate(ctx context.Context) error {
 	c.CertificateAuthority = strings.TrimSpace(c.CertificateAuthority)
 	c.TLSCert = strings.TrimSpace(c.TLSCert)
 	c.TLSKey = strings.TrimSpace(c.TLSKey)
-	c.StsAuthStyle = strings.TrimSpace(c.StsAuthStyle)
-	c.StsClientCertFile = strings.TrimSpace(c.StsClientCertFile)
-	c.StsClientKeyFile = strings.TrimSpace(c.StsClientKeyFile)
-	c.StsFederatedTokenFile = strings.TrimSpace(c.StsFederatedTokenFile)
-	c.StsSubjectTokenType = strings.TrimSpace(c.StsSubjectTokenType)
-	c.StsRequestedTokenType = strings.TrimSpace(c.StsRequestedTokenType)
+	c.normalizeTokenExchange()
 	if output.FromString(c.ListOutput) == nil {
 		return fmt.Errorf("invalid output name: %s, valid names are: %s", c.ListOutput, strings.Join(output.Names, ", "))
 	}
@@ -685,43 +661,51 @@ func (c *StaticConfig) validateSkipJWTVerification(ctx context.Context) error {
 		"if the server is behind a trusted reverse proxy that verifies tokens")
 }
 
-// validateTokenExchange validates token-exchange-related fields:
-//   - token_exchange_strategy must be a known strategy (when registry is provided)
-//   - sts_auth_style must be one of "params", "header", "assertion", "federated"
-//   - when sts_auth_style is "assertion", sts_client_cert_file and sts_client_key_file
-//     must both be set and reference existing files
-//   - when sts_auth_style is "federated", sts_federated_token_file must be set and exist
 func (c *StaticConfig) validateTokenExchange() error {
-	if c.TokenExchangeStrategy != "" && len(c.tokenExchangeStrategies) > 0 {
-		if !slices.Contains(c.tokenExchangeStrategies, c.TokenExchangeStrategy) {
-			return fmt.Errorf("invalid token_exchange_strategy: %s, valid values are: %s", c.TokenExchangeStrategy, strings.Join(c.tokenExchangeStrategies, ", "))
-		}
+	if c.TokenExchange == nil {
+		return nil
 	}
-	switch c.StsAuthStyle {
-	case "", tokenexchange.AuthStyleParams, tokenexchange.AuthStyleHeader:
-		// valid
-	case tokenexchange.AuthStyleAssertion:
-		if c.StsClientCertFile == "" {
-			return fmt.Errorf("sts_client_cert_file is required when sts_auth_style is %q", tokenexchange.AuthStyleAssertion)
+	if c.AuthorizationURL == "" {
+		return fmt.Errorf("token exchange requires authorization_url to discover the token endpoint")
+	}
+	strategies := c.tokenExchangeStrategies
+	if len(strategies) == 0 {
+		strategies = tokenexchange.GetRegisteredStrategies()
+	}
+	if c.TokenExchange.Strategy == "" || !slices.Contains(strategies, c.TokenExchange.Strategy) {
+		return fmt.Errorf("invalid token_exchange.strategy %q: valid values are: %s", c.TokenExchange.Strategy, strings.Join(strategies, ", "))
+	}
+	auth := c.TokenExchange.ClientAuth
+	if auth == nil || !authConfigured(auth) {
+		return nil
+	}
+	if auth.Method == "" {
+		if auth.ClientID != "" && auth.ClientSecret == "" && auth.CertificateFile == "" && auth.PrivateKeyFile == "" && auth.TokenFile == "" {
+			return nil
 		}
-		if c.StsClientKeyFile == "" {
-			return fmt.Errorf("sts_client_key_file is required when sts_auth_style is %q", tokenexchange.AuthStyleAssertion)
+		return fmt.Errorf("token_exchange.client_auth.method is required when client authentication fields are configured")
+	}
+	if auth.ClientID == "" {
+		return fmt.Errorf("token_exchange.client_auth.client_id is required when method is %q", auth.Method)
+	}
+	switch auth.Method {
+	case api.TokenExchangeClientAuthMethodSecretBasic, api.TokenExchangeClientAuthMethodSecretPost:
+		if auth.ClientSecret == "" {
+			return fmt.Errorf("token_exchange.client_auth.client_secret is required when method is %q", auth.Method)
 		}
-		if _, err := os.Stat(c.StsClientCertFile); err != nil {
-			return fmt.Errorf("sts_client_cert_file must be a valid file path: %w", err)
+	case api.TokenExchangeClientAuthMethodPrivateKey:
+		if err := validateTokenExchangeFile("certificate_file", auth.CertificateFile); err != nil {
+			return err
 		}
-		if _, err := os.Stat(c.StsClientKeyFile); err != nil {
-			return fmt.Errorf("sts_client_key_file must be a valid file path: %w", err)
+		if err := validateTokenExchangeFile("private_key_file", auth.PrivateKeyFile); err != nil {
+			return err
 		}
-	case tokenexchange.AuthStyleFederated:
-		if c.StsFederatedTokenFile == "" {
-			return fmt.Errorf("sts_federated_token_file is required when sts_auth_style is %q", tokenexchange.AuthStyleFederated)
-		}
-		if _, err := os.Stat(c.StsFederatedTokenFile); err != nil {
-			return fmt.Errorf("sts_federated_token_file must be a valid file path: %w", err)
+	case api.TokenExchangeClientAuthMethodJWTFile:
+		if err := validateTokenExchangeFile("token_file", auth.TokenFile); err != nil {
+			return err
 		}
 	default:
-		return fmt.Errorf("invalid sts_auth_style %q: must be %q, %q, %q, or %q", c.StsAuthStyle, tokenexchange.AuthStyleParams, tokenexchange.AuthStyleHeader, tokenexchange.AuthStyleAssertion, tokenexchange.AuthStyleFederated)
+		return fmt.Errorf("invalid token_exchange.client_auth.method %q: must be client_secret_basic, client_secret_post, private_key_jwt, or jwt_file", auth.Method)
 	}
 	return nil
 }
@@ -789,12 +773,98 @@ func (c *StaticConfig) ValidateClusterAuthMode() error {
 	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && c.RequireOAuth {
 		return fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", api.ClusterAuthKubeconfig)
 	}
-	hasTokenExchange := c.TokenExchangeStrategy != "" || c.StsAudience != ""
+	hasTokenExchange := c.TokenExchange != nil
 	if c.ClusterAuthMode == api.ClusterAuthKubeconfig && hasTokenExchange {
-		return fmt.Errorf("token exchange settings (token_exchange_strategy/sts_audience) are incompatible with cluster_auth_mode %q (exchanged token would be unused)", api.ClusterAuthKubeconfig)
+		return fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", api.ClusterAuthKubeconfig)
 	}
 	if !c.RequireOAuth && hasTokenExchange {
 		return fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)")
+	}
+	return nil
+}
+
+func (c *StaticConfig) normalizeTokenExchange() {
+	if c.TokenExchange == nil {
+		return
+	}
+	c.TokenExchange.Strategy = strings.TrimSpace(c.TokenExchange.Strategy)
+	c.TokenExchange.Audience = strings.TrimSpace(c.TokenExchange.Audience)
+	c.TokenExchange.SubjectTokenType = strings.TrimSpace(c.TokenExchange.SubjectTokenType)
+	c.TokenExchange.RequestedTokenType = strings.TrimSpace(c.TokenExchange.RequestedTokenType)
+	if auth := c.TokenExchange.ClientAuth; auth != nil {
+		auth.Method = api.TokenExchangeClientAuthMethod(strings.TrimSpace(string(auth.Method)))
+		auth.ClientID = strings.TrimSpace(auth.ClientID)
+		auth.ClientSecret = strings.TrimSpace(auth.ClientSecret)
+		auth.CertificateFile = strings.TrimSpace(auth.CertificateFile)
+		auth.PrivateKeyFile = strings.TrimSpace(auth.PrivateKeyFile)
+		auth.TokenFile = strings.TrimSpace(auth.TokenFile)
+	}
+}
+
+func authConfigured(auth *TokenExchangeClientAuth) bool {
+	return auth.Method != "" || auth.ClientID != "" || auth.ClientSecret != "" || auth.CertificateFile != "" || auth.PrivateKeyFile != "" || auth.TokenFile != ""
+}
+
+func validateTokenExchangeFile(name, path string) error {
+	if path == "" {
+		return fmt.Errorf("token_exchange.client_auth.%s is required", name)
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("token_exchange.client_auth.%s must be a valid file path: %w", name, err)
+	}
+	return nil
+}
+
+func validateConfigMetadata(md toml.MetaData) error {
+	locations := map[string]string{
+		"token_exchange_strategy":  "token_exchange.strategy",
+		"sts_audience":             "token_exchange.audience",
+		"sts_scopes":               "token_exchange.scopes",
+		"sts_subject_token_type":   "token_exchange.subject_token_type",
+		"sts_requested_token_type": "token_exchange.requested_token_type",
+		"sts_client_id":            "token_exchange.client_auth.client_id",
+		"sts_client_secret":        "token_exchange.client_auth.client_secret",
+		"sts_auth_style":           "token_exchange.client_auth.method",
+		"sts_client_cert_file":     "token_exchange.client_auth.certificate_file",
+		"sts_client_key_file":      "token_exchange.client_auth.private_key_file",
+		"sts_federated_token_file": "token_exchange.client_auth.token_file",
+	}
+	var removed []string
+	var unknown []string
+	hasLegacyClientID := false
+	hasLegacyStrategy := false
+	for _, key := range md.Undecoded() {
+		path := key.String()
+		name := path
+		if index := strings.LastIndexByte(path, '.'); index >= 0 {
+			name = path[index+1:]
+		}
+		if replacement, ok := locations[name]; ok {
+			removed = append(removed, path+" -> "+replacement)
+			hasLegacyClientID = hasLegacyClientID || name == "sts_client_id"
+			hasLegacyStrategy = hasLegacyStrategy || name == "token_exchange_strategy"
+			continue
+		}
+		if strings.HasPrefix(path, "token_exchange.") {
+			unknown = append(unknown, path)
+		}
+	}
+	var diagnostics []string
+	if len(removed) > 0 {
+		sort.Strings(removed)
+		diagnostic := "removed token exchange configuration keys: " + strings.Join(removed, ", ") +
+			"; sts_auth_style values map as follows: params -> client_secret_post, header -> client_secret_basic, assertion -> private_key_jwt, federated -> jwt_file"
+		if hasLegacyClientID && !hasLegacyStrategy {
+			diagnostic += "; legacy built-in STS used HTTP Basic authentication, so set token_exchange.client_auth.method to client_secret_basic"
+		}
+		diagnostics = append(diagnostics, diagnostic)
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		diagnostics = append(diagnostics, "unknown token exchange configuration keys: "+strings.Join(unknown, ", "))
+	}
+	if len(diagnostics) > 0 {
+		return errors.New(strings.Join(diagnostics, "; "))
 	}
 	return nil
 }

@@ -538,24 +538,42 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 |-------|------|---------|-------------|
 | `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. This **DOES NOT** determine validation strategy, which is done separately by `authorization_url` and `skip_jwt_verification` |
 | `oauth_audience` | string | `""` | Valid audience for OAuth tokens (for offline JWT claim validation). |
-| `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
+| `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and token exchange. |
 | `skip_jwt_verification` | boolean | `false` | When true and authorization_url is unset, the server forwards the bearer token without any local validation (no parse, no claims check, no audience check). Required to enable pure passthrough with non-JWT tokens (e.g., OpenShift OAuth sha256~…). When true and authorization_url is set, this flag has no effect — the configured OIDC provider validates tokens normally. Only use the no-authorization_url form when a downstream component (cluster, reverse proxy) is the authority. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
-| `sts_client_id` | string | `""` | OAuth client ID for backend token exchange. |
-| `sts_client_secret` | string | `""` | OAuth client secret for backend token exchange. |
-| `sts_audience` | string | `""` | Audience for STS token exchange. |
-| `sts_scopes` | string[] | `[]` | Scopes for STS token exchange. |
-| `token_exchange_strategy` | string | `""` | Token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. |
-| `sts_auth_style` | string | `"params"` | How client credentials are sent: `params` (body), `header` (Basic Auth), `assertion` (JWT), or `federated` (external IdP token file). |
-| `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
-| `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
-| `sts_federated_token_file` | string | `""` | Path to a JWT file from an external identity provider, e.g., SPIRE JWT-SVID (for `federated` auth style). |
-| `sts_subject_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | `subject_token_type` form parameter for RFC 8693 token exchange. Override to `urn:ietf:params:oauth:token-type:jwt` for cross-realm flows. |
-| `sts_requested_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | `requested_token_type` form parameter for RFC 8693 token exchange. The parameter is OPTIONAL per RFC 8693 §2.1, which leaves the issued token type to the authorization server's discretion when unspecified; this server sends `access_token` when the key is unset. Override to `urn:ietf:params:oauth:token-type:jwt` when the STS must mint a fresh JWT rather than echo the subject token shape. |
+| `token_exchange.strategy` | string | required | Registered token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. The block enables global exchange and requires `require_oauth = true` and `authorization_url`. |
+| `token_exchange.audience` | string | `""` | Audience for the exchanged token. |
+| `token_exchange.scopes` | string[] | `[]` | Scopes for the exchanged token. |
+| `token_exchange.subject_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `subject_token_type`. |
+| `token_exchange.requested_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `requested_token_type`. |
+| `token_exchange.client_auth.method` | string | none | Required when client credentials are configured: `client_secret_basic`, `client_secret_post`, `private_key_jwt`, or `jwt_file`. May be omitted when only `client_id` is set for a public client. |
+| `token_exchange.client_auth.client_id` | string | `""` | OAuth client ID. May be configured without a method or secret for a public client. |
+| `token_exchange.client_auth.client_secret` | string | `""` | Required by the client-secret methods. |
+| `token_exchange.client_auth.certificate_file` | string | `""` | Certificate PEM required by `private_key_jwt`. |
+| `token_exchange.client_auth.private_key_file` | string | `""` | Private-key PEM required by `private_key_jwt`. |
+| `token_exchange.client_auth.token_file` | string | `""` | JWT file required by `jwt_file`. |
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
+
+**Breaking-change migration:** The legacy top-level `token_exchange_strategy` and `sts_*` settings are removed and rejected at startup. Migrate them as follows:
+
+| Legacy setting | Replacement |
+|----------------|-------------|
+| `token_exchange_strategy` | `token_exchange.strategy` |
+| `sts_audience` | `token_exchange.audience` |
+| `sts_scopes` | `token_exchange.scopes` |
+| `sts_subject_token_type` | `token_exchange.subject_token_type` |
+| `sts_requested_token_type` | `token_exchange.requested_token_type` |
+| `sts_client_id` | `token_exchange.client_auth.client_id` |
+| `sts_client_secret` | `token_exchange.client_auth.client_secret` |
+| `sts_auth_style` | `token_exchange.client_auth.method` |
+| `sts_client_cert_file` | `token_exchange.client_auth.certificate_file` |
+| `sts_client_key_file` | `token_exchange.client_auth.private_key_file` |
+| `sts_federated_token_file` | `token_exchange.client_auth.token_file` |
+
+Map legacy `sts_auth_style` values as follows: `params` to `client_secret_post`, `header` to `client_secret_basic`, `assertion` to `private_key_jwt`, and `federated` to `jwt_file`. Configurations that omitted `token_exchange_strategy` used the built-in STS path and should use `client_secret_basic` to preserve HTTP Basic client authentication.
 
 **Example (with client secret):**
 ```toml
@@ -564,9 +582,14 @@ authorization_url = "https://keycloak.example.com/realms/mcp"
 oauth_audience = "kubernetes-mcp-server"
 oauth_scopes = ["openid", "profile"]
 
-sts_client_id = "mcp-backend"
-sts_client_secret = "your-client-secret"
-sts_audience = "kubernetes-api"
+[token_exchange]
+strategy = "rfc8693"
+audience = "kubernetes-api"
+
+[token_exchange.client_auth]
+method = "client_secret_basic"
+client_id = "mcp-backend"
+client_secret = "your-client-secret"
 ```
 
 **Example (with certificate-based auth for Entra ID):**
@@ -575,12 +598,15 @@ require_oauth = true
 authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
 oauth_audience = "<CLIENT_ID>"
 
-token_exchange_strategy = "entra-obo"
-sts_client_id = "<CLIENT_ID>"
-sts_auth_style = "assertion"
-sts_client_cert_file = "/path/to/client.crt"
-sts_client_key_file = "/path/to/client.key"
-sts_scopes = ["api://<DOWNSTREAM_API>/.default"]
+[token_exchange]
+strategy = "entra-obo"
+scopes = ["api://<DOWNSTREAM_API>/.default"]
+
+[token_exchange.client_auth]
+method = "private_key_jwt"
+client_id = "<CLIENT_ID>"
+certificate_file = "/path/to/client.crt"
+private_key_file = "/path/to/client.key"
 ```
 
 **Pure token passthrough (delegate validation to the cluster):**

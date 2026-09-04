@@ -17,14 +17,7 @@ type tokenExchangingProvider struct {
 	provider           Provider
 	baseConfigProvider func() api.BaseConfig
 	oauthState         *oauth.State
-	// stsConfig is cached and reused across calls so the memoized HTTP client in
-	// TargetTokenExchangeConfig (and its keep-alive connections to the IdP) is
-	// reused. Rebuilt when the token URL or any STS/TLS config field changes after
-	// a reload. Client assertions themselves are never cached — a fresh, single-use
-	// jti is minted per exchange (see TargetTokenExchangeConfig.BuildAssertion).
-	stsConfig    *tokenexchange.TargetTokenExchangeConfig
-	stsConfigMu  sync.Mutex
-	stsConfigKey stsConfigCacheKey
+	tokenExchangeCache tokenExchangeConfigCache
 }
 
 var _ Provider = &tokenExchangingProvider{}
@@ -55,8 +48,8 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 		// provider rather than panicking; token exchange is simply skipped.
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
-	stsConfig := p.getOrBuildStsConfig(ctx, snap, baseConfig)
-	ctx, err := ExchangeTokenInContext(ctx, baseConfig, snap.OIDCProvider, snap.HTTPClient, p.provider, target, stsConfig)
+	tokenExchangeConfig := p.getOrBuildTokenExchangeConfig(ctx, snap, baseConfig)
+	ctx, err := ExchangeTokenInContext(ctx, baseConfig, p.provider, target, tokenExchangeConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -70,13 +63,10 @@ func (p *tokenExchangingProvider) baseConfig() api.BaseConfig {
 	return p.baseConfigProvider()
 }
 
-// getOrBuildStsConfig returns a cached STS config, rebuilding it when the
-// OIDC provider's token URL or STS/TLS config fields change.
-func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap *oauth.Snapshot, baseConfig api.BaseConfig) *tokenexchange.TargetTokenExchangeConfig {
-	logger := klogutil.FromContext(ctx)
-
-	strategy := baseConfig.GetStsStrategy()
-	if strategy == "" {
+func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Context, snap *oauth.Snapshot, baseConfig api.BaseConfig) *tokenexchange.TargetTokenExchangeConfig {
+	global := baseConfig.GetTokenExchangeConfig()
+	if global == nil {
+		p.tokenExchangeCache.clear()
 		return nil
 	}
 
@@ -87,62 +77,56 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 		}
 	}
 	if tokenURL == "" {
-		klogutil.LogWarn(logger, "token exchange strategy configured but OIDC provider returned empty token URL",
-			klogutil.Field("token_exchange.strategy", strategy),
-		)
+		p.tokenExchangeCache.clear()
+		klogutil.LogWarn(klogutil.FromContext(ctx), "OIDC provider returned no token endpoint; token exchange is unavailable",
+			klogutil.Field("strategy", global.GetStrategy()))
 		return nil
 	}
 
-	p.stsConfigMu.Lock()
-	defer p.stsConfigMu.Unlock()
-
-	key := newStsConfigCacheKey(tokenURL, baseConfig)
-	if p.stsConfig != nil && p.stsConfigKey == key {
-		return p.stsConfig
-	}
-
-	authStyle := baseConfig.GetStsAuthStyle()
-	if authStyle == "" {
-		authStyle = tokenexchange.AuthStyleParams
-	}
-	scopes := append([]string(nil), baseConfig.GetStsScopes()...)
-
-	cfg := &tokenexchange.TargetTokenExchangeConfig{
-		TokenURL:           tokenURL,
-		ClientID:           baseConfig.GetStsClientId(),
-		ClientSecret:       baseConfig.GetStsClientSecret(),
-		Audience:           baseConfig.GetStsAudience(),
-		SubjectTokenType:   baseConfig.GetStsSubjectTokenType(),
-		RequestedTokenType: baseConfig.GetStsRequestedTokenType(),
-		Scopes:             scopes,
-		AuthStyle:          authStyle,
-		ClientCertFile:     baseConfig.GetStsClientCertFile(),
-		ClientKeyFile:      baseConfig.GetStsClientKeyFile(),
-		FederatedTokenFile: baseConfig.GetStsFederatedTokenFile(),
-		CAFile:             baseConfig.GetCertificateAuthority(),
-		TLSMinVersion:      baseConfig.GetTLSMinVersionConfig(),
-		TLSCipherSuites:    append([]string(nil), baseConfig.GetTLSCipherSuitesConfig()...),
-	}
-	cfg.SetRequireTLS(baseConfig.IsRequireTLS)
-	if err := cfg.Validate(); err != nil {
-		logger.Error(
-			err,
-			"STS config validation failed, token exchange will be attempted per-request but will likely fail with the same error",
-		)
-		return nil
-	}
-
-	// Release the previous client's idle connections before swapping in the
-	// rebuilt config so they don't linger until garbage collection.
-	if p.stsConfig != nil {
-		p.stsConfig.CloseIdleConnections()
-	}
-	p.stsConfig = cfg
-	p.stsConfigKey = key
-	return p.stsConfig
+	key := newTokenExchangeConfigCacheKey(tokenURL, baseConfig)
+	return p.tokenExchangeCache.getOrReplace(key, func() *tokenexchange.TargetTokenExchangeConfig {
+		cfg := &tokenexchange.TargetTokenExchangeConfig{
+			TokenURL:           tokenURL,
+			Audience:           global.GetAudience(),
+			SubjectTokenType:   global.GetSubjectTokenType(),
+			RequestedTokenType: global.GetRequestedTokenType(),
+			Scopes:             append([]string(nil), global.GetScopes()...),
+			CAFile:             baseConfig.GetCertificateAuthority(),
+			TLSMinVersion:      baseConfig.GetTLSMinVersionConfig(),
+			TLSCipherSuites:    append([]string(nil), baseConfig.GetTLSCipherSuitesConfig()...),
+		}
+		applyClientAuth(cfg, global.GetClientAuth())
+		cfg.SetRequireTLS(baseConfig.IsRequireTLS)
+		return cfg
+	})
 }
 
-type stsConfigCacheKey struct {
+func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth api.TokenExchangeClientAuth) {
+	if auth == nil {
+		return
+	}
+	cfg.ClientID = auth.GetClientID()
+	cfg.ClientSecret = auth.GetClientSecret()
+	switch auth.GetMethod() {
+	case api.TokenExchangeClientAuthMethodSecretBasic:
+		cfg.AuthStyle = tokenexchange.AuthStyleHeader
+	case api.TokenExchangeClientAuthMethodSecretPost:
+		cfg.AuthStyle = tokenexchange.AuthStyleParams
+	case api.TokenExchangeClientAuthMethodPrivateKey:
+		cfg.AuthStyle = tokenexchange.AuthStyleAssertion
+		cfg.ClientCertFile = auth.GetCertificateFile()
+		cfg.ClientKeyFile = auth.GetPrivateKeyFile()
+	case api.TokenExchangeClientAuthMethodJWTFile:
+		cfg.AuthStyle = tokenexchange.AuthStyleFederated
+		cfg.FederatedTokenFile = auth.GetTokenFile()
+	default:
+		// Preserve invalid methods so TargetTokenExchangeConfig.Validate rejects
+		// them instead of treating an empty style as form-body authentication.
+		cfg.AuthStyle = string(auth.GetMethod())
+	}
+}
+
+type tokenExchangeConfigCacheKey struct {
 	TokenURL           string
 	Strategy           string
 	ClientID           string
@@ -161,25 +145,32 @@ type stsConfigCacheKey struct {
 	RequireTLS         bool
 }
 
-func newStsConfigCacheKey(tokenURL string, cfg api.BaseConfig) stsConfigCacheKey {
-	return stsConfigCacheKey{
-		TokenURL:           tokenURL,
-		Strategy:           cfg.GetStsStrategy(),
-		ClientID:           cfg.GetStsClientId(),
-		ClientSecret:       cfg.GetStsClientSecret(),
-		Audience:           cfg.GetStsAudience(),
-		SubjectTokenType:   cfg.GetStsSubjectTokenType(),
-		RequestedTokenType: cfg.GetStsRequestedTokenType(),
-		Scopes:             strings.Join(cfg.GetStsScopes(), "\x00"),
-		AuthStyle:          cfg.GetStsAuthStyle(),
-		ClientCertFile:     cfg.GetStsClientCertFile(),
-		ClientKeyFile:      cfg.GetStsClientKeyFile(),
-		FederatedTokenFile: cfg.GetStsFederatedTokenFile(),
-		CAFile:             cfg.GetCertificateAuthority(),
-		TLSMinVersion:      cfg.GetTLSMinVersionConfig(),
-		TLSCipherSuites:    strings.Join(cfg.GetTLSCipherSuitesConfig(), "\x00"),
-		RequireTLS:         cfg.IsRequireTLS(),
+func newTokenExchangeConfigCacheKey(tokenURL string, cfg api.BaseConfig) tokenExchangeConfigCacheKey {
+	global := cfg.GetTokenExchangeConfig()
+	key := tokenExchangeConfigCacheKey{
+		TokenURL:        tokenURL,
+		CAFile:          cfg.GetCertificateAuthority(),
+		TLSMinVersion:   cfg.GetTLSMinVersionConfig(),
+		TLSCipherSuites: strings.Join(cfg.GetTLSCipherSuitesConfig(), "\x00"),
+		RequireTLS:      cfg.IsRequireTLS(),
 	}
+	if global == nil {
+		return key
+	}
+	key.Strategy = global.GetStrategy()
+	key.Audience = global.GetAudience()
+	key.SubjectTokenType = global.GetSubjectTokenType()
+	key.RequestedTokenType = global.GetRequestedTokenType()
+	key.Scopes = strings.Join(global.GetScopes(), "\x00")
+	if auth := global.GetClientAuth(); auth != nil {
+		key.ClientID = auth.GetClientID()
+		key.ClientSecret = auth.GetClientSecret()
+		key.AuthStyle = string(auth.GetMethod())
+		key.ClientCertFile = auth.GetCertificateFile()
+		key.ClientKeyFile = auth.GetPrivateKeyFile()
+		key.FederatedTokenFile = auth.GetTokenFile()
+	}
+	return key
 }
 
 func (p *tokenExchangingProvider) IsMultiTarget() bool {
@@ -203,6 +194,7 @@ func (p *tokenExchangingProvider) WatchTargets(ctx context.Context, reload McpRe
 }
 
 func (p *tokenExchangingProvider) Close() {
+	p.tokenExchangeCache.clear()
 	p.provider.Close()
 }
 
@@ -212,4 +204,39 @@ func (p *tokenExchangingProvider) AnyTargetHasGVKs(ctx context.Context, gvks []s
 
 func (p *tokenExchangingProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
 	return p.provider.IsTargetCompatibilityToolFiltersEnabled()
+}
+
+// tokenExchangeConfigCache owns synchronization and lifecycle management for
+// the memoized config and its HTTP client's idle connections.
+type tokenExchangeConfigCache struct {
+	mu     sync.Mutex
+	config *tokenexchange.TargetTokenExchangeConfig
+	key    tokenExchangeConfigCacheKey
+}
+
+func (c *tokenExchangeConfigCache) getOrReplace(key tokenExchangeConfigCacheKey, build func() *tokenexchange.TargetTokenExchangeConfig) *tokenexchange.TargetTokenExchangeConfig {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.config != nil && c.key == key {
+		return c.config
+	}
+	next := build()
+	if c.config != nil {
+		c.config.CloseIdleConnections()
+	}
+	c.config = next
+	c.key = key
+	return c.config
+}
+
+func (c *tokenExchangeConfigCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.config != nil {
+		c.config.CloseIdleConnections()
+	}
+	c.config = nil
+	c.key = tokenExchangeConfigCacheKey{}
 }
