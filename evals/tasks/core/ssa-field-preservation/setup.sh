@@ -47,4 +47,6 @@ spec:
             memory: 512Mi
 MANIFEST
 
-kubectl wait --for=condition=Available deployment/payment-service -n ssa-test --timeout=180s
+# Default matches generic K8s; slower environments can override via
+# VERIFY_TIMEOUT without changing the default for everyone else.
+kubectl wait --for=condition=Available deployment/payment-service -n ssa-test --timeout="${VERIFY_TIMEOUT:-120s}"

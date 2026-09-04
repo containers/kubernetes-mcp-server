@@ -6,6 +6,9 @@ readonly DEVELOPERS=("alice" "bob" "charlie")
 readonly DEV_NAMESPACES=("dev-alice" "dev-bob" "dev-charlie")
 readonly ALL_NAMESPACES=("${DEV_NAMESPACES[@]}" "dev-shared" "staging" "prod")
 readonly TEST_LABEL="app=verification-test"
+# Default matches generic K8s; slower environments can override via
+# VERIFY_TIMEOUT without changing the default for everyone else.
+readonly TEST_POD_TIMEOUT="${VERIFY_TIMEOUT:-60s}"
 
 # --- Cleanup Function ---
 cleanup() {
@@ -234,7 +237,7 @@ EOF
 
   echo "  - Waiting for test pods to be ready..."
   for dev in "${DEVELOPERS[@]}"; do
-    kubectl wait --for=condition=Ready pod/test-pod-${dev} -n "dev-${dev}" --timeout=180s
+    kubectl wait --for=condition=Ready pod/test-pod-${dev} -n "dev-${dev}" --timeout="${TEST_POD_TIMEOUT}"
   done
   
   # Test that alice cannot reach bob's service

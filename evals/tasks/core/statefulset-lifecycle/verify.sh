@@ -5,6 +5,11 @@ set -euo pipefail
 NAMESPACE="statefulset-test"
 STS_NAME="db"
 EXPECTED_CONTENT="initial_data"
+# Defaults match generic K8s; slower environments (e.g. cloud OCP PVC binding
+# lag) can override via VERIFY_TIMEOUT without changing the default for
+# everyone else.
+DELETE_TIMEOUT="${VERIFY_TIMEOUT:-120s}"
+READY_TIMEOUT="${VERIFY_TIMEOUT:-120s}"
 
 echo "Verifying old pods are deleted"
 # Wait for scale-down: deletion of db-1/db-2 (may already be gone).
@@ -12,7 +17,7 @@ echo "Verifying old pods are deleted"
 # other API/auth/transport error still returns non-zero and is treated as a
 # verification failure instead of being silently read as "pod is gone".
 for pod in db-1 db-2; do
-  kubectl wait "pod/${pod}" -n "${NAMESPACE}" --for=delete --timeout=180s 2>/dev/null || true
+  kubectl wait "pod/${pod}" -n "${NAMESPACE}" --for=delete --timeout="${DELETE_TIMEOUT}" 2>/dev/null || true
   if ! out=$(kubectl get pod "$pod" -n "${NAMESPACE}" --ignore-not-found -o name 2>&1); then
     echo "Unable to verify pod $pod was deleted: $out"
     exit 1
@@ -35,7 +40,7 @@ echo "StatefulSet is running with 1 replicas"
 
 # On cloud OCP, PVC binding can lag; wait for db-0 Ready before reading data
 echo "Waiting for pod db-0 to become Ready"
-if ! kubectl wait --for=condition=Ready "pod/db-0" -n "${NAMESPACE}" --timeout=300s; then
+if ! kubectl wait --for=condition=Ready "pod/db-0" -n "${NAMESPACE}" --timeout="${READY_TIMEOUT}"; then
   echo "Pod db-0 not Ready in time"
   kubectl get pvc,pod -n "${NAMESPACE}" -o wide || true
   exit 1
