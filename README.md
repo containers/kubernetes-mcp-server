@@ -562,9 +562,10 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
 
 - **vm_lifecycle** - Manage KubeVirt VirtualMachine lifecycle: start, stop, restart, pause, or unpause a VM
-  - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), 'restart' (stops then starts the VM), 'pause' (suspends the running VMI in-place), or 'unpause' (resumes a paused VMI)
+  - `action` (`string`) **(required)** - The lifecycle action to perform: 'start' (sets runStrategy from run_policy), 'stop' (sets runStrategy to Halted), 'restart' (stops then starts; see run_policy), 'pause' (suspends the running VMI in-place), or 'unpause' (resumes a paused VMI)
   - `name` (`string`) **(required)** - The name of the virtual machine
   - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+  - `run_policy` (`string`) - The run policy for 'start' and 'restart' (ignored for 'stop', 'pause', and 'unpause'): 'HighAvailability' (Always), 'RestartOnFailure' (RerunOnFailure), or 'Once' (Once). Defaults to 'HighAvailability'.
 
 - **vm_create_from_template** - Create a VirtualMachine from a VirtualMachineTemplate (virt-template) on KubeVirt. Processes the template server-side to substitute parameters (required values, defaults, and auto-generated values like passwords), then creates the resulting VirtualMachine in the same namespace. Cross-namespace template usage is not supported.
   - `namespace` (`string`) **(required)** - The namespace of the VirtualMachineTemplate and the resulting VirtualMachine (must be the same)
