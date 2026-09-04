@@ -74,7 +74,13 @@ claude-agent-acp: ## Install the claude-agent-acp adapter for the acp-anthropic 
 
 .PHONY: run-evals
 run-evals: mcpchecker jq $(if $(filter acp-anthropic,$(AGENT)),claude-agent-acp) ## Run mcpchecker evals (knobs: SUITE, AGENT, MODEL; see evals/README.md)
-	$(if $(MODEL),ANTHROPIC_MODEL=$(MODEL) )PATH="$(shell pwd)/_output/tools/node_modules/.bin:$(PATH)" $(MCPCHECKER) check $(EVAL_CONFIG) \
+	@# Prefer MCP_EVAL_KUBECONFIG when KUBECONFIG is unset so setup/verify kubectl
+	@# targets the same cluster as make run-server (avoids alabama/.kube/config).
+	@if [ -z "$${KUBECONFIG:-}" ] && [ -n "$(MCP_EVAL_KUBECONFIG)" ]; then \
+		export KUBECONFIG="$(MCP_EVAL_KUBECONFIG)"; \
+	fi; \
+	$(if $(MODEL),ANTHROPIC_MODEL=$(MODEL) )PATH="$(shell pwd)/_output/tools/bin:$(shell pwd)/_output/tools/node_modules/.bin:$${PATH}" \
+		$(MCPCHECKER) check $(EVAL_CONFIG) \
 		$(if $(EVAL_LABEL_SELECTOR),--label-selector $(EVAL_LABEL_SELECTOR),) \
 		$(if $(EVAL_TASK_FILTER),--run "$(EVAL_TASK_FILTER)",) \
 		$(if $(filter true,$(EVAL_VERBOSE)),--verbose,) \
@@ -100,7 +106,9 @@ diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
 .PHONY: run-server
 run-server: build ## Start MCP server in background and wait for health check
 	@echo "Starting MCP server on port $(MCP_PORT)..."
-	./$(BINARY_NAME) --port $(MCP_PORT) $(if $(TOOLSETS),--toolsets "$(TOOLSETS)") --config-dir $(MCP_CONFIG_DIR) $(if $(MCP_EVAL_KUBECONFIG),--kubeconfig "$(MCP_EVAL_KUBECONFIG)") & echo $$! > .mcp-server.pid
+	@# When MCP_EVAL_KUBECONFIG is set (OCP CI / local evals), force the kubeconfig
+	@# provider so in-cluster env cannot steal traffic and cause RBAC denials.
+	./$(BINARY_NAME) --port $(MCP_PORT) $(if $(TOOLSETS),--toolsets "$(TOOLSETS)") --config-dir $(MCP_CONFIG_DIR) $(if $(MCP_EVAL_KUBECONFIG),--kubeconfig "$(MCP_EVAL_KUBECONFIG)" --cluster-provider kubeconfig) & echo $$! > .mcp-server.pid
 	@echo "MCP server started with PID $$(cat .mcp-server.pid)"
 	@echo "Waiting for MCP server to be ready..."
 	@elapsed=0; \

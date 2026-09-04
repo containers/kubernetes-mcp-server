@@ -16,4 +16,10 @@ steps:
   cleanup:
     file: cleanup.sh
   prompt:
-    inline: "Create namespace 'limits-test' with a pod 'resource-limits-pod' using quay.io/fedora/httpd-24:latest image. Container 'my-container' should have CPU request 60m, limit 600m, and memory request/limit of 62Mi."
+    inline: >-
+      Create namespace 'limits-test' with a pod 'resource-limits-pod' using
+      quay.io/fedora/httpd-24:latest image. Container 'my-container' should have
+      CPU request 60m, limit 600m, and memory request/limit of 62Mi. The pod must
+      satisfy Pod Security restricted (OpenShift-compatible): set pod and container
+      securityContext with runAsNonRoot=true, allowPrivilegeEscalation=false,
+      capabilities.drop=["ALL"], and seccompProfile.type=RuntimeDefault.
