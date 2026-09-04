@@ -3,7 +3,7 @@ set -euo pipefail
 
 NAMESPACE="multi-container-logging"
 POD_NAME="communication-pod"
-TIMEOUT="120s"
+TIMEOUT="300s"
 
 # Wait for pod to be running
 echo "Waiting for pod '$POD_NAME' to be ready..."

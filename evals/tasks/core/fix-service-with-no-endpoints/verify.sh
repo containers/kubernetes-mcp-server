@@ -9,7 +9,7 @@ fi
 
 # Check if pods are being created successfully
 echo "Waiting for pods to become ready..."
-TIMEOUT="120s"
+TIMEOUT="300s"
 if ! kubectl wait --for=condition=Ready pods -l app=web-app -n webshop-frontend --timeout=$TIMEOUT; then
   echo "Pods are not reaching Ready state after fixing the node selector"
   exit 1

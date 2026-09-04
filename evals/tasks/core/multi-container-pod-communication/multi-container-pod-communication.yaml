@@ -24,3 +24,10 @@ steps:
       Both containers should be defined in spec.containers (not as init containers or sidecars).
       Both containers should mount logs-volume at '/var/log/nginx'.
       The pod should be considered ready when the web server is serving traffic.
+
+      The pod must run under Pod Security restricted (OpenShift-compatible): set pod and
+      container securityContext with runAsNonRoot=true, allowPrivilegeEscalation=false,
+      capabilities.drop=["ALL"], and seccompProfile.type=RuntimeDefault. Do not set a
+      specific numeric runAsUser -- omit it so the container runs as a non-root UID
+      allowed by the namespace (both images already support running as an arbitrary
+      non-root UID).
