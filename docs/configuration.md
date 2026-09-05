@@ -728,6 +728,9 @@ storage_driver = "configmap"
 |-------|------|-------------|
 | `allowed_registries` | string array | Optional list of permitted chart registry URL prefixes. Only `oci://` and `https://` schemes are accepted. |
 | `storage_driver` | string | Optional default storage driver for Helm operations. Supported values: `secret` (default) and `configmap`. |
+| `timeout` | string | Optional time to wait for resource readiness during blocking Helm operations, as a Go duration string (e.g. `4m`, `90s`). Equivalent to the Helm CLI `--timeout` flag. Defaults to `5m`. |
+| `wait` | bool | Optional. Whether `helm_install` blocks until the release's resources are ready. Equivalent to `helm install --wait`. Defaults to `true`. |
+| `uninstall_wait` | bool | Optional. Whether `helm_uninstall` blocks until the release's resources are deleted. Equivalent to `helm uninstall --wait`. Defaults to `true`. |
 
 The Helm toolset supports an optional `allowed_registries` allowlist to restrict which registries
 `helm_install` can fetch charts from.
@@ -739,6 +742,19 @@ The Helm toolset supports an optional `allowed_registries` allowlist to restrict
 - When `allowed_registries` **is configured**, chart references must be URL-based and prefix-match an entry in the list. Non-URL references (local paths, repo/chart names) are rejected.
 
 **Accepted risk:** bare filesystem paths (e.g. `/absolute/path`, `./relative/path`) are not blocked when no allowlist is configured, because they are indistinguishable from Helm repository references at the string level. When the server runs in a container, the blast radius is limited to the container filesystem. To fully restrict chart sources, configure `allowed_registries`.
+
+**Blocking behavior:** by default `helm_install` and `helm_uninstall` wait up to `timeout` for the
+release's resources to become ready or to be deleted, and return an error if they do not. Note that
+`wait` defaults to `true` here, whereas the Helm CLI's `--wait` defaults to `false`.
+
+Tune these when the MCP client enforces its own per-tool-call timeout. If the client's ceiling is
+below the server's `timeout`, the client gives up first and never sees the Helm error — lower
+`timeout` so the server reports the failure instead. Setting `wait = false` goes further:
+`helm_install` returns as soon as the resources are created, letting the caller poll readiness
+itself. `wait` and `uninstall_wait` are separate options, mirroring the separate `--wait` flags on
+`helm install` and `helm uninstall`, so that install can stop blocking while uninstall still
+sequences its deletes — a caller that reinstalls immediately after a non-blocking uninstall would
+otherwise race the deletions.
 
 Refer to individual toolset documentation for available options:
 - [Kiali Configuration](KIALI.md)

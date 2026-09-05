@@ -42,7 +42,7 @@ func (h *Helm) Install(ctx context.Context, chart string, values map[string]inte
 	if err != nil {
 		return "", err
 	}
-	install := action.NewInstall(cfg)
+	install := h.newInstall(cfg)
 	if name == "" {
 		install.GenerateName = true
 		install.ReleaseName, _, _ = install.NameAndChart([]string{chart})
@@ -50,9 +50,6 @@ func (h *Helm) Install(ctx context.Context, chart string, values map[string]inte
 		install.ReleaseName = name
 	}
 	install.Namespace = h.kubernetes.NamespaceOrDefault(namespace)
-	install.Wait = true
-	install.Timeout = 5 * time.Minute
-	install.DryRun = false
 
 	chartRequested, err := install.LocateChart(chart, cli.New())
 	if err != nil {
@@ -100,10 +97,7 @@ func (h *Helm) Uninstall(ctx context.Context, name string, namespace string) (st
 	if err != nil {
 		return "", err
 	}
-	uninstall := action.NewUninstall(cfg)
-	uninstall.IgnoreNotFound = true
-	uninstall.Wait = true
-	uninstall.Timeout = 5 * time.Minute
+	uninstall := h.newUninstall(cfg)
 	uninstalledRelease, err := uninstall.Run(name)
 	if uninstalledRelease == nil && err == nil {
 		return fmt.Sprintf("Release %s not found", name), nil
@@ -111,6 +105,27 @@ func (h *Helm) Uninstall(ctx context.Context, name string, namespace string) (st
 		return "", err
 	}
 	return fmt.Sprintf("Uninstalled release %s %s", uninstalledRelease.Release.Name, uninstalledRelease.Info), nil
+}
+
+// newInstall builds the install action with the configured blocking behavior
+// applied. Callers set the release name and namespace on the result.
+func (h *Helm) newInstall(cfg *action.Configuration) *action.Install {
+	install := action.NewInstall(cfg)
+	install.Wait = h.config.WaitOrDefault()
+	install.Timeout = h.config.TimeoutOrDefault()
+	install.DryRun = false
+	return install
+}
+
+// newUninstall builds the uninstall action with the configured blocking
+// behavior applied. Note that uninstall waiting is configured separately from
+// install waiting, so this reads UninstallWait rather than Wait.
+func (h *Helm) newUninstall(cfg *action.Configuration) *action.Uninstall {
+	uninstall := action.NewUninstall(cfg)
+	uninstall.IgnoreNotFound = true
+	uninstall.Wait = h.config.UninstallWaitOrDefault()
+	uninstall.Timeout = h.config.TimeoutOrDefault()
+	return uninstall
 }
 
 func (h *Helm) newAction(ctx context.Context, namespace string, allNamespaces bool) (*action.Configuration, error) {
