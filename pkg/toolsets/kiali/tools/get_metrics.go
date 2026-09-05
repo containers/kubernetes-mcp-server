@@ -82,7 +82,8 @@ func InitGetMetrics() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: resourceMetricsHandler,
+		},
+		Handler: resourceMetricsHandler,
 	})
 
 	return ret

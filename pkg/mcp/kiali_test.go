@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"sync"
@@ -672,6 +673,79 @@ func (s *KialiSuite) TestKialiToolsNotClusterAware() {
 			s.Require().True(ok, "expected properties map for tool %s", tool.Name)
 			s.NotContains(properties, "context", "kiali tool %s must not expose context parameter", tool.Name)
 		})
+	}
+}
+
+func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
+	s.Run("tools visible when configured URL passes /api/status", func() {
+		statusSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"status":{"Kiali state":"running"}}`))
+		}))
+		defer statusSrv.Close()
+
+		kubeConfig := s.Cfg.KubeConfig
+		cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+			toolsets = ["%s"]
+			experimental_enable_target_compatibility_tool_filters = true
+			[toolset_configs.kiali]
+			url = "%s"
+			insecure = true
+		`, s.toolsetName, statusSrv.URL)))
+		s.Require().NoError(err)
+		s.Cfg = cfg
+		s.Cfg.KubeConfig = kubeConfig
+		s.InitMcpClient()
+
+		tools, err := s.ListTools()
+		s.Require().NoError(err)
+		s.Require().NotNil(tools)
+		present := make(map[string]bool, len(tools.Tools))
+		for _, tool := range tools.Tools {
+			present[tool.Name] = true
+		}
+		for _, name := range s.kialiToolNames() {
+			s.Truef(present[name], "expected %s when status probe succeeds", name)
+		}
+	})
+
+	s.Run("tools hidden when configured URL fails /api/status", func() {
+		kubeConfig := s.Cfg.KubeConfig
+		cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+			toolsets = ["%s"]
+			experimental_enable_target_compatibility_tool_filters = true
+			[toolset_configs.kiali]
+			url = "http://127.0.0.1:1"
+			insecure = true
+		`, s.toolsetName)))
+		s.Require().NoError(err)
+		s.Cfg = cfg
+		s.Cfg.KubeConfig = kubeConfig
+		s.InitMcpClient()
+
+		tools, err := s.ListTools()
+		s.Require().NoError(err)
+		s.Require().NotNil(tools)
+		for _, tool := range tools.Tools {
+			for _, name := range s.kialiToolNames() {
+				s.Require().NotEqual(name, tool.Name, "expected %s hidden when status probe fails", name)
+			}
+		}
+	})
+}
+
+func (s *KialiSuite) kialiToolNames() []string {
+	return []string{
+		s.toolsetName + "_get_logs",
+		s.toolsetName + "_get_mesh_status",
+		s.toolsetName + "_get_mesh_traffic_graph",
+		s.toolsetName + "_get_metrics",
+		s.toolsetName + "_get_pod_performance",
+		s.toolsetName + "_get_resource_details",
+		s.toolsetName + "_get_trace_details",
+		s.toolsetName + "_list_mesh_clusters",
+		s.toolsetName + "_list_traces",
+		s.toolsetName + "_manage_istio_config",
+		s.toolsetName + "_manage_istio_config_read",
 	}
 }
 

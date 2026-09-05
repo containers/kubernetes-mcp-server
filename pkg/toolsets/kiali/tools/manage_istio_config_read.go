@@ -72,7 +72,8 @@ func InitManageIstioConfigRead() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: istioConfigHandlerRead,
+		},
+		Handler: istioConfigHandlerRead,
 	})
 	return ret
 }
