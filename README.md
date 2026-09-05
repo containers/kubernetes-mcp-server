@@ -272,7 +272,7 @@ and only needed for the project-specific scenarios noted.
 | [Helm](https://helm.sh) | `helm` | 3 |
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
-| [Kubernetes](https://kubernetes.io) | - | 32 |
+| [Kubernetes](https://kubernetes.io) | - | 33 |
 | [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 26 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
@@ -417,6 +417,9 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - Name of the resource
   - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
   - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
+
+- **api_resources_list** - Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.
+  - `kind` (`string`) **(required)** - Required case-insensitive substring filter on kind (e.g. 'deployment', 'route'). Matches across every API group, so a broad term can match more than one kind (e.g. 'networkpolicy' also matches CiliumNetworkPolicy) -- use the most specific substring you can.
 
 </details>
 
