@@ -144,6 +144,18 @@ func (s *BaseMcpSuite) InitMcpClient(options ...test.McpClientOption) {
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
 }
 
+// requireMessageText extracts the text from a prompt message using a checked
+// type assertion. It fails the test with a clear message instead of panicking
+// if the content is not *mcp.TextContent.
+func (s *BaseMcpSuite) requireMessageText(result *mcp.GetPromptResult, msgIndex int) string {
+	s.T().Helper()
+	s.Require().NotNil(result, "result should not be nil")
+	s.Require().Greater(len(result.Messages), msgIndex, "message index out of range")
+	content, ok := result.Messages[msgIndex].Content.(*mcp.TextContent)
+	s.Require().True(ok, "expected TextContent at message at index %d, got %T", msgIndex, result.Messages[msgIndex].Content)
+	return content.Text
+}
+
 // StartCapturingLogNotifications begins capturing log notifications.
 // Must be called BEFORE the tool call that triggers the notification.
 // This method sets the logging level to debug to ensure all log messages are received.
