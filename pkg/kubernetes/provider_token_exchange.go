@@ -80,14 +80,9 @@ func (p *tokenExchangingProvider) getOrBuildStsConfig(ctx context.Context, snap 
 		return nil
 	}
 
-	var tokenURL string
-	if snap.OIDCProvider != nil {
-		if endpoint := snap.OIDCProvider.Endpoint(); endpoint.TokenURL != "" {
-			tokenURL = endpoint.TokenURL
-		}
-	}
+	tokenURL := resolveStsTokenURL(baseConfig, snap.OIDCProvider)
 	if tokenURL == "" {
-		klogutil.LogWarn(logger, "token exchange strategy configured but OIDC provider returned empty token URL",
+		klogutil.LogWarn(logger, "token exchange strategy configured but no token URL available (set sts_token_url or configure authorization_url for OIDC discovery)",
 			klogutil.Field("token_exchange.strategy", strategy),
 		)
 		return nil

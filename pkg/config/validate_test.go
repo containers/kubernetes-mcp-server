@@ -553,6 +553,64 @@ func (s *ValidateSuite) TestStsTokenTypes() {
 	})
 }
 
+func (s *ValidateSuite) TestStsTokenURL() {
+	s.Run("empty is accepted (resolution falls back to OIDC discovery)", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = ""
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("https URL is accepted", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "https://sts-gateway.example.com/oauth/token"
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("http URL is accepted with warning", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "http://sts-gateway.example.com/oauth/token"
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("invalid scheme is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "ftp://sts-gateway.example.com/oauth/token"
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_token_url must use the http or https scheme")
+	})
+
+	s.Run("scheme-only URL with no host is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "https://"
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_token_url must include a host")
+	})
+
+	s.Run("path-only URL with no scheme is rejected", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "/oauth/token"
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "sts_token_url must use the http or https scheme")
+	})
+
+	s.Run("whitespace-only is trimmed to empty", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "   "
+		s.NoError(cfg.Validate(s.T().Context()))
+		s.Equal("", cfg.StsTokenURL, "whitespace should be trimmed from sts_token_url")
+	})
+
+	s.Run("padded value is trimmed but preserved", func() {
+		cfg := s.validConfig()
+		cfg.StsTokenURL = "  https://sts-gateway.example.com/oauth/token  "
+		s.NoError(cfg.Validate(s.T().Context()))
+		s.Equal("https://sts-gateway.example.com/oauth/token", cfg.StsTokenURL)
+	})
+}
+
 func (s *ValidateSuite) TestConfirmationFallback() {
 	s.Run("empty fallback is accepted", func() {
 		cfg := s.validConfig()

@@ -75,6 +75,7 @@ type StsConfigProvider interface {
 	GetStsFederatedTokenFile() string
 	GetStsSubjectTokenType() string
 	GetStsRequestedTokenType() string
+	GetStsTokenURL() string
 }
 
 // CertificateAuthorityProvider provides access to the top-level certificate_authority

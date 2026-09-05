@@ -3,13 +3,16 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -181,6 +184,47 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
 		s.Require().NoError(err)
 		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
 		s.Equal("Bearer exchanged-token", auth)
+	})
+}
+
+func (s *TokenExchangeRoutingSuite) TestResolveStsTokenURL() {
+	mockServer := test.NewMockServer()
+	authServer := mockServer.Config().Host
+	mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/.well-known/openid-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{
+				"issuer": "%s",
+				"authorization_endpoint": "%s/authorize",
+				"token_endpoint": "%s/token"
+			}`, authServer, authServer, authServer)
+		}
+	}))
+	s.T().Cleanup(mockServer.Close)
+	provider, err := oidc.NewProvider(s.T().Context(), authServer)
+	s.Require().NoError(err)
+	discoveredURL := provider.Endpoint().TokenURL
+	s.Require().NotEmpty(discoveredURL, "test prerequisite: OIDC discovery should yield a token endpoint")
+
+	s.Run("explicit sts_token_url wins over discovered endpoint", func() {
+		cfg := config.Default()
+		cfg.StsTokenURL = "https://explicit-sts.example.com/token"
+		got := resolveStsTokenURL(cfg, provider)
+		s.Equal("https://explicit-sts.example.com/token", got, "explicit URL must take precedence over OIDC discovery")
+	})
+
+	s.Run("falls back to OIDC provider endpoint when sts_token_url is empty", func() {
+		cfg := config.Default()
+		cfg.StsTokenURL = ""
+		got := resolveStsTokenURL(cfg, provider)
+		s.Equal(discoveredURL, got, "empty explicit URL should fall back to OIDC-discovered endpoint")
+	})
+
+	s.Run("returns empty when neither source is available", func() {
+		cfg := config.Default()
+		cfg.StsTokenURL = ""
+		got := resolveStsTokenURL(cfg, nil)
+		s.Equal("", got, "no explicit URL and no provider should yield empty string")
 	})
 }
 
