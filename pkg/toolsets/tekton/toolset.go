@@ -20,13 +20,18 @@ func (t *Toolset) GetDescription() string {
 	return "Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting."
 }
 
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
-	return slices.Concat(
+func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
+	tools := slices.Concat(
 		pipelineTools(),
 		pipelineRunTools(),
 		taskTools(),
 		taskRunTools(),
+		[]api.ServerTool{pipelineRunDiagnoseTool()},
 	)
+	for i := range tools {
+		tools[i].TargetCompatibilityFilters = append(tools[i].TargetCompatibilityFilters, hasPipelineRun(p))
+	}
+	return tools
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
