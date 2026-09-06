@@ -239,7 +239,7 @@ rate_limit_burst = 10        # allow bursts of up to 10 requests
 | `kubeconfig` | string | `""` | Path to the Kubernetes configuration file. If not provided, the server uses the in-cluster configuration or the default kubeconfig location (`~/.kube/config`). |
 | `cluster_provider_strategy` | string | auto-detect | How the server finds clusters. Valid values: `kubeconfig`, `in-cluster`, `kcp`, `disabled`. |
 | `ca_cache_dir` | string | `""` | Directory where CA certificates fetched via the `caURL` kubeconfig cluster extension are cached. Empty means the default: a subdirectory of the system temp dir. The directory must be writable; with a read-only root filesystem, mount an emptyDir there. |
-| `ca_refresh_interval` | duration | `"24h"` | How often cached CA certificates are re-fetched so a rotated cluster CA is picked up without a restart. Use `0s` to disable re-fetching; the CA is then only refreshed when a manager is rebuilt (e.g. kubeconfig change or restart). |
+| `ca_refresh_interval` | duration | `"24h"` | How often cached CA certificates are re-fetched so a rotated cluster CA is picked up without a restart. Use `0s` to disable automatic re-fetching; the CA is then only refreshed when a manager is rebuilt (e.g. kubeconfig change or restart) or via an on-demand SIGHUP re-fetch. |
 
 **Example:**
 ```toml
@@ -336,9 +336,11 @@ At manager creation the server fetches the CA from `caURL`, caches it to a file 
 
 Notes:
 
-- The URL must be `https`. A trust root fetched over cleartext could be swapped by a network attacker, who could then impersonate the cluster the CA is meant to authenticate.
+- The URL must be `https`. A trust root fetched over cleartext could be swapped by a network attacker, who could then impersonate the cluster the CA is meant to authenticate. Redirects are followed only to other `https` URLs, and the chain is capped.
+- The endpoint serving `caURL` must present a certificate the MCP process **already trusts** — system roots or `SSL_CERT_FILE` — **not** the cluster CA being fetched. This is a different trust domain from “the URL must be https”: a private-CA-signed endpoint fails at manager creation. Point `caURL` at something trusted by the process, or add its certificate to the process trust store.
 - The response must be a PEM CA certificate; other content fails fast with a clear error.
-- client-go re-checks the cached file every few minutes, so a rotation converges once the refresher writes the new CA; setting `ca_refresh_interval` below that cadence does not speed it up.
+- client-go re-checks the cached file roughly every 5 minutes (the `ClientsAllowCARotation` feature, beta and enabled by default in client-go 1.36+), so a rotation converges once the refresher writes the new CA; setting `ca_refresh_interval` below that cadence does not speed it up. With that feature disabled (e.g. `KUBE_FEATURE_ClientsAllowCARotation=false`), the client no longer re-reads the file, so a changed CA is only picked up when a manager is rebuilt.
+- Sending SIGHUP to reload configuration also triggers an immediate CA re-fetch, so a rotated CA can be picked up without waiting out `ca_refresh_interval` or restarting.
 - The cache directory (system temp dir by default, or `ca_cache_dir`) must be writable. With a read-only root filesystem, mount an emptyDir at the cache location — e.g. `emptyDir: {}` mounted at `/tmp`.
 - The initial fetch happens at manager creation; if it fails (unreachable endpoint, non-PEM response), manager creation fails rather than silently using an empty trust store. For the default context that is startup; lazily-created contexts (other targets) surface the error on first use.
 - Applies to every cluster provider strategy backed by a kubeconfig (`kubeconfig` and `kcp`).

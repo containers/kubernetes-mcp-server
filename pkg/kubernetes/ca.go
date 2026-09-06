@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +19,7 @@ import (
 
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -58,13 +58,48 @@ const (
 	caFetchAttempts = 3
 	// caMaxBodyBytes bounds CA response size; bundles are a few KB.
 	caMaxBodyBytes = 1 << 20 // 1 MiB
+	// caMaxRedirects bounds redirect hops from the CA endpoint. A CA is a
+	// trust root fetched on each refresh; any real deployment serves it
+	// directly, and a long chain is a redirect-loop or abuse signal.
+	caMaxRedirects = 3
+	// caFetchMaxBackoff is the cumulative 1s+2s... backoff between retries.
+	caFetchMaxBackoff = time.Duration(caFetchAttempts*(caFetchAttempts-1)/2) * time.Second
+	// caFetchMaxDuration bounds a whole fetch with retries: caFetchAttempts
+	// timeout-bounded attempts plus the backoff between them. Each attempt
+	// gets its own caFetchTimeout (see fetchCA), so a hung first attempt
+	// cannot consume the retry budget.
+	caFetchMaxDuration = caFetchTimeout*caFetchAttempts + caFetchMaxBackoff
 )
+
+// errCARedirectPolicy marks a redirect rejected by the CA client's redirect
+// policy (non-https hop or too many hops). Rejections are deterministic, so
+// they must not be retried.
+var errCARedirectPolicy = errors.New("caURL redirect rejected")
 
 // CAFetchClientFactory builds the HTTP client used to fetch CA certificates
 // from caURL endpoints. It is a variable so tests can pin a TLS test
 // server's certificate without touching the process-wide system pool.
+// The client verifies caURL against the system trust store (system roots or
+// SSL_CERT_FILE), not against the cluster CA being fetched; the redirect
+// policy applies only to clients built by this factory, so callers that
+// replace the factory inherit the responsibility of rejecting non-https
+// redirects.
 var CAFetchClientFactory = func() *http.Client {
-	return &http.Client{Timeout: caFetchTimeout}
+	return &http.Client{
+		Timeout: caFetchTimeout,
+		// A hostile or misconfigured CA host could redirect the fetch to
+		// cleartext, letting a network attacker substitute a CA. Follow
+		// only https hops, and cap the chain.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= caMaxRedirects {
+				return fmt.Errorf("%w: too many redirects (max %d)", errCARedirectPolicy, caMaxRedirects)
+			}
+			if req.URL.Scheme != "https" {
+				return fmt.Errorf("%w: redirect target must be https", errCARedirectPolicy)
+			}
+			return nil
+		},
+	}
 }
 
 func caURLFromClusterExtensions(cluster *clientcmdapi.Cluster) string {
@@ -145,10 +180,19 @@ func applyClusterCAURL(
 	if err := validateCAURL(caURL); err != nil {
 		return nil, err
 	}
+	// client-go rejects a CAFile combined with insecure-skip-tls-verify
+	// ("specifying a root certificates file with the insecure flag is not
+	// allowed"), so fail here with a message that names the conflict
+	// instead of surfacing that cryptic error later, after the fetch.
+	if restConfig.Insecure {
+		return nil, fmt.Errorf("cluster %q sets insecure-skip-tls-verify and serves its CA via caURL; remove one of them", contextName)
+	}
 
 	cacheFile := caCacheFilePath(caCacheDir(config.GetCACacheDir()), caURL)
 	client := CAFetchClientFactory()
-	fetchCtx, cancel := context.WithTimeout(ctx, caFetchTimeout)
+	// Bounds the whole fetch-with-retries so manager creation cannot hang
+	// for longer than the attempt-and-backoff envelope (see fetchCA).
+	fetchCtx, cancel := context.WithTimeout(ctx, caFetchMaxDuration)
 	defer cancel()
 	data, err := fetchCA(fetchCtx, client, caURL)
 	if err != nil {
@@ -166,16 +210,23 @@ func applyClusterCAURL(
 
 	interval := config.GetCARefreshInterval()
 	if interval <= 0 {
-		logger.V(2).Info("CA refresh disabled; cached CA only refreshes when a manager is rebuilt", "context", contextName)
-		return nil, nil
+		logger.V(2).Info("CA auto-refresh disabled; cached CA refreshes on SIGHUP or when a manager is rebuilt", "context", contextName)
 	}
+	// The refresher is kept even when auto-refresh is disabled so SIGHUP
+	// reload (Manager.RefreshCAs) can still fetch on demand; its background
+	// loop just never starts (see caRefresher.start).
 	return newCARefresher(ctx, cacheFile, caURL, client, interval, logger), nil
 }
 
 // fetchCA downloads the CA served at caURL, retrying transient failures.
 func fetchCA(ctx context.Context, client *http.Client, caURL string) ([]byte, error) {
 	for attempt := 1; ; attempt++ {
-		data, retryable, err := fetchCAOnce(ctx, client, caURL)
+		// Bound each attempt individually so a hung first attempt cannot
+		// consume the retry budget; the caller's outer deadline (see
+		// caFetchMaxDuration) still caps the whole fetch-with-retries.
+		attemptCtx, cancel := context.WithTimeout(ctx, caFetchTimeout)
+		data, retryable, err := fetchCAOnce(attemptCtx, client, caURL)
+		cancel()
 		if err == nil {
 			return data, nil
 		}
@@ -197,9 +248,19 @@ func fetchCAOnce(ctx context.Context, client *http.Client, caURL string) (data [
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, true, err
+		// Redirect-policy rejections are deterministic; retrying them only
+		// burns the retry budget.
+		return nil, !errors.Is(err, errCARedirectPolicy), err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// Clients built outside CAFetchClientFactory (tests, callers that
+	// replaced it) may follow redirects without a policy; re-check the
+	// final URL so a scheme downgrade (https to http) is still caught.
+	startURL, err := url.Parse(caURL)
+	if err == nil && resp.Request != nil && resp.Request.URL.Scheme != startURL.Scheme {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, false, fmt.Errorf("CA URL %s redirected from %s to %s", caURL, startURL.Scheme, resp.Request.URL.Scheme)
+	}
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		// Permanent client errors never become retryable; transient 5xx and
@@ -214,15 +275,11 @@ func fetchCAOnce(ctx context.Context, client *http.Client, caURL string) (data [
 	if len(body) > caMaxBodyBytes {
 		return nil, false, fmt.Errorf("CA URL %s response exceeds %d bytes", caURL, caMaxBodyBytes)
 	}
-	block, _ := pem.Decode(body)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return nil, false, fmt.Errorf("CA URL %s response is not a PEM CA certificate", caURL)
-	}
-	// AppendCertsFromPEM validates the whole bundle (it handles multi-block
-	// PEM where ParseCertificates expects raw DER).
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(body) {
-		return nil, false, fmt.Errorf("CA URL %s response is not a valid CA certificate bundle", caURL)
+	// certutil.ParseCertsPEM validates the whole bundle: every CERTIFICATE
+	// block parses, and at least one is required.
+	served, err := certutil.ParseCertsPEM(body)
+	if err != nil || len(served) == 0 {
+		return nil, false, fmt.Errorf("CA URL %s response is not a PEM CA certificate: %w", caURL, err)
 	}
 	return body, false, nil
 }
@@ -303,6 +360,12 @@ func (r *caRefresher) start() {
 	// NewKubeconfigManager is the only caller and starts the loop only
 	// after the manager is fully built, so a construction error leaves no
 	// goroutine behind that would need stopping.
+	// A zero interval disables the background loop entirely; the refresher
+	// then only fetches on demand (Manager.RefreshCAs on SIGHUP). Close
+	// sees started=false and skips waiting on a loop that never ran.
+	if r.interval <= 0 {
+		return
+	}
 	r.started.Store(true)
 	go r.loop()
 }
@@ -323,8 +386,9 @@ func (r *caRefresher) loop() {
 
 func (r *caRefresher) refreshOnce() {
 	// WithoutCancel keeps the caller's log/trace values without letting a
-	// shutdown cancel the fetch; the timeout below still bounds it.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), caFetchTimeout)
+	// shutdown cancel the fetch; caFetchMaxDuration below still bounds a
+	// fetch-with-retries.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), caFetchMaxDuration)
 	defer cancel()
 	data, err := fetchCA(ctx, r.client, r.caURL)
 	if err != nil {

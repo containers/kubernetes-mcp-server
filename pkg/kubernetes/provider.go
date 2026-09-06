@@ -34,6 +34,14 @@ type Provider interface {
 	Close()
 }
 
+// CARefresherProvider is implemented by providers that hold managers with
+// background CA refreshers. SIGHUP config reload calls RefreshCAs so a
+// rotated cluster CA (e.g. after the cluster is re-provisioned) can be
+// picked up without waiting out the refresh interval or restarting.
+type CARefresherProvider interface {
+	RefreshCAs()
+}
+
 // TokenExchangeProvider is an optional interface that providers can implement to suport per-target token exchange.
 //
 // When a provider implements this interface and GetTokenExchangeConfig returns a non-nil config for a target, token

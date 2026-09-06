@@ -53,10 +53,19 @@ type StaticConfig struct {
 	CACacheDir string `toml:"ca_cache_dir,omitempty"`
 	// CARefreshInterval is how often cached CA certificates are re-fetched
 	// so a rotated cluster CA is picked up without a restart. Zero disables
-	// re-fetching; the CA is then only refreshed when a manager is rebuilt.
-	// omitzero (not omitempty): the toml encoder never omits a zero
-	// int64-backed Duration with omitempty, which would clobber the
-	// BaseDefault value during Default()'s merge round-trip.
+	// re-fetching; the CA is then only refreshed when a manager is rebuilt
+	// or on an on-demand SIGHUP re-fetch.
+	//
+	// Zero is ambiguous here: as a toml value it means "not set" and the
+	// merge keeps the BaseDefault, while an explicit `"0s"` in a config
+	// file or --ca-refresh-interval=0 means "disabled" and is honored
+	// (config files merge by key presence, the flag assigns directly). The
+	// one exception: a build-time defaultOverride cannot express the
+	// disabled value, because mergeConfig drops zero Durations (omitzero;
+	// omitempty would clobber the BaseDefault — the encoder never omits a
+	// zero int64-backed Duration). Downstream builds that need refresh off
+	// by default must set a different value or this field becomes a
+	// *Duration.
 	CARefreshInterval Duration `toml:"ca_refresh_interval,omitzero"`
 	ListOutput        string   `toml:"list_output,omitempty"`
 	// Stateless configures the MCP server to operate in stateless mode.

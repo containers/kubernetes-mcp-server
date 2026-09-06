@@ -250,6 +250,17 @@ func (m *Manager) RESTConfig() *rest.Config {
 	return m.kubernetes.RESTConfig()
 }
 
+// RefreshCAs fetches the cluster CA now and rewrites the cache file when the
+// served CA changed (no-op without a refresher). SIGHUP config reload calls
+// this so a rotated CA can be picked up without waiting out
+// ca_refresh_interval or restarting the process. A failed fetch keeps the
+// previous CA; refreshes never fail closed.
+func (m *Manager) RefreshCAs() {
+	if m != nil && m.caRefresher != nil {
+		m.caRefresher.refreshOnce()
+	}
+}
+
 // Close releases HTTP transport resources held by this manager and stops
 // any background CA refresh loop.
 func (m *Manager) Close() {

@@ -103,6 +103,16 @@ func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create base manager: %w", err)
 	}
+	// NewKubeconfigManager starts the base manager's background CA refresher
+	// on construction. Keep it alive only when this reset succeeds; every
+	// error path below must release it, or provider construction fails with
+	// a live refresh goroutine and HTTP transport left behind.
+	baseManagerCommitted := false
+	defer func() {
+		if !baseManagerCommitted {
+			baseManager.Close()
+		}
+	}()
 
 	// The base manager may have resolved the cluster CA from the caURL
 	// kubeconfig extension. Propagate that trust anchor to the provider's
@@ -137,12 +147,10 @@ func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	for _, ws := range workspaceList {
 		p.managers[ws] = nil
 	}
-	// Store the base manager for the default workspace
-	p.managers[p.defaultWorkspace] = baseManager
 
-	// Setup watchers. Only the previous watchers are closed here; the fresh
-	// base manager stored above must stay alive (its CA refresher keeps the
-	// default workspace's CA cache fresh).
+	// Setup watchers from the base manager. Only the previous watchers are
+	// closed here; the base manager, committed below, must stay alive (its
+	// CA refresher keeps the default workspace's CA cache fresh).
 	p.closeWatchers()
 	k8s, err := baseManager.Derived(ctx)
 	if err != nil {
@@ -150,6 +158,10 @@ func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	}
 	p.workspaceWatcher = NewWorkspaceWatcher(ctx, k8s.DynamicClient(), p.defaultWorkspace)
 	p.clusterStateWatcher = watcher.NewClusterState(ctx, k8s.DiscoveryClient())
+
+	// Commit the base manager as the default workspace's manager.
+	p.managers[p.defaultWorkspace] = baseManager
+	baseManagerCommitted = true
 
 	return nil
 }
@@ -372,4 +384,23 @@ func closeManagers(managers map[string]*kubernetes.Manager) {
 func (p *kcpClusterProvider) Close() {
 	p.closeWatchers()
 	closeManagers(p.managers)
+}
+
+// RefreshCAs re-fetches every live workspace manager's cluster CA now, so
+// a rotated CA is picked up on SIGHUP without waiting out
+// ca_refresh_interval. The snapshot keeps the fetch (bounded by
+// caFetchMaxDuration) outside the lock so a reset triggered meanwhile is
+// not blocked on the network.
+func (p *kcpClusterProvider) RefreshCAs() {
+	p.mu.RLock()
+	managers := make([]*kubernetes.Manager, 0, len(p.managers))
+	for _, m := range p.managers {
+		if m != nil {
+			managers = append(managers, m)
+		}
+	}
+	p.mu.RUnlock()
+	for _, m := range managers {
+		m.RefreshCAs()
+	}
 }

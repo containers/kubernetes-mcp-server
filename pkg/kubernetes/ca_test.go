@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -136,6 +137,23 @@ func (s *ClusterCACASuite) TestValidateCAURL() {
 	})
 }
 
+func (s *ClusterCACASuite) TestCAFetchClientRedirectPolicy() {
+	s.Run("rejects a redirect to a non-https target", func() {
+		client := CAFetchClientFactory()
+		httpTarget := &http.Request{URL: &url.URL{Scheme: "http", Host: "ca.example.com"}}
+		err := client.CheckRedirect(httpTarget, nil)
+		s.Require().Error(err)
+		s.ErrorIs(err, errCARedirectPolicy)
+	})
+	s.Run("caps the redirect chain", func() {
+		client := CAFetchClientFactory()
+		httpsTarget := &http.Request{URL: &url.URL{Scheme: "https", Host: "ca.example.com"}}
+		via := make([]*http.Request, caMaxRedirects)
+		s.Require().Error(client.CheckRedirect(httpsTarget, via), "max redirects reached must be rejected")
+		s.NoError(client.CheckRedirect(httpsTarget, via[:caMaxRedirects-1]), "still within the cap must be allowed")
+	})
+}
+
 func (s *ClusterCACASuite) TestFetchCA() {
 	s.Run("fetches a PEM certificate", func() {
 		want := selfSignedPEM()
@@ -180,6 +198,29 @@ func (s *ClusterCACASuite) TestFetchCA() {
 		s.Require().NoError(err)
 		s.Equal(want, got)
 		s.GreaterOrEqual(hits.Load(), int32(2), "transient 5xx must be retried")
+	})
+	s.Run("rejects a redirect that downgrades https to http", func() {
+		want := selfSignedPEM()
+		// The CA endpoint (https) bounces the fetch to a cleartext host.
+		httpSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write(want)
+		}))
+		defer httpSrv.Close()
+		tlsSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, httpSrv.URL, http.StatusFound)
+		}))
+		defer tlsSrv.Close()
+		// A client without a redirect policy (simulating a caller that
+		// replaced CAFetchClientFactory): the post-Do scheme check must
+		// still catch the downgrade.
+		pool := x509.NewCertPool()
+		pool.AddCert(tlsSrv.Certificate())
+		downgradingClient := &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}},
+		}
+		_, err := fetchCA(context.Background(), downgradingClient, tlsSrv.URL)
+		s.Require().Error(err)
+		s.ErrorContains(err, "redirected from https to http")
 	})
 	s.Run("errors on non-PEM response without retrying forever", func() {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -290,6 +331,81 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 		// Close is safe to call twice; the refresh goroutine must not leak.
 		manager.Close()
 		manager.Close()
+	})
+	s.Run("RefreshCAs picks up a rotated CA on demand (SIGHUP path)", func() {
+		// Auto-refresh disabled; the refresher must still serve on-demand
+		// refreshes via Manager.RefreshCAs so SIGHUP can unbreak a server
+		// without waiting out an interval or restarting.
+		var mu sync.Mutex
+		currentCA := selfSignedPEM()
+		rotatedCA := selfSignedPEM()
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			mu.Lock()
+			defer mu.Unlock()
+			_, _ = w.Write(currentCA)
+		}))
+		defer srv.Close()
+		serverPool := x509.NewCertPool()
+		serverPool.AddCert(srv.Certificate())
+		originalFetchClient := CAFetchClientFactory
+		CAFetchClientFactory = func() *http.Client {
+			return &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{RootCAs: serverPool},
+				},
+			}
+		}
+		defer func() { CAFetchClientFactory = originalFetchClient }()
+
+		cfg := &config.StaticConfig{
+			KubeConfig:        kubeconfigWithCAURL(s.T(), srv.URL),
+			CACacheDir:        filepath.Join(s.T().TempDir(), "ca-cache"),
+			CARefreshInterval: config.Duration(0), // no background re-fetch
+		}
+		manager, err := NewKubeconfigManager(s.T().Context(), cfg, "")
+		s.Require().NoError(err)
+		defer manager.Close()
+		caFile := manager.kubernetes.RESTConfig().CAFile
+		s.Require().NotEmpty(caFile)
+
+		// Rotate the served CA: without a refresher loop the cache file
+		// must stay on the old CA until RefreshCAs is called.
+		mu.Lock()
+		currentCA = rotatedCA
+		mu.Unlock()
+		got, err := os.ReadFile(caFile)
+		s.Require().NoError(err)
+		s.NotEqual(rotatedCA, got, "cache must not change without an explicit refresh at interval 0")
+
+		manager.RefreshCAs()
+		got, err = os.ReadFile(caFile)
+		s.Require().NoError(err)
+		s.Equal(rotatedCA, got, "RefreshCAs must rewrite the cache with the rotated CA")
+	})
+	s.Run("rejects insecure-skip-tls-verify combined with a caURL", func() {
+		// client-go would reject the CAFile later with a cryptic error
+		// ("specifying a root certificates file with the insecure flag is
+		// not allowed"); the manager must fail fast with a message naming
+		// the conflict. Fails before any fetch, so no server is needed.
+		kc := clientcmdapi.NewConfig()
+		kc.Clusters["fake"] = &clientcmdapi.Cluster{
+			Server:                "https://127.0.0.1:1",
+			InsecureSkipTLSVerify: true,
+			Extensions: map[string]runtime.Object{
+				caExtensionName: extensionObject("https://ca.example.com/"),
+			},
+		}
+		kc.Contexts["fake"] = &clientcmdapi.Context{Cluster: "fake", AuthInfo: "fake"}
+		kc.AuthInfos["fake"] = &clientcmdapi.AuthInfo{Token: "test-token"}
+		kc.CurrentContext = "fake"
+		cfg := &config.StaticConfig{
+			KubeConfig:        test.KubeconfigFile(s.T(), kc),
+			CACacheDir:        s.T().TempDir(),
+			CARefreshInterval: config.Duration(0),
+		}
+		_, err := NewKubeconfigManager(s.T().Context(), cfg, "")
+		s.Require().Error(err)
+		s.ErrorContains(err, "insecure-skip-tls-verify")
 	})
 	s.Run("leaves rest config untouched without an extension", func() {
 		path := s.mockServerKubeconfig()
