@@ -7,6 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
@@ -24,13 +25,13 @@ const defaultKialiPort int64 = 20001
 
 // internalServiceURLs builds candidate in-cluster Service base URLs for a Kiali CR.
 // Prefer values from status/spec; fall back to CR metadata and Kiali defaults.
-func internalServiceURLs(cr *unstructured.Unstructured) []string {
+func internalServiceURLs(cr *KialiCR) []string {
 	if cr == nil {
 		return nil
 	}
-	instanceName := nestedString(cr.Object, "status", "deployment", "instanceName")
+	instanceName := cr.Status.Deployment.InstanceName
 	if instanceName == "" {
-		instanceName = nestedString(cr.Object, "spec", "deployment", "instance_name")
+		instanceName = cr.Spec.Deployment.InstanceName
 	}
 	if instanceName == "" {
 		instanceName = cr.GetName()
@@ -39,9 +40,9 @@ func internalServiceURLs(cr *unstructured.Unstructured) []string {
 		instanceName = "kiali"
 	}
 
-	ns := nestedString(cr.Object, "status", "deployment", "namespace")
+	ns := cr.Status.Deployment.Namespace
 	if ns == "" {
-		ns = nestedString(cr.Object, "spec", "deployment", "namespace")
+		ns = cr.Spec.Deployment.Namespace
 	}
 	if ns == "" {
 		ns = cr.GetNamespace()
@@ -50,12 +51,12 @@ func internalServiceURLs(cr *unstructured.Unstructured) []string {
 		return nil
 	}
 
-	port := nestedInt64(cr.Object, "spec", "server", "port")
+	port := cr.Spec.Server.Port
 	if port <= 0 {
 		port = defaultKialiPort
 	}
 
-	webRoot := nestedString(cr.Object, "spec", "server", "web_root")
+	webRoot := cr.Spec.Server.WebRoot
 	base := fmt.Sprintf("http://%s.%s.svc:%d", instanceName, ns, port)
 
 	switch webRoot {
@@ -67,24 +68,19 @@ func internalServiceURLs(cr *unstructured.Unstructured) []string {
 	}
 }
 
-func nestedString(obj map[string]any, fields ...string) string {
-	v, found, err := unstructured.NestedString(obj, fields...)
-	if !found || err != nil {
-		return ""
+func kialiFromUnstructured(obj *unstructured.Unstructured) (*KialiCR, error) {
+	if obj == nil {
+		return nil, fmt.Errorf("kiali CR is nil")
 	}
-	return strings.TrimSpace(v)
-}
-
-func nestedInt64(obj map[string]any, fields ...string) int64 {
-	v, found, err := unstructured.NestedInt64(obj, fields...)
-	if !found || err != nil {
-		return 0
+	var cr KialiCR
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &cr); err != nil {
+		return nil, err
 	}
-	return v
+	return &cr, nil
 }
 
 // listKialiCRs returns all Kiali CRs across namespaces. Returns nil when none exist or on error.
-func listKialiCRs(ctx context.Context, dc dynamic.Interface) []*unstructured.Unstructured {
+func listKialiCRs(ctx context.Context, dc dynamic.Interface) []*KialiCR {
 	if dc == nil {
 		return nil
 	}
@@ -96,9 +92,14 @@ func listKialiCRs(ctx context.Context, dc dynamic.Interface) []*unstructured.Uns
 	if list == nil || len(list.Items) == 0 {
 		return nil
 	}
-	out := make([]*unstructured.Unstructured, 0, len(list.Items))
+	out := make([]*KialiCR, 0, len(list.Items))
 	for i := range list.Items {
-		out = append(out, &list.Items[i])
+		cr, err := kialiFromUnstructured(&list.Items[i])
+		if err != nil {
+			klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
+			continue
+		}
+		out = append(out, cr)
 	}
 	return out
 }
@@ -110,14 +111,15 @@ func discoverAndValidateInternalURL(ctx context.Context, dc dynamic.Interface, c
 	if len(crs) == 0 {
 		return "", false
 	}
+
+	candidates := make([]string, 0, len(crs)*2)
 	for _, cr := range crs {
-		for _, candidate := range internalServiceURLs(cr) {
-			if probeStatusURL(ctx, candidate, cfg, bearerToken) {
-				klogutil.FromContext(ctx).V(1).Info("discovered reachable Kiali URL from CR",
-					"url", candidate, "kiali_cr", cr.GetNamespace()+"/"+cr.GetName())
-				return candidate, true
-			}
-		}
+		candidates = append(candidates, internalServiceURLs(cr)...)
+	}
+	url, ok := probeCandidateURLs(ctx, candidates, cfg, bearerToken)
+	if ok {
+		klogutil.FromContext(ctx).V(1).Info("discovered reachable Kiali URL from CR", "url", url)
+		return url, true
 	}
 	klogutil.FromContext(ctx).V(1).Info("Kiali CR(s) found but no reachable in-cluster URL")
 	return "", false

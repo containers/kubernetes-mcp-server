@@ -20,7 +20,7 @@ func (s *MeshStatusToolSuite) TestToolRegistration() {
 		s.Equal("Get Mesh Status", tools[0].Tool.Annotations.Title)
 		s.NotNil(tools[0].Tool.InputSchema)
 		s.NotNil(tools[0].Handler)
-		s.Empty(tools[0].TargetCompatibilityFilters, "Filters are applied by the toolset, not Init*")
+		s.Empty(tools[0].TargetCompatibilityFilters, "Reachability filtering is handled by the toolset GetTools")
 	})
 }
 

@@ -3,7 +3,6 @@ package kiali
 import (
 	"context"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -19,13 +18,8 @@ import (
 // Target-compatibility filtering enables Kiali tools when:
 //   - [toolset_configs.kiali].url is set and GET {url}/api/status succeeds, or
 //   - no URL is set, a Kiali CRD/CR path can discover a working in-cluster
-//     Service URL (via kubernetes.Provider when available, otherwise well-known
-//     Service DNS candidates after the Kiali GVK is detected).
-//
-// URL / config checks use api.ExtendedConfigProvider on the FilteringProvider
-// (kubernetes.Provider embeds api.BaseConfig). Cluster listing for CRs is
-// optional and only used when the provider also implements
-// kubernetes.Provider — no generic MCP changes are required for the URL-probe path.
+//     Service URL via kubernetes.Provider (or well-known Service DNS when the
+//     Kiali GVK is present but no cluster client is available).
 var KialiGVK = schema.GroupVersionKind{
 	Group:   "kiali.io",
 	Version: "v1alpha1",
@@ -52,28 +46,20 @@ func getDiscoveredURL() string {
 	return ""
 }
 
-// HasKiali returns a TargetCompatibilityFilter that is true when Kiali is
-// reachable: either a configured URL passes GET /api/status, or an in-cluster
-// Service URL can be discovered and probed.
+// HasKiali reports whether Kiali is reachable: either a configured URL passes
+// GET /api/status, or an in-cluster Service URL can be discovered and probed.
 //
-// The returned closure memoizes the result (sync.Once). Callers that register
-// the filter on many tools should share one closure (see Toolset.GetTools).
-func HasKiali(p api.FilteringProvider) func() bool {
-	var once sync.Once
-	var available bool
-	return func() bool {
-		once.Do(func() {
-			available = evaluateKialiAvailability(context.TODO(), p)
-		})
-		return available
-	}
+// fp supplies config and optional GVK discovery; kp is the Kubernetes provider
+// used for CR listing and bearer tokens (may be nil in tests).
+func HasKiali(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provider) bool {
+	return evaluateKialiAvailability(ctx, fp, kp)
 }
 
-func evaluateKialiAvailability(ctx context.Context, p api.FilteringProvider) bool {
-	cfg, cfgOK := kialiConfigFromProvider(p)
+func evaluateKialiAvailability(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provider) bool {
+	cfg, cfgOK := kialiConfigFromProvider(fp)
 	if cfgOK && strings.TrimSpace(cfg.Url) != "" {
 		setDiscoveredURL("")
-		token := bearerTokenFromProvider(ctx, p)
+		token := bearerTokenFromProvider(ctx, kp)
 		ok := probeStatusURL(ctx, cfg.Url, cfg, token)
 		if !ok {
 			klogutil.FromContext(ctx).V(1).Info("configured Kiali URL failed /api/status probe; disabling Kiali tools",
@@ -83,28 +69,28 @@ func evaluateKialiAvailability(ctx context.Context, p api.FilteringProvider) boo
 	}
 
 	// No configured URL: discover + probe an in-cluster Service URL.
-	if kp, ok := p.(kubernetes.Provider); ok {
-		return discoverInjectAndProbe(ctx, cfg, cfgOK, kp)
+	if kp != nil {
+		return discoverInjectAndProbe(ctx, cfg, kp)
 	}
 
-	// FilteringProvider wrappers may not expose kubernetes.Provider. Fall back to
-	// GVK presence + well-known Service DNS candidates (no generic MCP API change).
-	if p == nil || !p.AnyTargetHasGVKs(ctx, []schema.GroupVersionKind{KialiGVK}) {
+	// No kubernetes provider (typical in unit tests): fall back to GVK presence +
+	// well-known Service DNS candidates.
+	if fp == nil || !fp.AnyTargetHasGVKs(ctx, []schema.GroupVersionKind{KialiGVK}) {
 		setDiscoveredURL("")
 		return false
 	}
-	token := bearerTokenFromProvider(ctx, p)
+	token := bearerTokenFromProvider(ctx, nil)
 	url, ok := probeCandidateURLs(ctx, wellKnownInternalURLs(), cfg, token)
 	if !ok {
 		klogutil.FromContext(ctx).V(1).Info("Kiali GVK present but no reachable well-known in-cluster URL")
 		setDiscoveredURL("")
 		return false
 	}
-	injectDiscoveredURL(cfg, cfgOK, url)
+	storeDiscoveredURL(ctx, url)
 	return true
 }
 
-func discoverInjectAndProbe(ctx context.Context, cfg *Config, cfgOK bool, kp kubernetes.Provider) bool {
+func discoverInjectAndProbe(ctx context.Context, cfg *Config, kp kubernetes.Provider) bool {
 	k8s, err := kp.GetDerivedKubernetes(ctx, kp.GetDefaultTarget())
 	if err != nil || k8s == nil {
 		klogutil.FromContext(ctx).V(2).Info("Kiali discovery skipped: cannot derive Kubernetes client", "error", err)
@@ -124,22 +110,17 @@ func discoverInjectAndProbe(ctx context.Context, cfg *Config, cfgOK bool, kp kub
 		setDiscoveredURL("")
 		return false
 	}
-	injectDiscoveredURL(cfg, cfgOK, url)
+	storeDiscoveredURL(ctx, url)
 	return true
 }
 
-func injectDiscoveredURL(cfg *Config, cfgOK bool, url string) {
+func storeDiscoveredURL(ctx context.Context, url string) {
 	setDiscoveredURL(url)
-	if cfgOK && cfg != nil {
-		cfg.Url = url
-		klogutil.FromContext(context.TODO()).V(1).Info("injected discovered Kiali URL into toolset config", "url", url)
-		return
-	}
-	klogutil.FromContext(context.TODO()).V(1).Info("stored discovered Kiali URL for client use", "url", url)
+	klogutil.FromContext(ctx).V(1).Info("stored discovered Kiali URL for client use", "url", url)
 }
 
-func kialiConfigFromProvider(p api.FilteringProvider) (*Config, bool) {
-	cfgProvider, ok := p.(api.ExtendedConfigProvider)
+func kialiConfigFromProvider(fp api.FilteringProvider) (*Config, bool) {
+	cfgProvider, ok := fp.(api.ExtendedConfigProvider)
 	if !ok || cfgProvider == nil {
 		return nil, false
 	}
@@ -154,9 +135,8 @@ func kialiConfigFromProvider(p api.FilteringProvider) (*Config, bool) {
 	return kc, true
 }
 
-func bearerTokenFromProvider(ctx context.Context, p api.FilteringProvider) string {
-	kp, ok := p.(kubernetes.Provider)
-	if !ok {
+func bearerTokenFromProvider(ctx context.Context, kp kubernetes.Provider) string {
+	if kp == nil {
 		return ""
 	}
 	k8s, err := kp.GetDerivedKubernetes(ctx, kp.GetDefaultTarget())
@@ -167,7 +147,7 @@ func bearerTokenFromProvider(ctx context.Context, p api.FilteringProvider) strin
 }
 
 // wellKnownInternalURLs are tried when a Kiali CR cannot be listed through the
-// FilteringProvider (typical MCP wrapper) but the Kiali GVK is present.
+// kubernetes provider but the Kiali GVK is present.
 func wellKnownInternalURLs() []string {
 	hosts := []string{
 		"kiali.istio-system.svc",
@@ -180,13 +160,4 @@ func wellKnownInternalURLs() []string {
 		out = append(out, base, base+"/kiali")
 	}
 	return out
-}
-
-func probeCandidateURLs(ctx context.Context, candidates []string, cfg *Config, bearerToken string) (string, bool) {
-	for _, candidate := range candidates {
-		if probeStatusURL(ctx, candidate, cfg, bearerToken) {
-			return candidate, true
-		}
-	}
-	return "", false
 }
