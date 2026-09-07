@@ -1,11 +1,14 @@
 package kiali
 
 import (
+	"context"
 	"slices"
 
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
@@ -25,7 +28,24 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
-	return kialiTools.All(p)
+	kialiclient.WarnIfEmptyURLWithoutDiscovery(p)
+	if p.IsTargetCompatibilityToolFiltersEnabled() && !kialiAvailable(p) {
+		return nil
+	}
+
+	tools := kialiTools.All()
+	for i := range tools {
+		tools[i].ClusterAware = ptr.To(false)
+	}
+	return tools
+}
+
+func kialiAvailable(p api.FilteringProvider) bool {
+	var kp kubernetes.Provider
+	if provider, ok := p.(kubernetes.Provider); ok {
+		kp = provider
+	}
+	return kialiclient.HasKiali(context.Background(), p, kp)
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {

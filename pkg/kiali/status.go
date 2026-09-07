@@ -6,14 +6,17 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 const (
 	statusPath         = "/api/status"
-	statusProbeTimeout = 3 * time.Second
+	statusProbeTimeout = time.Second
 )
 
 // statusResponse is the subset of Kiali GET /api/status used for reachability checks.
@@ -55,7 +58,6 @@ func probeStatusURL(ctx context.Context, baseURL string, cfg *Config, bearerToke
 		klogutil.FromContext(ctx).V(2).Info("kiali status probe: failed to create HTTP client", "error", err)
 		return false
 	}
-	client.Timeout = statusProbeTimeout
 
 	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, statusURL, nil)
 	if err != nil {
@@ -93,4 +95,40 @@ func probeStatusURL(ctx context.Context, baseURL string, cfg *Config, bearerToke
 	}
 	klogutil.FromContext(ctx).V(2).Info("kiali status probe succeeded", "url", statusURL)
 	return true
+}
+
+func probeCandidateURLs(ctx context.Context, candidates []string, cfg *Config, bearerToken string) (string, bool) {
+	if len(candidates) == 0 {
+		return "", false
+	}
+	if len(candidates) == 1 {
+		if probeStatusURL(ctx, candidates[0], cfg, bearerToken) {
+			return candidates[0], true
+		}
+		return "", false
+	}
+
+	probeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu    sync.Mutex
+		found string
+	)
+	g, gctx := errgroup.WithContext(probeCtx)
+	for _, candidate := range candidates {
+		g.Go(func() error {
+			if probeStatusURL(gctx, candidate, cfg, bearerToken) {
+				mu.Lock()
+				if found == "" {
+					found = candidate
+					cancel()
+				}
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return found, found != ""
 }

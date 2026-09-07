@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -45,15 +46,15 @@ func (f *fakeFilteringProviderWithConfig) GetToolsetConfig(name string) (api.Ext
 
 func TestInternalServiceURLs(t *testing.T) {
 	t.Run("uses status deployment fields and tries web_root defaults", func(t *testing.T) {
-		cr := &unstructured.Unstructured{Object: map[string]any{
-			"metadata": map[string]any{"name": "kiali", "namespace": "istio-system"},
-			"status": map[string]any{
-				"deployment": map[string]any{
-					"instanceName": "kiali",
-					"namespace":    "istio-system",
+		cr := &KialiCR{
+			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+			Status: KialiStatus{
+				Deployment: KialiDeploymentStatus{
+					InstanceName: "kiali",
+					Namespace:    "istio-system",
 				},
 			},
-		}}
+		}
 		urls := internalServiceURLs(cr)
 		if len(urls) != 2 {
 			t.Fatalf("expected 2 candidates, got %v", urls)
@@ -67,13 +68,19 @@ func TestInternalServiceURLs(t *testing.T) {
 	})
 
 	t.Run("honors explicit web_root and port", func(t *testing.T) {
-		cr := &unstructured.Unstructured{Object: map[string]any{
-			"metadata": map[string]any{"name": "my-kiali", "namespace": "mesh"},
-			"spec": map[string]any{
-				"deployment": map[string]any{"instance_name": "my-kiali", "namespace": "mesh"},
-				"server":     map[string]any{"port": int64(20001), "web_root": "/kiali"},
+		cr := &KialiCR{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-kiali", Namespace: "mesh"},
+			Spec: KialiSpec{
+				Deployment: KialiDeploymentSpec{
+					InstanceName: "my-kiali",
+					Namespace:    "mesh",
+				},
+				Server: KialiServerSpec{
+					Port:    20001,
+					WebRoot: "/kiali",
+				},
 			},
-		}}
+		}
 		urls := internalServiceURLs(cr)
 		if len(urls) != 1 || urls[0] != "http://my-kiali.mesh.svc:20001/kiali" {
 			t.Fatalf("unexpected URLs: %v", urls)
@@ -131,7 +138,7 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 				"kiali": &Config{Url: srv.URL},
 			},
 		}
-		if !HasKiali(p)() {
+		if !HasKiali(context.Background(), p, nil) {
 			t.Fatal("expected HasKiali true for reachable configured URL")
 		}
 	})
@@ -143,7 +150,7 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 				"kiali": &Config{Url: "http://127.0.0.1:1"},
 			},
 		}
-		if HasKiali(p)() {
+		if HasKiali(context.Background(), p, nil) {
 			t.Fatal("expected HasKiali false for unreachable configured URL")
 		}
 	})
@@ -157,7 +164,7 @@ func TestHasKiali_DiscoverFromCR(t *testing.T) {
 				"kiali": &Config{},
 			},
 		}
-		if HasKiali(p)() {
+		if HasKiali(context.Background(), p, nil) {
 			t.Fatal("expected false without cluster access for discovery")
 		}
 	})
@@ -184,8 +191,27 @@ func TestHasKiali_DiscoverFromCR(t *testing.T) {
 }
 
 func TestHasKiali_NoURLNoCR(t *testing.T) {
-	filter := HasKiali(&fakeFilteringProvider{hasGVKs: false})
-	if filter() {
+	if HasKiali(context.Background(), &fakeFilteringProvider{hasGVKs: false}, nil) {
 		t.Fatal("expected false when no URL and no cluster access")
 	}
+}
+
+func TestProbeCandidateURLs(t *testing.T) {
+	t.Run("returns first reachable URL", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": map[string]any{"Kiali state": "running"},
+			})
+		}))
+		defer srv.Close()
+
+		url, ok := probeCandidateURLs(context.Background(), []string{
+			"http://127.0.0.1:1",
+			srv.URL,
+			"http://127.0.0.1:2",
+		}, nil, "")
+		if !ok || url != srv.URL {
+			t.Fatalf("expected reachable URL %q, got %q ok=%v", srv.URL, url, ok)
+		}
+	})
 }
