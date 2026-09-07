@@ -49,9 +49,6 @@ func getDiscoveredURL() string {
 
 // HasKiali reports whether Kiali is reachable: either a configured URL passes
 // GET /api/status, or an in-cluster Service URL can be discovered and probed.
-//
-// cfg supplies toolset_configs.kiali; kp is used for live config, CR listing,
-// and bearer tokens; inspector supports GVK discovery when kp is nil.
 func HasKiali(ctx context.Context, cfg *config.Config, kp kubernetes.Provider, inspector api.ClusterInspector) bool {
 	return evaluateKialiAvailability(ctx, cfg, kp, inspector)
 }

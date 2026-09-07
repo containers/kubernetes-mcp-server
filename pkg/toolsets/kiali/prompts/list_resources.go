@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -10,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
-func InitListApplications() []api.ServerPrompt {
+func InitListApplications(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: config.Prompt{
@@ -25,13 +26,13 @@ func InitListApplications() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("app"),
 		},
 	}
 }
 
-func InitListNamespaces() []api.ServerPrompt {
+func InitListNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: config.Prompt{
@@ -39,13 +40,13 @@ func InitListNamespaces() []api.ServerPrompt {
 				Title:       "List Mesh Namespaces",
 				Description: "List all namespaces with their sidecar injection status and Istio labels",
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("namespace"),
 		},
 	}
 }
 
-func InitListServices() []api.ServerPrompt {
+func InitListServices(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: config.Prompt{
@@ -60,13 +61,13 @@ func InitListServices() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("service"),
 		},
 	}
 }
 
-func InitListWorkloads() []api.ServerPrompt {
+func InitListWorkloads(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: config.Prompt{
@@ -81,7 +82,7 @@ func InitListWorkloads() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("workload"),
 		},
 	}
@@ -102,7 +103,7 @@ func InitListIstioConfig() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.IstioConfigReadRBAC(),
 			Handler: listIstioConfigHandler,
 		},
 	}
@@ -170,7 +171,7 @@ func InitMeshTopology() []api.ServerPrompt {
 				Title:       "Mesh Topology Overview",
 				Description: "Show the mesh topology including control plane components and cluster connectivity",
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.MeshStatusRBAC(),
 			Handler: meshTopologyHandler,
 		},
 	}
