@@ -30,6 +30,11 @@ AGENT ?= builtin-openai
 SUITE ?= core
 MODEL ?=
 
+# When true, run-server passes --read-only to the binary so only tools
+# annotated readOnlyHint=true are exposed. Required by the core-readonly
+# suite (see evals/README.md); its tasks assume write tools are unavailable.
+READ_ONLY ?= false
+
 # Prefer a per-suite eval config when one exists, then try the core-eval-testing
 # suite config (what CI uses).
 EVAL_CONFIG ?= $(or $(wildcard evals/tasks/$(SUITE)/$(AGENT)/eval.yaml),evals/core-eval-testing/$(AGENT)/eval-$(SUITE).yaml)
@@ -98,9 +103,10 @@ diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
 	$(MCPCHECKER) diff --base "$$BASELINE" --current "$$RESULTS_FILE" --output markdown
 
 .PHONY: run-server
-run-server: build ## Start MCP server in background and wait for health check
+run-server: build ## Start MCP server in background and wait for health check (knobs: TOOLSETS, READ_ONLY)
 	@echo "Starting MCP server on port $(MCP_PORT)..."
-	./$(BINARY_NAME) --port $(MCP_PORT) $(if $(TOOLSETS),--toolsets "$(TOOLSETS)") --config-dir $(MCP_CONFIG_DIR) $(if $(MCP_EVAL_KUBECONFIG),--kubeconfig "$(MCP_EVAL_KUBECONFIG)") & echo $$! > .mcp-server.pid
+	@if [ "$(READ_ONLY)" = "true" ]; then echo "Starting server with --read-only (only readOnlyHint=true tools are exposed)"; fi
+	./$(BINARY_NAME) --port $(MCP_PORT) $(if $(TOOLSETS),--toolsets "$(TOOLSETS)") --config-dir $(MCP_CONFIG_DIR) $(if $(MCP_EVAL_KUBECONFIG),--kubeconfig "$(MCP_EVAL_KUBECONFIG)") $(if $(filter true,$(READ_ONLY)),--read-only) & echo $$! > .mcp-server.pid
 	@echo "MCP server started with PID $$(cat .mcp-server.pid)"
 	@echo "Waiting for MCP server to be ready..."
 	@elapsed=0; \
