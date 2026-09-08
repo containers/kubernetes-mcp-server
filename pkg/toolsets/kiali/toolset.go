@@ -3,17 +3,21 @@ package kiali
 import (
 	"context"
 	"slices"
+	"sync"
 
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
 	kialiTools "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
+
+var warnKialiValidationDisabledOnce sync.Once
 
 type Toolset struct{}
 
@@ -28,8 +32,14 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
-	kialiclient.WarnIfEmptyURLWithoutDiscovery(p)
-	if p.IsTargetCompatibilityToolFiltersEnabled() && !kialiAvailable(p) {
+	if p != nil && !p.IsTargetCompatibilityToolFiltersEnabled() {
+		warnKialiValidationDisabledOnce.Do(func() {
+			klogutil.LogWarn(
+				klogutil.FromContext(context.Background()),
+				"experimental_enable_target_compatibility_tool_filters is disabled; Kiali URL reachability and in-cluster discovery are not validated",
+			)
+		})
+	} else if p != nil && p.IsTargetCompatibilityToolFiltersEnabled() && !kialiAvailable(p) {
 		return nil
 	}
 
