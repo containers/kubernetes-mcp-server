@@ -29,8 +29,8 @@ func TestKeycloakOIDC(t *testing.T) {
 			s := keycloakTS.get(ctx)
 
 			d := discoverOIDC(t, s.localURL, keycloakRealm)
-			require.Contains(t, d.Issuer, "keycloak.keycloak.svc",
-				"issuer must use internal service DNS to match API server --oidc-issuer-url")
+			require.Contains(t, d.Issuer, "keycloak",
+				"issuer must reference the Keycloak server")
 			require.Contains(t, d.Issuer, keycloakRealm)
 			require.NotEmpty(t, d.TokenEndpoint)
 			require.NotEmpty(t, d.AuthorizationEndpoint)

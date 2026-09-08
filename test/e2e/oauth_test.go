@@ -31,11 +31,34 @@ import (
 const (
 	keycloakRealm = "openshift"
 
+	// keycloakDefaultBaseURL is the internal cluster URL for Keycloak when no
+	// override is set. On Minikube this is the only URL; on OCP the env var
+	// KEYCLOAK_ISSUER_URL overrides it to the Route URL so the kube-apiserver
+	// (which runs on host networking) can reach Keycloak.
+	keycloakDefaultBaseURL = "https://keycloak.keycloak.svc:8443"
+
 	// caSecretName is the secret holding the CA cert the MCP server trusts when
 	// talking to Keycloak; caMountPath is where the chart mounts it in the pod.
 	caSecretName = "keycloak-ca"
 	caMountPath  = "/etc/keycloak-ca"
 )
+
+// keycloakIssuerURL returns the Keycloak issuer URL (base + realm) used in
+// OIDC configuration and token issuer assertions. Override with
+// KEYCLOAK_ISSUER_URL when the kube-apiserver reaches Keycloak via a
+// different URL than the in-cluster service DNS (e.g. an OpenShift Route).
+func keycloakIssuerURL() string {
+	return envOrDefault("KEYCLOAK_ISSUER_URL", keycloakDefaultBaseURL+"/realms/"+keycloakRealm)
+}
+
+// keycloakBaseURL returns just the Keycloak base URL (without /realms/...).
+func keycloakBaseURL() string {
+	issuer := keycloakIssuerURL()
+	if idx := strings.Index(issuer, "/realms/"); idx != -1 {
+		return issuer[:idx]
+	}
+	return envOrDefault("KEYCLOAK_BASE_URL", keycloakDefaultBaseURL)
+}
 
 // oidcDiscovery is the subset of the OIDC discovery document the tests use.
 type oidcDiscovery struct {
@@ -245,17 +268,31 @@ func mcpViewerToken(t *testing.T, keycloakURL string, scopes ...string) string {
 	})
 }
 
-// copyKeycloakCASecret copies the cert-manager self-signed CA into the test
-// namespace as the caSecretName secret so the MCP server pod can mount it and
-// trust Keycloak's TLS. Intended as a deployServer preInstall hook.
+// copyKeycloakCASecret copies the CA certificate that the MCP server needs to
+// trust Keycloak's TLS into the test namespace. On Minikube this is the
+// cert-manager self-signed CA (from cert-manager/selfsigned-ca-secret). Set
+// KEYCLOAK_CA_SECRET to "namespace/name" to override the source (e.g. an
+// OpenShift ingress CA secret); the secret must contain a "ca.crt" data key.
 func copyKeycloakCASecret(ctx context.Context, t *testing.T, clientset kubernetes.Interface, namespace string) {
 	t.Helper()
-	caSecret, err := clientset.CoreV1().Secrets("cert-manager").Get(ctx, "selfsigned-ca-secret", metav1.GetOptions{})
-	require.NoError(t, err, "get cert-manager CA secret")
 
-	_, err = clientset.CoreV1().Secrets(namespace).Create(ctx, &corev1.Secret{
+	var caCert []byte
+	if src := os.Getenv("KEYCLOAK_CA_SECRET"); src != "" {
+		parts := strings.SplitN(src, "/", 2)
+		require.Len(t, parts, 2, "KEYCLOAK_CA_SECRET must be namespace/name, got %q", src)
+		secret, err := clientset.CoreV1().Secrets(parts[0]).Get(ctx, parts[1], metav1.GetOptions{})
+		require.NoError(t, err, "get CA secret %s", src)
+		caCert = secret.Data["ca.crt"]
+		require.NotEmpty(t, caCert, "CA secret %s has no ca.crt key", src)
+	} else {
+		caSecret, err := clientset.CoreV1().Secrets("cert-manager").Get(ctx, "selfsigned-ca-secret", metav1.GetOptions{})
+		require.NoError(t, err, "get cert-manager CA secret")
+		caCert = caSecret.Data["ca.crt"]
+	}
+
+	_, err := clientset.CoreV1().Secrets(namespace).Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: caSecretName},
-		Data:       map[string][]byte{"ca.crt": caSecret.Data["ca.crt"]},
+		Data:       map[string][]byte{"ca.crt": caCert},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err, "create CA secret in test namespace")
 }
@@ -443,13 +480,14 @@ func oidcServerConfig(oauthScopes []string) string {
 		oauth_audience = "mcp-server"
 		oauth_scopes = %s
 		validate_token = false
-		authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
+		authorization_url = "%s"
 		sts_client_id = "mcp-server"
 		sts_client_secret = "mcp-server-dev-secret"
 		sts_audience = "openshift"
 		sts_scopes = ["mcp:openshift"]
 		certificate_authority = "%s/ca.crt"
-	`, scopes, caMountPath)
+		denied_resources = []
+	`, scopes, keycloakIssuerURL(), caMountPath)
 }
 
 // tomlStringArray renders a Go string slice as a TOML array literal.
