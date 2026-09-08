@@ -8,11 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 // Config holds Kiali toolset configuration
@@ -95,30 +93,6 @@ func kialiToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.M
 	}
 
 	return &cfg, nil
-}
-
-var warnEmptyURLWithoutDiscoveryOnce sync.Once
-
-// WarnIfEmptyURLWithoutDiscovery logs once when Kiali has no configured URL and
-// target-compatibility filtering is disabled, so in-cluster auto-discovery will not run.
-func WarnIfEmptyURLWithoutDiscovery(ctx context.Context, cfg *config.Config, targetCompatibilityFiltersEnabled bool) {
-	if targetCompatibilityFiltersEnabled || cfg == nil {
-		return
-	}
-	ext, ok := cfg.GetToolsetConfig("kiali")
-	if !ok {
-		return
-	}
-	kc, ok := ext.(*Config)
-	if !ok || kc == nil || strings.TrimSpace(kc.Url) != "" {
-		return
-	}
-	warnEmptyURLWithoutDiscoveryOnce.Do(func() {
-		klogutil.LogWarn(
-			klogutil.FromContext(ctx),
-			"Kiali url is empty and experimental_enable_target_compatibility_tool_filters is disabled; Kiali tools will not auto-discover an in-cluster URL",
-		)
-	})
 }
 
 func init() {

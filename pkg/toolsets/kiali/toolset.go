@@ -32,7 +32,6 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
-	kialiclient.WarnIfEmptyURLWithoutDiscovery(ctx, toolsetContext.Config, toolsetContext.TargetCompatibilityFiltersEnabled)
 	if !toolsetContext.TargetCompatibilityFiltersEnabled {
 		warnKialiValidationDisabledOnce.Do(func() {
 			klogutil.LogWarn(
