@@ -85,7 +85,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// verifies the signature against Keycloak's JWKS — a different path
 			// than A4 (unparseable) and A5 (offline audience mismatch).
 			badlySigned := mintJWT(t, jwt.Claims{
-				Issuer:   "https://keycloak.keycloak.svc:8443/realms/openshift",
+				Issuer:   keycloakIssuerURL(),
 				Subject:  "e2e-throwaway",
 				Audience: jwt.Audience{"mcp-server"},
 				Expiry:   jwt.NewNumericDate(time.Now().Add(time.Hour)),
@@ -101,7 +101,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// A4 (unparseable). The expiry is set well beyond go-jose's default
 			// 1-minute leeway.
 			expired := mintJWT(t, jwt.Claims{
-				Issuer:   "https://keycloak.keycloak.svc:8443/realms/openshift",
+				Issuer:   keycloakIssuerURL(),
 				Subject:  "e2e-throwaway",
 				Audience: jwt.Audience{"mcp-server"},
 				Expiry:   jwt.NewNumericDate(time.Now().Add(-time.Hour)),
@@ -118,7 +118,7 @@ func TestOAuthOIDCFlows(t *testing.T) {
 			// E1: openid-configuration is proxied from Keycloak.
 			oidcCfg, _ := requireWellKnown(t, base, "/.well-known/openid-configuration")
 			issuer, _ := oidcCfg["issuer"].(string)
-			require.Contains(t, issuer, "keycloak.keycloak.svc", "issuer = %q", issuer)
+			require.Contains(t, issuer, "keycloak", "issuer = %q", issuer)
 			require.NotEmpty(t, oidcCfg["token_endpoint"], "openid-configuration token_endpoint")
 
 			// E2: oauth-protected-resource (RFC 9728) metadata, plus E8 CORS header.
@@ -264,7 +264,7 @@ func TestOAuthForwardedIdentity(t *testing.T) {
 			// forwarded user token it runs as the cluster-admin user.
 			s := oauthIdentityTS.get(ctx)
 			dep := deployServer(ctx, t, cfg, "oauth-open-fwd",
-				withConfig("require_oauth = false"),
+				withConfig("require_oauth = false\ndenied_resources = []"),
 				withValues(viewClusterRoleBindingValues()),
 			)
 
@@ -291,7 +291,7 @@ func TestOAuthForwardedIdentity(t *testing.T) {
 			// authority. The forwarded user token acts as the cluster-admin user.
 			s := oauthIdentityTS.get(ctx)
 			dep := deployServer(ctx, t, cfg, "oauth-passthrough-fwd",
-				withConfig("require_oauth = true\nskip_jwt_verification = true"),
+				withConfig("require_oauth = true\nskip_jwt_verification = true\ndenied_resources = []"),
 				withValues(viewClusterRoleBindingValues()),
 			)
 
@@ -473,7 +473,7 @@ func TestOAuthSTSAssertion(t *testing.T) {
 				oauth_audience = "mcp-server-jwt"
 				oauth_scopes = ["openid", "mcp-server-jwt"]
 				validate_token = false
-				authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
+				authorization_url = "%s"
 				sts_client_id = "mcp-server-jwt"
 				sts_audience = "openshift"
 				sts_scopes = ["mcp:openshift"]
@@ -482,7 +482,8 @@ func TestOAuthSTSAssertion(t *testing.T) {
 				sts_client_cert_file = %q
 				sts_client_key_file = %q
 				certificate_authority = "%s/ca.crt"
-			`, stsAssertionCertPath, stsAssertionKeyPath, caMountPath)
+				denied_resources = []
+			`, keycloakIssuerURL(), stsAssertionCertPath, stsAssertionKeyPath, caMountPath)
 
 			dep := deployServer(ctx, t, cfg, "oauth-sts-assertion",
 				withConfig(assertionConfig),
