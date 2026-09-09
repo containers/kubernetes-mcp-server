@@ -89,6 +89,27 @@ Open your `claude_desktop_config.json` and add the mcp server to the list of `mc
 }
 ```
 
+### Codex
+
+Install the kubernetes MCP server using the codex cli directly:
+
+```shell
+codex mcp add kubernetes -- npx -y "kubernetes-mcp-server@latest"
+```
+
+Otherwise add the following section to your `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.kubernetes]
+command = "npx"
+args = ["-y", "kubernetes-mcp-server@latest"]
+```
+
+See the output of `codex mcp add --help` for further configuration details.
+
+The `npx` tool comes from the `npm` toolkit.
+
+
 ### VS Code / VS Code Insiders
 
 Install the Kubernetes MCP server extension in VS Code Insiders by pressing the following link:
