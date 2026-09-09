@@ -59,7 +59,7 @@ func (c *TokenExchangeConfig) GetClientAuth() api.TokenExchangeClientAuth {
 
 // TokenExchangeClientAuth is the TOML configuration for token exchange client authentication.
 type TokenExchangeClientAuth struct {
-	Method          api.TokenExchangeClientAuthMethod `toml:"method"`
+	Method          api.TokenExchangeClientAuthMethod `toml:"method,omitempty"`
 	ClientID        string                            `toml:"client_id,omitempty"`
 	ClientSecret    string                            `toml:"client_secret,omitempty"`
 	CertificateFile string                            `toml:"certificate_file,omitempty"`
