@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -70,15 +71,10 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Cont
 		return nil
 	}
 
-	var tokenURL string
-	if snap.OIDCProvider != nil {
-		if endpoint := snap.OIDCProvider.Endpoint(); endpoint.TokenURL != "" {
-			tokenURL = endpoint.TokenURL
-		}
-	}
+	tokenURL := resolveTokenExchangeURL(global, snap.OIDCProvider)
 	if tokenURL == "" {
 		p.tokenExchangeCache.clear()
-		klogutil.LogWarn(klogutil.FromContext(ctx), "OIDC provider returned no token endpoint; token exchange is unavailable",
+		klogutil.LogWarn(klogutil.FromContext(ctx), "no token endpoint available for token exchange (set token_exchange.token_url or configure authorization_url for OIDC discovery)",
 			klogutil.Field("strategy", global.GetStrategy()))
 		return nil
 	}
@@ -99,6 +95,22 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Cont
 		cfg.SetRequireTLS(baseConfig.IsRequireTLS)
 		return cfg
 	})
+}
+
+// resolveTokenExchangeURL returns the explicit token_exchange.token_url if
+// configured; otherwise falls back to the OIDC provider's discovered token
+// endpoint. The explicit URL decouples the token-exchange endpoint from the
+// user-token issuer (authorization_url), which is required for cross-realm
+// RFC 8693 deployments and enables token exchange when
+// skip_jwt_verification=true (no OIDC provider).
+func resolveTokenExchangeURL(global api.TokenExchangeConfig, oidcProvider *oidc.Provider) string {
+	if explicit := global.GetTokenURL(); explicit != "" {
+		return explicit
+	}
+	if oidcProvider != nil {
+		return oidcProvider.Endpoint().TokenURL
+	}
+	return ""
 }
 
 func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth api.TokenExchangeClientAuth) {

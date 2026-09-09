@@ -73,6 +73,9 @@ type TokenExchangeConfig interface {
 	GetScopes() []string
 	GetSubjectTokenType() string
 	GetRequestedTokenType() string
+	// GetTokenURL returns the explicit token-exchange endpoint. When empty,
+	// callers fall back to the OIDC provider's discovered token endpoint.
+	GetTokenURL() string
 	GetClientAuth() TokenExchangeClientAuth
 }
 

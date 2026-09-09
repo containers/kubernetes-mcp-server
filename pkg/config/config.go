@@ -38,12 +38,20 @@ type ToolOverride struct {
 
 // TokenExchangeConfig is the TOML configuration for global token exchange.
 type TokenExchangeConfig struct {
-	Strategy           string                   `toml:"strategy,omitempty"`
-	Audience           string                   `toml:"audience,omitempty"`
-	Scopes             []string                 `toml:"scopes,omitempty"`
-	SubjectTokenType   string                   `toml:"subject_token_type,omitempty"`
-	RequestedTokenType string                   `toml:"requested_token_type,omitempty"`
-	ClientAuth         *TokenExchangeClientAuth `toml:"client_auth,omitempty"`
+	Strategy           string   `toml:"strategy,omitempty"`
+	Audience           string   `toml:"audience,omitempty"`
+	Scopes             []string `toml:"scopes,omitempty"`
+	SubjectTokenType   string   `toml:"subject_token_type,omitempty"`
+	RequestedTokenType string   `toml:"requested_token_type,omitempty"`
+	// TokenURL is the explicit token-exchange endpoint. When set, it takes
+	// precedence over the token endpoint discovered from the OIDC provider at
+	// authorization_url. This decouples the trust boundary for user-token
+	// validation (authorization_url) from the trust boundary for delegated-token
+	// issuance (the STS/exchange endpoint), which is required for cross-realm
+	// deployments and for using token exchange together with
+	// skip_jwt_verification=true.
+	TokenURL   string                   `toml:"token_url,omitempty"`
+	ClientAuth *TokenExchangeClientAuth `toml:"client_auth,omitempty"`
 }
 
 func (c *TokenExchangeConfig) GetStrategy() string           { return c.Strategy }
@@ -51,6 +59,7 @@ func (c *TokenExchangeConfig) GetAudience() string           { return c.Audience
 func (c *TokenExchangeConfig) GetScopes() []string           { return c.Scopes }
 func (c *TokenExchangeConfig) GetSubjectTokenType() string   { return c.SubjectTokenType }
 func (c *TokenExchangeConfig) GetRequestedTokenType() string { return c.RequestedTokenType }
+func (c *TokenExchangeConfig) GetTokenURL() string           { return c.TokenURL }
 func (c *TokenExchangeConfig) GetClientAuth() api.TokenExchangeClientAuth {
 	if c.ClientAuth == nil {
 		return nil
@@ -610,7 +619,7 @@ func (c *StaticConfig) Validate(ctx context.Context) error {
 	if err := c.ValidateClusterAuthMode(); err != nil {
 		return err
 	}
-	if err := c.validateTokenExchange(); err != nil {
+	if err := c.validateTokenExchange(ctx); err != nil {
 		return err
 	}
 	if err := c.validateConfirmation(); err != nil {
@@ -661,12 +670,33 @@ func (c *StaticConfig) validateSkipJWTVerification(ctx context.Context) error {
 		"if the server is behind a trusted reverse proxy that verifies tokens")
 }
 
-func (c *StaticConfig) validateTokenExchange() error {
+func (c *StaticConfig) validateTokenExchange(ctx context.Context) error {
 	if c.TokenExchange == nil {
 		return nil
 	}
-	if c.AuthorizationURL == "" {
-		return fmt.Errorf("token exchange requires authorization_url to discover the token endpoint")
+	if c.TokenExchange.TokenURL == "" && c.AuthorizationURL == "" {
+		return fmt.Errorf("token exchange requires token_exchange.token_url, or authorization_url to discover the token endpoint")
+	}
+	if c.TokenExchange.TokenURL != "" {
+		u, err := url.Parse(c.TokenExchange.TokenURL)
+		if err != nil {
+			return err
+		}
+		if u.Scheme != "https" && u.Scheme != "http" {
+			return fmt.Errorf("token_exchange.token_url must use the http or https scheme, got %q", u.Scheme)
+		}
+		// url.Parse accepts scheme-only inputs such as "https://", which would
+		// otherwise surface as a confusing failure at exchange time.
+		if u.Host == "" {
+			return fmt.Errorf("token_exchange.token_url must include a host")
+		}
+		if u.Scheme == "http" {
+			klogutil.LogWarn(
+				klogutil.FromContext(ctx),
+				"token_exchange.token_url is using insecure scheme, this is not recommended for production use",
+				klogutil.Field("url.scheme", "http"),
+			)
+		}
 	}
 	strategies := c.tokenExchangeStrategies
 	if len(strategies) == 0 {
@@ -791,6 +821,7 @@ func (c *StaticConfig) normalizeTokenExchange() {
 	c.TokenExchange.Audience = strings.TrimSpace(c.TokenExchange.Audience)
 	c.TokenExchange.SubjectTokenType = strings.TrimSpace(c.TokenExchange.SubjectTokenType)
 	c.TokenExchange.RequestedTokenType = strings.TrimSpace(c.TokenExchange.RequestedTokenType)
+	c.TokenExchange.TokenURL = strings.TrimSpace(c.TokenExchange.TokenURL)
 	if auth := c.TokenExchange.ClientAuth; auth != nil {
 		auth.Method = api.TokenExchangeClientAuthMethod(strings.TrimSpace(string(auth.Method)))
 		auth.ClientID = strings.TrimSpace(auth.ClientID)
