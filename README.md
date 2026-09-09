@@ -273,7 +273,7 @@ and only needed for the project-specific scenarios noted.
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
 | [Kubernetes](https://kubernetes.io) | - | 32 |
-| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 26 |
+| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
 
@@ -538,6 +538,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
 <details>
 
 <summary>kubevirt</summary>
+
+- **vm_console_screenshot** - Capture a screenshot of a KubeVirt VirtualMachine's graphical (VNC) console as a PNG image. Use this to see what is currently displayed on the VM's screen (for example firmware, a bootloader, or a login prompt). Read-only: it never sends input to the guest.
+  - `name` (`string`) **(required)** - The name of the virtual machine
+  - `namespace` (`string`) **(required)** - The namespace of the virtual machine
+  - `wake_screen` (`boolean`) - Move the mouse cursor before capturing to wake a blanked screen. Defaults to false.
 
 - **vm_clone** - Clone a VirtualMachine on KubeVirt by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API
   - `name` (`string`) **(required)** - The name of the source virtual machine to clone

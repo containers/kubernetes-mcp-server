@@ -9,6 +9,35 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
+// ToolContentType distinguishes text from image content blocks.
+type ToolContentType string
+
+const (
+	ToolContentTypeText  ToolContentType = "text"
+	ToolContentTypeImage ToolContentType = "image"
+)
+
+// ToolContent represents a single content block in a multi-content tool result.
+// Used by tools that return both text and images (e.g., vm_console_screenshot).
+type ToolContent struct {
+	Type     ToolContentType
+	Text     string
+	Data     []byte // for image content, a copy of the image bytes
+	MIMEType string // for image content, e.g. "image/png"
+}
+
+// NewTextToolContent creates a text content block.
+func NewTextToolContent(text string) *ToolContent {
+	return &ToolContent{Type: ToolContentTypeText, Text: text}
+}
+
+// NewImageToolContent creates an image content block, copying the byte slice for safety.
+func NewImageToolContent(data []byte, mimeType string) *ToolContent {
+	dataCopy := make([]byte, len(data))
+	copy(dataCopy, data)
+	return &ToolContent{Type: ToolContentTypeImage, Data: dataCopy, MIMEType: mimeType}
+}
+
 type ServerTool struct {
 	Tool               Tool
 	Handler            ToolHandlerFunc
@@ -69,6 +98,9 @@ type ToolCallResult struct {
 	// When set, it is passed as structuredContent in the MCP CallToolResult alongside Content.
 	// Must be completely omitted (nil) when not used.
 	StructuredContent any
+	// ContentBlocks are SDK-neutral content blocks (text and/or images) for multi-content tools.
+	// When non-empty, these are used instead of the legacy Content field.
+	ContentBlocks []*ToolContent
 	// Error (non-protocol) to send back to the LLM.
 	Error error
 }
@@ -77,6 +109,16 @@ type ToolCallResult struct {
 // Use this for tools that return human-readable text output.
 func NewToolCallResult(content string, err error) *ToolCallResult {
 	return NewToolCallResultFull(content, nil, err)
+}
+
+// NewToolCallResultWithContent creates a ToolCallResult with content blocks (text and/or images).
+// Use this for multi-content tools like vm_console_screenshot.
+func NewToolCallResultWithContent(blocks []*ToolContent, structured any, err error) *ToolCallResult {
+	return &ToolCallResult{
+		ContentBlocks:     blocks,
+		StructuredContent: structured,
+		Error:             err,
+	}
 }
 
 // NewToolCallResultFull creates a ToolCallResult with both human-readable text
