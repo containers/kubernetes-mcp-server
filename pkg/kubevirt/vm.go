@@ -11,13 +11,35 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// RunStrategy represents the run strategy for a VirtualMachine
+// RunStrategy represents the Kubernetes VirtualMachine runStrategy.
 type RunStrategy string
 
+// RunPolicy is a user-facing abstraction over RunStrategy used by lifecycle tools.
+type RunPolicy string
+
 const (
-	RunStrategyAlways RunStrategy = "Always"
-	RunStrategyHalted RunStrategy = "Halted"
+	RunStrategyAlways         RunStrategy = "Always"
+	RunStrategyHalted         RunStrategy = "Halted"
+	RunStrategyManual         RunStrategy = "Manual"
+	RunStrategyRerunOnFailure RunStrategy = "RerunOnFailure"
+	RunStrategyOnce           RunStrategy = "Once"
 )
+
+const (
+	RunPolicyHighAvailability RunPolicy = "HighAvailability"
+	RunPolicyRestartOnFailure RunPolicy = "RestartOnFailure"
+	RunPolicyOnce             RunPolicy = "Once"
+)
+
+// Validate reports whether the run policy is one of the supported values.
+func (p RunPolicy) Validate() error {
+	switch p {
+	case RunPolicyHighAvailability, RunPolicyRestartOnFailure, RunPolicyOnce:
+		return nil
+	default:
+		return fmt.Errorf("invalid run policy '%s': must be one of 'HighAvailability', 'RestartOnFailure', 'Once'", p)
+	}
+}
 
 // GetVirtualMachine retrieves a VirtualMachine by namespace and name
 func GetVirtualMachine(ctx context.Context, client dynamic.Interface, namespace, name string) (*unstructured.Unstructured, error) {
@@ -47,37 +69,92 @@ func UpdateVirtualMachine(ctx context.Context, client dynamic.Interface, vm *uns
 		Update(ctx, vm, metav1.UpdateOptions{})
 }
 
-// StartVM starts a VirtualMachine by updating its runStrategy to Always
-// Returns the updated VM and true if the VM was started, false if it was already running
-func StartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (*unstructured.Unstructured, bool, error) {
+// StartVM starts a VirtualMachine by updating its runStrategy based on the runPolicy
+// runPolicy can be one of: HighAvailability, RestartOnFailure, Once
+// - HighAvailability: The VM will be started if it is not already running, if it is already running the runStrategy
+// will be set to Always.
+// - RestartOnFailure: The VM will be started if it is not already running and will be restarted if it fails, if it
+// is already running the runStrategy will be set to RerunOnFailure.
+// - Once: The VM will be started if it is not already running and will be stopped after it completes, if it is already
+// running the runStrategy will be set to Once.
+//
+// Returns (vm, wasStarted, strategyChanged, err):
+//   - wasStarted is true when the VM was not already under an auto-running strategy
+//     (Halted, Manual, missing, or unknown) and is now scheduled to start.
+//   - strategyChanged is true when the runStrategy was updated in place on a VM that was
+//     already auto-running (Always, RerunOnFailure, or Once); the VM was not stopped.
+//   - Both are false when the VM was already running with the desired run strategy (no-op).
+func StartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string, runPolicy RunPolicy) (*unstructured.Unstructured, bool, bool, error) {
+	desiredStrategy, err := runStrategyFromRunPolicy(runPolicy)
+	if err != nil {
+		return nil, false, false, err
+	}
+
 	// Get the current VirtualMachine
 	vm, err := GetVirtualMachine(ctx, dynamicClient, namespace, name)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to get VirtualMachine: %w", err)
+		return nil, false, false, fmt.Errorf("failed to get VirtualMachine: %w", err)
 	}
 
 	currentStrategy, found, err := GetVMRunStrategy(vm)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, fmt.Errorf("failed to read runStrategy from VirtualMachine: %w", err)
 	}
 
-	// Check if already running
-	if found && currentStrategy == RunStrategyAlways {
-		return vm, false, nil
+	// Already at the desired strategy — no-op
+	if found && currentStrategy == desiredStrategy {
+		return vm, false, false, nil
 	}
 
-	// Update runStrategy to Always
-	if err := SetVMRunStrategy(vm, RunStrategyAlways); err != nil {
-		return nil, false, fmt.Errorf("failed to set runStrategy: %w", err)
+	// Update runStrategy to the appropriate value
+	if err := SetVMRunStrategy(vm, desiredStrategy); err != nil {
+		return nil, false, false, fmt.Errorf("failed to set runStrategy: %w", err)
 	}
 
 	// Update the VM in the cluster
 	updatedVM, err := UpdateVirtualMachine(ctx, dynamicClient, vm)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to start VirtualMachine: %w", err)
+		return nil, false, false, fmt.Errorf("failed to start VirtualMachine: %w", err)
 	}
 
-	return updatedVM, true, nil
+	// In-place policy changes only apply when the VM was already auto-running.
+	// Halted/Manual/missing strategies cause KubeVirt to (re)start a VMI.
+	if found && isAutoRunningStrategy(currentStrategy) {
+		return updatedVM, false, true, nil
+	}
+	return updatedVM, true, false, nil
+}
+
+// isAutoRunningStrategy reports whether strategy keeps or creates a VMI automatically.
+func isAutoRunningStrategy(strategy RunStrategy) bool {
+	switch strategy {
+	case RunStrategyAlways, RunStrategyRerunOnFailure, RunStrategyOnce:
+		return true
+	default:
+		return false
+	}
+}
+
+// runStrategyFromRunPolicy maps a RunPolicy to its RunStrategy.
+// - HighAvailability: Always
+// - RestartOnFailure: RerunOnFailure
+// - Once: Once
+func runStrategyFromRunPolicy(runPolicy RunPolicy) (RunStrategy, error) {
+	switch runPolicy {
+	case RunPolicyHighAvailability:
+		return RunStrategyAlways, nil
+	case RunPolicyRestartOnFailure:
+		return RunStrategyRerunOnFailure, nil
+	case RunPolicyOnce:
+		return RunStrategyOnce, nil
+	default:
+		// Validate rejects unknown policies. The second return exists to catch a
+		// future bug where a policy is added to Validate without a mapping case above.
+		if err := runPolicy.Validate(); err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("run policy %q has no strategy mapping", runPolicy)
+	}
 }
 
 // StopVM stops a VirtualMachine by updating its runStrategy to Halted
@@ -91,7 +168,7 @@ func StopVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, nam
 
 	currentStrategy, found, err := GetVMRunStrategy(vm)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("failed to read runStrategy from VirtualMachine: %w", err)
 	}
 
 	// Check if already stopped
@@ -195,8 +272,13 @@ func UnpauseVM(ctx context.Context, dynamicClient dynamic.Interface, restConfig 
 	return GetVirtualMachine(ctx, dynamicClient, namespace, name)
 }
 
-// RestartVM restarts a VirtualMachine by temporarily setting runStrategy to Halted then back to Always
-func RestartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (*unstructured.Unstructured, error) {
+// RestartVM restarts a VirtualMachine by temporarily setting runStrategy to Halted then back to the specified run policy
+func RestartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string, runPolicy RunPolicy) (*unstructured.Unstructured, error) {
+	desiredStrategy, err := runStrategyFromRunPolicy(runPolicy)
+	if err != nil {
+		return nil, err
+	}
+
 	// Get the current VirtualMachine
 	vm, err := GetVirtualMachine(ctx, dynamicClient, namespace, name)
 	if err != nil {
@@ -213,9 +295,9 @@ func RestartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, 
 		return nil, fmt.Errorf("failed to stop VirtualMachine: %w", err)
 	}
 
-	// Start the VM again
-	if err := SetVMRunStrategy(vm, RunStrategyAlways); err != nil {
-		return nil, fmt.Errorf("failed to set runStrategy to Always: %w", err)
+	// Start the VM again with the specified run policy
+	if err := SetVMRunStrategy(vm, desiredStrategy); err != nil {
+		return nil, fmt.Errorf("failed to set runStrategy: %w", err)
 	}
 
 	updatedVM, err := UpdateVirtualMachine(ctx, dynamicClient, vm)
