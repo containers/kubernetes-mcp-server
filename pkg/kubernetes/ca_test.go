@@ -117,7 +117,7 @@ func (s *ClusterCACASuite) TestCAURLFromClusterExtensions() {
 		// The kubeconfig path exercises the actual clientcmd decode of
 		// extensions (runtime.Unknown payloads).
 		path := kubeconfigWithCAURL(s.T(), "https://ca.example.com/")
-		cfg := &config.StaticConfig{KubeConfig: path, CACacheDir: s.T().TempDir()}
+		cfg := &config.StaticConfig{KubeConfig: path}
 		s.Equal("https://ca.example.com/", caURLOfResolvedCluster(s.T(), cfg))
 	})
 }
@@ -303,7 +303,6 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 
 		cfg := &config.StaticConfig{
 			KubeConfig:        kubeconfigWithCAURL(s.T(), srv.URL),
-			CACacheDir:        filepath.Join(s.T().TempDir(), "ca-cache"),
 			CARefreshInterval: config.Duration(100 * time.Millisecond),
 		}
 		manager, err := NewKubeconfigManager(s.T().Context(), cfg, "")
@@ -359,7 +358,6 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 
 		cfg := &config.StaticConfig{
 			KubeConfig:        kubeconfigWithCAURL(s.T(), srv.URL),
-			CACacheDir:        filepath.Join(s.T().TempDir(), "ca-cache"),
 			CARefreshInterval: config.Duration(0), // no background re-fetch
 		}
 		manager, err := NewKubeconfigManager(s.T().Context(), cfg, "")
@@ -400,7 +398,6 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 		kc.CurrentContext = "fake"
 		cfg := &config.StaticConfig{
 			KubeConfig:        test.KubeconfigFile(s.T(), kc),
-			CACacheDir:        s.T().TempDir(),
 			CARefreshInterval: config.Duration(0),
 		}
 		_, err := NewKubeconfigManager(s.T().Context(), cfg, "")
@@ -411,7 +408,6 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 		path := s.mockServerKubeconfig()
 		manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{
 			KubeConfig:        path,
-			CACacheDir:        s.T().TempDir(),
 			CARefreshInterval: config.Duration(time.Minute),
 		}, "")
 		s.Require().NoError(err)

@@ -46,11 +46,6 @@ type StaticConfig struct {
 	Port        string `toml:"port,omitempty"`
 	BindAddress string `toml:"bind_address,omitempty"`
 	KubeConfig  string `toml:"kubeconfig,omitempty"`
-	// CACacheDir is where CA certificates fetched via the caURL kubeconfig
-	// cluster extension are cached. Empty means the default: a subdirectory
-	// of the system temp dir, which must be writable (mount an emptyDir
-	// there when the root filesystem is read-only).
-	CACacheDir string `toml:"ca_cache_dir,omitempty"`
 	// CARefreshInterval is how often cached CA certificates are re-fetched
 	// so a rotated cluster CA is picked up without a restart. Zero disables
 	// re-fetching; the CA is then only refreshed when a manager is rebuilt
@@ -434,10 +429,6 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 
 func (c *StaticConfig) GetClusterProviderStrategy() string {
 	return c.ClusterProviderStrategy
-}
-
-func (c *StaticConfig) GetCACacheDir() string {
-	return c.CACacheDir
 }
 
 func (c *StaticConfig) GetCARefreshInterval() time.Duration {

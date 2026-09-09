@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -103,7 +102,6 @@ func (s *KcpProviderSuite) TestResetKeepsDefaultWorkspaceCARefresherAlive() {
 
 	provider, err := newKcpClusterProvider(s.T().Context(), &config.StaticConfig{
 		KubeConfig:        kubeconfigPath,
-		CACacheDir:        filepath.Join(s.T().TempDir(), "ca-cache"),
 		CARefreshInterval: config.Duration(100 * time.Millisecond),
 	})
 	s.Require().NoError(err)

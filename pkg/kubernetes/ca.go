@@ -139,16 +139,13 @@ func validateCAURL(caURL string) error {
 	return nil
 }
 
-func caCacheDir(configured string) string {
-	if configured != "" {
-		return configured
-	}
-	return filepath.Join(os.TempDir(), caCacheSubdir)
-}
-
-func caCacheFilePath(cacheDir, caURL string) string {
+func caCacheFilePath(caURL string) string {
+	// The cache lives in a subdirectory of the system temp dir (which
+	// honors $TMPDIR), so an operator with a read-only root filesystem can
+	// point the cache at writable storage by setting $TMPDIR or mounting
+	// an emptyDir at /tmp.
 	sum := sha256.Sum256([]byte(caURL))
-	return filepath.Join(cacheDir, hex.EncodeToString(sum[:8])+".crt")
+	return filepath.Join(os.TempDir(), caCacheSubdir, hex.EncodeToString(sum[:8])+".crt")
 }
 
 // applyClusterCAURL points restConfig's TLS at a cached copy of the CA served
@@ -188,7 +185,7 @@ func applyClusterCAURL(
 		return nil, fmt.Errorf("cluster %q sets insecure-skip-tls-verify and serves its CA via caURL; remove one of them", contextName)
 	}
 
-	cacheFile := caCacheFilePath(caCacheDir(config.GetCACacheDir()), caURL)
+	cacheFile := caCacheFilePath(caURL)
 	client := CAFetchClientFactory()
 	// Bounds the whole fetch-with-retries so manager creation cannot hang
 	// for longer than the attempt-and-backoff envelope (see fetchCA).
