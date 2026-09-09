@@ -41,7 +41,7 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 		if err := ret.reset(ctx); err != nil {
 			return nil, err
 		}
-		ret.ProviderGVKFilter = NewProviderGVKFilter(ret)
+		ret.ProviderGVKFilter = NewProviderGVKFilter(ret, cfg.IsTargetCompatibilityToolFiltersEnabled)
 		return ret, nil
 	}
 }

@@ -27,7 +27,10 @@ func (s *ProviderSingleTestSuite) SetupTest() {
 	InClusterConfig = func() (*rest.Config, error) {
 		return s.mockServer.Config(), nil
 	}
-	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{})
+	cfg := test.Must(config.ReadToml([]byte(`
+		experimental_enable_target_compatibility_tool_filters = true
+	`)))
+	provider, err := NewProvider(s.T().Context(), cfg)
 	s.Require().NoError(err, "Expected no error creating provider")
 	s.provider = provider
 }

@@ -52,7 +52,7 @@ func newKcpClusterProvider(ctx context.Context, cfg api.BaseConfig) (kubernetes.
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
-	ret.ProviderGVKFilter = kubernetes.NewProviderGVKFilter(ret)
+	ret.ProviderGVKFilter = kubernetes.NewProviderGVKFilter(ret, cfg.IsTargetCompatibilityToolFiltersEnabled)
 	return ret, nil
 }
 
