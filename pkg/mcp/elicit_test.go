@@ -55,7 +55,7 @@ func (s *ElicitationSuite) registerElicitingToolset(handler api.ToolHandlerFunc)
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"elicit-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"elicit-test"})
 }
 
 func (s *ElicitationSuite) TestElicitationAccepted() {

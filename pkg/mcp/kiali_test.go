@@ -30,9 +30,9 @@ func (s *KialiSuite) SetupTest() {
 	s.toolsetName = (&kialiToolset.Toolset{}).GetName()
 	// toolset_configs requires the two-phase parsing performed by config.ReadToml,
 	// so we replace s.Cfg and restore the runtime fields the suite already set.
-	kubeConfig := s.Cfg.KubeConfig
-	listOutput := s.Cfg.ListOutput
-	readOnly := s.Cfg.ReadOnly
+	kubeConfig := s.Cfg.KubeConfig.Get()
+	listOutput := s.Cfg.ListOutput.Get()
+	readOnly := s.Cfg.ReadOnly.Get()
 	cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
 		toolsets = ["%s"]
 		[toolset_configs.kiali]
@@ -40,9 +40,9 @@ func (s *KialiSuite) SetupTest() {
 	`, s.toolsetName, s.mockServer.Config().Host)))
 	s.Require().NoError(err, "failed to parse kiali toolset config")
 	s.Cfg = cfg
-	s.Cfg.KubeConfig = kubeConfig
-	s.Cfg.ListOutput = listOutput
-	s.Cfg.ReadOnly = readOnly
+	s.Cfg.KubeConfig.SetForTest(kubeConfig)
+	s.Cfg.ListOutput.SetForTest(listOutput)
+	s.Cfg.ReadOnly.SetForTest(readOnly)
 }
 
 func (s *KialiSuite) TearDownTest() {
@@ -657,7 +657,7 @@ func (s *KialiSuite) TestKialiToolsNotClusterAware() {
 	for i := range 10 {
 		kubeconfig.Contexts[strconv.Itoa(i)] = clientcmdapi.NewContext()
 	}
-	s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
+	s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
 	s.InitMcpClient()
 
 	tools, err := s.ListTools()

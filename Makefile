@@ -119,7 +119,7 @@ local-env-setup: ## Setup complete local development environment with Minikube c
 	@echo "  make keycloak-port-forward"
 	@echo ""
 	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME) --port 8008 --config _output/config.toml"
+	@echo "  ./$(BINARY_NAME) --config _output/config.toml"
 	@echo ""
 	@echo "Start MCP Inspector in another terminal:"
 	@echo '  NODE_EXTRA_CA_CERTS="$$(pwd)/_output/cert-manager-ca/ca.crt" npx @modelcontextprotocol/inspector@latest'

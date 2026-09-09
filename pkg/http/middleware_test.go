@@ -19,16 +19,25 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// cfgStateWithTrustProxy returns a *config.StaticConfigState initialized with
+// cfgStateWithTrustProxy returns a *config.ConfigState initialized with
 // only TrustProxyHeaders set — used by tests that drive RequestMiddleware.
-func cfgStateWithTrustProxy(trustProxy bool) *config.StaticConfigState {
-	return config.NewStaticConfigState(&config.StaticConfig{TrustProxyHeaders: trustProxy})
+func cfgStateWithTrustProxy(trustProxy bool) *config.ConfigState {
+	return config.NewConfigState(func() *config.Config {
+		c := config.New()
+		c.TrustProxyHeaders.SetForTest(trustProxy)
+		return c
+	}())
 }
 
-// cfgStateWithMaxBody returns a *config.StaticConfigState initialized with
+// cfgStateWithMaxBody returns a *config.ConfigState initialized with
 // only HTTP.MaxBodyBytes set — used by tests that drive MaxBodyMiddleware.
-func cfgStateWithMaxBody(maxBytes int64) *config.StaticConfigState {
-	return config.NewStaticConfigState(&config.StaticConfig{HTTP: config.HTTPConfig{MaxBodyBytes: maxBytes}})
+
+func cfgStateWithMaxBody(maxBytes int64) *config.ConfigState {
+	return config.NewConfigState(func() *config.Config {
+		c := config.New()
+		c.HTTP.MaxBodyBytes.SetForTest(maxBytes)
+		return c
+	}())
 }
 
 type HTTPTraceContextPropagationSuite struct {
@@ -41,7 +50,9 @@ func (s *HTTPTraceContextPropagationSuite) SetupTest() {
 	s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
 	// Initialize telemetry (exporter may fail but tracingEnabled will be set)
-	cleanup, _ := telemetry.InitTracer(s.T().Context(), "test", "1.0.0")
+	cfg, err := config.ReadToml(nil)
+	s.Require().NoError(err)
+	cleanup, _ := telemetry.InitTracerWithConfig(s.T().Context(), &cfg.Telemetry, "test", "1.0.0")
 	s.cleanupTelemetry = cleanup
 
 	// Set up a global text map propagator for tests
@@ -298,7 +309,11 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 	// Regression for issue #1106: changes stored in cfgState must be observed
 	// on the NEXT request without rebuilding the middleware.
 	s.Run("picks up max_body_bytes change via cfgState.Store", func() {
-		cfgState := config.NewStaticConfigState(&config.StaticConfig{HTTP: config.HTTPConfig{MaxBodyBytes: 0}})
+		cfgState := config.NewConfigState(func() *config.Config {
+			c := config.New()
+			c.HTTP.MaxBodyBytes.SetForTest(0)
+			return c
+		}())
 
 		handler := MaxBodyMiddleware(cfgState)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := io.ReadAll(r.Body)
@@ -314,7 +329,11 @@ func (s *MaxBodyMiddlewareSuite) TestMaxBodyMiddleware() {
 		handler.ServeHTTP(rr1, req1)
 		s.Equal(http.StatusOK, rr1.Code, "pre-reload: max_body_bytes=0 must allow any body size")
 
-		cfgState.Store(&config.StaticConfig{HTTP: config.HTTPConfig{MaxBodyBytes: 10}})
+		cfgState.Store(func() *config.Config {
+			c := config.New()
+			c.HTTP.MaxBodyBytes.SetForTest(10)
+			return c
+		}())
 
 		req2 := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(strings.Repeat("x", 100)))
 		rr2 := httptest.NewRecorder()
@@ -356,8 +375,10 @@ func (s *TrustProxyHeadersSuite) SetupTest() {
 	// RequestMiddleware skips span creation when telemetry.Enabled() is false,
 	// so flip the flag on by initializing the tracer with an OTLP endpoint.
 	s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-	cleanup, err := telemetry.InitTracer(s.T().Context(), "test", "1.0.0")
-	s.Require().NoError(err, "Expected telemetry.InitTracer to succeed")
+	cfg, err := config.ReadToml(nil)
+	s.Require().NoError(err)
+	cleanup, err := telemetry.InitTracerWithConfig(s.T().Context(), &cfg.Telemetry, "test", "1.0.0")
+	s.Require().NoError(err, "Expected telemetry.InitTracerWithConfig to succeed")
 	s.cleanupTelemetry = cleanup
 }
 
@@ -500,12 +521,16 @@ func TestTrustProxyHeaders(t *testing.T) {
 // TestReloadObserved verifies the middleware observes config changes on the
 // NEXT request after cfgState.Store — no wiring rebuild required. This is
 // the regression lock for issue #1106: RequestMiddleware and MaxBodyMiddleware
-// must read from *StaticConfigState per request so SIGHUP-reloaded values
+// must read from *ConfigState per request so SIGHUP-reloaded values
 // (trust_proxy_headers, max_body_bytes) take effect without a restart.
 func (s *TrustProxyHeadersSuite) TestReloadObserved() {
 	s.Run("RequestMiddleware picks up trust_proxy_headers flip via cfgState.Store", func() {
 		s.spanRecorder.Reset()
-		cfgState := config.NewStaticConfigState(&config.StaticConfig{TrustProxyHeaders: false})
+		cfgState := config.NewConfigState(func() *config.Config {
+			c := config.New()
+			c.TrustProxyHeaders.SetForTest(false)
+			return c
+		}())
 
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -519,9 +544,15 @@ func (s *TrustProxyHeadersSuite) TestReloadObserved() {
 		middleware.ServeHTTP(httptest.NewRecorder(), req1)
 
 		// Flip config — simulates a SIGHUP reload.
-		cfgState.Store(&config.StaticConfig{TrustProxyHeaders: true})
+		cfgState.Store(func() *config.Config {
+			c := config.New()
+			c.TrustProxyHeaders.
 
-		// Second request — trust_proxy=true: X-Forwarded-For must now be honored.
+				// Second request — trust_proxy=true: X-Forwarded-For must now be honored.
+				SetForTest(true)
+			return c
+		}())
+
 		req2 := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 		req2.RemoteAddr = "192.168.1.1:443"
 		req2.Header.Set("X-Forwarded-For", "10.0.0.1")

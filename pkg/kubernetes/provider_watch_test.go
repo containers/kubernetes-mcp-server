@@ -21,7 +21,7 @@ type ProviderWatchTargetsTestSuite struct {
 	mockServer             *test.MockServer
 	discoveryClientHandler *test.DiscoveryClientHandler
 	kubeconfig             *clientcmdapi.Config
-	staticConfig           *config.StaticConfig
+	staticConfig           *config.Config
 }
 
 func (s *ProviderWatchTargetsTestSuite) SetupTest() {
@@ -42,7 +42,10 @@ func (s *ProviderWatchTargetsTestSuite) SetupTest() {
 		s.kubeconfig.Contexts[name].AuthInfo = s.kubeconfig.Contexts[s.kubeconfig.CurrentContext].AuthInfo
 	}
 
-	s.staticConfig = &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), s.kubeconfig)}
+	cfg, err := config.ReadToml(nil)
+	s.Require().NoError(err)
+	cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), s.kubeconfig))
+	s.staticConfig = cfg
 }
 
 func (s *ProviderWatchTargetsTestSuite) TearDownTest() {
@@ -83,7 +86,7 @@ func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
 
 	s.Run("KubeConfigClusterProvider updates targets (reset) on kubeconfig change", func() {
 		s.kubeconfig.CurrentContext = "context-1"
-		s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig))
+		s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig.Get()))
 		s.Require().NoError(waitForCallback(5 * time.Second))
 
 		s.Run("Replaces default target with new context", func() {
@@ -107,7 +110,7 @@ func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
 
 		s.Run("Keeps watching for further changes", func() {
 			s.kubeconfig.CurrentContext = "context-2"
-			s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig))
+			s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig.Get()))
 			s.Require().NoError(waitForCallback(5 * time.Second))
 
 			s.Run("Replaces default target with new context", func() {
@@ -126,7 +129,7 @@ func (s *ProviderWatchTargetsTestSuite) TestSingleClusterProvider() {
 
 	s.Run("SingleClusterProvider reloads/resets on kubeconfig change", func() {
 		s.kubeconfig.CurrentContext = "context-1"
-		s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig))
+		s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig.Get()))
 		s.Require().NoError(waitForCallback(5 * time.Second))
 
 		s.Run("Derived Kubernetes points to updated context", func() {
@@ -142,7 +145,7 @@ func (s *ProviderWatchTargetsTestSuite) TestSingleClusterProvider() {
 
 		s.Run("Keeps watching for further changes", func() {
 			s.kubeconfig.CurrentContext = "context-2"
-			s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig))
+			s.Require().NoError(clientcmd.WriteToFile(*s.kubeconfig, s.staticConfig.KubeConfig.Get()))
 			s.Require().NoError(waitForCallback(5 * time.Second))
 
 			s.Run("Derived Kubernetes points to updated context", func() {

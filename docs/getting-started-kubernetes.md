@@ -158,24 +158,27 @@ This command should successfully list all Pods if you chose **Option A: Cluster-
 
 ## 4. Use with Kubernetes MCP Server
 
-Now that you have a dedicated kubeconfig file, you can use it with the Kubernetes MCP Server:
-
-```bash
-# Run the MCP server with the dedicated kubeconfig
-./kubernetes-mcp-server --kubeconfig="$HOME/.kube/mcp-viewer.kubeconfig"
-
-# Or use npx
-npx -y kubernetes-mcp-server@latest --kubeconfig="$HOME/.kube/mcp-viewer.kubeconfig"
-
-# Or use uvx
-uvx kubernetes-mcp-server@latest --kubeconfig="$HOME/.kube/mcp-viewer.kubeconfig"
-```
-
-Alternatively, you can set the `KUBECONFIG` environment variable:
+Now that you have a dedicated kubeconfig file, you can use it with the Kubernetes MCP Server via the `KUBECONFIG` environment variable (client-go fallback when the TOML `kubeconfig` option is empty):
 
 ```bash
 export KUBECONFIG="$HOME/.kube/mcp-viewer.kubeconfig"
 ./kubernetes-mcp-server
+
+# Or use npx
+KUBECONFIG="$HOME/.kube/mcp-viewer.kubeconfig" npx -y kubernetes-mcp-server@latest
+
+# Or use uvx
+KUBECONFIG="$HOME/.kube/mcp-viewer.kubeconfig" uvx kubernetes-mcp-server@latest
+```
+
+To pin the path in TOML instead:
+
+```toml
+kubeconfig = "/home/YOU/.kube/mcp-viewer.kubeconfig"
+```
+
+```bash
+kubernetes-mcp-server --config /path/to/config.toml
 ```
 
 ## Token Expiration and Renewal

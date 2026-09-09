@@ -4,23 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
-	"strconv"
 	"strings"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 type Manager struct {
 	kubernetes *Kubernetes
 
-	config api.BaseConfig
+	config *config.Config
 }
 
 var (
@@ -28,14 +26,14 @@ var (
 	ErrorInClusterNotInCluster         = errors.New("in-cluster manager cannot be used outside of a cluster")
 )
 
-func NewKubeconfigManager(ctx context.Context, config api.BaseConfig, kubeconfigContext string) (*Manager, error) {
-	if IsInCluster(config) {
+func NewKubeconfigManager(ctx context.Context, cfg *config.Config, kubeconfigContext string) (*Manager, error) {
+	if IsInCluster(cfg.KubeConfig.Get()) {
 		return nil, ErrorKubeconfigInClusterNotAllowed
 	}
 
 	pathOptions := clientcmd.NewDefaultPathOptions()
-	if config.GetKubeConfigPath() != "" {
-		pathOptions.LoadingRules.ExplicitPath = config.GetKubeConfigPath()
+	if cfg.KubeConfig.Get() != "" {
+		pathOptions.LoadingRules.ExplicitPath = cfg.KubeConfig.Get()
 	}
 
 	resolvedContext, err := resolveKubeconfigContext(ctx, pathOptions.LoadingRules, kubeconfigContext)
@@ -55,7 +53,7 @@ func NewKubeconfigManager(ctx context.Context, config api.BaseConfig, kubeconfig
 		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %w", err)
 	}
 
-	return NewManager(ctx, config, restConfig, clientCmdConfig)
+	return NewManager(ctx, cfg, restConfig, clientCmdConfig)
 }
 
 // resolveKubeconfigContext determines which kubeconfig context to use.
@@ -104,12 +102,12 @@ func resolveKubeconfigContext(ctx context.Context, loadingRules *clientcmd.Clien
 		strings.Join(names, ", "))
 }
 
-func NewInClusterManager(ctx context.Context, config api.BaseConfig) (*Manager, error) {
-	if config.GetKubeConfigPath() != "" {
-		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %w", config.GetKubeConfigPath(), ErrorKubeconfigInClusterNotAllowed)
+func NewInClusterManager(ctx context.Context, cfg *config.Config) (*Manager, error) {
+	if cfg.KubeConfig.Get() != "" {
+		return nil, fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster deployments: %w", cfg.KubeConfig.Get(), ErrorKubeconfigInClusterNotAllowed)
 	}
 
-	if !IsInCluster(config) {
+	if !IsInCluster(cfg.KubeConfig.Get()) {
 		return nil, ErrorInClusterNotInCluster
 	}
 
@@ -133,11 +131,11 @@ func NewInClusterManager(ctx context.Context, config api.BaseConfig) (*Manager, 
 	}
 	clientCmdConfig.CurrentContext = inClusterKubeConfigDefaultContext
 
-	return NewManager(ctx, config, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
+	return NewManager(ctx, cfg, restConfig, clientcmd.NewDefaultClientConfig(*clientCmdConfig, nil))
 }
 
-func NewManager(ctx context.Context, config api.BaseConfig, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
-	if config == nil {
+func NewManager(ctx context.Context, cfg *config.Config, restConfig *rest.Config, clientCmdConfig clientcmd.ClientConfig) (*Manager, error) {
+	if cfg == nil {
 		return nil, errors.New("config cannot be nil")
 	}
 	if restConfig == nil {
@@ -147,11 +145,10 @@ func NewManager(ctx context.Context, config api.BaseConfig, restConfig *rest.Con
 		return nil, errors.New("clientCmdConfig cannot be nil")
 	}
 
-	// Apply QPS and Burst from environment variables if set (primarily for testing)
-	applyRateLimitFromEnv(restConfig)
+	applyRateLimit(restConfig, cfg)
 
 	k8s := &Manager{
-		config: config,
+		config: cfg,
 	}
 	var err error
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
@@ -177,7 +174,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	// token-less requests with 401, but this protects STDIO / internal paths and
 	// preserves the operator contract that require_oauth=true never falls through to kubeconfig.
 	if !hasToken {
-		if m.config.IsRequireOAuth() {
+		if m.config.RequireOAuth.Get() {
 			return nil, errors.New("oauth token required")
 		}
 		logger.V(5).Info("No bearer token in context, falling back to kubeconfig credentials")
@@ -232,20 +229,12 @@ func (m *Manager) Invalidate() {
 	m.kubernetes.DiscoveryClient().Invalidate()
 }
 
-// applyRateLimitFromEnv applies QPS and Burst rate limits from environment variables if set.
-// This is primarily useful for tests to avoid client-side rate limiting.
-// Environment variables:
-//   - KUBE_CLIENT_QPS: Sets the QPS (queries per second) limit
-//   - KUBE_CLIENT_BURST: Sets the burst limit
-func applyRateLimitFromEnv(cfg *rest.Config) {
-	if qpsStr := os.Getenv("KUBE_CLIENT_QPS"); qpsStr != "" {
-		if qps, err := strconv.ParseFloat(qpsStr, 32); err == nil {
-			cfg.QPS = float32(qps)
-		}
+// applyRateLimit applies QPS and Burst from Config when those options are set.
+func applyRateLimit(restCfg *rest.Config, cfg *config.Config) {
+	if qps := cfg.KubeClientQPS.Get(); qps != 0 {
+		restCfg.QPS = qps
 	}
-	if burstStr := os.Getenv("KUBE_CLIENT_BURST"); burstStr != "" {
-		if burst, err := strconv.Atoi(burstStr); err == nil {
-			cfg.Burst = burst
-		}
+	if burst := cfg.KubeClientBurst.Get(); burst != 0 {
+		restCfg.Burst = burst
 	}
 }

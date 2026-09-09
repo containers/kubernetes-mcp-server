@@ -60,7 +60,11 @@ func (s *ProviderCloseTestSuite) SetupTest() {
 		kubeconfig.Contexts[name].Cluster = "fake"
 		kubeconfig.Contexts[name].AuthInfo = "fake"
 	}
-	cfg := &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)}
+	cfg := func() *config.Config {
+		c := config.New()
+		c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+		return c
+	}()
 
 	singleProvider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), cfg)
 	s.Require().NoError(err)

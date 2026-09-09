@@ -8,17 +8,27 @@ This guide shows you how to configure the Kubernetes MCP Server with Claude Code
 
 Add the MCP server using the `claude mcp add-json` command:
 
+Create a small TOML config (runtime flags such as `--read-only` are no longer accepted):
+
+```bash
+cat > "$HOME/.config/kubernetes-mcp-server.toml" <<'EOF'
+read_only = true
+EOF
+```
+
+Add the MCP server using the `claude mcp add-json` command:
+
 ```bash
 claude mcp add-json kubernetes-mcp-server \
-  '{"command":"npx","args":["-y","kubernetes-mcp-server@latest","--read-only"],"env":{"KUBECONFIG":"'${HOME}'/.kube/mcp-viewer.kubeconfig"}}' \
+  '{"command":"npx","args":["-y","kubernetes-mcp-server@latest","--config","'"${HOME}"'/.config/kubernetes-mcp-server.toml"],"env":{"KUBECONFIG":"'${HOME}'/.kube/mcp-viewer.kubeconfig"}}' \
   -s user
 ```
 
 **What this does:**
 - Adds the Kubernetes MCP Server to your Claude Code configuration
 - Uses `npx` to automatically download and run the latest version
-- Enables read-only mode for safety
-- Uses the kubeconfig file you created in the Getting Started guide
+- Enables read-only mode via TOML (`read_only = true`)
+- Uses the kubeconfig file you created in the Getting Started guide (`KUBECONFIG`)
 - `-s user` makes it available in all your projects
 
 ## Manual Configuration (Alternative)
@@ -34,14 +44,15 @@ command = "npx"
 args = [
     "-y",
     "kubernetes-mcp-server@latest",
-    "--read-only"
+    "--config",
+    "/home/YOUR_USERNAME/.config/kubernetes-mcp-server.toml"
 ]
 
 [mcp_servers.env]
 KUBECONFIG = "/home/YOUR_USERNAME/.kube/mcp-viewer.kubeconfig"
 ```
 
-**Important:** Replace `/home/YOUR_USERNAME/` with your actual home directory path.
+**Important:** Replace `/home/YOUR_USERNAME/` with your actual home directory path. Write `read_only = true` in `~/.config/kubernetes-mcp-server.toml`.
 
 ## Verify Connection
 
@@ -55,7 +66,7 @@ Expected output:
 ```
 Checking MCP server health...
 
-kubernetes-mcp-server: npx -y kubernetes-mcp-server@latest --read-only - ✓ Connected
+kubernetes-mcp-server: npx -y kubernetes-mcp-server@latest --config .../kubernetes-mcp-server.toml - ✓ Connected
 ```
 
 ## Using the MCP Server
@@ -86,13 +97,7 @@ to fetch and display the relevant information from your cluster:
 
 ## Configuration Options
 
-Common command-line flags you can add to the `args` array:
-
-| Flag | Description |
-|------|-------------|
-| `--read-only` | Enable read-only mode (recommended) |
-| `--kubeconfig <path>` | Path to kubeconfig file (or use `KUBECONFIG` env var) |
-| `--config <path>` | Path to TOML config file (for advanced options like `server_instructions`) |
+CLI that remains: `--config` (and optionally `--config-dir`). Put `read_only`, `kubeconfig`, `server_instructions`, and other settings in the TOML file. `$KUBECONFIG` is still the client-go fallback when `kubeconfig` is empty. See the [Configuration Reference](configuration.md) and [Configuration Changes](configuration-changes.md).
 
 ## MCP Tool Search
 

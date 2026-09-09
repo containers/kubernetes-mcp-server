@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +32,7 @@ type HelmSuite struct {
 
 func (s *HelmSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	s.Cfg.Toolsets = append(s.Cfg.Toolsets, "helm")
+	s.Cfg.Toolsets.SetForTest(append(s.Cfg.Toolsets.Get(), "helm"))
 	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()))
 
 	// Capture log output to verify denied resource messages
@@ -92,9 +92,9 @@ func (s *HelmSuite) TestHelmInstall() {
 }
 
 func (s *HelmSuite) TestHelmInstallDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Secret" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("helm_install(chart=helm-chart-secret, denied)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -209,9 +209,9 @@ func (s *HelmSuite) TestHelmList() {
 }
 
 func (s *HelmSuite) TestHelmListDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Secret" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -293,9 +293,9 @@ func (s *HelmSuite) TestHelmUninstall() {
 }
 
 func (s *HelmSuite) TestHelmUninstallDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "ConfigMap" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

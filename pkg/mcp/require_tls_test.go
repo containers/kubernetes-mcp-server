@@ -6,9 +6,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	kialiToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
@@ -44,18 +44,18 @@ func (s *KialiRequireTLSSuite) setupConfig(requireTLS bool) {
 	// so we replace s.Cfg and restore the runtime fields the suite already set.
 	// Parse config without require_tls to bypass Layer 1 (config-time) URL validation,
 	// then enable require_tls to test Layer 2 (runtime) TLSEnforcingTransport enforcement.
-	kubeConfig := s.Cfg.KubeConfig
-	listOutput := s.Cfg.ListOutput
-	readOnly := s.Cfg.ReadOnly
+	kubeConfig := s.Cfg.KubeConfig.Get()
+	listOutput := s.Cfg.ListOutput.Get()
+	readOnly := s.Cfg.ReadOnly.Get()
 	s.Cfg = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
 		toolsets = ["%s"]
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.toolsetName, s.mockServer.Config().Host))))
-	s.Cfg.KubeConfig = kubeConfig
-	s.Cfg.ListOutput = listOutput
-	s.Cfg.ReadOnly = readOnly
-	s.Cfg.RequireTLS = requireTLS
+	s.Cfg.KubeConfig.SetForTest(kubeConfig)
+	s.Cfg.ListOutput.SetForTest(listOutput)
+	s.Cfg.ReadOnly.SetForTest(readOnly)
+	s.Cfg.RequireTLS.SetForTest(requireTLS)
 }
 
 func (s *KialiRequireTLSSuite) TestRequireTLS_BlocksHTTPRequests() {
@@ -112,9 +112,9 @@ type CoreRequireTLSSuite struct {
 }
 
 func (s *CoreRequireTLSSuite) TestRequireTLS_CoreToolsStillWork() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		require_tls = true
-	`), s.Cfg), "Expected to parse require_tls config")
+	`)
 	s.InitMcpClient()
 
 	s.Run("namespaces_list succeeds with require_tls enabled", func() {

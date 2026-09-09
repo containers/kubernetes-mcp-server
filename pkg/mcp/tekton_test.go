@@ -55,7 +55,7 @@ func (s *TektonMcpSuite) TearDownSuite() {
 
 func (s *TektonMcpSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	s.Cfg.Toolsets = append(s.Cfg.Toolsets, "tekton")
+	s.Cfg.Toolsets.SetForTest(append(s.Cfg.Toolsets.Get(), "tekton"))
 	s.namespace = fmt.Sprintf("tekton-mcp-%d", time.Now().UnixNano())
 	s.tektonConfigName = s.namespace
 	s.dynamic = dynamic.NewForConfigOrDie(test.EnvTestRestConfig())

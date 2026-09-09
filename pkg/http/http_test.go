@@ -35,7 +35,7 @@ import (
 type BaseHttpSuite struct {
 	suite.Suite
 	MockServer      *test.MockServer
-	StaticConfig    *config.StaticConfig
+	Config          *config.Config
 	Logger          logr.Logger
 	mcpServer       *mcp.Server
 	OidcProvider    *oidc.Provider
@@ -49,8 +49,8 @@ func (s *BaseHttpSuite) SetupTest() {
 	http.DefaultClient.Timeout = 10 * time.Second
 	s.MockServer = test.NewMockServer()
 	s.MockServer.Handle(test.NewDiscoveryClientHandler())
-	s.StaticConfig = config.Default()
-	s.StaticConfig.KubeConfig = s.MockServer.KubeconfigFile(s.T())
+	s.Config = config.New()
+	s.Config.KubeConfig.SetForTest(s.MockServer.KubeconfigFile(s.T()))
 }
 
 func (s *BaseHttpSuite) StartServer() {
@@ -59,12 +59,12 @@ func (s *BaseHttpSuite) StartServer() {
 
 	tcpAddr, err := test.RandomPortAddress()
 	s.Require().NoError(err, "Expected no error getting random port address")
-	s.StaticConfig.Port = strconv.Itoa(tcpAddr.Port)
+	s.Config.Port.SetForTest(strconv.Itoa(tcpAddr.Port))
 
-	s.OAuthState = oauth.NewState(oauth.SnapshotFromConfig(s.StaticConfig, s.OidcProvider, nil))
-	provider, err := kubernetes.NewProvider(s.T().Context(), s.StaticConfig, kubernetes.WithTokenExchange(s.OAuthState))
+	s.OAuthState = oauth.NewState(oauth.SnapshotFromConfig(s.Config, s.OidcProvider, nil))
+	provider, err := kubernetes.NewProvider(s.T().Context(), s.Config, kubernetes.WithTokenExchange(s.OAuthState))
 	s.Require().NoError(err, "Expected no error creating kubernetes target provider")
-	s.mcpServer, err = mcp.NewServer(s.T().Context(), mcp.Configuration{StaticConfig: s.StaticConfig}, provider)
+	s.mcpServer, err = mcp.NewServer(s.T().Context(), mcp.Configuration{Config: s.Config}, provider)
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.Require().NotNil(s.mcpServer, "MCP server should not be nil")
 	var timeoutCtx, cancelCtx context.Context
@@ -75,7 +75,7 @@ func (s *BaseHttpSuite) StartServer() {
 		cancelCtx = klog.NewContext(cancelCtx, s.Logger)
 	}
 	group.Go(func() error {
-		return Serve(cancelCtx, s.mcpServer, config.NewStaticConfigState(s.StaticConfig), s.OAuthState)
+		return Serve(cancelCtx, s.mcpServer, config.NewConfigState(s.Config), s.OAuthState)
 	})
 	s.WaitForShutdown = group.Wait
 	s.Require().NoError(test.WaitForServer(tcpAddr), "HTTP server did not start in time")
@@ -114,7 +114,7 @@ type httpContext struct {
 	timeoutCancel   context.CancelFunc // Release resources if test completes before the timeout
 	StopServer      context.CancelFunc
 	WaitForShutdown func() error
-	StaticConfig    *config.StaticConfig
+	Config          *config.Config
 	OidcProvider    *oidc.Provider
 	OAuthState      *oauth.State
 }
@@ -122,12 +122,12 @@ type httpContext struct {
 func (c *httpContext) beforeEach(t *testing.T) {
 	t.Helper()
 	http.DefaultClient.Timeout = 10 * time.Second
-	if c.StaticConfig == nil {
-		c.StaticConfig = config.Default()
+	if c.Config == nil {
+		c.Config = config.New()
 	}
 	c.mockServer = test.NewMockServer()
 	// Fake Kubernetes configuration
-	c.StaticConfig.KubeConfig = c.mockServer.KubeconfigFile(t)
+	c.Config.KubeConfig.SetForTest(c.mockServer.KubeconfigFile(t))
 	// Capture logging
 	c.klogState = klog.CaptureState()
 	flags := flag.NewFlagSet("test", flag.ContinueOnError)
@@ -143,13 +143,13 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	if randomPortErr := ln.Close(); randomPortErr != nil {
 		t.Fatalf("Failed to close random port listener: %v", randomPortErr)
 	}
-	c.StaticConfig.Port = fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
-	c.OAuthState = oauth.NewState(oauth.SnapshotFromConfig(c.StaticConfig, c.OidcProvider, nil))
-	provider, err := kubernetes.NewProvider(t.Context(), c.StaticConfig, kubernetes.WithTokenExchange(c.OAuthState))
+	c.Config.Port.SetForTest(fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port))
+	c.OAuthState = oauth.NewState(oauth.SnapshotFromConfig(c.Config, c.OidcProvider, nil))
+	provider, err := kubernetes.NewProvider(t.Context(), c.Config, kubernetes.WithTokenExchange(c.OAuthState))
 	if err != nil {
 		t.Fatalf("Failed to create kubernetes target provider: %v", err)
 	}
-	mcpServer, err := mcp.NewServer(t.Context(), mcp.Configuration{StaticConfig: c.StaticConfig}, provider)
+	mcpServer, err := mcp.NewServer(t.Context(), mcp.Configuration{Config: c.Config}, provider)
 	if err != nil {
 		t.Fatalf("Failed to create MCP server: %v", err)
 	}
@@ -158,7 +158,7 @@ func (c *httpContext) beforeEach(t *testing.T) {
 	group, gc := errgroup.WithContext(timeoutCtx)
 	cancelCtx, c.StopServer = context.WithCancel(gc)
 	group.Go(func() error {
-		return Serve(klog.NewContext(cancelCtx, c.logger), mcpServer, config.NewStaticConfigState(c.StaticConfig), c.OAuthState)
+		return Serve(klog.NewContext(cancelCtx, c.logger), mcpServer, config.NewConfigState(c.Config), c.OAuthState)
 	})
 	c.WaitForShutdown = group.Wait
 	// Wait for HTTP server to start (using net)
@@ -276,7 +276,13 @@ func TestHealthCheck(t *testing.T) {
 		})
 	})
 	// Health exposed even when require Authorization
-	testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{RequireOAuth: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+	testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+		c := config.New()
+		c.Port.SetForTest("8080")
+		c.RequireOAuth.SetForTest(true)
+		c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+		return c
+	}()}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
 		if err != nil {
 			t.Fatalf("Failed to get health check endpoint with OAuth: %v", err)
@@ -292,8 +298,12 @@ func TestHealthCheck(t *testing.T) {
 
 func TestBindAddress(t *testing.T) {
 	t.Run("binds to specified address", func(t *testing.T) {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "127.0.0.1"}}, func(ctx *httpContext) {
-			loopbackAddr := net.JoinHostPort("127.0.0.1", ctx.StaticConfig.Port)
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("127.0.0.1")
+			return c
+		}()}, func(ctx *httpContext) {
+			loopbackAddr := net.JoinHostPort("127.0.0.1", ctx.Config.Port.Get())
 			resp, err := http.Get(fmt.Sprintf("http://%s/healthz", loopbackAddr))
 			if err != nil {
 				t.Fatalf("Failed to reach server on bound address: %v", err)
@@ -305,7 +315,11 @@ func TestBindAddress(t *testing.T) {
 		})
 	})
 	t.Run("warns when on 0.0.0.0 without TLS or OAuth", func(t *testing.T) {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "0.0.0.0"}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("0.0.0.0")
+			return c
+		}()}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -315,7 +329,11 @@ func TestBindAddress(t *testing.T) {
 		})
 	})
 	t.Run("warns when on :: without TLS or OAuth", func(t *testing.T) {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "::"}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("::")
+			return c
+		}()}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -325,7 +343,11 @@ func TestBindAddress(t *testing.T) {
 		})
 	})
 	t.Run("no warning when on 127.0.0.1", func(t *testing.T) {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "127.0.0.1"}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("127.0.0.1")
+			return c
+		}()}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -335,7 +357,12 @@ func TestBindAddress(t *testing.T) {
 		})
 	})
 	t.Run("no warning when TLS is configured", func(t *testing.T) {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "0.0.0.0", TLSCert: "/dummy-cert.pem"}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("0.0.0.0")
+			c.TLSCert.SetForTest("/dummy-cert.pem")
+			return c
+		}()}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -345,7 +372,14 @@ func TestBindAddress(t *testing.T) {
 		})
 	})
 	t.Run("no warning when OAuth is enabled", func(t *testing.T) {
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{BindAddress: "0.0.0.0", RequireOAuth: true, ClusterProviderStrategy: api.ClusterProviderKubeConfig}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("0.0.0.0")
+			c.Port.SetForTest("8080")
+			c.RequireOAuth.SetForTest(true)
+			c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+			return c
+		}()}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -359,11 +393,14 @@ func TestBindAddress(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to find random port for metrics server: %v", err)
 		}
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{
-			BindAddress: "0.0.0.0",
-			TLSCert:     "/dummy-cert.pem",
-			MetricsPort: strconv.Itoa(metricsAddr.Port),
-		}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("0.0.0.0")
+			c.TLSCert.SetForTest("/dummy-cert.pem")
+			c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
+			return c
+		}(),
+		}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -380,12 +417,16 @@ func TestBindAddress(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to find random port for metrics server: %v", err)
 		}
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{
-			BindAddress:             "0.0.0.0",
-			RequireOAuth:            true,
-			ClusterProviderStrategy: api.ClusterProviderKubeConfig,
-			MetricsPort:             strconv.Itoa(metricsAddr.Port),
-		}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("0.0.0.0")
+			c.Port.SetForTest("8080")
+			c.RequireOAuth.SetForTest(true)
+			c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+			c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
+			return c
+		}(),
+		}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -402,10 +443,13 @@ func TestBindAddress(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to find random port for metrics server: %v", err)
 		}
-		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{
-			BindAddress: "127.0.0.1",
-			MetricsPort: strconv.Itoa(metricsAddr.Port),
-		}}, func(ctx *httpContext) {
+		testCaseWithContext(t, &httpContext{Config: func() *config.Config {
+			c := config.New()
+			c.BindAddress.SetForTest("127.0.0.1")
+			c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
+			return c
+		}(),
+		}, func(ctx *httpContext) {
 			ctx.StopServer()
 			_ = ctx.WaitForShutdown()
 			logStr := ctx.LogBuffer.String()
@@ -456,10 +500,12 @@ func TestMetricsPort(t *testing.T) {
 		}
 
 		testCaseWithContext(t, &httpContext{
-			StaticConfig: &config.StaticConfig{
-				MetricsPort:             strconv.Itoa(metricsAddr.Port),
-				ClusterProviderStrategy: api.ClusterProviderKubeConfig,
-			},
+			Config: func() *config.Config {
+				c := config.New()
+				c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
+				c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+				return c
+			}(),
 		}, func(ctx *httpContext) {
 			if err := test.WaitForServer(metricsAddr); err != nil {
 				t.Fatalf("Metrics server did not start in time: %v", err)
@@ -512,10 +558,12 @@ func TestMetricsPort(t *testing.T) {
 		}
 
 		testCaseWithContext(t, &httpContext{
-			StaticConfig: &config.StaticConfig{
-				MetricsPort:             strconv.Itoa(metricsAddr.Port),
-				ClusterProviderStrategy: api.ClusterProviderKubeConfig,
-			},
+			Config: func() *config.Config {
+				c := config.New()
+				c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
+				c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+				return c
+			}(),
 		}, func(ctx *httpContext) {
 			ctx.StopServer()
 			err := ctx.WaitForShutdown()

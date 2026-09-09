@@ -82,9 +82,19 @@ func (s *ProviderTestSuite) TestNewProviderInCluster() {
 		provider, err := NewProvider(s.T().Context(), cfg)
 		s.Require().Error(err, "Expected error for kubeconfig strategy")
 		s.ErrorContains(err, "kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments")
-		s.ErrorContains(err, "--kubeconfig /path/to/kubeconfig --cluster-provider kubeconfig")
+		s.ErrorContains(err, "kubeconfig = \"/path/to/kubeconfig\"")
+		s.ErrorContains(err, "cluster_provider_strategy is optional")
 		s.ErrorContains(err, "docs/configuration.md#cross-cluster-access-from-a-pod")
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
+	})
+	s.Run("With kubeconfig set to valid path and no cluster_provider_strategy, returns kubeconfig provider", func() {
+		cfg := test.Must(config.ReadToml([]byte(`
+			kubeconfig = "` + s.kubeconfigPath + `"
+		`)))
+		provider, err := NewProvider(s.T().Context(), cfg)
+		s.Require().NoError(err, "Expected no error when kubeconfig path is set")
+		s.NotNil(provider, "Expected provider instance")
+		s.IsType(&kubeConfigClusterProvider{}, provider, "Expected kubeConfigClusterProvider type")
 	})
 	s.Run("With cluster_provider_strategy=kubeconfig and kubeconfig set to valid path, returns kubeconfig provider", func() {
 		cfg := test.Must(config.ReadToml([]byte(`

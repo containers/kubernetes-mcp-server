@@ -15,7 +15,7 @@ type McpTransportSuite struct {
 
 func (s *McpTransportSuite) SetupTest() {
 	s.BaseHttpSuite.SetupTest()
-	s.StaticConfig.Stateless = false
+	s.Config.Stateless.SetForTest(false)
 }
 
 func (s *McpTransportSuite) TearDownTest() {
@@ -26,7 +26,7 @@ func (s *McpTransportSuite) TestSseEndpointsRemoved() {
 	s.StartServer()
 
 	for _, path := range []string{"/sse", "/message"} {
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s%s", s.StaticConfig.Port, path))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s%s", s.Config.Port.Get(), path))
 		s.Require().NoError(err, "Expected GET %s to complete", path)
 		_ = resp.Body.Close()
 		s.Equal(http.StatusNotFound, resp.StatusCode, "SSE endpoint %s must not be served", path)
@@ -37,12 +37,12 @@ func (s *McpTransportSuite) TestStreamableHttpTransport() {
 	testCases := []bool{true, false}
 	for _, stateless := range testCases {
 		s.Run(fmt.Sprintf("Streamable HTTP transport with server stateless=%v", stateless), func() {
-			s.StaticConfig.Stateless = stateless
+			s.Config.Stateless.SetForTest(stateless)
 			s.StartServer()
 
 			httpClient := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1.33.7"}, nil)
 			transport := &mcp.StreamableClientTransport{
-				Endpoint: fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port),
+				Endpoint: fmt.Sprintf("http://127.0.0.1:%s/mcp", s.Config.Port.Get()),
 			}
 			session, err := httpClient.Connect(s.T().Context(), transport, nil)
 			s.Require().NoError(err, "Expected no error connecting Streamable HTTP MCP client")

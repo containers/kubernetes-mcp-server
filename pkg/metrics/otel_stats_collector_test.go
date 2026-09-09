@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
@@ -246,7 +247,9 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 	s.Run("returns nil when OTEL_METRICS_EXPORTER is none", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "none")
 
-		exporter, err := createMetricsExporter(context.Background(), nil)
+		cfg, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(context.Background(), &cfg.Telemetry)
 		s.NoError(err)
 		s.Nil(exporter)
 	})
@@ -254,7 +257,9 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 	s.Run("returns nil when OTEL_METRICS_EXPORTER is none case-insensitive", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "NONE")
 
-		exporter, err := createMetricsExporter(context.Background(), nil)
+		cfg, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(context.Background(), &cfg.Telemetry)
 		s.NoError(err)
 		s.Nil(exporter)
 	})
@@ -273,9 +278,11 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -289,10 +296,12 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4318",
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4318")
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -306,10 +315,12 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "grpc",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("grpc")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -323,10 +334,12 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "unknown_protocol",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("unknown_protocol")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -335,13 +348,15 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		defer func() { _ = exporter.Shutdown(ctx) }()
 	})
 
-	s.Run("creates exporter from env var endpoint when no config", func() {
+	s.Run("creates exporter from env var endpoint when no config file", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
 		ctx := context.Background()
-		exporter, err := createMetricsExporter(ctx, nil)
+		cfg, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(ctx, &cfg.Telemetry)
 		s.NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
@@ -353,7 +368,9 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
 
 		ctx := context.Background()
-		exporter, err := createMetricsExporter(ctx, nil)
+		cfg, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(ctx, &cfg.Telemetry)
 		s.NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()

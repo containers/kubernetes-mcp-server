@@ -13,7 +13,7 @@ import (
 )
 
 type ToolsetConfigSuite struct {
-	BaseConfigSuite
+	ConfigFileSuite
 	originalToolsetConfigRegistry *extendedConfigRegistry
 }
 
@@ -114,15 +114,13 @@ func (s *ToolsetConfigSuite) TestReadConfigUnregisteredToolsetConfig() {
 	`)
 
 	config, err := Read(s.T().Context(), unregisteredConfigPath, "")
-	s.Run("returns no error for unregistered toolset config", func() {
-		s.Require().NoError(err, "Expected no error for unregistered toolset config, got %v", err)
+	s.Run("returns error for unregistered toolset config", func() {
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "toolset_configs.unregistered-toolset")
 	})
-	s.Run("returns config for unregistered toolset config", func() {
-		s.Require().NotNil(config, "Expected non-nil config for unregistered toolset config")
-	})
-	s.Run("does not parse unregistered toolset config", func() {
-		_, ok := config.GetToolsetConfig("unregistered-toolset")
-		s.Require().False(ok, "Expected no toolset config for unregistered toolset")
+	s.Run("returns nil config for unregistered toolset config", func() {
+		s.Nil(config)
 	})
 }
 
@@ -191,7 +189,7 @@ func (s *ToolsetConfigSuite) TestExtendedConfigMergingAcrossDropIns() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -240,7 +238,7 @@ func (s *ToolsetConfigSuite) TestExtendedConfigFromDropInOnly() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 

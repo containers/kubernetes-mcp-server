@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/log/logtest"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 )
 
 type LogsSuite struct {
@@ -29,17 +30,19 @@ func (s *LogsSuite) TestNewLogProviderDisabledCases() {
 
 	s.Run("returns nil when telemetry is explicitly disabled", func() {
 		disabled := false
-		cfg := &config.TelemetryConfig{
-			Enabled:  &disabled,
-			Endpoint: "http://localhost:4317",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Enabled.SetForTest(&disabled)
+			c.Endpoint.SetForTest("http://localhost:4317")
+			return c
+		}()
 		provider, err := NewLogProvider(s.T().Context(), cfg, "svc", "1.0")
 		s.NoError(err)
 		s.Nil(provider)
 	})
 
 	s.Run("returns nil when no endpoint is configured", func() {
-		cfg := &config.TelemetryConfig{}
+		cfg := configtest.NewTelemetry()
 		provider, err := NewLogProvider(s.T().Context(), cfg, "svc", "1.0")
 		s.NoError(err)
 		s.Nil(provider)
@@ -47,8 +50,10 @@ func (s *LogsSuite) TestNewLogProviderDisabledCases() {
 
 	s.Run("returns nil when OTEL_LOGS_EXPORTER is none", func() {
 		s.T().Setenv("OTEL_LOGS_EXPORTER", "none")
-		cfg := &config.TelemetryConfig{Endpoint: "http://localhost:4317"}
-		provider, err := NewLogProvider(s.T().Context(), cfg, "svc", "1.0")
+		loaded, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		loaded.Telemetry.Endpoint.SetForTest("http://localhost:4317")
+		provider, err := NewLogProvider(s.T().Context(), &loaded.Telemetry, "svc", "1.0")
 		s.NoError(err)
 		s.Nil(provider, "OTEL_LOGS_EXPORTER=none must disable log export even when endpoint is set")
 	})
@@ -56,7 +61,7 @@ func (s *LogsSuite) TestNewLogProviderDisabledCases() {
 
 func (s *LogsSuite) TestNewLogProviderWithValidConfig() {
 	s.Run("returns provider for grpc protocol", func() {
-		cfg := &config.TelemetryConfig{Endpoint: "http://localhost:4317", Protocol: "grpc"}
+		cfg := configtest.Telemetry("http://localhost:4317", "grpc")
 		provider, err := NewLogProvider(s.T().Context(), cfg, "test-svc", "1.0.0")
 		s.Require().NoError(err)
 		s.NotNil(provider)
@@ -64,7 +69,7 @@ func (s *LogsSuite) TestNewLogProviderWithValidConfig() {
 	})
 
 	s.Run("returns provider for http/protobuf protocol", func() {
-		cfg := &config.TelemetryConfig{Endpoint: "http://localhost:4318", Protocol: "http/protobuf"}
+		cfg := configtest.Telemetry("http://localhost:4318", "http/protobuf")
 		provider, err := NewLogProvider(s.T().Context(), cfg, "test-svc", "1.0.0")
 		s.Require().NoError(err)
 		s.NotNil(provider)
@@ -72,7 +77,7 @@ func (s *LogsSuite) TestNewLogProviderWithValidConfig() {
 	})
 
 	s.Run("defaults to grpc when protocol is empty", func() {
-		cfg := &config.TelemetryConfig{Endpoint: "http://localhost:4317"}
+		cfg := configtest.Telemetry("http://localhost:4317", "")
 		provider, err := NewLogProvider(s.T().Context(), cfg, "test-svc", "1.0.0")
 		s.Require().NoError(err)
 		s.NotNil(provider)
@@ -82,7 +87,7 @@ func (s *LogsSuite) TestNewLogProviderWithValidConfig() {
 
 func (s *LogsSuite) TestCreateLogExporter() {
 	s.Run("creates gRPC exporter by default when protocol is empty", func() {
-		cfg := &config.TelemetryConfig{Endpoint: "http://localhost:4317"}
+		cfg := configtest.Telemetry("http://localhost:4317", "")
 		exporter, err := createLogExporter(s.T().Context(), cfg)
 		s.Require().NoError(err)
 		s.NotNil(exporter)
@@ -90,7 +95,7 @@ func (s *LogsSuite) TestCreateLogExporter() {
 	})
 
 	s.Run("creates HTTP exporter for http/protobuf protocol", func() {
-		cfg := &config.TelemetryConfig{Endpoint: "http://localhost:4318", Protocol: "http/protobuf"}
+		cfg := configtest.Telemetry("http://localhost:4318", "http/protobuf")
 		exporter, err := createLogExporter(s.T().Context(), cfg)
 		s.Require().NoError(err)
 		s.NotNil(exporter)
@@ -98,7 +103,7 @@ func (s *LogsSuite) TestCreateLogExporter() {
 	})
 
 	s.Run("handles case-insensitive protocol values", func() {
-		cfg := &config.TelemetryConfig{Endpoint: "http://localhost:4318", Protocol: "HTTP/PROTOBUF"}
+		cfg := configtest.Telemetry("http://localhost:4318", "HTTP/PROTOBUF")
 		exporter, err := createLogExporter(s.T().Context(), cfg)
 		s.Require().NoError(err)
 		s.NotNil(exporter)

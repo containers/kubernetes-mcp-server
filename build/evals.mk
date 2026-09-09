@@ -100,7 +100,15 @@ diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
 .PHONY: run-server
 run-server: build ## Start MCP server in background and wait for health check
 	@echo "Starting MCP server on port $(MCP_PORT)..."
-	./$(BINARY_NAME) --port $(MCP_PORT) $(if $(TOOLSETS),--toolsets "$(TOOLSETS)") --config-dir $(MCP_CONFIG_DIR) $(if $(MCP_EVAL_KUBECONFIG),--kubeconfig "$(MCP_EVAL_KUBECONFIG)") & echo $$! > .mcp-server.pid
+	@mkdir -p _output
+	@printf 'port = "%s"\n' "$(MCP_PORT)" > _output/eval-server.toml
+	@if [ -n "$(TOOLSETS)" ]; then \
+		printf 'toolsets = [%s]\n' "$$(printf '%s' "$(TOOLSETS)" | sed 's/[[:space:]]*,[[:space:]]*/,/g; s/^/"/; s/,/", "/g; s/$$/"/')" >> _output/eval-server.toml; \
+	fi
+	@if [ -n "$(MCP_EVAL_KUBECONFIG)" ]; then \
+		printf 'kubeconfig = "%s"\n' "$(MCP_EVAL_KUBECONFIG)" >> _output/eval-server.toml; \
+	fi
+	./$(BINARY_NAME) --config _output/eval-server.toml --config-dir $(MCP_CONFIG_DIR) & echo $$! > .mcp-server.pid
 	@echo "MCP server started with PID $$(cat .mcp-server.pid)"
 	@echo "Waiting for MCP server to be ready..."
 	@elapsed=0; \

@@ -33,7 +33,8 @@ conformance-test: build ## Run MCP protocol conformance tests against a local se
 		'  user:' \
 		'    token: fake-token' \
 		> _output/conformance-kubeconfig
-	@./$(BINARY_NAME) --port $(CONFORMANCE_PORT) --kubeconfig _output/conformance-kubeconfig & echo $$! > .conformance-server.pid
+	@printf 'port = "%s"\nkubeconfig = "%s"\n' "$(CONFORMANCE_PORT)" "_output/conformance-kubeconfig" > _output/conformance-config.toml
+	@./$(BINARY_NAME) --config _output/conformance-config.toml & echo $$! > .conformance-server.pid
 	@echo "Waiting for server to be ready..."
 	@elapsed=0; \
 	while [ $$elapsed -lt $(CONFORMANCE_HEALTH_TIMEOUT) ]; do \

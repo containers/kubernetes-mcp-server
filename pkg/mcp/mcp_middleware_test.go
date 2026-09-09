@@ -303,8 +303,8 @@ type RateLimitingSuite struct {
 
 func (s *RateLimitingSuite) TestRequestsWithinRateLimitSucceed() {
 	s.Run("multiple requests under the limit all succeed", func() {
-		s.Cfg.HTTP.RateLimitRPS = 100
-		s.Cfg.HTTP.RateLimitBurst = 100
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(100)
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(100)
 		s.InitMcpClient()
 
 		for i := 0; i < 5; i++ {
@@ -316,8 +316,8 @@ func (s *RateLimitingSuite) TestRequestsWithinRateLimitSucceed() {
 
 func (s *RateLimitingSuite) TestRequestsExceedingRateLimitReturnError() {
 	s.Run("returns rate limit error after exceeding burst", func() {
-		s.Cfg.HTTP.RateLimitRPS = 0.001 // nearly zero replenishment
-		s.Cfg.HTTP.RateLimitBurst = 10
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(0.001) //  nearly zero replenishment
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(10)
 		s.InitMcpClient()
 
 		var rateLimitErr error
@@ -338,8 +338,8 @@ func (s *RateLimitingSuite) TestRequestsExceedingRateLimitReturnError() {
 
 func (s *RateLimitingSuite) TestSeparateSessionsHaveIndependentLimits() {
 	s.Run("second session succeeds after first is exhausted", func() {
-		s.Cfg.HTTP.RateLimitRPS = 0.001
-		s.Cfg.HTTP.RateLimitBurst = 10
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(0.001)
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(10)
 		s.InitMcpClient()
 
 		// Create a second client against the same server
@@ -362,7 +362,7 @@ func (s *RateLimitingSuite) TestSeparateSessionsHaveIndependentLimits() {
 
 func (s *RateLimitingSuite) TestDisabledRateLimiting() {
 	s.Run("requests succeed when rate limiting is disabled", func() {
-		s.Cfg.HTTP.RateLimitRPS = 0
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(0)
 		s.InitMcpClient()
 
 		for i := 0; i < 20; i++ {
@@ -374,8 +374,8 @@ func (s *RateLimitingSuite) TestDisabledRateLimiting() {
 
 func (s *RateLimitingSuite) TestDefaultBurst() {
 	s.Run("requests succeed when burst is not specified", func() {
-		s.Cfg.HTTP.RateLimitRPS = 100
-		s.Cfg.HTTP.RateLimitBurst = 0 // should default to 10
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(100)
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(0) //  should default to 10
 		s.InitMcpClient()
 
 		// Verify that requests succeed, confirming the default burst was applied
@@ -439,8 +439,8 @@ func (s *RateLimitingSuite) TestSessionBypass() {
 
 func (s *RateLimitingSuite) TestConfigReloadTakesEffect() {
 	s.Run("reload with higher values allows more requests", func() {
-		s.Cfg.HTTP.RateLimitRPS = 0.001 // nearly zero replenishment
-		s.Cfg.HTTP.RateLimitBurst = 2
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(0.001) //  nearly zero replenishment
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(2)
 		s.InitMcpClient()
 
 		// Exhaust the initial burst
@@ -453,8 +453,8 @@ func (s *RateLimitingSuite) TestConfigReloadTakesEffect() {
 		s.Require().Error(err, "Expected rate limit error")
 
 		// Reload with much higher limits
-		s.Cfg.HTTP.RateLimitRPS = 1000
-		s.Cfg.HTTP.RateLimitBurst = 1000
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(1000)
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(1000)
 
 		// After reload, requests should succeed
 		_, err = s.CallTool("configuration_view", map[string]any{"minified": false})
@@ -464,7 +464,7 @@ func (s *RateLimitingSuite) TestConfigReloadTakesEffect() {
 
 func (s *RateLimitingSuite) TestDisabledToEnabled() {
 	s.Run("enabling rate limiting after starting disabled", func() {
-		s.Cfg.HTTP.RateLimitRPS = 0 // disabled
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(0) //  disabled
 		s.InitMcpClient()
 
 		// Requests should succeed when disabled
@@ -474,8 +474,8 @@ func (s *RateLimitingSuite) TestDisabledToEnabled() {
 		}
 
 		// Enable rate limiting with tight burst
-		s.Cfg.HTTP.RateLimitRPS = 0.001
-		s.Cfg.HTTP.RateLimitBurst = 2
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(0.001)
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(2)
 
 		// Eventually should hit rate limit
 		var rateLimitErr error
@@ -493,8 +493,8 @@ func (s *RateLimitingSuite) TestDisabledToEnabled() {
 
 func (s *RateLimitingSuite) TestDoubleCloseDoesNotPanic() {
 	s.Run("calling Close twice does not panic", func() {
-		s.Cfg.HTTP.RateLimitRPS = 10
-		s.Cfg.HTTP.RateLimitBurst = 10
+		s.Cfg.HTTP.RateLimitRPS.SetForTest(10)
+		s.Cfg.HTTP.RateLimitBurst.SetForTest(10)
 		s.InitMcpClient()
 
 		s.NotPanics(func() {

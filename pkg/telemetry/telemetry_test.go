@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -21,9 +22,17 @@ func TestTelemetry(t *testing.T) {
 	suite.Run(t, new(TelemetrySuite))
 }
 
+func initTestTracer(ctx context.Context, serviceName, serviceVersion string) (func(), error) {
+	cfg, err := config.ReadToml(nil)
+	if err != nil {
+		return func() {}, err
+	}
+	return InitTracerWithConfig(ctx, &cfg.Telemetry, serviceName, serviceVersion)
+}
+
 func (s *TelemetrySuite) TestInitTracer() {
 	s.Run("returns cleanup function when OTLP endpoint not configured", func() {
-		cleanup, err := InitTracer(s.T().Context(), "test-service", "1.0.0")
+		cleanup, err := initTestTracer(s.T().Context(), "test-service", "1.0.0")
 
 		s.NoError(err, "should not return error when OTLP endpoint is not configured")
 		s.NotNil(cleanup, "cleanup function should not be nil")
@@ -34,7 +43,7 @@ func (s *TelemetrySuite) TestInitTracer() {
 	})
 
 	s.Run("initializes with valid service name and version", func() {
-		cleanup, err := InitTracer(s.T().Context(), "my-service", "2.0.0")
+		cleanup, err := initTestTracer(s.T().Context(), "my-service", "2.0.0")
 		defer cleanup()
 
 		s.NoError(err, "initialization should succeed")
@@ -45,7 +54,7 @@ func (s *TelemetrySuite) TestInitTracer() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 		initialProvider := otel.GetTracerProvider()
 
-		cleanup, err := InitTracer(s.T().Context(), "test-service", "1.0.0")
+		cleanup, err := initTestTracer(s.T().Context(), "test-service", "1.0.0")
 		s.Require().NoError(err)
 		defer cleanup()
 
@@ -60,7 +69,7 @@ func (s *TelemetrySuite) TestInitTracer() {
 
 func (s *TelemetrySuite) TestCleanupFunction() {
 	s.Run("can be called multiple times", func() {
-		cleanup, err := InitTracer(s.T().Context(), "test-service", "1.0.0")
+		cleanup, err := initTestTracer(s.T().Context(), "test-service", "1.0.0")
 		s.Require().NoError(err)
 
 		s.NotPanics(func() {
@@ -71,7 +80,7 @@ func (s *TelemetrySuite) TestCleanupFunction() {
 	})
 
 	s.Run("executes without blocking", func() {
-		cleanup, err := InitTracer(s.T().Context(), "test-service", "1.0.0")
+		cleanup, err := initTestTracer(s.T().Context(), "test-service", "1.0.0")
 		s.Require().NoError(err)
 
 		done := make(chan bool)
@@ -92,7 +101,7 @@ func (s *TelemetrySuite) TestCleanupFunction() {
 
 func (s *TelemetrySuite) TestInitTracerWithEmptyValues() {
 	s.Run("handles empty service name", func() {
-		cleanup, err := InitTracer(s.T().Context(), "", "1.0.0")
+		cleanup, err := initTestTracer(s.T().Context(), "", "1.0.0")
 		defer cleanup()
 
 		s.NoError(err, "should handle empty service name")
@@ -100,7 +109,7 @@ func (s *TelemetrySuite) TestInitTracerWithEmptyValues() {
 	})
 
 	s.Run("handles empty service version", func() {
-		cleanup, err := InitTracer(s.T().Context(), "test-service", "")
+		cleanup, err := initTestTracer(s.T().Context(), "test-service", "")
 		defer cleanup()
 
 		s.NoError(err, "should handle empty service version")
@@ -108,7 +117,7 @@ func (s *TelemetrySuite) TestInitTracerWithEmptyValues() {
 	})
 
 	s.Run("handles both empty", func() {
-		cleanup, err := InitTracer(s.T().Context(), "", "")
+		cleanup, err := initTestTracer(s.T().Context(), "", "")
 		defer cleanup()
 
 		s.NoError(err, "should handle both empty values")
@@ -130,10 +139,12 @@ func (s *TelemetrySuite) TestEnabled() {
 		}))
 		defer server.Close()
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: server.URL,
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest(server.URL)
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 		cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
 		s.Require().NoError(err)
 		defer cleanup()
@@ -148,10 +159,12 @@ func (s *TelemetrySuite) TestEnabled() {
 		}))
 		defer server.Close()
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: server.URL,
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest(server.URL)
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 		cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
 		s.Require().NoError(err)
 		s.Require().True(Enabled())
@@ -173,10 +186,12 @@ func (s *TelemetrySuite) TestInitTracerWithConfig() {
 
 	s.Run("returns no-op cleanup when cfg is not enabled", func() {
 		enabled := false
-		cfg := &config.TelemetryConfig{
-			Enabled:  &enabled,
-			Endpoint: "http://localhost:4317",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Enabled.SetForTest(&enabled)
+			c.Endpoint.SetForTest("http://localhost:4317")
+			return c
+		}()
 
 		cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
 
@@ -186,7 +201,7 @@ func (s *TelemetrySuite) TestInitTracerWithConfig() {
 	})
 
 	s.Run("returns no-op cleanup when cfg has no endpoint", func() {
-		cfg := &config.TelemetryConfig{}
+		cfg := configtest.NewTelemetry()
 
 		cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
 
@@ -202,10 +217,12 @@ func (s *TelemetrySuite) TestInitTracerWithConfig() {
 		}))
 		defer server.Close()
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: server.URL,
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest(server.URL)
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 
 		cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
 		s.Require().NoError(err)
@@ -221,10 +238,12 @@ func (s *TelemetrySuite) TestInitTracerWithConfig() {
 		}))
 		defer server.Close()
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: server.URL,
-			Protocol: "grpc",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest(server.URL)
+			c.Protocol.SetForTest("grpc")
+			return c
+		}()
 
 		cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
 		s.Require().NoError(err)
@@ -242,10 +261,12 @@ func (s *TelemetrySuite) TestInitTracerWithConfig() {
 		}))
 		defer server.Close()
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: server.URL,
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest(server.URL)
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 		initialProvider := otel.GetTracerProvider()
 
 		cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
@@ -261,60 +282,48 @@ func (s *TelemetrySuite) TestInitTracerWithConfig() {
 
 func (s *TelemetrySuite) TestCreateExporter() {
 	s.Run("creates gRPC exporter by default", func() {
-		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
-
 		ctx := context.Background()
-		exporter, err := createExporter(ctx)
+		exporter, err := createExporterWithConfig(ctx, configtest.Telemetry("http://localhost:4317", ""))
 		s.Require().NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
 	})
 
 	s.Run("creates gRPC exporter for grpc protocol", func() {
-		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
-
 		ctx := context.Background()
-		exporter, err := createExporter(ctx)
+		exporter, err := createExporterWithConfig(ctx, configtest.Telemetry("http://localhost:4317", "grpc"))
 		s.Require().NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
 	})
 
 	s.Run("creates HTTP exporter for http/protobuf protocol", func() {
-		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
-
 		ctx := context.Background()
-		exporter, err := createExporter(ctx)
+		exporter, err := createExporterWithConfig(ctx, configtest.Telemetry("http://localhost:4317", "http/protobuf"))
 		s.Require().NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
 	})
 
 	s.Run("creates HTTP exporter for http protocol alias", func() {
-		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http")
-
 		ctx := context.Background()
-		exporter, err := createExporter(ctx)
+		exporter, err := createExporterWithConfig(ctx, configtest.Telemetry("http://localhost:4317", "http"))
 		s.Require().NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
 	})
 
 	s.Run("falls back to gRPC for unknown protocol", func() {
-		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "unknown_protocol")
-
 		ctx := context.Background()
-		exporter, err := createExporter(ctx)
+		exporter, err := createExporterWithConfig(ctx, configtest.Telemetry("http://localhost:4317", "unknown_protocol"))
 		s.Require().NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
 	})
 
 	s.Run("handles case-insensitive protocol values", func() {
-		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "HTTP/PROTOBUF")
-
 		ctx := context.Background()
-		exporter, err := createExporter(ctx)
+		exporter, err := createExporterWithConfig(ctx, configtest.Telemetry("http://localhost:4317", "HTTP/PROTOBUF"))
 		s.Require().NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
@@ -323,9 +332,11 @@ func (s *TelemetrySuite) TestCreateExporter() {
 
 func (s *TelemetrySuite) TestCreateExporterWithConfig() {
 	s.Run("creates gRPC exporter by default when protocol is empty", func() {
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createExporterWithConfig(ctx, cfg)
@@ -335,10 +346,12 @@ func (s *TelemetrySuite) TestCreateExporterWithConfig() {
 	})
 
 	s.Run("creates gRPC exporter for grpc protocol", func() {
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "grpc",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("grpc")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createExporterWithConfig(ctx, cfg)
@@ -348,10 +361,12 @@ func (s *TelemetrySuite) TestCreateExporterWithConfig() {
 	})
 
 	s.Run("creates HTTP exporter for http/protobuf protocol", func() {
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4318",
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4318")
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createExporterWithConfig(ctx, cfg)
@@ -361,10 +376,12 @@ func (s *TelemetrySuite) TestCreateExporterWithConfig() {
 	})
 
 	s.Run("creates HTTP exporter for http protocol alias", func() {
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4318",
-			Protocol: "http",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4318")
+			c.Protocol.SetForTest("http")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createExporterWithConfig(ctx, cfg)
@@ -374,10 +391,12 @@ func (s *TelemetrySuite) TestCreateExporterWithConfig() {
 	})
 
 	s.Run("falls back to gRPC for unknown protocol", func() {
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "unknown_protocol",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("unknown_protocol")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createExporterWithConfig(ctx, cfg)
@@ -397,10 +416,12 @@ func (s *TelemetrySuite) TestCreateExporterWithConfig() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: server.URL,
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest(server.URL)
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createExporterWithConfig(ctx, cfg)
@@ -427,21 +448,33 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil")
 	})
 
 	s.Run("returns AlwaysSample for always_on", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "always_on")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil")
 	})
 
 	s.Run("returns NeverSample for always_off", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "always_off")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil")
 	})
 
@@ -449,7 +482,11 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.5")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil")
 	})
 
@@ -457,23 +494,32 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil")
 	})
 
-	s.Run("handles invalid sampler arg gracefully", func() {
+	s.Run("rejects invalid sampler arg at load", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "invalid")
 
-		sampler := getSamplerFromEnv(s.T().Context())
-		s.NotNil(sampler, "sampler should not be nil even with invalid arg")
+		_, err := config.ReadToml(nil)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "OTEL_TRACES_SAMPLER_ARG")
 	})
 
 	s.Run("handles out of range sampler arg gracefully", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "1.5")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil even with out of range arg")
 	})
 
@@ -481,14 +527,22 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "-0.1")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil even with negative arg")
 	})
 
 	s.Run("returns ParentBased(AlwaysSample) for parentbased_always_on", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "parentbased_always_on")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil")
 	})
 
@@ -496,14 +550,22 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.1")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil")
 	})
 
 	s.Run("returns default for unknown sampler type", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "unknown_sampler")
 
-		sampler := getSamplerFromEnv(s.T().Context())
+		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+			cfg, err := config.ReadToml(nil)
+			s.Require().NoError(err)
+			return &cfg.Telemetry
+		}())
 		s.NotNil(sampler, "sampler should not be nil even with unknown type")
 	})
 
@@ -512,7 +574,11 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 			s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 			s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.0")
 
-			sampler := getSamplerFromEnv(s.T().Context())
+			sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+				cfg, err := config.ReadToml(nil)
+				s.Require().NoError(err)
+				return &cfg.Telemetry
+			}())
 			s.NotNil(sampler, "sampler should accept 0.0")
 		})
 
@@ -520,7 +586,11 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 			s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 			s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "1.0")
 
-			sampler := getSamplerFromEnv(s.T().Context())
+			sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
+				cfg, err := config.ReadToml(nil)
+				s.Require().NoError(err)
+				return &cfg.Telemetry
+			}())
 			s.NotNil(sampler, "sampler should accept 1.0")
 		})
 	})
@@ -528,21 +598,29 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 
 func (s *TelemetrySuite) TestGetSamplerFromConfig() {
 	s.Run("returns default ParentBased(AlwaysSample) when sampler is empty", func() {
-		cfg := &config.TelemetryConfig{}
+		cfg := configtest.NewTelemetry()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
 	})
 
 	s.Run("returns AlwaysSample for always_on", func() {
-		cfg := &config.TelemetryConfig{TracesSampler: "always_on"}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("always_on")
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
 	})
 
 	s.Run("returns NeverSample for always_off", func() {
-		cfg := &config.TelemetryConfig{TracesSampler: "always_off"}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("always_off")
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
@@ -550,31 +628,45 @@ func (s *TelemetrySuite) TestGetSamplerFromConfig() {
 
 	s.Run("returns TraceIDRatioBased for traceidratio with valid arg", func() {
 		ratio := 0.5
-		cfg := &config.TelemetryConfig{
-			TracesSampler:    "traceidratio",
-			TracesSamplerArg: &ratio,
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("traceidratio")
+			c.TracesSamplerArg.SetForTest(&ratio)
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
 	})
 
 	s.Run("returns TraceIDRatioBased with default 1.0 for traceidratio without arg", func() {
-		cfg := &config.TelemetryConfig{TracesSampler: "traceidratio"}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("traceidratio")
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
 	})
 
 	s.Run("returns ParentBased(AlwaysSample) for parentbased_always_on", func() {
-		cfg := &config.TelemetryConfig{TracesSampler: "parentbased_always_on"}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("parentbased_always_on")
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
 	})
 
 	s.Run("returns ParentBased(NeverSample) for parentbased_always_off", func() {
-		cfg := &config.TelemetryConfig{TracesSampler: "parentbased_always_off"}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("parentbased_always_off")
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
@@ -582,17 +674,23 @@ func (s *TelemetrySuite) TestGetSamplerFromConfig() {
 
 	s.Run("returns ParentBased(TraceIDRatioBased) for parentbased_traceidratio", func() {
 		ratio := 0.1
-		cfg := &config.TelemetryConfig{
-			TracesSampler:    "parentbased_traceidratio",
-			TracesSamplerArg: &ratio,
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("parentbased_traceidratio")
+			c.TracesSamplerArg.SetForTest(&ratio)
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
 	})
 
 	s.Run("returns default for unknown sampler type", func() {
-		cfg := &config.TelemetryConfig{TracesSampler: "unknown_sampler"}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("unknown_sampler")
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
@@ -601,10 +699,12 @@ func (s *TelemetrySuite) TestGetSamplerFromConfig() {
 	s.Run("handles edge case ratio values", func() {
 		s.Run("accepts 0.0", func() {
 			ratio := 0.0
-			cfg := &config.TelemetryConfig{
-				TracesSampler:    "traceidratio",
-				TracesSamplerArg: &ratio,
-			}
+			cfg := func() *config.TelemetryConfig {
+				c := configtest.NewTelemetry()
+				c.TracesSampler.SetForTest("traceidratio")
+				c.TracesSamplerArg.SetForTest(&ratio)
+				return c
+			}()
 
 			sampler := getSamplerFromConfig(s.T().Context(), cfg)
 			s.NotNil(sampler)
@@ -612,10 +712,12 @@ func (s *TelemetrySuite) TestGetSamplerFromConfig() {
 
 		s.Run("accepts 1.0", func() {
 			ratio := 1.0
-			cfg := &config.TelemetryConfig{
-				TracesSampler:    "traceidratio",
-				TracesSamplerArg: &ratio,
-			}
+			cfg := func() *config.TelemetryConfig {
+				c := configtest.NewTelemetry()
+				c.TracesSampler.SetForTest("traceidratio")
+				c.TracesSamplerArg.SetForTest(&ratio)
+				return c
+			}()
 
 			sampler := getSamplerFromConfig(s.T().Context(), cfg)
 			s.NotNil(sampler)
@@ -624,7 +726,11 @@ func (s *TelemetrySuite) TestGetSamplerFromConfig() {
 
 	s.Run("env var takes precedence over config sampler", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "always_off")
-		cfg := &config.TelemetryConfig{TracesSampler: "always_on"}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("always_on")
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)
@@ -635,10 +741,12 @@ func (s *TelemetrySuite) TestGetSamplerFromConfig() {
 	s.Run("env var takes precedence over config sampler arg", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.1")
 		ratio := 0.9
-		cfg := &config.TelemetryConfig{
-			TracesSampler:    "traceidratio",
-			TracesSamplerArg: &ratio,
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.TracesSampler.SetForTest("traceidratio")
+			c.TracesSamplerArg.SetForTest(&ratio)
+			return c
+		}()
 
 		sampler := getSamplerFromConfig(s.T().Context(), cfg)
 		s.NotNil(sampler)

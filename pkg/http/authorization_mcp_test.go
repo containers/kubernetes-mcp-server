@@ -42,9 +42,9 @@ func (s *AuthorizationSuite) SetupTest() {
 
 	// Default Auth settings (overridden in tests as needed)
 	s.OidcProvider = nil
-	s.StaticConfig.RequireOAuth = true
-	s.StaticConfig.OAuthAudience = ""
-	s.StaticConfig.TokenExchange = nil
+	s.Config.RequireOAuth.SetForTest(true)
+	s.Config.OAuthAudience.SetForTest("")
+	s.Config.TokenExchange = config.New().TokenExchange
 }
 
 func (s *AuthorizationSuite) TearDownTest() {
@@ -58,7 +58,7 @@ func (s *AuthorizationSuite) TearDownTest() {
 }
 
 func (s *AuthorizationSuite) StartClient(headers ...map[string]string) {
-	endpoint := fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port)
+	endpoint := fmt.Sprintf("http://127.0.0.1:%s/mcp", s.Config.Port.Get())
 	options := []test.McpClientOption{
 		test.WithEndpoint(endpoint),
 		test.WithAllowConnectionError(),
@@ -70,7 +70,7 @@ func (s *AuthorizationSuite) StartClient(headers ...map[string]string) {
 }
 
 func (s *AuthorizationSuite) HttpGet(authHeader string) *http.Response {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s/mcp", s.StaticConfig.Port), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s/mcp", s.Config.Port.Get()), nil)
 	s.Require().NoError(err, "Failed to create request")
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
@@ -198,7 +198,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderExpired() {
 
 func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalidAudience() {
 	// Invalid audience claim Bearer token
-	s.StaticConfig.OAuthAudience = "expected-audience"
+	s.Config.OAuthAudience.SetForTest("expected-audience")
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + tokenBasicNotExpired,
@@ -229,7 +229,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedHeaderInvalidAudience(
 
 func (s *AuthorizationSuite) TestAuthorizationUnauthorizedOidcValidation() {
 	// Failed OIDC validation
-	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.Config.OAuthAudience.SetForTest("mcp-server")
 	oidcTestServer := NewOidcTestServer(s.T())
 	s.T().Cleanup(oidcTestServer.Close)
 	s.OidcProvider = oidcTestServer.Provider
@@ -278,17 +278,13 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedTokenExchangeFailure()
 	}
 
 	s.OidcProvider = oidcTestServer.Provider
-	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.TokenExchange = &config.TokenExchangeConfig{
-		Strategy: "rfc8693",
-		Audience: "backend-audience",
-		Scopes:   []string{"backend-scope"},
-		ClientAuth: &config.TokenExchangeClientAuth{
-			Method:       api.TokenExchangeClientAuthMethodSecretPost,
-			ClientID:     "test-sts-client-id",
-			ClientSecret: "test-sts-client-secret",
-		},
-	}
+	s.Config.OAuthAudience.SetForTest("mcp-server")
+	s.Config.TokenExchange.Strategy.SetForTest("rfc8693")
+	s.Config.TokenExchange.Audience.SetForTest("backend-audience")
+	s.Config.TokenExchange.Scopes.SetForTest([]string{"backend-scope"})
+	s.Config.TokenExchange.ClientAuth.Method.SetForTest("client_secret_post")
+	s.Config.TokenExchange.ClientAuth.ClientID.SetForTest("test-sts-client-id")
+	s.Config.TokenExchange.ClientAuth.ClientSecret.SetForTest("test-sts-client-secret")
 	s.logBuffer.Reset()
 	s.StartServer()
 	s.StartClient(map[string]string{
@@ -317,7 +313,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedTokenExchangeFailure()
 }
 
 func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
-	s.StaticConfig.RequireOAuth = false
+	s.Config.RequireOAuth.SetForTest(false)
 	s.StartServer()
 	s.StartClient()
 
@@ -332,11 +328,11 @@ func (s *AuthorizationSuite) TestAuthorizationRequireOAuthFalse() {
 
 func (s *AuthorizationSuite) TestAuthorizationRawToken() {
 	s.MockServer.ResetHandlers()
-	s.StaticConfig.SkipJWTVerification = true
+	s.Config.SkipJWTVerification.SetForTest(true)
 
 	cases := []string{"", "mcp-server"}
 	for _, audience := range cases {
-		s.StaticConfig.OAuthAudience = audience
+		s.Config.OAuthAudience.SetForTest(audience)
 		s.logBuffer.Reset()
 		s.StartServer()
 		s.StartClient(map[string]string{
@@ -368,7 +364,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcToken() {
 	validOidcToken := oidctest.SignIDToken(oidcTestServer.PrivateKey, "test-oidc-key-id", oidc.RS256, rawClaims)
 
 	s.OidcProvider = oidcTestServer.Provider
-	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.Config.OAuthAudience.SetForTest("mcp-server")
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + validOidcToken,
@@ -406,17 +402,13 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	}
 
 	s.OidcProvider = oidcTestServer.Provider
-	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.TokenExchange = &config.TokenExchangeConfig{
-		Strategy: "rfc8693",
-		Audience: "backend-audience",
-		Scopes:   []string{"backend-scope"},
-		ClientAuth: &config.TokenExchangeClientAuth{
-			Method:       api.TokenExchangeClientAuthMethodSecretPost,
-			ClientID:     "test-sts-client-id",
-			ClientSecret: "test-sts-client-secret",
-		},
-	}
+	s.Config.OAuthAudience.SetForTest("mcp-server")
+	s.Config.TokenExchange.Strategy.SetForTest("rfc8693")
+	s.Config.TokenExchange.Audience.SetForTest("backend-audience")
+	s.Config.TokenExchange.Scopes.SetForTest([]string{"backend-scope"})
+	s.Config.TokenExchange.ClientAuth.Method.SetForTest("client_secret_post")
+	s.Config.TokenExchange.ClientAuth.ClientID.SetForTest("test-sts-client-id")
+	s.Config.TokenExchange.ClientAuth.ClientSecret.SetForTest("test-sts-client-secret")
 
 	s.MockServer.ResetHandlers()
 	var backendAuth atomic.Value
@@ -459,9 +451,9 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughWarning() {
 	// When require_oauth=true, skip_jwt_verification=true, and no OIDC provider
 	// is configured (passthrough mode), a warning log should be emitted once.
 	s.MockServer.ResetHandlers()
-	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.AuthorizationURL = ""
-	s.StaticConfig.SkipJWTVerification = true
+	s.Config.OAuthAudience.SetForTest("mcp-server")
+	s.Config.AuthorizationURL.SetForTest("")
+	s.Config.SkipJWTVerification.SetForTest(true)
 	s.logBuffer.Reset()
 	s.StartServer()
 	s.StartClient(map[string]string{
@@ -484,9 +476,9 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughWarning() {
 func (s *AuthorizationSuite) TestAuthorizationPassthroughWarningOnce() {
 	// The warning should fire exactly once even with multiple requests.
 	s.MockServer.ResetHandlers()
-	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.AuthorizationURL = ""
-	s.StaticConfig.SkipJWTVerification = true
+	s.Config.OAuthAudience.SetForTest("mcp-server")
+	s.Config.AuthorizationURL.SetForTest("")
+	s.Config.SkipJWTVerification.SetForTest(true)
 	s.logBuffer.Reset()
 	s.StartServer()
 
@@ -508,9 +500,9 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughRejectedWithoutSkipFlag
 	// When require_oauth=true, skip_jwt_verification=false (default), and no OIDC
 	// provider is configured, requests should be rejected at runtime.
 	s.MockServer.ResetHandlers()
-	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.AuthorizationURL = ""
-	s.StaticConfig.SkipJWTVerification = false
+	s.Config.OAuthAudience.SetForTest("mcp-server")
+	s.Config.AuthorizationURL.SetForTest("")
+	s.Config.SkipJWTVerification.SetForTest(false)
 	s.logBuffer.Reset()
 	s.StartServer()
 	s.StartClient(map[string]string{
@@ -551,7 +543,7 @@ func (s *AuthorizationSuite) TestAuthorizationUnknownWellKnownPathRequiresAuth()
 	}
 	for _, path := range unknownPaths {
 		s.Run(fmt.Sprintf("%s requires auth", path), func() {
-			req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s%s", s.StaticConfig.Port, path), nil)
+			req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s%s", s.Config.Port.Get(), path), nil)
 			s.Require().NoError(err)
 			resp, err := http.DefaultClient.Do(req)
 			s.Require().NoError(err)
@@ -572,7 +564,7 @@ func (s *AuthorizationSuite) TestAuthorizationExemptEndpointsFromOAuth() {
 	exemptEndpoints := []string{"/healthz", "/metrics", "/stats"}
 	for _, endpoint := range exemptEndpoints {
 		s.Run(fmt.Sprintf("%s accessible without OAuth token", endpoint), func() {
-			req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s%s", s.StaticConfig.Port, endpoint), nil)
+			req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%s%s", s.Config.Port.Get(), endpoint), nil)
 			s.Require().NoError(err, "Failed to create request")
 			resp, err := http.DefaultClient.Do(req)
 			s.Require().NoError(err, "Failed to get %s endpoint", endpoint)
@@ -597,7 +589,7 @@ func (s *AuthorizationSuite) TestAuthorizationRawPassthroughStreamableHTTP() {
 		}
 	}))
 
-	s.StaticConfig.RequireOAuth = false
+	s.Config.RequireOAuth.SetForTest(false)
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + rawK8sToken,
@@ -644,8 +636,8 @@ func (s *AuthorizationSuite) TestAuthorizationClusterAuthModeKubeconfigDropsClie
 		backendAuth.Store(r.Header.Get("Authorization"))
 	}))
 
-	s.StaticConfig.RequireOAuth = false
-	s.StaticConfig.ClusterAuthMode = api.ClusterAuthKubeconfig
+	s.Config.RequireOAuth.SetForTest(false)
+	s.Config.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + clientToken,
@@ -690,8 +682,8 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughOpaqueToken() {
 		}
 	}))
 
-	s.StaticConfig.SkipJWTVerification = true
-	s.StaticConfig.AuthorizationURL = ""
+	s.Config.SkipJWTVerification.SetForTest(true)
+	s.Config.AuthorizationURL.SetForTest("")
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + opaqueToken,
@@ -727,8 +719,8 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughOpaqueToken() {
 func (s *AuthorizationSuite) TestAuthorizationPassthroughMalformedJWT() {
 	s.MockServer.ResetHandlers()
 
-	s.StaticConfig.SkipJWTVerification = true
-	s.StaticConfig.AuthorizationURL = ""
+	s.Config.SkipJWTVerification.SetForTest(true)
+	s.Config.AuthorizationURL.SetForTest("")
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer not.a.jwt.at.all",
@@ -748,8 +740,8 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughMalformedJWT() {
 // presence check still runs in passthrough mode — the early return fires only
 // after the header has been confirmed present.
 func (s *AuthorizationSuite) TestAuthorizationPassthroughMissingHeader() {
-	s.StaticConfig.SkipJWTVerification = true
-	s.StaticConfig.AuthorizationURL = ""
+	s.Config.SkipJWTVerification.SetForTest(true)
+	s.Config.AuthorizationURL.SetForTest("")
 	s.StartServer()
 
 	s.Run("Missing Authorization header returns 401 in passthrough mode", func() {
@@ -782,8 +774,8 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughExpiredToken() {
 		}
 	}))
 
-	s.StaticConfig.SkipJWTVerification = true
-	s.StaticConfig.AuthorizationURL = ""
+	s.Config.SkipJWTVerification.SetForTest(true)
+	s.Config.AuthorizationURL.SetForTest("")
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + tokenBasicExpired,
@@ -830,9 +822,9 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughClusterIssuedJWT() {
 		}
 	}))
 
-	s.StaticConfig.SkipJWTVerification = true
-	s.StaticConfig.AuthorizationURL = ""
-	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.Config.SkipJWTVerification.SetForTest(true)
+	s.Config.AuthorizationURL.SetForTest("")
+	s.Config.OAuthAudience.SetForTest("mcp-server")
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + clusterIssuedToken,
@@ -870,9 +862,9 @@ func (s *AuthorizationSuite) TestAuthorizationPassthroughOIDCPathUnaffected() {
 	oidcTestServer := NewOidcTestServer(s.T())
 	s.T().Cleanup(oidcTestServer.Close)
 
-	s.StaticConfig.SkipJWTVerification = true
-	s.StaticConfig.AuthorizationURL = oidcTestServer.URL
-	s.StaticConfig.OAuthAudience = "mcp-server"
+	s.Config.SkipJWTVerification.SetForTest(true)
+	s.Config.AuthorizationURL.SetForTest(oidcTestServer.URL)
+	s.Config.OAuthAudience.SetForTest("mcp-server")
 	s.OidcProvider = oidcTestServer.Provider
 	s.StartServer()
 

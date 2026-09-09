@@ -2,8 +2,6 @@ package watcher
 
 import (
 	"context"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -30,16 +28,11 @@ type Kubeconfig struct {
 
 var _ Watcher = (*Kubeconfig)(nil)
 
-func NewKubeconfig(ctx context.Context, clientConfig clientcmd.ClientConfig) *Kubeconfig {
-	debounceWindow := DefaultKubeconfigDebounceWindow
-
-	// Allow override via environment variable for testing
-	if envDebounce := os.Getenv("KUBECONFIG_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
-		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
-			debounceWindow = time.Duration(ms) * time.Millisecond
-			klogutil.FromContext(ctx).V(2).Info("Using custom kubeconfig debounce window", "debounce_window", debounceWindow)
-		}
+func NewKubeconfig(ctx context.Context, clientConfig clientcmd.ClientConfig, debounceWindow time.Duration) *Kubeconfig {
+	if debounceWindow <= 0 {
+		debounceWindow = DefaultKubeconfigDebounceWindow
 	}
+	klogutil.FromContext(ctx).V(2).Info("Using kubeconfig debounce window", "debounce_window", debounceWindow)
 
 	return &Kubeconfig{
 		ClientConfig:   clientConfig,

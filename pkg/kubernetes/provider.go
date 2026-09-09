@@ -3,8 +3,10 @@ package kubernetes
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
@@ -31,7 +33,36 @@ type Provider interface {
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
 	WatchTargets(ctx context.Context, reload McpReload)
+	// ReloadConfig replaces the provider's Config and rebuilds managers so
+	// values copied into clients at construction (denied_resources,
+	// validation, confirmation) pick up a SIGHUP reload. reset() replaces
+	// watchers; implementations re-arm WatchTargets afterward.
+	ReloadConfig(ctx context.Context, cfg *config.Config) error
 	Close()
+}
+
+// WatchTargetsRegistration remembers the WatchTargets callback so ReloadConfig
+// can re-arm watchers after reset() replaces them.
+type WatchTargetsRegistration struct {
+	mu     sync.Mutex
+	ctx    context.Context
+	reload McpReload
+}
+
+func (w *WatchTargetsRegistration) Store(ctx context.Context, reload McpReload) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ctx = ctx
+	w.reload = reload
+}
+
+func (w *WatchTargetsRegistration) Rearm(watch func(context.Context, McpReload)) {
+	w.mu.Lock()
+	ctx, reload := w.ctx, w.reload
+	w.mu.Unlock()
+	if reload != nil {
+		watch(ctx, reload)
+	}
 }
 
 // TokenExchangeProvider is an optional interface that providers can implement to suport per-target token exchange.
@@ -54,8 +85,8 @@ type TokenExchangeProvider interface {
 type ProviderOption func(*providerOptions)
 
 type providerOptions struct {
-	oauthState         *oauth.State
-	baseConfigProvider func() api.BaseConfig
+	oauthState     *oauth.State
+	configProvider func() *config.Config
 }
 
 func WithTokenExchange(oauthState *oauth.State) ProviderOption {
@@ -64,13 +95,13 @@ func WithTokenExchange(oauthState *oauth.State) ProviderOption {
 	}
 }
 
-func WithBaseConfigProvider(baseConfigProvider func() api.BaseConfig) ProviderOption {
+func WithConfigProvider(configProvider func() *config.Config) ProviderOption {
 	return func(opts *providerOptions) {
-		opts.baseConfigProvider = baseConfigProvider
+		opts.configProvider = configProvider
 	}
 }
 
-func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
+func NewProvider(ctx context.Context, cfg *config.Config, opts ...ProviderOption) (Provider, error) {
 	var providerOpts providerOptions
 	for _, opt := range opts {
 		opt(&providerOpts)
@@ -89,15 +120,15 @@ func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption
 	}
 
 	if providerOpts.oauthState != nil {
-		baseConfigProvider := providerOpts.baseConfigProvider
-		if baseConfigProvider == nil {
-			baseConfigProvider = func() api.BaseConfig {
+		configProvider := providerOpts.configProvider
+		if configProvider == nil {
+			configProvider = func() *config.Config {
 				return cfg
 			}
 		}
 		provider = newTokenExchangingProvider(
 			provider,
-			baseConfigProvider,
+			configProvider,
 			providerOpts.oauthState,
 		)
 	}
@@ -105,12 +136,12 @@ func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption
 	return provider, nil
 }
 
-func resolveStrategy(cfg api.BaseConfig) string {
-	if cfg.GetClusterProviderStrategy() != "" {
-		return cfg.GetClusterProviderStrategy()
+func resolveStrategy(cfg *config.Config) string {
+	if cfg.ClusterProviderStrategy.Get() != "" {
+		return cfg.ClusterProviderStrategy.Get()
 	}
 
-	if cfg.GetKubeConfigPath() != "" {
+	if cfg.KubeConfig.Get() != "" {
 		return api.ClusterProviderKubeConfig
 	}
 

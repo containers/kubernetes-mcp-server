@@ -37,7 +37,7 @@ func (s *ConfigurationSuite) SetupTest() {
 		kubeconfig.Contexts[name].Cluster = name + "-cluster"
 		kubeconfig.Contexts[name].AuthInfo = name + "-auth"
 	}
-	s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
+	s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
 }
 
 func (s *ConfigurationSuite) TestContextsList() {
@@ -162,7 +162,7 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 }
 
 func (s *ConfigurationSuite) TestConfigurationViewInCluster() {
-	s.Cfg.KubeConfig = "" // Force in-cluster
+	s.Cfg.KubeConfig.SetForTest("") // Force in-cluster
 	kubernetes.InClusterConfig = func() (*rest.Config, error) {
 		return &rest.Config{
 			Host:        "https://kubernetes.default.svc",

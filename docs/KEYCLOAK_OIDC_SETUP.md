@@ -39,7 +39,7 @@ After setup completes, start the Keycloak port-forward and MCP server in separat
 make keycloak-port-forward
 
 # In another terminal, start the server
-./kubernetes-mcp-server --port 8008 --config _output/config.toml
+./kubernetes-mcp-server --config _output/config.toml
 ```
 
 To test the HTTP OAuth flow, start MCP Inspector in a third terminal. The custom

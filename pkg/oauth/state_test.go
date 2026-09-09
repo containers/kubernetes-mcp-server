@@ -150,7 +150,7 @@ func (s *OAuthStateSuite) TestStateLoadStore() {
 
 func (s *OAuthStateSuite) TestCreateOIDCProviderAndClient() {
 	s.Run("empty authorization URL returns nil", func() {
-		cfg := config.Default()
+		cfg := config.New()
 		provider, client, err := CreateOIDCProviderAndClient(cfg)
 		s.NoError(err)
 		s.Nil(provider)

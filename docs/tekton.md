@@ -4,8 +4,8 @@ The `tekton` toolset adds Tekton-specific helpers on top of the generic Kubernet
 
 Enable it with:
 
-```shell
-kubernetes-mcp-server --toolsets core,config,tekton
+```toml
+toolsets = ["core", "config", "tekton"]
 ```
 
 ## PipelineRun operations

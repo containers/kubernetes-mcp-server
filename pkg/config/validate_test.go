@@ -19,8 +19,8 @@ type ValidateSuite struct {
 	suite.Suite
 }
 
-func (s *ValidateSuite) validConfig() *config.StaticConfig {
-	cfg := config.BaseDefault()
+func (s *ValidateSuite) validConfig() *config.Config {
+	cfg := config.New()
 	return cfg
 }
 
@@ -31,120 +31,150 @@ func (s *ValidateSuite) TestValidDefaultConfig() {
 	})
 }
 
+func (s *ValidateSuite) TestRequireOAuthStdio() {
+	s.Run("require_oauth with empty port is rejected", func() {
+		cfg := s.validConfig()
+		cfg.Port.SetForTest("")
+		cfg.RequireOAuth.SetForTest(true)
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "require_oauth is not supported in stdio mode")
+	})
+
+	s.Run("require_oauth with port is accepted when skip_jwt_verification is set", func() {
+		cfg := s.validConfig()
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.SkipJWTVerification.SetForTest(true)
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+}
+
 func (s *ValidateSuite) TestListOutput() {
-	s.Run("invalid list_output is rejected", func() {
-		cfg := s.validConfig()
-		cfg.ListOutput = "invalid-format"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid output name")
-		s.Contains(err.Error(), "invalid-format")
-	})
-
-	s.Run("empty list_output is rejected", func() {
-		cfg := s.validConfig()
-		cfg.ListOutput = ""
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid output name")
-	})
-
-	s.Run("yaml list_output is accepted", func() {
-		cfg := s.validConfig()
-		cfg.ListOutput = "yaml"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("table list_output is accepted", func() {
-		cfg := s.validConfig()
-		cfg.ListOutput = "table"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
+	cases := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{"invalid list_output is rejected", "invalid-format", "invalid output name"},
+		{"empty list_output is rejected", "", "invalid output name"},
+		{"yaml list_output is accepted", "yaml", ""},
+		{"table list_output is accepted", "table", ""},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			cfg.ListOutput.SetForTest(tc.value)
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+			if tc.value != "" {
+				s.Contains(err.Error(), tc.value)
+			}
+		})
+	}
 }
 
 func (s *ValidateSuite) TestToolsets() {
-	s.Run("invalid toolset name is rejected", func() {
-		cfg := s.validConfig()
-		cfg.Toolsets = []string{"nonexistent-toolset"}
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid toolset name")
-		s.Contains(err.Error(), "nonexistent-toolset")
-	})
-
-	s.Run("valid toolset names are accepted", func() {
-		cfg := s.validConfig()
-		cfg.Toolsets = []string{"core", "config"}
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
+	cases := []struct {
+		name    string
+		value   []string
+		wantErr string
+	}{
+		{"invalid toolset name is rejected", []string{"nonexistent-toolset"}, "invalid toolset name"},
+		{"valid toolset names are accepted", []string{"core", "config"}, ""},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			cfg.Toolsets.SetForTest(tc.value)
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+			s.Contains(err.Error(), tc.value[0])
+		})
+	}
 }
 
 func (s *ValidateSuite) TestClusterProviderStrategy() {
-	s.Run("unknown strategy is skipped without WithProviderStrategies", func() {
-		cfg := s.validConfig()
-		cfg.ClusterProviderStrategy = "nonexistent-strategy"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("unknown strategy is rejected with WithProviderStrategies", func() {
-		cfg := s.validConfig()
-		cfg.ClusterProviderStrategy = "nonexistent-strategy"
-		err := cfg.WithProviderStrategies([]string{"kubeconfig", "in-cluster"}).Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid cluster-provider")
-		s.Contains(err.Error(), "nonexistent-strategy")
-	})
-
-	s.Run("valid strategy is accepted with WithProviderStrategies", func() {
-		cfg := s.validConfig()
-		cfg.ClusterProviderStrategy = "kubeconfig"
-		s.NoError(cfg.WithProviderStrategies([]string{"kubeconfig", "in-cluster"}).Validate(s.T().Context()))
-	})
+	cases := []struct {
+		name       string
+		strategy   string
+		registered []string
+		wantErr    string
+	}{
+		{"unknown strategy is skipped without WithProviderStrategies", "nonexistent-strategy", nil, ""},
+		{"unknown strategy is rejected with WithProviderStrategies", "nonexistent-strategy", []string{"kubeconfig", "in-cluster"}, "invalid cluster_provider_strategy"},
+		{"valid strategy is accepted with WithProviderStrategies", "kubeconfig", []string{"kubeconfig", "in-cluster"}, ""},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			cfg.ClusterProviderStrategy.SetForTest(tc.strategy)
+			if tc.registered != nil {
+				cfg = cfg.WithProviderStrategies(tc.registered)
+			}
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+			s.Contains(err.Error(), tc.strategy)
+		})
+	}
 }
 
 func (s *ValidateSuite) TestAuthorizationURL() {
-	s.Run("invalid scheme is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "ftp://example.com/auth"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "--authorization-url must be a valid URL")
-	})
-
-	s.Run("https scheme is accepted", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("http scheme is accepted with warning", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "http://example.com/auth"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("authorization_url without require_oauth is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		cfg.AuthorizationURL = "https://example.com/auth"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "require-oauth is enabled")
-	})
+	cases := []struct {
+		name        string
+		requireAuth bool
+		url         string
+		wantErr     string
+	}{
+		{"invalid scheme is rejected", true, "ftp://example.com/auth", "authorization_url must be a valid URL"},
+		{"https scheme is accepted", true, "https://example.com/auth", ""},
+		{"http scheme is accepted with warning", true, "http://example.com/auth", ""},
+		{"authorization_url without require_oauth is rejected", false, "https://example.com/auth", "only valid if require_oauth is enabled"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			if tc.requireAuth {
+				cfg.Port.SetForTest("8080")
+			}
+			cfg.RequireOAuth.SetForTest(tc.requireAuth)
+			cfg.AuthorizationURL.SetForTest(tc.url)
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+		})
+	}
 }
 
 func (s *ValidateSuite) TestCertificateAuthority() {
 	s.Run("non-existent file is rejected", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.CertificateAuthority = "/nonexistent/path/ca.crt"
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.AuthorizationURL.SetForTest("https://example.com/auth")
+		cfg.CertificateAuthority.SetForTest("/nonexistent/path/ca.crt")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "certificate-authority must be a valid file path")
+		s.Contains(err.Error(), "certificate_authority must be a valid file path")
 	})
 
 	s.Run("existing file is accepted", func() {
@@ -153,17 +183,18 @@ func (s *ValidateSuite) TestCertificateAuthority() {
 		s.Require().NoError(os.WriteFile(caPath, []byte("test"), 0644))
 
 		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.CertificateAuthority = caPath
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.AuthorizationURL.SetForTest("https://example.com/auth")
+		cfg.CertificateAuthority.SetForTest(caPath)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("whitespace-only is treated as empty", func() {
 		cfg := s.validConfig()
-		cfg.CertificateAuthority = "   "
+		cfg.CertificateAuthority.SetForTest("   ")
 		s.NoError(cfg.Validate(s.T().Context()))
-		s.Equal("", cfg.CertificateAuthority, "whitespace should be trimmed from certificate-authority")
+		s.Equal("", cfg.CertificateAuthority.Get(), "whitespace should be trimmed from certificate_authority")
 	})
 }
 
@@ -174,11 +205,11 @@ func (s *ValidateSuite) TestTLSCertKey() {
 		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
 
 		cfg := s.validConfig()
-		cfg.TLSCert = certPath
-		cfg.TLSKey = ""
+		cfg.TLSCert.SetForTest(certPath)
+		cfg.TLSKey.SetForTest("")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "both --tls-cert and --tls-key must be provided together")
+		s.Contains(err.Error(), "both tls_cert and tls_key must be provided together")
 	})
 
 	s.Run("tls_key without tls_cert is rejected", func() {
@@ -187,11 +218,11 @@ func (s *ValidateSuite) TestTLSCertKey() {
 		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
 
 		cfg := s.validConfig()
-		cfg.TLSCert = ""
-		cfg.TLSKey = keyPath
+		cfg.TLSCert.SetForTest("")
+		cfg.TLSKey.SetForTest(keyPath)
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "both --tls-cert and --tls-key must be provided together")
+		s.Contains(err.Error(), "both tls_cert and tls_key must be provided together")
 	})
 
 	s.Run("non-existent tls_cert file is rejected", func() {
@@ -200,11 +231,11 @@ func (s *ValidateSuite) TestTLSCertKey() {
 		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
 
 		cfg := s.validConfig()
-		cfg.TLSCert = "/nonexistent/cert.pem"
-		cfg.TLSKey = keyPath
+		cfg.TLSCert.SetForTest("/nonexistent/cert.pem")
+		cfg.TLSKey.SetForTest(keyPath)
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "tls-cert must be a valid file path")
+		s.Contains(err.Error(), "tls_cert must be a valid file path")
 	})
 
 	s.Run("non-existent tls_key file is rejected", func() {
@@ -213,11 +244,11 @@ func (s *ValidateSuite) TestTLSCertKey() {
 		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
 
 		cfg := s.validConfig()
-		cfg.TLSCert = certPath
-		cfg.TLSKey = "/nonexistent/key.pem"
+		cfg.TLSCert.SetForTest(certPath)
+		cfg.TLSKey.SetForTest("/nonexistent/key.pem")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "tls-key must be a valid file path")
+		s.Contains(err.Error(), "tls_key must be a valid file path")
 	})
 
 	s.Run("both tls_cert and tls_key with valid files are accepted", func() {
@@ -228,18 +259,19 @@ func (s *ValidateSuite) TestTLSCertKey() {
 		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
 
 		cfg := s.validConfig()
-		cfg.TLSCert = certPath
-		cfg.TLSKey = keyPath
+		cfg.Port.SetForTest("8443")
+		cfg.TLSCert.SetForTest(certPath)
+		cfg.TLSKey.SetForTest(keyPath)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("whitespace-only tls_cert and tls_key are treated as empty", func() {
 		cfg := s.validConfig()
-		cfg.TLSCert = "   "
-		cfg.TLSKey = "   "
+		cfg.TLSCert.SetForTest("   ")
+		cfg.TLSKey.SetForTest("   ")
 		s.NoError(cfg.Validate(s.T().Context()))
-		s.Equal("", cfg.TLSCert, "whitespace should be trimmed from tls-cert")
-		s.Equal("", cfg.TLSKey, "whitespace should be trimmed from tls-key")
+		s.Equal("", cfg.TLSCert.Get(), "whitespace should be trimmed from tls_cert")
+		s.Equal("", cfg.TLSKey.Get(), "whitespace should be trimmed from tls_key")
 	})
 }
 
@@ -255,7 +287,7 @@ func (s *ValidateSuite) TestTLSSettings() {
 		s.Require().NoError(os.Unsetenv(config.EnvTLSMinVersion))
 		s.Require().NoError(os.Unsetenv(config.EnvTLSCipherSuites))
 		cfg := s.validConfig()
-		cfg.TLSMinVersion = "1.3"
+		cfg.TLSMinVersion.SetForTest("1.3")
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
@@ -263,89 +295,121 @@ func (s *ValidateSuite) TestTLSSettings() {
 		s.Require().NoError(os.Unsetenv(config.EnvTLSMinVersion))
 		s.Require().NoError(os.Unsetenv(config.EnvTLSCipherSuites))
 		cfg := s.validConfig()
-		cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
+		cfg.TLSCipherSuites.SetForTest([]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("TLS_MIN_VERSION env overrides invalid config value", func() {
-		s.Require().NoError(os.Setenv(config.EnvTLSMinVersion, "1.3"))
-		defer func() { _ = os.Unsetenv(config.EnvTLSMinVersion) }()
-		cfg := s.validConfig()
-		cfg.TLSMinVersion = "invalid"
+		s.T().Setenv(config.EnvTLSMinVersion, "1.3")
+		cfg, err := config.ReadToml([]byte(`tls_min_version = "invalid"`))
+		s.Require().NoError(err)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("invalid TLS_MIN_VERSION env is rejected", func() {
-		s.Require().NoError(os.Setenv(config.EnvTLSMinVersion, "bad"))
-		defer func() { _ = os.Unsetenv(config.EnvTLSMinVersion) }()
-		cfg := s.validConfig()
-		err := cfg.Validate(s.T().Context())
+		s.T().Setenv(config.EnvTLSMinVersion, "bad")
+		cfg, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "invalid TLS version")
 	})
 
 	s.Run("TLS_CIPHER_SUITES env overrides invalid config value", func() {
-		s.Require().NoError(os.Setenv(config.EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"))
-		defer func() { _ = os.Unsetenv(config.EnvTLSCipherSuites) }()
-		cfg := s.validConfig()
-		cfg.TLSCipherSuites = []string{"UNKNOWN_CIPHER"}
+		s.T().Setenv(config.EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+		cfg, err := config.ReadToml([]byte(`tls_cipher_suites = ["UNKNOWN_CIPHER"]`))
+		s.Require().NoError(err)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("invalid TLS_CIPHER_SUITES env is rejected", func() {
-		s.Require().NoError(os.Setenv(config.EnvTLSCipherSuites, "UNKNOWN_CIPHER"))
-		defer func() { _ = os.Unsetenv(config.EnvTLSCipherSuites) }()
-		cfg := s.validConfig()
-		err := cfg.Validate(s.T().Context())
+		s.T().Setenv(config.EnvTLSCipherSuites, "UNKNOWN_CIPHER")
+		cfg, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "invalid cipher suites")
 	})
 }
 
 func (s *ValidateSuite) TestTokenExchangeStrategy() {
-	s.Run("unknown strategy is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "nonexistent-strategy"}
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid token_exchange.strategy")
-		s.Contains(err.Error(), "nonexistent-strategy")
-	})
-
-	s.Run("registered strategy is accepted", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
+	cases := []struct {
+		name     string
+		strategy string
+		wantErr  string
+	}{
+		{"unknown strategy is rejected", "nonexistent-strategy", "invalid token_exchange.strategy"},
+		{"registered strategy is accepted", "rfc8693", ""},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			cfg.Port.SetForTest("8080")
+			cfg.RequireOAuth.SetForTest(true)
+			cfg.AuthorizationURL.SetForTest("https://example.com/auth")
+			cfg.TokenExchange.Strategy.SetForTest(tc.strategy)
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+			s.Contains(err.Error(), tc.strategy)
+		})
+	}
 }
 
 func (s *ValidateSuite) TestTokenExchangeClientAuth() {
-	newConfig := func(auth *config.TokenExchangeClientAuth) *config.StaticConfig {
+	type authVals struct {
+		Method          api.TokenExchangeClientAuthMethod
+		ClientID        string
+		ClientSecret    string
+		CertificateFile string
+		PrivateKeyFile  string
+		TokenFile       string
+	}
+	newConfig := func(auth authVals) *config.Config {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693", ClientAuth: auth}
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.AuthorizationURL.SetForTest("https://example.com/auth")
+		cfg.TokenExchange.Strategy.SetForTest("rfc8693")
+		if auth.Method != "" {
+			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(auth.Method))
+		}
+		if auth.ClientID != "" {
+			cfg.TokenExchange.ClientAuth.ClientID.SetForTest(auth.ClientID)
+		}
+		if auth.ClientSecret != "" {
+			cfg.TokenExchange.ClientAuth.ClientSecret.SetForTest(auth.ClientSecret)
+		}
+		if auth.CertificateFile != "" {
+			cfg.TokenExchange.ClientAuth.CertificateFile.SetForTest(auth.CertificateFile)
+		}
+		if auth.PrivateKeyFile != "" {
+			cfg.TokenExchange.ClientAuth.PrivateKeyFile.SetForTest(auth.PrivateKeyFile)
+		}
+		if auth.TokenFile != "" {
+			cfg.TokenExchange.ClientAuth.TokenFile.SetForTest(auth.TokenFile)
+		}
 		return cfg
 	}
 
 	s.Run("method is required when client authentication fields are configured", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{ClientSecret: "secret"})
+		cfg := newConfig(authVals{ClientSecret: "secret"})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "token_exchange.client_auth.method is required")
 	})
 
 	s.Run("public client with only a client ID is accepted", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{ClientID: "public-client"})
+		cfg := newConfig(authVals{ClientID: "public-client"})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("configured method requires a client ID", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:       api.TokenExchangeClientAuthMethodSecretBasic,
 			ClientSecret: "secret",
 		})
@@ -355,7 +419,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	})
 
 	s.Run("invalid method is rejected", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:   api.TokenExchangeClientAuthMethod("unknown"),
 			ClientID: "client",
 		})
@@ -365,7 +429,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	})
 
 	s.Run("client_secret_basic requires a client secret", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:   api.TokenExchangeClientAuthMethodSecretBasic,
 			ClientID: "client",
 		})
@@ -375,7 +439,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	})
 
 	s.Run("client_secret_basic with client credentials is accepted", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:       api.TokenExchangeClientAuthMethodSecretBasic,
 			ClientID:     "client",
 			ClientSecret: "secret",
@@ -384,7 +448,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	})
 
 	s.Run("client_secret_post with client credentials is accepted", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:       api.TokenExchangeClientAuthMethodSecretPost,
 			ClientID:     "client",
 			ClientSecret: "secret",
@@ -393,7 +457,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	})
 
 	s.Run("private_key_jwt requires certificate and private key files", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:   api.TokenExchangeClientAuthMethodPrivateKey,
 			ClientID: "client",
 		})
@@ -407,7 +471,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 		certPath := filepath.Join(tmpDir, "cert.pem")
 		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
 
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:          api.TokenExchangeClientAuthMethodPrivateKey,
 			ClientID:        "client",
 			CertificateFile: certPath,
@@ -424,7 +488,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
 		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
 
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:          api.TokenExchangeClientAuthMethodPrivateKey,
 			ClientID:        "client",
 			CertificateFile: certPath,
@@ -434,7 +498,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	})
 
 	s.Run("jwt_file requires a token file", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:   api.TokenExchangeClientAuthMethodJWTFile,
 			ClientID: "client",
 		})
@@ -448,7 +512,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 		tokenPath := filepath.Join(tmpDir, "token")
 		s.Require().NoError(os.WriteFile(tokenPath, []byte("jwt-token"), 0600))
 
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:    api.TokenExchangeClientAuthMethodJWTFile,
 			ClientID:  "client",
 			TokenFile: tokenPath,
@@ -457,7 +521,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	})
 
 	s.Run("jwt_file rejects a missing token file", func() {
-		cfg := newConfig(&config.TokenExchangeClientAuth{
+		cfg := newConfig(authVals{
 			Method:    api.TokenExchangeClientAuthMethodJWTFile,
 			ClientID:  "client",
 			TokenFile: filepath.Join(s.T().TempDir(), "missing-token"),
@@ -470,93 +534,88 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {
 	cfg := s.validConfig()
-	cfg.RequireOAuth = true
-	cfg.AuthorizationURL = "https://example.com/auth"
-	cfg.TokenExchange = &config.TokenExchangeConfig{
-		Strategy:           " rfc8693 ",
-		Audience:           " audience ",
-		SubjectTokenType:   " subject-token-type ",
-		RequestedTokenType: " requested-token-type ",
-		ClientAuth: &config.TokenExchangeClientAuth{
-			Method:          api.TokenExchangeClientAuthMethod(" client_secret_basic "),
-			ClientID:        " client ",
-			ClientSecret:    " secret ",
-			CertificateFile: " cert.pem ",
-			PrivateKeyFile:  " key.pem ",
-			TokenFile:       " token ",
-		},
-	}
+	cfg.Port.SetForTest("8080")
+	cfg.RequireOAuth.SetForTest(true)
+	cfg.AuthorizationURL.SetForTest("https://example.com/auth")
+	cfg.TokenExchange.Strategy.SetForTest(" rfc8693 ")
+	cfg.TokenExchange.Audience.SetForTest(" audience ")
+	cfg.TokenExchange.SubjectTokenType.SetForTest(" subject-token-type ")
+	cfg.TokenExchange.RequestedTokenType.SetForTest(" requested-token-type ")
+	cfg.TokenExchange.ClientAuth.Method.SetForTest(" client_secret_basic ")
+	cfg.TokenExchange.ClientAuth.ClientID.SetForTest(" client ")
+	cfg.TokenExchange.ClientAuth.ClientSecret.SetForTest(" secret ")
+	cfg.TokenExchange.ClientAuth.CertificateFile.SetForTest(" cert.pem ")
+	cfg.TokenExchange.ClientAuth.PrivateKeyFile.SetForTest(" key.pem ")
+	cfg.TokenExchange.ClientAuth.TokenFile.SetForTest(" token ")
 
 	s.Require().NoError(cfg.Validate(s.T().Context()))
-	s.Equal("rfc8693", cfg.TokenExchange.Strategy)
-	s.Equal("audience", cfg.TokenExchange.Audience)
-	s.Equal("subject-token-type", cfg.TokenExchange.SubjectTokenType)
-	s.Equal("requested-token-type", cfg.TokenExchange.RequestedTokenType)
-	s.Equal(api.TokenExchangeClientAuthMethodSecretBasic, cfg.TokenExchange.ClientAuth.Method)
-	s.Equal("client", cfg.TokenExchange.ClientAuth.ClientID)
-	s.Equal("secret", cfg.TokenExchange.ClientAuth.ClientSecret)
-	s.Equal("cert.pem", cfg.TokenExchange.ClientAuth.CertificateFile)
-	s.Equal("key.pem", cfg.TokenExchange.ClientAuth.PrivateKeyFile)
-	s.Equal("token", cfg.TokenExchange.ClientAuth.TokenFile)
+	s.Equal("rfc8693", cfg.TokenExchange.Strategy.Get())
+	s.Equal("audience", cfg.TokenExchange.Audience.Get())
+	s.Equal("subject-token-type", cfg.TokenExchange.SubjectTokenType.Get())
+	s.Equal("requested-token-type", cfg.TokenExchange.RequestedTokenType.Get())
+	s.Equal(string(api.TokenExchangeClientAuthMethodSecretBasic), cfg.TokenExchange.ClientAuth.Method.Get())
+	s.Equal("client", cfg.TokenExchange.ClientAuth.ClientID.Get())
+	s.Equal("secret", cfg.TokenExchange.ClientAuth.ClientSecret.Get())
+	s.Equal("cert.pem", cfg.TokenExchange.ClientAuth.CertificateFile.Get())
+	s.Equal("key.pem", cfg.TokenExchange.ClientAuth.PrivateKeyFile.Get())
+	s.Equal("token", cfg.TokenExchange.ClientAuth.TokenFile.Get())
 }
 
 func (s *ValidateSuite) TestConfirmationFallback() {
-	s.Run("empty fallback is accepted", func() {
-		cfg := s.validConfig()
-		cfg.ConfirmationFallback = ""
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("allow fallback is accepted", func() {
-		cfg := s.validConfig()
-		cfg.ConfirmationFallback = "allow"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("deny fallback is accepted", func() {
-		cfg := s.validConfig()
-		cfg.ConfirmationFallback = "deny"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("invalid fallback value is rejected", func() {
-		cfg := s.validConfig()
-		cfg.ConfirmationFallback = "block"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "invalid confirmation_fallback")
-		s.Contains(err.Error(), "block")
-	})
+	cases := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{"empty fallback is accepted", "", ""},
+		{"allow fallback is accepted", "allow", ""},
+		{"deny fallback is accepted", "deny", ""},
+		{"invalid fallback value is rejected", "block", "invalid confirmation_fallback"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			cfg.ConfirmationFallback.SetForTest(tc.value)
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+			s.Contains(err.Error(), tc.value)
+		})
+	}
 }
 
 func (s *ValidateSuite) TestConfirmationRules() {
 	s.Run("empty rules are accepted", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules = nil
+		cfg.ConfirmationRules.SetForTest(nil)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("valid tool-level rule is accepted", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules = []api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "Uninstall a release."},
-		}
+		})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("valid kube-level rule is accepted", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules = []api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
 			{Verb: "delete", Kind: "Secret", Message: "Delete a Secret."},
-		}
+		})
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("rule mixing tool and kube fields is rejected", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules = []api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
 			{Tool: "helm_uninstall", Verb: "delete", Message: "Mixed rule."},
-		}
+		})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "invalid confirmation rules")
@@ -564,9 +623,9 @@ func (s *ValidateSuite) TestConfirmationRules() {
 
 	s.Run("rule with no classifying fields is rejected", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules = []api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
 			{Message: "No level fields."},
-		}
+		})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "must set at least one")
@@ -574,10 +633,10 @@ func (s *ValidateSuite) TestConfirmationRules() {
 
 	s.Run("reports all rule errors with indices", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules = []api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
 			{Tool: "a", Verb: "delete", Message: "Mixed 1."},
 			{Kind: "Pod", Tool: "b", Message: "Mixed 2."},
-		}
+		})
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "confirmation_rules[0]")
@@ -586,67 +645,63 @@ func (s *ValidateSuite) TestConfirmationRules() {
 }
 
 func (s *ValidateSuite) TestSkipJWTVerification() {
-	s.Run("require_oauth with authorization_url set is accepted", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = "https://example.com/auth"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("require_oauth without authorization_url and skip_jwt_verification=false is rejected", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = ""
-		cfg.SkipJWTVerification = false
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "require_oauth is enabled but authorization_url is not configured")
-		s.Contains(err.Error(), "skip_jwt_verification=true")
-	})
-
-	s.Run("require_oauth without authorization_url and skip_jwt_verification=true is accepted", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.AuthorizationURL = ""
-		cfg.SkipJWTVerification = true
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("require_oauth=false with skip_jwt_verification=true is accepted", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		cfg.SkipJWTVerification = true
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("require_oauth=false is accepted", func() {
-		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
+	cases := []struct {
+		name    string
+		oauth   bool
+		authURL string
+		skipJWT bool
+		wantErr string
+	}{
+		{"require_oauth with authorization_url set is accepted", true, "https://example.com/auth", false, ""},
+		{"require_oauth without authorization_url and skip_jwt_verification=false is rejected", true, "", false, "require_oauth is enabled but authorization_url is not configured"},
+		{"require_oauth without authorization_url and skip_jwt_verification=true is accepted", true, "", true, ""},
+		{"require_oauth=false with skip_jwt_verification=true is accepted", false, "", true, ""},
+		{"require_oauth=false is accepted", false, "", false, ""},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			if tc.oauth {
+				cfg.Port.SetForTest("8080")
+			}
+			cfg.RequireOAuth.SetForTest(tc.oauth)
+			cfg.AuthorizationURL.SetForTest(tc.authURL)
+			cfg.SkipJWTVerification.SetForTest(tc.skipJWT)
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+			s.Contains(err.Error(), "skip_jwt_verification=true")
+		})
+	}
 }
 
 func (s *ValidateSuite) TestClusterAuthMode() {
 	s.Run("passthrough without require_oauth is accepted", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		cfg.RequireOAuth.SetForTest(false)
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthPassthrough)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("passthrough with require_oauth is accepted", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.SkipJWTVerification = true
-		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.SkipJWTVerification.SetForTest(true)
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthPassthrough)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("kubeconfig with require_oauth is rejected", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.SkipJWTVerification = true
-		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.SkipJWTVerification.SetForTest(true)
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "is not compatible with require_oauth=true")
@@ -654,14 +709,14 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 
 	s.Run("kubeconfig without require_oauth is accepted", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
+		cfg.RequireOAuth.SetForTest(false)
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("invalid cluster_auth_mode is rejected", func() {
 		cfg := s.validConfig()
-		cfg.ClusterAuthMode = "bogus"
+		cfg.ClusterAuthMode.SetForTest("bogus")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "invalid cluster_auth_mode")
@@ -669,8 +724,8 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 
 	s.Run("token exchange without require_oauth is rejected", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
+		cfg.RequireOAuth.SetForTest(false)
+		cfg.TokenExchange.Strategy.SetForTest("rfc8693")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "token exchange requires require_oauth=true")
@@ -678,9 +733,10 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 
 	s.Run("token exchange without authorization_url is rejected", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = true
-		cfg.SkipJWTVerification = true
-		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.SkipJWTVerification.SetForTest(true)
+		cfg.TokenExchange.Strategy.SetForTest("rfc8693")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "token exchange requires authorization_url")
@@ -688,9 +744,9 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 
 	s.Run("token exchange with kubeconfig mode is rejected", func() {
 		cfg := s.validConfig()
-		cfg.RequireOAuth = false
-		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
-		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
+		cfg.RequireOAuth.SetForTest(false)
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
+		cfg.TokenExchange.Strategy.SetForTest("rfc8693")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "token_exchange is incompatible with cluster_auth_mode")
@@ -698,48 +754,32 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 }
 
 func (s *ValidateSuite) TestMetricsPort() {
-	s.Run("metrics_port without port is rejected", func() {
-		cfg := s.validConfig()
-		cfg.MetricsPort = "9090"
-		cfg.Port = ""
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "metrics_port requires port")
-	})
-
-	s.Run("metrics_port same as port is rejected", func() {
-		cfg := s.validConfig()
-		cfg.Port = "8080"
-		cfg.MetricsPort = "8080"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "metrics_port must be different from port")
-	})
-
-	s.Run("metrics_port with different port is accepted", func() {
-		cfg := s.validConfig()
-		cfg.Port = "8080"
-		cfg.MetricsPort = "9090"
-		s.NoError(cfg.Validate(s.T().Context()))
-	})
-
-	s.Run("metrics_port with non-numeric value is rejected", func() {
-		cfg := s.validConfig()
-		cfg.Port = "8080"
-		cfg.MetricsPort = "abc"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "metrics_port must be a valid port number")
-	})
-
-	s.Run("metrics_port with out-of-range value is rejected", func() {
-		cfg := s.validConfig()
-		cfg.Port = "8080"
-		cfg.MetricsPort = "99999"
-		err := cfg.Validate(s.T().Context())
-		s.Require().Error(err)
-		s.Contains(err.Error(), "metrics_port must be a valid port number")
-	})
+	cases := []struct {
+		name        string
+		port        string
+		metricsPort string
+		wantErr     string
+	}{
+		{"metrics_port without port is rejected", "", "9090", "metrics_port requires port"},
+		{"metrics_port same as port is rejected", "8080", "8080", "metrics_port must be different from port"},
+		{"metrics_port with different port is accepted", "8080", "9090", ""},
+		{"metrics_port with non-numeric value is rejected", "8080", "abc", "metrics_port must be a valid port number"},
+		{"metrics_port with out-of-range value is rejected", "8080", "99999", "metrics_port must be a valid port number"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			cfg := s.validConfig()
+			cfg.Port.SetForTest(tc.port)
+			cfg.MetricsPort.SetForTest(tc.metricsPort)
+			err := cfg.Validate(s.T().Context())
+			if tc.wantErr == "" {
+				s.NoError(err)
+				return
+			}
+			s.Require().Error(err)
+			s.Contains(err.Error(), tc.wantErr)
+		})
+	}
 }
 
 func TestValidate(t *testing.T) {

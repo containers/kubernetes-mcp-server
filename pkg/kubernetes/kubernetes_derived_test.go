@@ -45,11 +45,11 @@ users:
 	s.Require().NoError(err, "failed to create kubeconfig file")
 
 	s.Run("with no RequireOAuth (default) config", func() {
-		testStaticConfig := test.Must(config.ReadToml([]byte(`
+		testCfg := test.Must(config.ReadToml([]byte(`
 			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
 		`)))
 		s.Run("without authorization header returns original clientset", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			derived, err := testManager.Derived(s.T().Context())
@@ -59,7 +59,7 @@ users:
 		})
 
 		s.Run("with invalid authorization header returns original client", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "invalid-token")
@@ -70,7 +70,7 @@ users:
 		})
 
 		s.Run("with valid bearer token creates derived kubernetes with correct configuration", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
@@ -78,7 +78,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
-			s.Equal(derived.config, testStaticConfig, "config not properly wired to derived client")
+			s.Equal(derived.config, testCfg, "config not properly wired to derived client")
 
 			s.Run("RestConfig is correctly copied and sensitive fields are omitted", func() {
 				derivedCfg := derived.RESTConfig()
@@ -130,7 +130,7 @@ users:
 			})
 			s.Run("derived kubernetes has initialized clients", func() {
 				// Verify that the derived kubernetes has proper clients initialized
-				s.Equalf(testStaticConfig, derived.config, "config not properly wired to derived client")
+				s.Equalf(testCfg, derived.config, "config not properly wired to derived client")
 				s.NotNilf(derived.RESTConfig(), "expected restConfig to be initialized")
 				s.NotNilf(derived.RESTMapper(), "expected RESTMapper to be initialized")
 				s.NotNilf(derived.DiscoveryClient(), "expected discoveryClient to be initialized")
@@ -157,12 +157,12 @@ users:
 	})
 
 	s.Run("with no RequireOAuth (default) and RawConfig error", func() {
-		testStaticConfig := test.Must(config.ReadToml([]byte(`
+		testCfg := test.Must(config.ReadToml([]byte(`
 			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
 		`)))
 
 		s.Run("with bearer token but RawConfig fails returns error", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Corrupt the clientCmdConfig by setting it to a config that will fail on RawConfig()
@@ -188,10 +188,12 @@ users:
 
 	s.Run("with RequireOAuth=true and RawConfig error", func() {
 		badKubeconfigPath := filepath.Join(s.T().TempDir(), "nonexistent", "config")
-		testStaticConfig := test.Must(config.ReadToml([]byte(`
+		testCfg := test.Must(config.ReadToml([]byte(`
 			kubeconfig = "` + strings.ReplaceAll(badKubeconfigPath, `\`, `\\`) + `"
 			require_oauth = true
 		`)))
+		testCfg.Port.SetForTest("8080")
+		testCfg.RequireOAuth.SetForTest(true)
 
 		s.Run("with bearer token but RawConfig fails returns error", func() {
 			// First create a working manager
@@ -205,7 +207,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Now create a bad manager with RequireOAuth=true
-			badManager, _ := NewManager(s.T().Context(), testStaticConfig, testManager.kubernetes.RESTConfig(), testManager.kubernetes.ToRawKubeConfigLoader())
+			badManager, _ := NewManager(s.T().Context(), testCfg, testManager.kubernetes.RESTConfig(), testManager.kubernetes.ToRawKubeConfigLoader())
 			// Replace the clientCmdConfig with one that will fail
 			pathOptions := clientcmd.NewDefaultPathOptions()
 			pathOptions.LoadingRules.ExplicitPath = badKubeconfigPath
@@ -223,12 +225,12 @@ users:
 	})
 
 	s.Run("with no RequireOAuth (default) and NewKubernetes error", func() {
-		testStaticConfig := test.Must(config.ReadToml([]byte(`
+		testCfg := test.Must(config.ReadToml([]byte(`
 			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
 		`)))
 
 		s.Run("with bearer token but invalid rest config returns error", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Corrupt the rest config to make NewKubernetes fail
@@ -242,13 +244,15 @@ users:
 	})
 
 	s.Run("with RequireOAuth=true and NewKubernetes error", func() {
-		testStaticConfig := test.Must(config.ReadToml([]byte(`
+		testCfg := test.Must(config.ReadToml([]byte(`
 			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
 			require_oauth = true
 		`)))
+		testCfg.Port.SetForTest("8080")
+		testCfg.RequireOAuth.SetForTest(true)
 
 		s.Run("with bearer token but invalid rest config returns error", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			// Corrupt the rest config to make NewKubernetes fail
@@ -263,13 +267,15 @@ users:
 	})
 
 	s.Run("with RequireOAuth=true", func() {
-		testStaticConfig := test.Must(config.ReadToml([]byte(`
+		testCfg := test.Must(config.ReadToml([]byte(`
 			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
 			require_oauth = true
 		`)))
+		testCfg.Port.SetForTest("8080")
+		testCfg.RequireOAuth.SetForTest(true)
 
 		s.Run("with no authorization header returns error", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			derived, err := testManager.Derived(s.T().Context())
@@ -279,7 +285,7 @@ users:
 		})
 
 		s.Run("with invalid authorization header returns error", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "invalid-token")
@@ -290,7 +296,7 @@ users:
 		})
 
 		s.Run("with valid bearer token creates derived kubernetes", func() {
-			testManager, err := NewKubeconfigManager(s.T().Context(), testStaticConfig, "")
+			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
 
 			ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
@@ -298,7 +304,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
-			s.Equal(derived.config, testStaticConfig, "config not properly wired to derived client")
+			s.Equal(derived.config, testCfg, "config not properly wired to derived client")
 
 			derivedCfg := derived.RESTConfig()
 			s.Require().NotNil(derivedCfg, "derived config is nil")

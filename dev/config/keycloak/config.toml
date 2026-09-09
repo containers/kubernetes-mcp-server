@@ -1,3 +1,4 @@
+port = "8008"
 require_oauth = true
 oauth_audience = "mcp-server"
 oauth_scopes = ["openid", "mcp-server"]

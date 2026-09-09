@@ -66,9 +66,9 @@ func main() {
 	toolsetsList := toolsets.Toolsets()
 
 	// Get default enabled toolsets
-	defaultConfig := config.Default()
+	defaultConfig := config.New()
 	defaultToolsetsMap := make(map[string]bool)
-	for _, toolsetName := range defaultConfig.Toolsets {
+	for _, toolsetName := range defaultConfig.Toolsets.Get() {
 		defaultToolsetsMap[toolsetName] = true
 	}
 

@@ -78,25 +78,25 @@ func (s *State) Store(snap *Snapshot) {
 	s.ref.Store(snap)
 }
 
-// SnapshotFromConfig extracts OAuth-relevant fields from a StaticConfig and
+// SnapshotFromConfig extracts OAuth-relevant fields from a Config and
 // pairs them with the corresponding OIDC provider and HTTP client.
-func SnapshotFromConfig(cfg *config.StaticConfig, provider *oidc.Provider, httpClient *http.Client) *Snapshot {
+func SnapshotFromConfig(cfg *config.Config, provider *oidc.Provider, httpClient *http.Client) *Snapshot {
 	return &Snapshot{
 		OIDCProvider:                     provider,
 		HTTPClient:                       httpClient,
-		AuthorizationURL:                 cfg.AuthorizationURL,
-		CertificateAuthority:             cfg.CertificateAuthority,
-		TLSMinVersion:                    cfg.GetTLSMinVersionConfig(),
-		TLSCipherSuites:                  append([]string(nil), cfg.GetTLSCipherSuitesConfig()...),
-		OAuthScopes:                      cfg.OAuthScopes,
-		DisableDynamicClientRegistration: cfg.DisableDynamicClientRegistration,
+		AuthorizationURL:                 cfg.AuthorizationURL.Get(),
+		CertificateAuthority:             cfg.CertificateAuthority.Get(),
+		TLSMinVersion:                    cfg.TLSMinVersion.Get(),
+		TLSCipherSuites:                  append([]string(nil), cfg.TLSCipherSuites.Get()...),
+		OAuthScopes:                      cfg.OAuthScopes.Get(),
+		DisableDynamicClientRegistration: cfg.DisableDynamicClientRegistration.Get(),
 	}
 }
 
 // CreateOIDCProviderAndClient builds an OIDC provider and HTTP client from config.
 // Returns (nil, nil, nil) when AuthorizationURL is empty (OAuth not configured).
-func CreateOIDCProviderAndClient(cfg *config.StaticConfig) (*oidc.Provider, *http.Client, error) {
-	if cfg.AuthorizationURL == "" {
+func CreateOIDCProviderAndClient(cfg *config.Config) (*oidc.Provider, *http.Client, error) {
+	if cfg.AuthorizationURL.Get() == "" {
 		return nil, nil, nil
 	}
 
@@ -105,20 +105,20 @@ func CreateOIDCProviderAndClient(cfg *config.StaticConfig) (*oidc.Provider, *htt
 	// Build TLS options for outbound client
 	var tlsOpts []tlsutil.TLSConfigOption
 
-	if cfg.CertificateAuthority != "" {
-		caCert, err := os.ReadFile(cfg.CertificateAuthority)
+	if cfg.CertificateAuthority.Get() != "" {
+		caCert, err := os.ReadFile(cfg.CertificateAuthority.Get())
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read CA certificate from %s: %w", cfg.CertificateAuthority, err)
+			return nil, nil, fmt.Errorf("failed to read CA certificate from %s: %w", cfg.CertificateAuthority.Get(), err)
 		}
 		caCertPool := x509.NewCertPool()
 		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return nil, nil, fmt.Errorf("failed to append CA certificate from %s to pool", cfg.CertificateAuthority)
+			return nil, nil, fmt.Errorf("failed to append CA certificate from %s to pool", cfg.CertificateAuthority.Get())
 		}
 		tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(caCertPool))
 	}
 
 	// Build TLS config from config getters (env/TOML already resolved).
-	tlsConfig, err := tlsutil.BuildTLSConfig(cfg.GetTLSMinVersionConfig(), cfg.GetTLSCipherSuitesConfig(), tlsOpts...)
+	tlsConfig, err := tlsutil.BuildTLSConfig(cfg.TLSMinVersion.Get(), cfg.TLSCipherSuites.Get(), tlsOpts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build TLS config: %w", err)
 	}
@@ -126,11 +126,11 @@ func CreateOIDCProviderAndClient(cfg *config.StaticConfig) (*oidc.Provider, *htt
 	var transport http.RoundTripper = &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}
-	transport = config.NewTLSEnforcingTransport(transport, cfg.IsRequireTLS)
+	transport = config.NewTLSEnforcingTransport(transport, func() bool { return cfg.RequireTLS.Get() })
 	httpClient := &http.Client{Transport: transport}
 
 	ctx = oidc.ClientContext(ctx, httpClient)
-	provider, err := oidc.NewProvider(ctx, cfg.AuthorizationURL)
+	provider, err := oidc.NewProvider(ctx, cfg.AuthorizationURL.Get())
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to setup OIDC provider: %w", err)
 	}

@@ -13,7 +13,7 @@ import (
 )
 
 type ProviderConfigSuite struct {
-	BaseConfigSuite
+	ConfigFileSuite
 	originalProviderConfigRegistry *extendedConfigRegistry
 }
 
@@ -117,15 +117,13 @@ func (s *ProviderConfigSuite) TestReadConfigUnregisteredProviderConfig() {
 	`)
 
 	config, err := Read(s.T().Context(), invalidConfigPath, "")
-	s.Run("returns no error for unregistered provider config", func() {
-		s.Require().NoError(err, "Expected no error for unregistered provider config, got %v", err)
+	s.Run("returns error for unregistered provider config", func() {
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "cluster_provider_configs.unregistered")
 	})
-	s.Run("returns config for unregistered provider config", func() {
-		s.Require().NotNil(config, "Expected non-nil config for unregistered provider config")
-	})
-	s.Run("does not parse unregistered provider config", func() {
-		_, ok := config.GetProviderConfig("unregistered")
-		s.Require().False(ok, "Expected no provider config for unregistered strategy")
+	s.Run("returns nil config for unregistered provider config", func() {
+		s.Nil(config)
 	})
 }
 
@@ -218,7 +216,7 @@ func (s *ProviderConfigSuite) TestExtendedConfigMergingAcrossDropIns() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -268,7 +266,7 @@ func (s *ProviderConfigSuite) TestExtendedConfigFromDropInOnly() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -358,6 +356,30 @@ func (s *ProviderConfigSuite) TestConfigDirPathInContextStandalone() {
 		s.NotEmpty(capturedDirPath, "Expected non-empty directory path in context")
 		s.Equal(absTempDir, capturedDirPath, "Expected directory path to match config-dir")
 	})
+}
+
+func (s *ProviderConfigSuite) TestPinNonReloadableProviderConfigs() {
+	RegisterProviderConfig("test", providerConfigForTestParser)
+	prevPath := s.writeConfig(`
+		[cluster_provider_configs.test]
+		str_prop = "old"
+		int_prop = 1
+	`)
+	nextPath := s.writeConfig(`
+		[cluster_provider_configs.test]
+		str_prop = "new"
+		int_prop = 2
+	`)
+	prev, err := Read(s.T().Context(), prevPath, "")
+	s.Require().NoError(err)
+	next, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
+	s.Require().NoError(err)
+	got, ok := next.GetProviderConfig("test")
+	s.Require().True(ok)
+	cfg, ok := got.(*ProviderConfigForTest)
+	s.Require().True(ok)
+	s.Equal("old", cfg.StrProp)
+	s.Equal(1, cfg.IntProp)
 }
 
 func TestProviderConfig(t *testing.T) {

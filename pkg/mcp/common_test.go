@@ -114,13 +114,13 @@ type BaseMcpSuite struct {
 	*test.McpClient
 	mcpServer *Server
 	provider  internalk8s.Provider
-	Cfg       *config.StaticConfig
+	Cfg       *config.Config
 }
 
 func (s *BaseMcpSuite) SetupTest() {
 	s.Cfg = config.BaseDefault()
-	s.Cfg.ListOutput = "yaml"
-	s.Cfg.KubeConfig = test.EnvTestKubeconfigFile(s.T())
+	s.Cfg.ListOutput.SetForTest("yaml")
+	s.Cfg.KubeConfig.SetForTest(test.EnvTestKubeconfigFile(s.T()))
 }
 
 func (s *BaseMcpSuite) TearDownTest() {
@@ -139,7 +139,7 @@ func (s *BaseMcpSuite) InitMcpClient(options ...test.McpClientOption) {
 	var err error
 	s.provider, err = internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err, "Expected no error creating k8s provider")
-	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, s.provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{Config: s.Cfg}, s.provider)
 	s.Require().NoError(err, "Expected no error creating MCP server")
 	s.McpClient = test.NewMcpClient(s.T(), s.mcpServer.ServeHTTP(), options...)
 }

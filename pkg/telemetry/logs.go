@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"context"
-	"os"
 	"strings"
 	"time"
 
@@ -29,7 +28,7 @@ func NewLogProvider(ctx context.Context, cfg *config.TelemetryConfig, serviceNam
 		return nil, nil
 	}
 
-	if strings.ToLower(os.Getenv("OTEL_LOGS_EXPORTER")) == "none" {
+	if strings.ToLower(cfg.LogsExporter.Get()) == "none" {
 		return nil, nil
 	}
 
@@ -70,8 +69,8 @@ func NewLogSink(serviceName, serviceVersion string, provider log.LoggerProvider)
 // createLogExporter creates an OTLP log exporter using the same endpoint and
 // protocol configuration as traces and metrics.
 func createLogExporter(ctx context.Context, cfg *config.TelemetryConfig) (sdklog.Exporter, error) {
-	protocol := strings.ToLower(cfg.GetProtocol())
-	endpoint := cfg.GetEndpoint()
+	protocol := strings.ToLower(cfg.Protocol.Get())
+	endpoint := cfg.Endpoint.Get()
 
 	switch protocol {
 	case "http/protobuf", "http":
