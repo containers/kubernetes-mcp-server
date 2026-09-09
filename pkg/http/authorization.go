@@ -52,7 +52,7 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - The token is then validated against the OIDC Provider.
 //
 //	         see TestAuthorizationOidcToken
-func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oauth.State) func(http.Handler) http.Handler {
+func AuthorizationMiddleware(cfgState *config.ConfigState, oauthState *oauth.State) func(http.Handler) http.Handler {
 	var skipJWTWarningOnce sync.Once
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,18 +62,18 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			staticConfig := cfgState.Load()
 			// Skip auth for infrastructure endpoints (health, metrics) and well-known endpoints.
 			// When metrics are on a separate port, only /healthz is exempt on the main port.
-			if slices.Contains(infraPaths(staticConfig.MetricsPort != ""), r.URL.Path) || isWellKnownPath(r.URL.EscapedPath()) {
+			if slices.Contains(infraPaths(staticConfig.MetricsPort.Get() != ""), r.URL.Path) || isWellKnownPath(r.URL.EscapedPath()) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if !staticConfig.RequireOAuth {
+			if !staticConfig.RequireOAuth.Get() {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			wwwAuthenticateHeader := "Bearer realm=\"Kubernetes MCP Server\""
-			if staticConfig.OAuthAudience != "" {
-				wwwAuthenticateHeader += fmt.Sprintf(`, audience="%s"`, staticConfig.OAuthAudience)
+			if staticConfig.OAuthAudience.Get() != "" {
+				wwwAuthenticateHeader += fmt.Sprintf(`, audience="%s"`, staticConfig.OAuthAudience.Get())
 			}
 
 			authHeader := r.Header.Get("Authorization")
@@ -102,7 +102,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 
 			// Token passthrough, skips all JWT processing
 			// Cluster is the sole authority for validating token (ex. sha256 token with OpenShift)
-			if staticConfig.SkipJWTVerification && staticConfig.AuthorizationURL == "" {
+			if staticConfig.SkipJWTVerification.Get() && staticConfig.AuthorizationURL.Get() == "" {
 				skipJWTWarningOnce.Do(func() {
 					klogutil.LogWarn(logger, "Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
 				})
@@ -117,14 +117,14 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			}
 			// Offline validation
 			if err == nil {
-				err = claims.ValidateOffline(staticConfig.OAuthAudience)
+				err = claims.ValidateOffline(staticConfig.OAuthAudience.Get())
 			}
 			// Online OIDC provider validation
 			if err == nil {
 				snapshot := oauthState.Load()
 				if snapshot == nil || snapshot.OIDCProvider == nil {
 					// Provider was configured (authorization_url set) but is unavailable — reject
-					if staticConfig.AuthorizationURL != "" {
+					if staticConfig.AuthorizationURL.Get() != "" {
 						logger.V(1).Info("Authentication rejected - OIDC provider unavailable",
 							"http.request.method", r.Method,
 							"url.path", r.URL.Path,
@@ -144,7 +144,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 					http.Error(w, "JWT verification not configured - set authorization_url or skip_jwt_verification", http.StatusInternalServerError)
 					return
 				} else {
-					err = claims.ValidateWithProvider(r.Context(), staticConfig.OAuthAudience, snapshot.OIDCProvider)
+					err = claims.ValidateWithProvider(r.Context(), staticConfig.OAuthAudience.Get(), snapshot.OIDCProvider)
 				}
 			}
 			if err != nil {

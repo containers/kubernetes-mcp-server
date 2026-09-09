@@ -35,7 +35,7 @@ After setup completes, run the server:
 
 ```bash
 # Start the server
-./kubernetes-mcp-server --port 8008 --config _output/config.toml
+./kubernetes-mcp-server --config _output/config.toml
 ```
 
 Or use the MCP Inspector for testing:

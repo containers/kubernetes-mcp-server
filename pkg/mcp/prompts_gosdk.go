@@ -55,12 +55,14 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 			return nil, fmt.Errorf("failed to get kubernetes client: %w", err)
 		}
 
+		cfg := s.configuration.Load()
 		params := api.PromptHandlerParams{
-			Context:           ctx,
-			BaseConfig:        s.configuration.Load(),
-			KubernetesClient:  k8s,
-			PromptCallRequest: &promptCallRequestAdapter{request: request},
-			Elicitor:          &sessionElicitor{},
+			Context:                 ctx,
+			ExtendedConfigProvider:  cfg.Config,
+			ClusterProviderStrategy: cfg.ClusterProviderStrategy.Get(),
+			KubernetesClient:        k8s,
+			PromptCallRequest:       &promptCallRequestAdapter{request: request},
+			Elicitor:                &sessionElicitor{},
 		}
 
 		result, err := serverPrompt.Handler(params)

@@ -49,7 +49,7 @@ func (s *SinkSuite) TearDownTest() {
 }
 
 // newSink wraps logging.New with the suite's IO buffers and a require-no-error.
-func (s *SinkSuite) newSink(cfg *config.StaticConfig) *logging.Sink {
+func (s *SinkSuite) newSink(cfg *config.Config) *logging.Sink {
 	sink, err := logging.New(cfg, s.httpOut, s.errOut)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sink.Close() })
@@ -58,7 +58,11 @@ func (s *SinkSuite) newSink(cfg *config.StaticConfig) *logging.Sink {
 
 func (s *SinkSuite) TestNewRoutesToConfiguredDestination() {
 	s.Run("stdio mode without log_file discards klog output", func() {
-		sink := s.newSink(&config.StaticConfig{LogLevel: 1})
+		sink := s.newSink(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(1)
+			return c
+		}())
 		klog.V(1).Info("should be discarded")
 		klog.Flush()
 		_, err := sink.Write([]byte("direct write"))
@@ -68,14 +72,24 @@ func (s *SinkSuite) TestNewRoutesToConfiguredDestination() {
 	})
 
 	s.Run("HTTP mode without log_file routes to httpOut", func() {
-		s.newSink(&config.StaticConfig{LogLevel: 1, Port: "8080"})
+		s.newSink(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(1)
+			c.Port.SetForTest("8080")
+			return c
+		}())
 		klog.V(1).Info("hello-http")
 		klog.Flush()
 		s.Contains(s.httpOut.String(), "hello-http")
 	})
 
 	s.Run("stderr sentinel routes to errOut without opening a file", func() {
-		s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: logging.StderrSentinel})
+		s.newSink(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(1)
+			c.LogFile.SetForTest(logging.StderrSentinel)
+			return c
+		}())
 		klog.V(1).Info("hello-stderr")
 		klog.Flush()
 		s.Contains(s.errOut.String(), "hello-stderr")
@@ -83,7 +97,12 @@ func (s *SinkSuite) TestNewRoutesToConfiguredDestination() {
 
 	s.Run("log_file path opens a file and routes to it", func() {
 		path := filepath.Join(s.tempDir, "server.log")
-		s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: path})
+		s.newSink(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(1)
+			c.LogFile.SetForTest(path)
+			return c
+		}())
 		klog.V(1).Info("hello-file")
 		klog.Flush()
 		content, err := os.ReadFile(path)
@@ -96,7 +115,7 @@ func (s *SinkSuite) TestNewRoutesToConfiguredDestination() {
 		// before asserting "no writes happened".
 		s.httpOut.Reset()
 		s.errOut.Reset()
-		s.newSink(&config.StaticConfig{})
+		s.newSink(config.New())
 		klog.V(1).Info("zero-config")
 		klog.Flush()
 		s.Empty(s.httpOut.String())
@@ -106,9 +125,11 @@ func (s *SinkSuite) TestNewRoutesToConfiguredDestination() {
 
 func (s *SinkSuite) TestNewWithBadLogFilePathFails() {
 	s.Run("returns wrapped error and does not panic", func() {
-		_, err := logging.New(
-			&config.StaticConfig{LogFile: filepath.Join(s.tempDir, "missing", "server.log")},
-			s.httpOut, s.errOut,
+		_, err := logging.New(func() *config.Config {
+			c := config.New()
+			c.LogFile.SetForTest(filepath.Join(s.tempDir, "missing", "server.log"))
+			return c
+		}(), s.httpOut, s.errOut,
 		)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "failed to open log file")
@@ -118,12 +139,22 @@ func (s *SinkSuite) TestNewWithBadLogFilePathFails() {
 func (s *SinkSuite) TestReloadSwitchesLogFile() {
 	pathA := filepath.Join(s.tempDir, "a.log")
 	pathB := filepath.Join(s.tempDir, "b.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
 	klog.V(1).Info("first")
 	klog.Flush()
 
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: pathB}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathB)
+		return c
+	}()))
 
 	klog.V(1).Info("second")
 	klog.Flush()
@@ -158,13 +189,23 @@ func (s *SinkSuite) TestReloadAfterRotationCreatesNewInode() {
 	}
 	logFile := filepath.Join(s.tempDir, "server.log")
 	rotated := logFile + ".1"
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: logFile})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(logFile)
+		return c
+	}())
 
 	klog.V(1).Info("before-rotate")
 	klog.Flush()
 
 	s.Require().NoError(os.Rename(logFile, rotated))
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: logFile}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(logFile)
+		return c
+	}()))
 
 	klog.V(1).Info("after-rotate")
 	klog.Flush()
@@ -193,9 +234,19 @@ func (s *SinkSuite) TestReloadAfterRotationCreatesNewInode() {
 
 func (s *SinkSuite) TestReloadKeepsOldDestinationOnError() {
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
-	bad := &config.StaticConfig{LogLevel: 1, LogFile: filepath.Join(s.tempDir, "missing", "server.log")}
+	bad := func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(filepath.Join(s.tempDir, "missing", "server.log"))
+		return c
+	}()
 	err := sink.Reload(bad)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "failed to open log file")
@@ -212,9 +263,19 @@ func (s *SinkSuite) TestReloadKeepsOldDestinationOnError() {
 
 func (s *SinkSuite) TestReloadSwitchesToStderr() {
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: logging.StderrSentinel}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(logging.StderrSentinel)
+		return c
+	}()))
 
 	klog.V(1).Info("on-stderr")
 	klog.Flush()
@@ -228,12 +289,22 @@ func (s *SinkSuite) TestReloadSwitchesToStderr() {
 
 func (s *SinkSuite) TestReloadUpdatesVerbosity() {
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
 	klog.V(3).Info("level3-before")
 	klog.Flush()
 
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 4, LogFile: pathA}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(4)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}()))
 
 	klog.V(3).Info("level3-after")
 	klog.Flush()
@@ -252,11 +323,21 @@ func (s *SinkSuite) TestReloadUpdatesVerbosity() {
 func (s *SinkSuite) TestSDKLoggerFollowsReload() {
 	pathA := filepath.Join(s.tempDir, "a.log")
 	pathB := filepath.Join(s.tempDir, "b.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
 	sink.SDKLogger().Info("sdk-on-a")
 	klog.Flush()
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: pathB}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathB)
+		return c
+	}()))
 	sink.SDKLogger().Info("sdk-on-b")
 	klog.Flush()
 
@@ -282,7 +363,12 @@ func (s *SinkSuite) TestConcurrentWriteAndReloadIsRaceFree() {
 	// surface area to inspect.
 	pathA := filepath.Join(s.tempDir, "a.log")
 	pathB := filepath.Join(s.tempDir, "b.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 2, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(2)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -308,7 +394,12 @@ func (s *SinkSuite) TestConcurrentWriteAndReloadIsRaceFree() {
 			path = pathB
 		}
 		level := 1 + i%4
-		s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: level, LogFile: path}))
+		s.Require().NoError(sink.Reload(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(level)
+			c.LogFile.SetForTest(path)
+			return c
+		}()))
 	}
 	close(stop)
 	wg.Wait()
@@ -325,7 +416,12 @@ func (s *SinkSuite) TestConcurrentWriteAndReloadNeverWritesToClosedFile() {
 	// that no write ever observes a closed descriptor.
 	pathA := filepath.Join(s.tempDir, "a.log")
 	pathB := filepath.Join(s.tempDir, "b.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
 	stop := make(chan struct{})
 	var writeErr atomic.Value // first non-nil error observed by any writer
@@ -353,7 +449,12 @@ func (s *SinkSuite) TestConcurrentWriteAndReloadNeverWritesToClosedFile() {
 		if i%2 == 1 {
 			path = pathB
 		}
-		s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: path}))
+		s.Require().NoError(sink.Reload(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(1)
+			c.LogFile.SetForTest(path)
+			return c
+		}()))
 	}
 	close(stop)
 	wg.Wait()
@@ -368,9 +469,18 @@ func (s *SinkSuite) TestReloadIgnoresPortChangeForServeMode() {
 	// Port must NOT flip the log destination — otherwise a process running
 	// in stdio mode whose config grows a Port would start writing klog to
 	// stdout, corrupting the MCP protocol channel.
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1}) // stdio mode (no Port)
+	sink := s.newSink(func() *config.Config {
+		c := config.New() // stdio mode (no Port)
+		c.LogLevel.SetForTest(1)
+		return c
+	}())
 
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, Port: "8080"}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.Port.SetForTest("8080")
+		return c
+	}()))
 
 	klog.V(1).Info("after-reload-with-port")
 	klog.Flush()
@@ -385,11 +495,22 @@ func (s *SinkSuite) TestReloadDropsLogFileBackToDefault() {
 	// SIGHUP. The sink should revert to the default destination (httpOut in
 	// HTTP mode, discard in stdio).
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA, Port: "8080"})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		c.Port.SetForTest("8080")
+		return c
+	}())
 
 	klog.V(1).Info("on-file")
 	klog.Flush()
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, Port: "8080"}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.Port.SetForTest("8080")
+		return c
+	}()))
 	klog.V(1).Info("on-default")
 	klog.Flush()
 
@@ -409,19 +530,42 @@ func (s *SinkSuite) TestReloadAfterCloseReopensQuietly() {
 	// quietly install a new destination.
 	pathA := filepath.Join(s.tempDir, "a.log")
 	pathB := filepath.Join(s.tempDir, "b.log")
-	sink, err := logging.New(&config.StaticConfig{LogFile: pathA}, s.httpOut, s.errOut)
+	sink, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogFile.SetForTest(pathA)
+		return c
+	}(), s.httpOut, s.errOut)
 	s.Require().NoError(err)
 	s.Require().NoError(sink.Close())
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogFile: pathB}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogFile.SetForTest(pathB)
+		return c
+	}()))
 	s.Require().NoError(sink.Close())
 }
 
 func (s *SinkSuite) TestDoubleReloadToSamePath() {
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink := s.newSink(&config.StaticConfig{LogLevel: 1, LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: pathA}))
-	s.Require().NoError(sink.Reload(&config.StaticConfig{LogLevel: 1, LogFile: pathA}))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}()))
+	s.Require().NoError(sink.Reload(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}()))
 
 	klog.V(1).Info("after-double-reload")
 	klog.Flush()
@@ -436,7 +580,12 @@ func (s *SinkSuite) TestCloseRoutesPostCloseLogsToErrOut() {
 	// RunE when Close itself errors) would hit a closed fd and be silently
 	// swallowed. Pin the contract: post-Close logs land on errOut.
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink, err := logging.New(&config.StaticConfig{LogLevel: 1, LogFile: pathA}, s.httpOut, s.errOut)
+	sink, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}(), s.httpOut, s.errOut)
 	s.Require().NoError(err)
 	s.Require().NoError(sink.Close())
 
@@ -448,7 +597,11 @@ func (s *SinkSuite) TestCloseRoutesPostCloseLogsToErrOut() {
 
 func (s *SinkSuite) TestCloseIsIdempotent() {
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink, err := logging.New(&config.StaticConfig{LogFile: pathA}, s.httpOut, s.errOut)
+	sink, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogFile.SetForTest(pathA)
+		return c
+	}(), s.httpOut, s.errOut)
 	s.Require().NoError(err)
 	s.Require().NoError(sink.Close())
 	s.Require().NoError(sink.Close(), "second Close must be a no-op, not panic")
@@ -459,7 +612,11 @@ func (s *SinkSuite) TestSinkImplementsIoWriter() {
 	// the configured destination without going through klog.
 	var _ io.Writer = (*logging.Sink)(nil)
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink := s.newSink(&config.StaticConfig{LogFile: pathA})
+	sink := s.newSink(func() *config.Config {
+		c := config.New()
+		c.LogFile.SetForTest(pathA)
+		return c
+	}())
 	_, err := sink.Write([]byte("direct"))
 	s.Require().NoError(err)
 	content, err := os.ReadFile(pathA)
@@ -474,9 +631,12 @@ func (s *SinkSuite) TestWithOtelLogSinkLogsToTextAndOtel() {
 	otelSink := telemetry.NewLogSink("test-svc", "1.0.0", recorder)
 
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink, err := logging.New(
-		&config.StaticConfig{LogLevel: 1, LogFile: pathA},
-		s.httpOut, s.errOut,
+	sink, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}(), s.httpOut, s.errOut,
 		logging.WithOtelLogSink(otelSink, nil),
 	)
 	s.Require().NoError(err)
@@ -504,9 +664,12 @@ func (s *SinkSuite) TestWithOtelLogSinkErrorLandsInBoth() {
 	otelSink := telemetry.NewLogSink("test-svc", "1.0.0", recorder)
 
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink, err := logging.New(
-		&config.StaticConfig{LogLevel: 1, LogFile: pathA},
-		s.httpOut, s.errOut,
+	sink, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}(), s.httpOut, s.errOut,
 		logging.WithOtelLogSink(otelSink, nil),
 	)
 	s.Require().NoError(err)
@@ -535,9 +698,12 @@ func (s *SinkSuite) TestWithOtelLogSinkBelowVerbosityReachesNeitherSink() {
 	otelSink := telemetry.NewLogSink("test-svc", "1.0.0", recorder)
 
 	pathA := filepath.Join(s.tempDir, "a.log")
-	sink, err := logging.New(
-		&config.StaticConfig{LogLevel: 1, LogFile: pathA},
-		s.httpOut, s.errOut,
+	sink, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(pathA)
+		return c
+	}(), s.httpOut, s.errOut,
 		logging.WithOtelLogSink(otelSink, nil),
 	)
 	s.Require().NoError(err)
@@ -561,9 +727,12 @@ func (s *SinkSuite) TestOtelLogRecordCarriesTraceContext() {
 	recorder := logtest.NewRecorder()
 	otelSink := telemetry.NewLogSink("test-svc", "1.0.0", recorder)
 
-	_, err := logging.New(
-		&config.StaticConfig{LogLevel: 1, LogFile: logging.StderrSentinel},
-		s.httpOut, s.errOut,
+	_, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(logging.StderrSentinel)
+		return c
+	}(), s.httpOut, s.errOut,
 		logging.WithOtelLogSink(otelSink, nil),
 	)
 	s.Require().NoError(err)
@@ -608,7 +777,12 @@ func (s *SinkSuite) TestOtelLogRecordCarriesTraceContext() {
 func (s *SinkSuite) TestKlogutilFromContextTextIsClean() {
 	s.Run("OTel disabled (default): text log carries no ctx field", func() {
 		path := filepath.Join(s.tempDir, "disabled.log")
-		sink, err := logging.New(&config.StaticConfig{LogLevel: 1, LogFile: path}, s.httpOut, s.errOut)
+		sink, err := logging.New(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(1)
+			c.LogFile.SetForTest(path)
+			return c
+		}(), s.httpOut, s.errOut)
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = sink.Close() })
 
@@ -624,7 +798,12 @@ func (s *SinkSuite) TestKlogutilFromContextTextIsClean() {
 		recorder := logtest.NewRecorder()
 		otelSink := telemetry.NewLogSink("svc", "1.0.0", recorder)
 		path := filepath.Join(s.tempDir, "enabled.log")
-		sink, err := logging.New(&config.StaticConfig{LogLevel: 1, LogFile: path}, s.httpOut, s.errOut, logging.WithOtelLogSink(otelSink, nil))
+		sink, err := logging.New(func() *config.Config {
+			c := config.New()
+			c.LogLevel.SetForTest(1)
+			c.LogFile.SetForTest(path)
+			return c
+		}(), s.httpOut, s.errOut, logging.WithOtelLogSink(otelSink, nil))
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = sink.Close() })
 
@@ -656,9 +835,12 @@ func (s *SinkSuite) TestCloseShutdownsOtelProvider() {
 	recorder := logtest.NewRecorder()
 	otelSink := telemetry.NewLogSink("test-svc", "1.0.0", recorder)
 
-	sink, err := logging.New(
-		&config.StaticConfig{LogLevel: 1, LogFile: logging.StderrSentinel},
-		s.httpOut, s.errOut,
+	sink, err := logging.New(func() *config.Config {
+		c := config.New()
+		c.LogLevel.SetForTest(1)
+		c.LogFile.SetForTest(logging.StderrSentinel)
+		return c
+	}(), s.httpOut, s.errOut,
 		logging.WithOtelLogSink(otelSink, provider),
 	)
 	s.Require().NoError(err)

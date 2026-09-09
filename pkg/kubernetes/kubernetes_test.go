@@ -35,9 +35,7 @@ func (s *KubernetesTestSuite) TestDiscoveryRequestsHaveDefaultTimeout() {
 
 	rawConfig := clientcmdapi.NewConfig()
 	k, err := NewKubernetes(
-		s.T().Context(),
-		&config.StaticConfig{},
-		clientcmd.NewDefaultClientConfig(*rawConfig, &clientcmd.ConfigOverrides{}),
+		s.T().Context(), config.New(), clientcmd.NewDefaultClientConfig(*rawConfig, &clientcmd.ConfigOverrides{}),
 		&rest.Config{Host: "https://cluster.example", Transport: transport},
 	)
 	s.Require().NoError(err)

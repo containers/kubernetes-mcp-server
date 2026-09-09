@@ -17,28 +17,28 @@ var ErrConfirmationDenied = errors.New("action requires confirmation")
 // CheckToolRules finds matching tool-level rules, merges them, and elicits confirmation.
 // Returns nil if no rules match or the user accepts. Returns an error if the user
 // declines or elicitation is not supported and the fallback is "deny".
-func CheckToolRules(ctx context.Context, provider api.ConfirmationRulesProvider, elicitor api.Elicitor,
+func CheckToolRules(ctx context.Context, rules []api.ConfirmationRule, fallback string, elicitor api.Elicitor,
 	toolName string, destructiveHint *bool) error {
 
-	matched := MatchToolLevelRules(provider.GetConfirmationRules(), toolName, destructiveHint)
+	matched := MatchToolLevelRules(rules, toolName, destructiveHint)
 	if len(matched) == 0 {
 		return nil
 	}
-	message, fallback := MergeMatchedRules(matched, provider.GetConfirmationFallback())
-	return CheckConfirmation(ctx, elicitor, message, fallback)
+	message, fb := MergeMatchedRules(matched, fallback)
+	return CheckConfirmation(ctx, elicitor, message, fb)
 }
 
 // CheckKubeRules finds matching kube-level rules, merges them, and elicits confirmation.
 // Returns nil if no rules match or the user accepts.
-func CheckKubeRules(ctx context.Context, provider api.ConfirmationRulesProvider, elicitor api.Elicitor,
+func CheckKubeRules(ctx context.Context, rules []api.ConfirmationRule, fallback string, elicitor api.Elicitor,
 	verb, kind, group, version, name, namespace string) error {
 
-	matched := MatchKubeLevelRules(provider.GetConfirmationRules(), verb, kind, group, version, name, namespace)
+	matched := MatchKubeLevelRules(rules, verb, kind, group, version, name, namespace)
 	if len(matched) == 0 {
 		return nil
 	}
-	message, fallback := MergeMatchedRules(matched, provider.GetConfirmationFallback())
-	return CheckConfirmation(ctx, elicitor, message, fallback)
+	message, fb := MergeMatchedRules(matched, fallback)
+	return CheckConfirmation(ctx, elicitor, message, fb)
 }
 
 // CheckConfirmation prompts the user for confirmation via the elicitor.

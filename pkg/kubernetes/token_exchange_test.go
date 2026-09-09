@@ -20,27 +20,28 @@ type TokenExchangeRoutingSuite struct {
 
 func (s *TokenExchangeRoutingSuite) TestResolveClusterAuthMode() {
 	s.Run("defaults to passthrough", func() {
-		cfg := config.Default()
+		cfg := config.New()
 		s.Equal(api.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
 	})
 
 	s.Run("defaults to passthrough regardless of require_oauth", func() {
-		cfg := config.Default()
-		cfg.RequireOAuth = true
+		cfg := config.New()
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
 		s.Equal(api.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
 	})
 
 	s.Run("returns explicit kubeconfig when set", func() {
-		cfg := config.Default()
-		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
+		cfg := config.New()
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
 		s.Equal(api.ClusterAuthKubeconfig, cfg.ResolveClusterAuthMode())
 	})
 }
 
 func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 	s.Run("kubeconfig mode clears OAuth token", func() {
-		cfg := config.Default()
-		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
+		cfg := config.New()
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
 		result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
@@ -51,8 +52,8 @@ func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 	})
 
 	s.Run("passthrough mode preserves token", func() {
-		cfg := config.Default()
-		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
+		cfg := config.New()
+		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthPassthrough)
 
 		ctx := context.Background()
 		ctx = context.WithValue(ctx, OAuthAuthorizationHeader, "Bearer original-token")
@@ -64,8 +65,8 @@ func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 	})
 
 	s.Run("auto-detect defaults to passthrough", func() {
-		cfg := config.Default()
-		cfg.ClusterAuthMode = "" // auto-detect
+		cfg := config.New()
+		cfg.ClusterAuthMode.SetForTest("") // auto-detect
 
 		ctx := context.Background()
 		ctx = context.WithValue(ctx, OAuthAuthorizationHeader, "Bearer original-token")
@@ -77,8 +78,8 @@ func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 	})
 
 	s.Run("configured exchange without a token endpoint returns an error", func() {
-		cfg := config.Default()
-		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: tokenexchange.StrategyRFC8693}
+		cfg := config.New()
+		cfg.TokenExchange.Strategy.SetForTest(tokenexchange.StrategyRFC8693)
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
 		_, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
@@ -88,7 +89,7 @@ func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 	})
 
 	s.Run("ignores an orphaned built config when declarative config is absent", func() {
-		cfg := config.Default()
+		cfg := config.New()
 		built := &tokenexchange.TargetTokenExchangeConfig{TokenURL: "https://example.com/token"}
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
@@ -109,8 +110,8 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksHTTPTokenExchange() {
 	defer server.Close()
 
 	s.Run("global exchange rejects http token URL when require_tls is true", func() {
-		cfg := config.Default()
-		cfg.RequireTLS = true
+		cfg := config.New()
+		cfg.RequireTLS.SetForTest(true)
 
 		cachedConfig := &tokenexchange.TargetTokenExchangeConfig{
 			TokenURL:     server.URL,
@@ -124,8 +125,8 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksHTTPTokenExchange() {
 	})
 
 	s.Run("global exchange allows http token URL when require_tls is false", func() {
-		cfg := config.Default()
-		cfg.RequireTLS = false
+		cfg := config.New()
+		cfg.RequireTLS.SetForTest(false)
 
 		cachedConfig := &tokenexchange.TargetTokenExchangeConfig{
 			TokenURL:     server.URL,
@@ -182,8 +183,8 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
 	ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer subject-token")
 
 	s.Run("rejects http token URL via per-target config when require_tls is true", func() {
-		cfg := config.Default()
-		cfg.RequireTLS = true
+		cfg := config.New()
+		cfg.RequireTLS.SetForTest(true)
 
 		_, err := ExchangeTokenInContext(ctx, cfg, newProvider(), "", nil)
 		s.Require().Error(err)
@@ -191,8 +192,8 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
 	})
 
 	s.Run("allows http token URL via per-target config when require_tls is false", func() {
-		cfg := config.Default()
-		cfg.RequireTLS = false
+		cfg := config.New()
+		cfg.RequireTLS.SetForTest(false)
 
 		result, err := ExchangeTokenInContext(ctx, cfg, newProvider(), "", nil)
 		s.Require().NoError(err)
@@ -202,7 +203,7 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
 }
 
 func (s *TokenExchangeRoutingSuite) TestUnknownStrategyReturnsError() {
-	cfg := config.Default()
+	cfg := config.New()
 	ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer subject-token")
 	provider := fakeTokenExchangeProvider{
 		exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{TokenURL: "https://example.com/token"},
@@ -215,7 +216,7 @@ func (s *TokenExchangeRoutingSuite) TestUnknownStrategyReturnsError() {
 }
 
 func (s *TokenExchangeRoutingSuite) TestInvalidPerTargetClientAuthReturnsError() {
-	cfg := config.Default()
+	cfg := config.New()
 	ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer subject-token")
 	provider := fakeTokenExchangeProvider{
 		exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{

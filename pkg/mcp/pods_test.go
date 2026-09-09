@@ -2,12 +2,12 @@ package mcp
 
 import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -153,9 +153,9 @@ func (s *PodsSuite) TestPodsListInNamespace() {
 }
 
 func (s *PodsSuite) TestPodsListDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Pod" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("pods_list (denied)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -219,7 +219,7 @@ func (s *PodsSuite) TestPodsListForbidden() {
 }
 
 func (s *PodsSuite) TestPodsListAsTable() {
-	s.Cfg.ListOutput = "table"
+	s.Cfg.ListOutput.SetForTest("table")
 	s.InitMcpClient()
 	s.Run("pods_list (list_output=table)", func() {
 		podsList, err := s.CallTool("pods_list", map[string]interface{}{})
@@ -380,9 +380,9 @@ func (s *PodsSuite) TestPodsGet() {
 }
 
 func (s *PodsSuite) TestPodsGetDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Pod" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("pods_get (denied)", func() {
 		podsGet, err := s.CallTool("pods_get", map[string]interface{}{"name": "a-pod-in-default"})
@@ -491,9 +491,9 @@ func (s *PodsSuite) TestPodsDelete() {
 }
 
 func (s *PodsSuite) TestPodsDeleteDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Pod" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("pods_delete (denied)", func() {
 		podsDelete, err := s.CallTool("pods_delete", map[string]interface{}{"name": "a-pod-in-default"})
@@ -667,9 +667,9 @@ func (s *PodsSuite) TestPodsLog() {
 }
 
 func (s *PodsSuite) TestPodsLogDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Pod" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("pods_log (denied)", func() {
 		podsLog, err := s.CallTool("pods_log", map[string]interface{}{"name": "a-pod-in-default"})

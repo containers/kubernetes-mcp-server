@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -153,11 +153,11 @@ func (s *McpMetricsSuite) TestMetricsExportedToConfigEndpoint() {
 	s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		[telemetry]
 		endpoint = "`+server.URL+`"
 		protocol = "http/protobuf"
-	`), s.Cfg))
+	`)
 	s.InitMcpClient()
 
 	_, err := s.CallTool("namespaces_list", map[string]interface{}{})

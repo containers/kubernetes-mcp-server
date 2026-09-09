@@ -14,7 +14,8 @@ import (
 
 // ConfirmationValidator validates Kubernetes API requests against confirmation rules.
 type ConfirmationValidator struct {
-	rulesProvider api.ConfirmationRulesProvider
+	rules    []api.ConfirmationRule
+	fallback string
 }
 
 func (v *ConfirmationValidator) Name() string {
@@ -31,7 +32,7 @@ func (v *ConfirmationValidator) Validate(ctx context.Context, req *api.HTTPValid
 		version = req.GVK.Version
 	}
 	err := confirmation.CheckKubeRules(
-		ctx, v.rulesProvider, &contextElicitor{},
+		ctx, v.rules, v.fallback, &contextElicitor{},
 		req.Verb, kind, group, version, req.ResourceName, req.Namespace,
 	)
 	if errors.Is(err, confirmation.ErrConfirmationDenied) {

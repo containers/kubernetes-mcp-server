@@ -74,9 +74,9 @@ type TargetTokenExchangeConfig struct {
 	// identity provider (e.g., SPIRE JWT-SVID). Used with AuthStyleFederated.
 	// The file is re-read on each token request to support token rotation.
 	FederatedTokenFile string `toml:"federated_token_file,omitempty"`
-	// TLSMinVersion is the effective global TLS min version (from GetTLSMinVersionConfig).
+	// TLSMinVersion is the effective global TLS min version.
 	TLSMinVersion string `toml:"-"`
-	// TLSCipherSuites is the effective global TLS cipher suites (from GetTLSCipherSuitesConfig).
+	// TLSCipherSuites is the effective global TLS cipher suites.
 	TLSCipherSuites []string `toml:"-"`
 
 	// client is a http client configured to work with the IdP for this target

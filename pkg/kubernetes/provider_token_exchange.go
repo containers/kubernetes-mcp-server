@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
@@ -15,7 +16,7 @@ import (
 
 type tokenExchangingProvider struct {
 	provider           Provider
-	baseConfigProvider func() api.BaseConfig
+	configProvider     func() *config.Config
 	oauthState         *oauth.State
 	tokenExchangeCache tokenExchangeConfigCache
 }
@@ -24,13 +25,13 @@ var _ Provider = &tokenExchangingProvider{}
 
 func newTokenExchangingProvider(
 	provider Provider,
-	baseConfigProvider func() api.BaseConfig,
+	configProvider func() *config.Config,
 	oauthState *oauth.State,
 ) Provider {
 	return &tokenExchangingProvider{
-		provider:           provider,
-		baseConfigProvider: baseConfigProvider,
-		oauthState:         oauthState,
+		provider:       provider,
+		configProvider: configProvider,
+		oauthState:     oauthState,
 	}
 }
 
@@ -39,32 +40,32 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 	if snap == nil {
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
-	baseConfig := p.baseConfig()
-	if baseConfig == nil {
+	cfg := p.config()
+	if cfg == nil {
 		// Defensive only: production wiring always supplies a non-nil config
 		// (NewProvider defaults the provider to return cfg, and the cmd path
-		// passes cfgState.Load(), which is non-nil by the StaticConfigState
+		// passes cfgState.Load(), which is non-nil by the ConfigState
 		// invariant). If a caller ever omits it, fall back to the wrapped
 		// provider rather than panicking; token exchange is simply skipped.
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
-	tokenExchangeConfig := p.getOrBuildTokenExchangeConfig(ctx, snap, baseConfig)
-	ctx, err := ExchangeTokenInContext(ctx, baseConfig, p.provider, target, tokenExchangeConfig)
+	tokenExchangeConfig := p.getOrBuildTokenExchangeConfig(ctx, snap, cfg)
+	ctx, err := ExchangeTokenInContext(ctx, cfg, p.provider, target, tokenExchangeConfig)
 	if err != nil {
 		return nil, err
 	}
 	return p.provider.GetDerivedKubernetes(ctx, target)
 }
 
-func (p *tokenExchangingProvider) baseConfig() api.BaseConfig {
-	if p.baseConfigProvider == nil {
+func (p *tokenExchangingProvider) config() *config.Config {
+	if p.configProvider == nil {
 		return nil
 	}
-	return p.baseConfigProvider()
+	return p.configProvider()
 }
 
-func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Context, snap *oauth.Snapshot, baseConfig api.BaseConfig) *tokenexchange.TargetTokenExchangeConfig {
-	global := baseConfig.GetTokenExchangeConfig()
+func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Context, snap *oauth.Snapshot, cfg *config.Config) *tokenexchange.TargetTokenExchangeConfig {
+	global := cfg.GetTokenExchangeConfig()
 	if global == nil {
 		p.tokenExchangeCache.clear()
 		return nil
@@ -79,50 +80,50 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Cont
 	if tokenURL == "" {
 		p.tokenExchangeCache.clear()
 		klogutil.LogWarn(klogutil.FromContext(ctx), "OIDC provider returned no token endpoint; token exchange is unavailable",
-			klogutil.Field("strategy", global.GetStrategy()))
+			klogutil.Field("strategy", global.Strategy.Get()))
 		return nil
 	}
 
-	key := newTokenExchangeConfigCacheKey(tokenURL, baseConfig)
+	key := newTokenExchangeConfigCacheKey(tokenURL, cfg)
 	return p.tokenExchangeCache.getOrReplace(key, func() *tokenexchange.TargetTokenExchangeConfig {
-		cfg := &tokenexchange.TargetTokenExchangeConfig{
+		te := &tokenexchange.TargetTokenExchangeConfig{
 			TokenURL:           tokenURL,
-			Audience:           global.GetAudience(),
-			SubjectTokenType:   global.GetSubjectTokenType(),
-			RequestedTokenType: global.GetRequestedTokenType(),
-			Scopes:             append([]string(nil), global.GetScopes()...),
-			CAFile:             baseConfig.GetCertificateAuthority(),
-			TLSMinVersion:      baseConfig.GetTLSMinVersionConfig(),
-			TLSCipherSuites:    append([]string(nil), baseConfig.GetTLSCipherSuitesConfig()...),
+			Audience:           global.Audience.Get(),
+			SubjectTokenType:   global.SubjectTokenType.Get(),
+			RequestedTokenType: global.RequestedTokenType.Get(),
+			Scopes:             append([]string(nil), global.Scopes.Get()...),
+			CAFile:             cfg.CertificateAuthority.Get(),
+			TLSMinVersion:      cfg.TLSMinVersion.Get(),
+			TLSCipherSuites:    append([]string(nil), cfg.TLSCipherSuites.Get()...),
 		}
-		applyClientAuth(cfg, global.GetClientAuth())
-		cfg.SetRequireTLS(baseConfig.IsRequireTLS)
-		return cfg
+		applyClientAuth(te, global.GetClientAuth())
+		te.SetRequireTLS(func() bool { return cfg.RequireTLS.Get() })
+		return te
 	})
 }
 
-func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth api.TokenExchangeClientAuth) {
+func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth *config.TokenExchangeClientAuth) {
 	if auth == nil {
 		return
 	}
-	cfg.ClientID = auth.GetClientID()
-	cfg.ClientSecret = auth.GetClientSecret()
-	switch auth.GetMethod() {
+	cfg.ClientID = auth.ClientID.Get()
+	cfg.ClientSecret = auth.ClientSecret.Get()
+	switch api.TokenExchangeClientAuthMethod(auth.Method.Get()) {
 	case api.TokenExchangeClientAuthMethodSecretBasic:
 		cfg.AuthStyle = tokenexchange.AuthStyleHeader
 	case api.TokenExchangeClientAuthMethodSecretPost:
 		cfg.AuthStyle = tokenexchange.AuthStyleParams
 	case api.TokenExchangeClientAuthMethodPrivateKey:
 		cfg.AuthStyle = tokenexchange.AuthStyleAssertion
-		cfg.ClientCertFile = auth.GetCertificateFile()
-		cfg.ClientKeyFile = auth.GetPrivateKeyFile()
+		cfg.ClientCertFile = auth.CertificateFile.Get()
+		cfg.ClientKeyFile = auth.PrivateKeyFile.Get()
 	case api.TokenExchangeClientAuthMethodJWTFile:
 		cfg.AuthStyle = tokenexchange.AuthStyleFederated
-		cfg.FederatedTokenFile = auth.GetTokenFile()
+		cfg.FederatedTokenFile = auth.TokenFile.Get()
 	default:
 		// Preserve invalid methods so TargetTokenExchangeConfig.Validate rejects
 		// them instead of treating an empty style as form-body authentication.
-		cfg.AuthStyle = string(auth.GetMethod())
+		cfg.AuthStyle = auth.Method.Get()
 	}
 }
 
@@ -145,30 +146,30 @@ type tokenExchangeConfigCacheKey struct {
 	RequireTLS         bool
 }
 
-func newTokenExchangeConfigCacheKey(tokenURL string, cfg api.BaseConfig) tokenExchangeConfigCacheKey {
+func newTokenExchangeConfigCacheKey(tokenURL string, cfg *config.Config) tokenExchangeConfigCacheKey {
 	global := cfg.GetTokenExchangeConfig()
 	key := tokenExchangeConfigCacheKey{
 		TokenURL:        tokenURL,
-		CAFile:          cfg.GetCertificateAuthority(),
-		TLSMinVersion:   cfg.GetTLSMinVersionConfig(),
-		TLSCipherSuites: strings.Join(cfg.GetTLSCipherSuitesConfig(), "\x00"),
-		RequireTLS:      cfg.IsRequireTLS(),
+		CAFile:          cfg.CertificateAuthority.Get(),
+		TLSMinVersion:   cfg.TLSMinVersion.Get(),
+		TLSCipherSuites: strings.Join(cfg.TLSCipherSuites.Get(), "\x00"),
+		RequireTLS:      cfg.RequireTLS.Get(),
 	}
 	if global == nil {
 		return key
 	}
-	key.Strategy = global.GetStrategy()
-	key.Audience = global.GetAudience()
-	key.SubjectTokenType = global.GetSubjectTokenType()
-	key.RequestedTokenType = global.GetRequestedTokenType()
-	key.Scopes = strings.Join(global.GetScopes(), "\x00")
+	key.Strategy = global.Strategy.Get()
+	key.Audience = global.Audience.Get()
+	key.SubjectTokenType = global.SubjectTokenType.Get()
+	key.RequestedTokenType = global.RequestedTokenType.Get()
+	key.Scopes = strings.Join(global.Scopes.Get(), "\x00")
 	if auth := global.GetClientAuth(); auth != nil {
-		key.ClientID = auth.GetClientID()
-		key.ClientSecret = auth.GetClientSecret()
-		key.AuthStyle = string(auth.GetMethod())
-		key.ClientCertFile = auth.GetCertificateFile()
-		key.ClientKeyFile = auth.GetPrivateKeyFile()
-		key.FederatedTokenFile = auth.GetTokenFile()
+		key.ClientID = auth.ClientID.Get()
+		key.ClientSecret = auth.ClientSecret.Get()
+		key.AuthStyle = auth.Method.Get()
+		key.ClientCertFile = auth.CertificateFile.Get()
+		key.ClientKeyFile = auth.PrivateKeyFile.Get()
+		key.FederatedTokenFile = auth.TokenFile.Get()
 	}
 	return key
 }

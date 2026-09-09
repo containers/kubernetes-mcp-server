@@ -2,36 +2,36 @@ package config
 
 import "sync/atomic"
 
-// StaticConfigState holds the current StaticConfig and allows atomic, lock-free reads.
+// ConfigState holds the current Config and allows atomic, lock-free reads.
 // This enables hot-reloading of configuration via SIGHUP while ensuring all consumers
 // (e.g., HTTP middleware) always see the latest config snapshot.
 //
-// Non-nil invariant: once constructed via NewStaticConfigState with a non-nil
-// *StaticConfig, Load always returns a non-nil pointer. Store silently ignores
+// Non-nil invariant: once constructed via NewConfigState with a non-nil
+// *Config, Load always returns a non-nil pointer. Store silently ignores
 // nil to preserve this invariant for downstream consumers that dereference
 // without a nil check.
-type StaticConfigState struct {
-	ref atomic.Pointer[StaticConfig]
+type ConfigState struct {
+	ref atomic.Pointer[Config]
 }
 
-// NewStaticConfigState creates a new StaticConfigState initialized with the given config.
+// NewConfigState creates a new ConfigState initialized with the given config.
 // cfg must be non-nil; passing nil violates the non-nil invariant of Load.
-func NewStaticConfigState(cfg *StaticConfig) *StaticConfigState {
-	s := &StaticConfigState{}
+func NewConfigState(cfg *Config) *ConfigState {
+	s := &ConfigState{}
 	s.ref.Store(cfg)
 	return s
 }
 
-// Load returns the current StaticConfig. Safe for concurrent use.
-// Guaranteed non-nil when the state was constructed via NewStaticConfigState
+// Load returns the current Config. Safe for concurrent use.
+// Guaranteed non-nil when the state was constructed via NewConfigState
 // with a non-nil config; Store(nil) is a no-op.
-func (s *StaticConfigState) Load() *StaticConfig {
+func (s *ConfigState) Load() *Config {
 	return s.ref.Load()
 }
 
-// Store atomically replaces the current StaticConfig.
+// Store atomically replaces the current Config.
 // nil is silently ignored to preserve the non-nil invariant of Load.
-func (s *StaticConfigState) Store(cfg *StaticConfig) {
+func (s *ConfigState) Store(cfg *Config) {
 	if cfg == nil {
 		return
 	}

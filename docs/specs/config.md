@@ -1,13 +1,13 @@
 # Config Option Framework
 
-Status: **Proposed**
+Status: **Implemented**
 
 This spec is the implemented configuration engine, originally sketched in
 [containers/kubernetes-mcp-server#1374](https://github.com/containers/kubernetes-mcp-server/issues/1374).
 There is no deprecation window and no compatibility shims.
 
-Implementation has not started. Do not treat this file as a description of
-current code. Current behavior lives in [`docs/configuration.md`](../configuration.md).
+Current user-facing behavior lives in [`docs/configuration.md`](../configuration.md).
+Upgrade notes live in [`docs/configuration-changes.md`](../configuration-changes.md).
 
 The [master table](#master-table) records which options have which vectors
 (TOML / env) and how those are spelled. Empty TOML / Env / CLI cells mean
@@ -59,12 +59,11 @@ type Source string
 const (
     SourceDefault Source = "<Default>"
     SourceEnv     Source = "<Env>"
-    SourceCLI     Source = "<CLI>"
     SourceTest    Source = "<Test>"
 )
 
 type Option[T any] struct {
-    TOMLKey, EnvName, FlagName string // empty => that vector is off
+    TOMLKey, EnvName string // empty => that vector is off
     Description                string
     Default                    T
     ParseEnv                   func(string) (T, error) // required if EnvName != ""
@@ -90,9 +89,9 @@ how a leaf opts out of TOML without a sentinel tag. Wrapping structs may
 still use `toml` tags for the **table name**; the walk prepends that
 prefix to each child's `TOMLKey`.
 
-There is no `HiddenFlag`. Hidden OAuth CLI flags are dropped; we are not
-building cobra-hide machinery we do not use. `FlagName` empty remains how
-an option opts out of CLI.
+There is no CLI vector for runtime options. Product CLI is bootstrap only
+(`--config` / `--config-dir` / `--version`). Those flags select files; they
+do not override Option values.
 
 Nested groups are ordinary structs of `Option`s:
 
@@ -103,16 +102,16 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-    ReadHeaderTimeout Option[Duration]
+    ReadHeaderTimeout Option[time.Duration]
     MaxBodyBytes      Option[int64]
 }
 
 func newHTTPConfig() HTTPConfig {
     return HTTPConfig{
-        ReadHeaderTimeout: Option[Duration]{
+        ReadHeaderTimeout: Option[time.Duration]{
             TOMLKey:     "read_header_timeout",
             Description: "Max duration to read request headers",
-            Default:     Duration(10 * time.Second),
+            Default:     10 * time.Second,
             Reloadable:  false,
         },
         MaxBodyBytes: Option[int64]{
@@ -131,8 +130,9 @@ Effective TOML keys are `http.read_header_timeout` and
 
 `Config` holds `Option[T]` fields, including nested `HTTP`, `Telemetry`,
 and `TokenExchange` structs of more `Option`s. A small unexported
-`option` interface plus a walk (including nested structs) applies env
-and produces the dump so a new field cannot be forgotten.
+`option` interface plus a walk (including nested structs) applies
+env, validates, and produces the startup dump so a new field cannot
+be forgotten.
 
 Do **not** `toml.Unmarshal` directly into `Option[T]`. Merge TOML as maps
 (tracking which file last set each key), then apply present keys onto
@@ -152,10 +152,11 @@ The error names the file and key path. Removed `sts_*` /
 table.
 
 Cross-field rules (`tls_cert` requires `tls_key`, OAuth coupling, …) stay
-on `Config.Validate`. `api.BaseConfig` getters wrap `Option.Get()`.
+on `Config.Validate`. Per-value checks live on `Option.Validate`. Callers
+with `*config.Config` use `Option.Get()`; there is no `api.BaseConfig`
+getter interface.
 
-No Viper/koanf. Cobra registers flags for options that have `FlagName`.
-BurntSushi/toml remains the file parser.
+No Viper/koanf. BurntSushi/toml remains the file parser.
 
 Resolve **once per load**, not at getter time. Owned TLS and OTEL values
 are applied from `Option.Get()` after load; there is no getter-time
@@ -212,7 +213,6 @@ the Default cell:
 | --- | --- |
 | `<Default>` | built-in (after downstream default overrides) |
 | `<Env>` | non-empty environment variable |
-| `<CLI>` | cobra flag `Changed` |
 | `<Test>` | test helper |
 | a filesystem path | last TOML file that set this key |
 
@@ -243,20 +243,20 @@ flowchart TD
   applyFile["Apply present keys; Source = file path"]
   unknown["Unknown keys: fail load"]
   applyEnv["Non-empty env; Source Env"]
-  pin[SIGHUP: pin non-reloadable values]
+  xval[Cross-field Validate]
   dump[Log Describe for every Option]
-  boot --> def --> files --> applyFile --> unknown --> applyEnv --> pin --> dump
+  boot --> def --> files --> applyFile --> unknown --> applyEnv --> xval --> dump
 ```
-
-`Read` / `ReadToml` stop after the dump. `Config.Validate` (per-value
-`Option.Validate`, then cross-field rules) runs afterward in
-`MCPServerOptions` at startup and in `ReloadConfiguration` on SIGHUP.
 
 **SIGHUP:** re-read files, re-apply env, re-validate. If a non-`Reloadable` option's resolved value would change,
 keep the previous value and source and log that a restart is required.
 
 SIGHUP still requires the process to have been started with `--config`
 and/or `--config-dir`. Unavailable on Windows (unchanged).
+
+On every successful load (startup and SIGHUP) the server logs every option.
+On SIGHUP, options whose value differs from the previous config are marked
+`changed=true` with the previous `Describe()` value.
 
 **Startup dump:** log every option via `Describe()`, secrets redacted.
 
@@ -327,7 +327,10 @@ restart is required.
 ### Bootstrap
 
 Not `Config` fields. Path selection is its own ladder: `--config` beats
-`$K8S_MCP_CONFIG_PATH` (already true). `--config-dir` has no env equivalent.
+`$K8S_MCP_CONFIG_PATH` (already true). `--config-dir` has no env equivalent
+and no default. It can be the only file source. Omit it and no directory
+is read. Relative `--config` and `--config-dir` are resolved against the
+working directory, independently of each other.
 
 <table>
 <thead>
@@ -369,13 +372,13 @@ Not `Config` fields. Path selection is its own ladder: `--config` beats
 <tr>
 <td>config dir</td>
 <td>string</td>
-<td><code>conf.d</code> next to the main file when <code>--config</code> is set</td>
+<td><code>""</code> (no drop-ins)</td>
 <td>—</td>
 <td>—</td>
 <td><code>--config-dir</code></td>
 <td>n/a (selects files to re-read)</td>
 <td>no</td>
-<td></td>
+<td>DROP implicit <code>conf.d</code> next to <code>--config</code>. Empty means no drop-ins. Relative paths resolve against the working directory, not the main file.</td>
 </tr>
 </tbody>
 </table>
@@ -969,7 +972,7 @@ non-reloadable mark below is for the **inbound** HTTP server.
 </tr>
 <tr>
 <td>http.read_header_timeout</td>
-<td>Duration</td>
+<td>time.Duration</td>
 <td><code>"10s"</code></td>
 <td><code>http.read_header_timeout</code></td>
 <td>—</td>
@@ -1262,8 +1265,8 @@ set (a public client may set only `client_id`).
 </tbody>
 </table>
 
-Stdio still forces `require_oauth` off (OAuth is HTTP-only). That remains a
-post-resolve adjustment, not a fourth vector.
+Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is
+HTTP-only; the default (`port=""`, `require_oauth=false`) still works.
 
 ### Telemetry
 
@@ -1410,7 +1413,7 @@ no.
 </tr>
 <tr>
 <td>kubeconfig_debounce_window</td>
-<td>Duration</td>
+<td>time.Duration</td>
 <td><code>"100ms"</code></td>
 <td><code>kubeconfig_debounce_window</code></td>
 <td><code>KUBECONFIG_DEBOUNCE_WINDOW_MS</code></td>
@@ -1421,7 +1424,7 @@ no.
 </tr>
 <tr>
 <td>cluster_state_poll_interval</td>
-<td>Duration</td>
+<td>time.Duration</td>
 <td><code>"30s"</code></td>
 <td><code>cluster_state_poll_interval</code></td>
 <td><code>CLUSTER_STATE_POLL_INTERVAL_MS</code></td>
@@ -1432,7 +1435,7 @@ no.
 </tr>
 <tr>
 <td>cluster_state_debounce_window</td>
-<td>Duration</td>
+<td>time.Duration</td>
 <td><code>"5s"</code></td>
 <td><code>cluster_state_debounce_window</code></td>
 <td><code>CLUSTER_STATE_DEBOUNCE_WINDOW_MS</code></td>
@@ -1443,7 +1446,7 @@ no.
 </tr>
 <tr>
 <td>workspace_poll_interval</td>
-<td>Duration</td>
+<td>time.Duration</td>
 <td><code>"60s"</code></td>
 <td><code>workspace_poll_interval</code></td>
 <td><code>WORKSPACE_POLL_INTERVAL_MS</code></td>
@@ -1454,7 +1457,7 @@ no.
 </tr>
 <tr>
 <td>workspace_debounce_window</td>
-<td>Duration</td>
+<td>time.Duration</td>
 <td><code>"5s"</code></td>
 <td><code>workspace_debounce_window</code></td>
 <td><code>WORKSPACE_DEBOUNCE_WINDOW_MS</code></td>

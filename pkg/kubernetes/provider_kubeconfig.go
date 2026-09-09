@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
 
@@ -19,8 +20,8 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
-	mu sync.RWMutex
-	api.BaseConfig
+	mu  sync.RWMutex
+	cfg *config.Config
 	*ProviderGVKFilter
 	defaultContext      string
 	managers            map[string]*Manager
@@ -38,8 +39,8 @@ func init() {
 // via kubeconfig contexts.
 // Internally, it leverages a KubeconfigManager for each context, initializing them
 // lazily when requested.
-func newKubeConfigClusterProvider(ctx context.Context, cfg api.BaseConfig) (Provider, error) {
-	ret := &kubeConfigClusterProvider{BaseConfig: cfg}
+func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Provider, error) {
+	ret := &kubeConfigClusterProvider{cfg: cfg}
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
@@ -51,14 +52,14 @@ func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	m, err := NewKubeconfigManager(ctx, p, "")
+	m, err := NewKubeconfigManager(ctx, p.cfg, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
 			return fmt.Errorf( //nolint:ST1005 // user-facing error with actionable multi-line guidance
 				"kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %w\n\n"+
-					"If you intend to connect to a different cluster from within a pod, provide the kubeconfig path explicitly:\n"+
-					"  --kubeconfig /path/to/kubeconfig --cluster-provider kubeconfig\n\n"+
-					"This overrides the in-cluster detection and uses the specified kubeconfig file instead.\n"+
+					"If you intend to connect to a different cluster from within a pod, set in your TOML config:\n"+
+					"  kubeconfig = \"/path/to/kubeconfig\"\n\n"+
+					"An explicit kubeconfig path overrides in-cluster detection; cluster_provider_strategy is optional.\n"+
 					"See https://github.com/containers/kubernetes-mcp-server/blob/main/docs/configuration.md#cross-cluster-access-from-a-pod",
 				err,
 			)
@@ -99,8 +100,8 @@ func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 	}
 
 	p.Close()
-	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig)
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient())
+	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
+	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	p.defaultContext = defaultContext
 
 	return nil
@@ -140,6 +141,10 @@ func (p *kubeConfigClusterProvider) managerForContext(ctx context.Context, kubeC
 	p.managers[kubeContext] = m
 
 	return m, nil
+}
+
+func (p *kubeConfigClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
 }
 
 func (p *kubeConfigClusterProvider) IsMultiTarget() bool {

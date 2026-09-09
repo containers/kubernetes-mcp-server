@@ -19,23 +19,6 @@ const (
 	ClusterAuthKubeconfig = "kubeconfig"
 )
 
-// ClusterAuthProvider provides configuration for how the MCP server authenticates to clusters.
-type ClusterAuthProvider interface {
-	// GetClusterAuthMode returns the raw cluster authentication mode from config.
-	// Returns empty string if not explicitly set.
-	GetClusterAuthMode() string
-	// ResolveClusterAuthMode returns the effective cluster auth mode.
-	// If explicitly set, returns that value. Otherwise auto-detects based on require_oauth.
-	ResolveClusterAuthMode() string
-}
-
-type ClusterProvider interface {
-	// GetClusterProviderStrategy returns the cluster provider strategy (if configured).
-	GetClusterProviderStrategy() string
-	// GetKubeConfigPath returns the path to the kubeconfig file (if configured).
-	GetKubeConfigPath() string
-}
-
 // ExtendedConfig is the interface that all configuration extensions must implement.
 // Each extended config manager registers a factory function to parse its config from TOML primitives
 type ExtendedConfig interface {
@@ -58,24 +41,6 @@ type GroupVersionKind struct {
 	Kind    string `json:"kind,omitempty" toml:"kind,omitempty"`
 }
 
-type DeniedResourcesProvider interface {
-	// GetDeniedResources returns a list of GroupVersionKinds that are denied.
-	GetDeniedResources() []GroupVersionKind
-}
-
-// TokenExchangeConfig provides declarative global token exchange settings.
-// Implementations must return an untyped nil from GetClientAuth when client
-// authentication is not configured. A typed nil stored in the interface is
-// non-nil and may panic when its methods are called.
-type TokenExchangeConfig interface {
-	GetStrategy() string
-	GetAudience() string
-	GetScopes() []string
-	GetSubjectTokenType() string
-	GetRequestedTokenType() string
-	GetClientAuth() TokenExchangeClientAuth
-}
-
 type TokenExchangeClientAuthMethod string
 
 const (
@@ -84,68 +49,3 @@ const (
 	TokenExchangeClientAuthMethodPrivateKey  TokenExchangeClientAuthMethod = "private_key_jwt"
 	TokenExchangeClientAuthMethodJWTFile     TokenExchangeClientAuthMethod = "jwt_file"
 )
-
-// TokenExchangeClientAuth provides optional declarative client authentication.
-// Providers returning this interface must use an untyped nil when no client
-// authentication configuration exists.
-type TokenExchangeClientAuth interface {
-	GetMethod() TokenExchangeClientAuthMethod
-	GetClientID() string
-	GetClientSecret() string
-	GetCertificateFile() string
-	GetPrivateKeyFile() string
-	GetTokenFile() string
-}
-
-type TokenExchangeConfigProvider interface {
-	GetTokenExchangeConfig() TokenExchangeConfig
-}
-
-// CertificateAuthorityProvider provides access to the top-level certificate_authority
-// TLS setting. It is a general OAuth/TLS option (also consumed by pkg/oauth) rather
-// than a token-exchange-specific one, so it is kept separate from TokenExchangeConfigProvider.
-type CertificateAuthorityProvider interface {
-	GetCertificateAuthority() string
-}
-
-// ValidationEnabledProvider provides access to validation enabled setting.
-type ValidationEnabledProvider interface {
-	IsValidationEnabled() bool
-}
-
-// TargetCompatibilityToolFiltersEnabledProvider provides access to target compatibility tool filters setting.
-type TargetCompatibilityToolFiltersEnabledProvider interface {
-	IsTargetCompatibilityToolFiltersEnabled() bool
-}
-
-// RequireTLSProvider provides access to require_tls setting.
-type RequireTLSProvider interface {
-	IsRequireTLS() bool
-}
-
-// TLSConfigProvider provides access to global TLS min version and cipher suite settings.
-// Values include TLS_MIN_VERSION and TLS_CIPHER_SUITES env overrides when set.
-type TLSConfigProvider interface {
-	GetTLSMinVersionConfig() string
-	GetTLSCipherSuitesConfig() []string
-}
-
-// RequireOAuthProvider provides access to require_oauth setting.
-type RequireOAuthProvider interface {
-	IsRequireOAuth() bool
-}
-
-type BaseConfig interface {
-	ClusterAuthProvider
-	ClusterProvider
-	ConfirmationRulesProvider
-	DeniedResourcesProvider
-	ExtendedConfigProvider
-	TokenExchangeConfigProvider
-	CertificateAuthorityProvider
-	ValidationEnabledProvider
-	TargetCompatibilityToolFiltersEnabledProvider
-	RequireTLSProvider
-	TLSConfigProvider
-	RequireOAuthProvider
-}

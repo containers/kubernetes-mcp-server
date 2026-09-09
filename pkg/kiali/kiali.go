@@ -30,12 +30,13 @@ type Kiali struct {
 }
 
 // NewKiali creates a new Kiali instance
-func NewKiali(configProvider api.BaseConfig, kubernetes *rest.Config) *Kiali {
+func NewKiali(configProvider api.ExtendedConfigProvider, kubernetes *rest.Config) *Kiali {
+	cfg := configFromProvider(configProvider)
 	kiali := &Kiali{
 		bearerToken:     kubernetes.BearerToken,
-		tlsMinVersion:   configProvider.GetTLSMinVersionConfig(),
-		tlsCipherSuites: configProvider.GetTLSCipherSuitesConfig(),
-		requireTLS:      configProvider.IsRequireTLS,
+		tlsMinVersion:   cfg.TLSMinVersion.Get(),
+		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 	}
 	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
 		if kc, ok := cfg.(*Config); ok && kc != nil {
@@ -215,4 +216,18 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 		return "", fmt.Errorf("kiali API error: status %d", resp.StatusCode)
 	}
 	return string(respBody), nil
+}
+
+func configFromProvider(p api.ExtendedConfigProvider) *config.Config {
+	switch v := p.(type) {
+	case *config.Config:
+		if v != nil {
+			return v
+		}
+	case api.ToolHandlerParams:
+		return configFromProvider(v.ExtendedConfigProvider)
+	case api.PromptHandlerParams:
+		return configFromProvider(v.ExtendedConfigProvider)
+	}
+	return config.New()
 }

@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
 
@@ -14,7 +15,7 @@ import (
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
-	api.BaseConfig
+	cfg *config.Config
 	*ProviderGVKFilter
 	strategy            string
 	manager             *Manager
@@ -33,10 +34,10 @@ func init() {
 // When used within a cluster or with an 'in-cluster' strategy, it uses an InClusterManager.
 // Otherwise, it uses a KubeconfigManager.
 func newSingleClusterProvider(strategy string) ProviderFactory {
-	return func(ctx context.Context, cfg api.BaseConfig) (Provider, error) {
+	return func(ctx context.Context, cfg *config.Config) (Provider, error) {
 		ret := &singleClusterProvider{
-			BaseConfig: cfg,
-			strategy:   strategy,
+			cfg:      cfg,
+			strategy: strategy,
 		}
 		if err := ret.reset(ctx); err != nil {
 			return nil, err
@@ -47,19 +48,19 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 }
 
 func (p *singleClusterProvider) reset(ctx context.Context) error {
-	if p.BaseConfig != nil && p.GetKubeConfigPath() != "" && p.strategy == api.ClusterProviderInCluster {
+	if p.cfg != nil && p.cfg.KubeConfig.Get() != "" && p.strategy == api.ClusterProviderInCluster {
 		return fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy",
-			p.GetKubeConfigPath())
+			p.cfg.KubeConfig.Get())
 	}
 
 	if p.manager != nil {
 		p.manager.Close()
 	}
 	var err error
-	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p) {
-		p.manager, err = NewInClusterManager(ctx, p)
+	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p.cfg.KubeConfig.Get()) {
+		p.manager, err = NewInClusterManager(ctx, p.cfg)
 	} else {
-		p.manager, err = NewKubeconfigManager(ctx, p, "")
+		p.manager, err = NewKubeconfigManager(ctx, p.cfg, "")
 	}
 	if err != nil {
 		if errors.Is(err, ErrorInClusterNotInCluster) {
@@ -70,9 +71,13 @@ func (p *singleClusterProvider) reset(ctx context.Context) error {
 	}
 
 	p.Close()
-	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig)
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient())
+	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
+	p.clusterStateWatcher = watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	return nil
+}
+
+func (p *singleClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
 }
 
 func (p *singleClusterProvider) IsMultiTarget() bool {
