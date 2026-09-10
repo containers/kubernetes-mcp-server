@@ -84,12 +84,12 @@
           "type": "string"
         },
         "query": {
-          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
+          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file relative to /var/log on the node (e.g., \"/kubelet.log\" or \"/kube-proxy.log\")",
           "type": "string"
         },
         "tailLines": {
           "default": 100,
-          "description": "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
+          "description": "Number of lines to retrieve from the end of service logs (Optional, 0 means all logs; ignored for file queries)",
           "minimum": 0,
           "type": "integer"
         }
