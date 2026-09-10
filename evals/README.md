@@ -26,6 +26,11 @@ evals/
 Tasks are grouped into suites via a `suite: <name>` label. The available suites are
 `core`, `config`, `helm`, `kiali`, `kubevirt`, `tekton`, and `netobserv`.
 
+A second, orthogonal `readonly: "true"` label marks tasks that are safe to run
+against a server started with `--read-only`. It cuts across the `suite:` label
+rather than replacing it — see [Read-only suite](#read-only-suite-core-readonly)
+below.
+
 ## Prerequisites
 
 - A Kubernetes cluster (kind, minikube, or any cluster) and `kubectl` configured for it
@@ -184,6 +189,41 @@ each `taskSets` entry determine which tasks run.
 Note: with `AGENT=acp-anthropic` every suite is keyless (agent and judge both run
 on your Claude subscription). With `builtin-*` agents the judge-backed tasks need
 the provider's API key (see [Eval configs](#eval-configs)).
+
+## Read-only suite (`core-readonly`)
+
+Proves that a model using only the tools exposed by a server started with
+`read_only=true` can still complete real read-only diagnostic workflows (log
+inspection, event filtering, metrics). It reuses the read-only-compatible
+tasks already in `core`/`config` via the `readonly: "true"` label (see
+[Filtering tasks by suite](#filtering-tasks-by-suite) above) instead of
+duplicating them into a new suite.
+
+As a suite-level safety net, every task also asserts `toolsNotUsed` for
+`resources_create_or_update|resources_delete|resources_scale|pods_delete|pods_exec|pods_run`
+(see `evals/core-eval-testing/builtin-openai/eval-core-readonly.yaml`). `pods_exec`
+is included even though it isn't a CRUD write tool because it's annotated
+`DestructiveHint: true` in `pkg/toolsets/core/pods.go` -- depending on the pod's
+entrypoint, an executed command can kill the pod.
+
+Note this suite intentionally does **not** cover write-blocking itself:
+whether `read_only=true` actually rejects a write attempt (as opposed to just
+hiding write tools from the tool list) is a deterministic property of the
+server, not of model behavior, so it's covered by
+`TestReadOnlyBlocksWriteToolInvocation` in `pkg/mcp/mcp_tools_test.go` instead
+of an eval task — see [`docs/dev/testing.md`](../docs/dev/testing.md). Using a
+live LLM to verify a property that doesn't depend on the model would just add
+cost and non-determinism for no extra assurance.
+
+The MCP server **must** be started with `--read-only` for this suite — its
+tasks assume write tools are unavailable. Because the suite selects tasks by
+`readonly: "true"` rather than `suite: core-readonly`, the default
+`EVAL_LABEL_SELECTOR` (`suite=$(SUITE)`) must be cleared:
+
+```bash
+make run-server READ_ONLY=true TOOLSETS=core,config
+make run-evals SUITE=core-readonly EVAL_LABEL_SELECTOR=
+```
 
 ## Versions
 

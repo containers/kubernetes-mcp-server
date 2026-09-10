@@ -18,6 +18,18 @@ Each contains:
 - `eval-tekton.yaml` — eval config for the `tekton` task suite (+ core/config)
 - `eval-netobserv.yaml` — eval config for the `netobserv` task suite (+ core/config)
 - `eval-all.yaml` — eval config that runs all task suites
+- `eval-core-readonly.yaml` (`builtin-openai` only so far) — eval config for the
+  `core-readonly` suite. Proves a model can still complete real diagnostic
+  workflows using only the tools exposed when the server is started with
+  `--read-only`. It selects on the `readonly: "true"` label instead of
+  `suite:`, reusing the read-only-compatible tasks from `core`/`config` without
+  duplicating them — see [Read-only suite](../README.md#read-only-suite-core-readonly)
+  for the full pattern (including why write-blocking is verified by a Go test
+  instead of an eval task). Run it with:
+  ```bash
+  make run-server READ_ONLY=true TOOLSETS=core,config
+  make run-evals SUITE=core-readonly EVAL_LABEL_SELECTOR=
+  ```
 
 Not all agent directories have every eval file yet — `builtin-openai` is the most complete set, used by the CI workflow.
 
