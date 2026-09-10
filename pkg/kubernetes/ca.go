@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"k8s.io/client-go/rest"
@@ -139,13 +140,17 @@ func validateCAURL(caURL string) error {
 	return nil
 }
 
+// caCacheRoot is the base directory cached CA certificates live under.
+// It is a variable (defaulting to the system temp dir, which honors
+// $TMPDIR) so tests can redirect the cache away from the shared system
+// temp dir; production never changes it. Operators with a read-only root
+// filesystem point TMPDIR at writable storage or mount an emptyDir at
+// /tmp.
+var caCacheRoot = os.TempDir()
+
 func caCacheFilePath(caURL string) string {
-	// The cache lives in a subdirectory of the system temp dir (which
-	// honors $TMPDIR), so an operator with a read-only root filesystem can
-	// point the cache at writable storage by setting $TMPDIR or mounting
-	// an emptyDir at /tmp.
 	sum := sha256.Sum256([]byte(caURL))
-	return filepath.Join(os.TempDir(), caCacheSubdir, hex.EncodeToString(sum[:8])+".crt")
+	return filepath.Join(caCacheRoot, caCacheSubdir, hex.EncodeToString(sum[:8])+".crt")
 }
 
 // applyClusterCAURL points restConfig's TLS at a cached copy of the CA served
@@ -281,10 +286,39 @@ func fetchCAOnce(ctx context.Context, client *http.Client, caURL string) (data [
 	return body, false, nil
 }
 
-// writeCAFile atomically writes data to path so readers (client-go's CA-file
-// rotation) never observe a partially written certificate.
+// ensurePrivateCacheDir makes dir exist and be private before CA files
+// go there. MkdirAll's mode only applies when it creates the directory,
+// so a predictable path beneath the shared system temp dir must be
+// checked rather than trusted: another local user could otherwise
+// pre-create it writable or as a symlink and substitute their own
+// certificate. Fails closed on symlinks, group/world writable
+// directories, and foreign ownership. World-readable is tolerated: the
+// CA files themselves are 0600, and read access cannot swap a trust
+// anchor.
+func ensurePrivateCacheDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create CA cache directory %s: %w", dir, err)
+	}
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("stat CA cache directory %s: %w", dir, err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("CA cache directory %s must not be a symlink", dir)
+	}
+	if perm := fi.Mode().Perm(); perm&0o022 != 0 {
+		return fmt.Errorf("CA cache directory %s is group or world writable (mode %#o)", dir, perm)
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Uid != uint32(os.Geteuid()) {
+		return fmt.Errorf("CA cache directory %s is owned by uid %d, not the current user", dir, st.Uid)
+	}
+	return nil
+}
+
+// writeCAFile atomically writes data to path so readers (client-go's
+// CA-file rotation) never observe a partially written certificate.
 func writeCAFile(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := ensurePrivateCacheDir(filepath.Dir(path)); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".ca-*.tmp")

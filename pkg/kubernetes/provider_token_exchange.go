@@ -206,6 +206,10 @@ func (p *tokenExchangingProvider) Close() {
 	p.provider.Close()
 }
 
+func (p *tokenExchangingProvider) RefreshCAs() {
+	p.provider.RefreshCAs()
+}
+
 func (p *tokenExchangingProvider) AnyTargetHasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
 	return p.provider.AnyTargetHasGVKs(ctx, gvks)
 }

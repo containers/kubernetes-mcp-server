@@ -31,15 +31,13 @@ type Provider interface {
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
 	WatchTargets(ctx context.Context, reload McpReload)
-	Close()
-}
-
-// CARefresherProvider is implemented by providers that hold managers with
-// background CA refreshers. SIGHUP config reload calls RefreshCAs so a
-// rotated cluster CA (e.g. after the cluster is re-provisioned) can be
-// picked up without waiting out the refresh interval or restarting.
-type CARefresherProvider interface {
+	// RefreshCAs re-fetches every held manager's cluster CA now, so a
+	// rotated cluster CA is picked up on SIGHUP config reload without
+	// waiting out the refresh interval. It lives on the interface rather
+	// than as an optional capability so no provider can silently miss the
+	// refresh.
 	RefreshCAs()
+	Close()
 }
 
 // TokenExchangeProvider is an optional interface that providers can implement to suport per-target token exchange.

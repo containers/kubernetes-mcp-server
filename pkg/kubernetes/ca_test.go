@@ -33,19 +33,74 @@ import (
 
 type ClusterCACASuite struct {
 	suite.Suite
-	originalEnv []string
+	originalEnv       []string
+	originalCacheRoot string
 }
 
 func (s *ClusterCACASuite) SetupTest() {
 	s.originalEnv = os.Environ()
+	// Redirect the CA cache into a per-test temp dir so tests stay
+	// hermetic and never touch the shared system temp dir.
+	s.originalCacheRoot = caCacheRoot
+	caCacheRoot = s.T().TempDir()
 }
 
 func (s *ClusterCACASuite) TearDownTest() {
 	test.RestoreEnv(s.originalEnv)
+	caCacheRoot = s.originalCacheRoot
 }
 
 func TestClusterCASuite(t *testing.T) {
 	suite.Run(t, new(ClusterCACASuite))
+}
+
+// TestWriteCAFileRejectsUnsafeCacheDirs guards the cache directory against
+// another local user pre-creating the predictable path beneath the system
+// temp dir as writable or as a symlink, then swapping in their own CA.
+func (s *ClusterCACASuite) TestWriteCAFileRejectsUnsafeCacheDirs() {
+	base := caCacheRoot // per-test temp dir, owned by us
+
+	s.Run("world-writable pre-existing cache dir is rejected", func() {
+		dir := filepath.Join(base, "world-writable")
+		s.Require().NoError(os.MkdirAll(dir, 0o700))
+		s.Require().NoError(os.Chmod(dir, 0o777))
+		err := writeCAFile(filepath.Join(dir, "ca.crt"), selfSignedPEM())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "group or world writable")
+	})
+
+	s.Run("symlinked cache dir is rejected", func() {
+		target := filepath.Join(base, "elsewhere")
+		s.Require().NoError(os.MkdirAll(target, 0o700))
+		dir := filepath.Join(base, "symlinked")
+		s.Require().NoError(os.Symlink(target, dir))
+		err := writeCAFile(filepath.Join(dir, "ca.crt"), selfSignedPEM())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "must not be a symlink")
+	})
+
+	s.Run("private pre-existing cache dir is accepted", func() {
+		dir := filepath.Join(base, "private")
+		s.Require().NoError(os.MkdirAll(dir, 0o700))
+		pemBytes := selfSignedPEM()
+		s.Require().NoError(writeCAFile(filepath.Join(dir, "ca.crt"), pemBytes))
+		got, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
+		s.Require().NoError(err)
+		s.Equal(pemBytes, got)
+	})
+
+	s.Run("final file symlink is replaced, not followed", func() {
+		dir := filepath.Join(base, "final-symlink")
+		s.Require().NoError(os.MkdirAll(dir, 0o700))
+		victimPath := filepath.Join(dir, "victim.crt")
+		s.Require().NoError(os.WriteFile(victimPath, []byte("victim"), 0o600))
+		link := filepath.Join(dir, "ca.crt")
+		s.Require().NoError(os.Symlink(victimPath, link))
+		s.Require().NoError(writeCAFile(link, selfSignedPEM()))
+		got, err := os.ReadFile(victimPath)
+		s.Require().NoError(err)
+		s.Equal("victim", string(got), "rename must replace the symlink, not write through it")
+	})
 }
 
 // selfSignedPEM returns a fresh self-signed CA certificate in PEM form, so
