@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -86,7 +87,23 @@ type StaticConfig struct {
 	BindAddress string `toml:"bind_address,omitempty"`
 	MetricsPort string `toml:"metrics_port,omitempty"`
 	KubeConfig  string `toml:"kubeconfig,omitempty"`
-	ListOutput  string `toml:"list_output,omitempty"`
+	// CARefreshInterval is how often cached CA certificates are re-fetched
+	// so a rotated cluster CA is picked up without a restart. Zero disables
+	// re-fetching; the CA is then only refreshed when a manager is rebuilt
+	// or on an on-demand SIGHUP re-fetch.
+	//
+	// Zero is ambiguous here: as a toml value it means "not set" and the
+	// merge keeps the BaseDefault, while an explicit `"0s"` in a config
+	// file or --ca-refresh-interval=0 means "disabled" and is honored
+	// (config files merge by key presence, the flag assigns directly). The
+	// one exception: a build-time defaultOverride cannot express the
+	// disabled value, because mergeConfig drops zero Durations (omitzero;
+	// omitempty would clobber the BaseDefault — the encoder never omits a
+	// zero int64-backed Duration). Downstream builds that need refresh off
+	// by default must set a different value or this field becomes a
+	// *Duration.
+	CARefreshInterval Duration `toml:"ca_refresh_interval,omitzero"`
+	ListOutput        string   `toml:"list_output,omitempty"`
 	// Stateless configures the MCP server to operate in stateless mode.
 	// When true, the server will not send notifications to clients (e.g., tools/list_changed, prompts/list_changed).
 	// This is useful for container deployments, load balancing, and serverless environments where
@@ -432,6 +449,10 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*StaticConfig, error) {
 
 func (c *StaticConfig) GetClusterProviderStrategy() string {
 	return c.ClusterProviderStrategy
+}
+
+func (c *StaticConfig) GetCARefreshInterval() time.Duration {
+	return c.CARefreshInterval.Duration()
 }
 
 func (c *StaticConfig) GetDeniedResources() []api.GroupVersionKind {

@@ -1,5 +1,7 @@
 package api
 
+import "time"
+
 const (
 	ClusterProviderKubeConfig = "kubeconfig"
 	ClusterProviderInCluster  = "in-cluster"
@@ -34,6 +36,11 @@ type ClusterProvider interface {
 	GetClusterProviderStrategy() string
 	// GetKubeConfigPath returns the path to the kubeconfig file (if configured).
 	GetKubeConfigPath() string
+	// GetCARefreshInterval returns how often cached CA certificates are
+	// re-fetched so a rotated cluster CA is picked up without a restart.
+	// Zero disables re-fetching; the CA is then only refreshed when a
+	// manager is rebuilt.
+	GetCARefreshInterval() time.Duration
 }
 
 // ExtendedConfig is the interface that all configuration extensions must implement.
