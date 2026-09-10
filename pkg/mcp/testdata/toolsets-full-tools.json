@@ -2,6 +2,30 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "API Resources: List by Kind"
+    },
+    "description": "Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.",
+    "inputSchema": {
+      "properties": {
+        "kind": {
+          "description": "Required case-insensitive substring filter on kind (e.g. 'deployment', 'route'). Matches across every API group, so a broad term can match more than one kind (e.g. 'networkpolicy' also matches CiliumNetworkPolicy) -- use the most specific substring you can.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "name": "api_resources_list",
+    "title": "API Resources: List by Kind"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
       "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,

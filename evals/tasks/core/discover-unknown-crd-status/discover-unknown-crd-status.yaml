@@ -1,0 +1,19 @@
+kind: Task
+metadata:
+  labels:
+    suite: core
+    project: kubernetes
+  annotations:
+    project-name: "Kubernetes"
+    project-url: "https://kubernetes.io"
+  name: "discover-unknown-crd-status"
+  difficulty: easy
+steps:
+  setup:
+    file: setup.sh
+  verify:
+    contains: "provisioning-quasar-77123"
+  cleanup:
+    file: cleanup.sh
+  prompt:
+    inline: There's a custom resource named 'prod-fleet' in the 'default' namespace, of kind WidgetFleet. What phase is it currently in?
