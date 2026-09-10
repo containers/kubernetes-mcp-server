@@ -3,7 +3,9 @@ set -euo pipefail
 
 NAMESPACE="multi-container-logging"
 POD_NAME="communication-pod"
-TIMEOUT="120s"
+# Default matches generic K8s; slower environments can override via
+# VERIFY_TIMEOUT without changing the default for everyone else.
+TIMEOUT="${VERIFY_TIMEOUT:-120s}"
 
 # Wait for pod to be running
 echo "Waiting for pod '$POD_NAME' to be ready..."

@@ -16,4 +16,4 @@ steps:
   cleanup:
     file: cleanup.sh
   prompt:
-    inline: "What images are all pods running in the cluster?"
+    inline: "What images are pods running in the cluster? Query the cluster now and report the images you find directly in your response -- do not ask for clarification or preferences about output format."
