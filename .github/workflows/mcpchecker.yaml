@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, or all)'
+        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, argocd, or all)'
         required: false
         default: 'core'
         type: choice
@@ -25,6 +25,7 @@ on:
           - kiali
           - tekton
           - netobserv
+          - argocd
           - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
@@ -180,7 +181,7 @@ jobs:
 
               // Parse suite from the review body (trusted — fetched from API).
               const suiteMatch = triggerReview.body.match(
-                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|all)/i,
+                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|argocd|all)/i,
               );
               const suite = suiteMatch ? suiteMatch[1].toLowerCase() : '';
 
@@ -234,7 +235,8 @@ jobs:
             {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
             {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
             {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
-            {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"}
+            {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"},
+            {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"}
           ]}
           EOFM
           )
@@ -253,6 +255,9 @@ jobs:
               ;;
             netobserv)
               MATRIX=$(single_matrix netobserv "${EVAL_DIR}/eval-netobserv.yaml" "core,config,netobserv")
+              ;;
+            argocd)
+              MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "core,config")
               ;;
             all)
               MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")
@@ -319,6 +324,9 @@ jobs:
       - name: Install NetObserv mock plugin
         if: contains(matrix.toolsets, 'netobserv')
         run: make setup-netobserv
+      - name: Install ArgoCD CRDs
+        if: contains(matrix.toolsets, 'argocd')
+        run: make argocd-install
 
       - name: Start MCP server
         run: make run-server
