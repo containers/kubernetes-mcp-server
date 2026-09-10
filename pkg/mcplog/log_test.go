@@ -139,6 +139,49 @@ func (s *LoggingSuite) TestSanitizeMessage() {
 		s.Contains(sanitized, "mongodb+srv://dbuser:[REDACTED]@")
 	})
 
+	s.Run("redacts command-line log credentials", func() {
+		msg := "request failed\ntoken=secret-value\npassword=another-value\napi-key: yaml-value"
+		sanitized := SanitizeLog(msg)
+		s.NotContains(sanitized, "secret-value")
+		s.NotContains(sanitized, "another-value")
+		s.NotContains(sanitized, "yaml-value")
+		s.Contains(sanitized, "request failed")
+	})
+
+	s.Run("redacts the earliest credential on a line", func() {
+		msg := "secret=first-secret token=second-secret"
+		sanitized := SanitizeLog(msg)
+		s.NotContains(sanitized, "first-secret")
+		s.NotContains(sanitized, "second-secret")
+		s.Equal("secret=[REDACTED]", sanitized)
+	})
+
+	s.Run("handles Unicode before a credential", func() {
+		s.Equal("Ⱥtoken=[REDACTED]", SanitizeLog("Ⱥtoken=not-a-real-secret"))
+	})
+
+	s.Run("redacts common credential assignments", func() {
+		for _, msg := range []string{
+			"AWS_SECRET_ACCESS_KEY=not-a-real-secret",
+			"credential=not-a-real-secret",
+			"apikey=not-a-real-secret",
+			`{"auth":"not-a-real-secret"}`,
+		} {
+			s.NotContains(SanitizeLog(msg), "not-a-real-secret", msg)
+		}
+	})
+
+	s.Run("redacts complete PEM blocks", func() {
+		msg := "before\n-----BEGIN PRIVATE KEY-----\nbase64-key-material\n-----END PRIVATE KEY-----\nafter"
+		sanitized := SanitizeLog(msg)
+		s.NotContains(sanitized, "base64-key-material")
+		s.NotContains(sanitized, "BEGIN PRIVATE KEY")
+		s.NotContains(sanitized, "END PRIVATE KEY")
+		s.Contains(sanitized, "[REDACTED PEM BLOCK]")
+		s.Contains(sanitized, "before")
+		s.Contains(sanitized, "after")
+	})
+
 	s.Run("preserves non-sensitive data", func() {
 		msg := `{"namespace": "default", "pod": "nginx"}`
 		sanitized := Sanitize(msg)

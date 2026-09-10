@@ -67,6 +67,17 @@ config:
     - glob: ../../tasks/*/*/*.yaml
       labelSelector:
         suite: tekton
+        workflow: pipelinerun-diagnosis
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: tekton_pipelinerun_diagnose
+        minToolCalls: 1
+        maxToolCalls: 1
+        noDuplicateCalls: true
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: tekton
       assertions:
         toolsUsed:
           - server: kubernetes

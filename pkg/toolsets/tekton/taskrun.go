@@ -14,8 +14,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/utils/ptr"
 )
+
+// podLogClient is the narrow client surface needed for container log collection.
+type podLogClient interface {
+	CoreV1() corev1client.CoreV1Interface
+}
 
 const maxLogBytesPerContainer = 1 << 20 // 1 MiB
 
@@ -179,7 +185,7 @@ func collectTaskRunLogs(params api.ToolHandlerParams, sb *strings.Builder, names
 	collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, sb, namespace, tr, stepName, tailLines)
 }
 
-func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
+func collectTaskRunLogsWithClient(ctx context.Context, client podLogClient, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
 	hasStep := stepName == ""
 	for _, step := range tr.Status.Steps {
 		if step.Name == stepName {
@@ -206,26 +212,40 @@ func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClie
 	}
 }
 
-func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, podName, namespace, kind, name, container string, tailLines int64) {
-	req := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container: container,
-		TailLines: &tailLines,
-	})
-	stream, err := req.Stream(ctx)
+func collectContainerLogs(ctx context.Context, client podLogClient, sb *strings.Builder, podName, namespace, kind, name, container string, tailLines int64) {
+	logText, truncated, err := readContainerLog(ctx, client, namespace, podName, container, maxLogBytesPerContainer, tailLines)
 	if err != nil {
 		fmt.Fprintf(sb, "[%s: %s] error retrieving logs: %v\n", kind, name, err)
 		return
+	}
+	if logText != "" {
+		fmt.Fprintf(sb, "[%s: %s]\n%s\n", kind, name, logText)
+		if truncated {
+			fmt.Fprintln(sb, "[truncated]")
+		}
+	}
+}
+
+func readContainerLog(ctx context.Context, client podLogClient, namespace, podName, container string, maxBytes int64, tailLines ...int64) (string, bool, error) {
+	options := &corev1.PodLogOptions{Container: container}
+	if len(tailLines) > 0 {
+		options.TailLines = &tailLines[0]
+	}
+	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, options).Stream(ctx)
+	if err != nil {
+		return "", false, err
 	}
 	defer func() {
 		_ = stream.Close()
 	}()
 
-	bytes, err := io.ReadAll(io.LimitReader(stream, maxLogBytesPerContainer))
+	logData, err := io.ReadAll(io.LimitReader(stream, maxBytes+1))
 	if err != nil {
-		fmt.Fprintf(sb, "[%s: %s] error reading logs: %v\n", kind, name, err)
-		return
+		return "", false, fmt.Errorf("error reading logs for container %s: %w", container, err)
 	}
-	if len(bytes) > 0 {
-		fmt.Fprintf(sb, "[%s: %s]\n%s\n", kind, name, string(bytes))
+	truncated := int64(len(logData)) > maxBytes
+	if truncated {
+		logData = logData[:maxBytes]
 	}
+	return string(logData), truncated, nil
 }
