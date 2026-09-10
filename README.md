@@ -944,9 +944,25 @@ Compile the project and run the Kubernetes MCP server with [mcp-inspector](https
 ```shell
 # Compile the project
 make build
-# Run the Kubernetes MCP server with mcp-inspector
+# Run the Kubernetes MCP server with mcp-inspector (stdio)
 npx @modelcontextprotocol/inspector@latest $(pwd)/kubernetes-mcp-server
 ```
+
+#### Via Docker/Podman Compose (HTTP transport)
+
+Run the server and Inspector as containers — no Node.js required on the host:
+
+```shell
+# Requires a kubeconfig (e.g. after: make kind-create-cluster)
+make inspect
+
+# With podman:
+CONTAINER_CLI=podman make inspect
+```
+
+Open the Inspector URL from the logs (`http://localhost:6274/?MCP_PROXY_AUTH_TOKEN=...`),
+then connect using **Streamable HTTP** to `http://kubernetes-mcp-server:8080/mcp`
+(the Inspector proxy resolves the compose service name internally).
 
 ---
 

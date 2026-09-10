@@ -1,0 +1,20 @@
+services:
+  kubernetes-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      KUBECONFIG: /kube/config
+    volumes:
+      - ./_output/compose-kubeconfig:/kube/config:ro
+    ports:
+      - "8080:8080"
+
+  inspector:
+    image: ghcr.io/modelcontextprotocol/inspector:latest
+    environment:
+      - HOST=0.0.0.0
+      - MCP_AUTO_OPEN_ENABLED=false
+    ports:
+      - "6274:6274"
+      - "6277:6277"
