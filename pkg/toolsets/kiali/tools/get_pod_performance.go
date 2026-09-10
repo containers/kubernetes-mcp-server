@@ -56,7 +56,8 @@ func InitGetPodPerformance() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: getPodPerformanceHandler,
+		},
+		Handler: getPodPerformanceHandler,
 	})
 
 	return ret

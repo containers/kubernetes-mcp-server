@@ -29,7 +29,8 @@ func InitListMeshClusters() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listMeshClustersHandler,
+		},
+		Handler: listMeshClustersHandler,
 	})
 	return ret
 }

@@ -35,7 +35,8 @@ func InitGetTraceDetails() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: tracesHandler,
+		},
+		Handler: tracesHandler,
 	})
 
 	return ret

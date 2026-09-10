@@ -51,7 +51,8 @@ func InitListOrGetResources() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listOrGetResourcesHandler,
+		},
+		Handler: listOrGetResourcesHandler,
 	})
 
 	return ret
