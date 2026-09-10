@@ -17,7 +17,8 @@ metadata:
 spec:
   ports:
   - port: 80
-    targetPort: 80
+    # nginx-unprivileged listens on 8080; only the selector is intentionally wrong
+    targetPort: 8080
   selector:
     app: web  # Mismatched label - deployment has app=nginx
 EOF

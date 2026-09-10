@@ -6,6 +6,9 @@ readonly DEVELOPERS=("alice" "bob" "charlie")
 readonly DEV_NAMESPACES=("dev-alice" "dev-bob" "dev-charlie")
 readonly ALL_NAMESPACES=("${DEV_NAMESPACES[@]}" "dev-shared" "staging" "prod")
 readonly TEST_LABEL="app=verification-test"
+# Default matches generic K8s; slower environments can override via
+# VERIFY_TIMEOUT without changing the default for everyone else.
+readonly TEST_POD_TIMEOUT="${VERIFY_TIMEOUT:-60s}"
 
 # --- Cleanup Function ---
 cleanup() {
@@ -190,10 +193,21 @@ metadata:
   labels:
     ${selector_key}: ${selector_value}
 spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: curl
-    image: quay.io/curl/curl:latest
+    image: quay.io/curl/curl:8.11.1
     command: ["sleep", "3600"]
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     resources:
         limits:
             cpu: "100m"
@@ -223,7 +237,7 @@ EOF
 
   echo "  - Waiting for test pods to be ready..."
   for dev in "${DEVELOPERS[@]}"; do
-    kubectl wait --for=condition=Ready pod/test-pod-${dev} -n "dev-${dev}" --timeout=60s
+    kubectl wait --for=condition=Ready pod/test-pod-${dev} -n "dev-${dev}" --timeout="${TEST_POD_TIMEOUT}"
   done
   
   # Test that alice cannot reach bob's service
