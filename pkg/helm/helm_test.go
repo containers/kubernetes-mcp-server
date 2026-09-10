@@ -5,9 +5,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/release"
 	helmtime "helm.sh/helm/v3/pkg/time"
+	"k8s.io/utils/ptr"
 )
 
 type HelmSuite struct {
@@ -213,6 +215,95 @@ func (s *HelmSuite) TestValidateChartReference() {
 			s.Error(err)
 			s.Contains(err.Error(), "http:// scheme is blocked")
 		})
+	})
+}
+
+func (s *HelmSuite) TestNewInstall() {
+	s.Run("with nil config", func() {
+		install := (&Helm{}).newInstall(&action.Configuration{})
+		s.Run("waits for resource readiness", func() {
+			s.True(install.Wait)
+		})
+		s.Run("uses the default timeout", func() {
+			s.Equal(DefaultTimeout, install.Timeout)
+		})
+	})
+	s.Run("with empty config", func() {
+		install := (&Helm{config: &Config{}}).newInstall(&action.Configuration{})
+		s.Run("waits for resource readiness", func() {
+			s.True(install.Wait)
+		})
+		s.Run("uses the default timeout", func() {
+			s.Equal(DefaultTimeout, install.Timeout)
+		})
+	})
+	s.Run("applies configured wait = false", func() {
+		install := (&Helm{config: &Config{Wait: ptr.To(false)}}).newInstall(&action.Configuration{})
+		s.False(install.Wait)
+	})
+	s.Run("applies configured wait = true", func() {
+		install := (&Helm{config: &Config{Wait: ptr.To(true)}}).newInstall(&action.Configuration{})
+		s.True(install.Wait)
+	})
+	s.Run("applies configured timeout", func() {
+		install := (&Helm{config: &Config{Timeout: "4m"}}).newInstall(&action.Configuration{})
+		s.Equal(4*time.Minute, install.Timeout)
+	})
+	s.Run("falls back to the default timeout when malformed", func() {
+		install := (&Helm{config: &Config{Timeout: "four minutes"}}).newInstall(&action.Configuration{})
+		s.Equal(DefaultTimeout, install.Timeout)
+	})
+	s.Run("reads wait, not uninstall_wait", func() {
+		// Disabling only uninstall waiting must leave install waiting.
+		install := (&Helm{config: &Config{UninstallWait: ptr.To(false)}}).newInstall(&action.Configuration{})
+		s.True(install.Wait)
+	})
+	s.Run("never dry runs", func() {
+		install := (&Helm{config: &Config{}}).newInstall(&action.Configuration{})
+		s.False(install.DryRun)
+	})
+}
+
+func (s *HelmSuite) TestNewUninstall() {
+	s.Run("with nil config", func() {
+		uninstall := (&Helm{}).newUninstall(&action.Configuration{})
+		s.Run("waits for resource deletion", func() {
+			s.True(uninstall.Wait)
+		})
+		s.Run("uses the default timeout", func() {
+			s.Equal(DefaultTimeout, uninstall.Timeout)
+		})
+	})
+	s.Run("with empty config", func() {
+		uninstall := (&Helm{config: &Config{}}).newUninstall(&action.Configuration{})
+		s.Run("waits for resource deletion", func() {
+			s.True(uninstall.Wait)
+		})
+		s.Run("uses the default timeout", func() {
+			s.Equal(DefaultTimeout, uninstall.Timeout)
+		})
+	})
+	s.Run("applies configured uninstall_wait = false", func() {
+		uninstall := (&Helm{config: &Config{UninstallWait: ptr.To(false)}}).newUninstall(&action.Configuration{})
+		s.False(uninstall.Wait)
+	})
+	s.Run("applies configured uninstall_wait = true", func() {
+		uninstall := (&Helm{config: &Config{UninstallWait: ptr.To(true)}}).newUninstall(&action.Configuration{})
+		s.True(uninstall.Wait)
+	})
+	s.Run("applies configured timeout", func() {
+		uninstall := (&Helm{config: &Config{Timeout: "4m"}}).newUninstall(&action.Configuration{})
+		s.Equal(4*time.Minute, uninstall.Timeout)
+	})
+	s.Run("reads uninstall_wait, not wait", func() {
+		// Disabling install waiting must leave uninstall sequencing its deletes,
+		// otherwise a caller that reinstalls immediately races the deletions.
+		uninstall := (&Helm{config: &Config{Wait: ptr.To(false)}}).newUninstall(&action.Configuration{})
+		s.True(uninstall.Wait)
+	})
+	s.Run("ignores a missing release", func() {
+		uninstall := (&Helm{config: &Config{}}).newUninstall(&action.Configuration{})
+		s.True(uninstall.IgnoreNotFound)
 	})
 }
 

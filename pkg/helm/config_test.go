@@ -2,6 +2,7 @@ package helm
 
 import (
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -102,6 +103,105 @@ func (s *ConfigSuite) TestValidate() {
 		s.Error(err)
 		s.Contains(err.Error(), "unsupported Helm storage driver")
 	})
+	s.Run("accepts valid timeout", func() {
+		cfg := &Config{
+			Timeout: "4m",
+		}
+		s.NoError(cfg.Validate())
+	})
+	s.Run("rejects malformed timeout", func() {
+		cfg := &Config{
+			Timeout: "four minutes",
+		}
+		err := cfg.Validate()
+		s.Error(err)
+		s.Contains(err.Error(), "invalid Helm timeout")
+	})
+	s.Run("rejects negative timeout", func() {
+		cfg := &Config{
+			Timeout: "-1m",
+		}
+		err := cfg.Validate()
+		s.Error(err)
+		s.Contains(err.Error(), "must be positive")
+	})
+	s.Run("rejects zero timeout", func() {
+		cfg := &Config{
+			Timeout: "0s",
+		}
+		err := cfg.Validate()
+		s.Error(err)
+		s.Contains(err.Error(), "must be positive")
+	})
+}
+
+func (s *ConfigSuite) TestTimeoutOrDefault() {
+	s.Run("returns default on nil config", func() {
+		var cfg *Config
+		s.Equal(DefaultTimeout, cfg.TimeoutOrDefault())
+	})
+	s.Run("returns default when unset", func() {
+		cfg := &Config{}
+		s.Equal(DefaultTimeout, cfg.TimeoutOrDefault())
+	})
+	s.Run("returns configured timeout", func() {
+		cfg := &Config{Timeout: "4m"}
+		s.Equal(4*time.Minute, cfg.TimeoutOrDefault())
+	})
+}
+
+func (s *ConfigSuite) TestWaitOrDefault() {
+	s.Run("returns true on nil config", func() {
+		var cfg *Config
+		s.True(cfg.WaitOrDefault())
+	})
+	s.Run("returns true when unset", func() {
+		cfg := &Config{}
+		s.True(cfg.WaitOrDefault())
+	})
+	s.Run("returns configured false", func() {
+		wait := false
+		cfg := &Config{Wait: &wait}
+		s.False(cfg.WaitOrDefault())
+	})
+	s.Run("returns configured true", func() {
+		wait := true
+		cfg := &Config{Wait: &wait}
+		s.True(cfg.WaitOrDefault())
+	})
+	s.Run("is independent of uninstall_wait", func() {
+		wait := false
+		cfg := &Config{Wait: &wait}
+		s.False(cfg.WaitOrDefault())
+		s.True(cfg.UninstallWaitOrDefault())
+	})
+}
+
+func (s *ConfigSuite) TestUninstallWaitOrDefault() {
+	s.Run("returns true on nil config", func() {
+		var cfg *Config
+		s.True(cfg.UninstallWaitOrDefault())
+	})
+	s.Run("returns true when unset", func() {
+		cfg := &Config{}
+		s.True(cfg.UninstallWaitOrDefault())
+	})
+	s.Run("returns configured false", func() {
+		wait := false
+		cfg := &Config{UninstallWait: &wait}
+		s.False(cfg.UninstallWaitOrDefault())
+	})
+	s.Run("returns configured true", func() {
+		wait := true
+		cfg := &Config{UninstallWait: &wait}
+		s.True(cfg.UninstallWaitOrDefault())
+	})
+	s.Run("is independent of wait", func() {
+		wait := false
+		cfg := &Config{UninstallWait: &wait}
+		s.False(cfg.UninstallWaitOrDefault())
+		s.True(cfg.WaitOrDefault())
+	})
 }
 
 func (s *ConfigSuite) TestParser() {
@@ -160,6 +260,94 @@ func (s *ConfigSuite) TestParser() {
 		`))
 		s.Error(err)
 		s.Contains(err.Error(), "unsupported Helm storage driver")
+	})
+	s.Run("parses timeout from TOML", func() {
+		cfg := test.Must(config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			timeout = "4m"
+		`)))
+		helmCfg, ok := cfg.GetToolsetConfig("helm")
+		s.Require().True(ok)
+		hc, ok := helmCfg.(*Config)
+		s.Require().True(ok)
+		s.Equal("4m", hc.Timeout)
+		s.Equal(4*time.Minute, hc.TimeoutOrDefault())
+	})
+	s.Run("parses wait from TOML", func() {
+		cfg := test.Must(config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			wait = false
+		`)))
+		helmCfg, ok := cfg.GetToolsetConfig("helm")
+		s.Require().True(ok)
+		hc, ok := helmCfg.(*Config)
+		s.Require().True(ok)
+		s.Require().NotNil(hc.Wait)
+		s.False(*hc.Wait)
+		s.False(hc.WaitOrDefault())
+	})
+	s.Run("wait defaults to true when absent from TOML", func() {
+		cfg := test.Must(config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			timeout = "4m"
+		`)))
+		helmCfg, ok := cfg.GetToolsetConfig("helm")
+		s.Require().True(ok)
+		hc, ok := helmCfg.(*Config)
+		s.Require().True(ok)
+		s.Nil(hc.Wait)
+		s.True(hc.WaitOrDefault())
+	})
+	s.Run("parses uninstall_wait from TOML", func() {
+		cfg := test.Must(config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			uninstall_wait = false
+		`)))
+		helmCfg, ok := cfg.GetToolsetConfig("helm")
+		s.Require().True(ok)
+		hc, ok := helmCfg.(*Config)
+		s.Require().True(ok)
+		s.Require().NotNil(hc.UninstallWait)
+		s.False(*hc.UninstallWait)
+		s.False(hc.UninstallWaitOrDefault())
+	})
+	s.Run("wait = false leaves uninstall waiting", func() {
+		// The deployed configuration: install returns as soon as resources
+		// are created, uninstall still sequences its deletes.
+		cfg := test.Must(config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			wait = false
+			timeout = "4m"
+		`)))
+		helmCfg, ok := cfg.GetToolsetConfig("helm")
+		s.Require().True(ok)
+		hc, ok := helmCfg.(*Config)
+		s.Require().True(ok)
+		s.False(hc.WaitOrDefault())
+		s.True(hc.UninstallWaitOrDefault())
+		s.Equal(4*time.Minute, hc.TimeoutOrDefault())
+	})
+	s.Run("rejects non-boolean uninstall_wait in TOML", func() {
+		_, err := config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			uninstall_wait = "no"
+		`))
+		s.Error(err)
+	})
+	s.Run("rejects non-boolean wait in TOML", func() {
+		_, err := config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			wait = "no"
+		`))
+		s.Error(err)
+	})
+	s.Run("rejects invalid timeout in TOML", func() {
+		_, err := config.ReadToml([]byte(`
+			[toolset_configs.helm]
+			timeout = "later"
+		`))
+		s.Error(err)
+		s.Contains(err.Error(), "invalid Helm timeout")
 	})
 }
 
