@@ -98,6 +98,8 @@ The prompt gathers comprehensive diagnostic data and presents it to the LLM for 
 3. Warnings and recommendations
 4. Summary by component
 
+**Performance note:** `cluster-health-check` gathers workload data (pods, deployments, statefulsets, daemonsets, and PVCs) from **all namespaces**. On very large clusters this can take longer and consume more API-server resources than namespace-scoped checks. The default timeouts were chosen based on testing against clusters with ~6,000 pods and ~1,700 namespaces. If you only need to check a single namespace, use `namespace-health-check` instead.
+
 ## Configuration File Location
 
 Place your prompts in the `config.toml` file used by the MCP server. Specify the config file path using the `--config` flag when starting the server.

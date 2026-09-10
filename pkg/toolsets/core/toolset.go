@@ -5,6 +5,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core/prompts"
 )
 
 // Details: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
@@ -37,7 +38,8 @@ func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	return slices.Concat(
-		initHealthChecks(),
+		prompts.InitHealthChecks(),
+		prompts.InitNamespaceHealthChecks(),
 	)
 }
 
