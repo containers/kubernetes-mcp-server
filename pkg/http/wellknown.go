@@ -53,8 +53,8 @@ type WellKnownMetadataGenerator interface {
 	GenerateAuthorizationServerMetadata(oidcConfig map[string]interface{}) map[string]interface{}
 
 	// GenerateProtectedResourceMetadata generates oauth-protected-resource metadata (RFC 9728)
-	// for the MCP server. authorizationServerURL is where OAuth metadata can be fetched.
-	GenerateProtectedResourceMetadata(oidcConfig map[string]interface{}, authorizationServerURL string) map[string]interface{}
+	// for the MCP server at resourceURL.
+	GenerateProtectedResourceMetadata(oidcConfig map[string]interface{}, resourceURL string) map[string]interface{}
 }
 
 // DefaultMetadataGenerator provides standard metadata generation for OIDC providers
@@ -69,9 +69,12 @@ func (g *DefaultMetadataGenerator) GenerateAuthorizationServerMetadata(oidcConfi
 
 // GenerateProtectedResourceMetadata generates RFC 9728 compliant metadata
 // for the MCP server acting as an OAuth 2.0 protected resource.
-func (g *DefaultMetadataGenerator) GenerateProtectedResourceMetadata(oidcConfig map[string]interface{}, authorizationServerURL string) map[string]interface{} {
+func (g *DefaultMetadataGenerator) GenerateProtectedResourceMetadata(oidcConfig map[string]interface{}, resourceURL string) map[string]interface{} {
 	metadata := map[string]interface{}{
-		"authorization_servers": []string{authorizationServerURL},
+		"resource": resourceURL,
+	}
+	if issuer, ok := oidcConfig["issuer"].(string); ok && issuer != "" {
+		metadata["authorization_servers"] = []string{issuer}
 	}
 
 	// Copy relevant fields from openid-configuration
@@ -362,7 +365,8 @@ func (w *WellKnown) generateProtectedResourceMetadata(request *http.Request) (ma
 		return nil, nil
 	}
 
-	// MCP server URL - where OAuth metadata can be fetched
+	// The MCP server is the protected resource; the OIDC issuer identifies its
+	// authorization server separately.
 	mcpServerURL := w.buildResourceURL(request)
 	return w.metadataGenerator.GenerateProtectedResourceMetadata(oidcConfig, mcpServerURL), nil
 }
@@ -389,7 +393,8 @@ func (w *WellKnown) buildResourceURL(request *http.Request) string {
 			scheme = "http"
 		}
 	}
-	return fmt.Sprintf("%s://%s", scheme, host)
+	resourcePath := strings.TrimPrefix(request.URL.EscapedPath(), oauthProtectedResourceEndpoint)
+	return fmt.Sprintf("%s://%s%s", scheme, host, resourcePath)
 }
 
 // applyConfigOverrides applies server configuration overrides to the metadata.
