@@ -1,16 +1,23 @@
 package kiali
 
 import (
+	"context"
 	"slices"
+	"sync"
 
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
 	kialiTools "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
+
+var warnKialiValidationDisabledOnce sync.Once
 
 type Toolset struct{}
 
@@ -25,25 +32,32 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
-	tools := slices.Concat(
-		kialiTools.InitGetMeshTrafficGraph(p),
-		kialiTools.InitGetMeshStatus(),
-		kialiTools.InitManageIstioConfigRead(),
-		kialiTools.InitManageIstioConfig(),
-		kialiTools.InitListMeshClusters(),
-		kialiTools.InitListOrGetResources(p),
-		kialiTools.InitListTraces(),
-		kialiTools.InitGetTraceDetails(),
-		kialiTools.InitGetPodPerformance(),
-		kialiTools.InitGetLogs(),
-		kialiTools.InitGetMetrics(),
-	)
+	if p != nil && !p.IsTargetCompatibilityToolFiltersEnabled() {
+		warnKialiValidationDisabledOnce.Do(func() {
+			klogutil.LogWarn(
+				klogutil.FromContext(context.Background()),
+				"experimental_enable_target_compatibility_tool_filters is disabled; Kiali URL reachability is not validated",
+			)
+		})
+	} else if p != nil && p.IsTargetCompatibilityToolFiltersEnabled() && !kialiAvailable(p) {
+		return nil
+	}
+
+	tools := kialiTools.All(p)
 	// Kiali calls a single configured endpoint; mesh scope is selected via meshCluster,
 	// not the provider-level context parameter injected for core Kubernetes tools.
 	for i := range tools {
 		tools[i].ClusterAware = ptr.To(false)
 	}
 	return tools
+}
+
+func kialiAvailable(p api.FilteringProvider) bool {
+	var kp kubernetes.Provider
+	if provider, ok := p.(kubernetes.Provider); ok {
+		kp = provider
+	}
+	return kialiclient.HasKiali(context.Background(), p, kp)
 }
 
 func (t *Toolset) GetPrompts() []api.ServerPrompt {
