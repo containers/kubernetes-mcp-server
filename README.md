@@ -294,6 +294,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 | kiali     | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
 | kubevirt  | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
 | netobserv | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| olm       | Read-only Kubernetes Operator Lifecycle Manager tools for OLMv0 and OLMv1 resources, catalogs, status, and diagnostics                                                                                                                  |         |
 | tekton    | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
@@ -776,6 +777,36 @@ Examples:
   - `recordType` (`string`) - Flow record type filter.
   - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
+
+</details>
+
+<details>
+
+<summary>olm</summary>
+
+- **olm_diagnose** - Collect read-only OLM conditions, related workload health, and warning events for troubleshooting
+  - `namespace` (`string`) - Namespace to query; empty means all namespaces where supported
+  - `version` (`string`) - OLM API generation to inspect; auto checks both generations
+
+- **olm_diagnose_installation** - Follow complete installation chain for an operator: Subscription/ClusterExtension -> CSV -> InstallPlan -> owned resources.
+  - `catalog` (`string`) - Catalog name or namespace/name
+  - `channel` (`string`) - Subscription channel
+  - `namespace` (`string`) - Namespace containing the operator
+  - `package` (`string`) **(required)** - Package name
+  - `version` (`string`) - OLM API generation
+
+- **olm_assess_namespace** - Assess health of OLM operator installations in a namespace.
+  - `namespace` (`string`) **(required)** - Namespace to assess
+
+- **olm_analyze_condition** - Explain OLM status conditions and correlate with workload state.
+  - `apiVersion` (`string`) - API version of the OLM resource
+  - `kind` (`string`) - Kind of the OLM resource
+  - `name` (`string`) **(required)** - Name of the resource
+
+- **olm_catalog_inspect** - Inspect catalog content with intelligent filtering.
+  - `catalog` (`string`) **(required)** - Catalog name or namespace/name
+  - `channel` (`string`) - Optional channel filter
+  - `packageName` (`string`) - Optional package name filter
 
 </details>
 
