@@ -28,7 +28,11 @@ func (s *ProviderKubeconfigTestSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
 	// Default discovery simulates a vanilla (non-OpenShift) cluster.
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
-	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: s.mockServer.KubeconfigFile(s.T())})
+	provider, err := NewProvider(s.T().Context(), func() *config.Config {
+		c := config.New()
+		c.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
+		return c
+	}())
 	s.Require().NoError(err, "Expected no error creating provider with kubeconfig")
 	s.provider = provider
 }
@@ -79,12 +83,15 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.T().Cleanup(vanilla.Close)
 		vanilla.Handle(test.NewDiscoveryClientHandler())
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
 				"openshift": openshift,
 				"vanilla":   vanilla,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
@@ -100,12 +107,15 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.T().Cleanup(b.Close)
 		b.Handle(test.NewDiscoveryClientHandler())
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
 				"a": a,
 				"b": b,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
@@ -121,12 +131,15 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.T().Cleanup(b.Close)
 		b.Handle(test.NewDiscoveryClientHandler())
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
 				"a": a,
 				"b": b,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
@@ -150,12 +163,15 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 			<-hang
 		}))
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
 				"openshift": openshift,
 				"hanging":   hanging,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
@@ -221,7 +237,11 @@ func (s *ProviderKubeconfigTestSuite) TestEmptyCurrentContext() {
 	s.Run("with single context auto-selects it as default target", func() {
 		kubeconfig := test.KubeConfigFake()
 		kubeconfig.CurrentContext = ""
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+			return c
+		}())
 		s.Require().NoError(err, "Expected no error creating provider with empty current-context and single context")
 		s.Equal("fake-context", provider.GetDefaultTarget(), "Expected auto-selected fake-context as default target")
 	})
@@ -229,7 +249,11 @@ func (s *ProviderKubeconfigTestSuite) TestEmptyCurrentContext() {
 		kubeconfig := test.KubeConfigFake()
 		kubeconfig.CurrentContext = ""
 		kubeconfig.Contexts["another-context"] = clientcmdapi.NewContext()
-		_, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		_, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+			return c
+		}())
 		s.Require().Error(err, "Expected error creating provider with empty current-context and multiple contexts")
 		s.ErrorContains(err, "current-context is not set")
 		s.ErrorContains(err, "kubectl config use-context")
@@ -287,7 +311,11 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentLazyManagerInit() {
 			kubeconfig.Contexts[fmt.Sprintf("lazy-context-%d", i)] = ctx
 		}
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+			return c
+		}())
 		s.Require().NoError(err, "Expected no error creating provider")
 
 		const goroutines = 20
@@ -323,7 +351,10 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 		}
 
 		kubeconfigPath := test.KubeconfigFile(s.T(), kubeconfig)
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: kubeconfigPath})
+		cfg, err := config.ReadToml(nil)
+		s.Require().NoError(err)
+		cfg.KubeConfig.SetForTest(kubeconfigPath)
+		provider, err := NewProvider(s.T().Context(), cfg)
 		s.Require().NoError(err, "Expected no error creating provider")
 		s.T().Cleanup(provider.Close)
 

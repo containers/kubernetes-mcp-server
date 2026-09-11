@@ -42,9 +42,3 @@ func (r *ConfirmationRule) Validate() error {
 	}
 	return nil
 }
-
-// ConfirmationRulesProvider provides access to confirmation rules and the global fallback.
-type ConfirmationRulesProvider interface {
-	GetConfirmationRules() []ConfirmationRule
-	GetConfirmationFallback() string
-}

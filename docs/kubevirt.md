@@ -9,18 +9,14 @@ This server can expose KubeVirt tools so assistants can create and manage virtua
 
 ### Enable the KubeVirt toolset
 
-The KubeVirt toolset is not enabled by default. Enable it via the CLI flag or a TOML configuration file.
-
-CLI:
-
-```shell
-kubernetes-mcp-server --toolsets core,kubevirt
-```
-
-Config (TOML):
+The KubeVirt toolset is not enabled by default. Enable it in a TOML configuration file:
 
 ```toml
 toolsets = ["core", "kubevirt"]
+```
+
+```shell
+kubernetes-mcp-server --config /path/to/config.toml
 ```
 
 No additional toolset-specific configuration is required. The server uses your existing Kubernetes credentials (from kubeconfig or in-cluster) to interact with the KubeVirt API.
@@ -95,6 +91,7 @@ falls back to instructing the AI agent to ask the user and wait for confirmation
 
 **Usage:**
 Requires both `kubevirt` and `tekton` toolsets enabled:
-```shell
-kubernetes-mcp-server --toolsets core,kubevirt,tekton
+
+```toml
+toolsets = ["core", "kubevirt", "tekton"]
 ```

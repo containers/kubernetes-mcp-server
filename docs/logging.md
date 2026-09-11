@@ -13,10 +13,8 @@ log_level = 2
 log_file = "/var/log/kubernetes-mcp-server.log"
 ```
 
-Or via CLI flag:
-
 ```bash
-kubernetes-mcp-server --log-file /var/log/kubernetes-mcp-server.log --log-level 2
+kubernetes-mcp-server --config /path/to/config.toml
 ```
 
 | Setting | Description |

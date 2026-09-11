@@ -112,7 +112,7 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 	}
 }
 
-func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticConfigState, oauthState *oauth.State) error {
+func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.ConfigState, oauthState *oauth.State) error {
 	logger := klogutil.FromContext(ctx)
 	// Only fields read below are startup-only; middleware reloads via cfgState.
 	staticConfig := cfgState.Load()
@@ -128,7 +128,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
 
 	// Inbound TLS min version and cipher suites are fixed for the process lifetime.
-	tlsConfig, err := tlsutil.BuildTLSConfig(staticConfig.GetTLSMinVersionConfig(), staticConfig.GetTLSCipherSuitesConfig())
+	tlsConfig, err := tlsutil.BuildTLSConfig(staticConfig.TLSMinVersion.Get(), staticConfig.TLSCipherSuites.Get())
 	if err != nil {
 		return fmt.Errorf("failed to build TLS config: %w", err)
 	}
@@ -138,9 +138,9 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	// protection; other timeouts are left at Go defaults since MCP clients
 	// maintain persistent connections.
 	httpServer := &http.Server{
-		Addr:              net.JoinHostPort(staticConfig.BindAddress, staticConfig.Port),
+		Addr:              net.JoinHostPort(staticConfig.BindAddress.Get(), staticConfig.Port.Get()),
 		Handler:           instrumentedHandler,
-		ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Duration(),
+		ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Get(),
 		TLSConfig:         tlsConfig,
 		// BaseContext propagates the server context (including the klog logger)
 		// to all incoming request contexts, so klogutil.FromContext(r.Context())
@@ -150,7 +150,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 
 	// Only set up custom error logger for TLS mode to filter noisy TLS handshake errors
 	// from load balancer health checks
-	if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
+	if staticConfig.TLSCert.Get() != "" && staticConfig.TLSKey.Get() != "" {
 		httpServer.ErrorLog = log.New(&tlsErrorFilterWriter{underlying: os.Stderr, logger: logger}, "", 0)
 	}
 
@@ -161,7 +161,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	})
 	mux.Handle("/.well-known/", WellKnownHandler(cfgState, oauthState))
 
-	metricsOnSeparatePort := staticConfig.MetricsPort != ""
+	metricsOnSeparatePort := staticConfig.MetricsPort.Get() != ""
 
 	if !metricsOnSeparatePort {
 		mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
@@ -177,9 +177,9 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		metricsMux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
 		metricsMux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
 		metricsServer = &http.Server{
-			Addr:              net.JoinHostPort(staticConfig.BindAddress, staticConfig.MetricsPort),
+			Addr:              net.JoinHostPort(staticConfig.BindAddress.Get(), staticConfig.MetricsPort.Get()),
 			Handler:           metricsMux,
-			ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Duration(),
+			ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Get(),
 			BaseContext:       func(_ net.Listener) context.Context { return ctx },
 		}
 	}
@@ -199,12 +199,12 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	signal.Notify(sigHupChan, syscall.SIGHUP)
 	defer signal.Stop(sigHupChan)
 
-	listeningOnAllInterfaces := staticConfig.BindAddress == "0.0.0.0" || staticConfig.BindAddress == "::"
-	if listeningOnAllInterfaces && staticConfig.TLSCert == "" && !staticConfig.RequireOAuth {
+	listeningOnAllInterfaces := staticConfig.BindAddress.Get() == "0.0.0.0" || staticConfig.BindAddress.Get() == "::"
+	if listeningOnAllInterfaces && staticConfig.TLSCert.Get() == "" && !staticConfig.RequireOAuth.Get() {
 		klogutil.LogWarn(logger,
 			"HTTP server is listening on all interfaces without TLS or authentication, "+
 				"consider setting bind_address to 127.0.0.1, enabling TLS, or enabling OAuth",
-			klogutil.Field("bind_address", staticConfig.BindAddress),
+			klogutil.Field("bind_address", staticConfig.BindAddress.Get()),
 		)
 	}
 	// The metrics server never uses TLS or OAuth, so the branch above is not
@@ -215,8 +215,8 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 			"Metrics server is listening on all interfaces without TLS or authentication, "+
 				"exposing /metrics and /stats; TLS and OAuth on the main server do not apply. "+
 				"Consider setting bind_address to 127.0.0.1 or restricting access with a network policy",
-			klogutil.Field("bind_address", staticConfig.BindAddress),
-			klogutil.Field("metrics_port", staticConfig.MetricsPort),
+			klogutil.Field("bind_address", staticConfig.BindAddress.Get()),
+			klogutil.Field("metrics_port", staticConfig.MetricsPort.Get()),
 		)
 	}
 
@@ -227,12 +227,12 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		if metricsOnSeparatePort {
 			endpoints = "/mcp, /healthz"
 		}
-		if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
+		if staticConfig.TLSCert.Get() != "" && staticConfig.TLSKey.Get() != "" {
 			logger.Info("HTTPS server starting",
 				"server.addr", httpServer.Addr,
 				"endpoints", endpoints,
 			)
-			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert, staticConfig.TLSKey)
+			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert.Get(), staticConfig.TLSKey.Get())
 		} else {
 			logger.Info("HTTP server starting",
 				"server.addr", httpServer.Addr,

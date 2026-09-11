@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
@@ -14,7 +14,7 @@ type McpPromptsSuite struct {
 }
 
 func (s *McpPromptsSuite) TestListPrompts() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		[[prompts]]
 		name = "test-prompt"
 		title = "Test Prompt"
@@ -28,7 +28,7 @@ func (s *McpPromptsSuite) TestListPrompts() {
 		[[prompts.messages]]
 		role = "user"
 		content = "Test message with {{test_arg}}"
-	`), s.Cfg), "Expected to parse prompts config")
+	`)
 
 	s.InitMcpClient()
 
@@ -61,7 +61,7 @@ func (s *McpPromptsSuite) TestListPrompts() {
 }
 
 func (s *McpPromptsSuite) TestGetPrompt() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		[[prompts]]
 		name = "substitution-prompt"
 		description = "Test argument substitution"
@@ -74,7 +74,7 @@ func (s *McpPromptsSuite) TestGetPrompt() {
 		[[prompts.messages]]
 		role = "user"
 		content = "Hello {{name}}!"
-	`), s.Cfg), "Expected to parse prompts config")
+	`)
 
 	s.InitMcpClient()
 
@@ -99,7 +99,7 @@ func (s *McpPromptsSuite) TestGetPrompt() {
 }
 
 func (s *McpPromptsSuite) TestGetPromptMissingRequiredArgument() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		[[prompts]]
 		name = "required-arg-prompt"
 		description = "Test required argument validation"
@@ -112,7 +112,7 @@ func (s *McpPromptsSuite) TestGetPromptMissingRequiredArgument() {
 		[[prompts.messages]]
 		role = "user"
 		content = "Content with {{required_arg}}"
-	`), s.Cfg), "Expected to parse prompts config")
+	`)
 
 	s.InitMcpClient()
 

@@ -87,7 +87,7 @@ This MCP server is designed to run both locally and remotely.
 ### Local Execution
 
 When running locally, the server connects to a Kubernetes or OpenShift cluster using the kubeconfig file.
-It reads the kubeconfig from the `--kubeconfig` flag, the `KUBECONFIG` environment variable, or defaults to `~/.kube/config`.
+It reads the kubeconfig from the `kubeconfig` TOML option, the `KUBECONFIG` environment variable, or defaults to `~/.kube/config`.
 
 This means that `npx -y kubernetes-mcp-server@latest` on a workstation will talk to whatever cluster your current kubeconfig points to (e.g. a local Minikube cluster).
 
@@ -172,7 +172,7 @@ When introducing new modules run `make tidy` so that `go.mod` and `go.sum` remai
 The `docs/` directory contains user-facing documentation:
 
 - `docs/README.md` – Documentation index and navigation
-- `docs/configuration.md` – **Complete TOML configuration reference** (all `StaticConfig` options, drop-in configuration, dynamic reload)
+- `docs/configuration.md` – **Complete TOML configuration reference** (all `Config` options, drop-in configuration, dynamic reload)
 - `docs/prompts.md` – MCP Prompts configuration guide
 - `docs/logging.md` – MCP Logging guide (automatic K8s error logging, secret redaction)
 - `docs/OTEL.md` – OpenTelemetry observability setup

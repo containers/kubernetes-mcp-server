@@ -29,7 +29,7 @@ import (
 )
 
 type Configuration struct {
-	*config.StaticConfig
+	*config.Config
 	// SDKLogger is the slog.Logger handed to the underlying MCP SDK for its
 	// server-activity logs. When nil (e.g. in tests) it falls back to a
 	// klog-backed logger.
@@ -40,7 +40,7 @@ type Configuration struct {
 
 func (c *Configuration) Toolsets() []api.Toolset {
 	if c.toolsets == nil {
-		for _, toolset := range c.StaticConfig.Toolsets {
+		for _, toolset := range c.Config.Toolsets.Get() {
 			c.toolsets = append(c.toolsets, toolsets.ToolsetFromString(toolset))
 		}
 	}
@@ -49,7 +49,7 @@ func (c *Configuration) Toolsets() []api.Toolset {
 
 func (c *Configuration) ListOutput() output.Output {
 	if c.listOutput == nil {
-		c.listOutput = output.FromString(c.StaticConfig.ListOutput)
+		c.listOutput = output.FromString(c.Config.ListOutput.Get())
 	}
 	return c.listOutput
 }
@@ -66,19 +66,19 @@ func (c *Configuration) warmCaches() {
 }
 
 func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
-	if c.ReadOnly && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
+	if c.ReadOnly.Get() && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
 		return false
 	}
-	if c.DisableDestructive && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
+	if c.DisableDestructive.Get() && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
 		return false
 	}
-	if c.EnabledTools != nil && !slices.Contains(c.EnabledTools, tool.Tool.Name) {
+	if c.EnabledTools.Get() != nil && !slices.Contains(c.EnabledTools.Get(), tool.Tool.Name) {
 		return false
 	}
-	if c.DisabledTools != nil && slices.Contains(c.DisabledTools, tool.Tool.Name) {
+	if c.DisabledTools.Get() != nil && slices.Contains(c.DisabledTools.Get(), tool.Tool.Name) {
 		return false
 	}
-	if c.EnableTargetCompatibilityToolFilters {
+	if c.EnableTargetCompatibilityToolFilters.Get() {
 		for _, filter := range tool.TargetCompatibilityFilters {
 			if !filter() {
 				return false
@@ -133,12 +133,12 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 			},
 			&mcp.ServerOptions{
 				Capabilities: &mcp.ServerCapabilities{
-					Resources: &mcp.ResourceCapabilities{ListChanged: !configuration.Stateless},
-					Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless},
-					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless},
+					Resources: &mcp.ResourceCapabilities{ListChanged: !configuration.Stateless.Get()},
+					Prompts:   &mcp.PromptCapabilities{ListChanged: !configuration.Stateless.Get()},
+					Tools:     &mcp.ToolCapabilities{ListChanged: !configuration.Stateless.Get()},
 					Logging:   &mcp.LoggingCapabilities{}, //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 				},
-				Instructions: configuration.ServerInstructions,
+				Instructions: configuration.ServerInstructions.Get(),
 				Logger:       sdkLogger,
 			}),
 		p: targetProvider,
@@ -163,8 +163,8 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 	s.server.AddReceivingMiddleware(
 		rateLimitingMiddleware(s.rateLimitDone, func() (rate.Limit, int) {
 			cfg := s.configuration.Load()
-			rps := cfg.HTTP.RateLimitRPS
-			burst := cfg.HTTP.RateLimitBurst
+			rps := cfg.HTTP.RateLimitRPS.Get()
+			burst := cfg.HTTP.RateLimitBurst.Get()
 			if burst == 0 {
 				burst = config.DefaultRateLimitBurst
 			}
@@ -392,7 +392,7 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 	mutator := ComposeMutators(
 		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 		WithTargetListTool(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p),
-		WithToolOverrides(cfg.ToolOverrides),
+		WithToolOverrides(cfg.ToolOverrides.Get()),
 	)
 
 	tools := make([]api.ServerTool, 0)
@@ -417,7 +417,7 @@ func (s *Server) collectApplicablePrompts(cfg *Configuration) []api.ServerPrompt
 			toolsetPrompts = append(toolsetPrompts, mutator(prompt))
 		}
 	}
-	configPrompts := prompts.ToServerPrompts(cfg.Prompts)
+	configPrompts := prompts.ToServerPrompts(cfg.Prompts.Get())
 	return prompts.MergePrompts(toolsetPrompts, configPrompts)
 }
 
@@ -500,7 +500,7 @@ func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
 		// balancing, and serverless environments where maintaining client state
 		// is not desired or possible.
 		// https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#listening-for-messages-from-the-server
-		Stateless: s.configuration.Load().Stateless,
+		Stateless: s.configuration.Load().Stateless.Get(),
 	})
 }
 
@@ -549,7 +549,7 @@ func (s *Server) GetEnabledResourceTemplates() []string {
 // SDK, and the enabled-X bookkeeping at their previous consistent values, so
 // concurrent readers (rate-limit closure, confirmation rules, list output...)
 // can never observe a new-but-rejected configuration.
-func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.StaticConfig) error {
+func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Config) error {
 	logger := klogutil.FromContext(ctx)
 	logger.V(1).Info("Reloading MCP server configuration...")
 
@@ -563,7 +563,7 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Stat
 
 	// Build a candidate Configuration view. applyToolsets will install it
 	// atomically only if the convert phase succeeds.
-	candidate := &Configuration{StaticConfig: newConfig}
+	candidate := &Configuration{Config: newConfig}
 
 	if err := s.applyToolsets(ctx, candidate); err != nil {
 		return fmt.Errorf("failed to reload toolsets: %w", err)

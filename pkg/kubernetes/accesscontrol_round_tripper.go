@@ -23,25 +23,26 @@ import (
 // AccessControlRoundTripper intercepts HTTP requests to enforce access control
 // and optionally run validators before they reach the Kubernetes API.
 type AccessControlRoundTripper struct {
-	delegate                http.RoundTripper
-	deniedResourcesProvider api.DeniedResourcesProvider
-	restMapperProvider      func() meta.RESTMapper
-	rawDiscovery            *rawDiscoveryCache
-	apiPathPrefix           string
-	validators              []api.HTTPValidator
+	delegate           http.RoundTripper
+	deniedResources    []api.GroupVersionKind
+	restMapperProvider func() meta.RESTMapper
+	rawDiscovery       *rawDiscoveryCache
+	apiPathPrefix      string
+	validators         []api.HTTPValidator
 }
 
 // AccessControlRoundTripperConfig configures the AccessControlRoundTripper.
 type AccessControlRoundTripperConfig struct {
-	Delegate                  http.RoundTripper
-	DeniedResourcesProvider   api.DeniedResourcesProvider
-	RestMapperProvider        func() meta.RESTMapper
-	HostURL                   string
-	DiscoveryProvider         func() discovery.DiscoveryInterface
-	RawDiscoveryProvider      func() discovery.DiscoveryInterface
-	AuthClientProvider        func() authv1client.AuthorizationV1Interface
-	ValidationEnabled         bool
-	ConfirmationRulesProvider api.ConfirmationRulesProvider
+	Delegate             http.RoundTripper
+	DeniedResources      []api.GroupVersionKind
+	RestMapperProvider   func() meta.RESTMapper
+	HostURL              string
+	DiscoveryProvider    func() discovery.DiscoveryInterface
+	RawDiscoveryProvider func() discovery.DiscoveryInterface
+	AuthClientProvider   func() authv1client.AuthorizationV1Interface
+	ValidationEnabled    bool
+	ConfirmationRules    []api.ConfirmationRule
+	ConfirmationFallback string
 }
 
 // NewAccessControlRoundTripper creates a new AccessControlRoundTripper.
@@ -65,11 +66,11 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 		}
 	}
 	rt := &AccessControlRoundTripper{
-		delegate:                cfg.Delegate,
-		deniedResourcesProvider: cfg.DeniedResourcesProvider,
-		restMapperProvider:      cfg.RestMapperProvider,
-		rawDiscovery:            rawDisc,
-		apiPathPrefix:           apiPathPrefix,
+		delegate:           cfg.Delegate,
+		deniedResources:    cfg.DeniedResources,
+		restMapperProvider: cfg.RestMapperProvider,
+		rawDiscovery:       rawDisc,
+		apiPathPrefix:      apiPathPrefix,
 	}
 
 	// Schema/RBAC validators run first so the user isn't prompted for
@@ -81,8 +82,11 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 		})...)
 	}
 
-	if cfg.ConfirmationRulesProvider != nil && len(cfg.ConfirmationRulesProvider.GetConfirmationRules()) > 0 {
-		rt.validators = append(rt.validators, &ConfirmationValidator{rulesProvider: cfg.ConfirmationRulesProvider})
+	if len(cfg.ConfirmationRules) > 0 {
+		rt.validators = append(rt.validators, &ConfirmationValidator{
+			rules:    cfg.ConfirmationRules,
+			fallback: cfg.ConfirmationFallback,
+		})
 	}
 
 	// Always enable Windows EULA validator for windows-efi-installer PipelineRuns
@@ -206,11 +210,11 @@ func (rt *AccessControlRoundTripper) getGVK(
 func (rt *AccessControlRoundTripper) isAllowed(
 	gvk schema.GroupVersionKind,
 ) bool {
-	if rt.deniedResourcesProvider == nil {
+	if len(rt.deniedResources) == 0 {
 		return true
 	}
 
-	for _, val := range rt.deniedResourcesProvider.GetDeniedResources() {
+	for _, val := range rt.deniedResources {
 		// If kind is empty, that means Group/Version pair is denied entirely
 		if val.Kind == "" {
 			if gvk.Group == val.Group && gvk.Version == val.Version {

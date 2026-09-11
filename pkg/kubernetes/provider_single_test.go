@@ -27,7 +27,7 @@ func (s *ProviderSingleTestSuite) SetupTest() {
 	InClusterConfig = func() (*rest.Config, error) {
 		return s.mockServer.Config(), nil
 	}
-	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{})
+	provider, err := NewProvider(s.T().Context(), config.New())
 	s.Require().NoError(err, "Expected no error creating provider")
 	s.provider = provider
 }

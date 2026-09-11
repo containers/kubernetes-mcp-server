@@ -164,7 +164,8 @@ type ServerResourceTemplate struct {
 
 type ToolHandlerParams struct {
 	context.Context
-	BaseConfig
+	ExtendedConfigProvider
+	ClusterProviderStrategy string
 	KubernetesClient
 	FilteringProvider FilteringProvider
 	ToolCallRequest

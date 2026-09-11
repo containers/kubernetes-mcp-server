@@ -67,8 +67,8 @@ func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
 }
 
 func (s *ConfigSuite) TestNewNetObserv_withoutToolsetConfigSection() {
-	base := config.BaseDefault()
-	base.Toolsets = append(base.Toolsets, "netobserv")
+	base := config.New()
+	base.Toolsets.SetForTest(append(base.Toolsets.Get(), "netobserv"))
 	client := NewNetObserv(context.Background(), base, nil, nil)
 	s.Equal(DefaultPluginURL(false), client.pluginURL)
 	s.False(client.insecure)

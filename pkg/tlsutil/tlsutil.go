@@ -1,6 +1,6 @@
 // Package tlsutil provides shared TLS configuration utilities for parsing TLS
-// settings and building crypto/tls.Config values. Callers should pass values
-// from config.GetTLSMinVersionConfig / GetTLSCipherSuitesConfig.
+// settings and building crypto/tls.Config values. Callers should pass
+// TLSMinVersion.Get() / TLSCipherSuites.Get() from config.
 package tlsutil
 
 import (
@@ -80,8 +80,7 @@ func ParseTLSCipherSuites(suites []string) ([]uint16, error) {
 	return result, nil
 }
 
-// BuildTLSConfig creates a tls.Config from TLS settings returned by
-// config.GetTLSMinVersionConfig / GetTLSCipherSuitesConfig.
+// BuildTLSConfig creates a tls.Config from TLS min version and cipher suite settings.
 // Options (e.g., RootCAs, InsecureSkipVerify) are applied last.
 func BuildTLSConfig(minVersion string, cipherSuites []string, opts ...TLSConfigOption) (*tls.Config, error) {
 	parsedMinVersion, err := ParseTLSVersion(minVersion)

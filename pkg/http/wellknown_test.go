@@ -34,7 +34,7 @@ type WellknownSuite struct {
 
 func (s *WellknownSuite) SetupTest() {
 	s.BaseHttpSuite.SetupTest()
-	s.StaticConfig.ClusterProviderStrategy = api.ClusterProviderKubeConfig
+	s.Config.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
 	s.TestServerPayload = defaultWellknownPayload
 	s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.EscapedPath(), "/.well-known/") {
@@ -50,7 +50,7 @@ func (s *WellknownSuite) SetupTest() {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 		_, _ = w.Write([]byte(s.TestServerPayload))
 	}))
-	s.StaticConfig.AuthorizationURL = s.TestServer.URL
+	s.Config.AuthorizationURL.SetForTest(s.TestServer.URL)
 }
 
 func (s *WellknownSuite) TearDownTest() {
@@ -62,12 +62,12 @@ func (s *WellknownSuite) TearDownTest() {
 
 func (s *WellknownSuite) TestCorsHeaders() {
 	var receivedRequestHeaders http.Header
-	s.StaticConfig.RequireOAuth = true
+	s.Config.RequireOAuth.SetForTest(true)
 	s.StartServer()
 
 	for _, path := range wellknownPaths {
 		s.ReceivedRequest = nil
-		req, err := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path), nil)
+		req, err := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path), nil)
 		s.NoError(err, "Failed to create request")
 		// Add various headers to test they are NOT propagated
 		req.Header.Set("Origin", "https://example.com")
@@ -103,18 +103,18 @@ func (s *WellknownSuite) TestCorsHeaders() {
 }
 
 func (s *WellknownSuite) TestResponseHeaderFiltering() {
-	s.StaticConfig.RequireOAuth = true
+	s.Config.RequireOAuth.SetForTest(true)
 	s.StartServer()
 
 	for _, path := range wellknownPaths {
 		s.Run("propagates allowed headers for "+path, func() {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 			s.Equal("no-cache", resp.Header.Get("Cache-Control"))
 		})
 		s.Run("does not propagate non-allowed headers for "+path, func() {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 			s.Empty(resp.Header.Get("Custom-Backend-Header"), "Custom backend headers should not be forwarded")
@@ -126,12 +126,12 @@ func (s *WellknownSuite) TestResponseHeaderFiltering() {
 }
 
 func (s *WellknownSuite) TestOptionsPreflightRequest() {
-	s.StaticConfig.RequireOAuth = true
+	s.Config.RequireOAuth.SetForTest(true)
 	s.StartServer()
 
 	for _, path := range wellknownPaths {
 		s.Run("Well-known endpoint responds to OPTIONS preflight for "+path, func() {
-			req, err := http.NewRequest("OPTIONS", fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path), nil)
+			req, err := http.NewRequest("OPTIONS", fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path), nil)
 			s.Require().NoError(err, "Failed to create request")
 			req.Header.Set("Origin", "https://example.com")
 			req.Header.Set("Access-Control-Request-Method", "GET")
@@ -150,13 +150,13 @@ func (s *WellknownSuite) TestOptionsPreflightRequest() {
 
 func (s *WellknownSuite) TestReverseProxyNoAuthURL() {
 	s.Run("with no authorization URL configured", func() {
-		s.StaticConfig.AuthorizationURL = ""
-		s.StaticConfig.RequireOAuth = true
+		s.Config.AuthorizationURL.SetForTest("")
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
 		for _, path := range wellknownPaths {
 			s.Run("returns 404 for "+path, func() {
-				resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+				resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 				s.Require().NoError(err, "Failed to get endpoint")
 				s.T().Cleanup(func() { _ = resp.Body.Close() })
 				s.Equal(http.StatusNotFound, resp.StatusCode, "Expected HTTP 404 Not Found")
@@ -168,12 +168,12 @@ func (s *WellknownSuite) TestReverseProxyNoAuthURL() {
 func (s *WellknownSuite) TestReverseProxyInvalidPayload() {
 	s.Run("with invalid JSON payload from authorization server", func() {
 		s.TestServerPayload = `NOT A JSON PAYLOAD`
-		s.StaticConfig.RequireOAuth = true
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
 		for _, path := range wellknownPaths {
 			s.Run("returns 500 for "+path, func() {
-				resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+				resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 				s.Require().NoError(err, "Failed to get endpoint")
 				s.T().Cleanup(func() { _ = resp.Body.Close() })
 				s.Equal(http.StatusInternalServerError, resp.StatusCode, "Expected HTTP 500 Internal Server Error")
@@ -184,11 +184,11 @@ func (s *WellknownSuite) TestReverseProxyInvalidPayload() {
 
 func (s *WellknownSuite) TestReverseProxyValidPayload() {
 	s.Run("with valid payload from authorization server", func() {
-		s.StaticConfig.RequireOAuth = true
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
 		for _, path := range wellknownPaths {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err, "Failed to get endpoint")
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 
@@ -204,12 +204,12 @@ func (s *WellknownSuite) TestReverseProxyValidPayload() {
 
 func (s *WellknownSuite) TestDisableDynamicClientRegistration() {
 	s.Run("with dynamic client registration disabled", func() {
-		s.StaticConfig.RequireOAuth = true
-		s.StaticConfig.DisableDynamicClientRegistration = true
+		s.Config.RequireOAuth.SetForTest(true)
+		s.Config.DisableDynamicClientRegistration.SetForTest(true)
 		s.StartServer()
 
 		for _, path := range wellknownPaths {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err, "Failed to get endpoint")
 			body, err := io.ReadAll(resp.Body)
 			s.Require().NoError(err, "Failed to read response body")
@@ -230,12 +230,12 @@ func (s *WellknownSuite) TestDisableDynamicClientRegistration() {
 
 func (s *WellknownSuite) TestOAuthScopesOverride() {
 	s.Run("with OAuth scopes override configured", func() {
-		s.StaticConfig.RequireOAuth = true
-		s.StaticConfig.OAuthScopes = []string{"openid", "mcp-server"}
+		s.Config.RequireOAuth.SetForTest(true)
+		s.Config.OAuthScopes.SetForTest([]string{"openid", "mcp-server"})
 		s.StartServer()
 
 		for _, path := range wellknownPaths {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err, "Failed to get endpoint")
 			body, err := io.ReadAll(resp.Body)
 			s.Require().NoError(err, "Failed to read response body")
@@ -281,7 +281,7 @@ func (s *WellknownSuite) TestIsWellKnownPath() {
 }
 
 func (s *WellknownSuite) TestPathTraversal() {
-	s.StaticConfig.RequireOAuth = true
+	s.Config.RequireOAuth.SetForTest(true)
 	s.StartServer()
 
 	traversalPaths := []string{
@@ -291,7 +291,7 @@ func (s *WellknownSuite) TestPathTraversal() {
 	}
 	for _, path := range traversalPaths {
 		s.Run("rejects path traversal for "+path, func() {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 			s.NotEqual(http.StatusOK, resp.StatusCode, "Path traversal request should not succeed")
@@ -300,13 +300,13 @@ func (s *WellknownSuite) TestPathTraversal() {
 }
 
 func (s *WellknownSuite) TestUpstreamPathStaysWithinWellKnown() {
-	s.StaticConfig.RequireOAuth = true
+	s.Config.RequireOAuth.SetForTest(true)
 	s.StartServer()
 
 	for _, path := range wellknownPaths {
 		s.Run("upstream request path starts with /.well-known/ for "+path, func() {
 			s.ReceivedRequest = nil
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 			s.Require().NotNil(s.ReceivedRequest)
@@ -319,14 +319,14 @@ func (s *WellknownSuite) TestUpstreamPathStaysWithinWellKnown() {
 }
 
 func (s *WellknownSuite) TestAuthorizationURLWithBasePath() {
-	s.StaticConfig.RequireOAuth = true
-	s.StaticConfig.AuthorizationURL = s.TestServer.URL + "/realms/openshift"
+	s.Config.RequireOAuth.SetForTest(true)
+	s.Config.AuthorizationURL.SetForTest(s.TestServer.URL + "/realms/openshift")
 	s.StartServer()
 
 	for _, path := range wellknownPaths {
 		s.Run("proxies correctly with base path for "+path, func() {
 			s.ReceivedRequest = nil
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, path))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), path))
 			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 			s.Require().NotNil(s.ReceivedRequest)
@@ -341,10 +341,10 @@ func (s *WellknownSuite) TestAuthorizationURLWithBasePath() {
 func (s *WellknownSuite) TestOversizedUpstreamResponse() {
 	s.Run("rejects upstream response exceeding size limit", func() {
 		s.TestServerPayload = `{"data":"` + strings.Repeat("x", 2*1024*1024) + `"}`
-		s.StaticConfig.RequireOAuth = true
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.StaticConfig.Port, wellknownPaths[0]))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/%s", s.Config.Port.Get(), wellknownPaths[0]))
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = resp.Body.Close() })
 		s.Equal(http.StatusInternalServerError, resp.StatusCode, "Oversized response should be rejected")
@@ -370,12 +370,12 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 				http.NotFound(w, r)
 			}
 		}))
-		s.StaticConfig.AuthorizationURL = s.TestServer.URL
-		s.StaticConfig.RequireOAuth = true
+		s.Config.AuthorizationURL.SetForTest(s.TestServer.URL)
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
 		// oauth-authorization-server should work via fallback
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.Config.Port.Get()))
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
@@ -402,11 +402,11 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 				http.NotFound(w, r)
 			}
 		}))
-		s.StaticConfig.AuthorizationURL = s.TestServer.URL
-		s.StaticConfig.RequireOAuth = true
+		s.Config.AuthorizationURL.SetForTest(s.TestServer.URL)
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource", s.StaticConfig.Port))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource", s.Config.Port.Get()))
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
@@ -417,7 +417,7 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 
 		// Verify RFC 9728 format - MCP server is the authorization_server from client's perspective
 		s.Contains(string(body), `"authorization_servers":`, "Expected authorization_servers array per RFC 9728")
-		s.Contains(string(body), fmt.Sprintf("127.0.0.1:%s", s.StaticConfig.Port), "Expected authorization_servers to contain MCP server URL")
+		s.Contains(string(body), fmt.Sprintf("127.0.0.1:%s", s.Config.Port.Get()), "Expected authorization_servers to contain MCP server URL")
 		s.Contains(string(body), `"scopes_supported":`, "Expected scopes_supported from openid-configuration")
 	})
 
@@ -439,12 +439,12 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 				w.WriteHeader(http.StatusOK)
 			}
 		}))
-		s.StaticConfig.AuthorizationURL = s.TestServer.URL
-		s.StaticConfig.RequireOAuth = true
+		s.Config.AuthorizationURL.SetForTest(s.TestServer.URL)
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
 		s.Run("oauth-authorization-server", func() {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.Config.Port.Get()))
 			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 
@@ -456,7 +456,7 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 		})
 
 		s.Run("oauth-protected-resource", func() {
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource", s.StaticConfig.Port))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource", s.Config.Port.Get()))
 			s.Require().NoError(err)
 			s.T().Cleanup(func() { _ = resp.Body.Close() })
 
@@ -473,11 +473,11 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 		s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 		}))
-		s.StaticConfig.AuthorizationURL = s.TestServer.URL
-		s.StaticConfig.RequireOAuth = true
+		s.Config.AuthorizationURL.SetForTest(s.TestServer.URL)
+		s.Config.RequireOAuth.SetForTest(true)
 		s.StartServer()
 
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.Config.Port.Get()))
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
@@ -499,13 +499,13 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 				http.NotFound(w, r)
 			}
 		}))
-		s.StaticConfig.AuthorizationURL = s.TestServer.URL
-		s.StaticConfig.RequireOAuth = true
-		s.StaticConfig.DisableDynamicClientRegistration = true
-		s.StaticConfig.OAuthScopes = []string{"custom-scope"}
+		s.Config.AuthorizationURL.SetForTest(s.TestServer.URL)
+		s.Config.RequireOAuth.SetForTest(true)
+		s.Config.DisableDynamicClientRegistration.SetForTest(true)
+		s.Config.OAuthScopes.SetForTest([]string{"custom-scope"})
 		s.StartServer()
 
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.StaticConfig.Port))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-authorization-server", s.Config.Port.Get()))
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = resp.Body.Close() })
 

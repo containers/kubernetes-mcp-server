@@ -28,13 +28,13 @@ import (
 type NetObservSuite struct {
 	suite.Suite
 	MockServer *test.MockServer
-	Config     *config.StaticConfig
+	Config     *config.Config
 }
 
 func (s *NetObservSuite) SetupTest() {
 	s.MockServer = test.NewMockServer()
 	s.MockServer.Config().BearerToken = ""
-	s.Config = config.Default()
+	s.Config = config.New()
 }
 
 func (s *NetObservSuite) TearDownTest() {

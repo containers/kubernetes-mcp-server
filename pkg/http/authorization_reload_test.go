@@ -12,7 +12,7 @@ import (
 )
 
 // AuthorizationMiddlewareReloadSuite verifies that config changes published via
-// *config.StaticConfigState.Store take effect on the NEXT request served by an
+// *config.ConfigState.Store take effect on the NEXT request served by an
 // already-constructed AuthorizationMiddleware — i.e. the middleware re-reads
 // the config snapshot per request instead of capturing it at wiring time.
 // Regression guard for issue #1106 / PR #1105.
@@ -26,7 +26,11 @@ func TestAuthorizationMiddlewareReload(t *testing.T) {
 
 func (s *AuthorizationMiddlewareReloadSuite) TestRequireOAuthFlipObservedPerRequest() {
 	s.Run("unauthenticated request: 200 when require_oauth=false, 401 after cfgState.Store flips it to true", func() {
-		cfgState := config.NewStaticConfigState(&config.StaticConfig{RequireOAuth: false})
+		cfgState := config.NewConfigState(func() *config.Config {
+			c := config.New()
+			c.RequireOAuth.SetForTest(false)
+			return c
+		}())
 		oauthState := oauth.NewState(&oauth.Snapshot{})
 
 		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -41,9 +45,15 @@ func (s *AuthorizationMiddlewareReloadSuite) TestRequireOAuthFlipObservedPerRequ
 		s.Equal(http.StatusOK, rr1.Code, "pre-reload: require_oauth=false must allow unauthenticated requests")
 
 		// Simulate a SIGHUP reload flipping require_oauth to true.
-		cfgState.Store(&config.StaticConfig{RequireOAuth: true})
+		cfgState.Store(func() *config.Config {
+			c := config.New()
+			c.RequireOAuth.
 
-		// Post-reload: same unauthenticated request must now be rejected.
+				// Post-reload: same unauthenticated request must now be rejected.
+				SetForTest(true)
+			return c
+		}())
+
 		req2 := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 		rr2 := httptest.NewRecorder()
 		handler.ServeHTTP(rr2, req2)

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	kubevirtgvr "github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	kubevirttesting "github.com/containers/kubernetes-mcp-server/pkg/kubevirt/testing"
 	kubevirttoolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
@@ -69,9 +69,9 @@ func (s *KubevirtSuite) TearDownSuite() {
 
 func (s *KubevirtSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		toolsets = [ "kubevirt" ]
-	`), s.Cfg), "Expected to parse toolsets config")
+	`)
 	s.InitMcpClient()
 }
 

@@ -31,16 +31,17 @@ type NetObserv struct {
 }
 
 // NewNetObserv creates a client using toolset config, cluster detection, and the Kubernetes REST config.
-func NewNetObserv(ctx context.Context, configProvider api.BaseConfig, k8s api.KubernetesClient, provider api.FilteringProvider) *NetObserv {
+func NewNetObserv(ctx context.Context, configProvider api.ExtendedConfigProvider, k8s api.KubernetesClient, provider api.FilteringProvider) *NetObserv {
 	var restConfig *rest.Config
 	if k8s != nil {
 		restConfig = k8s.RESTConfig()
 	}
+	cfg := configFromProvider(configProvider)
 	client := &NetObserv{
 		bearerToken:     "",
-		tlsMinVersion:   configProvider.GetTLSMinVersionConfig(),
-		tlsCipherSuites: configProvider.GetTLSCipherSuitesConfig(),
-		requireTLS:      configProvider.IsRequireTLS,
+		tlsMinVersion:   cfg.TLSMinVersion.Get(),
+		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 	}
 	if restConfig != nil {
 		client.bearerToken = strings.TrimSpace(restConfig.BearerToken)
@@ -241,4 +242,18 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
 	}
 	return GetResponse{Body: string(respBody), Truncated: truncated}, nil
+}
+
+func configFromProvider(p api.ExtendedConfigProvider) *config.Config {
+	switch v := p.(type) {
+	case *config.Config:
+		if v != nil {
+			return v
+		}
+	case api.ToolHandlerParams:
+		return configFromProvider(v.ExtendedConfigProvider)
+	case api.PromptHandlerParams:
+		return configFromProvider(v.ExtendedConfigProvider)
+	}
+	return config.New()
 }

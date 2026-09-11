@@ -2,9 +2,7 @@ package kcp
 
 import (
 	"context"
-	"os"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -44,25 +42,16 @@ var _ watcher.Watcher = (*WorkspaceWatcher)(nil)
 
 // NewWorkspaceWatcher creates a new workspace watcher that polls the kcp tenancy API
 // for workspace changes.
-func NewWorkspaceWatcher(ctx context.Context, dynamicClient dynamic.Interface, rootWorkspace string) *WorkspaceWatcher {
-	pollInterval := DefaultWorkspacePollInterval
-	debounceWindow := DefaultWorkspaceDebounceWindow
+func NewWorkspaceWatcher(ctx context.Context, dynamicClient dynamic.Interface, rootWorkspace string, pollInterval, debounceWindow time.Duration) *WorkspaceWatcher {
+	if pollInterval <= 0 {
+		pollInterval = DefaultWorkspacePollInterval
+	}
+	if debounceWindow <= 0 {
+		debounceWindow = DefaultWorkspaceDebounceWindow
+	}
 
 	logger := klogutil.FromContext(ctx)
-
-	// Allow override via environment variable for testing
-	if envInterval := os.Getenv("WORKSPACE_POLL_INTERVAL_MS"); envInterval != "" {
-		if ms, err := strconv.Atoi(envInterval); err == nil && ms > 0 {
-			pollInterval = time.Duration(ms) * time.Millisecond
-			logger.V(2).Info("Using custom workspace poll interval", "poll_interval", pollInterval)
-		}
-	}
-	if envDebounce := os.Getenv("WORKSPACE_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
-		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
-			debounceWindow = time.Duration(ms) * time.Millisecond
-			logger.V(2).Info("Using custom workspace debounce window", "debounce_window", debounceWindow)
-		}
-	}
+	logger.V(2).Info("Using workspace watcher timings", "poll_interval", pollInterval, "debounce_window", debounceWindow)
 
 	return &WorkspaceWatcher{
 		dynamicClient:  dynamicClient,

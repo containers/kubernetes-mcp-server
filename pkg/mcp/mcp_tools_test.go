@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -33,9 +33,9 @@ func (s *McpToolProcessingSuite) TestUnrestricted() {
 }
 
 func (s *McpToolProcessingSuite) TestReadOnly() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		read_only = true
-	`), s.Cfg), "Expected to parse read only server config")
+	`)
 	s.InitMcpClient()
 
 	tools, err := s.ListTools()
@@ -57,9 +57,9 @@ func (s *McpToolProcessingSuite) TestReadOnly() {
 }
 
 func (s *McpToolProcessingSuite) TestDisableDestructive() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		disable_destructive = true
-	`), s.Cfg), "Expected to parse disable destructive server config")
+	`)
 	s.InitMcpClient()
 
 	tools, err := s.ListTools()
@@ -79,9 +79,9 @@ func (s *McpToolProcessingSuite) TestDisableDestructive() {
 }
 
 func (s *McpToolProcessingSuite) TestEnabledTools() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		enabled_tools = [ "namespaces_list", "events_list" ]
-	`), s.Cfg), "Expected to parse enabled tools server config")
+	`)
 	s.InitMcpClient()
 
 	tools, err := s.ListTools()
@@ -102,9 +102,9 @@ func (s *McpToolProcessingSuite) TestEnabledTools() {
 }
 
 func (s *McpToolProcessingSuite) TestDisabledTools() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		disabled_tools = [ "namespaces_list", "events_list" ]
-	`), s.Cfg), "Expected to parse disabled tools server config")
+	`)
 	s.InitMcpClient()
 
 	tools, err := s.ListTools()

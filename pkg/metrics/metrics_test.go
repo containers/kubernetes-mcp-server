@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -31,10 +32,12 @@ func (s *MetricsSuite) TestNew() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "grpc",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("grpc")
+			return c
+		}()
 
 		m, err := New(s.T().Context(), Config{
 			TracerName:     "test",

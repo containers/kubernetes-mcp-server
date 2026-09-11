@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +21,7 @@ type PodsTopSuite struct {
 func (s *PodsTopSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 
 	s.discoveryHandler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.discoveryHandler)
@@ -190,9 +190,9 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 }
 
 func (s *PodsTopSuite) TestPodsTopDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { group = "metrics.k8s.io", version = "v1beta1" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
 		GroupVersion: "metrics.k8s.io/v1beta1",
 		APIResources: []metav1.APIResource{

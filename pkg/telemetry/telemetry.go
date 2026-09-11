@@ -2,8 +2,6 @@ package telemetry
 
 import (
 	"context"
-	"os"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -33,196 +31,8 @@ func Enabled() bool {
 	return tracingEnabled.Load()
 }
 
-// getSamplerFromEnv reads the sampler configuration from environment variables.
-// It supports the following OTEL_TRACES_SAMPLER values:
-//   - "always_on": Sample all traces
-//   - "always_off": Don't sample any traces
-//   - "traceidratio": Sample based on trace ID ratio (requires OTEL_TRACES_SAMPLER_ARG)
-//   - "parentbased_always_on": Respect parent span sampling decision, default to always_on
-//   - "parentbased_traceidratio": Respect parent span sampling decision, default to ratio
-//   - "" (empty/not set): Use default ParentBased(AlwaysSample)
-func getSamplerFromEnv(ctx context.Context) trace.Sampler {
-	samplerType := os.Getenv("OTEL_TRACES_SAMPLER")
-	samplerArg := os.Getenv("OTEL_TRACES_SAMPLER_ARG")
-	logger := klogutil.FromContext(ctx)
-
-	// Parse sampler argument (ratio) if provided
-	ratio := 1.0 // Default to 100% sampling
-	if samplerArg != "" {
-		parsed, err := strconv.ParseFloat(samplerArg, 64)
-		if err != nil {
-			klogutil.LogInfo(logger.V(1), "Invalid OTEL_TRACES_SAMPLER_ARG, falling back to default",
-				klogutil.Field("config.env_var", "OTEL_TRACES_SAMPLER_ARG"),
-				klogutil.Field("config.provided_value", samplerArg),
-				klogutil.Field("config.default_value", 1.0),
-				klogutil.Err(err),
-			)
-		} else if parsed < 0.0 || parsed > 1.0 {
-			logger.V(1).Info("OTEL_TRACES_SAMPLER_ARG out of range [0.0, 1.0], falling back to default",
-				"config.env_var", "OTEL_TRACES_SAMPLER_ARG",
-				"config.provided_value", parsed,
-				"config.default_value", 1.0,
-			)
-		} else {
-			ratio = parsed
-		}
-	}
-
-	// Select sampler based on type
-	switch samplerType {
-	case "always_on":
-		logger.V(2).Info("Using AlwaysSample sampler")
-		return trace.AlwaysSample()
-
-	case "always_off":
-		logger.V(2).Info("Using NeverSample sampler")
-		return trace.NeverSample()
-
-	case "traceidratio":
-		logger.V(2).Info("Using TraceIDRatioBased sampler", "telemetry.sampler.ratio", ratio)
-		return trace.TraceIDRatioBased(ratio)
-
-	case "parentbased_always_on":
-		logger.V(2).Info("Using ParentBased(AlwaysSample) sampler")
-		return trace.ParentBased(trace.AlwaysSample())
-
-	case "parentbased_always_off":
-		logger.V(2).Info("Using ParentBased(NeverSample) sampler")
-		return trace.ParentBased(trace.NeverSample())
-
-	case "parentbased_traceidratio":
-		logger.V(2).Info("Using ParentBased(TraceIDRatioBased) sampler", "telemetry.sampler.ratio", ratio)
-		return trace.ParentBased(trace.TraceIDRatioBased(ratio))
-
-	case "":
-		// Default: ParentBased(AlwaysSample) for development
-		logger.V(2).Info("Using default ParentBased(AlwaysSample) sampler")
-		return trace.ParentBased(trace.AlwaysSample())
-
-	default:
-		logger.V(1).Info("Unknown OTEL_TRACES_SAMPLER, using default",
-			"config.env_var", "OTEL_TRACES_SAMPLER",
-			"config.provided", samplerType,
-			"config.default", "ParentBased(AlwaysSample)",
-		)
-		return trace.ParentBased(trace.AlwaysSample())
-	}
-}
-
-// createExporter creates an OTLP trace exporter based on the OTEL_EXPORTER_OTLP_PROTOCOL env var.
-// Supported protocols:
-//   - "grpc": Use gRPC protocol (default)
-//   - "http/protobuf": Use HTTP with protobuf encoding
-//   - "http": Alias for "http/protobuf"
-func createExporter(ctx context.Context) (*otlptrace.Exporter, error) {
-	protocol := strings.ToLower(os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
-	logger := klogutil.FromContext(ctx)
-
-	switch protocol {
-	case "http/protobuf", "http":
-		logger.V(2).Info("Using HTTP/protobuf OTLP exporter", "telemetry.exporter.protocol", protocol)
-		return otlptracehttp.New(ctx)
-
-	case "grpc", "":
-		// Default to gRPC
-		if protocol == "" {
-			logger.V(2).Info("Using gRPC OTLP exporter (default)")
-		} else {
-			logger.V(2).Info("Using gRPC OTLP exporter")
-		}
-		return otlptracegrpc.New(ctx)
-
-	default:
-		logger.V(1).Info("Unknown OTEL_EXPORTER_OTLP_PROTOCOL falling back to default",
-			"config.env_var", "OTEL_EXPORTER_OTLP_PROTOCOL",
-			"config.provided", protocol,
-			"config.default", "grpc",
-		)
-		return otlptracegrpc.New(ctx)
-	}
-}
-
-// InitTracer initializes the OpenTelemetry tracer provider.
-// Tracing is only enabled if OTEL_EXPORTER_OTLP_ENDPOINT is set.
-// Check telemetry.Enabled() to determine if tracing is active.
-func InitTracer(ctx context.Context, serviceName, serviceVersion string) (func(), error) {
-	logger := klogutil.FromContext(ctx)
-	// Check if OTLP endpoint is configured - if not, skip all tracing setup
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		logger.V(2).Info("OTEL_EXPORTER_OTLP_ENDPOINT not set, tracing disabled")
-		return func() {}, nil
-	}
-
-	// Create OTLP exporter based on protocol configuration
-	// Endpoint is configured via OTEL_EXPORTER_OTLP_ENDPOINT env var
-	// Protocol is configured via OTEL_EXPORTER_OTLP_PROTOCOL env var
-	exporter, err := createExporter(ctx)
-	if err != nil {
-		klogutil.LogInfo(logger.V(1), "Failed to create OTLP exporter, tracing disabled", klogutil.Err(err))
-		return func() {}, nil
-	}
-
-	// Create resource with service information
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(serviceName),
-			semconv.ServiceVersion(serviceVersion),
-		),
-	)
-	if err != nil {
-		klogutil.LogInfo(logger.V(1), "Failed to create resource, tracing disabled", klogutil.Err(err))
-		return func() {}, nil
-	}
-
-	// Configure tracer provider with sampler from environment
-	sampler := getSamplerFromEnv(ctx)
-
-	// Create batch span processor with production settings
-	// - BatchTimeout: Maximum time to wait before exporting a batch (5 seconds)
-	// - MaxQueueSize: Maximum number of spans queued before dropping (2048)
-	// - MaxExportBatchSize: Maximum spans per export batch (512)
-	bsp := trace.NewBatchSpanProcessor(
-		exporter,
-		trace.WithBatchTimeout(5*time.Second),
-		trace.WithMaxQueueSize(2048),
-		trace.WithMaxExportBatchSize(512),
-	)
-
-	tp := trace.NewTracerProvider(
-		trace.WithSpanProcessor(bsp),
-		trace.WithResource(res),
-		trace.WithSampler(sampler),
-	)
-
-	otel.SetTracerProvider(tp)
-
-	// Set up text map propagator for distributed tracing context propagation
-	// This enables trace context to be extracted from and injected into carriers (e.g., HTTP headers, MCP metadata)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{}, // W3C Trace Context propagator
-		propagation.Baggage{},      // W3C Baggage propagator
-	))
-
-	// Mark tracing as enabled so middleware knows to create spans
-	tracingEnabled.Store(true)
-	logger.V(1).Info("OpenTelemetry tracing initialized successfully")
-
-	cleanup := func() {
-		tracingEnabled.Store(false)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := tp.Shutdown(ctx); err != nil {
-			logger.Error(err, "Failed to shutdown tracer provider")
-		}
-		logger.V(1).Info("OpenTelemetry tracer provider shutdown complete")
-	}
-
-	return cleanup, nil
-}
-
 // InitTracerWithConfig initializes the OpenTelemetry tracer provider using the provided config.
-// The config values can be overridden by environment variables.
+// Env overrides are already resolved onto cfg at load time.
 // Check telemetry.Enabled() to determine if tracing is active.
 func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serviceName, serviceVersion string) (func(), error) {
 	logger := klogutil.FromContext(ctx)
@@ -273,7 +83,7 @@ func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serv
 	))
 
 	tracingEnabled.Store(true)
-	logger.V(1).Info("OpenTelemetry tracing initialized successfully", "telemetry.exporter.endpoint", cfg.GetEndpoint())
+	logger.V(1).Info("OpenTelemetry tracing initialized successfully", "telemetry.exporter.endpoint", cfg.Endpoint.Get())
 
 	cleanup := func() {
 		tracingEnabled.Store(false)
@@ -289,23 +99,14 @@ func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serv
 }
 
 // getSamplerFromConfig reads the sampler configuration from TelemetryConfig.
-// Environment variables take precedence over config values.
 func getSamplerFromConfig(ctx context.Context, cfg *config.TelemetryConfig) trace.Sampler {
-	samplerType := cfg.GetTracesSampler()
-	samplerArg := cfg.GetTracesSamplerArg()
+	samplerType := cfg.TracesSampler.Get()
 	logger := klogutil.FromContext(ctx)
 
 	ratio := 1.0 // Default to 100% sampling
-	if samplerArg != "" {
-		parsed, err := strconv.ParseFloat(samplerArg, 64)
-		if err != nil {
-			klogutil.LogInfo(logger.V(1), "Invalid traces_sampler_arg, using",
-				klogutil.Field("config.key", "traces_sampler_arg"),
-				klogutil.Field("config.provided", samplerArg),
-				klogutil.Field("config.default", 1.0),
-				klogutil.Err(err),
-			)
-		} else if parsed < 0.0 || parsed > 1.0 {
+	if arg := cfg.TracesSamplerArg.Get(); arg != nil {
+		parsed := *arg
+		if parsed < 0.0 || parsed > 1.0 {
 			logger.V(1).Info("traces_sampler_arg out of range [0.0, 1.0], using default",
 				"config.key", "traces_sampler_arg",
 				"config.provided", parsed,
@@ -357,10 +158,9 @@ func getSamplerFromConfig(ctx context.Context, cfg *config.TelemetryConfig) trac
 }
 
 // createExporterWithConfig creates an OTLP trace exporter using the provided config.
-// Environment variables take precedence over config values.
 func createExporterWithConfig(ctx context.Context, cfg *config.TelemetryConfig) (*otlptrace.Exporter, error) {
-	protocol := strings.ToLower(cfg.GetProtocol())
-	endpoint := cfg.GetEndpoint()
+	protocol := strings.ToLower(cfg.Protocol.Get())
+	endpoint := cfg.Endpoint.Get()
 	logger := klogutil.FromContext(ctx)
 
 	switch protocol {

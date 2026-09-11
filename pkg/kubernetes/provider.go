@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
@@ -54,8 +55,8 @@ type TokenExchangeProvider interface {
 type ProviderOption func(*providerOptions)
 
 type providerOptions struct {
-	oauthState         *oauth.State
-	baseConfigProvider func() api.BaseConfig
+	oauthState     *oauth.State
+	configProvider func() *config.Config
 }
 
 func WithTokenExchange(oauthState *oauth.State) ProviderOption {
@@ -64,13 +65,13 @@ func WithTokenExchange(oauthState *oauth.State) ProviderOption {
 	}
 }
 
-func WithBaseConfigProvider(baseConfigProvider func() api.BaseConfig) ProviderOption {
+func WithConfigProvider(configProvider func() *config.Config) ProviderOption {
 	return func(opts *providerOptions) {
-		opts.baseConfigProvider = baseConfigProvider
+		opts.configProvider = configProvider
 	}
 }
 
-func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
+func NewProvider(ctx context.Context, cfg *config.Config, opts ...ProviderOption) (Provider, error) {
 	var providerOpts providerOptions
 	for _, opt := range opts {
 		opt(&providerOpts)
@@ -89,15 +90,15 @@ func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption
 	}
 
 	if providerOpts.oauthState != nil {
-		baseConfigProvider := providerOpts.baseConfigProvider
-		if baseConfigProvider == nil {
-			baseConfigProvider = func() api.BaseConfig {
+		configProvider := providerOpts.configProvider
+		if configProvider == nil {
+			configProvider = func() *config.Config {
 				return cfg
 			}
 		}
 		provider = newTokenExchangingProvider(
 			provider,
-			baseConfigProvider,
+			configProvider,
 			providerOpts.oauthState,
 		)
 	}
@@ -105,12 +106,12 @@ func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption
 	return provider, nil
 }
 
-func resolveStrategy(cfg api.BaseConfig) string {
-	if cfg.GetClusterProviderStrategy() != "" {
-		return cfg.GetClusterProviderStrategy()
+func resolveStrategy(cfg *config.Config) string {
+	if cfg.ClusterProviderStrategy.Get() != "" {
+		return cfg.ClusterProviderStrategy.Get()
 	}
 
-	if cfg.GetKubeConfigPath() != "" {
+	if cfg.KubeConfig.Get() != "" {
 		return api.ClusterProviderKubeConfig
 	}
 

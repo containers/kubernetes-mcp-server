@@ -2,9 +2,7 @@ package watcher
 
 import (
 	"context"
-	"os"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -43,24 +41,15 @@ type ClusterState struct {
 
 var _ Watcher = (*ClusterState)(nil)
 
-func NewClusterState(ctx context.Context, discoveryClient discovery.CachedDiscoveryInterface) *ClusterState {
-	pollInterval := DefaultClusterStatePollInterval
-	debounceWindow := DefaultClusterStateDebounceWindow
+func NewClusterState(ctx context.Context, discoveryClient discovery.CachedDiscoveryInterface, pollInterval, debounceWindow time.Duration) *ClusterState {
+	if pollInterval <= 0 {
+		pollInterval = DefaultClusterStatePollInterval
+	}
+	if debounceWindow <= 0 {
+		debounceWindow = DefaultClusterStateDebounceWindow
+	}
 	logger := klogutil.FromContext(ctx)
-
-	// Allow override via environment variable for testing
-	if envInterval := os.Getenv("CLUSTER_STATE_POLL_INTERVAL_MS"); envInterval != "" {
-		if ms, err := strconv.Atoi(envInterval); err == nil && ms > 0 {
-			pollInterval = time.Duration(ms) * time.Millisecond
-			logger.V(2).Info("Using custom cluster state poll interval", "poll_interval", pollInterval)
-		}
-	}
-	if envDebounce := os.Getenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
-		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
-			debounceWindow = time.Duration(ms) * time.Millisecond
-			logger.V(2).Info("Using custom cluster state debounce window", "debounce_window", debounceWindow)
-		}
-	}
+	logger.V(2).Info("Using cluster state watcher timings", "poll_interval", pollInterval, "debounce_window", debounceWindow)
 
 	return &ClusterState{
 		discoveryClient: discoveryClient,
