@@ -28,27 +28,44 @@ This will:
 4. Configure Keycloak realm and clients
 5. Build the MCP server binary
 6. Generate a configuration file at `_output/config.toml`
+7. Add a managed `keycloak.keycloak.svc` entry to `/etc/hosts`
 
 ## Running the MCP Server
 
-After setup completes, run the server:
+After setup completes, start the Keycloak port-forward and MCP server in separate terminals:
 
 ```bash
-# Start the server
+# Keep this port-forward running in a separate terminal
+make keycloak-port-forward
+
+# In another terminal, start the server
 ./kubernetes-mcp-server --port 8008 --config _output/config.toml
 ```
 
-Or use the MCP Inspector for testing:
+To test the HTTP OAuth flow, start MCP Inspector in a third terminal. The custom
+CA allows Inspector's Node.js backend to fetch Keycloak metadata through the
+local port-forward.
 
 ```bash
-npx @modelcontextprotocol/inspector@latest $(pwd)/kubernetes-mcp-server --config _output/config.toml
+NODE_EXTRA_CA_CERTS="$(pwd)/_output/cert-manager-ca/ca.crt" \
+  npx @modelcontextprotocol/inspector@latest
 ```
 
 ## Quick Walkthrough
 
 ### 1. Start MCP Inspector and Connect
 
-After running the inspector, in the `Authentication`'s **OAuth 2.0 Flow** set the `Client ID` to be `mcp-client` and the `Scope` to `mcp-server`, afterwards click the "Connect" button.
+After running Inspector, configure the connection as follows:
+
+- Transport: **Streamable HTTP**
+- URL: `http://localhost:8008/mcp`
+- OAuth Client ID: `mcp-client`
+- OAuth Client Secret: leave empty because `mcp-client` is a public client
+- OAuth Scopes: `openid mcp-server`
+- **Request refresh token**: disabled
+
+The local `mcp-client` does not allow the `offline_access` scope that Inspector
+adds when requesting refresh tokens. Click **Connect** after disabling that option.
 
 <a href="images/keycloak-mcp-inspector-connect.png">
   <img src="images/keycloak-mcp-inspector-connect.png" alt="MCP Inspector Connect Button" width="600" />
@@ -78,7 +95,7 @@ After authentication, you can use the **Tools** from the Kubernetes-MCP-Server f
 - Runs as a Deployment in the `keycloak` namespace
 - Terminates TLS natively using a cert-manager certificate for `keycloak.keycloak.svc`
 - Accessible in-cluster at `https://keycloak.keycloak.svc:8443`
-- For browser access, use `make keycloak-port-forward` then open `https://localhost:8443`
+- For browser access, use `make keycloak-port-forward` then open `https://keycloak.keycloak.svc:8443`
 
 ### Minikube Cluster with OIDC
 - Kubernetes API server configured with OIDC authentication
@@ -205,9 +222,6 @@ make keycloak-logs
 
 Start a port-forward and open your browser:
 ```bash
-# One-time setup: add hosts entry so Keycloak redirects resolve locally
-echo '127.0.0.1 keycloak.keycloak.svc' | sudo tee -a /etc/hosts
-
 make keycloak-port-forward
 # Then open https://keycloak.keycloak.svc:8443
 ```
@@ -226,4 +240,6 @@ Remove the local environment:
 make local-env-teardown
 ```
 
-This deletes the Minikube cluster (Keycloak is removed with it).
+This deletes the Minikube cluster (Keycloak is removed with it) and removes the
+`/etc/hosts` entry created by `make local-env-setup`. Existing user-managed
+entries are left unchanged.
