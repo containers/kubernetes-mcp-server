@@ -8,6 +8,7 @@ var (
 
 func init() {
 	RegisterTokenExchanger(StrategyKeycloakV1, &keycloakV1Exchanger{})
+	RegisterTokenExchanger(StrategyKeycloakV2, &keycloakV2Exchanger{})
 	RegisterTokenExchanger(StrategyRFC8693, &rfc8693Exchanger{})
 	RegisterTokenExchanger(StrategyEntraOBO, &entraOBOExchanger{})
 }

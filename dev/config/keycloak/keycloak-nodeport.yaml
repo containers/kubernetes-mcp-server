@@ -1,0 +1,18 @@
+# NodePort service for Keycloak, used by multicluster setups where the spoke
+# cluster's API server needs to reach Keycloak on the hub via the hub node IP.
+# Applied alongside the existing ClusterIP service (which remains the primary
+# in-cluster endpoint).
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-nodeport
+  namespace: keycloak
+spec:
+  type: NodePort
+  selector:
+    app: keycloak
+  ports:
+  - port: 8443
+    targetPort: 8443
+    nodePort: 30443
+    protocol: TCP

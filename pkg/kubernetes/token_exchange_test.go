@@ -148,7 +148,7 @@ type fakeTokenExchangeProvider struct {
 	strategy       string
 }
 
-func (f fakeTokenExchangeProvider) GetTokenExchangeConfig(string) *tokenexchange.TargetTokenExchangeConfig {
+func (f fakeTokenExchangeProvider) GetTargetTokenExchangeConfig(string) *tokenexchange.TargetTokenExchangeConfig {
 	return f.exchangeConfig
 }
 func (f fakeTokenExchangeProvider) GetTokenExchangeStrategy() string { return f.strategy }

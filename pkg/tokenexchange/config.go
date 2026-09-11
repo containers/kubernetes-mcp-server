@@ -95,6 +95,25 @@ type TargetTokenExchangeConfig struct {
 	requireTLS func() bool `toml:"-"`
 }
 
+// SetTokenURLIfEmpty sets the token endpoint URL if it has not already been
+// set. This is safe for concurrent use from multiple goroutines (e.g. when
+// the URL is resolved lazily from OIDC discovery on first request).
+func (c *TargetTokenExchangeConfig) SetTokenURLIfEmpty(tokenURL string) {
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
+	if c.TokenURL == "" {
+		c.TokenURL = tokenURL
+	}
+}
+
+// GetTokenURL returns the configured token endpoint URL. This is safe for
+// concurrent use from multiple goroutines.
+func (c *TargetTokenExchangeConfig) GetTokenURL() string {
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
+	return c.TokenURL
+}
+
 // SetRequireTLS installs the TLS enforcer. HTTPClient() always wraps its
 // transport to read it live per request, so this may be (re)set at any time —
 // before or after the client is memoized, e.g. on a SIGHUP toggle.

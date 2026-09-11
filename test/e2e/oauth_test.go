@@ -31,11 +31,17 @@ import (
 const (
 	keycloakRealm = "openshift"
 
+	keycloakDefaultBaseURL = "https://keycloak.keycloak.svc:8443"
+
 	// caSecretName is the secret holding the CA cert the MCP server trusts when
 	// talking to Keycloak; caMountPath is where the chart mounts it in the pod.
 	caSecretName = "keycloak-ca"
 	caMountPath  = "/etc/keycloak-ca"
 )
+
+func keycloakIssuerURL() string {
+	return envOrDefault("KEYCLOAK_ISSUER_URL", keycloakDefaultBaseURL+"/realms/"+keycloakRealm)
+}
 
 // oidcDiscovery is the subset of the OIDC discovery document the tests use.
 type oidcDiscovery struct {
