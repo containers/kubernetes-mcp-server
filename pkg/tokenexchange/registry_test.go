@@ -16,6 +16,11 @@ func (s *TokenExchangerRegistryTestSuite) TestGetTokenExchanger() {
 		s.True(ok, "Expected keycloak-v1 exchanger to be registered")
 		s.NotNil(exchanger, "Expected keycloak-v1 exchanger to be non-nil")
 	})
+	s.Run("returns keycloak-v2 exchanger", func() {
+		exchanger, ok := GetTokenExchanger(StrategyKeycloakV2)
+		s.True(ok, "Expected keycloak-v2 exchanger to be registered")
+		s.NotNil(exchanger, "Expected keycloak-v2 exchanger to be non-nil")
+	})
 	s.Run("returns rfc8693 exchanger", func() {
 		exchanger, ok := GetTokenExchanger(StrategyRFC8693)
 		s.True(ok, "Expected rfc8693 exchanger to be registered")
@@ -36,7 +41,7 @@ func (s *TokenExchangerRegistryTestSuite) TestGetTokenExchanger() {
 func (s *TokenExchangerRegistryTestSuite) TestGetRegisteredStrategies() {
 	s.Run("returns sorted list of registered strategies", func() {
 		strategies := GetRegisteredStrategies()
-		s.Equal([]string{StrategyEntraOBO, StrategyKeycloakV1, StrategyRFC8693}, strategies)
+		s.Equal([]string{StrategyEntraOBO, StrategyKeycloakV1, StrategyKeycloakV2, StrategyRFC8693}, strategies)
 	})
 }
 

@@ -26,7 +26,13 @@ func ExchangeTokenInContext(
 	subjectToken := strings.TrimPrefix(auth, "Bearer ")
 
 	if tep, ok := provider.(TokenExchangeProvider); ok {
-		if targetConfig := tep.GetTokenExchangeConfig(target); targetConfig != nil {
+		if targetConfig := tep.GetTargetTokenExchangeConfig(target); targetConfig != nil {
+			if globalConfig != nil {
+				targetConfig.SetTokenURLIfEmpty(globalConfig.GetTokenURL())
+			}
+			if targetConfig.GetTokenURL() == "" {
+				return ctx, fmt.Errorf("token exchange failed for target %q: no token URL available from OIDC provider", target)
+			}
 			return exchangeToken(ctx, baseConfig, subjectToken, target, tep.GetTokenExchangeStrategy(), targetConfig)
 		}
 	}
