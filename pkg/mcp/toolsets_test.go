@@ -181,6 +181,52 @@ func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
 	})
 }
 
+func (s *ToolsetsSuite) TestKialiToolsFilteredWhenURLUnreachable() {
+	s.Run("Kiali tools are filtered out when configured URL fails /api/status probe", func() {
+		toolsetName := (&kiali.Toolset{}).GetName()
+		kubeConfig := s.Cfg.KubeConfig
+		cfg, err := configuration.ReadToml([]byte(`
+			toolsets = ["kiali"]
+			experimental_enable_target_compatibility_tool_filters = true
+			[toolset_configs.kiali]
+			url = "http://127.0.0.1:1"
+			insecure = true
+		`))
+		s.Require().NoError(err)
+		s.Cfg = cfg
+		s.Cfg.KubeConfig = kubeConfig
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Run("ListTools returns tools", func() {
+			s.NotNil(tools, "Expected tools from ListTools")
+			s.NoError(err, "Expected no error from ListTools")
+		})
+		s.Run("kiali tools are not present", func() {
+			for _, tool := range tools.Tools {
+				for _, kialiTool := range s.kialiToolNames(toolsetName) {
+					s.Require().NotEqual(kialiTool, tool.Name, "Expected %s to not be present when Kiali URL is unreachable", kialiTool)
+				}
+			}
+		})
+	})
+}
+
+func (s *ToolsetsSuite) kialiToolNames(toolsetName string) []string {
+	return []string{
+		toolsetName + "_get_logs",
+		toolsetName + "_get_mesh_status",
+		toolsetName + "_get_mesh_traffic_graph",
+		toolsetName + "_get_metrics",
+		toolsetName + "_get_pod_performance",
+		toolsetName + "_get_resource_details",
+		toolsetName + "_get_trace_details",
+		toolsetName + "_list_mesh_clusters",
+		toolsetName + "_list_traces",
+		toolsetName + "_manage_istio_config",
+		toolsetName + "_manage_istio_config_read",
+	}
+}
+
 func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 	s.Run("Default configuration toolsets in multi-cluster (with 11 clusters)", func() {
 		kubeconfig := s.Kubeconfig()
