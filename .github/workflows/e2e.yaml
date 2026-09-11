@@ -43,3 +43,26 @@ jobs:
       - name: Cleanup
         if: always()
         run: make e2e-teardown
+
+  e2e-multicluster:
+    name: Run Multicluster E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup multicluster e2e environment
+        run: make e2e-multicluster-setup
+
+      - name: Run e2e tests
+        run: make e2e-test
+
+      - name: Cleanup
+        if: always()
+        run: make e2e-multicluster-teardown

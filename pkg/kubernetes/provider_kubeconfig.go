@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
 
 // KubeConfigTargetParameterName is the parameter name used to specify
@@ -26,9 +29,23 @@ type kubeConfigClusterProvider struct {
 	managers            map[string]*Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
 	clusterStateWatcher *watcher.ClusterState
+
+	targetConfigsMu sync.Mutex
+	// targetConfigs caches per-target token exchange configs, keyed by context
+	// name. Entries are rebuilt when the cache key (derived from live config)
+	// changes; cleared wholesale on reset().
+	targetConfigs map[string]*cachedTargetConfig
 }
 
-var _ Provider = &kubeConfigClusterProvider{}
+type cachedTargetConfig struct {
+	key    tokenExchangeConfigCacheKey
+	config *tokenexchange.TargetTokenExchangeConfig
+}
+
+var (
+	_ Provider              = &kubeConfigClusterProvider{}
+	_ TokenExchangeProvider = &kubeConfigClusterProvider{}
+)
 
 func init() {
 	RegisterProvider(config.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
@@ -42,6 +59,16 @@ func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Prov
 	ret := &kubeConfigClusterProvider{cfg: cfg}
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
+	}
+	// Per-target exchange inherits strategy/credentials/endpoint from the global
+	// [token_exchange] block. Without it the exchange silently no-ops at runtime.
+	if pc := ret.providerConfig(cfg); pc != nil && len(pc.Targets) > 0 && cfg.GetTokenExchangeConfig() == nil {
+		names := make([]string, 0, len(pc.Targets))
+		for name := range pc.Targets {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return nil, fmt.Errorf("cluster_provider_configs.kubeconfig configures per-target token exchange for targets [%s] but no global [token_exchange] block is set", strings.Join(names, ", "))
 	}
 	ret.ProviderGVKFilter = NewProviderGVKFilter(ret)
 	return ret, nil
@@ -84,6 +111,15 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 			defaultContext = name
 		}
 	}
+
+	p.targetConfigsMu.Lock()
+	for _, cached := range p.targetConfigs {
+		if cached.config != nil {
+			cached.config.CloseIdleConnections()
+		}
+	}
+	p.targetConfigs = nil
+	p.targetConfigsMu.Unlock()
 
 	for _, old := range p.managers {
 		if old != nil {
@@ -262,4 +298,165 @@ func (p *kubeConfigClusterProvider) Close() {
 			w.Close()
 		}
 	}
+
+	p.targetConfigsMu.Lock()
+	for _, cached := range p.targetConfigs {
+		if cached.config != nil {
+			cached.config.CloseIdleConnections()
+		}
+	}
+	p.targetConfigs = nil
+	p.targetConfigsMu.Unlock()
+}
+
+func (p *kubeConfigClusterProvider) providerConfig(base *config.Config) *KubeConfigProviderConfig {
+	extCfg, ok := base.GetProviderConfig(config.ClusterProviderKubeConfig)
+	if !ok {
+		return nil
+	}
+	kcCfg, ok := extCfg.(*KubeConfigProviderConfig)
+	if !ok {
+		return nil
+	}
+	return kcCfg
+}
+
+func (p *kubeConfigClusterProvider) GetTokenExchangeStrategy(base *config.Config) string {
+	if cfg := p.providerConfig(base); cfg != nil {
+		return cfg.Strategy
+	}
+	return ""
+}
+
+func (p *kubeConfigClusterProvider) GetTargetTokenExchangeConfig(target string, base *config.Config, tokenURL string) (*tokenexchange.TargetTokenExchangeConfig, error) {
+	cfg := p.providerConfig(base)
+	if cfg == nil {
+		return nil, nil
+	}
+	targetCfg, ok := cfg.Targets[target]
+	if !ok {
+		return nil, nil
+	}
+
+	global := base.GetTokenExchangeConfig()
+	if global == nil {
+		// Target is configured but global [token_exchange] block is absent.
+		// This can happen via hot-reload: return an error rather than silently
+		// falling through to passthrough mode with the wrong-audience token.
+		return nil, fmt.Errorf("target %q has per-target token exchange configured but no global [token_exchange] block is set", target)
+	}
+
+	key := computeTargetConfigCacheKey(cfg.Strategy, base, global, targetCfg, tokenURL)
+
+	p.targetConfigsMu.Lock()
+	defer p.targetConfigsMu.Unlock()
+
+	if cached, ok := p.targetConfigs[target]; ok {
+		if cached.key == key {
+			return cached.config, nil
+		}
+		// Config changed (e.g. SIGHUP rotated credentials or OIDC endpoint rotated)
+		// — close idle connections so they aren't reused with stale credentials.
+		if cached.config != nil {
+			cached.config.CloseIdleConnections()
+		}
+	}
+
+	result := &tokenexchange.TargetTokenExchangeConfig{
+		TokenURL:           tokenURL,
+		Audience:           global.Audience.Get(),
+		SubjectTokenType:   global.SubjectTokenType.Get(),
+		RequestedTokenType: global.RequestedTokenType.Get(),
+		Scopes:             append([]string(nil), global.Scopes.Get()...),
+		CAFile:             base.CertificateAuthority.Get(),
+		TLSMinVersion:      base.TLSMinVersion.Get(),
+		TLSCipherSuites:    append([]string(nil), base.TLSCipherSuites.Get()...),
+	}
+	applyClientAuth(result, global.GetClientAuth())
+
+	result.Audience = targetCfg.Audience
+	result.ClientID, result.ClientSecret = resolveTargetClientCreds(
+		result.AuthStyle, result.ClientID, result.ClientSecret, targetCfg.ClientId, targetCfg.ClientSecret)
+	if len(targetCfg.Scopes) > 0 {
+		result.Scopes = append([]string(nil), targetCfg.Scopes...)
+	}
+	if targetCfg.SubjectIssuer != "" {
+		result.SubjectIssuer = targetCfg.SubjectIssuer
+	}
+
+	if p.targetConfigs == nil {
+		p.targetConfigs = make(map[string]*cachedTargetConfig)
+	}
+	p.targetConfigs[target] = &cachedTargetConfig{key: key, config: result}
+	return result, nil
+}
+
+// resolveTargetClientCreds overlays per-target client credentials on the global
+// ones. Styles that authenticate with a signed assertion or a federated token
+// file (assertion, federated) do not use a client_secret, so a per-target
+// client_id overrides on its own. Secret-based styles require both client_id and
+// client_secret to be set together, to avoid pairing a per-target id with a
+// mismatched global secret.
+func resolveTargetClientCreds(authStyle, globalID, globalSecret, targetID, targetSecret string) (id, secret string) {
+	id, secret = globalID, globalSecret
+	switch authStyle {
+	case tokenexchange.AuthStyleAssertion, tokenexchange.AuthStyleFederated:
+		if targetID != "" {
+			id = targetID
+		}
+	default:
+		if targetID != "" && targetSecret != "" {
+			id, secret = targetID, targetSecret
+		}
+	}
+	return id, secret
+}
+
+func computeTargetConfigCacheKey(
+	strategy string,
+	base *config.Config,
+	global *config.TokenExchangeConfig,
+	targetCfg KubeConfigTargetConfig,
+	tokenURL string,
+) tokenExchangeConfigCacheKey {
+	key := tokenExchangeConfigCacheKey{
+		TokenURL:           tokenURL,
+		Strategy:           strategy,
+		Audience:           targetCfg.Audience,
+		SubjectTokenType:   global.SubjectTokenType.Get(),
+		RequestedTokenType: global.RequestedTokenType.Get(),
+		CAFile:             base.CertificateAuthority.Get(),
+		TLSMinVersion:      base.TLSMinVersion.Get(),
+		TLSCipherSuites:    strings.Join(base.TLSCipherSuites.Get(), "\x00"),
+		SubjectIssuer:      targetCfg.SubjectIssuer,
+	}
+
+	scopes := global.Scopes.Get()
+	if len(targetCfg.Scopes) > 0 {
+		scopes = targetCfg.Scopes
+	}
+	key.Scopes = strings.Join(scopes, "\x00")
+
+	authStyle := ""
+	if auth := global.GetClientAuth(); auth != nil {
+		key.ClientID = auth.ClientID.Get()
+		key.ClientSecret = auth.ClientSecret.Get()
+		key.AuthStyle = auth.Method.Get()
+		key.ClientCertFile = auth.CertificateFile.Get()
+		key.ClientKeyFile = auth.PrivateKeyFile.Get()
+		key.FederatedTokenFile = auth.TokenFile.Get()
+
+		switch config.TokenExchangeClientAuthMethod(auth.Method.Get()) {
+		case config.TokenExchangeClientAuthMethodPrivateKey:
+			authStyle = tokenexchange.AuthStyleAssertion
+		case config.TokenExchangeClientAuthMethodJWTFile:
+			authStyle = tokenexchange.AuthStyleFederated
+		}
+	}
+	// Apply the same per-target credential override as the built config, so the
+	// key changes exactly when the resulting ClientID/ClientSecret would.
+	key.ClientID, key.ClientSecret = resolveTargetClientCreds(
+		authStyle, key.ClientID, key.ClientSecret, targetCfg.ClientId, targetCfg.ClientSecret)
+
+	return key
 }

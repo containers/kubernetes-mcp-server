@@ -148,10 +148,10 @@ type fakeTokenExchangeProvider struct {
 	strategy       string
 }
 
-func (f fakeTokenExchangeProvider) GetTokenExchangeConfig(string) *tokenexchange.TargetTokenExchangeConfig {
-	return f.exchangeConfig
+func (f fakeTokenExchangeProvider) GetTargetTokenExchangeConfig(_ string, _ *config.Config, _ string) (*tokenexchange.TargetTokenExchangeConfig, error) {
+	return f.exchangeConfig, nil
 }
-func (f fakeTokenExchangeProvider) GetTokenExchangeStrategy() string { return f.strategy }
+func (f fakeTokenExchangeProvider) GetTokenExchangeStrategy(*config.Config) string { return f.strategy }
 func (f fakeTokenExchangeProvider) AnyTargetHasGVKs(context.Context, []schema.GroupVersionKind) bool {
 	return true
 }

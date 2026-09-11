@@ -142,6 +142,7 @@ type tokenExchangeConfigCacheKey struct {
 	CAFile             string
 	TLSMinVersion      string
 	TLSCipherSuites    string
+	SubjectIssuer      string
 	RequireTLS         bool
 }
 
