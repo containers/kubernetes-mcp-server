@@ -7,6 +7,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/redact"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
@@ -135,6 +136,9 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	default:
 		return api.NewToolCallResult("", fmt.Errorf("invalid action '%s': must be one of 'start', 'stop', 'restart', 'pause', 'unpause'", action)), nil
 	}
+
+	// Scrub inline cloud-init payloads before the VM object enters LLM context.
+	redact.VMCloudInitFields(vm)
 
 	// Format the output
 	marshalledYaml, err := output.MarshalYaml([]*unstructured.Unstructured{vm})

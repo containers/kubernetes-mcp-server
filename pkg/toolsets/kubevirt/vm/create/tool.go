@@ -11,6 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/redact"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
 )
@@ -178,6 +179,11 @@ func create(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, vmYaml)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create VirtualMachine: %w", err)), nil
+	}
+
+	// Scrub inline cloud-init payloads before the VM object enters LLM context.
+	for _, r := range resources {
+		redact.VMCloudInitFields(r)
 	}
 
 	// Format the output
