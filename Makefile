@@ -115,11 +115,20 @@ local-env-setup: ## Setup complete local development environment with Minikube c
 	@echo "Configuration file generated:"
 	@echo "  _output/config.toml"
 	@echo ""
+	@echo "First start the Keycloak port-forward in another terminal:"
+	@echo "  make keycloak-port-forward"
+	@echo ""
 	@echo "Run the MCP server with:"
 	@echo "  ./$(BINARY_NAME) --port 8008 --config _output/config.toml"
 	@echo ""
-	@echo "Or run with MCP inspector:"
-	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --config _output/config.toml"
+	@echo "Start MCP Inspector in another terminal:"
+	@echo '  NODE_EXTRA_CA_CERTS="$$(pwd)/_output/cert-manager-ca/ca.crt" npx @modelcontextprotocol/inspector@latest'
+	@echo ""
+	@echo "Connect using Streamable HTTP:"
+	@echo "  URL: http://localhost:8008/mcp"
+	@echo "  OAuth client ID: mcp-client (no client secret)"
+	@echo "  OAuth scopes: openid mcp-server"
+	@echo "  Disable Request refresh token"
 
 .PHONY: local-env-setup-kubevirt
 local-env-setup-kubevirt: ## Setup complete local development environment with Minikube cluster and KubeVirt
@@ -215,6 +224,7 @@ local-env-setup-kuadrant: ## Setup complete local development environment with M
 
 .PHONY: local-env-teardown
 local-env-teardown: ## Tear down the local Minikube cluster
+	$(MAKE) keycloak-remove-host-entry
 	$(MAKE) minikube-delete-cluster
 
 .PHONY: print-git-tag-version

@@ -406,7 +406,7 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 		s.StaticConfig.RequireOAuth = true
 		s.StartServer()
 
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource", s.StaticConfig.Port))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/.well-known/oauth-protected-resource/mcp", s.StaticConfig.Port))
 		s.Require().NoError(err)
 		s.T().Cleanup(func() { _ = resp.Body.Close() })
 
@@ -415,9 +415,8 @@ func (s *WellknownSuite) TestMetadataGenerationFallback() {
 		body, err := io.ReadAll(resp.Body)
 		s.Require().NoError(err)
 
-		// Verify RFC 9728 format - MCP server is the authorization_server from client's perspective
-		s.Contains(string(body), `"authorization_servers":`, "Expected authorization_servers array per RFC 9728")
-		s.Contains(string(body), fmt.Sprintf("127.0.0.1:%s", s.StaticConfig.Port), "Expected authorization_servers to contain MCP server URL")
+		s.Contains(string(body), `"authorization_servers":["https://login.microsoftonline.com/tenant/v2.0"]`, "Expected authorization_servers to contain the OIDC issuer")
+		s.Contains(string(body), fmt.Sprintf(`"resource":"http://127.0.0.1:%s/mcp"`, s.StaticConfig.Port), "Expected resource to contain the MCP server URL")
 		s.Contains(string(body), `"scopes_supported":`, "Expected scopes_supported from openid-configuration")
 	})
 
