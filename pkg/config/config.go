@@ -38,20 +38,13 @@ type ToolOverride struct {
 
 // TokenExchangeConfig is the TOML configuration for global token exchange.
 type TokenExchangeConfig struct {
-	Strategy           string   `toml:"strategy,omitempty"`
-	Audience           string   `toml:"audience,omitempty"`
-	Scopes             []string `toml:"scopes,omitempty"`
-	SubjectTokenType   string   `toml:"subject_token_type,omitempty"`
-	RequestedTokenType string   `toml:"requested_token_type,omitempty"`
-	// TokenURL is the explicit token-exchange endpoint. When set, it takes
-	// precedence over the token endpoint discovered from the OIDC provider at
-	// authorization_url. This decouples the trust boundary for user-token
-	// validation (authorization_url) from the trust boundary for delegated-token
-	// issuance (the STS/exchange endpoint), which is required for cross-realm
-	// deployments and for using token exchange together with
-	// skip_jwt_verification=true.
-	TokenURL   string                   `toml:"token_url,omitempty"`
-	ClientAuth *TokenExchangeClientAuth `toml:"client_auth,omitempty"`
+	Strategy           string                   `toml:"strategy,omitempty"`
+	Audience           string                   `toml:"audience,omitempty"`
+	Scopes             []string                 `toml:"scopes,omitempty"`
+	SubjectTokenType   string                   `toml:"subject_token_type,omitempty"`
+	RequestedTokenType string                   `toml:"requested_token_type,omitempty"`
+	TokenURL           string                   `toml:"token_url,omitempty"`
+	ClientAuth         *TokenExchangeClientAuth `toml:"client_auth,omitempty"`
 }
 
 func (c *TokenExchangeConfig) GetStrategy() string           { return c.Strategy }

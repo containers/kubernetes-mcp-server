@@ -455,20 +455,7 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	s.stopRunningServer()
 }
 
-// TestAuthorizationTokenExchangeURLDecouplesIssuerFromGateway proves the trust
-// boundary actually splits on the wire when token_exchange.token_url points at
-// a different host than authorization_url. The user's JWT must be validated
-// against the issuer (JWKS fetched from authorization_url), but the exchange
-// POST must hit the explicitly-configured token_url — not the issuer's
-// discovered token endpoint.
-//
-// Without token_exchange.token_url support this configuration is impossible:
-// the runtime only knows about the issuer's discovered token endpoint, so
-// validation and exchange both end up at the same host.
 func (s *AuthorizationSuite) TestAuthorizationTokenExchangeURLDecouplesIssuerFromGateway() {
-	// Two independent OIDC test servers: one is the IDP that signs and validates
-	// the user's bearer token, the other is the standalone STS gateway that
-	// mints the exchanged backend token.
 	idp := NewOidcTestServer(s.T())
 	s.T().Cleanup(idp.Close)
 	stsGateway := NewOidcTestServer(s.T())
@@ -484,9 +471,6 @@ func (s *AuthorizationSuite) TestAuthorizationTokenExchangeURLDecouplesIssuerFro
 	validBackendToken := oidctest.SignIDToken(stsGateway.PrivateKey, "test-oidc-key-id", oidc.RS256,
 		fmt.Sprintf(rawClaims, "backend-audience"))
 
-	// Each server tracks whether its /token endpoint was hit. Only the gateway
-	// should see exchange traffic; if the IDP receives an exchange request, the
-	// decoupling failed.
 	var idpTokenHits atomic.Int32
 	idp.TokenEndpointHandler = func(w http.ResponseWriter, r *http.Request) {
 		idpTokenHits.Add(1)
@@ -500,7 +484,6 @@ func (s *AuthorizationSuite) TestAuthorizationTokenExchangeURLDecouplesIssuerFro
 		_, _ = fmt.Fprintf(w, `{"access_token":"%s","token_type":"Bearer","expires_in":253402297199}`, validBackendToken)
 	}
 
-	// Wire validation against the IDP, exchange against the gateway.
 	s.OidcProvider = idp.Provider
 	s.StaticConfig.AuthorizationURL = idp.URL
 	s.StaticConfig.OAuthAudience = "mcp-server"
@@ -516,7 +499,6 @@ func (s *AuthorizationSuite) TestAuthorizationTokenExchangeURLDecouplesIssuerFro
 		},
 	}
 
-	// Capture the Authorization header the MCP server sends to the cluster.
 	s.MockServer.ResetHandlers()
 	var backendAuth atomic.Value
 	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

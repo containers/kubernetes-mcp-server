@@ -97,12 +97,6 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Cont
 	})
 }
 
-// resolveTokenExchangeURL returns the explicit token_exchange.token_url if
-// configured; otherwise falls back to the OIDC provider's discovered token
-// endpoint. The explicit URL decouples the token-exchange endpoint from the
-// user-token issuer (authorization_url), which is required for cross-realm
-// RFC 8693 deployments and enables token exchange when
-// skip_jwt_verification=true (no OIDC provider).
 func resolveTokenExchangeURL(global api.TokenExchangeConfig, oidcProvider *oidc.Provider) string {
 	if explicit := global.GetTokenURL(); explicit != "" {
 		return explicit
