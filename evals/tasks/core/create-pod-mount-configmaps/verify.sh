@@ -46,16 +46,23 @@ if [[ "$POD_IMAGE" != "quay.io/nginx/nginx-unprivileged:alpine" ]]; then
     exit 1
 fi
 
-# Verify the values are accessible in the pod
+# Verify the values are accessible in the pod.
+# The prompt never specifies a container name, so resolve the actual first
+# container name instead of letting kubectl pick a default -- if the pod ends
+# up with a kubectl.kubernetes.io/default-container annotation that doesn't
+# match the container name the model chose, a bare `kubectl exec pod1` fails
+# with "container not found" even though there's exactly one container.
+CONTAINER_NAME=$(kubectl get pod pod1 -n $NAMESPACE -o jsonpath='{.spec.containers[0].name}')
+
 echo "Verifying environment variable in pod..."
-ENV_TEST=$(kubectl exec pod1 -n $NAMESPACE -- sh -c 'echo $COLOR')
+ENV_TEST=$(kubectl exec pod1 -n $NAMESPACE -c "$CONTAINER_NAME" -- sh -c 'echo $COLOR')
 if [[ "$ENV_TEST" != "blue" ]]; then
     echo "Environment variable 'COLOR' is not accessible in the pod or has incorrect value: '$ENV_TEST'"
     exit 1
 fi
 
 echo "Verifying volume mount in pod..."
-VOLUME_TEST=$(kubectl exec pod1 -n $NAMESPACE -- cat /etc/sizes/size)
+VOLUME_TEST=$(kubectl exec pod1 -n $NAMESPACE -c "$CONTAINER_NAME" -- cat /etc/sizes/size)
 if [[ "$VOLUME_TEST" != "medium" ]]; then
     echo "Volume mount is not accessible in the pod or file has incorrect content: '$VOLUME_TEST'"
     exit 1
