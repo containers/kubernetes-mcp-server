@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -61,6 +62,25 @@ func cleanupMockNetObservPlugin(t *testing.T, kubeconfig string) {
 	_ = cmd.Run() // Best effort cleanup
 }
 
+// checkNetObservOperatorDeployed checks if NetObserv operator is deployed and returns the plugin namespace
+func checkNetObservOperatorDeployed(ctx context.Context, t *testing.T, clientset kubernetes.Interface) (string, bool) {
+	t.Helper()
+
+	// Check common namespaces where NetObserv plugin runs
+	namespaces := []string{"netobserv", "openshift-netobserv"}
+
+	for _, ns := range namespaces {
+		svc, err := clientset.CoreV1().Services(ns).Get(ctx, "netobserv-plugin", metav1.GetOptions{})
+		if err == nil && svc != nil {
+			t.Logf("Found NetObserv plugin service in namespace: %s", ns)
+			return ns, true
+		}
+	}
+
+	t.Logf("NetObserv plugin service not found in namespaces: %v", namespaces)
+	return "", false
+}
+
 // TestNetObservMock tests NetObserv MCP tools against mock plugin (no operator required)
 func TestNetObservMock(t *testing.T) {
 	f := features.New("netobserv-mock").
@@ -104,7 +124,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 		Assess("list_flows returns JSON with expected fields", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			assertNetobservListFlows(ctx, t, s.mcpClient.Client, map[string]any{
+			assertNetobservListFlows(t, s.mcpClient, map[string]any{
 				"timeRange": makeTimeRange(5),
 				"namespace": "default",
 			})
@@ -114,7 +134,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 		Assess("get_flow_metrics returns success status", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			assertNetobservGetMetrics(ctx, t, s.mcpClient.Client, map[string]any{
+			assertNetobservGetMetrics(t, s.mcpClient, map[string]any{
 				"timeRange":   makeTimeRange(5),
 				"aggregateBy": "namespace",
 			})
@@ -124,7 +144,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 		Assess("export_flows returns CSV format", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			assertNetobservExportFlows(ctx, t, s.mcpClient.Client, map[string]any{
+			assertNetobservExportFlows(t, s.mcpClient, map[string]any{
 				"timeRange": makeTimeRange(5),
 				"namespace": "default",
 			})
@@ -135,7 +155,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 		Assess("filters parameter narrows results", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			assertNetobservListFlows(ctx, t, s.mcpClient.Client, map[string]any{
+			assertNetobservListFlows(t, s.mcpClient, map[string]any{
 				"timeRange": makeTimeRange(5),
 				"filters":   makeFilters("SrcK8S_Namespace=default"),
 			})
@@ -145,7 +165,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 		Assess("invalid filter returns error", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			netobservToolCallExpectError(ctx, t, s.mcpClient.Client, "netobserv_list_flows", map[string]any{
+			assertNetobservToolCallError(t, s.mcpClient, "netobserv_list_flows", map[string]any{
 				"timeRange": makeTimeRange(5),
 				"filters":   makeFilters("InvalidFilter"),
 			})
@@ -159,19 +179,28 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 
 // TestNetObservReal tests NetObserv MCP tools against real plugin (requires operator)
 func TestNetObservReal(t *testing.T) {
-	t.Skip("Real NetObserv plugin tests require operator deployment")
-
-	// TODO: Check if NetObserv operator is deployed
-	// If not, skip with message: "NetObserv operator not found, skipping real plugin tests"
-
 	f := features.New("netobserv-real").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			// Use real NetObserv plugin service
-			dep := deployServer(ctx, t, cfg, "netobserv-real",
-				withConfig(`
+			kubeconfig := cfg.KubeconfigFile()
+			clientset, err := clientsetFromKubeconfig(kubeconfig)
+			require.NoError(t, err, "create clientset")
+
+			// Check if NetObserv operator is deployed
+			pluginNamespace, found := checkNetObservOperatorDeployed(ctx, t, clientset)
+			if !found {
+				t.Skip("NetObserv operator not found - skipping real plugin tests. Deploy the operator and FlowCollector to run these tests.")
+			}
+
+			t.Logf("Using real NetObserv plugin in namespace: %s", pluginNamespace)
+
+			// Deploy MCP server configured to use real plugin service
+			configTOML := fmt.Sprintf(`
 [toolsets.netobserv]
-# Will auto-detect OpenShift and use in-cluster service
-`),
+url = "http://netobserv-plugin.%s.svc.cluster.local:9001"
+`, pluginNamespace)
+
+			dep := deployServer(ctx, t, cfg, "netobserv-real",
+				withConfig(configTOML),
 				withValues(viewClusterRoleBindingValues()),
 			)
 			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
@@ -182,7 +211,7 @@ func TestNetObservReal(t *testing.T) {
 		Assess("list_flows returns actual flow data", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			assertNetobservListFlows(ctx, t, s.mcpClient.Client, map[string]any{
+			assertNetobservListFlows(t, s.mcpClient, map[string]any{
 				"timeRange": makeTimeRange(15),
 			})
 
@@ -191,7 +220,7 @@ func TestNetObservReal(t *testing.T) {
 		Assess("get_flow_metrics returns actual metrics", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			assertNetobservGetMetrics(ctx, t, s.mcpClient.Client, map[string]any{
+			assertNetobservGetMetrics(t, s.mcpClient, map[string]any{
 				"timeRange":   makeTimeRange(15),
 				"aggregateBy": "namespace",
 			})
@@ -202,7 +231,7 @@ func TestNetObservReal(t *testing.T) {
 		Assess("DNS enrichment is available in flows", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			contents, err := netobservToolCall(ctx, t, s.mcpClient.Client, "netobserv_list_flows", map[string]any{
+			result, err := s.mcpClient.CallTool("netobserv_list_flows", map[string]any{
 				"timeRange": makeTimeRange(30),
 				"filters":   makeFilters("DnsFlagsResponseCode!="),
 			})
@@ -210,7 +239,7 @@ func TestNetObservReal(t *testing.T) {
 			// This may return empty if no DNS flows exist, which is okay
 			// We're just checking the filter works without error
 			require.NoError(t, err, "DNS filter should not error")
-			require.NotNil(t, contents, "should return content")
+			require.NotNil(t, result, "should return result")
 
 			return ctx
 		}).

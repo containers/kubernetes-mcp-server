@@ -3,85 +3,74 @@
 package e2e
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
-// netobservToolCall calls a NetObserv MCP tool and returns the parsed response
-func netobservToolCall(ctx context.Context, t *testing.T, client *mcp.Client, toolName string, args map[string]any) ([]mcp.TextContent, error) {
-	t.Helper()
-
-	result, err := client.CallTool(ctx, toolName, args)
-	if err != nil {
-		return nil, err
-	}
-
-	var textContents []mcp.TextContent
-	for _, content := range result.Content {
-		if tc, ok := content.(mcp.TextContent); ok {
-			textContents = append(textContents, tc)
-		}
-	}
-
-	return textContents, nil
-}
-
 // assertNetobservListFlows calls netobserv_list_flows and validates response structure
-func assertNetobservListFlows(ctx context.Context, t *testing.T, client *mcp.Client, args map[string]any) {
+func assertNetobservListFlows(t *testing.T, mcpClient *test.McpClient, args map[string]any) {
 	t.Helper()
 
-	contents, err := netobservToolCall(ctx, t, client, "netobserv_list_flows", args)
+	result, err := mcpClient.CallTool("netobserv_list_flows", args)
 	require.NoError(t, err, "list_flows should succeed")
-	require.NotEmpty(t, contents, "should return content")
+	require.False(t, result.IsError, "list_flows should not return error")
+	require.NotEmpty(t, result.Content, "should return content")
 
 	// Parse JSON response
+	textContent := result.Content[0].(mcp.TextContent)
 	var flows map[string]interface{}
-	err = json.Unmarshal([]byte(contents[0].Text), &flows)
+	err = json.Unmarshal([]byte(textContent.Text), &flows)
 	require.NoError(t, err, "response should be valid JSON")
 	require.Contains(t, flows, "result", "response should have 'result' field")
 }
 
 // assertNetobservGetMetrics calls netobserv_get_flow_metrics and validates response structure
-func assertNetobservGetMetrics(ctx context.Context, t *testing.T, client *mcp.Client, args map[string]any) {
+func assertNetobservGetMetrics(t *testing.T, mcpClient *test.McpClient, args map[string]any) {
 	t.Helper()
 
-	contents, err := netobservToolCall(ctx, t, client, "netobserv_get_flow_metrics", args)
+	result, err := mcpClient.CallTool("netobserv_get_flow_metrics", args)
 	require.NoError(t, err, "get_flow_metrics should succeed")
-	require.NotEmpty(t, contents, "should return content")
+	require.False(t, result.IsError, "get_flow_metrics should not return error")
+	require.NotEmpty(t, result.Content, "should return content")
 
 	// Parse JSON response
+	textContent := result.Content[0].(mcp.TextContent)
 	var metrics map[string]interface{}
-	err = json.Unmarshal([]byte(contents[0].Text), &metrics)
+	err = json.Unmarshal([]byte(textContent.Text), &metrics)
 	require.NoError(t, err, "response should be valid JSON")
 	require.Contains(t, metrics, "status", "response should have 'status' field")
 	require.Equal(t, "success", metrics["status"], "status should be 'success'")
 }
 
 // assertNetobservExportFlows calls netobserv_export_flows and validates CSV response
-func assertNetobservExportFlows(ctx context.Context, t *testing.T, client *mcp.Client, args map[string]any) {
+func assertNetobservExportFlows(t *testing.T, mcpClient *test.McpClient, args map[string]any) {
 	t.Helper()
 
-	contents, err := netobservToolCall(ctx, t, client, "netobserv_export_flows", args)
+	result, err := mcpClient.CallTool("netobserv_export_flows", args)
 	require.NoError(t, err, "export_flows should succeed")
-	require.NotEmpty(t, contents, "should return content")
+	require.False(t, result.IsError, "export_flows should not return error")
+	require.NotEmpty(t, result.Content, "should return content")
 
-	csvData := contents[0].Text
+	textContent := result.Content[0].(mcp.TextContent)
+	csvData := textContent.Text
 	require.Contains(t, csvData, "TimeFlowStartMs", "CSV should have expected headers")
 	require.True(t, strings.Contains(csvData, "\n"), "CSV should have multiple lines")
 }
 
-// netobservToolCallExpectError calls a tool and expects an error
-func netobservToolCallExpectError(ctx context.Context, t *testing.T, client *mcp.Client, toolName string, args map[string]any) {
+// assertNetobservToolCallError calls a tool and expects an error
+func assertNetobservToolCallError(t *testing.T, mcpClient *test.McpClient, toolName string, args map[string]any) {
 	t.Helper()
 
-	_, err := client.CallTool(ctx, toolName, args)
-	require.Error(t, err, "tool call should fail")
+	result, err := mcpClient.CallTool(toolName, args)
+	// Either transport error OR tool error is acceptable
+	if err == nil {
+		require.True(t, result.IsError, "tool call should return error")
+	}
 }
 
 // makeTimeRange creates a time range value for the last N minutes (in seconds)
