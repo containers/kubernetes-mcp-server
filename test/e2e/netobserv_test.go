@@ -90,6 +90,27 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 	operatorNamespace := "openshift-netobserv-operator"
 	pluginNamespace := "netobserv"
 
+	// Check if operator is already deployed
+	if checkNetObservOperatorStatus(ctx, t, kubeconfig, clientset, operatorNamespace) {
+		t.Logf("NetObserv operator already deployed and ready, skipping operator deployment")
+
+		// Still need to ensure FlowCollector exists
+		t.Logf("Checking FlowCollector...")
+		cmd := exec.CommandContext(ctx, "kubectl", "get", "flowcollector", "cluster", "--kubeconfig", kubeconfig)
+		if cmd.Run() != nil {
+			// FlowCollector doesn't exist, create it
+			t.Logf("Creating FlowCollector")
+			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
+			output, err := cmd.CombinedOutput()
+			require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
+		} else {
+			t.Logf("FlowCollector already exists")
+		}
+
+		// Wait for console plugin to be ready and return
+		return waitForConsolePlugin(ctx, t, clientset, pluginNamespace)
+	}
+
 	// Create CatalogSource (y-stream Konflux catalog)
 	t.Logf("Creating CatalogSource: netobserv-konflux-fbc")
 	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig)
@@ -179,8 +200,54 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 	require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
 
 	// Wait for console plugin service to be ready
+	return waitForConsolePlugin(ctx, t, clientset, pluginNamespace)
+}
+
+// checkNetObservOperatorStatus checks if NetObserv operator is already deployed and ready
+func checkNetObservOperatorStatus(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface, operatorNamespace string) bool {
+	t.Helper()
+
+	// Check if operator namespace exists
+	_, err := clientset.CoreV1().Namespaces().Get(ctx, operatorNamespace, metav1.GetOptions{})
+	if err != nil {
+		t.Logf("Operator namespace %s not found, operator will be deployed", operatorNamespace)
+		return false
+	}
+
+	// Check if operator pod is running
+	pods, err := clientset.CoreV1().Pods(operatorNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app=netobserv-operator",
+	})
+	if err != nil || len(pods.Items) == 0 {
+		t.Logf("Operator pod not found, operator will be deployed")
+		return false
+	}
+
+	// Check if all operator pods are running
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != "Running" {
+			t.Logf("Operator pod %s not running (phase: %s), operator will be deployed", pod.Name, pod.Status.Phase)
+			return false
+		}
+	}
+
+	// Check if FlowCollector CRD exists
+	cmd := exec.CommandContext(ctx, "kubectl", "get", "crd", "flowcollectors.flows.netobserv.io", "--kubeconfig", kubeconfig)
+	if cmd.Run() != nil {
+		t.Logf("FlowCollector CRD not found, operator will be deployed")
+		return false
+	}
+
+	t.Logf("NetObserv operator is already deployed and ready")
+	return true
+}
+
+// waitForConsolePlugin waits for the NetObserv console plugin to be ready
+func waitForConsolePlugin(ctx context.Context, t *testing.T, clientset kubernetes.Interface, pluginNamespace string) string {
+	t.Helper()
+
 	t.Logf("Waiting for console plugin service to be ready...")
-	deadline = time.Now().Add(10 * time.Minute)
+	deadline := time.Now().Add(10 * time.Minute)
 	for time.Now().Before(deadline) {
 		svc, err := clientset.CoreV1().Services(pluginNamespace).Get(ctx, "netobserv-plugin", metav1.GetOptions{})
 		if err == nil && svc != nil {
