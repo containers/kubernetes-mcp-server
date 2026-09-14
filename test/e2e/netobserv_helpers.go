@@ -22,7 +22,7 @@ func assertNetobservListFlows(t *testing.T, mcpClient *test.McpClient, args map[
 	require.NotEmpty(t, result.Content, "should return content")
 
 	// Parse JSON response
-	textContent := result.Content[0].(mcp.TextContent)
+	textContent := result.Content[0].(*mcp.TextContent)
 	var flows map[string]interface{}
 	err = json.Unmarshal([]byte(textContent.Text), &flows)
 	require.NoError(t, err, "response should be valid JSON")
@@ -39,7 +39,7 @@ func assertNetobservGetMetrics(t *testing.T, mcpClient *test.McpClient, args map
 	require.NotEmpty(t, result.Content, "should return content")
 
 	// Parse JSON response
-	textContent := result.Content[0].(mcp.TextContent)
+	textContent := result.Content[0].(*mcp.TextContent)
 	var metrics map[string]interface{}
 	err = json.Unmarshal([]byte(textContent.Text), &metrics)
 	require.NoError(t, err, "response should be valid JSON")
@@ -56,7 +56,7 @@ func assertNetobservExportFlows(t *testing.T, mcpClient *test.McpClient, args ma
 	require.False(t, result.IsError, "export_flows should not return error")
 	require.NotEmpty(t, result.Content, "should return content")
 
-	textContent := result.Content[0].(mcp.TextContent)
+	textContent := result.Content[0].(*mcp.TextContent)
 	csvData := textContent.Text
 	require.Contains(t, csvData, "TimeFlowStartMs", "CSV should have expected headers")
 	require.True(t, strings.Contains(csvData, "\n"), "CSV should have multiple lines")

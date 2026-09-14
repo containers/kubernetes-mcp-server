@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -79,6 +80,30 @@ func checkNetObservOperatorDeployed(ctx context.Context, t *testing.T, clientset
 
 	t.Logf("NetObserv plugin service not found in namespaces: %v", namespaces)
 	return "", false
+}
+
+// deployNetObservOperator deploys NetObserv operator and FlowCollector
+func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface) string {
+	t.Helper()
+
+	// TODO: Implement full operator deployment
+	// For now, this is a placeholder that would:
+	// 1. Deploy NetObserv operator (via OLM or manifests)
+	// 2. Wait for operator to be ready
+	// 3. Deploy FlowCollector CR
+	// 4. Wait for console plugin service to be ready
+	// 5. Return the namespace
+
+	t.Skip("Operator deployment not yet implemented - use NETOBSERV_OPERATOR=use-existing with pre-deployed operator")
+	return "netobserv"
+}
+
+// cleanupNetObservOperator removes NetObserv operator and FlowCollector
+func cleanupNetObservOperator(t *testing.T, kubeconfig string) {
+	t.Helper()
+
+	// TODO: Implement cleanup
+	// Best effort cleanup of operator and FlowCollector
 }
 
 // TestNetObservMock tests NetObserv MCP tools against mock plugin (no operator required)
@@ -178,20 +203,41 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 }
 
 // TestNetObservReal tests NetObserv MCP tools against real plugin (requires operator)
+// Set NETOBSERV_OPERATOR=deploy to deploy operator, or NETOBSERV_OPERATOR=use-existing to use pre-deployed operator
 func TestNetObservReal(t *testing.T) {
+	operatorMode := os.Getenv("NETOBSERV_OPERATOR")
+	if operatorMode == "" {
+		t.Skip("Skipping real plugin tests - set NETOBSERV_OPERATOR=deploy or NETOBSERV_OPERATOR=use-existing to run")
+	}
+
 	f := features.New("netobserv-real").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			kubeconfig := cfg.KubeconfigFile()
 			clientset, err := clientsetFromKubeconfig(kubeconfig)
 			require.NoError(t, err, "create clientset")
 
-			// Check if NetObserv operator is deployed
-			pluginNamespace, found := checkNetObservOperatorDeployed(ctx, t, clientset)
-			if !found {
-				t.Skip("NetObserv operator not found - skipping real plugin tests. Deploy the operator and FlowCollector to run these tests.")
-			}
+			var pluginNamespace string
 
-			t.Logf("Using real NetObserv plugin in namespace: %s", pluginNamespace)
+			switch operatorMode {
+			case "deploy":
+				t.Logf("NETOBSERV_OPERATOR=deploy - deploying NetObserv operator and FlowCollector")
+				pluginNamespace = deployNetObservOperator(ctx, t, kubeconfig, clientset)
+				t.Cleanup(func() {
+					cleanupNetObservOperator(t, kubeconfig)
+				})
+
+			case "use-existing":
+				t.Logf("NETOBSERV_OPERATOR=use-existing - checking for existing operator")
+				var found bool
+				pluginNamespace, found = checkNetObservOperatorDeployed(ctx, t, clientset)
+				if !found {
+					t.Skip("NetObserv operator not found - deploy it first or use NETOBSERV_OPERATOR=deploy")
+				}
+				t.Logf("Using existing NetObserv plugin in namespace: %s", pluginNamespace)
+
+			default:
+				t.Skipf("Invalid NETOBSERV_OPERATOR value: %s (use 'deploy' or 'use-existing')", operatorMode)
+			}
 
 			// Deploy MCP server configured to use real plugin service
 			configTOML := fmt.Sprintf(`
