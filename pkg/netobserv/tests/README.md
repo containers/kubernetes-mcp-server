@@ -47,7 +47,7 @@ Contract tests run in kubernetes-mcp-server CI to catch plugin API regressions.
 - `/api/loki/flow/records` - List flows endpoint registration
 - `/api/flow/metrics` - Get metrics endpoint registration
 - `/api/loki/export` - Export flows endpoint registration
-- `/healthz` - Health check endpoint
+- `/api/status` - Plugin status endpoint
 
 ✅ **Response Validation:**
 - HTTP status codes (200, 400, 403, 404)

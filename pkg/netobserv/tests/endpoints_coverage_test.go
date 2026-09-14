@@ -12,7 +12,7 @@ func TestEndpointsCoverage(t *testing.T) {
 		"/api/loki/flow/records",
 		"/api/flow/metrics",
 		"/api/loki/export",
-		"/healthz",
+		"/api/status",
 	}
 
 	// This test serves as documentation and catches missing tests

@@ -121,13 +121,23 @@ func (s *ContractTestSuite) TestExportFlowsEndpoint() {
 	}
 }
 
-// TestHealthEndpoint validates /healthz endpoint
-func (s *ContractTestSuite) TestHealthEndpoint() {
-	resp, err := s.callEndpoint("GET", "/healthz", nil)
+// TestStatusEndpoint validates /api/status endpoint
+func (s *ContractTestSuite) TestStatusEndpoint() {
+	resp, err := s.callEndpoint("GET", "/api/status", nil)
 	s.NoError(err, "HTTP request should succeed")
 	defer resp.Body.Close()
 
-	s.Equal(200, resp.StatusCode, "/healthz should return 200")
+	s.Equal(200, resp.StatusCode, "/api/status should return 200")
+
+	if resp.StatusCode == 200 {
+		body, err := io.ReadAll(resp.Body)
+		s.NoError(err)
+
+		var status map[string]interface{}
+		s.NoError(json.Unmarshal(body, &status), "response should be valid JSON")
+		s.Contains(status, "loki", "response should have 'loki' field")
+		s.Contains(status, "prometheus", "response should have 'prometheus' field")
+	}
 }
 
 // TestErrorHandling validates plugin returns proper errors
