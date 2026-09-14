@@ -4,10 +4,15 @@ package e2e
 
 import (
 	"context"
+	"os/exec"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
@@ -19,20 +24,62 @@ type netobservState struct {
 
 var netobservTS testState[netobservState]
 
+// deployMockNetObservPlugin deploys the mock NetObserv console plugin
+func deployMockNetObservPlugin(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface) {
+	t.Helper()
+
+	// Path to mock plugin manifest (relative to repo root)
+	manifestPath := filepath.Join("evals", "tasks", "netobserv", "shared", "mock-plugin.yaml")
+
+	// Apply the manifest using kubectl
+	t.Logf("Deploying mock NetObserv plugin from %s", manifestPath)
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", manifestPath, "--kubeconfig", kubeconfig)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "kubectl apply failed: %s", string(output))
+	t.Logf("Mock plugin manifest applied")
+
+	// Wait for deployment to be ready
+	t.Logf("Waiting for netobserv-plugin deployment to be ready...")
+	deadline := time.Now().Add(2 * time.Minute)
+	for time.Now().Before(deadline) {
+		deploy, err := clientset.AppsV1().Deployments("netobserv").Get(ctx, "netobserv-plugin", metav1.GetOptions{})
+		if err == nil && deploy.Status.ReadyReplicas > 0 {
+			t.Logf("Mock plugin deployment ready")
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
+	require.Fail(t, "Mock plugin deployment did not become ready in time")
+}
+
+// cleanupMockNetObservPlugin removes the mock NetObserv plugin
+func cleanupMockNetObservPlugin(t *testing.T, kubeconfig string) {
+	t.Helper()
+
+	manifestPath := filepath.Join("evals", "tasks", "netobserv", "shared", "mock-plugin.yaml")
+	cmd := exec.Command("kubectl", "delete", "-f", manifestPath, "--kubeconfig", kubeconfig, "--ignore-not-found")
+	_ = cmd.Run() // Best effort cleanup
+}
+
 // TestNetObservMock tests NetObserv MCP tools against mock plugin (no operator required)
 func TestNetObservMock(t *testing.T) {
-	// TODO: Deploy mock NetObserv plugin before running tests
-	t.Skip("Mock NetObserv plugin deployment not yet implemented")
-
 	f := features.New("netobserv-mock").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			// Deploy mock plugin here
-			// kubectl apply -f evals/tasks/netobserv/shared/mock-plugin.yaml
+			kubeconfig := cfg.KubeconfigFile()
+			clientset, err := clientsetFromKubeconfig(kubeconfig)
+			require.NoError(t, err, "create clientset")
 
+			// Deploy mock NetObserv plugin
+			deployMockNetObservPlugin(ctx, t, kubeconfig, clientset)
+			t.Cleanup(func() {
+				cleanupMockNetObservPlugin(t, kubeconfig)
+			})
+
+			// Deploy MCP server configured to use mock plugin
 			dep := deployServer(ctx, t, cfg, "netobserv-mock",
 				withConfig(`
 [toolsets.netobserv]
-url = "http://netobserv-mock:9001"
+url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 `),
 				withValues(viewClusterRoleBindingValues()),
 			)

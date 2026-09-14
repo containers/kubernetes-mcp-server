@@ -84,11 +84,9 @@ func netobservToolCallExpectError(ctx context.Context, t *testing.T, client *mcp
 	require.Error(t, err, "tool call should fail")
 }
 
-// makeTimeRange creates a time range map for the last N minutes
-func makeTimeRange(minutes int) map[string]string {
-	return map[string]string{
-		"last": fmt.Sprintf("%dm", minutes),
-	}
+// makeTimeRange creates a time range value for the last N minutes (in seconds)
+func makeTimeRange(minutes int) int {
+	return minutes * 60
 }
 
 // makeFilters creates a filters array from key-value pairs
