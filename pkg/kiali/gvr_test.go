@@ -61,6 +61,30 @@ func TestProbeStatusURL(t *testing.T) {
 		}
 	})
 
+	t.Run("returns false on probe timeout", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = listener.Close() }()
+
+		go func() {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			time.Sleep(2 * time.Second)
+			_ = conn.Close()
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		result := probeStatusURL(ctx, "http://"+listener.Addr().String(), nil, "")
+		if result == nil || *result {
+			t.Fatal("expected probe to fail on timeout")
+		}
+	})
+
 	t.Run("returns nil on temporary DNS error to fail open", func(t *testing.T) {
 		if !isTemporaryDNSProbeError(&net.DNSError{IsTemporary: true}) {
 			t.Fatal("expected temporary DNS error to fail open")
