@@ -6,34 +6,34 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // HasKiali reports whether a configured Kiali URL responds to GET /api/status.
-//
-// fp supplies toolset config via ExtendedConfigProvider; kp is the Kubernetes
-// provider used for bearer tokens (may be nil in tests).
-func HasKiali(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provider) bool {
-	cfg, ok := kialiConfigFromProvider(fp)
-	if !ok || strings.TrimSpace(cfg.Url) == "" {
+// When the probe hits a temporary DNS resolution failure, returns true so tools
+// remain visible (fail open).
+func HasKiali(ctx context.Context, cfg api.BaseConfig, bearerToken string) bool {
+	kc, ok := kialiConfigFromBase(cfg)
+	if !ok || strings.TrimSpace(kc.Url) == "" {
 		return false
 	}
 
-	token := bearerTokenFromProvider(ctx, kp)
-	ok = probeStatusURL(ctx, cfg.Url, cfg, token)
-	if !ok {
-		klogutil.FromContext(ctx).V(1).Info("configured Kiali URL failed /api/status probe; disabling Kiali tools",
-			"url", cfg.Url)
+	result := probeStatusURL(ctx, cfg, restConfigFromBearerToken(bearerToken))
+	if result == nil {
+		return true
 	}
-	return ok
+	if !*result {
+		klogutil.FromContext(ctx).V(1).Info("configured Kiali URL failed /api/status probe; disabling Kiali tools",
+			"url", kc.Url)
+	}
+	return *result
 }
 
-func kialiConfigFromProvider(fp api.FilteringProvider) (*Config, bool) {
-	cfgProvider, ok := fp.(api.ExtendedConfigProvider)
-	if !ok || cfgProvider == nil {
+func kialiConfigFromBase(cfg api.BaseConfig) (*Config, bool) {
+	if cfg == nil {
 		return nil, false
 	}
-	ext, ok := cfgProvider.GetToolsetConfig("kiali")
+	ext, ok := cfg.GetToolsetConfig("kiali")
 	if !ok {
 		return nil, false
 	}
@@ -44,13 +44,9 @@ func kialiConfigFromProvider(fp api.FilteringProvider) (*Config, bool) {
 	return kc, true
 }
 
-func bearerTokenFromProvider(ctx context.Context, kp kubernetes.Provider) string {
-	if kp == nil {
-		return ""
+func restConfigFromBearerToken(bearerToken string) *rest.Config {
+	if strings.TrimSpace(bearerToken) == "" {
+		return &rest.Config{}
 	}
-	k8s, err := kp.GetDerivedKubernetes(ctx, kp.GetDefaultTarget())
-	if err != nil || k8s == nil || k8s.RESTConfig() == nil {
-		return ""
-	}
-	return k8s.RESTConfig().BearerToken
+	return &rest.Config{BearerToken: bearerToken}
 }

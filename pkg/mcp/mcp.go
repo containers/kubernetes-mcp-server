@@ -25,6 +25,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/prompts"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	kialitoolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
@@ -237,8 +238,8 @@ func (s *Server) applyToolsets(ctx context.Context, cfg *Configuration) error {
 	// Collect applicable items against cfg (NOT s.configuration) so that a
 	// pending ReloadConfiguration can probe a candidate config without making
 	// it observable to concurrent readers until the convert phase succeeds.
-	applicableTools := s.collectApplicableTools(cfg)
-	applicablePrompts := s.collectApplicablePrompts(cfg)
+	applicableTools := s.collectApplicableTools(ctx, cfg)
+	applicablePrompts := s.collectApplicablePrompts(ctx, cfg)
 	applicableResources := s.collectApplicableResources(cfg)
 	applicableResourceTemplates := s.collectApplicableResourceTemplates(cfg)
 
@@ -384,7 +385,7 @@ func commitItems[M, H any](
 }
 
 // collectApplicableTools returns tools after applying filtering and mutation
-func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
+func (s *Server) collectApplicableTools(ctx context.Context, cfg *Configuration) []api.ServerTool {
 	filter := CompositeFilter(
 		cfg.isToolApplicable,
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
@@ -396,10 +397,15 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 	)
 
 	tools := make([]api.ServerTool, 0)
-	// Wrap the filtering provider with live config so toolsets that type-assert to
-	// ExtendedConfigProvider (e.g. Kiali URL reachability) see toolset_configs.
-	// The kubernetes Provider may be wrapped (token exchange) and not expose config.
-	provider := filteringProviderWithConfig{FilteringProvider: s.p, cfg: cfg.StaticConfig}
+	// TODO(registration-api): replace filteringProviderWithConfig with an explicit tool
+	// registration API once we align on design (core Toolset interface vs optional
+	// toolset extension). See PR #1425 review discussion.
+	provider := filteringProviderWithConfig{
+		FilteringProvider: s.p,
+		staticCfg:         cfg.StaticConfig,
+		bearerToken:       bearerTokenFromProvider(ctx, s.p),
+		ctx:               ctx,
+	}
 	for _, toolset := range cfg.Toolsets() {
 		for _, tool := range toolset.GetTools(provider) {
 			tool = mutator(tool)
@@ -412,33 +418,75 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 }
 
 // filteringProviderWithConfig embeds FilteringProvider and exposes the live
-// ExtendedConfigProvider so target-compatibility filters can inspect toolset_configs.
+// BaseConfig plus bearer token for toolsets that need them during registration.
 type filteringProviderWithConfig struct {
 	api.FilteringProvider
-	cfg api.ExtendedConfigProvider
+	staticCfg   api.BaseConfig
+	bearerToken string
+	ctx         context.Context
 }
 
 func (f filteringProviderWithConfig) GetProviderConfig(strategy string) (api.ExtendedConfig, bool) {
-	if f.cfg == nil {
+	if f.staticCfg == nil {
 		return nil, false
 	}
-	return f.cfg.GetProviderConfig(strategy)
+	return f.staticCfg.GetProviderConfig(strategy)
 }
 
 func (f filteringProviderWithConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
-	if f.cfg == nil {
+	if f.staticCfg == nil {
 		return nil, false
 	}
-	return f.cfg.GetToolsetConfig(name)
+	return f.staticCfg.GetToolsetConfig(name)
+}
+
+func (f filteringProviderWithConfig) BaseConfig() api.BaseConfig {
+	return f.staticCfg
+}
+
+func (f filteringProviderWithConfig) BearerToken() string {
+	return f.bearerToken
+}
+
+func (f filteringProviderWithConfig) Context() context.Context {
+	if f.ctx != nil {
+		return f.ctx
+	}
+	return context.Background()
+}
+
+func bearerTokenFromProvider(ctx context.Context, provider internalk8s.Provider) string {
+	if provider == nil {
+		return ""
+	}
+	k8s, err := provider.GetDerivedKubernetes(ctx, provider.GetDefaultTarget())
+	if err != nil || k8s == nil || k8s.RESTConfig() == nil {
+		return ""
+	}
+	return k8s.RESTConfig().BearerToken
 }
 
 // collectApplicablePrompts returns prompts after applying mutation and merging toolset and config prompts
-func (s *Server) collectApplicablePrompts(cfg *Configuration) []api.ServerPrompt {
+func (s *Server) collectApplicablePrompts(ctx context.Context, cfg *Configuration) []api.ServerPrompt {
 	mutator := WithPromptTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget())
 
+	provider := filteringProviderWithConfig{
+		FilteringProvider: s.p,
+		staticCfg:         cfg.StaticConfig,
+		bearerToken:       bearerTokenFromProvider(ctx, s.p),
+		ctx:               ctx,
+	}
 	toolsetPrompts := make([]api.ServerPrompt, 0)
 	for _, toolset := range cfg.Toolsets() {
-		for _, prompt := range toolset.GetPrompts() {
+		var prompts []api.ServerPrompt
+		// TODO(registration-api): generalize prompt/resource reachability gating instead of
+		// a Kiali-specific type assert once the registration API is defined.
+		if kt, ok := toolset.(*kialitoolset.Toolset); ok {
+			prompts = kt.GetPromptsIfAvailable(provider)
+		} else {
+			prompts = toolset.GetPrompts()
+		}
+		for _, prompt := range prompts {
 			toolsetPrompts = append(toolsetPrompts, mutator(prompt))
 		}
 	}
