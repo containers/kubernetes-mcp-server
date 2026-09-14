@@ -1,0 +1,18 @@
+apiVersion: flows.netobserv.io/v1beta2
+kind: FlowCollector
+metadata:
+  name: cluster
+spec:
+  namespace: netobserv
+  deploymentModel: Service
+  agent:
+    type: eBPF
+    ebpf:
+      sampling: 50
+  loki:
+    enable: true
+    mode: Monolithic
+    monolithic:
+      installDemoLoki: true
+  consolePlugin:
+    enable: true

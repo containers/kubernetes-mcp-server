@@ -86,24 +86,157 @@ func checkNetObservOperatorDeployed(ctx context.Context, t *testing.T, clientset
 func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface) string {
 	t.Helper()
 
-	// TODO: Implement full operator deployment
-	// For now, this is a placeholder that would:
-	// 1. Deploy NetObserv operator (via OLM or manifests)
-	// 2. Wait for operator to be ready
-	// 3. Deploy FlowCollector CR
-	// 4. Wait for console plugin service to be ready
-	// 5. Return the namespace
+	baseManifestPath := filepath.Join("evals", "tasks", "netobserv", "shared")
+	operatorNamespace := "openshift-netobserv-operator"
+	pluginNamespace := "netobserv"
 
-	t.Skip("Operator deployment not yet implemented - use NETOBSERV_OPERATOR=use-existing with pre-deployed operator")
-	return "netobserv"
+	// Create CatalogSource (y-stream Konflux catalog)
+	t.Logf("Creating CatalogSource: netobserv-konflux-fbc")
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "Failed to create CatalogSource: %s", string(output))
+
+	// Wait for CatalogSource pod to be ready
+	t.Logf("Waiting for CatalogSource pod to be ready...")
+	deadline := time.Now().Add(3 * time.Minute)
+	for time.Now().Before(deadline) {
+		pods, err := clientset.CoreV1().Pods("openshift-marketplace").List(ctx, metav1.ListOptions{
+			LabelSelector: "olm.catalogSource=netobserv-konflux-fbc",
+		})
+		if err == nil && len(pods.Items) > 0 {
+			allReady := true
+			for _, pod := range pods.Items {
+				if pod.Status.Phase != "Running" {
+					allReady = false
+					break
+				}
+			}
+			if allReady {
+				t.Logf("CatalogSource pod is ready")
+				break
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	// Create namespaces
+	t.Logf("Creating namespaces")
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-namespace.yaml"), "--kubeconfig", kubeconfig)
+	output, err = cmd.CombinedOutput()
+	require.NoError(t, err, "Failed to create namespaces: %s", string(output))
+
+	// Create OperatorGroup
+	t.Logf("Creating OperatorGroup")
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-group.yaml"), "--kubeconfig", kubeconfig)
+	output, err = cmd.CombinedOutput()
+	require.NoError(t, err, "Failed to create OperatorGroup: %s", string(output))
+
+	// Create Subscription
+	t.Logf("Creating Subscription for netobserv-operator")
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-subscription.yaml"), "--kubeconfig", kubeconfig)
+	output, err = cmd.CombinedOutput()
+	require.NoError(t, err, "Failed to create Subscription: %s", string(output))
+
+	// Wait for operator pod to be ready
+	t.Logf("Waiting for operator pod to be ready...")
+	deadline = time.Now().Add(5 * time.Minute)
+	for time.Now().Before(deadline) {
+		pods, err := clientset.CoreV1().Pods(operatorNamespace).List(ctx, metav1.ListOptions{
+			LabelSelector: "app=netobserv-operator",
+		})
+		if err == nil && len(pods.Items) > 0 {
+			allReady := true
+			for _, pod := range pods.Items {
+				if pod.Status.Phase != "Running" {
+					allReady = false
+					break
+				}
+			}
+			if allReady {
+				t.Logf("Operator pod is ready")
+				break
+			}
+		}
+		time.Sleep(10 * time.Second)
+	}
+
+	// Wait for FlowCollector CRD to be available
+	t.Logf("Waiting for FlowCollector CRD...")
+	deadline = time.Now().Add(3 * time.Minute)
+	for time.Now().Before(deadline) {
+		cmd = exec.CommandContext(ctx, "kubectl", "get", "crd", "flowcollectors.flows.netobserv.io", "--kubeconfig", kubeconfig)
+		if cmd.Run() == nil {
+			t.Logf("FlowCollector CRD is available")
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	// Deploy FlowCollector
+	t.Logf("Creating FlowCollector")
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
+	output, err = cmd.CombinedOutput()
+	require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
+
+	// Wait for console plugin service to be ready
+	t.Logf("Waiting for console plugin service to be ready...")
+	deadline = time.Now().Add(10 * time.Minute)
+	for time.Now().Before(deadline) {
+		svc, err := clientset.CoreV1().Services(pluginNamespace).Get(ctx, "netobserv-plugin", metav1.GetOptions{})
+		if err == nil && svc != nil {
+			// Also check if plugin pods are running
+			pods, err := clientset.CoreV1().Pods(pluginNamespace).List(ctx, metav1.ListOptions{
+				LabelSelector: "app=netobserv-plugin",
+			})
+			if err == nil && len(pods.Items) > 0 {
+				allReady := true
+				for _, pod := range pods.Items {
+					if pod.Status.Phase != "Running" {
+						allReady = false
+						break
+					}
+				}
+				if allReady {
+					t.Logf("Console plugin is ready in namespace: %s", pluginNamespace)
+					return pluginNamespace
+				}
+			}
+		}
+		time.Sleep(10 * time.Second)
+	}
+
+	require.Fail(t, "Console plugin did not become ready in time")
+	return pluginNamespace
 }
 
 // cleanupNetObservOperator removes NetObserv operator and FlowCollector
 func cleanupNetObservOperator(t *testing.T, kubeconfig string) {
 	t.Helper()
 
-	// TODO: Implement cleanup
-	// Best effort cleanup of operator and FlowCollector
+	baseManifestPath := filepath.Join("evals", "tasks", "netobserv", "shared")
+
+	// Best effort cleanup - delete in reverse order
+	t.Logf("Cleaning up NetObserv operator")
+
+	// Delete FlowCollector
+	cmd := exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "flowcollector.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	_ = cmd.Run()
+
+	// Delete Subscription
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-subscription.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	_ = cmd.Run()
+
+	// Delete OperatorGroup
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-group.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	_ = cmd.Run()
+
+	// Delete namespaces
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-namespace.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	_ = cmd.Run()
+
+	// Delete CatalogSource
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	_ = cmd.Run()
 }
 
 // TestNetObservMock tests NetObserv MCP tools against mock plugin (no operator required)

@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: netobserv-konflux-fbc
+  namespace: openshift-marketplace
+spec:
+  displayName: NetObserv Konflux Y-Stream
+  image: quay.io/redhat-user-workloads/ocp-network-observab-tenant/catalog-ystream:latest
+  sourceType: grpc
+  grpcPodConfig:
+    securityContextConfig: legacy
