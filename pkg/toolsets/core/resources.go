@@ -138,7 +138,7 @@ func initResources(p api.FilteringProvider) []api.ServerTool {
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, RBAC: api.RBACBounded(api.RBACRequirement{
-			Verbs:  []string{"patch"},
+			Verbs:  []string{"create", "patch"},
 			Target: api.RBACTarget{Manifest: &api.RBACManifestTarget{Argument: "resource"}},
 		}), Handler: resourcesCreateOrUpdate},
 		{Tool: api.Tool{

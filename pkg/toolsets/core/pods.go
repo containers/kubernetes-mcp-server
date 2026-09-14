@@ -335,17 +335,17 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 			},
 		}, RBAC: api.RBACBounded(
 			api.RBACRequirement{
-				Verbs:     []string{"patch"},
+				Verbs:     []string{"create", "patch"},
 				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
 				Namespace: &api.RBACNamespace{Argument: "namespace"},
 			},
 			api.RBACRequirement{
-				Verbs:     []string{"patch"},
+				Verbs:     []string{"create", "patch"},
 				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "services"}},
 				Namespace: &api.RBACNamespace{Argument: "namespace"},
 			},
 			api.RBACRequirement{
-				Verbs: []string{"patch"},
+				Verbs: []string{"create", "patch"},
 				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
 					APIGroup: "route.openshift.io",
 					Resource: "routes",
