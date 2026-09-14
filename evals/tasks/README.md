@@ -42,3 +42,19 @@ When a new MCP toolset lands, keep its evaluations isolated by creating a siblin
 3. Any shared fixtures the stack needs (place them in a `shared/` subdirectory if multiple scenarios reuse them).
 
 This structure keeps task stacks discoverable and lets eval harnesses target toolset-specific workflows without mixing concerns from the core Kubernetes or Kiali libraries.
+
+## Reusing Tasks Across Suites
+
+Tasks are selected by `metadata.labels`, which is a map — a task can carry
+more than one label, so it can belong to its primary `suite` (`core`,
+`config`, ...) and *also* be picked up by an orthogonal eval config without
+duplicating its content into a new file.
+
+The `core-readonly` suite (see `../core-eval-testing/*/eval-core-readonly.yaml`)
+uses this pattern: read-only-compatible tasks from `core` and `config` are
+tagged with an additional `readonly: "true"` label, and the `core-readonly`
+eval config selects on that label alone (not `suite`). The task files
+themselves are unmodified except for the one extra label line — no copies are
+made. See [Read-only suite](../README.md#read-only-suite-core-readonly) for
+the full pattern, including why write-blocking itself is verified by a Go
+test (`pkg/mcp/mcp_tools_test.go`) rather than an eval task.
