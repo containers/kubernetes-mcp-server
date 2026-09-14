@@ -18,6 +18,8 @@ type toolsetConfigProvider interface {
 }
 
 // HasKiali reports whether a configured Kiali URL responds to GET /api/status.
+// When the probe hits a temporary DNS resolution failure, returns true so tools
+// remain visible (fail open).
 //
 // fp may stub GetToolsetConfig in tests; kp supplies live config and bearer
 // tokens in production (may be nil in tests).
@@ -28,12 +30,15 @@ func HasKiali(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provi
 	}
 
 	token := bearerTokenFromProvider(ctx, kp)
-	ok = probeStatusURL(ctx, cfg.Url, cfg, token)
-	if !ok {
+	result := probeStatusURL(ctx, cfg.Url, cfg, token)
+	if result == nil {
+		return true
+	}
+	if !*result {
 		klogutil.FromContext(ctx).V(1).Info("configured Kiali URL failed /api/status probe; disabling Kiali tools",
 			"url", cfg.Url)
 	}
-	return ok
+	return *result
 }
 
 func kialiConfigFrom(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provider) (*Config, bool) {

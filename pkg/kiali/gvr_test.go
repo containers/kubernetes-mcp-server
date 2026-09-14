@@ -3,9 +3,11 @@ package kiali
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -45,7 +47,8 @@ func TestProbeStatusURL(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		if !probeStatusURL(context.Background(), srv.URL, &Config{Url: srv.URL}, "") {
+		result := probeStatusURL(context.Background(), srv.URL, &Config{Url: srv.URL}, "")
+		if result == nil || !*result {
 			t.Fatal("expected probe to succeed")
 		}
 	})
@@ -55,14 +58,49 @@ func TestProbeStatusURL(t *testing.T) {
 			_, _ = w.Write([]byte(`{"externalServices":[]}`))
 		}))
 		defer srv.Close()
-		if probeStatusURL(context.Background(), srv.URL, nil, "") {
+		result := probeStatusURL(context.Background(), srv.URL, nil, "")
+		if result == nil || *result {
 			t.Fatal("expected probe to fail")
 		}
 	})
 
 	t.Run("returns false on connection error", func(t *testing.T) {
-		if probeStatusURL(context.Background(), "http://127.0.0.1:1", nil, "") {
+		result := probeStatusURL(context.Background(), "http://127.0.0.1:1", nil, "")
+		if result == nil || *result {
 			t.Fatal("expected probe to fail for unreachable URL")
+		}
+	})
+
+	t.Run("returns false on probe timeout", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = listener.Close() }()
+
+		go func() {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			time.Sleep(2 * time.Second)
+			_ = conn.Close()
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		result := probeStatusURL(ctx, "http://"+listener.Addr().String(), nil, "")
+		if result == nil || *result {
+			t.Fatal("expected probe to fail on timeout")
+		}
+	})
+
+	t.Run("returns nil on temporary DNS error to fail open", func(t *testing.T) {
+		if !isTemporaryDNSProbeError(&net.DNSError{IsTemporary: true}) {
+			t.Fatal("expected temporary DNS error to fail open")
+		}
+		if isTemporaryDNSProbeError(context.DeadlineExceeded) {
+			t.Fatal("expected timeout not to fail open")
 		}
 	})
 }
@@ -105,6 +143,34 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 		}
 		if HasKiali(context.Background(), p, nil) {
 			t.Fatal("expected HasKiali false without configured URL")
+		}
+	})
+
+	t.Run("disables on probe timeout", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = listener.Close() }()
+
+		go func() {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			time.Sleep(2 * time.Second)
+			_ = conn.Close()
+		}()
+
+		p := &fakeFilteringProviderWithConfig{
+			configs: map[string]config.ExtendedConfig{
+				"kiali": &Config{Url: "http://" + listener.Addr().String()},
+			},
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		if HasKiali(ctx, p, nil) {
+			t.Fatal("expected HasKiali false on probe timeout")
 		}
 	})
 }
