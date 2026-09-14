@@ -24,14 +24,23 @@ type netobservState struct {
 	mcpClient *test.McpClient
 }
 
-var netobservTS testState[netobservState]
+var (
+	netobservTS          testState[netobservState]
+	netobservManifestDir = getNetobservManifestDir()
+)
+
+// getNetobservManifestDir returns the absolute path to NetObserv manifests directory
+func getNetobservManifestDir() string {
+	dir, _ := filepath.Abs("../../evals/tasks/netobserv/shared")
+	return dir
+}
 
 // deployMockNetObservPlugin deploys the mock NetObserv console plugin
 func deployMockNetObservPlugin(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface) {
 	t.Helper()
 
-	// Path to mock plugin manifest (relative to repo root)
-	manifestPath := filepath.Join("evals", "tasks", "netobserv", "shared", "mock-plugin.yaml")
+	// Path to mock plugin manifest
+	manifestPath := filepath.Join(netobservManifestDir, "mock-plugin.yaml")
 
 	// Apply the manifest using kubectl
 	t.Logf("Deploying mock NetObserv plugin from %s", manifestPath)
@@ -58,7 +67,7 @@ func deployMockNetObservPlugin(ctx context.Context, t *testing.T, kubeconfig str
 func cleanupMockNetObservPlugin(t *testing.T, kubeconfig string) {
 	t.Helper()
 
-	manifestPath := filepath.Join("evals", "tasks", "netobserv", "shared", "mock-plugin.yaml")
+	manifestPath := filepath.Join(netobservManifestDir, "mock-plugin.yaml")
 	cmd := exec.Command("kubectl", "delete", "-f", manifestPath, "--kubeconfig", kubeconfig, "--ignore-not-found")
 	_ = cmd.Run() // Best effort cleanup
 }
@@ -86,7 +95,6 @@ func checkNetObservOperatorDeployed(ctx context.Context, t *testing.T, clientset
 func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface) string {
 	t.Helper()
 
-	baseManifestPath := filepath.Join("evals", "tasks", "netobserv", "shared")
 	operatorNamespace := "openshift-netobserv-operator"
 	pluginNamespace := "netobserv"
 
@@ -100,7 +108,7 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 		if cmd.Run() != nil {
 			// FlowCollector doesn't exist, create it
 			t.Logf("Creating FlowCollector")
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
+			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
 			output, err := cmd.CombinedOutput()
 			require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
 		} else {
@@ -113,7 +121,7 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 
 	// Create CatalogSource (y-stream Konflux catalog)
 	t.Logf("Creating CatalogSource: netobserv-konflux-fbc")
-	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig)
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "Failed to create CatalogSource: %s", string(output))
 
@@ -142,19 +150,19 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 
 	// Create namespaces
 	t.Logf("Creating namespaces")
-	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-namespace.yaml"), "--kubeconfig", kubeconfig)
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "operator-namespace.yaml"), "--kubeconfig", kubeconfig)
 	output, err = cmd.CombinedOutput()
 	require.NoError(t, err, "Failed to create namespaces: %s", string(output))
 
 	// Create OperatorGroup
 	t.Logf("Creating OperatorGroup")
-	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-group.yaml"), "--kubeconfig", kubeconfig)
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "operator-group.yaml"), "--kubeconfig", kubeconfig)
 	output, err = cmd.CombinedOutput()
 	require.NoError(t, err, "Failed to create OperatorGroup: %s", string(output))
 
 	// Create Subscription
 	t.Logf("Creating Subscription for netobserv-operator")
-	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "operator-subscription.yaml"), "--kubeconfig", kubeconfig)
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "operator-subscription.yaml"), "--kubeconfig", kubeconfig)
 	output, err = cmd.CombinedOutput()
 	require.NoError(t, err, "Failed to create Subscription: %s", string(output))
 
@@ -195,7 +203,7 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 
 	// Deploy FlowCollector
 	t.Logf("Creating FlowCollector")
-	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(baseManifestPath, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
 	output, err = cmd.CombinedOutput()
 	require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
 
@@ -280,29 +288,27 @@ func waitForConsolePlugin(ctx context.Context, t *testing.T, clientset kubernete
 func cleanupNetObservOperator(t *testing.T, kubeconfig string) {
 	t.Helper()
 
-	baseManifestPath := filepath.Join("evals", "tasks", "netobserv", "shared")
-
 	// Best effort cleanup - delete in reverse order
 	t.Logf("Cleaning up NetObserv operator")
 
 	// Delete FlowCollector
-	cmd := exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "flowcollector.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	cmd := exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
 	_ = cmd.Run()
 
 	// Delete Subscription
-	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-subscription.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "operator-subscription.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
 	_ = cmd.Run()
 
 	// Delete OperatorGroup
-	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-group.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "operator-group.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
 	_ = cmd.Run()
 
 	// Delete namespaces
-	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-namespace.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "operator-namespace.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
 	_ = cmd.Run()
 
 	// Delete CatalogSource
-	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(baseManifestPath, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
 	_ = cmd.Run()
 }
 
