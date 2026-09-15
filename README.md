@@ -266,7 +266,7 @@ and only needed for the project-specific scenarios noted.
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
 | [Kubernetes](https://kubernetes.io) | - | 33 |
-| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
+| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 30 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
 
