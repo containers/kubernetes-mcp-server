@@ -273,7 +273,7 @@ and only needed for the project-specific scenarios noted.
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
 | [Kubernetes](https://kubernetes.io) | - | 32 |
-| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 26 |
+| [KubeVirt](https://kubevirt.io) | `guest-observability`, `kubevirt`, `tekton` | 32 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
 
@@ -285,16 +285,17 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset   | Description                                                                                                                                                                                                                             | Default |
-|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config    | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
-| core      | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
-| helm      | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
-| kcp       | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
-| kiali     | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
-| kubevirt  | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
-| netobserv | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
-| tekton    | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
+| Toolset             | Description                                                                                                                                                                                                                             | Default |
+|---------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config              | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
+| core                | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| guest-observability | Guest observability tools for querying metrics and logs from virtual machine guest operating systems.                                                                                                                                   |         |
+| helm                | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
+| kcp                 | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
+| kiali               | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
+| kubevirt            | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
+| netobserv           | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| tekton              | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -417,6 +418,36 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - Name of the resource
   - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
   - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
+
+</details>
+
+<details>
+
+<summary>guest-observability</summary>
+
+- **guest-observability_loki_query** - Executes a LogQL range query against the configured Loki backend for virtual machine guest log investigation.
+
+Guest telemetry uses a label contract for reliable VM attribution. The namespace and vm_name labels together identify the KubeVirt VM that produced the telemetry. The os and source labels classify the guest operating system and telemetry source.
+
+For Windows guest-log investigations, use os="windows" or source="windows_eventlog" when those classification labels are available.
+
+If namespace or vm_name is missing, the telemetry may still establish that an event occurred, but it cannot reliably identify the affected VM. Do not infer missing VM identity from unrelated Kubernetes workload metadata.
+
+If a namespace-scoped search does not find the specific event being investigated, perform one bounded follow-up query without the namespace matcher while retaining the strongest available classification labels and event identifier. Telemetry returned without namespace must not be attributed to the requested namespace.
+
+If os or source is missing, report the missing classification field rather than inventing it; the remaining labels and log content may still provide useful diagnostic evidence.
+
+Missing contract labels are surfaced explicitly so callers can distinguish reliable attribution from incomplete telemetry.
+  - `direction` (`string`) - Log ordering direction: backward returns newest matching entries first; forward returns oldest matching entries first.
+  - `end` (`string`) - Optional RFC3339 end timestamp with explicit timezone.
+When start and end are omitted, the query defaults to the previous one
+hour ending at the server's current time.
+  - `limit` (`integer`) - Maximum raw log entries to return. Defaults to 100 and is capped at 1000.
+  - `query` (`string`) **(required)** - LogQL query expression to execute.
+  - `start` (`string`) - Optional RFC3339 start timestamp with explicit timezone.
+When start and end are omitted, the query defaults to the previous one
+hour ending at the server's current time.
+  - `step` (`string`) - Optional query resolution for metric-style LogQL range queries, for example 30s, 1m, or 5m.
 
 </details>
 
