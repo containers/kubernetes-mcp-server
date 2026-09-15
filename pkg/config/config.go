@@ -768,8 +768,9 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*Config, error) {
 	return resolve(context.Background(), merged, sources, settings)
 }
 
-// resolve applies merged TOML, rejects unknown keys, parses extension tables,
-// overlays env, and pins non-reloadable options when settings.previous is set.
+// resolve applies merged TOML, rejects unknown keys, overlays env, pins
+// non-reloadable options, then parses extension tables so parsers see the
+// effective require_tls (and other pinned values).
 func resolve(ctx context.Context, merged map[string]any, sources map[string]string, settings loadSettings) (*Config, error) {
 	cfg := New()
 	if settings.dirPath != "" {
@@ -789,9 +790,6 @@ func resolve(ctx context.Context, merged map[string]any, sources map[string]stri
 	if err := rejectWrongTableTypes(merged, cfg, sources); err != nil {
 		return nil, err
 	}
-	if err := parseExtensions(ctx, cfg, merged, sources); err != nil {
-		return nil, err
-	}
 
 	if err := walkApply(cfg, func(o option) error { return o.applyEnv() }); err != nil {
 		return nil, err
@@ -799,6 +797,14 @@ func resolve(ctx context.Context, merged map[string]any, sources map[string]stri
 
 	if settings.previous != nil {
 		pinNonReloadable(ctx, settings.previous, cfg)
+	}
+
+	if err := parseExtensions(ctx, cfg, merged, sources, settings.previous); err != nil {
+		return nil, err
+	}
+
+	if settings.previous != nil {
+		pinClusterProviderConfigs(ctx, settings.previous, cfg)
 	}
 
 	dumpConfig(ctx, cfg, settings.previous)
@@ -1010,25 +1016,36 @@ func flattenKeys(m map[string]any, prefix string) []string {
 }
 
 // parseExtensions decodes cluster_provider_configs and toolset_configs via
-// registered parsers.
-func parseExtensions(ctx context.Context, cfg *Config, merged map[string]any, sources map[string]string) error {
+// registered parsers. previous is the pinned config on SIGHUP (nil at startup).
+func parseExtensions(ctx context.Context, cfg *Config, merged map[string]any, sources map[string]string, previous *Config) error {
 	ctx = withConfigDirPath(ctx, cfg.configDirPath)
 	ctx = withRequireTLS(ctx, cfg.RequireTLS.Get())
 
-	var err error
 	if raw, ok := merged[extensionProviderTable].(map[string]any); ok {
 		cfg.clusterProviderConfigsSource = Source(sources[extensionProviderTable])
-		cfg.parsedClusterProviderConfigs, err = providerConfigRegistry.parseMaps(ctx, extensionProviderTable, raw)
+		parsed, err := providerConfigRegistry.parseMaps(ctx, extensionProviderTable, raw)
 		if err != nil {
-			return err
+			if previous == nil {
+				return err
+			}
+			klogutil.LogWarn(klogutil.FromContext(ctx),
+				"Ignoring invalid non-reloadable option; restart the process to apply it",
+				klogutil.Field("option", extensionProviderTable),
+				klogutil.Err(err),
+			)
+			cfg.parsedClusterProviderConfigs = previous.parsedClusterProviderConfigs
+			cfg.clusterProviderConfigsSource = previous.clusterProviderConfigsSource
+		} else {
+			cfg.parsedClusterProviderConfigs = parsed
 		}
 	}
 	if raw, ok := merged[extensionToolsetTable].(map[string]any); ok {
 		cfg.toolsetConfigsSource = Source(sources[extensionToolsetTable])
-		cfg.parsedToolsetConfigs, err = toolsetConfigRegistry.parseMaps(ctx, extensionToolsetTable, raw)
+		parsed, err := toolsetConfigRegistry.parseMaps(ctx, extensionToolsetTable, raw)
 		if err != nil {
 			return err
 		}
+		cfg.parsedToolsetConfigs = parsed
 	}
 	return nil
 }
@@ -1050,7 +1067,6 @@ func pinNonReloadable(ctx context.Context, prev, next *Config) {
 		)
 		o.keepFrom(p)
 	})
-	pinClusterProviderConfigs(ctx, prev, next)
 }
 
 // pinClusterProviderConfigs keeps previous cluster_provider_configs on reload.

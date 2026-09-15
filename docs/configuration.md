@@ -157,7 +157,7 @@ SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re
 
 Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
 
-If the new files fail to parse or validate (including unknown keys), the previous configuration is kept.
+If the new files fail to parse or validate (including unknown keys), the previous configuration is kept. An invalid `cluster_provider_configs` table on SIGHUP is logged and the previous table is kept so other reloadable settings in that load still apply. `toolset_configs` parsers see the pinned `require_tls` value.
 
 ### What Requires a Restart
 

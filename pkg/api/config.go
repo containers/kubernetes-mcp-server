@@ -26,6 +26,12 @@ type ExtendedConfig interface {
 	Validate() error
 }
 
+// RequireTLSValidator is implemented by extended configs whose TLS settings
+// must stay consistent with the process-wide require_tls option.
+type RequireTLSValidator interface {
+	ValidateRequireTLS(requireTLS bool) error
+}
+
 type ExtendedConfigProvider interface {
 	// GetProviderConfig returns the extended configuration for the given provider strategy.
 	// The boolean return value indicates whether the configuration was found.

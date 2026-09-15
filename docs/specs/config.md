@@ -243,13 +243,27 @@ flowchart TD
   applyFile["Apply present keys; Source = file path"]
   unknown["Unknown keys: fail load"]
   applyEnv["Non-empty env; Source Env"]
+  pinOpts["SIGHUP: pin non-reloadable Options"]
+  parseExt["Parse toolset_configs and cluster_provider_configs"]
+  pinProv["SIGHUP: pin cluster_provider_configs"]
   xval[Cross-field Validate]
   dump[Log Describe for every Option]
-  boot --> def --> files --> applyFile --> unknown --> applyEnv --> xval --> dump
+  boot --> def --> files --> applyFile --> unknown --> applyEnv --> pinOpts --> parseExt --> pinProv --> xval --> dump
 ```
 
-**SIGHUP:** re-read files, re-apply env, re-validate. If a non-`Reloadable` option's resolved value would change,
-keep the previous value and source and log that a restart is required.
+**SIGHUP:** re-read files, re-apply env, pin non-reloadable Options, parse
+extension tables, pin `cluster_provider_configs`, re-validate. If a
+non-`Reloadable` option's resolved value would change, keep the previous value
+and source and log that a restart is required.
+
+Pinning Options **before** extension parse means parsers that consult
+`require_tls` (Kiali, NetObserv) see the effective value, not a would-be-ignored
+change in the new files.
+
+`cluster_provider_configs` is not reloadable. A parse or validation error in
+that table on SIGHUP is logged and the previous map is kept so other reloadable
+keys in the same load still apply. After a successful parse, a changed map is
+still pinned back to the previous value.
 
 SIGHUP still requires the process to have been started with `--config`
 and/or `--config-dir`. Unavailable on Windows (unchanged).
@@ -262,10 +276,13 @@ On SIGHUP, options whose value differs from the previous config are marked
 
 **Unknown keys:** a file that contains any key not in the schema fails
 that load. Startup exits with a non-zero status. SIGHUP logs the error
-and keeps the previous `Config` (same as a parse/validate failure). Registered extension tables remain valid; keys *inside* a
+and keeps the previous `Config` (same as a parse/validate failure), except
+that an invalid `cluster_provider_configs` table is pinned to the previous
+map and the rest of the load proceeds. Registered extension tables remain valid; keys *inside* a
 registered `toolset_configs.<name>` / `cluster_provider_configs.<name>`
 block are checked by that parser (unknown nested fields there also
-fail).
+fail at startup; on SIGHUP they fail the load for `toolset_configs` and
+are ignored for `cluster_provider_configs`).
 
 ## Package layout
 
@@ -895,10 +912,6 @@ working directory, independently of each other.
 </table>
 
 ### HTTP / TLS
-
-Inbound listen/TLS settings need a restart. Outbound TLS (OAuth, token
-exchange, Kiali, NetObserv) already re-reads on reload / per call; the
-non-reloadable mark below is for the **inbound** HTTP server.
 
 <table>
 <thead>

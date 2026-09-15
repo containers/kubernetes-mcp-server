@@ -328,6 +328,48 @@ func (s *ToolsetConfigSuite) TestConfigDirPathInContextStandalone() {
 	})
 }
 
+func (s *ToolsetConfigSuite) TestParserSeesPinnedRequireTLS() {
+	var captured bool
+	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+		captured = RequireTLSFromContext(ctx)
+		return toolsetConfigForTestParser(ctx, primitive, md)
+	})
+
+	s.Run("parser sees pinned true when file sets false", func() {
+		prev, err := ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`))
+		s.Require().NoError(err)
+		next, err := ReadToml([]byte(`
+			require_tls = false
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.True(captured, "parser should see pinned require_tls=true, not the file's false")
+		s.True(next.RequireTLS.Get())
+	})
+
+	s.Run("parser sees pinned false when file sets true", func() {
+		prev, err := ReadToml([]byte(`
+			require_tls = false
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`))
+		s.Require().NoError(err)
+		next, err := ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.False(captured, "parser should see pinned require_tls=false, not the file's true")
+		s.False(next.RequireTLS.Get())
+	})
+}
+
 func TestToolsetConfig(t *testing.T) {
 	suite.Run(t, new(ToolsetConfigSuite))
 }

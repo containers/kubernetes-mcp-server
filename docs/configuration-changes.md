@@ -84,7 +84,7 @@ Removed `sts_*` / `token_exchange_strategy` keys are rejected with a pointer to 
 
 ### SIGHUP
 
-SIGHUP re-reads files and re-applies env. Non-reloadable options whose resolved value would change keep the previous value and source; the server logs that a restart is required.
+SIGHUP re-reads files and re-applies env. Non-reloadable options whose resolved value would change keep the previous value and source; the server logs that a restart is required. Those options are pinned before `toolset_configs` / `cluster_provider_configs` are parsed, so extension TLS checks see the effective `require_tls`. An invalid `cluster_provider_configs` table on SIGHUP is logged and the previous table is kept so other reloadable keys still apply.
 
 On SIGHUP the option dump includes `changed=true` and `previous` for values that differ from the prior config.
 

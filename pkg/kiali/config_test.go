@@ -115,6 +115,58 @@ func (s *ConfigSuite) TestConfigParser_AllowsSecureWithRequireTLS() {
 	s.False(kcfg.Insecure)
 }
 
+func (s *ConfigSuite) TestReloadPinsRequireTLSBeforeParse() {
+	caFileForTOML := filepath.ToSlash(s.caFile)
+
+	s.Run("rejects kiali insecure when require_tls stays pinned true", func() {
+		prev, err := config.ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			certificate_authority = "` + caFileForTOML + `"
+		`))
+		s.Require().NoError(err)
+		_, err = config.ReadToml([]byte(`
+			require_tls = false
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			insecure = true
+			certificate_authority = "`+caFileForTOML+`"
+		`), config.WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "insecure=true disables certificate verification")
+	})
+
+	s.Run("allows kiali HTTP when require_tls stays pinned false", func() {
+		prev, err := config.ReadToml([]byte(`
+			require_tls = false
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+		`))
+		s.Require().NoError(err)
+		next, err := config.ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+		`), config.WithPrevious(prev))
+		s.Require().NoError(err)
+		s.False(next.RequireTLS.Get())
+	})
+}
+
+func (s *ConfigSuite) TestValidate_RejectsInsecureWhenRequireTLSEnabledAfterParse() {
+	cfg, err := config.ReadToml([]byte(`
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		insecure = true
+	`))
+	s.Require().NoError(err)
+	cfg.RequireTLS.SetForTest(true)
+	err = cfg.ValidateRequireTLS()
+	s.Require().Error(err)
+	s.Contains(err.Error(), "insecure=true disables certificate verification")
+}
+
 func (s *ConfigSuite) TestValidate() {
 	s.Run("nil config returns error", func() {
 		var cfg *Config

@@ -226,6 +226,42 @@ func (s *NetObservSuite) TestRequireTLS_ConfigValidation() {
 		s.Require().NoError(err)
 		s.NotNil(cfg)
 	})
+
+	s.Run("rejects netobserv insecure when require_tls stays pinned true", func() {
+		tempDir := s.T().TempDir()
+		caFile := filepath.Join(tempDir, "ca.crt")
+		s.Require().NoError(os.WriteFile(caFile, []byte("test ca content"), 0644))
+		caFileForTOML := filepath.ToSlash(caFile)
+		prev, err := config.ReadToml([]byte(`
+			require_tls = true
+			[toolset_configs.netobserv]
+			url = "https://netobserv.example/"
+			certificate_authority = "` + caFileForTOML + `"
+		`))
+		s.Require().NoError(err)
+		_, err = config.ReadToml([]byte(`
+			require_tls = false
+			[toolset_configs.netobserv]
+			url = "https://netobserv.example/"
+			insecure = true
+			certificate_authority = "`+caFileForTOML+`"
+		`), config.WithPrevious(prev))
+		s.Require().Error(err)
+		s.ErrorContains(err, "insecure=true disables certificate verification")
+	})
+
+	s.Run("Validate rejects insecure netobserv after require_tls is enabled", func() {
+		cfg, err := config.ReadToml([]byte(`
+			[toolset_configs.netobserv]
+			url = "https://netobserv.example/"
+			insecure = true
+		`))
+		s.Require().NoError(err)
+		cfg.RequireTLS.SetForTest(true)
+		err = cfg.ValidateRequireTLS()
+		s.Require().Error(err)
+		s.ErrorContains(err, "insecure=true disables certificate verification")
+	})
 }
 
 func (s *NetObservSuite) TestCreateHTTPClient_failsClosedOnInvalidCA() {

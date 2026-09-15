@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"slices"
@@ -239,13 +240,32 @@ func (c *Config) validateTokenExchange() error {
 }
 
 func (c *Config) ValidateRequireTLS() error {
-	if !c.RequireTLS.Get() {
-		return nil
+	requireTLS := c.RequireTLS.Get()
+	if requireTLS {
+		if err := ValidateURLsRequireTLS(map[string]string{
+			"authorization_url": c.AuthorizationURL.Get(),
+			"server_url":        c.ServerURL.Get(),
+		}); err != nil {
+			return err
+		}
 	}
-	return ValidateURLsRequireTLS(map[string]string{
-		"authorization_url": c.AuthorizationURL.Get(),
-		"server_url":        c.ServerURL.Get(),
-	})
+	if err := validateExtendedRequireTLS(c.parsedToolsetConfigs, extensionToolsetTable, requireTLS); err != nil {
+		return err
+	}
+	return validateExtendedRequireTLS(c.parsedClusterProviderConfigs, extensionProviderTable, requireTLS)
+}
+
+func validateExtendedRequireTLS(cfgs map[string]api.ExtendedConfig, table string, requireTLS bool) error {
+	for _, name := range slices.Sorted(maps.Keys(cfgs)) {
+		v, ok := cfgs[name].(api.RequireTLSValidator)
+		if !ok {
+			continue
+		}
+		if err := v.ValidateRequireTLS(requireTLS); err != nil {
+			return fmt.Errorf("%s.%s: %w", table, name, err)
+		}
+	}
+	return nil
 }
 
 func (c *Config) ValidateClusterAuthMode() error {
