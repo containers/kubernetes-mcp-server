@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -15,6 +16,7 @@ import (
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
+	mu  sync.RWMutex
 	cfg *config.Config
 	*ProviderGVKFilter
 	strategy            string
@@ -49,6 +51,12 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 }
 
 func (p *singleClusterProvider) reset(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.resetLocked(ctx)
+}
+
+func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 	if p.cfg != nil && p.cfg.KubeConfig.Get() != "" && p.strategy == api.ClusterProviderInCluster {
 		return fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy",
 			p.cfg.KubeConfig.Get())
@@ -78,6 +86,8 @@ func (p *singleClusterProvider) reset(ctx context.Context) error {
 }
 
 func (p *singleClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
 }
 
@@ -90,6 +100,8 @@ func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) 
 }
 
 func (p *singleClusterProvider) GetTargetManagers(_ context.Context) ([]*Manager, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return []*Manager{p.manager}, nil
 }
 
@@ -98,6 +110,11 @@ func (p *singleClusterProvider) GetDerivedKubernetes(ctx context.Context, target
 		return nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy: %w", p.strategy, ErrUnknownTarget)
 	}
 
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.manager == nil {
+		return nil, errors.New("kubernetes manager is not initialized")
+	}
 	return p.manager.Derived(ctx)
 }
 
@@ -109,8 +126,11 @@ func (p *singleClusterProvider) ReloadConfig(ctx context.Context, cfg *config.Co
 	if cfg == nil {
 		return errors.New("config cannot be nil")
 	}
+	p.mu.Lock()
 	p.cfg = cfg
-	if err := p.reset(ctx); err != nil {
+	err := p.resetLocked(ctx)
+	p.mu.Unlock()
+	if err != nil {
 		return err
 	}
 	p.watch.Rearm(p.WatchTargets)
@@ -121,17 +141,19 @@ func (p *singleClusterProvider) GetTargetParameterName() string {
 	return ""
 }
 
-func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpReload) {
+func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpReloader) {
 	p.watch.Store(ctx, reload)
 	reloadWithReset := func() error {
-		if err := p.reset(ctx); err != nil {
-			return err
-		}
-		p.WatchTargets(ctx, reload)
-		return reload()
+		return reload.Run(func() error {
+			if err := p.reset(ctx); err != nil {
+				return err
+			}
+			p.WatchTargets(ctx, reload)
+			return reload.ApplyToolsets()
+		})
 	}
 	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload)
+	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
 }
 
 func (p *singleClusterProvider) Close() {

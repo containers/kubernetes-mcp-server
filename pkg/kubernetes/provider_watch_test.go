@@ -65,7 +65,7 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 
 		s.Run("With provider "+reflect.TypeOf(provider).String(), func() {
 			callback, waitForCallback := CallbackWaiter()
-			provider.WatchTargets(s.T().Context(), callback)
+			provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
 			s.Run("Reloads provider on cluster changes", func() {
 				s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "alex.example.com/v1"})
 
@@ -82,7 +82,7 @@ func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
 	s.Require().NoError(err, "Expected no error from provider creation")
 
 	callback, waitForCallback := CallbackWaiter()
-	provider.WatchTargets(s.T().Context(), callback)
+	provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
 
 	s.Run("KubeConfigClusterProvider updates targets (reset) on kubeconfig change", func() {
 		s.kubeconfig.CurrentContext = "context-1"
@@ -125,7 +125,7 @@ func (s *ProviderWatchTargetsTestSuite) TestSingleClusterProvider() {
 	s.Require().NoError(err, "Expected no error from provider creation")
 
 	callback, waitForCallback := CallbackWaiter()
-	provider.WatchTargets(s.T().Context(), callback)
+	provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
 
 	s.Run("SingleClusterProvider reloads/resets on kubeconfig change", func() {
 		s.kubeconfig.CurrentContext = "context-1"

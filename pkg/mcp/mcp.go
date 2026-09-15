@@ -92,11 +92,9 @@ type Server struct {
 	// mu protects the enabledX bookkeeping. The configuration is held in
 	// an atomic.Pointer (see below) and does NOT require mu for reads.
 	mu sync.RWMutex
-	// reloadMu serializes applyToolsets calls. WatchTargets (kubeconfig +
-	// cluster-state watchers) and ReloadConfiguration can all fire reloads
-	// concurrently; without this lock, two reloads can interleave their SDK
-	// Add/Remove operations and their enabledX writes, leaving the SDK and
-	// the bookkeeping divergent.
+	// reloadMu serializes applyToolsets, ReloadConfig, and watcher resets.
+	// WatchTargets (kubeconfig + cluster-state) and ReloadConfiguration
+	// all take this lock so SDK Add/Remove and manager rebuild cannot interleave.
 	reloadMu sync.Mutex
 	// configuration is the live server configuration. It's an
 	// atomic.Pointer so that handlers (which read s.configuration on every
@@ -185,7 +183,7 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 	if err != nil {
 		return nil, err
 	}
-	s.p.WatchTargets(ctx, s.reapplyToolsets)
+	s.p.WatchTargets(ctx, s.mcpReloader())
 
 	return s, nil
 }
@@ -200,7 +198,25 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 func (s *Server) reapplyToolsets() error {
 	// TODO: context.Background is likely correct here, but let's verify when we add otel traces on SIGHUP path
 	// We want to make sure all the logs get correlated correctly through handling a SIGHUP signal
-	return s.applyToolsets(context.Background(), nil)
+	return s.withReloadLock(func() error {
+		return s.applyToolsetsLocked(context.Background(), nil)
+	})
+}
+
+func (s *Server) withReloadLock(fn func() error) error {
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+	return fn()
+}
+
+func (s *Server) mcpReloader() internalk8s.McpReloader {
+	return internalk8s.McpReloader{
+		Reapply: s.reapplyToolsets,
+		Do:      s.withReloadLock,
+		Apply: func() error {
+			return s.applyToolsetsLocked(context.Background(), nil)
+		},
+	}
 }
 
 // applyToolsets recomputes the SDK's tool/prompt/resource/template surface
@@ -217,14 +233,18 @@ func (s *Server) reapplyToolsets() error {
 // On error s.configuration, the SDK, and the enabled-X bookkeeping all stay
 // at their prior consistent values.
 func (s *Server) applyToolsets(ctx context.Context, cfg *Configuration) error {
+	return s.withReloadLock(func() error {
+		return s.applyToolsetsLocked(ctx, cfg)
+	})
+}
+
+func (s *Server) applyToolsetsLocked(ctx context.Context, cfg *Configuration) error {
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(tools...)
 
-	// Serialize reloads: WatchTargets and ReloadConfiguration can both fire
-	// concurrently, and their SDK Add/Remove operations would otherwise
-	// interleave and leave SDK state divergent from enabledX.
-	s.reloadMu.Lock()
-	defer s.reloadMu.Unlock()
+	// Caller holds reloadMu. WatchTargets (kubeconfig + cluster-state)
+	// and ReloadConfiguration serialize here so SDK Add/Remove and
+	// manager reset cannot interleave.
 
 	// If the caller didn't pin a candidate cfg, re-apply whatever is
 	// currently installed. Reading inside the reloadMu critical section
@@ -323,7 +343,7 @@ func (s *Server) applyToolsets(ctx context.Context, cfg *Configuration) error {
 	s.mu.Unlock()
 
 	// Start new watch
-	s.p.WatchTargets(ctx, s.reapplyToolsets)
+	s.p.WatchTargets(ctx, s.mcpReloader())
 	return nil
 }
 
@@ -563,16 +583,20 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 		return fmt.Errorf("configuration reload rejected: %w", err)
 	}
 
-	if err := s.p.ReloadConfig(ctx, newConfig); err != nil {
-		return fmt.Errorf("failed to reload kubernetes provider: %w", err)
-	}
+	if err := s.withReloadLock(func() error {
+		if err := s.p.ReloadConfig(ctx, newConfig); err != nil {
+			return fmt.Errorf("failed to reload kubernetes provider: %w", err)
+		}
 
-	// Build a candidate Configuration view. applyToolsets will install it
-	// atomically only if the convert phase succeeds.
-	candidate := &Configuration{Config: newConfig}
-
-	if err := s.applyToolsets(ctx, candidate); err != nil {
-		return fmt.Errorf("failed to reload toolsets: %w", err)
+		// Build a candidate Configuration view. applyToolsets will install it
+		// atomically only if the convert phase succeeds.
+		candidate := &Configuration{Config: newConfig}
+		if err := s.applyToolsetsLocked(ctx, candidate); err != nil {
+			return fmt.Errorf("failed to reload toolsets: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	logger.V(1).Info("MCP server configuration reloaded successfully")

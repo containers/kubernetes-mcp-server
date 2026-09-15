@@ -52,7 +52,10 @@ func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Prov
 func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.resetLocked(ctx)
+}
 
+func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 	m, err := NewKubeconfigManager(ctx, p.cfg, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
@@ -145,6 +148,8 @@ func (p *kubeConfigClusterProvider) managerForContext(ctx context.Context, kubeC
 }
 
 func (p *kubeConfigClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
 }
 
@@ -193,8 +198,19 @@ func (p *kubeConfigClusterProvider) GetTargetParameterName() string {
 	return KubeConfigTargetParameterName
 }
 
-func (p *kubeConfigClusterProvider) GetDerivedKubernetes(ctx context.Context, context string) (*Kubernetes, error) {
-	m, err := p.managerForContext(ctx, context, false)
+func (p *kubeConfigClusterProvider) GetDerivedKubernetes(ctx context.Context, kubeContext string) (*Kubernetes, error) {
+	p.mu.RLock()
+	m, ok := p.managers[kubeContext]
+	if ok && m != nil {
+		k8s, err := m.Derived(ctx)
+		p.mu.RUnlock()
+		return k8s, err
+	}
+	p.mu.RUnlock()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	m, err := p.managerForContext(ctx, kubeContext, true)
 	if err != nil {
 		return nil, err
 	}
@@ -213,25 +229,28 @@ func (p *kubeConfigClusterProvider) ReloadConfig(ctx context.Context, cfg *confi
 	}
 	p.mu.Lock()
 	p.cfg = cfg
+	err := p.resetLocked(ctx)
 	p.mu.Unlock()
-	if err := p.reset(ctx); err != nil {
+	if err != nil {
 		return err
 	}
 	p.watch.Rearm(p.WatchTargets)
 	return nil
 }
 
-func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload McpReload) {
+func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload McpReloader) {
 	p.watch.Store(ctx, reload)
 	reloadWithReset := func() error {
-		if err := p.reset(ctx); err != nil {
-			return err
-		}
-		p.WatchTargets(ctx, reload)
-		return reload()
+		return reload.Run(func() error {
+			if err := p.reset(ctx); err != nil {
+				return err
+			}
+			p.WatchTargets(ctx, reload)
+			return reload.ApplyToolsets()
+		})
 	}
 	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload)
+	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
 }
 
 func (p *kubeConfigClusterProvider) Close() {

@@ -190,7 +190,7 @@ func (p *tokenExchangingProvider) GetTargetParameterName() string {
 	return p.provider.GetTargetParameterName()
 }
 
-func (p *tokenExchangingProvider) WatchTargets(ctx context.Context, reload McpReload) {
+func (p *tokenExchangingProvider) WatchTargets(ctx context.Context, reload McpReloader) {
 	p.provider.WatchTargets(ctx, reload)
 }
 

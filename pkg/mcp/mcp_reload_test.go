@@ -557,6 +557,8 @@ func (s *ConfigReloadSuite) TestConcurrentReadsDuringReload() {
 				_ = cfg.HTTP.RateLimitRPS.Get()
 				_ = cfg.Stateless.Get()
 				_ = cfg.LogLevel.Get()
+				_, _ = provider.GetDerivedKubernetes(s.T().Context(), provider.GetDefaultTarget())
+				_ = provider.IsTargetCompatibilityToolFiltersEnabled()
 				observedReads.Add(1)
 			}
 		}()

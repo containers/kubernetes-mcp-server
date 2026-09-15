@@ -359,7 +359,7 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 		s.T().Cleanup(provider.Close)
 
 		callback, waitForCallback := CallbackWaiter()
-		provider.WatchTargets(s.T().Context(), callback)
+		provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
 
 		const readers = 10
 		stop := make(chan struct{})

@@ -61,8 +61,10 @@ func newKcpClusterProvider(ctx context.Context, cfg *config.Config) (kubernetes.
 func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.resetLocked(ctx)
+}
 
-	// Load kubeconfig
+func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 	pathOptions := clientcmd.NewDefaultPathOptions()
 	if p.cfg.KubeConfig.Get() != "" {
 		pathOptions.LoadingRules.ExplicitPath = p.cfg.KubeConfig.Get()
@@ -264,6 +266,8 @@ func (p *kcpClusterProvider) findOrCreateWorkspaceContext(
 }
 
 func (p *kcpClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
 }
 
@@ -312,15 +316,24 @@ func (p *kcpClusterProvider) GetTargetParameterName() string {
 }
 
 func (p *kcpClusterProvider) GetDerivedKubernetes(ctx context.Context, workspace string) (*kubernetes.Kubernetes, error) {
+	p.mu.RLock()
 	if workspace == "" {
 		workspace = p.defaultWorkspace
 	}
+	m, ok := p.managers[workspace]
+	if ok && m != nil {
+		k8s, err := m.Derived(ctx)
+		p.mu.RUnlock()
+		return k8s, err
+	}
+	p.mu.RUnlock()
 
-	m, err := p.managerForWorkspace(ctx, workspace, false)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	m, err := p.managerForWorkspace(ctx, workspace, true)
 	if err != nil {
 		return nil, err
 	}
-
 	return m.Derived(ctx)
 }
 
@@ -336,26 +349,28 @@ func (p *kcpClusterProvider) ReloadConfig(ctx context.Context, cfg *config.Confi
 	}
 	p.mu.Lock()
 	p.cfg = cfg
+	err := p.resetLocked(ctx)
 	p.mu.Unlock()
-	if err := p.reset(ctx); err != nil {
+	if err != nil {
 		return err
 	}
 	p.watch.Rearm(p.WatchTargets)
 	return nil
 }
 
-func (p *kcpClusterProvider) WatchTargets(ctx context.Context, reload kubernetes.McpReload) {
+func (p *kcpClusterProvider) WatchTargets(ctx context.Context, reload kubernetes.McpReloader) {
 	p.watch.Store(ctx, reload)
 	reloadWithReset := func() error {
-		if err := p.reset(ctx); err != nil {
-			return err
-		}
-		p.WatchTargets(ctx, reload)
-		return reload()
+		return reload.Run(func() error {
+			if err := p.reset(ctx); err != nil {
+				return err
+			}
+			p.WatchTargets(ctx, reload)
+			return reload.ApplyToolsets()
+		})
 	}
-
 	p.workspaceWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload)
+	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
 }
 
 func (p *kcpClusterProvider) Close() {

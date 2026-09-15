@@ -58,7 +58,7 @@ func (fakeDerivedProvider) IsMultiTarget() bool                          { retur
 func (fakeDerivedProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
 func (fakeDerivedProvider) GetDefaultTarget() string                     { return "" }
 func (fakeDerivedProvider) GetTargetParameterName() string               { return "" }
-func (fakeDerivedProvider) WatchTargets(context.Context, McpReload)      {}
+func (fakeDerivedProvider) WatchTargets(context.Context, McpReloader)    {}
 func (fakeDerivedProvider) ReloadConfig(context.Context, *config.Config) error {
 	return nil
 }
