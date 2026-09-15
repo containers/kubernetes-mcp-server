@@ -1,0 +1,166 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+
+metadata:
+  labels:
+    suite: guest-observability
+    project: kubevirt
+    requires: guest-observability
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "windows-event-129-missing-vm-name"
+  category: "Guest failure investigation"
+  description: "Detect a Windows storage reset when guest telemetry is missing VM identity."
+  difficulty: medium
+
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          GUEST_OBSERVABILITY_SCENARIO=event129-missing-vm-name \
+            "${REPO_ROOT}/evals/tasks/guest-observability/shared/setup-mock.sh"
+        timeout: 180s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          LOKI_PORT="${GUEST_OBSERVABILITY_LOKI_PORT:-3101}"
+
+          REQUESTS=""
+
+          for _ in 1 2 3 4 5; do
+            if REQUESTS=$(curl -sf \
+              "http://127.0.0.1:${LOKI_PORT}/api/debug/requests"); then
+              break
+            fi
+
+            sleep 1
+          done
+
+          : "${REQUESTS:?mock Loki unreachable}"
+
+          python3 - "${REQUESTS}" <<'PY'
+          import json
+          import sys
+
+          payload = json.loads(sys.argv[1])
+          requests = payload.get("requests", [])
+
+          if not requests:
+              raise SystemExit("no Loki queries were recorded")
+
+          valid_request = None
+
+          for request in requests:
+              if request.get("path") != "/loki/api/v1/query_range":
+                  continue
+
+              args = request.get("query", {})
+              logql = args.get("query", "")
+              start = args.get("start", "")
+              end = args.get("end", "")
+              lower = logql.lower()
+
+              selector = ""
+              if "{" in logql and "}" in logql:
+                  selector = logql.split("{", 1)[1].split("}", 1)[0].lower()
+
+              has_namespace = (
+                  "guest-observability-eval" in lower
+              )
+
+              has_windows_identity = (
+                  "windows_eventlog" in lower
+                  or 'os="windows"' in lower
+                  or "os='windows'" in lower
+              )
+
+              has_storage_reset_filter = (
+                  "129" in lower
+                  or "reset to device" in lower
+                  or "storage reset" in lower
+                  or "storport" in lower
+                  or "reset" in lower
+              )
+
+              does_not_require_vm_name = (
+                  "vm_name" not in selector
+              )
+
+              bounded_time = bool(
+                  start
+                  and end
+                  and start != end
+              )
+
+              limit = args.get("limit")
+              safe_limit = True
+
+              if limit is not None:
+                  try:
+                      safe_limit = 1 <= int(limit) <= 1000
+                  except ValueError:
+                      safe_limit = False
+
+              if (
+                  has_namespace
+                  and has_windows_identity
+                  and has_storage_reset_filter
+                  and does_not_require_vm_name
+                  and bounded_time
+                  and safe_limit
+              ):
+                  valid_request = request
+                  break
+
+          if valid_request is None:
+              print("Recorded Loki requests:")
+              print(json.dumps(requests, indent=2))
+
+              raise SystemExit(
+                  "no valid Windows storage-reset query "
+                  "without a vm_name selector was found"
+              )
+
+          print("Valid missing-vm_name Loki query found:")
+          print(json.dumps(valid_request, indent=2))
+          PY
+
+    - llmJudge:
+        contains: "Event 129"
+
+    - llmJudge:
+        contains: >-
+          The telemetry stream is missing the vm_name label, so the
+          affected VM cannot be reliably identified and no specific
+          VM name should be claimed.
+
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          bash "${REPO_ROOT}/evals/tasks/guest-observability/shared/cleanup-mock.sh"
+        timeout: 60s
+
+  prompt:
+    inline: |
+      Check whether any Windows VM in the
+      guest-observability-eval namespace experienced a storage reset
+      during the last hour.
+      Identify the affected VM and summarize the evidence you find.

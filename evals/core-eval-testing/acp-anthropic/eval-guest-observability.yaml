@@ -1,0 +1,30 @@
+kind: Eval
+metadata:
+  name: "guest-observability-e2e"
+
+config:
+  agent:
+    type: "file"
+    path: agent.yaml
+
+  mcpConfigFile: ../../mcp-config.yaml
+
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+
+  llmJudge:
+    ref:
+      type: file
+      path: agent.yaml
+
+  taskSets:
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: guest-observability
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "guest-observability_.*"
+        minToolCalls: 1
+        maxToolCalls: 20

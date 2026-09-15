@@ -1,0 +1,490 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: guest-observability-eval
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-loki
+  namespace: guest-observability-eval
+data:
+  server.py: |
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from datetime import datetime, timezone, timedelta
+    import json
+    import time
+    import re
+    import os
+    import urllib.parse
+
+    LAST_REQUEST = {}
+    REQUEST_HISTORY = []
+    VM_NAMESPACE = "guest-observability-eval"
+    OTHER_NAMESPACE = "guest-observability-other"
+
+    SCENARIO = os.environ.get(
+        "GUEST_OBSERVABILITY_SCENARIO",
+        "event129",
+    ).strip()
+
+
+    def windows_labels(namespace, vm_name):
+        return {
+            "namespace": namespace,
+            "vm_name": vm_name,
+            "os": "windows",
+            "source": "windows_eventlog",
+        }
+
+
+    def storage_reset_labels():
+        labels = windows_labels(
+            VM_NAMESPACE,
+            "win-event-129",
+        )
+
+        if SCENARIO == "event129":
+            return labels
+
+        if SCENARIO == "event129-missing-vm-name":
+            labels.pop("vm_name")
+            return labels
+
+        if SCENARIO == "event129-missing-namespace":
+            labels.pop("namespace")
+            return labels
+
+        if SCENARIO == "event129-missing-os":
+            labels.pop("os")
+            return labels
+
+        if SCENARIO == "event129-missing-source":
+            labels.pop("source")
+            return labels
+
+        if SCENARIO == "event129-missing-all-labels":
+            return {
+                "collector": "guest-agent",
+            }
+
+        raise ValueError(
+            f"unsupported guest-observability scenario: {SCENARIO}"
+        )
+
+
+    LOG_STREAMS = [
+        # Candidate Windows VM #1 in requested namespace.
+        {
+            "labels": windows_labels(
+                VM_NAMESPACE,
+                "win-event-129",
+            ),
+            "message": (
+                "Provider=Service Control Manager "
+                "EventID=7036 storage service running"
+            ),
+            "kind": "normal",
+        },
+
+        # Candidate Windows VM #2 in requested namespace.
+        {
+            "labels": windows_labels(
+                VM_NAMESPACE,
+                "win-clean-01",
+            ),
+            "message": (
+                "Provider=Service Control Manager "
+                "EventID=7036 storage service running"
+            ),
+            "kind": "normal",
+        },
+
+        # Same VM name in a different namespace.
+        #
+        # This is what makes missing namespace genuinely ambiguous:
+        # namespace + vm_name is the VM identity.
+        {
+            "labels": windows_labels(
+                OTHER_NAMESPACE,
+                "win-event-129",
+            ),
+            "message": (
+                "Provider=Service Control Manager "
+                "EventID=7036 storage service running"
+            ),
+            "kind": "normal",
+        },
+
+        # Linux noise.
+        {
+            "labels": {
+                "namespace": VM_NAMESPACE,
+                "vm_name": "linux-db-01",
+                "os": "linux",
+                "source": "linux_syslog",
+            },
+            "message": "kernel: storage subsystem operating normally",
+            "kind": "normal",
+        },
+
+        # The actual failure event.
+        {
+            "labels": storage_reset_labels(),
+            "message": (
+                "Provider=storport EventID=129 "
+                "Reset to device, "
+                "\\\\Device\\\\RaidPort0, was issued."
+            ),
+            "kind": "storage-reset",
+        },
+    ]
+
+    def first(query, key, default=""):
+        values = query.get(key, [])
+        return values[0] if values else default
+
+    def record_request(path, query):
+        global LAST_REQUEST
+
+        entry = {
+            "path": path,
+            "query": {
+                key: values[0] if len(values) == 1 else values
+                for key, values in query.items()
+            },
+        }
+
+        LAST_REQUEST = entry
+        REQUEST_HISTORY.append(entry)
+
+    LABEL_MATCHER_RE = re.compile(
+        r'([A-Za-z_][A-Za-z0-9_]*)\s*(=~|!~|!=|=)\s*"([^"]*)"'
+    )
+
+    LINE_FILTER_RE = re.compile(
+        r'(\|=|\|~|!=|!~)\s*"([^"]*)"'
+    )
+
+
+    def stream_matches_line_filters(logql, message):
+        if "}" not in logql:
+            return True
+
+        pipeline = logql.split("}", 1)[1]
+
+        for operator, expected in LINE_FILTER_RE.findall(pipeline):
+            if operator == "|=":
+                if expected not in message:
+                    return False
+
+            elif operator == "!=":
+                if expected in message:
+                    return False
+
+            elif operator == "|~":
+                try:
+                    if re.search(expected, message) is None:
+                        return False
+                except re.error:
+                    return False
+
+            elif operator == "!~":
+                try:
+                    if re.search(expected, message) is not None:
+                        return False
+                except re.error:
+                    return False
+
+        return True
+
+
+    def stream_matches_query(logql, stream):
+        # Metric-style LogQL is outside this mock's current scope.
+        if "count_over_time(" in logql or "sum by" in logql:
+            return False
+
+        if not stream_matches_selector(
+            logql,
+            stream["labels"],
+        ):
+            return False
+
+        if not stream_matches_line_filters(
+            logql,
+            stream["message"],
+        ):
+            return False
+
+        return True
+
+
+    def stream_matches_selector(logql, labels):
+        selector_match = re.search(r"\{([^}]*)\}", logql)
+        if not selector_match:
+            return True
+
+        selector = selector_match.group(1)
+
+        for label, operator, expected in LABEL_MATCHER_RE.findall(selector):
+            actual = labels.get(label)
+
+            if operator == "=":
+                if actual != expected:
+                    return False
+
+            elif operator == "!=":
+                if actual == expected:
+                    return False
+
+            elif operator == "=~":
+                if actual is None or re.fullmatch(expected, actual) is None:
+                    return False
+
+            elif operator == "!~":
+                if actual is not None and re.fullmatch(expected, actual) is not None:
+                    return False
+
+        return True
+
+    def parse_rfc3339(value):
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+
+        return datetime.fromisoformat(value).astimezone(timezone.utc)
+
+    def event_timestamp():
+        return datetime.now(timezone.utc) - timedelta(minutes=5)
+
+
+    def event_timestamp_ns(ts):
+        return str(int(ts.timestamp() * 1_000_000_000))
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            return
+
+        def send_json(self, status, body):
+            payload = json.dumps(body).encode()
+
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_GET(self):
+            global LAST_REQUEST
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            query = urllib.parse.parse_qs(parsed.query)
+            result = []
+
+            if path == "/ready":
+                self.send_json(200, {"status": "ready"})
+                return
+
+            if path == "/api/debug/reset":
+                LAST_REQUEST = {}
+                REQUEST_HISTORY.clear()
+
+                self.send_json(
+                    200,
+                    {
+                        "status": "reset",
+                    },
+                )
+                return
+
+            if path == "/api/debug/requests":
+                self.send_json(
+                    200,
+                    {
+                        "requests": REQUEST_HISTORY,
+                    },
+                )
+                return
+
+            if path == "/api/debug/last-request":
+                self.send_json(200, LAST_REQUEST)
+                return
+
+            if path != "/loki/api/v1/query_range":
+                self.send_json(
+                    404,
+                    {
+                        "status": "error",
+                        "error": "unsupported endpoint",
+                    },
+                )
+                return
+
+            record_request(path, query)
+
+            logql = first(query, "query")
+            start = first(query, "start")
+            end = first(query, "end")
+            direction = first(query, "direction", "backward")
+            limit = first(query, "limit", "100")
+
+            if not logql:
+                self.send_json(
+                    400,
+                    {
+                        "status": "error",
+                        "error": "query is required",
+                    },
+                )
+                return
+
+            if not start or not end:
+                self.send_json(
+                    400,
+                    {
+                        "status": "error",
+                        "error": "bounded start and end timestamps are required",
+                    },
+                )
+                return
+
+            if direction not in ("forward", "backward"):
+                self.send_json(
+                    400,
+                    {
+                        "status": "error",
+                        "error": "direction must be forward or backward",
+                    },
+                )
+                return
+
+            try:
+                limit_value = int(limit)
+            except ValueError:
+                self.send_json(
+                    400,
+                    {
+                        "status": "error",
+                        "error": "limit must be an integer",
+                    },
+                )
+                return
+
+            try:
+                start_time = parse_rfc3339(start)
+                end_time = parse_rfc3339(end)
+            except ValueError:
+                self.send_json(
+                    400,
+                    {
+                        "status": "error",
+                        "error": "start and end must be valid RFC3339 timestamps",
+                    },
+                )
+                return
+
+            if start_time > end_time:
+                self.send_json(
+                    400,
+                    {
+                        "status": "error",
+                        "error": "start must not be after end",
+                    },
+                )
+                return
+
+            event_time = event_timestamp()
+            event_in_range = start_time <= event_time <= end_time
+
+            if limit_value <= 0 or limit_value > 1000:
+                self.send_json(
+                    400,
+                    {
+                        "status": "error",
+                        "error": "limit must be between 1 and 1000",
+                    },
+                )
+                return
+
+            if event_in_range:
+                for stream in LOG_STREAMS:
+                    if not stream_matches_query(logql, stream):
+                        continue
+
+                    result.append(
+                    {
+                        "stream": stream["labels"],
+                        "values": [
+                            [
+                                event_timestamp_ns(event_time),
+                                stream["message"],
+                            ]
+                        ],
+                    }
+                )
+
+            self.send_json(
+                200,
+                {
+                    "status": "success",
+                    "data": {
+                        "resultType": "streams",
+                        "result": result,
+                    },
+                },
+            )
+
+    if __name__ == "__main__":
+        HTTPServer(("0.0.0.0", 3100), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-loki
+  namespace: guest-observability-eval
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-loki
+  template:
+    metadata:
+      labels:
+        app: mock-loki
+    spec:
+      containers:
+        - name: mock-loki
+          image: python:3.12-alpine
+          env:
+            - name: GUEST_OBSERVABILITY_SCENARIO
+              value: event129
+          command:
+            - python
+            - /scripts/server.py
+          ports:
+            - containerPort: 3100
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: mock-loki
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-loki
+  namespace: guest-observability-eval
+spec:
+  selector:
+    app: mock-loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: 3100
