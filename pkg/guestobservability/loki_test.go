@@ -14,6 +14,18 @@ import (
 	"time"
 )
 
+func newLokiTestServer(
+	t *testing.T,
+	handler http.HandlerFunc,
+) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	return server
+}
+
 func TestPrepareLokiQueryRange(t *testing.T) {
 	now := time.Date(
 		2026,
@@ -205,8 +217,9 @@ func TestLokiQueryRange(t *testing.T) {
 
 	captured := make(chan capturedRequest, 1)
 
-	server := httptest.NewServer(
-		http.HandlerFunc(func(
+	server := newLokiTestServer(
+		t,
+		func(
 			w http.ResponseWriter,
 			r *http.Request,
 		) {
@@ -229,9 +242,8 @@ func TestLokiQueryRange(t *testing.T) {
 					},
 				},
 			)
-		}),
+		},
 	)
-	defer server.Close()
 
 	client, err := newLokiFromConfig(
 		&Config{
@@ -310,8 +322,9 @@ func TestLokiQueryRange(t *testing.T) {
 }
 
 func TestLokiHTTPError(t *testing.T) {
-	server := httptest.NewServer(
-		http.HandlerFunc(func(
+	server := newLokiTestServer(
+		t,
+		func(
 			w http.ResponseWriter,
 			_ *http.Request,
 		) {
@@ -320,9 +333,8 @@ func TestLokiHTTPError(t *testing.T) {
 				"backend unavailable",
 				http.StatusServiceUnavailable,
 			)
-		}),
+		},
 	)
-	defer server.Close()
 
 	client, err := newLokiFromConfig(
 		&Config{
@@ -361,18 +373,19 @@ func TestLokiHTTPError(t *testing.T) {
 }
 
 func TestLokiRedirectRejected(t *testing.T) {
-	target := httptest.NewServer(
-		http.HandlerFunc(func(
+	target := newLokiTestServer(
+		t,
+		func(
 			w http.ResponseWriter,
 			_ *http.Request,
 		) {
 			w.WriteHeader(http.StatusOK)
-		}),
+		},
 	)
-	defer target.Close()
 
-	server := httptest.NewServer(
-		http.HandlerFunc(func(
+	server := newLokiTestServer(
+		t,
+		func(
 			w http.ResponseWriter,
 			r *http.Request,
 		) {
@@ -382,9 +395,8 @@ func TestLokiRedirectRejected(t *testing.T) {
 				target.URL,
 				http.StatusFound,
 			)
-		}),
+		},
 	)
-	defer server.Close()
 
 	client, err := newLokiFromConfig(
 		&Config{
@@ -419,8 +431,9 @@ func TestLokiRedirectRejected(t *testing.T) {
 }
 
 func TestLokiOversizedResponseRejected(t *testing.T) {
-	server := httptest.NewServer(
-		http.HandlerFunc(func(
+	server := newLokiTestServer(
+		t,
+		func(
 			w http.ResponseWriter,
 			_ *http.Request,
 		) {
@@ -437,9 +450,8 @@ func TestLokiOversizedResponseRejected(t *testing.T) {
 					),
 				),
 			)
-		}),
+		},
 	)
-	defer server.Close()
 
 	client, err := newLokiFromConfig(
 		&Config{
