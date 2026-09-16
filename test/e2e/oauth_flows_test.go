@@ -471,7 +471,6 @@ func TestOAuthSTSAssertion(t *testing.T) {
 				require_oauth = true
 				oauth_audience = "mcp-server-jwt"
 				oauth_scopes = ["openid", "mcp-server-jwt"]
-				validate_token = false
 				authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
 				certificate_authority = "%s/ca.crt"
 

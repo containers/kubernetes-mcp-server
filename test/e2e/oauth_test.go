@@ -445,7 +445,6 @@ func oidcServerConfig(oauthScopes []string, clientAuthMethod string) string {
 		require_oauth = true
 		oauth_audience = "mcp-server"
 		oauth_scopes = %s
-		validate_token = false
 		authorization_url = "https://keycloak.keycloak.svc:8443/realms/openshift"
 		certificate_authority = "%s/ca.crt"
 

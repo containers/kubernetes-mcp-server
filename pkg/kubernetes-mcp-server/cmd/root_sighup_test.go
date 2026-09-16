@@ -647,8 +647,11 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 	s.Run("no shutdown messages in logs", func() {
 		// Poll the negative over a window (not a fixed sleep + single sample):
 		// Never fails the moment a shutdown line appears.
+		// Capture the buffer so Never's leftover ticker goroutine does not
+		// race SetupTest replacing s.baseSIGHUPSetup.
+		logBuffer := s.logBuffer
 		s.Never(func() bool {
-			logOutput := s.logBuffer.String()
+			logOutput := logBuffer.String()
 			return strings.Contains(logOutput, "initiating graceful shutdown") ||
 				strings.Contains(logOutput, "Shutting down HTTP server")
 		}, 500*time.Millisecond, 50*time.Millisecond, "SIGHUP must not trigger shutdown of the HTTP server")
@@ -689,8 +692,9 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPIgnoredWithoutConfig() {
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
 
 	s.Run("no-config server keeps serving after SIGHUP", func() {
+		logBuffer := s.logBuffer
 		s.Never(func() bool {
-			logOutput := s.logBuffer.String()
+			logOutput := logBuffer.String()
 			return strings.Contains(logOutput, "initiating graceful shutdown") ||
 				strings.Contains(logOutput, "Shutting down HTTP server")
 		}, 500*time.Millisecond, 50*time.Millisecond, "SIGHUP must not shut down the no-config HTTP server")
