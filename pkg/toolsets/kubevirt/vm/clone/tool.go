@@ -44,6 +44,11 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
+			RBAC: api.RBACBounded(api.RBACRequirement{
+				Verbs:     []string{"create"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "clone.kubevirt.io", Resource: "virtualmachineclones"}},
+				Namespace: &api.RBACNamespace{Argument: "namespace"},
+			}),
 			Handler: cloneVM,
 			TargetCompatibilityFilters: []func() bool{
 				kubevirt.HasVirtualMachine(p),

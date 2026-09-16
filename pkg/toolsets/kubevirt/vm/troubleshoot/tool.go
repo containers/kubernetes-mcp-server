@@ -60,6 +60,54 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 					OpenWorldHint:   ptr.To(true),
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "kubevirt.io", Resource: "virtualmachines"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "kubevirt.io", Resource: "virtualmachineinstances"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"get"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "cdi.kubevirt.io", Resource: "datavolumes"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"get"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "persistentvolumeclaims"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"get"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods", Subresource: "log"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "events"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:  []string{"get", "list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "storage.k8s.io", Resource: "storageclasses"}},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "kubevirt.io", Resource: "virtualmachineinstancemigrations"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+			),
 			TargetCompatibilityFilters: []func() bool{
 				kubevirt.HasVirtualMachine(p),
 			},

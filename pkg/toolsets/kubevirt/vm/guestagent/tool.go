@@ -57,6 +57,38 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "kubevirt.io", Resource: "virtualmachineinstances"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "subresources.kubevirt.io", Resource: "virtualmachineinstances", Subresource: "guestosinfo"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "subresources.kubevirt.io", Resource: "virtualmachineinstances", Subresource: "filesystemlist"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "subresources.kubevirt.io", Resource: "virtualmachineinstances", Subresource: "userlist"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "subresources.kubevirt.io", Resource: "virtualmachineinstances", Subresource: "interfacelist"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+			),
 			Handler: guestInfo,
 			TargetCompatibilityFilters: []func() bool{
 				kubevirt.HasVirtualMachine(p),

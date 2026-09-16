@@ -56,6 +56,26 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get", "update"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "kubevirt.io", Resource: "virtualmachines"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"update"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "subresources.kubevirt.io", Resource: "virtualmachineinstances", Subresource: "pause"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"update"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "subresources.kubevirt.io", Resource: "virtualmachineinstances", Subresource: "unpause"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+			),
 			Handler: lifecycle,
 			TargetCompatibilityFilters: []func() bool{
 				kubevirt.HasVirtualMachine(p),

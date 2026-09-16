@@ -26,6 +26,31 @@ func initHCOStatus() []api.ServerPrompt {
 				Title:       fmt.Sprintf("%s HyperConverged Status", defaults.ProductName()),
 				Description: fmt.Sprintf("Generate a status report for the HyperConverged Cluster Operator (HCO) managing %s and related components", defaults.ProductName()),
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "hco.kubevirt.io", Resource: "hyperconvergeds"}},
+					Namespace: &api.RBACNamespace{AllNamespaces: true},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "kubevirt.io", Resource: "kubevirts"}},
+					Namespace: &api.RBACNamespace{AllNamespaces: true},
+				},
+				api.RBACRequirement{
+					Verbs:  []string{"list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "cdi.kubevirt.io", Resource: "cdis"}},
+				},
+				api.RBACRequirement{
+					Verbs:  []string{"list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "networkaddonsoperator.network.kubevirt.io", Resource: "networkaddonsconfigs"}},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "events"}},
+					Namespace: &api.RBACNamespace{AllNamespaces: true},
+				},
+			),
 			Handler: hcoStatusHandler,
 		},
 	}

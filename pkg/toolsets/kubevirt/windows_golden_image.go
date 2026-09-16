@@ -89,6 +89,7 @@ func initWindowsGoldenImage() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:         api.RBACNone(),
 			Handler:      windowsGoldenImageHandler,
 			ClusterAware: ptr.To(false),
 		},

@@ -47,6 +47,12 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
+			RBAC: api.RBACBounded(api.RBACRequirement{
+				Verbs:        []string{"create"},
+				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "subresources.template.kubevirt.io", Resource: "virtualmachinetemplates", Subresource: "create"}},
+				Namespace:    &api.RBACNamespace{Argument: "namespace"},
+				ResourceName: &api.RBACResourceName{Argument: "template_name"},
+			}),
 			Handler: createFromTemplate,
 			TargetCompatibilityFilters: []func() bool{
 				kubevirt.HasVirtualMachineTemplate(p),

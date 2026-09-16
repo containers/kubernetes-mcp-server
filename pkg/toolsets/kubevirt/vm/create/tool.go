@@ -110,6 +110,37 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "cdi.kubevirt.io", Resource: "datasources"}},
+					Namespace: &api.RBACNamespace{AllNamespaces: true},
+				},
+				api.RBACRequirement{
+					Verbs:  []string{"list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "instancetype.kubevirt.io", Resource: "virtualmachineclusterpreferences"}},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "instancetype.kubevirt.io", Resource: "virtualmachinepreferences"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:  []string{"list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "instancetype.kubevirt.io", Resource: "virtualmachineclusterinstancetypes"}},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "instancetype.kubevirt.io", Resource: "virtualmachineinstancetypes"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:        []string{"patch"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "kubevirt.io", Resource: "virtualmachines"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+			),
 			Handler: create,
 			TargetCompatibilityFilters: []func() bool{
 				kubevirt.HasVirtualMachine(p),
