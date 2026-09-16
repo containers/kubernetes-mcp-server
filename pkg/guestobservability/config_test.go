@@ -201,13 +201,6 @@ url = "http://127.0.0.1:3101"
 	})
 
 	t.Run("require_tls rejects insecure Loki configuration", func(t *testing.T) {
-		dir := t.TempDir()
-		caFile := filepath.Join(dir, "ca.crt")
-
-		if err := os.WriteFile(caFile, createTestCACertificatePEM(t), 0600); err != nil {
-			t.Fatalf("failed to create CA file: %v", err)
-		}
-
 		_, err := config.ReadToml([]byte(`
 require_tls = true
 
