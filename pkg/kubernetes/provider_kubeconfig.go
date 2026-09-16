@@ -228,12 +228,15 @@ func (p *kubeConfigClusterProvider) ReloadConfig(ctx context.Context, cfg *confi
 		return errors.New("config cannot be nil")
 	}
 	p.mu.Lock()
+	oldCfg := p.cfg
 	p.cfg = cfg
 	err := p.resetLocked(ctx)
-	p.mu.Unlock()
 	if err != nil {
+		p.cfg = oldCfg
+		p.mu.Unlock()
 		return err
 	}
+	p.mu.Unlock()
 	p.watch.Rearm(p.WatchTargets)
 	return nil
 }

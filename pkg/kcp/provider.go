@@ -70,16 +70,15 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 		pathOptions.LoadingRules.ExplicitPath = p.cfg.KubeConfig.Get()
 	}
 
-	p.clientCmdConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+	clientCmdConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		pathOptions.LoadingRules,
 		&clientcmd.ConfigOverrides{})
 
-	rawConfig, err := p.clientCmdConfig.RawConfig()
+	rawConfig, err := clientCmdConfig.RawConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
-	// Get current context
 	currentContext := rawConfig.Contexts[rawConfig.CurrentContext]
 	if currentContext == nil {
 		return errors.New("no current context in kubeconfig")
@@ -90,57 +89,57 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 		return errors.New("current context's cluster not found in kubeconfig")
 	}
 
-	// Parse kcp server URL to extract base URL and workspace
-	p.baseServerURL, p.defaultWorkspace = ParseServerURL(currentCluster.Server)
-	if p.defaultWorkspace == "" {
+	baseServerURL, defaultWorkspace := ParseServerURL(currentCluster.Server)
+	if defaultWorkspace == "" {
 		return errors.New("failed to parse workspace from kubeconfig cluster URL")
 	}
 
-	// Create REST config
-	p.restConfig, err = p.clientCmdConfig.ClientConfig()
+	restConfig, err := clientCmdConfig.ClientConfig()
 	if err != nil {
 		return fmt.Errorf("failed to create rest config: %w", err)
 	}
 
-	// Create base manager for workspace discovery
 	baseManager, err := kubernetes.NewKubeconfigManager(ctx, p.cfg, rawConfig.CurrentContext)
 	if err != nil {
 		return fmt.Errorf("failed to create base manager: %w", err)
 	}
 
-	// Discover workspaces
-	workspaceList, err := p.discoverWorkspaces(baseManager)
+	workspaceList, err := p.discoverWorkspaces(restConfig, defaultWorkspace)
 	if err != nil {
 		klogutil.LogWarn(klogutil.FromContext(ctx), "Failed to discover workspaces via API, falling back to kubeconfig", klogutil.Err(err))
-		workspaceList, err = p.workspacesFromKubeconfig(ctx)
+		workspaceList, err = workspacesFromKubeconfig(ctx, clientCmdConfig)
 		if err != nil {
 			baseManager.Close()
 			return fmt.Errorf("failed to discover workspaces: %w", err)
 		}
 	}
 
-	oldManagers := p.managers
-	// Initialize workspace managers (lazily, set to nil first)
-	p.managers = make(map[string]*kubernetes.Manager, len(workspaceList))
-	for _, ws := range workspaceList {
-		p.managers[ws] = nil
+	k8s, err := baseManager.Derived(ctx)
+	if err != nil {
+		baseManager.Close()
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
-	// Store the base manager for the default workspace
-	p.managers[p.defaultWorkspace] = baseManager
+
+	newManagers := make(map[string]*kubernetes.Manager, len(workspaceList))
+	for _, ws := range workspaceList {
+		newManagers[ws] = nil
+	}
+	newManagers[defaultWorkspace] = baseManager
+
+	oldManagers := p.managers
+	p.clientCmdConfig = clientCmdConfig
+	p.baseServerURL = baseServerURL
+	p.defaultWorkspace = defaultWorkspace
+	p.restConfig = restConfig
+	p.managers = newManagers
+	p.Close()
+	p.workspaceWatcher = NewWorkspaceWatcher(ctx, k8s.DynamicClient(), defaultWorkspace, p.cfg.WorkspacePollInterval.Get(), p.cfg.WorkspaceDebounceWindow.Get())
+	p.clusterStateWatcher = watcher.NewClusterState(ctx, k8s.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	for _, old := range oldManagers {
 		if old != nil {
 			old.Close()
 		}
 	}
-
-	// Setup watchers
-	p.Close()
-	k8s, err := baseManager.Derived(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get kubernetes client: %w", err)
-	}
-	p.workspaceWatcher = NewWorkspaceWatcher(ctx, k8s.DynamicClient(), p.defaultWorkspace, p.cfg.WorkspacePollInterval.Get(), p.cfg.WorkspaceDebounceWindow.Get())
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, k8s.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 
 	return nil
 }
@@ -148,13 +147,13 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 // discoverWorkspaces queries the kcp tenancy API to discover available workspaces.
 // It recursively discovers nested workspaces in the workspace hierarchy.
 // Runs under lock.
-func (p *kcpClusterProvider) discoverWorkspaces(_ *kubernetes.Manager) ([]string, error) {
-	return DiscoverAllWorkspaces(context.TODO(), p.restConfig, p.defaultWorkspace)
+func (p *kcpClusterProvider) discoverWorkspaces(restConfig *rest.Config, defaultWorkspace string) ([]string, error) {
+	return DiscoverAllWorkspaces(context.TODO(), restConfig, defaultWorkspace)
 }
 
 // workspacesFromKubeconfig extracts workspace names from kubeconfig cluster URLs as a fallback.
-func (p *kcpClusterProvider) workspacesFromKubeconfig(ctx context.Context) ([]string, error) {
-	rawConfig, err := p.clientCmdConfig.RawConfig()
+func workspacesFromKubeconfig(ctx context.Context, clientCmdConfig clientcmd.ClientConfig) ([]string, error) {
+	rawConfig, err := clientCmdConfig.RawConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -348,12 +347,15 @@ func (p *kcpClusterProvider) ReloadConfig(ctx context.Context, cfg *config.Confi
 		return errors.New("config cannot be nil")
 	}
 	p.mu.Lock()
+	oldCfg := p.cfg
 	p.cfg = cfg
 	err := p.resetLocked(ctx)
-	p.mu.Unlock()
 	if err != nil {
+		p.cfg = oldCfg
+		p.mu.Unlock()
 		return err
 	}
+	p.mu.Unlock()
 	p.watch.Rearm(p.WatchTargets)
 	return nil
 }

@@ -397,6 +397,20 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 	})
 }
 
+func (s *ProviderKubeconfigTestSuite) TestReloadConfigKeepsManagersOnError() {
+	bad := config.New()
+	bad.KubeConfig.SetForTest("/no/such/kubeconfig")
+	s.Run("reload returns the manager error", func() {
+		err := s.provider.ReloadConfig(s.T().Context(), bad)
+		s.Error(err)
+	})
+	s.Run("previous managers still serve after failed reload", func() {
+		k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), s.provider.GetDefaultTarget())
+		s.NoError(err)
+		s.NotNil(k8s)
+	})
+}
+
 func TestProviderKubeconfig(t *testing.T) {
 	suite.Run(t, new(ProviderKubeconfigTestSuite))
 }

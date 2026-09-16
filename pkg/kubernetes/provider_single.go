@@ -62,14 +62,14 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 			p.cfg.KubeConfig.Get())
 	}
 
-	if p.manager != nil {
-		p.manager.Close()
-	}
-	var err error
+	var (
+		manager *Manager
+		err     error
+	)
 	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p.cfg.KubeConfig.Get()) {
-		p.manager, err = NewInClusterManager(ctx, p.cfg)
+		manager, err = NewInClusterManager(ctx, p.cfg)
 	} else {
-		p.manager, err = NewKubeconfigManager(ctx, p.cfg, "")
+		manager, err = NewKubeconfigManager(ctx, p.cfg, "")
 	}
 	if err != nil {
 		if errors.Is(err, ErrorInClusterNotInCluster) {
@@ -80,6 +80,10 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 	}
 
 	p.Close()
+	if p.manager != nil {
+		p.manager.Close()
+	}
+	p.manager = manager
 	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
 	p.clusterStateWatcher = watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	return nil
@@ -127,12 +131,15 @@ func (p *singleClusterProvider) ReloadConfig(ctx context.Context, cfg *config.Co
 		return errors.New("config cannot be nil")
 	}
 	p.mu.Lock()
+	oldCfg := p.cfg
 	p.cfg = cfg
 	err := p.resetLocked(ctx)
-	p.mu.Unlock()
 	if err != nil {
+		p.cfg = oldCfg
+		p.mu.Unlock()
 		return err
 	}
+	p.mu.Unlock()
 	p.watch.Rearm(p.WatchTargets)
 	return nil
 }

@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -96,6 +97,25 @@ func (s *ProviderSingleTestSuite) TestGetDefaultTarget() {
 
 func (s *ProviderSingleTestSuite) TestGetTargetParameterName() {
 	s.Empty(s.provider.GetTargetParameterName(), "Expected empty string as target parameter name")
+}
+
+func (s *ProviderSingleTestSuite) TestReloadConfigKeepsManagerOnError() {
+	k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), "")
+	s.Require().NoError(err)
+	s.Require().NotNil(k8s)
+
+	InClusterConfig = func() (*rest.Config, error) {
+		return nil, errors.New("in-cluster config unavailable")
+	}
+	s.Run("reload returns the manager error", func() {
+		err := s.provider.ReloadConfig(s.T().Context(), config.New())
+		s.Error(err)
+	})
+	s.Run("previous manager still serves after failed reload", func() {
+		k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), "")
+		s.NoError(err)
+		s.NotNil(k8s)
+	})
 }
 
 func TestProviderSingle(t *testing.T) {
