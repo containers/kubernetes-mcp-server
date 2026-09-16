@@ -2,13 +2,23 @@ package tools
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/suite"
 )
 
-func TestAddGuestTelemetryContractWarnings(t *testing.T) {
-	t.Run("complete contract leaves response unchanged", func(t *testing.T) {
-		input := `{
+type LokiQueryContractSuite struct {
+	suite.Suite
+}
+
+func TestLokiQueryContractSuite(t *testing.T) {
+	suite.Run(t, new(LokiQueryContractSuite))
+}
+
+func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
+	s.Run("complete contract", func() {
+		s.Run("leaves response unchanged", func() {
+			input := `{
 "status":"success",
 "data":{
 "resultType":"streams",
@@ -26,19 +36,19 @@ func TestAddGuestTelemetryContractWarnings(t *testing.T) {
 }
 }`
 
-		got := addGuestTelemetryContractWarnings(input)
+			got := addGuestTelemetryContractWarnings(input)
 
-		if got != input {
-			t.Fatalf(
-				"expected complete-contract response to remain unchanged\n"+
-					"got: %s",
+			s.Equal(
+				input,
 				got,
+				"expected complete-contract response to remain unchanged",
 			)
-		}
+		})
 	})
 
-	t.Run("missing vm_name makes VM identity unreliable", func(t *testing.T) {
-		input := `{
+	s.Run("missing identity labels", func() {
+		s.Run("missing vm_name makes VM identity unreliable", func() {
+			input := `{
 "status":"success",
 "data":{
 "resultType":"streams",
@@ -60,56 +70,47 @@ func TestAddGuestTelemetryContractWarnings(t *testing.T) {
 }
 }`
 
-		warnings := contractWarningsFromResponse(
-			t,
-			addGuestTelemetryContractWarnings(input),
-		)
-
-		if len(warnings) != 1 {
-			t.Fatalf(
-				"expected 1 warning, got %d",
-				len(warnings),
+			warnings := s.contractWarningsFromResponse(
+				addGuestTelemetryContractWarnings(input),
 			)
-		}
 
-		warning := warnings[0]
+			s.Require().Len(
+				warnings,
+				1,
+				"expected exactly one contract warning",
+			)
 
-		if warning.IdentityReliable {
-			t.Fatal(
+			warning := warnings[0]
+
+			s.False(
+				warning.IdentityReliable,
 				"expected identity to be unreliable when vm_name is missing",
 			)
-		}
-
-		if !containsString(warning.Missing, "vm_name") {
-			t.Fatalf(
-				"expected vm_name in missing labels: %#v",
+			s.Contains(
 				warning.Missing,
+				"vm_name",
+				"expected vm_name in missing labels",
 			)
-		}
 
-		expectedFragments := []string{
-			"The affected VM is UNKNOWN",
-			"Do not name, rank, suggest, or speculate",
-			`"most likely" or "strongest candidate"`,
-			"Do not infer VM identity from VM names",
-		}
+			expectedFragments := []string{
+				"The affected VM is UNKNOWN",
+				"Do not name, rank, suggest, or speculate",
+				`"most likely" or "strongest candidate"`,
+				"Do not infer VM identity from VM names",
+			}
 
-		for _, fragment := range expectedFragments {
-			if !strings.Contains(
-				warning.Message,
-				fragment,
-			) {
-				t.Fatalf(
-					"expected warning to contain %q; got %q",
-					fragment,
+			for _, fragment := range expectedFragments {
+				s.Contains(
 					warning.Message,
+					fragment,
+					"expected warning to contain %q",
+					fragment,
 				)
 			}
-		}
-	})
+		})
 
-	t.Run("missing namespace makes VM identity unreliable", func(t *testing.T) {
-		input := `{
+		s.Run("missing namespace makes VM identity unreliable", func() {
+			input := `{
 "status":"success",
 "data":{
 "resultType":"streams",
@@ -126,39 +127,31 @@ func TestAddGuestTelemetryContractWarnings(t *testing.T) {
 }
 }`
 
-		warnings := contractWarningsFromResponse(
-			t,
-			addGuestTelemetryContractWarnings(input),
-		)
-
-		if len(warnings) != 1 {
-			t.Fatalf(
-				"expected 1 warning, got %d",
-				len(warnings),
+			warnings := s.contractWarningsFromResponse(
+				addGuestTelemetryContractWarnings(input),
 			)
-		}
 
-		warning := warnings[0]
+			s.Require().Len(
+				warnings,
+				1,
+				"expected exactly one contract warning",
+			)
 
-		if warning.IdentityReliable {
-			t.Fatal(
+			warning := warnings[0]
+
+			s.False(
+				warning.IdentityReliable,
 				"expected identity to be unreliable when namespace is missing",
 			)
-		}
-
-		if !strings.Contains(
-			warning.Message,
-			"vm_name alone does not identify a namespaced VM",
-		) {
-			t.Fatalf(
-				"unexpected warning: %q",
+			s.Contains(
 				warning.Message,
+				"vm_name alone does not identify a namespaced VM",
+				"unexpected warning",
 			)
-		}
-	})
+		})
 
-	t.Run("missing both identity labels reports VM and namespace unknown", func(t *testing.T) {
-		input := `{
+		s.Run("missing both identity labels reports VM and namespace unknown", func() {
+			input := `{
 "status":"success",
 "data":{
 "resultType":"streams",
@@ -173,53 +166,43 @@ func TestAddGuestTelemetryContractWarnings(t *testing.T) {
 }
 }`
 
-		warnings := contractWarningsFromResponse(
-			t,
-			addGuestTelemetryContractWarnings(input),
-		)
-
-		if len(warnings) != 1 {
-			t.Fatalf(
-				"expected 1 warning, got %d",
-				len(warnings),
+			warnings := s.contractWarningsFromResponse(
+				addGuestTelemetryContractWarnings(input),
 			)
-		}
 
-		warning := warnings[0]
+			s.Require().Len(
+				warnings,
+				1,
+				"expected exactly one contract warning",
+			)
 
-		if warning.IdentityReliable {
-			t.Fatal(
+			warning := warnings[0]
+
+			s.False(
+				warning.IdentityReliable,
 				"expected identity to be unreliable",
 			)
-		}
-
-		if !containsString(warning.Missing, "namespace") {
-			t.Fatalf(
-				"expected namespace in missing labels: %#v",
+			s.Contains(
 				warning.Missing,
+				"namespace",
+				"expected namespace in missing labels",
 			)
-		}
-
-		if !containsString(warning.Missing, "vm_name") {
-			t.Fatalf(
-				"expected vm_name in missing labels: %#v",
+			s.Contains(
 				warning.Missing,
+				"vm_name",
+				"expected vm_name in missing labels",
 			)
-		}
-
-		if !strings.Contains(
-			warning.Message,
-			"The affected VM and namespace are UNKNOWN",
-		) {
-			t.Fatalf(
-				"unexpected warning: %q",
+			s.Contains(
 				warning.Message,
+				"The affected VM and namespace are UNKNOWN",
+				"unexpected warning",
 			)
-		}
+		})
 	})
 
-	t.Run("missing classification label keeps identity reliable", func(t *testing.T) {
-		input := `{
+	s.Run("missing classification labels", func() {
+		s.Run("keeps identity reliable", func() {
+			input := `{
 "status":"success",
 "data":{
 "resultType":"streams",
@@ -236,46 +219,38 @@ func TestAddGuestTelemetryContractWarnings(t *testing.T) {
 }
 }`
 
-		warnings := contractWarningsFromResponse(
-			t,
-			addGuestTelemetryContractWarnings(input),
-		)
-
-		if len(warnings) != 1 {
-			t.Fatalf(
-				"expected 1 warning, got %d",
-				len(warnings),
+			warnings := s.contractWarningsFromResponse(
+				addGuestTelemetryContractWarnings(input),
 			)
-		}
 
-		warning := warnings[0]
+			s.Require().Len(
+				warnings,
+				1,
+				"expected exactly one contract warning",
+			)
 
-		if !warning.IdentityReliable {
-			t.Fatal(
+			warning := warnings[0]
+
+			s.True(
+				warning.IdentityReliable,
 				"expected identity to remain reliable when only os is missing",
 			)
-		}
-
-		if !containsString(warning.Missing, "os") {
-			t.Fatalf(
-				"expected os in missing labels: %#v",
+			s.Contains(
 				warning.Missing,
+				"os",
+				"expected os in missing labels",
 			)
-		}
-
-		if !strings.Contains(
-			warning.Message,
-			"Preserve this classification uncertainty",
-		) {
-			t.Fatalf(
-				"unexpected warning: %q",
+			s.Contains(
 				warning.Message,
+				"Preserve this classification uncertainty",
+				"unexpected warning",
 			)
-		}
+		})
 	})
 
-	t.Run("duplicate missing-label combinations are deduplicated", func(t *testing.T) {
-		input := `{
+	s.Run("warning handling", func() {
+		s.Run("duplicate missing-label combinations are deduplicated", func() {
+			input := `{
 "status":"success",
 "data":{
 "resultType":"streams",
@@ -300,53 +275,50 @@ func TestAddGuestTelemetryContractWarnings(t *testing.T) {
 }
 }`
 
-		warnings := contractWarningsFromResponse(
-			t,
-			addGuestTelemetryContractWarnings(input),
-		)
-
-		if len(warnings) != 1 {
-			t.Fatalf(
-				"expected duplicate warnings to be deduplicated, got %d",
-				len(warnings),
+			warnings := s.contractWarningsFromResponse(
+				addGuestTelemetryContractWarnings(input),
 			)
-		}
-	})
 
-	t.Run("invalid JSON is returned unchanged", func(t *testing.T) {
-		input := "not-json"
+			s.Len(
+				warnings,
+				1,
+				"expected duplicate warnings to be deduplicated",
+			)
+		})
 
-		got := addGuestTelemetryContractWarnings(input)
+		s.Run("invalid JSON is returned unchanged", func() {
+			input := "not-json"
 
-		if got != input {
-			t.Fatalf(
-				"expected invalid JSON to remain unchanged; got %q",
+			got := addGuestTelemetryContractWarnings(input)
+
+			s.Equal(
+				input,
 				got,
+				"expected invalid JSON to remain unchanged",
 			)
-		}
+		})
 	})
 }
 
-func contractWarningsFromResponse(
-	t *testing.T,
+func (s *LokiQueryContractSuite) contractWarningsFromResponse(
 	content string,
 ) []guestTelemetryContractWarning {
-	t.Helper()
+	s.T().Helper()
 
 	var response struct {
 		Warnings []guestTelemetryContractWarning `json:"guestTelemetryContractWarnings"`
 	}
 
-	if err := json.Unmarshal(
+	err := json.Unmarshal(
 		[]byte(content),
 		&response,
-	); err != nil {
-		t.Fatalf(
-			"failed to decode enriched Loki response: %v\nresponse: %s",
-			err,
-			content,
-		)
-	}
+	)
+
+	s.Require().NoError(
+		err,
+		"failed to decode enriched Loki response: %s",
+		content,
+	)
 
 	return response.Warnings
 }

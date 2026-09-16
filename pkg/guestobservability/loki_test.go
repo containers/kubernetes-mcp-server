@@ -3,7 +3,6 @@ package guestobservability
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,7 +11,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 )
+
+type LokiSuite struct {
+	suite.Suite
+}
+
+func TestLokiSuite(t *testing.T) {
+	suite.Run(t, new(LokiSuite))
+}
 
 func newLokiTestServer(
 	t *testing.T,
@@ -26,7 +35,7 @@ func newLokiTestServer(
 	return server
 }
 
-func TestPrepareLokiQueryRange(t *testing.T) {
+func (s *LokiSuite) TestPrepareLokiQueryRange() {
 	now := time.Date(
 		2026,
 		time.August,
@@ -38,178 +47,132 @@ func TestPrepareLokiQueryRange(t *testing.T) {
 		time.UTC,
 	)
 
-	t.Run("applies safe defaults", func(t *testing.T) {
-		values, err := prepareLokiQueryRange(
-			LokiQueryRangeRequest{
-				Query: `{source="windows_eventlog"}`,
-			},
-			now,
-		)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if values.Get("limit") != "100" {
-			t.Fatalf(
-				"expected limit 100, got %q",
-				values.Get("limit"),
-			)
-		}
-
-		if values.Get("direction") != "backward" {
-			t.Fatalf(
-				"expected backward direction, got %q",
-				values.Get("direction"),
-			)
-		}
-
-		start, err := time.Parse(
-			time.RFC3339Nano,
-			values.Get("start"),
-		)
-		if err != nil {
-			t.Fatalf("invalid start timestamp: %v", err)
-		}
-
-		end, err := time.Parse(
-			time.RFC3339Nano,
-			values.Get("end"),
-		)
-		if err != nil {
-			t.Fatalf("invalid end timestamp: %v", err)
-		}
-
-		if !end.Equal(now) {
-			t.Fatalf(
-				"expected end %v, got %v",
+	s.Run("default behavior", func() {
+		s.Run("applies safe defaults", func() {
+			values, err := prepareLokiQueryRange(
+				LokiQueryRangeRequest{
+					Query: `{source="windows_eventlog"}`,
+				},
 				now,
-				end,
 			)
-		}
+			s.Require().NoError(err)
 
-		expectedStart := now.Add(-time.Hour)
-		if !start.Equal(expectedStart) {
-			t.Fatalf(
-				"expected start %v, got %v",
-				expectedStart,
-				start,
-			)
-		}
-	})
+			s.Equal("100", values.Get("limit"))
+			s.Equal("backward", values.Get("direction"))
 
-	t.Run("normalizes timestamps to UTC", func(t *testing.T) {
-		values, err := prepareLokiQueryRange(
-			LokiQueryRangeRequest{
-				Query: `{source="windows_eventlog"}`,
-				Start: "2026-08-18T14:00:00-07:00",
-				End:   "2026-08-18T15:00:00-07:00",
-			},
-			now,
-		)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if values.Get("start") !=
-			"2026-08-18T21:00:00Z" {
-			t.Fatalf(
-				"unexpected normalized start: %q",
+			start, err := time.Parse(
+				time.RFC3339Nano,
 				values.Get("start"),
 			)
-		}
+			s.Require().NoError(
+				err,
+				"invalid start timestamp",
+			)
 
-		if values.Get("end") !=
-			"2026-08-18T22:00:00Z" {
-			t.Fatalf(
-				"unexpected normalized end: %q",
+			end, err := time.Parse(
+				time.RFC3339Nano,
 				values.Get("end"),
 			)
-		}
+			s.Require().NoError(
+				err,
+				"invalid end timestamp",
+			)
+
+			s.Equal(now, end)
+			s.Equal(now.Add(-time.Hour), start)
+		})
 	})
 
-	t.Run("supports forward direction and step", func(t *testing.T) {
-		values, err := prepareLokiQueryRange(
-			LokiQueryRangeRequest{
-				Query:     `{source="windows_eventlog"}`,
-				Direction: "forward",
-				Limit:     50,
-				Step:      "30s",
-			},
-			now,
-		)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+	s.Run("explicit options", func() {
+		s.Run("normalizes timestamps to UTC", func() {
+			values, err := prepareLokiQueryRange(
+				LokiQueryRangeRequest{
+					Query: `{source="windows_eventlog"}`,
+					Start: "2026-08-18T14:00:00-07:00",
+					End:   "2026-08-18T15:00:00-07:00",
+				},
+				now,
+			)
+			s.Require().NoError(err)
 
-		if values.Get("direction") != "forward" {
-			t.Fatalf("unexpected direction")
-		}
+			s.Equal(
+				"2026-08-18T21:00:00Z",
+				values.Get("start"),
+			)
+			s.Equal(
+				"2026-08-18T22:00:00Z",
+				values.Get("end"),
+			)
+		})
 
-		if values.Get("limit") != "50" {
-			t.Fatalf("unexpected limit")
-		}
+		s.Run("supports forward direction and step", func() {
+			values, err := prepareLokiQueryRange(
+				LokiQueryRangeRequest{
+					Query:     `{source="windows_eventlog"}`,
+					Direction: "forward",
+					Limit:     50,
+					Step:      "30s",
+				},
+				now,
+			)
+			s.Require().NoError(err)
 
-		if values.Get("step") != "30s" {
-			t.Fatalf("unexpected step")
-		}
+			s.Equal("forward", values.Get("direction"))
+			s.Equal("50", values.Get("limit"))
+			s.Equal("30s", values.Get("step"))
+		})
 	})
 
-	t.Run("rejects empty query", func(t *testing.T) {
-		_, err := prepareLokiQueryRange(
-			LokiQueryRangeRequest{},
-			now,
-		)
+	s.Run("invalid requests", func() {
+		s.Run("rejects empty query", func() {
+			_, err := prepareLokiQueryRange(
+				LokiQueryRangeRequest{},
+				now,
+			)
 
-		if err == nil {
-			t.Fatal("expected validation error")
-		}
-	})
+			s.Error(err)
+		})
 
-	t.Run("rejects excessive limit", func(t *testing.T) {
-		_, err := prepareLokiQueryRange(
-			LokiQueryRangeRequest{
-				Query: `{source="windows_eventlog"}`,
-				Limit: MaxLokiLimit + 1,
-			},
-			now,
-		)
+		s.Run("rejects excessive limit", func() {
+			_, err := prepareLokiQueryRange(
+				LokiQueryRangeRequest{
+					Query: `{source="windows_eventlog"}`,
+					Limit: MaxLokiLimit + 1,
+				},
+				now,
+			)
 
-		if err == nil {
-			t.Fatal("expected limit validation error")
-		}
-	})
+			s.Error(err)
+		})
 
-	t.Run("rejects invalid direction", func(t *testing.T) {
-		_, err := prepareLokiQueryRange(
-			LokiQueryRangeRequest{
-				Query:     `{source="windows_eventlog"}`,
-				Direction: "sideways",
-			},
-			now,
-		)
+		s.Run("rejects invalid direction", func() {
+			_, err := prepareLokiQueryRange(
+				LokiQueryRangeRequest{
+					Query:     `{source="windows_eventlog"}`,
+					Direction: "sideways",
+				},
+				now,
+			)
 
-		if err == nil {
-			t.Fatal("expected direction validation error")
-		}
-	})
+			s.Error(err)
+		})
 
-	t.Run("rejects reversed time range", func(t *testing.T) {
-		_, err := prepareLokiQueryRange(
-			LokiQueryRangeRequest{
-				Query: `{source="windows_eventlog"}`,
-				Start: "2026-08-18T22:00:00Z",
-				End:   "2026-08-18T21:00:00Z",
-			},
-			now,
-		)
+		s.Run("rejects reversed time range", func() {
+			_, err := prepareLokiQueryRange(
+				LokiQueryRangeRequest{
+					Query: `{source="windows_eventlog"}`,
+					Start: "2026-08-18T22:00:00Z",
+					End:   "2026-08-18T21:00:00Z",
+				},
+				now,
+			)
 
-		if err == nil {
-			t.Fatal("expected time-range validation error")
-		}
+			s.Error(err)
+		})
 	})
 }
 
-func TestLokiQueryRange(t *testing.T) {
+func (s *LokiSuite) TestLokiQueryRange() {
 	type capturedRequest struct {
 		Query  url.Values
 		Header http.Header
@@ -218,7 +181,7 @@ func TestLokiQueryRange(t *testing.T) {
 	captured := make(chan capturedRequest, 1)
 
 	server := newLokiTestServer(
-		t,
+		s.T(),
 		func(
 			w http.ResponseWriter,
 			r *http.Request,
@@ -256,9 +219,10 @@ func TestLokiQueryRange(t *testing.T) {
 		nil,
 		func() bool { return false },
 	)
-	if err != nil {
-		t.Fatalf("failed to create Loki client: %v", err)
-	}
+	s.Require().NoError(
+		err,
+		"failed to create Loki client",
+	)
 
 	body, err := client.QueryRange(
 		context.Background(),
@@ -269,61 +233,53 @@ func TestLokiQueryRange(t *testing.T) {
 			Limit: 100,
 		},
 	)
-	if err != nil {
-		t.Fatalf("query failed: %v", err)
-	}
+	s.Require().NoError(err, "query failed")
 
-	if !strings.Contains(body, `"status":"success"`) &&
-		!strings.Contains(body, `"status": "success"`) {
-		t.Fatalf("unexpected response body: %s", body)
-	}
+	s.True(
+		strings.Contains(body, `"status":"success"`) ||
+			strings.Contains(body, `"status": "success"`),
+		"unexpected response body: %s",
+		body,
+	)
 
 	request := <-captured
 
-	if request.Query.Get("query") == "" {
-		t.Fatal("expected LogQL query")
-	}
-
-	if request.Query.Get("start") == "" {
-		t.Fatal("expected start timestamp")
-	}
-
-	if request.Query.Get("end") == "" {
-		t.Fatal("expected end timestamp")
-	}
-
-	if request.Query.Get("limit") != "100" {
-		t.Fatalf(
-			"unexpected limit: %q",
-			request.Query.Get("limit"),
-		)
-	}
-
-	if request.Query.Get("direction") != "backward" {
-		t.Fatalf(
-			"unexpected direction: %q",
-			request.Query.Get("direction"),
-		)
-	}
-
-	if got := request.Header.Get("Authorization"); got != "" {
-		t.Fatalf(
-			"unexpected Authorization header sent to Loki: %q",
-			got,
-		)
-	}
-
-	if got := request.Header.Get("X-Scope-OrgID"); got != "application" {
-		t.Fatalf(
-			"unexpected X-Scope-OrgID: %q",
-			got,
-		)
-	}
+	s.NotEmpty(
+		request.Query.Get("query"),
+		"expected LogQL query",
+	)
+	s.NotEmpty(
+		request.Query.Get("start"),
+		"expected start timestamp",
+	)
+	s.NotEmpty(
+		request.Query.Get("end"),
+		"expected end timestamp",
+	)
+	s.Equal(
+		"100",
+		request.Query.Get("limit"),
+		"unexpected limit",
+	)
+	s.Equal(
+		"backward",
+		request.Query.Get("direction"),
+		"unexpected direction",
+	)
+	s.Empty(
+		request.Header.Get("Authorization"),
+		"unexpected Authorization header sent to Loki",
+	)
+	s.Equal(
+		"application",
+		request.Header.Get("X-Scope-OrgID"),
+		"unexpected X-Scope-OrgID",
+	)
 }
 
-func TestLokiHTTPError(t *testing.T) {
+func (s *LokiSuite) TestLokiHTTPError() {
 	server := newLokiTestServer(
-		t,
+		s.T(),
 		func(
 			w http.ResponseWriter,
 			_ *http.Request,
@@ -346,9 +302,10 @@ func TestLokiHTTPError(t *testing.T) {
 		nil,
 		func() bool { return false },
 	)
-	if err != nil {
-		t.Fatalf("failed to create Loki client: %v", err)
-	}
+	s.Require().NoError(
+		err,
+		"failed to create Loki client",
+	)
 
 	_, err = client.QueryRange(
 		context.Background(),
@@ -357,24 +314,13 @@ func TestLokiHTTPError(t *testing.T) {
 		},
 	)
 
-	if err == nil {
-		t.Fatal("expected Loki HTTP error")
-	}
-
-	if !strings.Contains(
-		err.Error(),
-		"HTTP 503",
-	) {
-		t.Fatalf(
-			"unexpected error: %v",
-			err,
-		)
-	}
+	s.Require().Error(err, "expected Loki HTTP error")
+	s.Contains(err.Error(), "HTTP 503")
 }
 
-func TestLokiRedirectRejected(t *testing.T) {
+func (s *LokiSuite) TestLokiRedirectRejected() {
 	target := newLokiTestServer(
-		t,
+		s.T(),
 		func(
 			w http.ResponseWriter,
 			_ *http.Request,
@@ -384,7 +330,7 @@ func TestLokiRedirectRejected(t *testing.T) {
 	)
 
 	server := newLokiTestServer(
-		t,
+		s.T(),
 		func(
 			w http.ResponseWriter,
 			r *http.Request,
@@ -408,9 +354,10 @@ func TestLokiRedirectRejected(t *testing.T) {
 		nil,
 		func() bool { return false },
 	)
-	if err != nil {
-		t.Fatalf("failed to create Loki client: %v", err)
-	}
+	s.Require().NoError(
+		err,
+		"failed to create Loki client",
+	)
 
 	_, err = client.QueryRange(
 		context.Background(),
@@ -418,21 +365,17 @@ func TestLokiRedirectRejected(t *testing.T) {
 			Query: `{source="windows_eventlog"}`,
 		},
 	)
-	if err == nil {
-		t.Fatal("expected redirect rejection error")
-	}
 
-	if !errors.Is(err, errLokiRedirectsNotAllowed) {
-		t.Fatalf(
-			"expected redirect rejection error, got: %v",
-			err,
-		)
-	}
+	s.Require().Error(
+		err,
+		"expected redirect rejection error",
+	)
+	s.ErrorIs(err, errLokiRedirectsNotAllowed)
 }
 
-func TestLokiOversizedResponseRejected(t *testing.T) {
+func (s *LokiSuite) TestLokiOversizedResponseRejected() {
 	server := newLokiTestServer(
-		t,
+		s.T(),
 		func(
 			w http.ResponseWriter,
 			_ *http.Request,
@@ -463,9 +406,10 @@ func TestLokiOversizedResponseRejected(t *testing.T) {
 		nil,
 		func() bool { return false },
 	)
-	if err != nil {
-		t.Fatalf("failed to create Loki client: %v", err)
-	}
+	s.Require().NoError(
+		err,
+		"failed to create Loki client",
+	)
 
 	_, err = client.QueryRange(
 		context.Background(),
@@ -473,83 +417,92 @@ func TestLokiOversizedResponseRejected(t *testing.T) {
 			Query: `{source="windows_eventlog"}`,
 		},
 	)
-	if err == nil {
-		t.Fatal("expected oversized Loki response error")
-	}
 
-	if !strings.Contains(
+	s.Require().Error(
+		err,
+		"expected oversized Loki response error",
+	)
+	s.Contains(
 		err.Error(),
 		"Loki response exceeded maximum size",
-	) {
-		t.Fatalf(
-			"unexpected error: %v",
+	)
+}
+
+func (s *LokiSuite) TestLokiHTTPClient() {
+	s.Run("reuses cached client", func() {
+		client := &Loki{}
+
+		first, err := client.getHTTPClient()
+		s.Require().NoError(
 			err,
+			"failed to create first HTTP client",
 		)
-	}
-}
 
-func TestLokiHTTPClientCached(t *testing.T) {
-	client := &Loki{}
+		second, err := client.getHTTPClient()
+		s.Require().NoError(
+			err,
+			"failed to get cached HTTP client",
+		)
 
-	first, err := client.getHTTPClient()
-	if err != nil {
-		t.Fatalf("failed to create first HTTP client: %v", err)
-	}
+		s.Same(
+			first,
+			second,
+			"expected HTTP client to be reused",
+		)
+	})
 
-	second, err := client.getHTTPClient()
-	if err != nil {
-		t.Fatalf("failed to get cached HTTP client: %v", err)
-	}
+	s.Run("rebuilds client when CA file changes", func() {
+		dir := s.T().TempDir()
+		caFile := filepath.Join(dir, "ca.crt")
 
-	if first != second {
-		t.Fatal("expected HTTP client to be reused")
-	}
-}
+		s.Require().NoError(
+			os.WriteFile(
+				caFile,
+				createTestCACertificatePEM(s.T()),
+				0600,
+			),
+			"failed to write CA file",
+		)
 
-func TestLokiHTTPClientRebuiltWhenCAFileChanges(t *testing.T) {
-	dir := t.TempDir()
-	caFile := filepath.Join(dir, "ca.crt")
+		client := &Loki{
+			certificateAuthority: caFile,
+		}
 
-	if err := os.WriteFile(
-		caFile,
-		createTestCACertificatePEM(t),
-		0600,
-	); err != nil {
-		t.Fatalf("failed to write CA file: %v", err)
-	}
+		first, err := client.getHTTPClient()
+		s.Require().NoError(
+			err,
+			"failed to create first HTTP client",
+		)
 
-	client := &Loki{
-		certificateAuthority: caFile,
-	}
+		info, err := os.Stat(caFile)
+		s.Require().NoError(
+			err,
+			"failed to stat CA file",
+		)
 
-	first, err := client.getHTTPClient()
-	if err != nil {
-		t.Fatalf("failed to create first HTTP client: %v", err)
-	}
+		// Force a modification-time change so the cache observes certificate
+		// rotation even on filesystems with coarse timestamp resolution.
+		newModTime := info.ModTime().Add(2 * time.Second)
 
-	info, err := os.Stat(caFile)
-	if err != nil {
-		t.Fatalf("failed to stat CA file: %v", err)
-	}
+		s.Require().NoError(
+			os.Chtimes(
+				caFile,
+				newModTime,
+				newModTime,
+			),
+			"failed to update CA file timestamp",
+		)
 
-	// Force a modification-time change so the cache observes certificate
-	// rotation even on filesystems with coarse timestamp resolution.
-	newModTime := info.ModTime().Add(2 * time.Second)
+		second, err := client.getHTTPClient()
+		s.Require().NoError(
+			err,
+			"failed to rebuild HTTP client",
+		)
 
-	if err := os.Chtimes(
-		caFile,
-		newModTime,
-		newModTime,
-	); err != nil {
-		t.Fatalf("failed to update CA file timestamp: %v", err)
-	}
-
-	second, err := client.getHTTPClient()
-	if err != nil {
-		t.Fatalf("failed to rebuild HTTP client: %v", err)
-	}
-
-	if first == second {
-		t.Fatal("expected HTTP client to be rebuilt after CA file change")
-	}
+		s.NotSame(
+			first,
+			second,
+			"expected HTTP client to be rebuilt after CA file change",
+		)
+	})
 }
