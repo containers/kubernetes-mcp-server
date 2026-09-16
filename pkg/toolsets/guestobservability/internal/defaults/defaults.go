@@ -7,19 +7,9 @@ const (
 )
 
 func ToolsetName() string {
-	overrideName := ToolsetNameOverride()
-	if overrideName != "" {
-		return overrideName
-	}
-
 	return DefaultToolsetName
 }
 
 func ToolsetDescription() string {
-	overrideDescription := ToolsetDescriptionOverride()
-	if overrideDescription != "" {
-		return overrideDescription
-	}
-
 	return DefaultToolsetDescription
 }
