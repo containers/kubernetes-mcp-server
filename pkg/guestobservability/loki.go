@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -49,6 +50,11 @@ type LokiQueryRangeRequest struct {
 	Step      string
 }
 
+type lokiCAFileState struct {
+	modTime time.Time
+	size    int64
+}
+
 // Loki is an HTTP client for the Loki HTTP API.
 type Loki struct {
 	baseURL              string
@@ -58,6 +64,10 @@ type Loki struct {
 	tlsMinVersion        string
 	tlsCipherSuites      []string
 	requireTLS           func() bool
+
+	httpClientMu sync.Mutex
+	httpClient   *http.Client
+	caFileState  *lokiCAFileState
 }
 
 // NewLoki creates a Loki client using guest-observability
@@ -151,7 +161,7 @@ func (l *Loki) QueryRange(
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
 
-	httpClient, err := l.createHTTPClient()
+	httpClient, err := l.getHTTPClient()
 	if err != nil {
 		return "", err
 	}
@@ -417,6 +427,68 @@ func (l *Loki) queryRangeURL(
 	u.RawQuery = values.Encode()
 
 	return u.String(), nil
+}
+
+func (l *Loki) getHTTPClient() (*http.Client, error) {
+	l.httpClientMu.Lock()
+	defer l.httpClientMu.Unlock()
+
+	caState, err := l.currentCAFileState()
+	if err != nil {
+		return nil, err
+	}
+
+	if l.httpClient != nil &&
+		sameLokiCAFileState(l.caFileState, caState) {
+		return l.httpClient, nil
+	}
+
+	client, err := l.createHTTPClient()
+	if err != nil {
+		return nil, err
+	}
+
+	if l.httpClient != nil {
+		l.httpClient.CloseIdleConnections()
+	}
+
+	l.httpClient = client
+	l.caFileState = caState
+
+	return l.httpClient, nil
+}
+
+func (l *Loki) currentCAFileState() (*lokiCAFileState, error) {
+	caFile := strings.TrimSpace(l.certificateAuthority)
+	if caFile == "" {
+		return nil, nil
+	}
+
+	info, err := os.Stat(caFile)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to stat Loki certificate authority %q: %w",
+			caFile,
+			err,
+		)
+	}
+
+	return &lokiCAFileState{
+		modTime: info.ModTime(),
+		size:    info.Size(),
+	}, nil
+}
+
+func sameLokiCAFileState(
+	current *lokiCAFileState,
+	latest *lokiCAFileState,
+) bool {
+	if current == nil || latest == nil {
+		return current == nil && latest == nil
+	}
+
+	return current.modTime.Equal(latest.modTime) &&
+		current.size == latest.size
 }
 
 func (l *Loki) createHTTPClient() (*http.Client, error) {

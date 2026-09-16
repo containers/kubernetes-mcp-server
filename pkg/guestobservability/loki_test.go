@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -471,5 +473,71 @@ func TestLokiOversizedResponseRejected(t *testing.T) {
 			"unexpected error: %v",
 			err,
 		)
+	}
+}
+
+func TestLokiHTTPClientCached(t *testing.T) {
+	client := &Loki{}
+
+	first, err := client.getHTTPClient()
+	if err != nil {
+		t.Fatalf("failed to create first HTTP client: %v", err)
+	}
+
+	second, err := client.getHTTPClient()
+	if err != nil {
+		t.Fatalf("failed to get cached HTTP client: %v", err)
+	}
+
+	if first != second {
+		t.Fatal("expected HTTP client to be reused")
+	}
+}
+
+func TestLokiHTTPClientRebuiltWhenCAFileChanges(t *testing.T) {
+	dir := t.TempDir()
+	caFile := filepath.Join(dir, "ca.crt")
+
+	if err := os.WriteFile(
+		caFile,
+		createTestCACertificatePEM(t),
+		0600,
+	); err != nil {
+		t.Fatalf("failed to write CA file: %v", err)
+	}
+
+	client := &Loki{
+		certificateAuthority: caFile,
+	}
+
+	first, err := client.getHTTPClient()
+	if err != nil {
+		t.Fatalf("failed to create first HTTP client: %v", err)
+	}
+
+	info, err := os.Stat(caFile)
+	if err != nil {
+		t.Fatalf("failed to stat CA file: %v", err)
+	}
+
+	// Force a modification-time change so the cache observes certificate
+	// rotation even on filesystems with coarse timestamp resolution.
+	newModTime := info.ModTime().Add(2 * time.Second)
+
+	if err := os.Chtimes(
+		caFile,
+		newModTime,
+		newModTime,
+	); err != nil {
+		t.Fatalf("failed to update CA file timestamp: %v", err)
+	}
+
+	second, err := client.getHTTPClient()
+	if err != nil {
+		t.Fatalf("failed to rebuild HTTP client: %v", err)
+	}
+
+	if first == second {
+		t.Fatal("expected HTTP client to be rebuilt after CA file change")
 	}
 }
