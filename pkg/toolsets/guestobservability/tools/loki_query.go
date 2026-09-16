@@ -163,83 +163,12 @@ type guestTelemetryContractWarning struct {
 }
 
 func addGuestTelemetryContractWarnings(content string) string {
-	var response map[string]any
-
-	if err := json.Unmarshal([]byte(content), &response); err != nil {
-		return content
-	}
-
-	data, ok := response["data"].(map[string]any)
+	response, results, ok := guestTelemetryResults(content)
 	if !ok {
 		return content
 	}
 
-	results, ok := data["result"].([]any)
-	if !ok || len(results) == 0 {
-		return content
-	}
-
-	warnings := make([]guestTelemetryContractWarning, 0)
-	seen := make(map[string]struct{})
-
-	for _, rawResult := range results {
-		result, ok := rawResult.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		stream, ok := result["stream"].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		missing := make([]string, 0, 4)
-
-		for _, label := range []string{
-			"namespace",
-			"vm_name",
-			"os",
-			"source",
-		} {
-			if !hasNonEmptyStringLabel(stream, label) {
-				missing = append(missing, label)
-			}
-		}
-
-		if len(missing) == 0 {
-			continue
-		}
-
-		/*
-		   Deduplicate warnings for streams with the same missing-label
-		   combination. A Loki result may contain many streams with the
-		   same telemetry-contract problem, and repeating the same
-		   warning adds noise without adding information.
-		*/
-		key := strings.Join(missing, ",")
-
-		if _, exists := seen[key]; exists {
-			continue
-		}
-
-		seen[key] = struct{}{}
-
-		identityReliable :=
-			hasNonEmptyStringLabel(stream, "namespace") &&
-				hasNonEmptyStringLabel(stream, "vm_name")
-
-		warnings = append(
-			warnings,
-			guestTelemetryContractWarning{
-				Missing:          missing,
-				IdentityReliable: identityReliable,
-				Message: guestTelemetryContractWarningMessage(
-					missing,
-				),
-			},
-		)
-	}
-
+	warnings := guestTelemetryContractWarnings(results)
 	if len(warnings) == 0 {
 		return content
 	}
@@ -252,6 +181,114 @@ func addGuestTelemetryContractWarnings(content string) string {
 	}
 
 	return string(enriched)
+}
+
+func guestTelemetryResults(
+	content string,
+) (map[string]any, []any, bool) {
+	var response map[string]any
+
+	if err := json.Unmarshal([]byte(content), &response); err != nil {
+		return nil, nil, false
+	}
+
+	data, ok := response["data"].(map[string]any)
+	if !ok {
+		return nil, nil, false
+	}
+
+	results, ok := data["result"].([]any)
+	if !ok || len(results) == 0 {
+		return nil, nil, false
+	}
+
+	return response, results, true
+}
+
+func guestTelemetryContractWarnings(
+	results []any,
+) []guestTelemetryContractWarning {
+	warnings := make([]guestTelemetryContractWarning, 0)
+	seen := make(map[string]struct{})
+
+	for _, rawResult := range results {
+		stream, ok := guestTelemetryStream(rawResult)
+		if !ok {
+			continue
+		}
+
+		missing := missingGuestTelemetryContractLabels(stream)
+		if len(missing) == 0 {
+			continue
+		}
+
+		key := strings.Join(missing, ",")
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		warnings = append(
+			warnings,
+			newGuestTelemetryContractWarning(stream, missing),
+		)
+	}
+
+	return warnings
+}
+
+func guestTelemetryStream(
+	rawResult any,
+) (map[string]any, bool) {
+	result, ok := rawResult.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+
+	stream, ok := result["stream"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+
+	return stream, true
+}
+
+func missingGuestTelemetryContractLabels(
+	stream map[string]any,
+) []string {
+	labels := []string{
+		"namespace",
+		"vm_name",
+		"os",
+		"source",
+	}
+
+	missing := make([]string, 0, len(labels))
+
+	for _, label := range labels {
+		if !hasNonEmptyStringLabel(stream, label) {
+			missing = append(missing, label)
+		}
+	}
+
+	return missing
+}
+
+func newGuestTelemetryContractWarning(
+	stream map[string]any,
+	missing []string,
+) guestTelemetryContractWarning {
+	identityReliable :=
+		hasNonEmptyStringLabel(stream, "namespace") &&
+			hasNonEmptyStringLabel(stream, "vm_name")
+
+	return guestTelemetryContractWarning{
+		Missing:          missing,
+		IdentityReliable: identityReliable,
+		Message: guestTelemetryContractWarningMessage(
+			missing,
+		),
+	}
 }
 
 func hasNonEmptyStringLabel(

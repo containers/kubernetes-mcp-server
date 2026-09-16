@@ -230,9 +230,9 @@ func prepareLokiQueryRange(
 	request LokiQueryRangeRequest,
 	now time.Time,
 ) (url.Values, error) {
-	query := strings.TrimSpace(request.Query)
-	if query == "" {
-		return nil, errors.New("Loki query is required")
+	query, err := validateLokiQuery(request.Query)
+	if err != nil {
+		return nil, err
 	}
 
 	start, end, err := resolveLokiTimeRange(
@@ -244,32 +244,73 @@ func prepareLokiQueryRange(
 		return nil, err
 	}
 
-	limit := request.Limit
+	limit, err := resolveLokiLimit(request.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	direction, err := resolveLokiDirection(request.Direction)
+	if err != nil {
+		return nil, err
+	}
+
+	return buildLokiQueryRangeValues(
+		query,
+		start,
+		end,
+		limit,
+		direction,
+		request.Step,
+	), nil
+}
+
+func validateLokiQuery(query string) (string, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", errors.New("Loki query is required")
+	}
+
+	return query, nil
+}
+
+func resolveLokiLimit(limit int) (int, error) {
 	if limit == 0 {
 		limit = DefaultLokiLimit
 	}
 
 	if limit < 1 || limit > MaxLokiLimit {
-		return nil, fmt.Errorf(
+		return 0, fmt.Errorf(
 			"Loki limit must be between 1 and %d",
 			MaxLokiLimit,
 		)
 	}
 
-	direction := strings.ToLower(
-		strings.TrimSpace(request.Direction),
-	)
+	return limit, nil
+}
+
+func resolveLokiDirection(direction string) (string, error) {
+	direction = strings.ToLower(strings.TrimSpace(direction))
 	if direction == "" {
 		direction = DefaultLokiDirection
 	}
 
-	if direction != "forward" &&
-		direction != "backward" {
-		return nil, errors.New(
+	if direction != "forward" && direction != "backward" {
+		return "", errors.New(
 			"Loki direction must be forward or backward",
 		)
 	}
 
+	return direction, nil
+}
+
+func buildLokiQueryRangeValues(
+	query string,
+	start time.Time,
+	end time.Time,
+	limit int,
+	direction string,
+	step string,
+) url.Values {
 	values := url.Values{}
 
 	values.Set("query", query)
@@ -284,11 +325,11 @@ func prepareLokiQueryRange(
 	values.Set("limit", strconv.Itoa(limit))
 	values.Set("direction", direction)
 
-	if step := strings.TrimSpace(request.Step); step != "" {
+	if step = strings.TrimSpace(step); step != "" {
 		values.Set("step", step)
 	}
 
-	return values, nil
+	return values
 }
 
 func resolveLokiTimeRange(
