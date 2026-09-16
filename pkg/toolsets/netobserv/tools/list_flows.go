@@ -15,6 +15,7 @@ func InitListFlows() []api.ServerTool {
 			InputSchema: toolInputSchema(flowQueryProperties(), nil),
 			Annotations: readOnlyAnnotations("List NetObserv Flow Records"),
 		},
+		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
 		Handler: listFlowsHandler,
 	}}
 }

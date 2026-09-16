@@ -29,6 +29,7 @@ func InitExportFlows() []api.ServerTool {
 			InputSchema: toolInputSchema(props, nil),
 			Annotations: readOnlyAnnotations("Export NetObserv Flows as CSV"),
 		},
+		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
 		Handler: exportFlowsHandler,
 	}}
 }

@@ -57,6 +57,7 @@ func InitGetFlowMetrics() []api.ServerTool {
 			InputSchema: toolInputSchema(props, []string{"aggregateBy"}),
 			Annotations: readOnlyAnnotations("Get NetObserv Flow Metrics"),
 		},
+		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
 		Handler: getFlowMetricsHandler,
 	}}
 }
