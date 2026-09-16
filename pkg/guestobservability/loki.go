@@ -133,16 +133,35 @@ func (l *Loki) QueryRange(
 	ctx context.Context,
 	request LokiQueryRangeRequest,
 ) (string, error) {
-	logger := klogutil.FromContext(ctx)
-
-	values, err := prepareLokiQueryRange(request, time.Now().UTC())
+	req, err := l.newQueryRangeRequest(ctx, request)
 	if err != nil {
 		return "", err
 	}
 
-	requestURL, err := l.queryRangeURL(values)
+	resp, err := l.doRequest(ctx, req)
 	if err != nil {
 		return "", err
+	}
+	defer resp.Body.Close()
+
+	return readLokiResponse(ctx, resp)
+}
+
+func (l *Loki) newQueryRangeRequest(
+	ctx context.Context,
+	request LokiQueryRangeRequest,
+) (*http.Request, error) {
+	values, err := prepareLokiQueryRange(
+		request,
+		time.Now().UTC(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	requestURL, err := l.queryRangeURL(values)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -152,8 +171,9 @@ func (l *Loki) QueryRange(
 		nil,
 	)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+
 	if l.tenant != "" {
 		req.Header.Set("X-Scope-OrgID", l.tenant)
 	}
@@ -161,30 +181,50 @@ func (l *Loki) QueryRange(
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
 
+	return req, nil
+}
+
+func (l *Loki) doRequest(
+	ctx context.Context,
+	req *http.Request,
+) (*http.Response, error) {
+	logger := klogutil.FromContext(ctx)
+
 	httpClient, err := l.getHTTPClient()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	resp, err := httpClient.Do(req)
-	if err != nil {
-		logger.V(1).Info(
-			"Loki request failed",
-			"host", req.URL.Host,
-			"error", err,
-		)
-
-		if errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) {
-			return "", fmt.Errorf(
-				"Loki query canceled or timed out: %w",
-				err,
-			)
-		}
-
-		return "", fmt.Errorf("Loki query failed: %w", err)
+	if err == nil {
+		return resp, nil
 	}
-	defer resp.Body.Close()
+
+	logger.V(1).Info(
+		"Loki request failed",
+		"host", req.URL.Host,
+		"error", err,
+	)
+
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return nil, fmt.Errorf(
+			"Loki query canceled or timed out: %w",
+			err,
+		)
+	}
+
+	return nil, fmt.Errorf(
+		"Loki query failed: %w",
+		err,
+	)
+}
+
+func readLokiResponse(
+	ctx context.Context,
+	resp *http.Response,
+) (string, error) {
+	logger := klogutil.FromContext(ctx)
 
 	body, err := io.ReadAll(
 		io.LimitReader(
@@ -195,7 +235,7 @@ func (l *Loki) QueryRange(
 	if err != nil {
 		logger.V(1).Info(
 			"Failed to read Loki response",
-			"host", req.URL.Host,
+			"host", resp.Request.URL.Host,
 			"error", err,
 		)
 
@@ -208,7 +248,7 @@ func (l *Loki) QueryRange(
 	if len(body) > maxLokiResponseBodySize {
 		logger.V(1).Info(
 			"Loki response exceeded maximum allowed size",
-			"host", req.URL.Host,
+			"host", resp.Request.URL.Host,
 			"maximum_bytes", maxLokiResponseBodySize,
 		)
 
@@ -222,7 +262,7 @@ func (l *Loki) QueryRange(
 		resp.StatusCode >= http.StatusMultipleChoices {
 		logger.V(1).Info(
 			"Loki API returned non-success status",
-			"host", req.URL.Host,
+			"host", resp.Request.URL.Host,
 			"status_code", resp.StatusCode,
 		)
 
