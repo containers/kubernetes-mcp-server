@@ -22,17 +22,17 @@ func InitLokiQuery() []api.ServerTool {
 				Name: name,
 				Description: `Executes a LogQL range query against the configured Loki backend for virtual machine guest log investigation.
 
-Guest telemetry follows a label contract in which namespace and vm_name identify the KubeVirt VM, while os and source classify the guest operating system and telemetry source.
+Guest telemetry uses namespace and vm_name as VM identity labels, while os and source classify the guest operating system and telemetry source. A collector label may also be available for orphan guest telemetry when the standard contract labels are absent.
 
-Telemetry streams may have incomplete contract labels. A LogQL label matcher only returns streams containing a matching value for that label. Consequently, filtering by namespace, vm_name, os, or source excludes streams where that label is absent.
+Loki label matchers exclude streams where the matched label is absent. An empty result from a query using namespace, vm_name, os, or source therefore does not prove that matching guest events are absent. When relevant telemetry may have incomplete labels, a bounded follow-up query can use progressively fewer contract-label matchers while preserving filters for the event itself.
 
-For Windows guest-log investigations, available classification labels such as os="windows" and source="windows_eventlog" can narrow the search. Specific event signatures such as provider names, event IDs, or diagnostic message text can be used in the LogQL content filter; for example, a Windows storage-reset investigation may be identified by StorPort or Event ID 129 content.
+A missing label matcher should not be replaced with a log-content filter containing that label's value unless the value is known to occur in the log message. Removing namespace="example" and adding |= "example", for example, does not establish namespace association.
 
-When an identity label such as namespace or vm_name is absent from telemetry, discovering that stream requires a bounded query that omits the missing identity matcher while retaining available classification labels and the specific event signature. A result without namespace cannot establish namespace attribution, and a result without vm_name cannot establish the affected VM.
+For event-content searches, stable event identifiers and case-insensitive matching are useful when provider or component capitalization is not guaranteed. For Windows guest-log investigations, available classification labels such as os="windows" or source="windows_eventlog" should be retained in the initial query together with the event-content filter. Windows storage reset telemetry commonly contains Event ID 129 and the StorPort provider.
 
-Missing os or source labels represent classification uncertainty but do not by themselves invalidate identity when namespace and vm_name remain present.
+If an event is discovered after identity labels are removed, event detection and VM attribution must be treated separately. Reliable VM identity requires both namespace and vm_name from the telemetry. Missing os or source represents classification uncertainty but does not by itself invalidate identity when namespace and vm_name are present.
 
-Query results may include guest telemetry contract warnings identifying missing identity or classification labels and whether VM attribution is reliable.`,
+Results may include guest telemetry contract warnings identifying missing identity or classification labels and whether VM attribution is reliable.`,
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
@@ -151,9 +151,7 @@ func lokiQueryHandler(
 		), nil
 	}
 
-	content = addGuestTelemetryContractWarnings(content)
-
-	return api.NewToolCallResult(content, nil), nil
+	return lokiQueryResult(content), nil
 }
 
 type guestTelemetryContractWarning struct {
@@ -162,47 +160,59 @@ type guestTelemetryContractWarning struct {
 	Message          string   `json:"message"`
 }
 
-func addGuestTelemetryContractWarnings(content string) string {
-	response, results, ok := guestTelemetryResults(content)
+func lokiQueryResult(content string) *api.ToolCallResult {
+	response, ok := guestTelemetryStructuredResult(content)
 	if !ok {
-		return content
+		return api.NewToolCallResult(content, nil)
+	}
+
+	return api.NewToolCallResultStructured(response, nil)
+}
+
+func guestTelemetryStructuredResult(
+	content string,
+) (map[string]any, bool) {
+	var response map[string]any
+
+	if err := json.Unmarshal([]byte(content), &response); err != nil {
+		return nil, false
+	}
+
+	addGuestTelemetryContractWarnings(response)
+
+	return response, true
+}
+
+func addGuestTelemetryContractWarnings(
+	response map[string]any,
+) {
+	results, ok := guestTelemetryResults(response)
+	if !ok {
+		return
 	}
 
 	warnings := guestTelemetryContractWarnings(results)
 	if len(warnings) == 0 {
-		return content
+		return
 	}
 
 	response["guestTelemetryContractWarnings"] = warnings
-
-	enriched, err := json.Marshal(response)
-	if err != nil {
-		return content
-	}
-
-	return string(enriched)
 }
 
 func guestTelemetryResults(
-	content string,
-) (map[string]any, []any, bool) {
-	var response map[string]any
-
-	if err := json.Unmarshal([]byte(content), &response); err != nil {
-		return nil, nil, false
-	}
-
+	response map[string]any,
+) ([]any, bool) {
 	data, ok := response["data"].(map[string]any)
 	if !ok {
-		return nil, nil, false
+		return nil, false
 	}
 
 	results, ok := data["result"].([]any)
 	if !ok || len(results) == 0 {
-		return nil, nil, false
+		return nil, false
 	}
 
-	return response, results, true
+	return results, true
 }
 
 func guestTelemetryContractWarnings(
@@ -333,9 +343,11 @@ func guestTelemetryContractWarningMessage(
 	case missingNamespace:
 		return "Guest telemetry is missing namespace. " +
 			"vm_name alone does not identify a namespaced VM. " +
-			"Do not claim that the event belongs to the user's requested " +
-			"namespace unless the telemetry contains an explicit " +
-			"correlation field."
+			"The event must be treated as unassociated with the user's " +
+			"requested namespace unless the same telemetry contains an " +
+			"explicit correlation field. A separate stream with the same " +
+			"vm_name is not sufficient to establish namespace association. " +
+			"Do not describe the association as probable, likely, or inferred."
 
 	default:
 		return fmt.Sprintf(

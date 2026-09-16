@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -36,12 +35,33 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 }
 }`
 
-			got := addGuestTelemetryContractWarnings(input)
+			result := lokiQueryResult(input)
 
-			s.Equal(
+			s.Require().NotNil(
+				result,
+				"expected Loki tool result",
+			)
+			s.Require().NotNil(
+				result.StructuredContent,
+				"expected structured Loki result",
+			)
+			s.JSONEq(
 				input,
-				got,
-				"expected complete-contract response to remain unchanged",
+				result.Content,
+				"expected complete-contract response content to remain equivalent",
+			)
+
+			structured, ok := result.StructuredContent.(map[string]any)
+			s.Require().True(
+				ok,
+				"expected structured Loki result, got %T",
+				result.StructuredContent,
+			)
+
+			s.NotContains(
+				structured,
+				"guestTelemetryContractWarnings",
+				"did not expect contract warnings for complete telemetry",
 			)
 		})
 	})
@@ -70,9 +90,7 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 }
 }`
 
-			warnings := s.contractWarningsFromResponse(
-				addGuestTelemetryContractWarnings(input),
-			)
+			warnings := s.contractWarningsFromResult(input)
 
 			s.Require().Len(
 				warnings,
@@ -127,9 +145,7 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 }
 }`
 
-			warnings := s.contractWarningsFromResponse(
-				addGuestTelemetryContractWarnings(input),
-			)
+			warnings := s.contractWarningsFromResult(input)
 
 			s.Require().Len(
 				warnings,
@@ -143,11 +159,21 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 				warning.IdentityReliable,
 				"expected identity to be unreliable when namespace is missing",
 			)
-			s.Contains(
-				warning.Message,
+			expectedFragments := []string{
 				"vm_name alone does not identify a namespaced VM",
-				"unexpected warning",
-			)
+				"must be treated as unassociated",
+				"same vm_name is not sufficient",
+				"Do not describe the association as probable, likely, or inferred",
+			}
+
+			for _, fragment := range expectedFragments {
+				s.Contains(
+					warning.Message,
+					fragment,
+					"expected warning to contain %q",
+					fragment,
+				)
+			}
 		})
 
 		s.Run("missing both identity labels reports VM and namespace unknown", func() {
@@ -166,9 +192,7 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 }
 }`
 
-			warnings := s.contractWarningsFromResponse(
-				addGuestTelemetryContractWarnings(input),
-			)
+			warnings := s.contractWarningsFromResult(input)
 
 			s.Require().Len(
 				warnings,
@@ -219,9 +243,7 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 }
 }`
 
-			warnings := s.contractWarningsFromResponse(
-				addGuestTelemetryContractWarnings(input),
-			)
+			warnings := s.contractWarningsFromResult(input)
 
 			s.Require().Len(
 				warnings,
@@ -275,9 +297,7 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 }
 }`
 
-			warnings := s.contractWarningsFromResponse(
-				addGuestTelemetryContractWarnings(input),
-			)
+			warnings := s.contractWarningsFromResult(input)
 
 			s.Len(
 				warnings,
@@ -285,40 +305,66 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 				"expected duplicate warnings to be deduplicated",
 			)
 		})
-
-		s.Run("invalid JSON is returned unchanged", func() {
+		s.Run("invalid JSON falls back to text result", func() {
 			input := "not-json"
 
-			got := addGuestTelemetryContractWarnings(input)
+			result := lokiQueryResult(input)
 
+			s.Require().NotNil(
+				result,
+				"expected Loki tool result",
+			)
 			s.Equal(
 				input,
-				got,
-				"expected invalid JSON to remain unchanged",
+				result.Content,
+				"expected invalid JSON to fall back to text result",
+			)
+			s.Nil(
+				result.StructuredContent,
+				"did not expect structured content for invalid JSON",
+			)
+			s.Nil(
+				result.Error,
+				"did not expect Loki result error",
 			)
 		})
 	})
 }
 
-func (s *LokiQueryContractSuite) contractWarningsFromResponse(
+func (s *LokiQueryContractSuite) contractWarningsFromResult(
 	content string,
 ) []guestTelemetryContractWarning {
 	s.T().Helper()
 
-	var response struct {
-		Warnings []guestTelemetryContractWarning `json:"guestTelemetryContractWarnings"`
+	result := lokiQueryResult(content)
+
+	s.Require().NotNil(
+		result,
+		"expected Loki tool result",
+	)
+	s.Require().Nil(
+		result.Error,
+		"did not expect Loki result error",
+	)
+
+	structured, ok := result.StructuredContent.(map[string]any)
+	s.Require().True(
+		ok,
+		"expected structured Loki result, got %T",
+		result.StructuredContent,
+	)
+
+	rawWarnings, ok := structured["guestTelemetryContractWarnings"]
+	if !ok {
+		return nil
 	}
 
-	err := json.Unmarshal(
-		[]byte(content),
-		&response,
+	warnings, ok := rawWarnings.([]guestTelemetryContractWarning)
+	s.Require().True(
+		ok,
+		"expected typed guest telemetry warnings, got %T",
+		rawWarnings,
 	)
 
-	s.Require().NoError(
-		err,
-		"failed to decode enriched Loki response: %s",
-		content,
-	)
-
-	return response.Warnings
+	return warnings
 }
