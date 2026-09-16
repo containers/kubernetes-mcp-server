@@ -9,199 +9,220 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestConfigValidate(t *testing.T) {
-	t.Run("accepts valid HTTP Loki URL", func(t *testing.T) {
-		cfg := &Config{
-			Loki: LokiConfig{
-				URL: "http://localhost:3100",
-			},
-		}
+type ConfigSuite struct {
+	suite.Suite
+}
 
-		if err := cfg.Validate(); err != nil {
-			t.Fatalf("expected valid config, got error: %v", err)
-		}
+func TestConfigSuite(t *testing.T) {
+	suite.Run(t, new(ConfigSuite))
+}
+
+func (s *ConfigSuite) TestConfigValidate() {
+	s.Run("valid configurations", func() {
+		s.Run("accepts valid HTTP Loki URL", func() {
+			cfg := &Config{
+				Loki: LokiConfig{
+					URL: "http://localhost:3100",
+				},
+			}
+
+			s.NoError(
+				cfg.Validate(),
+				"expected valid HTTP Loki configuration",
+			)
+		})
+
+		s.Run("HTTPS accepts system trust without custom CA", func() {
+			cfg := &Config{
+				Loki: LokiConfig{
+					URL: "https://loki.example.com",
+				},
+			}
+
+			s.NoError(
+				cfg.Validate(),
+				"expected HTTPS configuration using system trust to be valid",
+			)
+		})
+
+		s.Run("HTTPS accepts insecure mode without CA", func() {
+			cfg := &Config{
+				Loki: LokiConfig{
+					URL:      "https://loki.example.com",
+					Insecure: true,
+				},
+			}
+
+			s.NoError(
+				cfg.Validate(),
+				"expected insecure HTTPS configuration to be valid",
+			)
+		})
+
+		s.Run("HTTPS accepts valid CA file", func() {
+			dir := s.T().TempDir()
+			caFile := filepath.Join(dir, "ca.crt")
+			certPEM := createTestCACertificatePEM(s.T())
+
+			s.Require().NoError(
+				os.WriteFile(caFile, certPEM, 0600),
+				"failed to create CA file",
+			)
+
+			cfg := &Config{
+				Loki: LokiConfig{
+					URL:                  "https://loki.example.com",
+					CertificateAuthority: caFile,
+				},
+			}
+
+			s.NoError(
+				cfg.Validate(),
+				"expected HTTPS configuration with custom CA to be valid",
+			)
+		})
 	})
 
-	t.Run("rejects missing Loki URL", func(t *testing.T) {
-		cfg := &Config{}
+	s.Run("invalid configurations", func() {
+		s.Run("rejects missing Loki URL", func() {
+			cfg := &Config{}
 
-		err := cfg.Validate()
-		if err == nil {
-			t.Fatal("expected validation error")
-		}
+			err := cfg.Validate()
 
-		if got := err.Error(); got != "loki url is required" {
-			t.Fatalf("unexpected error: %s", got)
-		}
-	})
+			s.Require().Error(err, "expected validation error")
+			s.Equal(
+				"loki url is required",
+				err.Error(),
+				"unexpected validation error",
+			)
+		})
 
-	t.Run("rejects invalid Loki URL", func(t *testing.T) {
-		cfg := &Config{
-			Loki: LokiConfig{
-				URL: "not-a-url",
-			},
-		}
+		s.Run("rejects invalid Loki URL", func() {
+			cfg := &Config{
+				Loki: LokiConfig{
+					URL: "not-a-url",
+				},
+			}
 
-		err := cfg.Validate()
-		if err == nil {
-			t.Fatal("expected validation error")
-		}
-	})
+			s.Error(
+				cfg.Validate(),
+				"expected invalid Loki URL validation error",
+			)
+		})
 
-	t.Run("HTTPS accepts system trust without custom CA", func(t *testing.T) {
-		cfg := &Config{
-			Loki: LokiConfig{
-				URL: "https://loki.example.com",
-			},
-		}
+		s.Run("rejects invalid CA PEM", func() {
+			dir := s.T().TempDir()
+			caFile := filepath.Join(dir, "ca.crt")
 
-		if err := cfg.Validate(); err != nil {
-			t.Fatalf("expected valid config, got error: %v", err)
-		}
-	})
+			s.Require().NoError(
+				os.WriteFile(
+					caFile,
+					[]byte("not-a-valid-pem-certificate"),
+					0600,
+				),
+				"failed to create invalid CA file",
+			)
 
-	t.Run("HTTPS accepts insecure mode without CA", func(t *testing.T) {
-		cfg := &Config{
-			Loki: LokiConfig{
-				URL:      "https://loki.example.com",
-				Insecure: true,
-			},
-		}
+			cfg := &Config{
+				Loki: LokiConfig{
+					URL:                  "https://loki.example.com",
+					CertificateAuthority: caFile,
+				},
+			}
 
-		if err := cfg.Validate(); err != nil {
-			t.Fatalf("expected valid config, got error: %v", err)
-		}
-	})
+			err := cfg.Validate()
 
-	t.Run("HTTPS accepts valid CA file", func(t *testing.T) {
-		dir := t.TempDir()
-		caFile := filepath.Join(dir, "ca.crt")
+			s.Require().Error(
+				err,
+				"expected invalid CA PEM validation error",
+			)
+			s.Contains(
+				err.Error(),
+				"contains no valid PEM certificates",
+				"unexpected validation error",
+			)
+		})
 
-		certPEM := createTestCACertificatePEM(t)
+		s.Run("rejects missing CA file", func() {
+			cfg := &Config{
+				Loki: LokiConfig{
+					URL:                  "https://loki.example.com",
+					CertificateAuthority: "/does/not/exist/ca.crt",
+				},
+			}
 
-		if err := os.WriteFile(caFile, certPEM, 0600); err != nil {
-			t.Fatalf("failed to create CA file: %v", err)
-		}
-
-		cfg := &Config{
-			Loki: LokiConfig{
-				URL:                  "https://loki.example.com",
-				CertificateAuthority: caFile,
-			},
-		}
-		if err := cfg.Validate(); err != nil {
-			t.Fatalf("expected valid config, got error: %v", err)
-		}
-	})
-
-	t.Run("rejects invalid CA PEM", func(t *testing.T) {
-		dir := t.TempDir()
-		caFile := filepath.Join(dir, "ca.crt")
-
-		if err := os.WriteFile(
-			caFile,
-			[]byte("not-a-valid-pem-certificate"),
-			0600,
-		); err != nil {
-			t.Fatalf("failed to create invalid CA file: %v", err)
-		}
-
-		cfg := &Config{
-			Loki: LokiConfig{
-				URL:                  "https://loki.example.com",
-				CertificateAuthority: caFile,
-			},
-		}
-
-		err := cfg.Validate()
-		if err == nil {
-			t.Fatal("expected invalid CA PEM validation error")
-		}
-
-		if !strings.Contains(
-			err.Error(),
-			"contains no valid PEM certificates",
-		) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("rejects missing CA file", func(t *testing.T) {
-		cfg := &Config{
-			Loki: LokiConfig{
-				URL:                  "https://loki.example.com",
-				CertificateAuthority: "/does/not/exist/ca.crt",
-			},
-		}
-
-		err := cfg.Validate()
-		if err == nil {
-			t.Fatal("expected validation error")
-		}
+			s.Error(
+				cfg.Validate(),
+				"expected missing CA file validation error",
+			)
+		})
 	})
 }
 
-func TestToolsetConfigParsing(t *testing.T) {
-	t.Run("parses Loki configuration", func(t *testing.T) {
-		cfg, err := config.ReadToml([]byte(`
+func (s *ConfigSuite) TestToolsetConfigParsing() {
+	s.Run("valid configuration", func() {
+		s.Run("parses Loki configuration", func() {
+			cfg, err := config.ReadToml([]byte(`
 [toolset_configs.guest-observability.loki]
 url = "http://127.0.0.1:3101"
 tenant = "application"
 `))
-		if err != nil {
-			t.Fatalf("failed to parse config: %v", err)
-		}
+			s.Require().NoError(
+				err,
+				"failed to parse guest-observability configuration",
+			)
 
-		extended, ok := cfg.GetToolsetConfig(ToolsetName)
-		if !ok {
-			t.Fatal("guest-observability toolset config not found")
-		}
+			extended, ok := cfg.GetToolsetConfig(ToolsetName)
+			s.Require().True(
+				ok,
+				"guest-observability toolset config not found",
+			)
 
-		guestCfg, ok := extended.(*Config)
-		if !ok {
-			t.Fatalf(
+			guestCfg, ok := extended.(*Config)
+			s.Require().True(
+				ok,
 				"expected *guestobservability.Config, got %T",
 				extended,
 			)
-		}
 
-		if guestCfg.Loki.URL != "http://127.0.0.1:3101" {
-			t.Fatalf(
-				"unexpected Loki URL: %q",
+			s.Equal(
+				"http://127.0.0.1:3101",
 				guestCfg.Loki.URL,
+				"unexpected Loki URL",
 			)
-		}
-
-		if guestCfg.Loki.Tenant != "application" {
-			t.Fatalf(
-				"unexpected Loki tenant: %q",
+			s.Equal(
+				"application",
 				guestCfg.Loki.Tenant,
+				"unexpected Loki tenant",
 			)
-		}
+		})
 	})
 
-	t.Run("require_tls rejects HTTP Loki endpoint", func(t *testing.T) {
-		_, err := config.ReadToml([]byte(`
+	s.Run("TLS validation", func() {
+		s.Run("require_tls rejects HTTP Loki endpoint", func() {
+			_, err := config.ReadToml([]byte(`
 require_tls = true
 
 [toolset_configs.guest-observability.loki]
 url = "http://127.0.0.1:3101"
 `))
 
-		if err == nil {
-			t.Fatal("expected require_tls validation error")
-		}
-	})
+			s.Error(
+				err,
+				"expected require_tls validation error",
+			)
+		})
 
-	t.Run("require_tls rejects insecure Loki configuration", func(t *testing.T) {
-		_, err := config.ReadToml([]byte(`
+		s.Run("require_tls rejects insecure Loki configuration", func() {
+			_, err := config.ReadToml([]byte(`
 require_tls = true
 
 [toolset_configs.guest-observability.loki]
@@ -209,9 +230,11 @@ url = "https://loki.example.com"
 insecure = true
 `))
 
-		if err == nil {
-			t.Fatal("expected insecure TLS validation error")
-		}
+			s.Error(
+				err,
+				"expected insecure TLS validation error",
+			)
+		})
 	})
 }
 
@@ -219,9 +242,11 @@ func createTestCACertificatePEM(t *testing.T) []byte {
 	t.Helper()
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("failed to generate test CA key: %v", err)
-	}
+	require.NoError(
+		t,
+		err,
+		"failed to generate test CA key",
+	)
 
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
@@ -242,9 +267,11 @@ func createTestCACertificatePEM(t *testing.T) []byte {
 		&privateKey.PublicKey,
 		privateKey,
 	)
-	if err != nil {
-		t.Fatalf("failed to create test CA certificate: %v", err)
-	}
+	require.NoError(
+		t,
+		err,
+		"failed to create test CA certificate",
+	)
 
 	return pem.EncodeToMemory(
 		&pem.Block{
