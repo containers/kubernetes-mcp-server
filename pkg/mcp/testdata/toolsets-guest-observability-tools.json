@@ -1,0 +1,52 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Query Guest Logs with LogQL"
+    },
+    "description": "Executes a LogQL range query against the configured Loki backend for virtual machine guest log investigation.\n\nGuest telemetry uses a label contract for reliable VM attribution. The namespace and vm_name labels together identify the KubeVirt VM that produced the telemetry. The os and source labels classify the guest operating system and telemetry source.\n\nFor Windows guest-log investigations, use os=\"windows\" or source=\"windows_eventlog\" when those classification labels are available.\n\nIf namespace or vm_name is missing, the telemetry may still establish that an event occurred, but it cannot reliably identify the affected VM. Do not infer missing VM identity from unrelated Kubernetes workload metadata.\n\nIf a namespace-scoped search does not find the specific event being investigated, perform one bounded follow-up query without the namespace matcher while retaining the strongest available classification labels and event identifier. Telemetry returned without namespace must not be attributed to the requested namespace.\n\nIf os or source is missing, report the missing classification field rather than inventing it; the remaining labels and log content may still provide useful diagnostic evidence.\n\nMissing contract labels are surfaced explicitly so callers can distinguish reliable attribution from incomplete telemetry.",
+    "inputSchema": {
+      "properties": {
+        "direction": {
+          "default": "backward",
+          "description": "Log ordering direction: backward returns newest matching entries first; forward returns oldest matching entries first.",
+          "enum": [
+            "forward",
+            "backward"
+          ],
+          "type": "string"
+        },
+        "end": {
+          "description": "Optional RFC3339 end timestamp with explicit timezone.\nWhen start and end are omitted, the query defaults to the previous one\nhour ending at the server's current time.",
+          "type": "string"
+        },
+        "limit": {
+          "default": 100,
+          "description": "Maximum raw log entries to return. Defaults to 100 and is capped at 1000.",
+          "type": "integer"
+        },
+        "query": {
+          "description": "LogQL query expression to execute.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Optional RFC3339 start timestamp with explicit timezone.\nWhen start and end are omitted, the query defaults to the previous one\nhour ending at the server's current time.",
+          "type": "string"
+        },
+        "step": {
+          "description": "Optional query resolution for metric-style LogQL range queries, for example 30s, 1m, or 5m.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "guest-observability_loki_query",
+    "title": "Query Guest Logs with LogQL"
+  }
+]
