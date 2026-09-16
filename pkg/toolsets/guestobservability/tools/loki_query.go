@@ -22,17 +22,17 @@ func InitLokiQuery() []api.ServerTool {
 				Name: name,
 				Description: `Executes a LogQL range query against the configured Loki backend for virtual machine guest log investigation.
 
-Guest telemetry uses a label contract for reliable VM attribution. The namespace and vm_name labels together identify the KubeVirt VM that produced the telemetry. The os and source labels classify the guest operating system and telemetry source.
+Guest telemetry follows a label contract in which namespace and vm_name identify the KubeVirt VM, while os and source classify the guest operating system and telemetry source.
 
-For Windows guest-log investigations, use os="windows" or source="windows_eventlog" when those classification labels are available.
+Telemetry streams may have incomplete contract labels. A LogQL label matcher only returns streams containing a matching value for that label. Consequently, filtering by namespace, vm_name, os, or source excludes streams where that label is absent.
 
-If namespace or vm_name is missing, the telemetry may still establish that an event occurred, but it cannot reliably identify the affected VM. Do not infer missing VM identity from unrelated Kubernetes workload metadata.
+For Windows guest-log investigations, available classification labels such as os="windows" and source="windows_eventlog" can narrow the search. Specific event signatures such as provider names, event IDs, or diagnostic message text can be used in the LogQL content filter; for example, a Windows storage-reset investigation may be identified by StorPort or Event ID 129 content.
 
-If a namespace-scoped search does not find the specific event being investigated, perform one bounded follow-up query without the namespace matcher while retaining the strongest available classification labels and event identifier. Telemetry returned without namespace must not be attributed to the requested namespace.
+When an identity label such as namespace or vm_name is absent from telemetry, discovering that stream requires a bounded query that omits the missing identity matcher while retaining available classification labels and the specific event signature. A result without namespace cannot establish namespace attribution, and a result without vm_name cannot establish the affected VM.
 
-If os or source is missing, report the missing classification field rather than inventing it; the remaining labels and log content may still provide useful diagnostic evidence.
+Missing os or source labels represent classification uncertainty but do not by themselves invalidate identity when namespace and vm_name remain present.
 
-Missing contract labels are surfaced explicitly so callers can distinguish reliable attribution from incomplete telemetry.`,
+Query results may include guest telemetry contract warnings identifying missing identity or classification labels and whether VM attribution is reliable.`,
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
