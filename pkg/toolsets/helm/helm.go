@@ -44,7 +44,7 @@ func initHelm() []api.ServerTool {
 				IdempotentHint:  nil, // TODO: consider replacing implementation with equivalent to: helm upgrade --install
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: helmInstall},
+		}, RBAC: api.RBACUnbounded("Permissions depend on resources contained in the referenced Helm chart"), Handler: helmInstall},
 		{Tool: api.Tool{
 			Name:        "helm_list",
 			Description: "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
@@ -67,7 +67,18 @@ func initHelm() []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: helmList},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:     []string{"list"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "secrets"}},
+				Namespace: &api.RBACNamespace{AllNamespaces: true},
+			},
+			api.RBACRequirement{
+				Verbs:     []string{"list"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "configmaps"}},
+				Namespace: &api.RBACNamespace{AllNamespaces: true},
+			},
+		), Handler: helmList},
 		{Tool: api.Tool{
 			Name:        "helm_uninstall",
 			Description: "Uninstall a Helm release in the current or provided namespace",
@@ -91,7 +102,7 @@ func initHelm() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: helmUninstall},
+		}, RBAC: api.RBACUnbounded("Permissions depend on resources contained in the installed Helm release"), Handler: helmUninstall},
 	}
 }
 
