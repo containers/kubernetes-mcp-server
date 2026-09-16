@@ -20,6 +20,9 @@ e2e-test: helm kubectl ## Run all e2e tests against existing cluster
 	KUBECTL_PATH=$(KUBECTL) \
 	HELM_PATH=$(HELM) \
 	MCP_SERVER_IMAGE=$(E2E_IMAGE) \
+	E2E_SPOKE_CONTEXT=$$($(KUBECTL) --kubeconfig $(shell pwd)/_output/kubeconfig config get-contexts -o name 2>/dev/null | grep -m1 '$(MINIKUBE_SPOKE_PROFILE)' || true) \
+	E2E_SPOKE_SERVER_URL=$$(SPOKE_IP=$$($(MINIKUBE) ip --profile $(MINIKUBE_SPOKE_PROFILE) 2>/dev/null) \
+		&& [ -n "$$SPOKE_IP" ] && echo "https://$$SPOKE_IP:6444" || true) \
 	go test -tags e2e -v -count=1 -timeout 20m ./test/e2e/ $(E2E_ARGS)
 
 .PHONY: e2e-teardown
@@ -32,3 +35,23 @@ e2e-full-setup: ## Full e2e setup with all components (cluster, image, cert-mana
 	$(MAKE) keycloak-install
 	$(MAKE) kuadrant-setup
 	$(MAKE) tempo-install
+
+##@ Multicluster E2E
+# Multicluster tests use two minikube clusters (hub + spoke) sharing a Keycloak
+# instance. The spoke cluster's API server validates OIDC tokens with a different
+# audience ("spoke" vs "openshift"), exercising per-target token exchange.
+# Tests skip gracefully when E2E_SPOKE_CONTEXT is empty (single-cluster runs).
+
+.PHONY: e2e-multicluster-setup
+e2e-multicluster-setup: ## Full e2e setup with hub + spoke clusters for multicluster testing
+	$(MAKE) e2e-setup
+	$(MAKE) keycloak-install
+	$(MAKE) minikube-create-spoke-cluster
+	$(MAKE) minikube-load-image-spoke
+	$(MAKE) keycloak-setup-spoke
+	$(MAKE) minikube-merge-kubeconfigs
+
+.PHONY: e2e-multicluster-teardown
+e2e-multicluster-teardown: ## Delete both hub and spoke clusters
+	$(MAKE) minikube-delete-spoke-cluster
+	$(MAKE) minikube-delete-cluster

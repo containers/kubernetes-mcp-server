@@ -9,6 +9,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
 
 // KubeConfigTargetParameterName is the parameter name used to specify
@@ -26,9 +27,18 @@ type kubeConfigClusterProvider struct {
 	managers            map[string]*Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
 	clusterStateWatcher *watcher.ClusterState
+
+	targetConfigsMu sync.Mutex
+	// targetConfigs caches per-target token exchange configs. Bounded by the
+	// number of contexts in the kubeconfig (typically single-digit). Cleared
+	// on reset() when the kubeconfig file changes.
+	targetConfigs map[string]*tokenexchange.TargetTokenExchangeConfig
 }
 
-var _ Provider = &kubeConfigClusterProvider{}
+var (
+	_ Provider              = &kubeConfigClusterProvider{}
+	_ TokenExchangeProvider = &kubeConfigClusterProvider{}
+)
 
 func init() {
 	RegisterProvider(api.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
@@ -81,6 +91,13 @@ func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 			defaultContext = name
 		}
 	}
+
+	p.targetConfigsMu.Lock()
+	for _, cfg := range p.targetConfigs {
+		cfg.CloseIdleConnections()
+	}
+	p.targetConfigs = nil
+	p.targetConfigsMu.Unlock()
 
 	for _, old := range p.managers {
 		if old != nil {
@@ -219,4 +236,77 @@ func (p *kubeConfigClusterProvider) Close() {
 			w.Close()
 		}
 	}
+}
+
+func (p *kubeConfigClusterProvider) providerConfig() *KubeConfigProviderConfig {
+	extCfg, ok := p.GetProviderConfig(api.ClusterProviderKubeConfig)
+	if !ok {
+		return nil
+	}
+	kcCfg, ok := extCfg.(*KubeConfigProviderConfig)
+	if !ok {
+		return nil
+	}
+	return kcCfg
+}
+
+func (p *kubeConfigClusterProvider) GetTokenExchangeStrategy() string {
+	if cfg := p.providerConfig(); cfg != nil {
+		return cfg.Strategy
+	}
+	return ""
+}
+
+func (p *kubeConfigClusterProvider) GetTargetTokenExchangeConfig(target string) *tokenexchange.TargetTokenExchangeConfig {
+	cfg := p.providerConfig()
+	if cfg == nil {
+		return nil
+	}
+	targetCfg, ok := cfg.Targets[target]
+	if !ok {
+		return nil
+	}
+
+	p.targetConfigsMu.Lock()
+	defer p.targetConfigsMu.Unlock()
+
+	if cached, ok := p.targetConfigs[target]; ok {
+		return cached
+	}
+
+	global := p.GetTokenExchangeConfig()
+	if global == nil {
+		return nil
+	}
+
+	// Start from the global token exchange config and apply per-target overrides.
+	// TokenURL is intentionally empty — filled by ExchangeTokenInContext from
+	// the OIDC provider's token endpoint.
+	result := &tokenexchange.TargetTokenExchangeConfig{
+		Audience:           global.GetAudience(),
+		SubjectTokenType:   global.GetSubjectTokenType(),
+		RequestedTokenType: global.GetRequestedTokenType(),
+		Scopes:             append([]string(nil), global.GetScopes()...),
+		CAFile:             p.GetCertificateAuthority(),
+		TLSMinVersion:      p.GetTLSMinVersionConfig(),
+		TLSCipherSuites:    append([]string(nil), p.GetTLSCipherSuitesConfig()...),
+	}
+	applyClientAuth(result, global.GetClientAuth())
+
+	result.Audience = targetCfg.Audience
+	if targetCfg.ClientId != "" {
+		result.ClientID = targetCfg.ClientId
+	}
+	if targetCfg.ClientSecret != "" {
+		result.ClientSecret = targetCfg.ClientSecret
+	}
+	if len(targetCfg.Scopes) > 0 {
+		result.Scopes = append([]string(nil), targetCfg.Scopes...)
+	}
+
+	if p.targetConfigs == nil {
+		p.targetConfigs = make(map[string]*tokenexchange.TargetTokenExchangeConfig)
+	}
+	p.targetConfigs[target] = result
+	return result
 }

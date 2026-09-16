@@ -43,7 +43,7 @@ keycloak-install: minikube kubectl install-cert-manager keycloak-gen-sts-keypair
 		--extra-config=apiserver.oidc-groups-claim=groups \
 		--extra-config=apiserver.oidc-ca-file=/var/lib/minikube/certs/keycloak-ca.crt
 	@echo "Re-exporting kubeconfig..."
-	@$(MINIKUBE) kubectl --profile $(MINIKUBE_PROFILE) -- config view --flatten > _output/kubeconfig
+	@$(MINIKUBE) kubectl --profile $(MINIKUBE_PROFILE) -- config view --flatten --minify > _output/kubeconfig
 	@$(KUBECTL) apply -f dev/config/keycloak/rbac.yaml
 	@mkdir -p _output
 	@cp dev/config/keycloak/config.toml _output/config.toml
@@ -53,9 +53,76 @@ keycloak-install: minikube kubectl install-cert-manager keycloak-gen-sts-keypair
 	@echo "  Test user: mcp / mcp"
 	@echo "  Config: _output/config.toml"
 
+# keycloak-setup-spoke configures the spoke minikube cluster so its API server
+# validates OIDC tokens issued by the Keycloak running on the hub cluster.
+#
+# The spoke's kube-apiserver needs to reach Keycloak for OIDC discovery, but
+# Keycloak runs inside the hub cluster. Cross-cluster networking is handled at
+# creation time (--network in minikube-create-spoke-cluster places the spoke on
+# the hub's container network). This target handles the remaining configuration:
+#
+#   1. Copy the Keycloak CA cert into the spoke node (persists on a minikube
+#      volume across container restarts).
+#   2. Expose Keycloak on the hub via NodePort 30443.
+#   3. Reconfigure the spoke API server with OIDC flags via minikube start.
+#      This restarts the spoke container, wiping ephemeral state — all steps
+#      below MUST come after this point.
+#   4. Set up /etc/hosts (keycloak.keycloak.svc → 127.0.0.2) and nsswitch.conf
+#      (files before dns) so the spoke's kube-apiserver resolves the Keycloak
+#      hostname via /etc/hosts rather than cluster DNS.
+#   5. Run a socat proxy on 127.0.0.2:8443 → hub:30443. Bound to 127.0.0.2
+#      (not 0.0.0.0) to avoid conflicting with the kube-apiserver on *:6444.
+#   6. Restart the kube-apiserver so it retries OIDC discovery now that the
+#      Keycloak path is live.
+.PHONY: keycloak-setup-spoke
+keycloak-setup-spoke: minikube kubectl ## Configure spoke cluster to use Keycloak for OIDC (hub must be running)
+	$(eval HUB_IP := $(shell $(KUBECTL) --kubeconfig $(shell pwd)/_output/kubeconfig get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'))
+	@if [ -z "$(HUB_IP)" ]; then echo "ERROR: could not determine hub node IP — is the hub cluster running?"; exit 1; fi
+	@echo "Configuring spoke cluster for Keycloak OIDC..."
+	@echo "Hub node IP: $(HUB_IP)"
+# --- Step 1: CA cert (persists on minikube volume) ---
+	@echo "Copying CA certificate into spoke Minikube node..."
+	@$(MINIKUBE) cp _output/cert-manager-ca/ca.crt $(MINIKUBE_SPOKE_PROFILE):/var/lib/minikube/certs/keycloak-ca.crt --profile $(MINIKUBE_SPOKE_PROFILE)
+# --- Step 2: NodePort for cross-cluster Keycloak access ---
+	@echo "Exposing Keycloak on hub via NodePort (port 30443)..."
+	@$(KUBECTL) --kubeconfig $(shell pwd)/_output/kubeconfig apply -f dev/config/keycloak/keycloak-nodeport.yaml
+# --- Step 3: OIDC config (restarts spoke container — ephemeral state lost) ---
+	@echo "Restarting spoke API server with OIDC (client-id=spoke)..."
+	@$(MINIKUBE) start --profile $(MINIKUBE_SPOKE_PROFILE) \
+		--extra-config=apiserver.oidc-issuer-url=https://keycloak.keycloak.svc:8443/realms/openshift \
+		--extra-config=apiserver.oidc-client-id=spoke \
+		--extra-config=apiserver.oidc-username-claim=preferred_username \
+		--extra-config=apiserver.oidc-groups-claim=groups \
+		--extra-config=apiserver.oidc-ca-file=/var/lib/minikube/certs/keycloak-ca.crt
+# --- Step 4: DNS resolution for keycloak.keycloak.svc inside the spoke ---
+	@echo "Adding Keycloak DNS entry to spoke node /etc/hosts (127.0.0.2)..."
+	@$(MINIKUBE) ssh --profile $(MINIKUBE_SPOKE_PROFILE) -- \
+		"grep -v keycloak.keycloak.svc /etc/hosts | sudo tee /etc/hosts.tmp > /dev/null && sudo cp /etc/hosts.tmp /etc/hosts && sudo rm /etc/hosts.tmp && echo '127.0.0.2 keycloak.keycloak.svc' | sudo tee -a /etc/hosts > /dev/null"
+	@$(MINIKUBE) ssh --profile $(MINIKUBE_SPOKE_PROFILE) -- \
+		"grep -q '^hosts:.*files' /etc/nsswitch.conf 2>/dev/null || { sudo sed -i '/^hosts:/d' /etc/nsswitch.conf 2>/dev/null; echo 'hosts: files dns' | sudo tee -a /etc/nsswitch.conf > /dev/null; }"
+# --- Step 5: socat proxy (127.0.0.2:8443 → hub NodePort) ---
+	@echo "Starting socat proxy on spoke node (127.0.0.2:8443 -> hub:30443)..."
+	-@$(MINIKUBE) ssh --profile $(MINIKUBE_SPOKE_PROFILE) -- "sudo pkill -f 'socat.*TCP-LISTEN:8443' 2>/dev/null"
+	-@$(MINIKUBE) ssh --profile $(MINIKUBE_SPOKE_PROFILE) -- \
+		"sudo sh -c 'socat TCP-LISTEN:8443,fork,reuseaddr,bind=127.0.0.2 TCP:$(HUB_IP):30443 </dev/null >/dev/null 2>&1 &'"
+	@sleep 1
+	@$(MINIKUBE) ssh --profile $(MINIKUBE_SPOKE_PROFILE) -- "pgrep -f 'socat.*TCP-LISTEN:8443' >/dev/null"
+# --- Step 6: restart apiserver so OIDC discovery succeeds now that socat is live ---
+	@echo "Restarting kube-apiserver to pick up OIDC discovery..."
+	-@$(MINIKUBE) ssh --profile $(MINIKUBE_SPOKE_PROFILE) -- \
+		"sudo crictl ps -q --name kube-apiserver | xargs -r sudo crictl stop" 2>/dev/null
+	@$(MINIKUBE) kubectl --profile $(MINIKUBE_SPOKE_PROFILE) -- wait --for=condition=ready node --all --timeout=120s 2>/dev/null || true
+# --- Export kubeconfig and apply RBAC ---
+	@echo "Exporting spoke kubeconfig..."
+	@$(MINIKUBE) kubectl --profile $(MINIKUBE_SPOKE_PROFILE) -- config view --flatten --minify 2>/dev/null > _output/kubeconfig-spoke
+	@echo "Applying spoke RBAC..."
+	@$(MINIKUBE) kubectl --profile $(MINIKUBE_SPOKE_PROFILE) -- apply -f dev/config/keycloak/rbac-spoke.yaml
+	@echo "Spoke cluster OIDC configuration complete"
+
 .PHONY: keycloak-uninstall
 keycloak-uninstall: kubectl ## Uninstall Keycloak
 	@$(KUBECTL) delete -f dev/config/keycloak/rbac.yaml --ignore-not-found || true
+	@$(KUBECTL) delete -f dev/config/keycloak/keycloak-nodeport.yaml --ignore-not-found || true
 	@$(KUBECTL) delete -f dev/config/keycloak/deployment.yaml --ignore-not-found || true
 	@$(KUBECTL) delete -f dev/config/keycloak/realm-import.yaml --ignore-not-found || true
 
