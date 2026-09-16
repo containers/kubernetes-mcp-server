@@ -58,7 +58,8 @@ func InitListTraces() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listTracesHandler,
+		},
+		Handler: listTracesHandler,
 	})
 
 	return ret

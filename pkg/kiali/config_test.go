@@ -122,11 +122,10 @@ func (s *ConfigSuite) TestValidate() {
 		s.Error(err, "Expected error for nil config")
 		s.ErrorContains(err, "kiali config is nil")
 	})
-	s.Run("empty URL returns error", func() {
+	s.Run("empty URL is allowed for auto-discovery", func() {
 		cfg := &Config{}
 		err := cfg.Validate()
-		s.Error(err, "Expected error for empty URL")
-		s.ErrorContains(err, "url is required")
+		s.NoError(err, "empty URL should be allowed so discovery can fill it in")
 	})
 	s.Run("invalid URL returns error", func() {
 		cfg := &Config{Url: "://bad-url"}

@@ -71,7 +71,8 @@ func InitGetLogs() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: workloadLogsHandler,
+		},
+		Handler: workloadLogsHandler,
 	})
 
 	return ret

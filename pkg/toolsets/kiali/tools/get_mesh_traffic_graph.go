@@ -45,7 +45,8 @@ func InitGetMeshTrafficGraph() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: getMeshGraphHandler,
+		},
+		Handler: getMeshGraphHandler,
 	})
 	return ret
 }
