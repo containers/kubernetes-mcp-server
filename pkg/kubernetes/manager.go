@@ -147,6 +147,17 @@ func NewManager(ctx context.Context, config api.BaseConfig, restConfig *rest.Con
 		return nil, errors.New("clientCmdConfig cannot be nil")
 	}
 
+	// Raise the default client-go rate limits (QPS=5, Burst=10) which are too
+	// low for MCP prompts that fan out across many namespaces in parallel.
+	// Only override when the rest config still carries the zero-value defaults;
+	// explicit kubeconfig or programmatic settings are preserved.
+	if restConfig.QPS == 0 {
+		restConfig.QPS = 25
+	}
+	if restConfig.Burst == 0 {
+		restConfig.Burst = 50
+	}
+
 	// Apply QPS and Burst from environment variables if set (primarily for testing)
 	applyRateLimitFromEnv(restConfig)
 
