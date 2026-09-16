@@ -51,7 +51,7 @@ func InitListOrGetResources() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listOrGetResourcesHandler,
+		}, RBAC: api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"), Handler: listOrGetResourcesHandler,
 	})
 
 	return ret

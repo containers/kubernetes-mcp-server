@@ -71,7 +71,7 @@ func InitGetLogs() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: workloadLogsHandler,
+		}, RBAC: api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"), Handler: workloadLogsHandler,
 	})
 
 	return ret

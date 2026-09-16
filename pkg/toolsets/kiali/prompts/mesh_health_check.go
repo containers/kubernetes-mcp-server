@@ -24,6 +24,7 @@ func InitMeshHealthCheck() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
 			Handler: meshHealthCheckHandler,
 		},
 	}
