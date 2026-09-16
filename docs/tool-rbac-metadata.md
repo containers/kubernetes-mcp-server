@@ -189,7 +189,7 @@ verbs: ["get", "update"]
 
 ### Manifest
 
-Use `manifest` when resource identities are contained in a YAML or JSON manifest argument:
+Use `manifest` when resource identities are contained in a standard Kubernetes resource manifest argument. The manifest uses the usual Kubernetes object format (`apiVersion`, `kind`, `metadata`, and so on), encoded as YAML or JSON; this metadata does not define a separate manifest format.
 
 ```json
 {

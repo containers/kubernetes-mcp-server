@@ -45,7 +45,7 @@ func initHealthChecks() []api.ServerPrompt {
 					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "nodes"}},
 				},
 				api.RBACRequirement{
-					Verbs:  []string{"list"},
+					Verbs:  []string{"get", "list"},
 					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "namespaces"}},
 				},
 				api.RBACRequirement{
