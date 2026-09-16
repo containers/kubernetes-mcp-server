@@ -37,13 +37,13 @@ func (s *TokenExchangeRoutingSuite) TestResolveClusterAuthMode() {
 	})
 }
 
-func (s *TokenExchangeRoutingSuite) TestStsExchangeTokenInContextRouting() {
+func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 	s.Run("kubeconfig mode clears OAuth token", func() {
 		cfg := config.Default()
 		cfg.ClusterAuthMode = api.ClusterAuthKubeconfig
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
-		result, err := stsExchangeTokenInContext(ctx, cfg, nil, nil, "original-token", nil)
+		result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
 		s.Require().NoError(err)
 
 		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
@@ -55,7 +55,8 @@ func (s *TokenExchangeRoutingSuite) TestStsExchangeTokenInContextRouting() {
 		cfg.ClusterAuthMode = api.ClusterAuthPassthrough
 
 		ctx := context.Background()
-		result, err := stsExchangeTokenInContext(ctx, cfg, nil, nil, "original-token", nil)
+		ctx = context.WithValue(ctx, OAuthAuthorizationHeader, "Bearer original-token")
+		result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
 		s.Require().NoError(err)
 
 		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
@@ -67,11 +68,33 @@ func (s *TokenExchangeRoutingSuite) TestStsExchangeTokenInContextRouting() {
 		cfg.ClusterAuthMode = "" // auto-detect
 
 		ctx := context.Background()
-		result, err := stsExchangeTokenInContext(ctx, cfg, nil, nil, "original-token", nil)
+		ctx = context.WithValue(ctx, OAuthAuthorizationHeader, "Bearer original-token")
+		result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
 		s.Require().NoError(err)
 
 		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
 		s.Equal("Bearer original-token", auth)
+	})
+
+	s.Run("configured exchange without a token endpoint returns an error", func() {
+		cfg := config.Default()
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: tokenexchange.StrategyRFC8693}
+
+		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
+		_, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "no token endpoint available from OIDC provider")
+		s.Contains(err.Error(), `strategy "rfc8693"`)
+	})
+
+	s.Run("ignores an orphaned built config when declarative config is absent", func() {
+		cfg := config.Default()
+		built := &tokenexchange.TargetTokenExchangeConfig{TokenURL: "https://example.com/token"}
+
+		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
+		result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", built)
+		s.Require().NoError(err)
+		s.Equal("Bearer original-token", result.Value(OAuthAuthorizationHeader))
 	})
 }
 
@@ -85,7 +108,7 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksHTTPTokenExchange() {
 	}))
 	defer server.Close()
 
-	s.Run("strategyBasedTokenExchange rejects http token URL when require_tls is true", func() {
+	s.Run("global exchange rejects http token URL when require_tls is true", func() {
 		cfg := config.Default()
 		cfg.RequireTLS = true
 
@@ -95,15 +118,12 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksHTTPTokenExchange() {
 			ClientSecret: "test-secret",
 		}
 
-		_, err := strategyBasedTokenExchange(
-			context.Background(), cfg, nil, nil, "subject-token",
-			tokenexchange.StrategyRFC8693, cachedConfig,
-		)
+		_, err := exchangeToken(context.Background(), cfg, "subject-token", "", tokenexchange.StrategyRFC8693, cachedConfig)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "require_tls is enabled")
 	})
 
-	s.Run("strategyBasedTokenExchange allows http token URL when require_tls is false", func() {
+	s.Run("global exchange allows http token URL when require_tls is false", func() {
 		cfg := config.Default()
 		cfg.RequireTLS = false
 
@@ -113,10 +133,7 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksHTTPTokenExchange() {
 			ClientSecret: "test-secret",
 		}
 
-		result, err := strategyBasedTokenExchange(
-			context.Background(), cfg, nil, nil, "subject-token",
-			tokenexchange.StrategyRFC8693, cachedConfig,
-		)
+		result, err := exchangeToken(context.Background(), cfg, "subject-token", "", tokenexchange.StrategyRFC8693, cachedConfig)
 		s.Require().NoError(err)
 		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
 		s.Equal("Bearer exchanged-token", auth)
@@ -168,7 +185,7 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
 		cfg := config.Default()
 		cfg.RequireTLS = true
 
-		_, err := ExchangeTokenInContext(ctx, cfg, nil, nil, newProvider(), "", nil)
+		_, err := ExchangeTokenInContext(ctx, cfg, newProvider(), "", nil)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "require_tls is enabled")
 	})
@@ -177,11 +194,40 @@ func (s *TokenExchangeRoutingSuite) TestRequireTLS_BlocksExCfgTokenExchange() {
 		cfg := config.Default()
 		cfg.RequireTLS = false
 
-		result, err := ExchangeTokenInContext(ctx, cfg, nil, nil, newProvider(), "", nil)
+		result, err := ExchangeTokenInContext(ctx, cfg, newProvider(), "", nil)
 		s.Require().NoError(err)
 		auth, _ := result.Value(OAuthAuthorizationHeader).(string)
 		s.Equal("Bearer exchanged-token", auth)
 	})
+}
+
+func (s *TokenExchangeRoutingSuite) TestUnknownStrategyReturnsError() {
+	cfg := config.Default()
+	ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer subject-token")
+	provider := fakeTokenExchangeProvider{
+		exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{TokenURL: "https://example.com/token"},
+		strategy:       "unknown",
+	}
+
+	_, err := ExchangeTokenInContext(ctx, cfg, provider, "", nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `token exchange strategy "unknown" not found`)
+}
+
+func (s *TokenExchangeRoutingSuite) TestInvalidPerTargetClientAuthReturnsError() {
+	cfg := config.Default()
+	ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer subject-token")
+	provider := fakeTokenExchangeProvider{
+		exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{
+			TokenURL:  "https://example.com/token",
+			AuthStyle: "unknown",
+		},
+		strategy: tokenexchange.StrategyRFC8693,
+	}
+
+	_, err := ExchangeTokenInContext(ctx, cfg, provider, "", nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `invalid auth_style "unknown"`)
 }
 
 func TestTokenExchangeRouting(t *testing.T) {

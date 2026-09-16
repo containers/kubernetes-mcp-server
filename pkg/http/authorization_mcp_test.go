@@ -19,6 +19,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 type AuthorizationSuite struct {
@@ -43,10 +44,7 @@ func (s *AuthorizationSuite) SetupTest() {
 	s.OidcProvider = nil
 	s.StaticConfig.RequireOAuth = true
 	s.StaticConfig.OAuthAudience = ""
-	s.StaticConfig.StsClientId = ""
-	s.StaticConfig.StsClientSecret = ""
-	s.StaticConfig.StsAudience = ""
-	s.StaticConfig.StsScopes = []string{}
+	s.StaticConfig.TokenExchange = nil
 }
 
 func (s *AuthorizationSuite) TearDownTest() {
@@ -281,10 +279,16 @@ func (s *AuthorizationSuite) TestAuthorizationUnauthorizedTokenExchangeFailure()
 
 	s.OidcProvider = oidcTestServer.Provider
 	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.StsClientId = "test-sts-client-id"
-	s.StaticConfig.StsClientSecret = "test-sts-client-secret"
-	s.StaticConfig.StsAudience = "backend-audience"
-	s.StaticConfig.StsScopes = []string{"backend-scope"}
+	s.StaticConfig.TokenExchange = &config.TokenExchangeConfig{
+		Strategy: "rfc8693",
+		Audience: "backend-audience",
+		Scopes:   []string{"backend-scope"},
+		ClientAuth: &config.TokenExchangeClientAuth{
+			Method:       api.TokenExchangeClientAuthMethodSecretPost,
+			ClientID:     "test-sts-client-id",
+			ClientSecret: "test-sts-client-secret",
+		},
+	}
 	s.logBuffer.Reset()
 	s.StartServer()
 	s.StartClient(map[string]string{
@@ -403,10 +407,16 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 
 	s.OidcProvider = oidcTestServer.Provider
 	s.StaticConfig.OAuthAudience = "mcp-server"
-	s.StaticConfig.StsClientId = "test-sts-client-id"
-	s.StaticConfig.StsClientSecret = "test-sts-client-secret"
-	s.StaticConfig.StsAudience = "backend-audience"
-	s.StaticConfig.StsScopes = []string{"backend-scope"}
+	s.StaticConfig.TokenExchange = &config.TokenExchangeConfig{
+		Strategy: "rfc8693",
+		Audience: "backend-audience",
+		Scopes:   []string{"backend-scope"},
+		ClientAuth: &config.TokenExchangeClientAuth{
+			Method:       api.TokenExchangeClientAuthMethodSecretPost,
+			ClientID:     "test-sts-client-id",
+			ClientSecret: "test-sts-client-secret",
+		},
+	}
 
 	s.MockServer.ResetHandlers()
 	var backendAuth atomic.Value

@@ -159,6 +159,44 @@ func (s *ResourceSuite) TestResourceTemplates() {
 	})
 }
 
+func (s *ResourceSuite) TestRBACMetadataConversion() {
+	s.Run("resource", func() {
+		rbac := api.RBACNone()
+		resource, _, err := ServerResourceToGoSdkResource(nil, api.ServerResource{
+			Resource: api.Resource{URI: "test://example/rbac", Name: "rbac-resource"},
+			RBAC:     rbac,
+		})
+		s.Require().NoError(err)
+		s.Same(rbac, resource.Meta[api.RBACMetadataKey])
+	})
+
+	s.Run("resource template", func() {
+		rbac := api.RBACNone()
+		template, _, err := ServerResourceTemplateToGoSdkResourceTemplate(nil, api.ServerResourceTemplate{
+			ResourceTemplate: api.ResourceTemplate{URITemplate: "test://example/{name}", Name: "rbac-template"},
+			RBAC:             rbac,
+		})
+		s.Require().NoError(err)
+		s.Same(rbac, template.Meta[api.RBACMetadataKey])
+	})
+
+	s.Run("invalid resource", func() {
+		_, _, err := ServerResourceToGoSdkResource(nil, api.ServerResource{
+			Resource: api.Resource{URI: "test://example/invalid", Name: "invalid-resource"},
+			RBAC:     api.RBACBounded(),
+		})
+		s.ErrorContains(err, "invalid RBAC metadata")
+	})
+
+	s.Run("invalid resource template", func() {
+		_, _, err := ServerResourceTemplateToGoSdkResourceTemplate(nil, api.ServerResourceTemplate{
+			ResourceTemplate: api.ResourceTemplate{URITemplate: "test://example/{name}", Name: "invalid-template"},
+			RBAC:             api.RBACBounded(),
+		})
+		s.ErrorContains(err, "invalid RBAC metadata")
+	})
+}
+
 func (s *ResourceSuite) TestHandlerErrors() {
 	testToolset := &mockResourceToolset{
 		resources: []api.ServerResource{

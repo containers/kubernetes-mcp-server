@@ -10,7 +10,7 @@ const (
 // ClusterAuthMode constants define how the MCP server authenticates to the cluster.
 const (
 	// ClusterAuthPassthrough passes the OAuth token to the cluster.
-	// If token exchange is configured (token_exchange_strategy or sts_audience),
+	// If token exchange is configured,
 	// the token is exchanged first before being passed through.
 	ClusterAuthPassthrough = "passthrough"
 
@@ -63,23 +63,47 @@ type DeniedResourcesProvider interface {
 	GetDeniedResources() []GroupVersionKind
 }
 
-type StsConfigProvider interface {
-	GetStsClientId() string
-	GetStsClientSecret() string
-	GetStsAudience() string
-	GetStsScopes() []string
-	GetStsStrategy() string
-	GetStsAuthStyle() string
-	GetStsClientCertFile() string
-	GetStsClientKeyFile() string
-	GetStsFederatedTokenFile() string
-	GetStsSubjectTokenType() string
-	GetStsRequestedTokenType() string
+// TokenExchangeConfig provides declarative global token exchange settings.
+// Implementations must return an untyped nil from GetClientAuth when client
+// authentication is not configured. A typed nil stored in the interface is
+// non-nil and may panic when its methods are called.
+type TokenExchangeConfig interface {
+	GetStrategy() string
+	GetAudience() string
+	GetScopes() []string
+	GetSubjectTokenType() string
+	GetRequestedTokenType() string
+	GetClientAuth() TokenExchangeClientAuth
+}
+
+type TokenExchangeClientAuthMethod string
+
+const (
+	TokenExchangeClientAuthMethodSecretBasic TokenExchangeClientAuthMethod = "client_secret_basic"
+	TokenExchangeClientAuthMethodSecretPost  TokenExchangeClientAuthMethod = "client_secret_post"
+	TokenExchangeClientAuthMethodPrivateKey  TokenExchangeClientAuthMethod = "private_key_jwt"
+	TokenExchangeClientAuthMethodJWTFile     TokenExchangeClientAuthMethod = "jwt_file"
+)
+
+// TokenExchangeClientAuth provides optional declarative client authentication.
+// Providers returning this interface must use an untyped nil when no client
+// authentication configuration exists.
+type TokenExchangeClientAuth interface {
+	GetMethod() TokenExchangeClientAuthMethod
+	GetClientID() string
+	GetClientSecret() string
+	GetCertificateFile() string
+	GetPrivateKeyFile() string
+	GetTokenFile() string
+}
+
+type TokenExchangeConfigProvider interface {
+	GetTokenExchangeConfig() TokenExchangeConfig
 }
 
 // CertificateAuthorityProvider provides access to the top-level certificate_authority
 // TLS setting. It is a general OAuth/TLS option (also consumed by pkg/oauth) rather
-// than an STS-specific one, so it is kept separate from StsConfigProvider.
+// than a token-exchange-specific one, so it is kept separate from TokenExchangeConfigProvider.
 type CertificateAuthorityProvider interface {
 	GetCertificateAuthority() string
 }
@@ -117,7 +141,7 @@ type BaseConfig interface {
 	ConfirmationRulesProvider
 	DeniedResourcesProvider
 	ExtendedConfigProvider
-	StsConfigProvider
+	TokenExchangeConfigProvider
 	CertificateAuthorityProvider
 	ValidationEnabledProvider
 	TargetCompatibilityToolFiltersEnabledProvider

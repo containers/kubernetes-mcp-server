@@ -19,7 +19,17 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 	if _, err := url.Parse(res.Resource.URI); err != nil {
 		return nil, nil, fmt.Errorf("invalid URI %q: %w", res.Resource.URI, err)
 	}
+
+	var meta mcp.Meta
+	if res.RBAC != nil {
+		if err := res.RBAC.Validate(); err != nil {
+			return nil, nil, fmt.Errorf("resource %q: invalid RBAC metadata: %w", res.Resource.Name, err)
+		}
+		meta = mcp.Meta{api.RBACMetadataKey: res.RBAC}
+	}
+
 	mcpResource := &mcp.Resource{
+		Meta:        meta,
 		URI:         res.Resource.URI,
 		Name:        res.Resource.Name,
 		Description: res.Resource.Description,
@@ -59,7 +69,15 @@ func ServerResourceTemplateToGoSdkResourceTemplate(_ *Server, rt api.ServerResou
 	if _, err := uritemplate.New(rt.ResourceTemplate.URITemplate); err != nil {
 		return nil, nil, fmt.Errorf("invalid URITemplate %q: %w", rt.ResourceTemplate.URITemplate, err)
 	}
+	var meta mcp.Meta
+	if rt.RBAC != nil {
+		if err := rt.RBAC.Validate(); err != nil {
+			return nil, nil, fmt.Errorf("resource template %q: invalid RBAC metadata: %w", rt.ResourceTemplate.Name, err)
+		}
+		meta = mcp.Meta{api.RBACMetadataKey: rt.RBAC}
+	}
 	mcpTemplate := &mcp.ResourceTemplate{
+		Meta:        meta,
 		URITemplate: rt.ResourceTemplate.URITemplate,
 		Name:        rt.ResourceTemplate.Name,
 		Description: rt.ResourceTemplate.Description,

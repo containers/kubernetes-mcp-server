@@ -354,6 +354,66 @@ func TestBindAddress(t *testing.T) {
 			}
 		})
 	})
+	t.Run("warns when metrics_port is on 0.0.0.0 even with TLS", func(t *testing.T) {
+		metricsAddr, err := test.RandomPortAddress()
+		if err != nil {
+			t.Fatalf("Failed to find random port for metrics server: %v", err)
+		}
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{
+			BindAddress: "0.0.0.0",
+			TLSCert:     "/dummy-cert.pem",
+			MetricsPort: strconv.Itoa(metricsAddr.Port),
+		}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if !strings.Contains(logStr, "Metrics server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected warning about metrics server listening on all interfaces, got: %s", logStr)
+			}
+			if strings.Contains(logStr, "HTTP server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected no main-server warning when TLS cert is configured, got: %s", logStr)
+			}
+		})
+	})
+	t.Run("warns when metrics_port is on 0.0.0.0 even with OAuth", func(t *testing.T) {
+		metricsAddr, err := test.RandomPortAddress()
+		if err != nil {
+			t.Fatalf("Failed to find random port for metrics server: %v", err)
+		}
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{
+			BindAddress:             "0.0.0.0",
+			RequireOAuth:            true,
+			ClusterProviderStrategy: api.ClusterProviderKubeConfig,
+			MetricsPort:             strconv.Itoa(metricsAddr.Port),
+		}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if !strings.Contains(logStr, "Metrics server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected warning about metrics server listening on all interfaces, got: %s", logStr)
+			}
+			if strings.Contains(logStr, "HTTP server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected no main-server warning when OAuth is enabled, got: %s", logStr)
+			}
+		})
+	})
+	t.Run("no metrics warning when metrics_port is on 127.0.0.1", func(t *testing.T) {
+		metricsAddr, err := test.RandomPortAddress()
+		if err != nil {
+			t.Fatalf("Failed to find random port for metrics server: %v", err)
+		}
+		testCaseWithContext(t, &httpContext{StaticConfig: &config.StaticConfig{
+			BindAddress: "127.0.0.1",
+			MetricsPort: strconv.Itoa(metricsAddr.Port),
+		}}, func(ctx *httpContext) {
+			ctx.StopServer()
+			_ = ctx.WaitForShutdown()
+			logStr := ctx.LogBuffer.String()
+			if strings.Contains(logStr, "Metrics server is listening on all interfaces without TLS or authentication") {
+				t.Errorf("Expected no metrics warning for 127.0.0.1, got: %s", logStr)
+			}
+		})
+	})
 }
 
 func TestMiddlewareLogging(t *testing.T) {
@@ -383,6 +443,84 @@ func TestMiddlewareLogging(t *testing.T) {
 			}
 			if duration < 0 {
 				t.Errorf("Expected duration to be non-negative, got %v", duration)
+			}
+		})
+	})
+}
+
+func TestMetricsPort(t *testing.T) {
+	t.Run("metrics and stats served on separate port when metrics_port is set", func(t *testing.T) {
+		metricsAddr, err := test.RandomPortAddress()
+		if err != nil {
+			t.Fatalf("Failed to find random port for metrics server: %v", err)
+		}
+
+		testCaseWithContext(t, &httpContext{
+			StaticConfig: &config.StaticConfig{
+				MetricsPort:             strconv.Itoa(metricsAddr.Port),
+				ClusterProviderStrategy: api.ClusterProviderKubeConfig,
+			},
+		}, func(ctx *httpContext) {
+			if err := test.WaitForServer(metricsAddr); err != nil {
+				t.Fatalf("Metrics server did not start in time: %v", err)
+			}
+
+			assertEndpoint := func(addr, path string, wantStatus int) {
+				t.Helper()
+				resp, err := http.Get(fmt.Sprintf("http://%s%s", addr, path))
+				if err != nil {
+					t.Fatalf("Failed to get %s from %s: %v", path, addr, err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if resp.StatusCode != wantStatus {
+					t.Errorf("GET %s on %s: expected %d, got %d", path, addr, wantStatus, resp.StatusCode)
+				}
+			}
+
+			assertEndpoint(metricsAddr.String(), "/metrics", http.StatusOK)
+			assertEndpoint(metricsAddr.String(), "/stats", http.StatusOK)
+			assertEndpoint(metricsAddr.String(), "/healthz", http.StatusOK)
+			assertEndpoint(ctx.HttpAddress, "/metrics", http.StatusNotFound)
+			assertEndpoint(ctx.HttpAddress, "/stats", http.StatusNotFound)
+			assertEndpoint(ctx.HttpAddress, "/healthz", http.StatusOK)
+		})
+	})
+
+	t.Run("all endpoints on main port when metrics_port is not set", func(t *testing.T) {
+		testCase(t, func(ctx *httpContext) {
+			assertEndpoint := func(addr, path string, wantStatus int) {
+				t.Helper()
+				resp, err := http.Get(fmt.Sprintf("http://%s%s", addr, path))
+				if err != nil {
+					t.Fatalf("Failed to get %s from %s: %v", path, addr, err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if resp.StatusCode != wantStatus {
+					t.Errorf("GET %s on %s: expected %d, got %d", path, addr, wantStatus, resp.StatusCode)
+				}
+			}
+
+			assertEndpoint(ctx.HttpAddress, "/metrics", http.StatusOK)
+			assertEndpoint(ctx.HttpAddress, "/stats", http.StatusOK)
+		})
+	})
+
+	t.Run("graceful shutdown stops both servers", func(t *testing.T) {
+		metricsAddr, err := test.RandomPortAddress()
+		if err != nil {
+			t.Fatalf("Failed to find random port for metrics server: %v", err)
+		}
+
+		testCaseWithContext(t, &httpContext{
+			StaticConfig: &config.StaticConfig{
+				MetricsPort:             strconv.Itoa(metricsAddr.Port),
+				ClusterProviderStrategy: api.ClusterProviderKubeConfig,
+			},
+		}, func(ctx *httpContext) {
+			ctx.StopServer()
+			err := ctx.WaitForShutdown()
+			if err != nil {
+				t.Errorf("Expected graceful shutdown, but got error: %v", err)
 			}
 		})
 	})

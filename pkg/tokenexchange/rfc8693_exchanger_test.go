@@ -19,10 +19,11 @@ type RFC8693ExchangerTestSuite struct {
 // the httptest handler goroutine only unwinds that goroutine, which can hang
 // or mask the real failure instead of failing the test.
 type recordedRequest struct {
-	method      string
-	contentType string
-	parseErr    error
-	form        map[string]string
+	method        string
+	contentType   string
+	authorization string
+	parseErr      error
+	form          map[string]string
 }
 
 // newRecordingServer returns an httptest.Server that decodes the form body of the
@@ -32,6 +33,7 @@ func (s *RFC8693ExchangerTestSuite) newRecordingServer(captured *recordedRequest
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured.method = r.Method
 		captured.contentType = r.Header.Get(HeaderContentType)
+		captured.authorization = r.Header.Get(HeaderAuthorization)
 
 		if err := r.ParseForm(); err != nil {
 			captured.parseErr = err
@@ -50,6 +52,49 @@ func (s *RFC8693ExchangerTestSuite) newRecordingServer(captured *recordedRequest
 			"expires_in":   3600,
 		})
 	}))
+}
+
+func (s *RFC8693ExchangerTestSuite) TestClientAuthenticationWireFormat() {
+	exchange := func(cfg *TargetTokenExchangeConfig) recordedRequest {
+		var captured recordedRequest
+		server := s.newRecordingServer(&captured)
+		defer server.Close()
+		cfg.TokenURL = server.URL
+
+		_, err := (&rfc8693Exchanger{}).Exchange(s.T().Context(), cfg, "incoming-token")
+		s.Require().NoError(err)
+		s.Require().NoError(captured.parseErr)
+		return captured
+	}
+
+	s.Run("client_secret_basic uses Authorization header", func() {
+		captured := exchange(&TargetTokenExchangeConfig{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			AuthStyle:    AuthStyleHeader,
+		})
+		s.Equal("Basic dGVzdC1jbGllbnQ6dGVzdC1zZWNyZXQ=", captured.authorization)
+		s.Empty(captured.form[FormKeyClientID])
+		s.Empty(captured.form[FormKeyClientSecret])
+	})
+
+	s.Run("client_secret_post uses form body", func() {
+		captured := exchange(&TargetTokenExchangeConfig{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			AuthStyle:    AuthStyleParams,
+		})
+		s.Empty(captured.authorization)
+		s.Equal("test-client", captured.form[FormKeyClientID])
+		s.Equal("test-secret", captured.form[FormKeyClientSecret])
+	})
+
+	s.Run("public client sends only client ID", func() {
+		captured := exchange(&TargetTokenExchangeConfig{ClientID: "public-client"})
+		s.Empty(captured.authorization)
+		s.Equal("public-client", captured.form[FormKeyClientID])
+		s.Empty(captured.form[FormKeyClientSecret])
+	})
 }
 
 func (s *RFC8693ExchangerTestSuite) TestExchange() {

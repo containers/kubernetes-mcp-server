@@ -6,6 +6,7 @@ import "context"
 // Prompts provide pre-defined workflow templates and guidance to AI assistants.
 type ServerPrompt struct {
 	Prompt         Prompt
+	RBAC           *RBACMetadata
 	Handler        PromptHandlerFunc
 	ClusterAware   *bool
 	ArgumentSchema map[string]PromptArgument

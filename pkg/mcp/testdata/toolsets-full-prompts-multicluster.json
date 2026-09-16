@@ -1,5 +1,127 @@
 [
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "target": {
+                "resource": {
+                  "resource": "nodes"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "deployments"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "statefulsets"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "daemonsets"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "persistentvolumeclaims"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "apiGroup": "config.openshift.io",
+                  "resource": "clusteroperators"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "events"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "arguments": [
       {
         "name": "namespace",

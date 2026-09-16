@@ -3,6 +3,8 @@
 KEYCLOAK_NAMESPACE = keycloak
 KEYCLOAK_ADMIN_USER = admin
 KEYCLOAK_ADMIN_PASSWORD = admin
+KEYCLOAK_HOSTNAME = keycloak.keycloak.svc
+KEYCLOAK_HOSTS_ENTRY = 127.0.0.1 $(KEYCLOAK_HOSTNAME) \# kubernetes-mcp-server
 
 ##@ Keycloak
 
@@ -47,11 +49,35 @@ keycloak-install: minikube kubectl install-cert-manager keycloak-gen-sts-keypair
 	@$(KUBECTL) apply -f dev/config/keycloak/rbac.yaml
 	@mkdir -p _output
 	@cp dev/config/keycloak/config.toml _output/config.toml
+	@$(MAKE) keycloak-add-host-entry
 	@echo ""
 	@echo "Keycloak installed and configured!"
-	@echo "  Admin console: make keycloak-port-forward, then https://localhost:8443"
+	@echo "  Admin console: make keycloak-port-forward, then https://$(KEYCLOAK_HOSTNAME):8443"
 	@echo "  Test user: mcp / mcp"
 	@echo "  Config: _output/config.toml"
+
+.PHONY: keycloak-add-host-entry
+keycloak-add-host-entry: ## Add the local Keycloak hostname to /etc/hosts
+	@if grep -Fqx '$(KEYCLOAK_HOSTS_ENTRY)' /etc/hosts; then \
+		echo "Keycloak host entry already managed by this project"; \
+	elif grep -Eq '(^|[[:space:]])$(KEYCLOAK_HOSTNAME)([[:space:]]|$$)' /etc/hosts; then \
+		echo "Existing unmanaged entry for $(KEYCLOAK_HOSTNAME), leaving it unchanged"; \
+	else \
+		echo "Adding $(KEYCLOAK_HOSTNAME) to /etc/hosts (sudo required)..."; \
+		printf '%s\n' '$(KEYCLOAK_HOSTS_ENTRY)' | sudo tee -a /etc/hosts >/dev/null; \
+	fi
+
+.PHONY: keycloak-remove-host-entry
+keycloak-remove-host-entry: ## Remove the local Keycloak hostname managed by this project
+	@if grep -Fqx '$(KEYCLOAK_HOSTS_ENTRY)' /etc/hosts; then \
+		echo "Removing managed $(KEYCLOAK_HOSTNAME) entry from /etc/hosts (sudo required)..."; \
+		TMP_FILE=$$(mktemp); \
+		trap 'rm -f "$$TMP_FILE"' EXIT; \
+		grep -Fvx '$(KEYCLOAK_HOSTS_ENTRY)' /etc/hosts > "$$TMP_FILE"; \
+		sudo tee /etc/hosts >/dev/null < "$$TMP_FILE"; \
+	else \
+		echo "No managed Keycloak entry in /etc/hosts, nothing to remove"; \
+	fi
 
 .PHONY: keycloak-uninstall
 keycloak-uninstall: kubectl ## Uninstall Keycloak
@@ -66,7 +92,7 @@ keycloak-status: kubectl ## Show Keycloak status and connection info
 		echo "Keycloak Status: Installed"; \
 		echo "========================================"; \
 		echo ""; \
-		echo "Admin Console: make keycloak-port-forward, then https://localhost:8443"; \
+		echo "Admin Console: make keycloak-port-forward, then https://$(KEYCLOAK_HOSTNAME):8443"; \
 		echo "  Username: $(KEYCLOAK_ADMIN_USER)"; \
 		echo "  Password: $(KEYCLOAK_ADMIN_PASSWORD)"; \
 		echo ""; \
@@ -82,8 +108,6 @@ keycloak-logs: kubectl ## Tail Keycloak logs
 
 .PHONY: keycloak-port-forward
 keycloak-port-forward: kubectl ## Port-forward to Keycloak for browser access
-	@echo "Add to /etc/hosts (one-time):  echo '127.0.0.1 keycloak.keycloak.svc' | sudo tee -a /etc/hosts"
-	@echo ""
-	@echo "Forwarding https://keycloak.keycloak.svc:8443 -> keycloak pod:8443"
+	@echo "Forwarding https://$(KEYCLOAK_HOSTNAME):8443 -> keycloak pod:8443"
 	@echo "Press Ctrl+C to stop"
 	@$(KUBECTL) port-forward -n $(KEYCLOAK_NAMESPACE) svc/keycloak 8443:8443

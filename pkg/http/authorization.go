@@ -57,14 +57,15 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logger := klogutil.FromContext(r.Context())
-			// Skip auth for infrastructure endpoints (health, metrics) and well-known endpoints
-			if slices.Contains(infraPaths, r.URL.Path) || isWellKnownPath(r.URL.EscapedPath()) {
-				next.ServeHTTP(w, r)
-				return
-			}
 			// Load the latest config snapshot on every request so that
 			// SIGHUP-reloaded auth settings take effect immediately.
 			staticConfig := cfgState.Load()
+			// Skip auth for infrastructure endpoints (health, metrics) and well-known endpoints.
+			// When metrics are on a separate port, only /healthz is exempt on the main port.
+			if slices.Contains(infraPaths(staticConfig.MetricsPort != ""), r.URL.Path) || isWellKnownPath(r.URL.EscapedPath()) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			if !staticConfig.RequireOAuth {
 				next.ServeHTTP(w, r)
 				return

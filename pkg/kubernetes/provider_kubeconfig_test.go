@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -62,6 +63,124 @@ func (s *ProviderKubeconfigTestSuite) TestWithNonOpenShiftGVK() {
 		})
 		s.False(hasGVK, "Expected provider to report no nonexistent GVK")
 	})
+}
+
+func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
+	projectGVK := []schema.GroupVersionKind{
+		{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
+	}
+
+	s.Run("returns true when one of several targets has the GVK", func() {
+		openshift := test.NewMockServer()
+		s.T().Cleanup(openshift.Close)
+		openshift.Handle(test.NewInOpenShiftHandler())
+
+		vanilla := test.NewMockServer()
+		s.T().Cleanup(vanilla.Close)
+		vanilla.Handle(test.NewDiscoveryClientHandler())
+
+		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
+			KubeConfig: kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
+				"openshift": openshift,
+				"vanilla":   vanilla,
+			}),
+		})
+		s.Require().NoError(err, "Expected no error creating multi-context provider")
+		s.T().Cleanup(provider.Close)
+
+		s.True(provider.AnyTargetHasGVKs(s.T().Context(), projectGVK), "Expected Project GVK when at least one target is OpenShift")
+	})
+
+	s.Run("returns false when no target has the GVK", func() {
+		a := test.NewMockServer()
+		s.T().Cleanup(a.Close)
+		a.Handle(test.NewDiscoveryClientHandler())
+
+		b := test.NewMockServer()
+		s.T().Cleanup(b.Close)
+		b.Handle(test.NewDiscoveryClientHandler())
+
+		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
+			KubeConfig: kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
+				"a": a,
+				"b": b,
+			}),
+		})
+		s.Require().NoError(err, "Expected no error creating multi-context provider")
+		s.T().Cleanup(provider.Close)
+
+		s.False(provider.AnyTargetHasGVKs(s.T().Context(), projectGVK), "Expected no Project GVK when no target is OpenShift")
+	})
+
+	s.Run("returns true when the parent context is canceled", func() {
+		a := test.NewMockServer()
+		s.T().Cleanup(a.Close)
+		a.Handle(test.NewDiscoveryClientHandler())
+
+		b := test.NewMockServer()
+		s.T().Cleanup(b.Close)
+		b.Handle(test.NewDiscoveryClientHandler())
+
+		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
+			KubeConfig: kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
+				"a": a,
+				"b": b,
+			}),
+		})
+		s.Require().NoError(err, "Expected no error creating multi-context provider")
+		s.T().Cleanup(provider.Close)
+
+		ctx, cancel := context.WithCancel(s.T().Context())
+		cancel()
+
+		s.True(provider.AnyTargetHasGVKs(ctx, projectGVK), "Expected fail-open when parent context is canceled")
+	})
+
+	s.Run("returns true without waiting for a hanging target", func() {
+		openshift := test.NewMockServer()
+		s.T().Cleanup(openshift.Close)
+		openshift.Handle(test.NewInOpenShiftHandler())
+
+		hang := make(chan struct{})
+		hanging := test.NewMockServer()
+		// Unblock the handler before MockServer.Close, which waits for in-flight requests.
+		s.T().Cleanup(hanging.Close)
+		s.T().Cleanup(func() { close(hang) })
+		hanging.Handle(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			<-hang
+		}))
+
+		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
+			KubeConfig: kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
+				"openshift": openshift,
+				"hanging":   hanging,
+			}),
+		})
+		s.Require().NoError(err, "Expected no error creating multi-context provider")
+		s.T().Cleanup(provider.Close)
+
+		start := time.Now()
+		has := provider.AnyTargetHasGVKs(s.T().Context(), projectGVK)
+		s.True(has, "Expected Project GVK from the OpenShift target")
+		s.Less(time.Since(start), 2*time.Second, "Expected to return before the hanging target's discovery timeout")
+	})
+}
+
+func kubeconfigForMockServers(t *testing.T, currentContext string, servers map[string]*test.MockServer) string {
+	t.Helper()
+	cfg := clientcmdapi.NewConfig()
+	for name, srv := range servers {
+		cluster := clientcmdapi.NewCluster()
+		cluster.Server = srv.Config().Host
+		cfg.Clusters[name] = cluster
+		cfg.AuthInfos[name] = clientcmdapi.NewAuthInfo()
+		ctx := clientcmdapi.NewContext()
+		ctx.Cluster = name
+		ctx.AuthInfo = name
+		cfg.Contexts[name] = ctx
+	}
+	cfg.CurrentContext = currentContext
+	return test.KubeconfigFile(t, cfg)
 }
 
 func (s *ProviderKubeconfigTestSuite) TestGetTargets() {

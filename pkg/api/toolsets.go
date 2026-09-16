@@ -11,6 +11,7 @@ import (
 
 type ServerTool struct {
 	Tool               Tool
+	RBAC               *RBACMetadata
 	Handler            ToolHandlerFunc
 	ClusterAware       *bool
 	TargetListProvider *bool
@@ -139,6 +140,7 @@ type ResourceHandler func(ctx context.Context) (*ResourceContent, error)
 // ServerResource represents a resource that can be registered with the MCP server.
 type ServerResource struct {
 	Resource Resource
+	RBAC     *RBACMetadata
 	Handler  ResourceHandler
 }
 
@@ -159,6 +161,7 @@ type ResourceTemplateHandler func(ctx context.Context, uri string) (*ResourceCon
 // ServerResourceTemplate represents a resource template that can be registered with the MCP server.
 type ServerResourceTemplate struct {
 	ResourceTemplate ResourceTemplate
+	RBAC             *RBACMetadata
 	Handler          ResourceTemplateHandler
 }
 
