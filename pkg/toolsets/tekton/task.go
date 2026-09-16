@@ -46,6 +46,19 @@ func taskTools() []api.ServerTool {
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "tasks"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"create"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "taskruns"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+			),
 			Handler: startTask,
 		},
 	}
