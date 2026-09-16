@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"slices"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
@@ -44,5 +46,13 @@ func ShouldIncludeTargetListTool(targetName string, isMultiTarget bool) ToolFilt
 		}
 
 		return true
+	}
+}
+
+// ShouldIncludeConfigurationViewTool prevents kubeconfig contents from being
+// exposed over HTTP unless the tool was explicitly allowlisted.
+func ShouldIncludeConfigurationViewTool(isHTTP bool, enabledTools []string) ToolFilter {
+	return func(tool api.ServerTool) bool {
+		return !isHTTP || tool.Tool.Name != "configuration_view" || slices.Contains(enabledTools, tool.Tool.Name)
 	}
 }
