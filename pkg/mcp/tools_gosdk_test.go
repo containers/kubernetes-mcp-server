@@ -53,6 +53,84 @@ func (s *ToolsGoSdkSuite) TestInputSchemaValidation() {
 	})
 }
 
+func (s *ToolsGoSdkSuite) TestRBACMetadataConversion() {
+	s.Run("adds declared RBAC while preserving existing metadata", func() {
+		existingMeta := map[string]any{"ui": map[string]any{"resourceUri": "ui://server/app.html"}}
+		rbac := api.RBACNone()
+		tool := api.ServerTool{
+			Tool: api.Tool{
+				Name:        "rbac-tool",
+				InputSchema: &jsonschema.Schema{Type: "object"},
+				Meta:        existingMeta,
+			},
+			RBAC: rbac,
+		}
+
+		mcpTool, _, err := ServerToolToGoSdkTool(nil, tool)
+		s.Require().NoError(err)
+		s.Equal(existingMeta["ui"], mcpTool.Meta["ui"])
+		s.Same(rbac, mcpTool.Meta[api.RBACMetadataKey])
+		s.NotContains(existingMeta, api.RBACMetadataKey)
+	})
+
+	s.Run("leaves metadata unchanged when RBAC is not declared", func() {
+		tool := api.ServerTool{
+			Tool: api.Tool{
+				Name:        "no-rbac-metadata",
+				InputSchema: &jsonschema.Schema{Type: "object"},
+				Meta:        map[string]any{"existing": true},
+			},
+		}
+
+		mcpTool, _, err := ServerToolToGoSdkTool(nil, tool)
+		s.Require().NoError(err)
+		s.Equal(mcp.Meta{"existing": true}, mcpTool.Meta)
+	})
+
+	s.Run("rejects invalid RBAC metadata", func() {
+		tool := api.ServerTool{
+			Tool: api.Tool{
+				Name:        "invalid-rbac",
+				InputSchema: &jsonschema.Schema{Type: "object"},
+			},
+			RBAC: api.RBACBounded(),
+		}
+
+		_, _, err := ServerToolToGoSdkTool(nil, tool)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "invalid RBAC metadata")
+	})
+
+	s.Run("rejects RBAC metadata set directly on the tool without declared RBAC", func() {
+		tool := api.ServerTool{
+			Tool: api.Tool{
+				Name:        "direct-rbac",
+				InputSchema: &jsonschema.Schema{Type: "object"},
+				Meta:        map[string]any{api.RBACMetadataKey: map[string]any{}},
+			},
+		}
+
+		_, _, err := ServerToolToGoSdkTool(nil, tool)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "ServerTool.RBAC")
+	})
+
+	s.Run("rejects RBAC metadata set directly on the tool with declared RBAC", func() {
+		tool := api.ServerTool{
+			Tool: api.Tool{
+				Name:        "duplicate-rbac",
+				InputSchema: &jsonschema.Schema{Type: "object"},
+				Meta:        map[string]any{api.RBACMetadataKey: map[string]any{}},
+			},
+			RBAC: api.RBACNone(),
+		}
+
+		_, _, err := ServerToolToGoSdkTool(nil, tool)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "ServerTool.RBAC")
+	})
+}
+
 func (s *ToolsGoSdkSuite) TestOutputSchemaValidation() {
 	s.Run("nil output schema converts successfully", func() {
 		tool := api.ServerTool{

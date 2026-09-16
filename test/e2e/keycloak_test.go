@@ -64,7 +64,7 @@ func TestKeycloakOIDC(t *testing.T) {
 			//    mounted so it can trust Keycloak's TLS. The CA secret is created
 			//    by the copyKeycloakCASecret pre-install hook before Helm install.
 			dep := deployServer(ctx, t, cfg, "keycloak-oidc",
-				withConfig(oidcServerConfig(nil)),
+				withConfig(oidcServerConfig(nil, clientAuthMethodSecretPost)),
 				withValues(mergeValues(viewClusterRoleBindingValues(), keycloakCAVolumeValues())),
 				withPreInstall(copyKeycloakCASecret),
 			)

@@ -30,6 +30,21 @@ kuadrant-install-prerequisites: helm kubectl ## Install Gateway API CRDs and Ist
 	@$(HELM) upgrade --install istiod istio/istiod -n istio-system --version $(KUADRANT_ISTIO_VERSION) --wait
 	@echo "✅ Istiod installed"
 	@echo ""
+	@echo "Waiting for cluster DNS to resolve Istiod..."
+	@for attempt in $$(seq 1 30); do \
+		if $(KUBECTL) run --rm -i --restart=Never --image=busybox:1.36 dns-check -- \
+			nslookup istiod.istio-system.svc.cluster.local >/dev/null 2>&1; then \
+			echo "✅ Istiod service resolves through cluster DNS"; \
+			break; \
+		fi; \
+		if [ $$attempt -eq 30 ]; then \
+			echo "Istiod service did not resolve through cluster DNS after 150 seconds"; \
+			exit 1; \
+		fi; \
+		echo "  Waiting for DNS ($$attempt/30)..."; \
+		sleep 5; \
+	done
+	@echo ""
 	@echo "Creating gateway-system namespace..."
 	@$(KUBECTL) create namespace gateway-system --dry-run=client -o yaml | $(KUBECTL) apply -f -
 	@echo "✅ gateway-system namespace ready"

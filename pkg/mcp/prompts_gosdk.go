@@ -23,6 +23,14 @@ func (p *promptCallRequestAdapter) GetArguments() map[string]string {
 
 // ServerPromptToGoSdkPrompt converts an api.ServerPrompt to MCP SDK types
 func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.Prompt, mcp.PromptHandler, error) {
+	var meta mcp.Meta
+	if serverPrompt.RBAC != nil {
+		if err := serverPrompt.RBAC.Validate(); err != nil {
+			return nil, nil, fmt.Errorf("prompt %q: invalid RBAC metadata: %w", serverPrompt.Prompt.Name, err)
+		}
+		meta = mcp.Meta{api.RBACMetadataKey: serverPrompt.RBAC}
+	}
+
 	// Convert arguments
 	var args []*mcp.PromptArgument
 	for _, arg := range serverPrompt.Prompt.Arguments {
@@ -35,6 +43,7 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 
 	// Create the MCP SDK prompt
 	mcpPrompt := &mcp.Prompt{
+		Meta:        meta,
 		Name:        serverPrompt.Prompt.Name,
 		Description: serverPrompt.Prompt.Description,
 		Arguments:   args,

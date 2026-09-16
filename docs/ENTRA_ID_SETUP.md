@@ -117,7 +117,7 @@ Replace:
 > credentials are used when absent. Set `cluster_auth_mode = "kubeconfig"` to always
 > use kubeconfig credentials regardless of any Authorization header.
 >
-> In `passthrough` mode, if token exchange is configured (`token_exchange_strategy` or `sts_audience`), the token is exchanged before being passed to the cluster.
+> In `passthrough` mode, a configured `[token_exchange]` block exchanges the token before it is passed to the cluster.
 
 > **Note:** Authenticating MCP clients with `require_oauth = true` while using a shared ServiceAccount
 > for cluster access (`cluster_auth_mode = "kubeconfig"`) is **not supported** and is rejected at
@@ -140,10 +140,14 @@ oauth_scopes = ["openid", "profile", "email"]
 authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
 
 # Token exchange configuration (passthrough will use this automatically)
-token_exchange_strategy = "entra-obo"
-sts_client_id = "<CLIENT_ID>"
-sts_client_secret = "<CLIENT_SECRET>"
-sts_scopes = ["api://<DOWNSTREAM_API_APP_ID>/.default"]
+[token_exchange]
+strategy = "entra-obo"
+scopes = ["api://<DOWNSTREAM_API_APP_ID>/.default"]
+
+[token_exchange.client_auth]
+method = "client_secret_post"
+client_id = "<CLIENT_ID>"
+client_secret = "<CLIENT_SECRET>"
 ```
 
 #### With Certificate (Option B — Recommended)
@@ -156,12 +160,15 @@ oauth_scopes = ["openid", "profile", "email"]
 authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
 
 # Token exchange with certificate authentication (RFC 7523 JWT Client Assertion)
-token_exchange_strategy = "entra-obo"
-sts_client_id = "<CLIENT_ID>"
-sts_auth_style = "assertion"
-sts_client_cert_file = "/path/to/client.crt"
-sts_client_key_file = "/path/to/client.key"
-sts_scopes = ["api://<DOWNSTREAM_API_APP_ID>/.default"]
+[token_exchange]
+strategy = "entra-obo"
+scopes = ["api://<DOWNSTREAM_API_APP_ID>/.default"]
+
+[token_exchange.client_auth]
+method = "private_key_jwt"
+client_id = "<CLIENT_ID>"
+certificate_file = "/path/to/client.crt"
+private_key_file = "/path/to/client.key"
 ```
 
 No client secret is needed when using certificate auth. The MCP server signs a short-lived JWT assertion (5 minutes) using the private key, and Entra ID validates it against the uploaded certificate.
@@ -198,14 +205,17 @@ oauth_scopes = ["openid", "profile", "email"]
 authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
 
 # Token exchange with federated credential (workload identity federation)
-token_exchange_strategy = "entra-obo"
-sts_client_id = "<CLIENT_ID>"
-sts_auth_style = "federated"
-sts_federated_token_file = "/var/run/secrets/tokens/federated-token"
-sts_scopes = ["api://<DOWNSTREAM_API_APP_ID>/.default"]
+[token_exchange]
+strategy = "entra-obo"
+scopes = ["api://<DOWNSTREAM_API_APP_ID>/.default"]
+
+[token_exchange.client_auth]
+method = "jwt_file"
+client_id = "<CLIENT_ID>"
+token_file = "/var/run/secrets/tokens/federated-token"
 ```
 
-The MCP server reads the JWT from `sts_federated_token_file` on each token request, so token rotation by the external IdP is handled automatically.
+The MCP server reads the JWT from `token_exchange.client_auth.token_file` on each token request, so token rotation by the external IdP is handled automatically.
 
 ## Step 3: Run the MCP Server
 
@@ -267,7 +277,7 @@ This means the certificate used to sign the JWT assertion doesn't match any cert
    ```
 2. Go to Azure Portal → App registrations → your app → **Certificates & secrets** → **Certificates**
 3. Compare the thumbprint. If it doesn't match, upload the correct certificate
-4. Make sure `sts_client_cert_file` and `sts_client_key_file` point to the matching cert/key pair
+4. Make sure `token_exchange.client_auth.certificate_file` and `token_exchange.client_auth.private_key_file` point to the matching cert/key pair
 
 ### "AADSTS50011" Redirect URI Mismatch
 
@@ -400,12 +410,15 @@ oauth_audience = "<CLIENT_ID>"
 cluster_auth_mode = "passthrough"
 
 # Token Exchange: OBO flow with JWT client assertion
-token_exchange_strategy = "entra-obo"
-sts_client_id = "<CLIENT_ID>"
-sts_auth_style = "assertion"
-sts_client_cert_file = "/path/to/client.crt"
-sts_client_key_file = "/path/to/client.key"
-sts_scopes = ["<CLIENT_ID>/.default"]
+[token_exchange]
+strategy = "entra-obo"
+scopes = ["<CLIENT_ID>/.default"]
+
+[token_exchange.client_auth]
+method = "private_key_jwt"
+client_id = "<CLIENT_ID>"
+certificate_file = "/path/to/client.crt"
+private_key_file = "/path/to/client.key"
 ```
 
 ### Understanding the Two Trust Relationships
@@ -413,7 +426,7 @@ sts_scopes = ["<CLIENT_ID>/.default"]
 1. **MCP Server → Entra ID (OBO Exchange)**
    - MCP Server authenticates using JWT client assertion (certificate)
    - No client_secret needed
-   - This is what `sts_auth_style = "assertion"` configures
+   - This is what `token_exchange.client_auth.method = "private_key_jwt"` configures
 
 2. **Cluster → Entra ID (Token Validation)**
    - The API server validates tokens from Entra ID
@@ -459,12 +472,15 @@ oauth_scopes = ["openid", "profile", "email"]
 authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
 
 # OBO exchange uses App B's credentials (certificate, no secret)
-token_exchange_strategy = "entra-obo"
-sts_client_id = "<CLIENT_ID_B>"
-sts_auth_style = "assertion"
-sts_client_cert_file = "/path/to/client.crt"
-sts_client_key_file = "/path/to/client.key"
-sts_scopes = ["<CLIENT_ID_B>/.default"]
+[token_exchange]
+strategy = "entra-obo"
+scopes = ["<CLIENT_ID_B>/.default"]
+
+[token_exchange.client_auth]
+method = "private_key_jwt"
+client_id = "<CLIENT_ID_B>"
+certificate_file = "/path/to/client.crt"
+private_key_file = "/path/to/client.key"
 ```
 
 This way, the cluster's existing OIDC configuration is untouched, and the MCP server has its own credentials with certificate-based auth.

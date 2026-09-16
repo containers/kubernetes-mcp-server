@@ -27,7 +27,8 @@ e2e-teardown: ## Delete the e2e Minikube cluster
 	$(MAKE) minikube-delete-cluster
 
 .PHONY: e2e-full-setup
-e2e-full-setup: ## Full e2e setup with all components (cluster, image, cert-manager, Keycloak, Kuadrant)
+e2e-full-setup: ## Full e2e setup with all components (cluster, image, cert-manager, Keycloak, Kuadrant, Tempo)
 	$(MAKE) e2e-setup
 	$(MAKE) keycloak-install
 	$(MAKE) kuadrant-setup
+	$(MAKE) tempo-install

@@ -1,0 +1,50 @@
+# MCP conformance test expected failures.
+# Scenarios listed here are known to fail and are excluded from CI regression detection.
+# Remove entries as features are implemented — stale entries cause CI failure.
+#
+# Format: list scenario names under the server: key.
+# Per-check baselining: "scenario:check-id" (no space after colon).
+# See: https://github.com/modelcontextprotocol/conformance
+server:
+  ## Not implemented — genuine feature gaps
+  # No completion handler exists in the server.
+  - completion-complete
+  # No resource subscription support.
+  - resources-subscribe
+  - resources-unsubscribe
+  # No tool emits progress notifications.
+  - tools-call-with-progress
+  # Sampling (createMessage) not implemented.
+  - tools-call-sampling
+
+  ## Fixture mismatch — conformance expects synthetic test tools/resources/prompts
+  ## (echo, error-trigger, image-returning, etc.) that a real Kubernetes MCP server
+  ## does not provide. The protocol wiring for these features works; it's the
+  ## specific fixture names/behaviors that are missing.
+
+  # Tool calls — no conformance-specific test tools (echo, image, audio, etc.)
+  - tools-call-simple-text
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-with-logging
+  - tools-call-error
+  - tools-call-elicitation
+
+  # Elicitation — fully implemented, but no tool triggers it for conformance.
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+
+  # Resources — capability advertised, infrastructure implemented, but no toolset
+  # registers any resources. resources-list passes (empty list is valid).
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+
+  # Prompts — server has real prompts (cluster-health-check), but they don't match
+  # the conformance suite's expected fixture names/arguments.
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image

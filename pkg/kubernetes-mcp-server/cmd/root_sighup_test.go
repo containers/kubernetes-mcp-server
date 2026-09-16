@@ -68,6 +68,7 @@ type SIGHUPSuite struct {
 	dropInConfigDir string
 	server          *mcp.Server
 	stopSIGHUP      func()
+	cfgState        *config.StaticConfigState
 }
 
 func (s *SIGHUPSuite) SetupTest() {
@@ -100,8 +101,9 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 	s.Require().NoError(err)
 
 	opts := &MCPServerOptions{
-		ConfigPath: configPath,
-		ConfigDir:  configDir,
+		ConfigPath:   configPath,
+		ConfigDir:    configDir,
+		StaticConfig: cfg,
 		IOStreams: genericiooptions.IOStreams{
 			Out:    s.logBuffer,
 			ErrOut: s.logBuffer,
@@ -109,8 +111,8 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 	}
 	oauthState := oauth.NewState(&oauth.Snapshot{})
 
-	cfgState := config.NewStaticConfigState(cfg)
-	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, oauthState, cfgState)
+	s.cfgState = config.NewStaticConfigState(cfg)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, oauthState, s.cfgState)
 	return opts
 }
 
@@ -249,6 +251,95 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 	})
 }
 
+func (s *SIGHUPSuite) TestSIGHUPPreservesMetricsPort() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		port = "18080"
+		metrics_port = "9090"
+		toolsets = ["core", "config"]
+	`), 0o644))
+	_ = s.InitServer(configPath, "")
+
+	s.Run("metrics_port is set at startup", func() {
+		s.Equal("9090", s.cfgState.Load().MetricsPort)
+	})
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		port = "18080"
+		metrics_port = "9090"
+		toolsets = ["core", "config", "helm"]
+	`), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Run("unchanged metrics_port reloads other fields without warning", func() {
+		s.Require().Eventually(func() bool {
+			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
+		}, 2*time.Second, 50*time.Millisecond)
+		s.Equal("9090", s.cfgState.Load().MetricsPort)
+		s.NotContains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
+	})
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		port = "18080"
+		metrics_port = "9091"
+		toolsets = ["core", "config", "helm"]
+	`), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Run("changed metrics_port is kept at the original value and warned", func() {
+		s.Require().Eventually(func() bool {
+			klog.Flush()
+			return strings.Contains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
+		}, 2*time.Second, 50*time.Millisecond)
+		s.Equal("9090", s.cfgState.Load().MetricsPort, "SIGHUP must not change MetricsPort used for OAuth skip paths")
+	})
+
+	s.logBuffer.Reset()
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		port = "18080"
+		toolsets = ["core", "config", "helm"]
+	`), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Run("cleared metrics_port is kept at the original value and warned", func() {
+		s.Require().Eventually(func() bool {
+			klog.Flush()
+			return strings.Contains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
+		}, 2*time.Second, 50*time.Millisecond)
+		s.Equal("9090", s.cfgState.Load().MetricsPort)
+	})
+}
+
+func (s *SIGHUPSuite) TestSIGHUPPreservesCLIMetricsPort() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		port = "18080"
+		metrics_port = "9090"
+		toolsets = ["core", "config"]
+	`), 0o644))
+	opts := s.InitServer(configPath, "")
+	// Simulate --metrics-port winning over TOML at startup. StaticConfig is
+	// the same pointer stored in cfgState until the first successful reload.
+	opts.StaticConfig.MetricsPort = "9092"
+	s.Equal("9092", s.cfgState.Load().MetricsPort)
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		port = "18080"
+		metrics_port = "9090"
+		toolsets = ["core", "config", "helm"]
+	`), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Run("CLI-overlaid metrics_port is kept when TOML would revert it", func() {
+		s.Require().Eventually(func() bool {
+			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
+		}, 2*time.Second, 50*time.Millisecond)
+		s.Equal("9092", s.cfgState.Load().MetricsPort)
+		klog.Flush()
+		s.Contains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
+	})
+}
+
 func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
 	// Create initial config with one prompt
 	configPath := filepath.Join(s.tempDir, "config.toml")
@@ -345,7 +436,8 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	t.Cleanup(mcpServer.Close)
 
 	opts := &MCPServerOptions{
-		ConfigPath: configPath,
+		ConfigPath:   configPath,
+		StaticConfig: cfg,
 		IOStreams: genericiooptions.IOStreams{
 			Out:    logBuffer,
 			ErrOut: logBuffer,

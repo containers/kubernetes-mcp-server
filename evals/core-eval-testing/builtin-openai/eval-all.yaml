@@ -83,3 +83,13 @@ config:
             toolPattern: "netobserv_.*"
         minToolCalls: 1
         maxToolCalls: 10
+    # ArgoCD tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: argocd
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
