@@ -113,7 +113,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
 | defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
-| extraArgs | list | `[]` | Note: For TLS configuration, use the tls section above instead of extraArgs. |
+| extraArgs | list | `[]` | Only bootstrap flags remain (`--config`, `--config-dir`, `--version`). Runtime flags such as `--tls-cert` fail with `unknown flag`; put those settings in `config` or the `tls` section. |
 | extraContainers | list | `[]` | Note: sidecars do not inherit defaultSecurityContext or the /tmp emptyDir mount; configure them per-container if needed. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |

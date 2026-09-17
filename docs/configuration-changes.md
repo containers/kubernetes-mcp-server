@@ -151,6 +151,8 @@ cluster_provider_strategy = "disabled"
 
 In-cluster Deployment args should be `--config` and/or `--config-dir` pointing at mounted TOML, not `--kubeconfig` / `--cluster-provider`.
 
+Chart `tls.enabled` writes `tls_cert` / `tls_key` into the mounted ConfigMap. Chart `extraArgs` and container `args` that still pass removed flags (`--tls-cert`, `--port`, …) fail with cobra's `unknown flag`.
+
 ## Upgrading from 0.0.66
 
 The legacy top-level `token_exchange_strategy` and `sts_*` settings were removed and are rejected at startup. Migrate them as follows:

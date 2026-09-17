@@ -70,6 +70,16 @@ helm-validate: helm kubeconform ## Validate Helm chart manifests with kubeconfor
 	@echo "Validating with Gateway API HTTPRoute values..."
 	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/httproute-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""
+	@echo "Validating with TLS enabled..."
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tls-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@output=$$($(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tls-test-values.yaml 2>&1); \
+	failed=0; \
+	if echo "$$output" | grep -q -- '--tls-cert\|--tls-key'; then echo "FAIL: TLS still passed as CLI flags"; failed=1; else echo "PASS: no --tls-cert / --tls-key args"; fi; \
+	if ! echo "$$output" | grep -q 'tls_cert = "/etc/tls/tls.crt"'; then echo "FAIL: ConfigMap missing tls_cert"; failed=1; else echo "PASS: ConfigMap has tls_cert"; fi; \
+	if ! echo "$$output" | grep -q 'tls_key = "/etc/tls/tls.key"'; then echo "FAIL: ConfigMap missing tls_key"; failed=1; else echo "PASS: ConfigMap has tls_key"; fi; \
+	if [ $$failed -eq 1 ]; then echo ""; echo "TLS ConfigMap test FAILED"; exit 1; fi; \
+	echo ""; echo "TLS ConfigMap test PASSED"
+	@echo ""
 	@echo "Testing ConfigMap numeric .0 cleanup..."
 	@output=$$($(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/configmap-numeric-test-values.yaml 2>&1); \
 	failed=0; \
