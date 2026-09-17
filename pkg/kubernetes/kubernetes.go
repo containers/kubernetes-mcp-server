@@ -2,8 +2,10 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -45,7 +47,7 @@ var ParameterCodec = runtime.NewParameterCodec(Scheme)
 // apiVersion and kinds are checked for allowed access
 type Kubernetes struct {
 	kubernetes.Interface
-	config             *config.Config
+	cfg                *atomic.Pointer[config.Config]
 	clientCmdConfig    clientcmd.ClientConfig
 	restConfig         *rest.Config
 	httpClient         *http.Client
@@ -64,8 +66,23 @@ func NewKubernetes(
 	clientCmdConfig clientcmd.ClientConfig,
 	restConfig *rest.Config,
 ) (*Kubernetes, error) {
+	live := &atomic.Pointer[config.Config]{}
+	live.Store(cfg)
+	return newKubernetesFromLive(ctx, live, clientCmdConfig, restConfig)
+}
+
+func newKubernetesFromLive(
+	ctx context.Context,
+	live *atomic.Pointer[config.Config],
+	clientCmdConfig clientcmd.ClientConfig,
+	restConfig *rest.Config,
+) (*Kubernetes, error) {
+	if live == nil || live.Load() == nil {
+		return nil, errors.New("config cannot be nil")
+	}
+	cfg := live.Load()
 	k := &Kubernetes{
-		config:          cfg,
+		cfg:             live,
 		clientCmdConfig: clientCmdConfig,
 		restConfig:      rest.CopyConfig(restConfig),
 	}
@@ -76,6 +93,7 @@ func NewKubernetes(
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return NewAccessControlRoundTripper(ctx, AccessControlRoundTripperConfig{
 			Delegate:             original,
+			ConfigProvider:       k.Config,
 			DeniedResources:      cfg.DeniedResources.Get(),
 			RestMapperProvider:   func() meta.RESTMapper { return k.restMapper },
 			HostURL:              k.restConfig.Host,
@@ -132,6 +150,13 @@ func (k *Kubernetes) close() {
 		return
 	}
 	utilnet.CloseIdleConnectionsFor(k.httpClient.Transport)
+}
+
+func (k *Kubernetes) Config() *config.Config {
+	if k == nil || k.cfg == nil {
+		return nil
+	}
+	return k.cfg.Load()
 }
 
 func (k *Kubernetes) RESTConfig() *rest.Config {

@@ -198,6 +198,11 @@ func (p *tokenExchangingProvider) ReloadConfig(ctx context.Context, cfg *config.
 	return p.provider.ReloadConfig(ctx, cfg)
 }
 
+func (p *tokenExchangingProvider) PublishKubernetesConfig(cfg *config.Config) {
+	p.tokenExchangeCache.clear()
+	p.provider.PublishKubernetesConfig(cfg)
+}
+
 func (p *tokenExchangingProvider) Close() {
 	p.tokenExchangeCache.clear()
 	p.provider.Close()

@@ -22,7 +22,6 @@ type singleClusterProvider struct {
 	manager             *Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
 	clusterStateWatcher *watcher.ClusterState
-	watch               WatchTargetsRegistration
 }
 
 var _ Provider = &singleClusterProvider{}
@@ -125,22 +124,25 @@ func (p *singleClusterProvider) GetDefaultTarget() string {
 	return ""
 }
 
-func (p *singleClusterProvider) ReloadConfig(ctx context.Context, cfg *config.Config) error {
+func (p *singleClusterProvider) ReloadConfig(_ context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return errors.New("config cannot be nil")
 	}
 	p.mu.Lock()
-	oldCfg := p.cfg
+	defer p.mu.Unlock()
 	p.cfg = cfg
-	err := p.resetLocked(ctx)
-	if err != nil {
-		p.cfg = oldCfg
-		p.mu.Unlock()
-		return err
-	}
-	p.mu.Unlock()
-	p.watch.Rearm(p.WatchTargets)
 	return nil
+}
+
+func (p *singleClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.manager != nil {
+		p.manager.SetConfig(cfg)
+	}
 }
 
 func (p *singleClusterProvider) GetTargetParameterName() string {
@@ -148,7 +150,6 @@ func (p *singleClusterProvider) GetTargetParameterName() string {
 }
 
 func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpReloader) {
-	p.watch.Store(ctx, reload)
 	reloadWithReset := func() error {
 		return reload.Run(func() error {
 			if err := p.reset(ctx); err != nil {

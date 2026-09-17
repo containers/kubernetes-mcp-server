@@ -48,26 +48,27 @@ func NewKubeconfig(ctx context.Context, clientConfig clientcmd.ClientConfig, deb
 func (w *Kubeconfig) Watch(ctx context.Context, onChange func() error) {
 	logger := klogutil.FromContext(ctx)
 
-	w.mu.Lock()
-	if w.started {
-		w.mu.Unlock()
-		return
-	}
-	w.started = true
-	w.mu.Unlock()
-
 	kubeConfigFiles := w.ConfigAccess().GetLoadingPrecedence()
 	if len(kubeConfigFiles) == 0 {
+		logger.V(2).Info("No kubeconfig files to watch")
 		return
 	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
+		logger.Error(err, "Failed to create kubeconfig file watcher")
 		return
 	}
 	for _, file := range kubeConfigFiles {
 		_ = watcher.Add(file)
 	}
 
+	w.mu.Lock()
+	if w.started {
+		w.mu.Unlock()
+		_ = watcher.Close()
+		return
+	}
+	w.started = true
 	go func() {
 		defer close(w.stoppedCh)
 		defer func() { _ = watcher.Close() }()
@@ -102,6 +103,7 @@ func (w *Kubeconfig) Watch(ctx context.Context, onChange func() error) {
 			}
 		}
 	}()
+	w.mu.Unlock()
 }
 
 // Close stops the kubeconfig watcher

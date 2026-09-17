@@ -26,7 +26,6 @@ type kubeConfigClusterProvider struct {
 	managers            map[string]*Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
 	clusterStateWatcher *watcher.ClusterState
-	watch               WatchTargetsRegistration
 }
 
 var _ Provider = &kubeConfigClusterProvider{}
@@ -134,9 +133,7 @@ func (p *kubeConfigClusterProvider) managerForContext(ctx context.Context, kubeC
 		}
 	}
 
-	baseManager := p.managers[p.defaultContext]
-
-	m, err := NewKubeconfigManager(ctx, baseManager.config, kubeContext)
+	m, err := NewKubeconfigManager(ctx, p.cfg, kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUnknownTarget, err)
 	}
@@ -222,26 +219,30 @@ func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
 	return p.defaultContext
 }
 
-func (p *kubeConfigClusterProvider) ReloadConfig(ctx context.Context, cfg *config.Config) error {
+func (p *kubeConfigClusterProvider) ReloadConfig(_ context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return errors.New("config cannot be nil")
 	}
 	p.mu.Lock()
-	oldCfg := p.cfg
+	defer p.mu.Unlock()
 	p.cfg = cfg
-	err := p.resetLocked(ctx)
-	if err != nil {
-		p.cfg = oldCfg
-		p.mu.Unlock()
-		return err
-	}
-	p.mu.Unlock()
-	p.watch.Rearm(p.WatchTargets)
 	return nil
 }
 
+func (p *kubeConfigClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, m := range p.managers {
+		if m != nil {
+			m.SetConfig(cfg)
+		}
+	}
+}
+
 func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload McpReloader) {
-	p.watch.Store(ctx, reload)
 	reloadWithReset := func() error {
 		return reload.Run(func() error {
 			if err := p.reset(ctx); err != nil {

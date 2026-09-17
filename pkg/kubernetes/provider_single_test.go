@@ -99,7 +99,7 @@ func (s *ProviderSingleTestSuite) TestGetTargetParameterName() {
 	s.Empty(s.provider.GetTargetParameterName(), "Expected empty string as target parameter name")
 }
 
-func (s *ProviderSingleTestSuite) TestReloadConfigKeepsManagerOnError() {
+func (s *ProviderSingleTestSuite) TestReloadConfigDoesNotRebuild() {
 	k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), "")
 	s.Require().NoError(err)
 	s.Require().NotNil(k8s)
@@ -107,11 +107,11 @@ func (s *ProviderSingleTestSuite) TestReloadConfigKeepsManagerOnError() {
 	InClusterConfig = func() (*rest.Config, error) {
 		return nil, errors.New("in-cluster config unavailable")
 	}
-	s.Run("reload returns the manager error", func() {
+	s.Run("reload publishes config without rebuilding managers", func() {
 		err := s.provider.ReloadConfig(s.T().Context(), config.New())
-		s.Error(err)
+		s.NoError(err)
 	})
-	s.Run("previous manager still serves after failed reload", func() {
+	s.Run("previous manager still serves after reload", func() {
 		k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), "")
 		s.NoError(err)
 		s.NotNil(k8s)

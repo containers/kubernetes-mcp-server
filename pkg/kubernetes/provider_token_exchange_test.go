@@ -61,7 +61,8 @@ func (fakeDerivedProvider) WatchTargets(context.Context, McpReloader)    {}
 func (fakeDerivedProvider) ReloadConfig(context.Context, *config.Config) error {
 	return nil
 }
-func (fakeDerivedProvider) Close() {}
+func (fakeDerivedProvider) PublishKubernetesConfig(*config.Config) {}
+func (fakeDerivedProvider) Close()                                 {}
 func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kubernetes, error) {
 	return &Kubernetes{}, nil
 }

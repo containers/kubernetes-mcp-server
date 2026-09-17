@@ -71,11 +71,20 @@ func (w *ClusterState) Watch(ctx context.Context, onChange func() error) {
 		w.mu.Unlock()
 		return
 	}
-	w.started = true
-	w.lastKnownState = w.captureState()
 	w.mu.Unlock()
 
-	// Start background monitoring
+	// captureState talks to the API server; do not hold mu across it.
+	// Capture before Watch returns so callers that mutate cluster state
+	// immediately afterwards are compared against the pre-watch snapshot.
+	initial := w.captureState()
+
+	w.mu.Lock()
+	if w.started {
+		w.mu.Unlock()
+		return
+	}
+	w.started = true
+	w.lastKnownState = initial
 	go func() {
 		defer close(w.stoppedCh)
 		ticker := time.NewTicker(w.pollInterval)
@@ -95,8 +104,8 @@ func (w *ClusterState) Watch(ctx context.Context, onChange func() error) {
 				// Invalidate discovery cache to get fresh API groups
 				w.discoveryClient.Invalidate()
 
-				w.mu.Lock()
 				current := w.captureState()
+				w.mu.Lock()
 				logger.V(3).Info("Polled cluster state",
 					"cluster.api_groups.count", len(current.apiGroups),
 					"cluster.is_openshift", current.isOpenShift,
@@ -124,8 +133,9 @@ func (w *ClusterState) Watch(ctx context.Context, onChange func() error) {
 						if err := onChange(); err != nil {
 							logger.Error(err, "Failed to reload")
 						} else {
+							next := w.captureState()
 							w.mu.Lock()
-							w.lastKnownState = w.captureState()
+							w.lastKnownState = next
 							w.mu.Unlock()
 							logger.V(2).Info("Reload completed")
 						}
@@ -135,6 +145,7 @@ func (w *ClusterState) Watch(ctx context.Context, onChange func() error) {
 			}
 		}
 	}()
+	w.mu.Unlock()
 }
 
 // Close stops the cluster state watcher

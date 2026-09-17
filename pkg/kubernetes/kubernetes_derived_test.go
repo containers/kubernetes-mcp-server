@@ -78,7 +78,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
-			s.Equal(derived.config, testCfg, "config not properly wired to derived client")
+			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			s.Run("RestConfig is correctly copied and sensitive fields are omitted", func() {
 				derivedCfg := derived.RESTConfig()
@@ -130,7 +130,7 @@ users:
 			})
 			s.Run("derived kubernetes has initialized clients", func() {
 				// Verify that the derived kubernetes has proper clients initialized
-				s.Equalf(testCfg, derived.config, "config not properly wired to derived client")
+				s.Equalf(testCfg, derived.Config(), "config not properly wired to derived client")
 				s.NotNilf(derived.RESTConfig(), "expected restConfig to be initialized")
 				s.NotNilf(derived.RESTMapper(), "expected RESTMapper to be initialized")
 				s.NotNilf(derived.DiscoveryClient(), "expected discoveryClient to be initialized")
@@ -304,7 +304,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
-			s.Equal(derived.config, testCfg, "config not properly wired to derived client")
+			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			derivedCfg := derived.RESTConfig()
 			s.Require().NotNil(derivedCfg, "derived config is nil")

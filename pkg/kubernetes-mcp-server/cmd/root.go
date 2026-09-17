@@ -290,10 +290,14 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 				continue
 			}
 
-			// Apply the new configuration to the MCP server first — if this fails,
-			// we skip the OAuth state and config state updates to avoid inconsistent state.
+			prev := cfgState.Load()
+			// Publish so HTTP middleware and token exchange observe the new
+			// config during apply. Roll back if ReloadConfiguration fails.
+			cfgState.Store(newConfig)
+
 			if err := mcpServer.ReloadConfiguration(ctx, newConfig); err != nil {
 				logger.Error(err, "Failed to apply reloaded configuration")
+				cfgState.Store(prev)
 				continue
 			}
 
@@ -306,9 +310,7 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 					logger.Error(err, "Failed to reload log destination, keeping previous one")
 				}
 			}
-			newConfig.Dump(ctx, cfgState.Load())
-			// Publish the new config so the HTTP auth middleware picks it up.
-			cfgState.Store(newConfig)
+			newConfig.Dump(ctx, prev)
 
 			// Check if OAuth-relevant config changed and update the shared state
 			currentSnapshot := oauthState.Load()

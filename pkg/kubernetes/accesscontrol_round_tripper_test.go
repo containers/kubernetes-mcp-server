@@ -422,6 +422,77 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	})
 }
 
+func (s *AccessControlRoundTripperTestSuite) TestRoundTripLiveConfigProvider() {
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	s.Run("denied_resources is read live", func() {
+		cfg := config.New()
+		rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+			Delegate:           mockDelegate,
+			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
+			ConfigProvider:     func() *config.Config { return cfg },
+		})
+
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/api/v1/pods", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled)
+
+		cfg.DeniedResources.SetForTest([]config.GroupVersionKind{{Version: "v1", Kind: "Pod"}})
+		delegateCalled = false
+		resp, err = rt.RoundTrip(req)
+		s.Error(err)
+		s.Nil(resp)
+		s.False(delegateCalled)
+		s.Contains(err.Error(), "resource not allowed")
+	})
+
+	s.Run("validation_enabled is read live from a new config pointer", func() {
+		s.mockServer.Handle(newOpenAPISchemaHandler())
+		clientSet, err := kubernetes.NewForConfig(s.mockServer.Config())
+		s.Require().NoError(err)
+
+		off := config.New()
+		off.ValidationEnabled.SetForTest(false)
+		on := config.New()
+		on.ValidationEnabled.SetForTest(true)
+		live := off
+		rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+			Delegate:           mockDelegate,
+			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
+			DiscoveryProvider:  func() discovery.DiscoveryInterface { return clientSet.Discovery() },
+			AuthClientProvider: func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
+			ConfigProvider:     func() *config.Config { return live },
+		})
+
+		req := httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
+		delegateCalled = false
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled)
+
+		live = on
+		delegateCalled = false
+		req = httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
+		resp, err = rt.RoundTrip(req)
+		s.Error(err)
+		s.Nil(resp)
+		s.False(delegateCalled)
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeInvalidField, ve.Code)
+	})
+}
+
 type StripAPIPathPrefixTestSuite struct {
 	suite.Suite
 }

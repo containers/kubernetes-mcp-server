@@ -72,12 +72,18 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 		w.mu.Unlock()
 		return
 	}
-	w.started = true
-	w.lastKnownState = w.captureState(ctx)
 	w.mu.Unlock()
 
 	logger := klogutil.FromContext(ctx)
+	initial := w.captureState(ctx)
 
+	w.mu.Lock()
+	if w.started {
+		w.mu.Unlock()
+		return
+	}
+	w.started = true
+	w.lastKnownState = initial
 	go func() {
 		defer close(w.stoppedCh)
 		ticker := time.NewTicker(w.pollInterval)
@@ -94,8 +100,8 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 				logger.V(2).Info("Stopping workspace watcher")
 				return
 			case <-ticker.C:
-				w.mu.Lock()
 				current := w.captureState(ctx)
+				w.mu.Lock()
 				logger.V(3).Info("Polled workspaces", "cluster.workspaces.count", len(current.workspaces))
 
 				changed := len(current.workspaces) != len(w.lastKnownState.workspaces)
@@ -118,8 +124,9 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 						if err := onChange(); err != nil {
 							logger.Error(err, "Failed to reload")
 						} else {
+							next := w.captureState(ctx)
 							w.mu.Lock()
-							w.lastKnownState = w.captureState(ctx)
+							w.lastKnownState = next
 							w.mu.Unlock()
 							logger.V(2).Info("Reload completed")
 						}
@@ -129,6 +136,7 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 			}
 		}
 	}()
+	w.mu.Unlock()
 }
 
 // Close stops the workspace watcher and cleans up resources.

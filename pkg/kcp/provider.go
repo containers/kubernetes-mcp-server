@@ -37,7 +37,6 @@ type kcpClusterProvider struct {
 	managers            map[string]*kubernetes.Manager
 	workspaceWatcher    *WorkspaceWatcher
 	clusterStateWatcher *watcher.ClusterState
-	watch               kubernetes.WatchTargetsRegistration
 }
 
 var _ kubernetes.Provider = &kcpClusterProvider{}
@@ -103,7 +102,7 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 		return fmt.Errorf("failed to create base manager: %w", err)
 	}
 
-	workspaceList, err := p.discoverWorkspaces(restConfig, defaultWorkspace)
+	workspaceList, err := p.discoverWorkspaces(ctx, restConfig, defaultWorkspace)
 	if err != nil {
 		klogutil.LogWarn(klogutil.FromContext(ctx), "Failed to discover workspaces via API, falling back to kubeconfig", klogutil.Err(err))
 		workspaceList, err = workspacesFromKubeconfig(ctx, clientCmdConfig)
@@ -145,9 +144,8 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 
 // discoverWorkspaces queries the kcp tenancy API to discover available workspaces.
 // It recursively discovers nested workspaces in the workspace hierarchy.
-// Runs under lock.
-func (p *kcpClusterProvider) discoverWorkspaces(restConfig *rest.Config, defaultWorkspace string) ([]string, error) {
-	return DiscoverAllWorkspaces(context.TODO(), restConfig, defaultWorkspace)
+func (p *kcpClusterProvider) discoverWorkspaces(ctx context.Context, restConfig *rest.Config, defaultWorkspace string) ([]string, error) {
+	return DiscoverAllWorkspaces(ctx, restConfig, defaultWorkspace)
 }
 
 // workspacesFromKubeconfig extracts workspace names from kubeconfig cluster URLs as a fallback.
@@ -341,26 +339,30 @@ func (p *kcpClusterProvider) GetDefaultTarget() string {
 	return p.defaultWorkspace
 }
 
-func (p *kcpClusterProvider) ReloadConfig(ctx context.Context, cfg *config.Config) error {
+func (p *kcpClusterProvider) ReloadConfig(_ context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return errors.New("config cannot be nil")
 	}
 	p.mu.Lock()
-	oldCfg := p.cfg
+	defer p.mu.Unlock()
 	p.cfg = cfg
-	err := p.resetLocked(ctx)
-	if err != nil {
-		p.cfg = oldCfg
-		p.mu.Unlock()
-		return err
-	}
-	p.mu.Unlock()
-	p.watch.Rearm(p.WatchTargets)
 	return nil
 }
 
+func (p *kcpClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, m := range p.managers {
+		if m != nil {
+			m.SetConfig(cfg)
+		}
+	}
+}
+
 func (p *kcpClusterProvider) WatchTargets(ctx context.Context, reload kubernetes.McpReloader) {
-	p.watch.Store(ctx, reload)
 	reloadWithReset := func() error {
 		return reload.Run(func() error {
 			if err := p.reset(ctx); err != nil {

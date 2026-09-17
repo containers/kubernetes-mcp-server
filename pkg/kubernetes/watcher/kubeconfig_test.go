@@ -93,6 +93,17 @@ func (s *KubeconfigTestSuite) TestWatch() {
 		s.Eventually(func() bool {
 			return completed.Load()
 		}, kubeconfigTestTimeout, kubeconfigEventuallyTick, "Watch blocked when no kubeconfig files exist")
+
+		done := make(chan struct{})
+		go func() {
+			watcher.Close()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(kubeconfigTestTimeout):
+			s.Fail("Close hung after Watch with no kubeconfig files")
+		}
 	})
 
 	s.Run("handles multiple file changes with debouncing", func() {

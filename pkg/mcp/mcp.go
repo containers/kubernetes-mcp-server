@@ -210,13 +210,9 @@ func (s *Server) withReloadLock(fn func() error) error {
 }
 
 func (s *Server) mcpReloader() internalk8s.McpReloader {
-	return internalk8s.McpReloader{
-		Reapply: s.reapplyToolsets,
-		Do:      s.withReloadLock,
-		Apply: func() error {
-			return s.applyToolsetsLocked(context.Background(), nil)
-		},
-	}
+	return internalk8s.NewMcpReloader(s.withReloadLock, func() error {
+		return s.applyToolsetsLocked(context.Background(), nil)
+	})
 }
 
 // applyToolsets recomputes the SDK's tool/prompt/resource/template surface
@@ -238,13 +234,13 @@ func (s *Server) applyToolsets(ctx context.Context, cfg *Configuration) error {
 	})
 }
 
-func (s *Server) applyToolsetsLocked(ctx context.Context, cfg *Configuration) error {
+func (s *Server) applyToolsetsLocked(_ context.Context, cfg *Configuration) error {
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(tools...)
 
 	// Caller holds reloadMu. WatchTargets (kubeconfig + cluster-state)
 	// and ReloadConfiguration serialize here so SDK Add/Remove and
-	// manager reset cannot interleave.
+	// kubeconfig WatchTargets reset cannot interleave.
 
 	// If the caller didn't pin a candidate cfg, re-apply whatever is
 	// currently installed. Reading inside the reloadMu critical section
@@ -326,6 +322,14 @@ func (s *Server) applyToolsetsLocked(ctx context.Context, cfg *Configuration) er
 	// can observe cfg with un-warmed caches.
 	cfg.warmCaches()
 
+	// Publish Kubernetes live config immediately before the MCP snapshot so
+	// a concurrent tool call cannot observe new tools with old access-control
+	// (fail-open on added denied_resources). The remaining window is new
+	// k8s AC with the previous MCP snapshot — fail-closed on tightening.
+	if cfg.Config != nil {
+		s.p.PublishKubernetesConfig(cfg.Config)
+	}
+
 	// Publish cfg to readers (handlers, rate-limit closure, ServeHTTP, the
 	// next re-apply) via an atomic store. The SDK already reflects cfg from
 	// the commit phase above; the store makes the new *Configuration
@@ -342,8 +346,6 @@ func (s *Server) applyToolsetsLocked(ctx context.Context, cfg *Configuration) er
 	s.enabledResourceTemplates = newResourceTemplates
 	s.mu.Unlock()
 
-	// Start new watch
-	s.p.WatchTargets(ctx, s.mcpReloader())
 	return nil
 }
 
@@ -563,9 +565,10 @@ func (s *Server) GetEnabledResourceTemplates() []string {
 // This is intended to be called by the server lifecycle manager when
 // configuration changes are detected.
 //
-// The Kubernetes provider is rebuilt first so GetTools sees the new p.cfg
-// (target-compatibility descriptions, denied_resources, validation,
-// confirmation). That rebuild is not rolled back if applyToolsets fails.
+// p.cfg is swapped first so collectApplicableTools sees updated filter flags.
+// Live Kubernetes access-control is published only at the applyToolsets
+// commit, immediately before s.configuration, so a rejected convert does
+// not change clients. On apply failure, p.cfg is rolled back.
 //
 // applyToolsets is transactional: s.configuration is not mutated until the
 // SDK surface has been recomputed against the candidate config. A rejected
@@ -594,7 +597,15 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 		// Build a candidate Configuration view. applyToolsets will install it
 		// atomically only if the convert phase succeeds.
 		candidate := &Configuration{Config: newConfig}
+		if prev := s.configuration.Load(); prev != nil {
+			candidate.SDKLogger = prev.SDKLogger
+		}
 		if err := s.applyToolsetsLocked(ctx, candidate); err != nil {
+			if prev := s.configuration.Load(); prev != nil && prev.Config != nil {
+				if rbErr := s.p.ReloadConfig(ctx, prev.Config); rbErr != nil {
+					logger.Error(rbErr, "Failed to roll back kubernetes provider config after toolset reload failure")
+				}
+			}
 			return fmt.Errorf("failed to reload toolsets: %w", err)
 		}
 		return nil

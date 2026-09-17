@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -18,7 +19,7 @@ import (
 type Manager struct {
 	kubernetes *Kubernetes
 
-	config *config.Config
+	config atomic.Pointer[config.Config]
 }
 
 var (
@@ -147,19 +148,35 @@ func NewManager(ctx context.Context, cfg *config.Config, restConfig *rest.Config
 
 	applyRateLimit(restConfig, cfg)
 
-	k8s := &Manager{
-		config: cfg,
-	}
+	m := &Manager{}
+	m.config.Store(cfg)
 	var err error
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
 	//k8s.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
-	k8s.kubernetes, err = NewKubernetes(ctx, k8s.config, clientCmdConfig, restConfig)
+	m.kubernetes, err = newKubernetesFromLive(ctx, &m.config, clientCmdConfig, restConfig)
 	if err != nil {
 		return nil, err
 	}
-	return k8s, nil
+	return m, nil
+}
+
+// SetConfig publishes a new Config to this manager and every Kubernetes
+// client derived from it. Access-control values are read live from this
+// pointer; kubeconfig/rest.Config are not rebuilt.
+func (m *Manager) SetConfig(cfg *config.Config) {
+	if m == nil || cfg == nil {
+		return
+	}
+	m.config.Store(cfg)
+}
+
+func (m *Manager) Config() *config.Config {
+	if m == nil {
+		return nil
+	}
+	return m.config.Load()
 }
 
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
@@ -174,7 +191,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	// token-less requests with 401, but this protects STDIO / internal paths and
 	// preserves the operator contract that require_oauth=true never falls through to kubeconfig.
 	if !hasToken {
-		if m.config.RequireOAuth.Get() {
+		if cfg := m.config.Load(); cfg != nil && cfg.RequireOAuth.Get() {
 			return nil, errors.New("oauth token required")
 		}
 		logger.V(5).Info("No bearer token in context, falling back to kubeconfig credentials")
@@ -209,7 +226,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
-	derived, err := NewKubernetes(ctx, m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
+	derived, err := newKubernetesFromLive(ctx, &m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create derived client: %w", err)
 	}

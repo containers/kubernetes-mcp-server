@@ -3,7 +3,6 @@ package kubernetes
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -15,53 +14,48 @@ import (
 // target (context, workspace, etc.) does not exist or cannot be used.
 var ErrUnknownTarget = errors.New("unknown target")
 
-// McpReloader serializes kubeconfig/cluster-state reloads with SIGHUP.
-//
-// Reapply recomputes the MCP tool surface and acquires the server reload lock.
-// Do runs fn while holding that same lock; fn must not call Reapply (deadlock).
-// Apply recomputes toolsets; the caller must already be inside Do.
+// McpReloader serializes kubeconfig/cluster-state WatchTargets callbacks
+// with SIGHUP. Construct with NewMcpReloader; fields are unexported so
+// callers cannot omit Apply and deadlock inside Run.
 type McpReloader struct {
-	Reapply func() error
-	Do      func(fn func() error) error
-	Apply   func() error
+	withLock    func(fn func() error) error
+	applyLocked func() error
+}
+
+// NewMcpReloader builds a reloader.
+// withLock runs fn while holding the server reload lock.
+// applyLocked recomputes toolsets; the caller must already hold that lock.
+func NewMcpReloader(withLock func(fn func() error) error, applyLocked func() error) McpReloader {
+	return McpReloader{withLock: withLock, applyLocked: applyLocked}
 }
 
 // McpReloaderFromCallback builds a reloader for tests that only need a
-// change notification. Do runs fn without extra locking.
+// change notification. Run runs fn without extra locking.
 func McpReloaderFromCallback(cb func() error) McpReloader {
-	return McpReloader{
-		Reapply: cb,
-		Apply:   cb,
-		Do:      func(fn func() error) error { return fn() },
-	}
+	return NewMcpReloader(func(fn func() error) error { return fn() }, cb)
 }
 
 func (r McpReloader) Run(fn func() error) error {
-	if r.Do != nil {
-		return r.Do(fn)
+	if r.withLock != nil {
+		return r.withLock(fn)
 	}
 	return fn()
 }
 
 func (r McpReloader) ApplyToolsets() error {
-	if r.Apply != nil {
-		return r.Apply()
-	}
-	if r.Reapply != nil {
-		return r.Reapply()
+	if r.applyLocked != nil {
+		return r.applyLocked()
 	}
 	return nil
 }
 
 func (r McpReloader) ClusterStateCallback() func() error {
-	if r.Reapply != nil {
-		return r.Reapply
+	if r.withLock == nil && r.applyLocked == nil {
+		return func() error { return nil }
 	}
-	return func() error { return nil }
-}
-
-func (r McpReloader) Armed() bool {
-	return r.Reapply != nil || r.Do != nil || r.Apply != nil
+	return func() error {
+		return r.Run(r.ApplyToolsets)
+	}
 }
 
 // ManagerProvider provides access to the underlying Manager instances for each target.
@@ -80,36 +74,15 @@ type Provider interface {
 	// WatchTargets sets up a watcher for changes in the cluster targets and
 	// invokes reload when changes are detected.
 	WatchTargets(ctx context.Context, reload McpReloader)
-	// ReloadConfig replaces the provider's Config and rebuilds managers so
-	// values copied into clients at construction (denied_resources,
-	// validation, confirmation) pick up a SIGHUP reload. reset() replaces
-	// watchers; implementations re-arm WatchTargets afterward.
+	// ReloadConfig replaces the provider's Config pointer used for tool
+	// filtering and lazy manager construction. It does not change live
+	// access-control on existing Kubernetes clients; call
+	// PublishKubernetesConfig at the same commit as the MCP surface.
 	ReloadConfig(ctx context.Context, cfg *config.Config) error
+	// PublishKubernetesConfig pushes cfg into existing managers so the
+	// access-control round tripper and RequireOAuth checks observe it.
+	PublishKubernetesConfig(cfg *config.Config)
 	Close()
-}
-
-// WatchTargetsRegistration remembers the WatchTargets callback so ReloadConfig
-// can re-arm watchers after reset() replaces them.
-type WatchTargetsRegistration struct {
-	mu     sync.Mutex
-	ctx    context.Context
-	reload McpReloader
-}
-
-func (w *WatchTargetsRegistration) Store(ctx context.Context, reload McpReloader) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.ctx = ctx
-	w.reload = reload
-}
-
-func (w *WatchTargetsRegistration) Rearm(watch func(context.Context, McpReloader)) {
-	w.mu.Lock()
-	ctx, reload := w.ctx, w.reload
-	w.mu.Unlock()
-	if reload.Armed() {
-		watch(ctx, reload)
-	}
 }
 
 // TokenExchangeProvider is an optional interface that providers can implement to suport per-target token exchange.
