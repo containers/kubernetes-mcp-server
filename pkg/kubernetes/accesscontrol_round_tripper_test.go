@@ -9,6 +9,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -596,7 +597,7 @@ func (s *SubresourceOnlyAPIGroupSuite) TestRoundTripForSubresourceOnlyAPIGroups(
 		delegateCalled = false
 		deniedRT := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
 			Delegate:             mockDelegate,
-			DeniedResources:      []api.GroupVersionKind{{Group: "subresources.kubevirt.io", Version: "v1"}},
+			DeniedResources:      []config.GroupVersionKind{{Group: "subresources.kubevirt.io", Version: "v1"}},
 			RestMapperProvider:   func() meta.RESTMapper { return s.restMapper },
 			RawDiscoveryProvider: func() discovery.DiscoveryInterface { return s.discoveryClient },
 		})

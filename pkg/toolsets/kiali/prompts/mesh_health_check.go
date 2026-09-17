@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
@@ -12,11 +13,11 @@ import (
 func InitMeshHealthCheck() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "mesh-health-check",
 				Title:       "Mesh Health Check",
 				Description: "Perform a comprehensive health assessment of the Istio service mesh including control plane and data plane status",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Optional namespace to focus the health check on (default: all namespaces)",
@@ -35,7 +36,10 @@ func meshHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 
 	klogutil.FromContext(params.Context).Info("Starting mesh health check prompt...")
 
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return nil, err
+	}
 	statusContent, err := kiali.ExecuteRequest(params.Context, tools.KialiGetMeshStatusEndpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve mesh status: %w", err)

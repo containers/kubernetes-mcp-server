@@ -41,6 +41,24 @@ func (s *NetObservSuite) TearDownTest() {
 	s.MockServer.Close()
 }
 
+func (s *NetObservSuite) mustNewClient() *NetObserv {
+	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), nil)
+	s.Require().NoError(err)
+	return client
+}
+
+func (s *NetObservSuite) TestNewNetObserv_NilConfig() {
+	client, err := NewNetObserv(context.Background(), nil, s.MockServer.Config(), nil)
+	s.Nil(client)
+	s.ErrorContains(err, "config is required")
+}
+
+func (s *NetObservSuite) TestNewNetObserv_NilRestConfig() {
+	client, err := NewNetObserv(context.Background(), s.Config, nil, nil)
+	s.Nil(client)
+	s.ErrorContains(err, "kubernetes rest config is required")
+}
+
 func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 	s.Config = test.Must(config.ReadToml([]byte(`
 		tls_min_version = "1.3"
@@ -49,7 +67,7 @@ func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 		url = "https://netobserv.example/"
 		insecure = true
 	`)))
-	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+	client := s.mustNewClient()
 
 	s.Equal("https://netobserv.example/", client.pluginURL)
 	s.True(client.insecure)
@@ -72,8 +90,7 @@ func (s *NetObservSuite) TestExecuteGet() {
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	client := NewNetObserv(context.Background(), s.Config, nil, nil)
-	client.bearerToken = "token-xyz"
+	client := s.mustNewClient()
 
 	content, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", map[string]any{
 		"namespace": "default",
@@ -98,8 +115,9 @@ func (s *NetObservSuite) TestExecuteGet() {
 			s.Equal("Bearer file-sa-token", r.Header.Get("Authorization"))
 			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		}))
-		client := NewNetObserv(context.Background(), s.Config, nil, nil)
-		client.bearerTokenFile = tokenFile
+		s.MockServer.Config().BearerToken = ""
+		s.MockServer.Config().BearerTokenFile = tokenFile
+		client := s.mustNewClient()
 
 		content, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
 		s.Require().NoError(err)
@@ -127,7 +145,7 @@ func (s *NetObservSuite) TestExecuteGetAccept_csv() {
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+	client := s.mustNewClient()
 
 	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", map[string]any{
 		"format": "csv",
@@ -147,7 +165,7 @@ func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+	client := s.mustNewClient()
 
 	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*", 16)
 	s.Require().NoError(err)
@@ -156,7 +174,7 @@ func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
 }
 
 func (s *NetObservSuite) TestNewNetObserv_usesDefaultURLWithoutConfigSection() {
-	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+	client := s.mustNewClient()
 	s.Equal(DefaultPluginURL(false), client.pluginURL)
 }
 
@@ -179,7 +197,7 @@ func (s *NetObservSuite) TestCreateHTTPClient_AppliesTLSSettings() {
 			url = "https://netobserv.example/"
 			insecure = true
 		`)))
-		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+		client := s.mustNewClient()
 
 		httpClient, err := client.createHTTPClient(s.T().Context())
 		s.Require().NoError(err)
@@ -190,7 +208,7 @@ func (s *NetObservSuite) TestCreateHTTPClient_AppliesTLSSettings() {
 	})
 
 	s.Run("returns error for invalid TLS min version", func() {
-		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+		client := s.mustNewClient()
 		client.tlsMinVersion = "9.9"
 
 		httpClient, err := client.createHTTPClient(s.T().Context())
@@ -265,7 +283,7 @@ func (s *NetObservSuite) TestRequireTLS_ConfigValidation() {
 }
 
 func (s *NetObservSuite) TestCreateHTTPClient_failsClosedOnInvalidCA() {
-	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+	client := s.mustNewClient()
 	client.certificateAuthority = filepath.Join(s.T().TempDir(), "missing-ca.crt")
 
 	_, err := client.createHTTPClient(s.T().Context())
@@ -287,7 +305,7 @@ func (s *NetObservSuite) TestExecuteGet_rejectsRedirects() {
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	client := NewNetObserv(context.Background(), s.Config, nil, nil)
+	client := s.mustNewClient()
 
 	_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
 	s.Require().Error(err)
@@ -299,7 +317,8 @@ func (s *NetObservSuite) TestNewNetObserv_openShiftProviderUsesHTTPSURL() {
 	// bearer token is never sent in cleartext. This is also the fail-open direction: on a discovery
 	// error AnyTargetHasGVKs returns true, so this same https path is taken instead of leaking over http.
 	provider := &mockFilteringProvider{hasGVKs: true}
-	client := NewNetObserv(context.Background(), s.Config, nil, provider)
+	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), provider)
+	s.Require().NoError(err)
 	s.Equal(DefaultPluginURL(true), client.pluginURL)
 }
 
@@ -315,7 +334,7 @@ func (s *NetObservSuite) TestCreateHTTPClient_pinsProvidedCA() {
 	// Set the URL and CA directly on the client rather than via TOML: a Windows temp path
 	// (C:\Users\...) is not a valid double-quoted TOML string ("\U" is read as an escape).
 	s.Run("verifies against the pinned CA", func() {
-		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+		client := s.mustNewClient()
 		client.pluginURL = srv.URL
 		client.certificateAuthority = pinnedCA
 
@@ -324,7 +343,7 @@ func (s *NetObservSuite) TestCreateHTTPClient_pinsProvidedCA() {
 	})
 
 	s.Run("rejects a server cert not signed by the pinned CA", func() {
-		client := NewNetObserv(context.Background(), s.Config, nil, nil)
+		client := s.mustNewClient()
 		client.pluginURL = srv.URL
 		client.certificateAuthority = s.writeSelfSignedCA()
 

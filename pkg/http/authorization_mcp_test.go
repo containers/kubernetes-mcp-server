@@ -18,7 +18,6 @@ import (
 	"k8s.io/klog/v2/textlogger"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
@@ -637,7 +636,7 @@ func (s *AuthorizationSuite) TestAuthorizationClusterAuthModeKubeconfigDropsClie
 	}))
 
 	s.Config.RequireOAuth.SetForTest(false)
-	s.Config.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
+	s.Config.ClusterAuthMode.SetForTest(config.ClusterAuthKubeconfig)
 	s.StartServer()
 	s.StartClient(map[string]string{
 		"Authorization": "Bearer " + clientToken,

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
@@ -22,8 +21,8 @@ type Config struct {
 }
 
 var (
-	_ api.ExtendedConfig      = (*Config)(nil)
-	_ api.RequireTLSValidator = (*Config)(nil)
+	_ config.ExtendedConfig      = (*Config)(nil)
+	_ config.RequireTLSValidator = (*Config)(nil)
 )
 
 func (c *Config) Validate() error {
@@ -65,7 +64,7 @@ func (c *Config) ValidateRequireTLS(requireTLS bool) error {
 	return nil
 }
 
-func kialiToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func kialiToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (config.ExtendedConfig, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err

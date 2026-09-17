@@ -31,6 +31,24 @@ func (s *KialiSuite) TearDownTest() {
 	s.MockServer.Close()
 }
 
+func (s *KialiSuite) mustNewKiali() *Kiali {
+	k, err := NewKiali(s.Config, s.MockServer.Config())
+	s.Require().NoError(err)
+	return k
+}
+
+func (s *KialiSuite) TestNewKiali_NilConfig() {
+	k, err := NewKiali(nil, s.MockServer.Config())
+	s.Nil(k)
+	s.ErrorContains(err, "config is required")
+}
+
+func (s *KialiSuite) TestNewKiali_NilRestConfig() {
+	k, err := NewKiali(s.Config, nil)
+	s.Nil(k)
+	s.ErrorContains(err, "kubernetes rest config is required")
+}
+
 func (s *KialiSuite) TestNewKiali_SetsFields() {
 	s.Config = test.Must(config.ReadToml([]byte(`
 		[toolset_configs.kiali]
@@ -38,7 +56,7 @@ func (s *KialiSuite) TestNewKiali_SetsFields() {
 		insecure = true
 	`)))
 	s.MockServer.Config().BearerToken = "bearer-token"
-	k := NewKiali(s.Config, s.MockServer.Config())
+	k := s.mustNewKiali()
 
 	s.Run("URL is set", func() {
 		s.Equal("https://kiali.example/", k.kialiURL, "Unexpected Kiali URL")
@@ -114,7 +132,7 @@ func (s *KialiSuite) TestCertificateRequiredForHTTPSWhenNotInsecure() {
 }
 
 func (s *KialiSuite) TestNewKiali_NoKialiConfig() {
-	k := NewKiali(s.Config, s.MockServer.Config())
+	k := s.mustNewKiali()
 
 	s.Run("URL is empty when no kiali config", func() {
 		s.Empty(k.kialiURL, "Expected empty Kiali URL")
@@ -135,7 +153,7 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 		url = "https://kiali.example/"
 		insecure = true
 	`)))
-	k := NewKiali(s.Config, s.MockServer.Config())
+	k := s.mustNewKiali()
 
 	s.Run("returns base URL for empty endpoint", func() {
 		full, err := k.validateAndGetURL("")
@@ -173,7 +191,7 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 			url = "http://kiali-istio-system.apps-crc.testing/kiali"
 			insecure = true
 		`)))
-		k := NewKiali(s.Config, s.MockServer.Config())
+		k := s.mustNewKiali()
 
 		s.Run("concatenates base path with endpoint", func() {
 			full, err := k.validateAndGetURL("/api/namespaces")
@@ -203,7 +221,7 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 			url = "https://kiali.example/"
 			insecure = true
 		`)))
-		k := NewKiali(s.Config, s.MockServer.Config())
+		k := s.mustNewKiali()
 
 		s.Run("rejects http URLs", func() {
 			_, err := k.validateAndGetURL("http://other-server.com/api")
@@ -230,7 +248,7 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 			url = "https://kiali.example/"
 			insecure = true
 		`)))
-		k := NewKiali(s.Config, s.MockServer.Config())
+		k := s.mustNewKiali()
 
 		full, err := k.validateAndGetURL("/api/path#section")
 		s.Require().NoError(err, "Expected no error validating URL with fragment")
@@ -258,7 +276,7 @@ func (s *KialiSuite) TestExecuteRequest() {
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
-	k := NewKiali(s.Config, s.MockServer.Config())
+	k := s.mustNewKiali()
 
 	out, err := k.ExecuteRequest(s.T().Context(), "/api/ping?q=1", nil)
 	s.Require().NoError(err, "Expected no error executing request")
@@ -338,7 +356,7 @@ func (s *KialiSuite) TestExecuteRequest() {
 	})
 	s.Run("omits Authorization header when bearer token is empty", func() {
 		s.MockServer.Config().BearerToken = ""
-		kNoAuth := NewKiali(s.Config, s.MockServer.Config())
+		kNoAuth := s.mustNewKiali()
 		var capturedAuth string
 		s.MockServer.ResetHandlers()
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -351,7 +369,7 @@ func (s *KialiSuite) TestExecuteRequest() {
 	})
 	s.Run("does not duplicate Bearer prefix when token already prefixed", func() {
 		s.MockServer.Config().BearerToken = "Bearer already-prefixed"
-		kPrefixed := NewKiali(s.Config, s.MockServer.Config())
+		kPrefixed := s.mustNewKiali()
 		var capturedAuth string
 		s.MockServer.ResetHandlers()
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

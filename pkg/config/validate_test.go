@@ -7,12 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-
-	// Blank imports to register toolsets and providers in their respective registries.
-	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
-	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 )
 
 type ValidateSuite struct {
@@ -80,28 +75,18 @@ func (s *ValidateSuite) TestListOutput() {
 }
 
 func (s *ValidateSuite) TestToolsets() {
-	cases := []struct {
-		name    string
-		value   []string
-		wantErr string
-	}{
-		{"invalid toolset name is rejected", []string{"nonexistent-toolset"}, "invalid toolset name"},
-		{"valid toolset names are accepted", []string{"core", "config"}, ""},
-	}
-	for _, tc := range cases {
-		s.Run(tc.name, func() {
-			cfg := s.validConfig()
-			cfg.Toolsets.SetForTest(tc.value)
-			err := cfg.Validate(s.T().Context())
-			if tc.wantErr == "" {
-				s.NoError(err)
-				return
-			}
-			s.Require().Error(err)
-			s.Contains(err.Error(), tc.wantErr)
-			s.Contains(err.Error(), tc.value[0])
-		})
-	}
+	// Toolset names are checked against the registry by cmd and mcp, not Config.Validate
+	// (that would import pkg/toolsets and cycle with pkg/api).
+	s.Run("unknown toolset names are accepted by Config.Validate", func() {
+		cfg := s.validConfig()
+		cfg.Toolsets.SetForTest([]string{"nonexistent-toolset"})
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("valid toolset names are accepted", func() {
+		cfg := s.validConfig()
+		cfg.Toolsets.SetForTest([]string{"core", "config"})
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
 }
 
 func (s *ValidateSuite) TestClusterProviderStrategy() {
@@ -362,7 +347,7 @@ func (s *ValidateSuite) TestTokenExchangeStrategy() {
 
 func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 	type authVals struct {
-		Method          api.TokenExchangeClientAuthMethod
+		Method          config.TokenExchangeClientAuthMethod
 		ClientID        string
 		ClientSecret    string
 		CertificateFile string
@@ -410,7 +395,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("configured method requires a client ID", func() {
 		cfg := newConfig(authVals{
-			Method:       api.TokenExchangeClientAuthMethodSecretBasic,
+			Method:       config.TokenExchangeClientAuthMethodSecretBasic,
 			ClientSecret: "secret",
 		})
 		err := cfg.Validate(s.T().Context())
@@ -420,7 +405,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("invalid method is rejected", func() {
 		cfg := newConfig(authVals{
-			Method:   api.TokenExchangeClientAuthMethod("unknown"),
+			Method:   config.TokenExchangeClientAuthMethod("unknown"),
 			ClientID: "client",
 		})
 		err := cfg.Validate(s.T().Context())
@@ -430,7 +415,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("client_secret_basic requires a client secret", func() {
 		cfg := newConfig(authVals{
-			Method:   api.TokenExchangeClientAuthMethodSecretBasic,
+			Method:   config.TokenExchangeClientAuthMethodSecretBasic,
 			ClientID: "client",
 		})
 		err := cfg.Validate(s.T().Context())
@@ -440,7 +425,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("client_secret_basic with client credentials is accepted", func() {
 		cfg := newConfig(authVals{
-			Method:       api.TokenExchangeClientAuthMethodSecretBasic,
+			Method:       config.TokenExchangeClientAuthMethodSecretBasic,
 			ClientID:     "client",
 			ClientSecret: "secret",
 		})
@@ -449,7 +434,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("client_secret_post with client credentials is accepted", func() {
 		cfg := newConfig(authVals{
-			Method:       api.TokenExchangeClientAuthMethodSecretPost,
+			Method:       config.TokenExchangeClientAuthMethodSecretPost,
 			ClientID:     "client",
 			ClientSecret: "secret",
 		})
@@ -458,7 +443,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("private_key_jwt requires certificate and private key files", func() {
 		cfg := newConfig(authVals{
-			Method:   api.TokenExchangeClientAuthMethodPrivateKey,
+			Method:   config.TokenExchangeClientAuthMethodPrivateKey,
 			ClientID: "client",
 		})
 		err := cfg.Validate(s.T().Context())
@@ -472,7 +457,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 		s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0644))
 
 		cfg := newConfig(authVals{
-			Method:          api.TokenExchangeClientAuthMethodPrivateKey,
+			Method:          config.TokenExchangeClientAuthMethodPrivateKey,
 			ClientID:        "client",
 			CertificateFile: certPath,
 		})
@@ -489,7 +474,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 		s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0644))
 
 		cfg := newConfig(authVals{
-			Method:          api.TokenExchangeClientAuthMethodPrivateKey,
+			Method:          config.TokenExchangeClientAuthMethodPrivateKey,
 			ClientID:        "client",
 			CertificateFile: certPath,
 			PrivateKeyFile:  keyPath,
@@ -499,7 +484,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("jwt_file requires a token file", func() {
 		cfg := newConfig(authVals{
-			Method:   api.TokenExchangeClientAuthMethodJWTFile,
+			Method:   config.TokenExchangeClientAuthMethodJWTFile,
 			ClientID: "client",
 		})
 		err := cfg.Validate(s.T().Context())
@@ -513,7 +498,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 		s.Require().NoError(os.WriteFile(tokenPath, []byte("jwt-token"), 0600))
 
 		cfg := newConfig(authVals{
-			Method:    api.TokenExchangeClientAuthMethodJWTFile,
+			Method:    config.TokenExchangeClientAuthMethodJWTFile,
 			ClientID:  "client",
 			TokenFile: tokenPath,
 		})
@@ -522,7 +507,7 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 
 	s.Run("jwt_file rejects a missing token file", func() {
 		cfg := newConfig(authVals{
-			Method:    api.TokenExchangeClientAuthMethodJWTFile,
+			Method:    config.TokenExchangeClientAuthMethodJWTFile,
 			ClientID:  "client",
 			TokenFile: filepath.Join(s.T().TempDir(), "missing-token"),
 		})
@@ -553,7 +538,7 @@ func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {
 	s.Equal("audience", cfg.TokenExchange.Audience.Get())
 	s.Equal("subject-token-type", cfg.TokenExchange.SubjectTokenType.Get())
 	s.Equal("requested-token-type", cfg.TokenExchange.RequestedTokenType.Get())
-	s.Equal(string(api.TokenExchangeClientAuthMethodSecretBasic), cfg.TokenExchange.ClientAuth.Method.Get())
+	s.Equal(string(config.TokenExchangeClientAuthMethodSecretBasic), cfg.TokenExchange.ClientAuth.Method.Get())
 	s.Equal("client", cfg.TokenExchange.ClientAuth.ClientID.Get())
 	s.Equal("secret", cfg.TokenExchange.ClientAuth.ClientSecret.Get())
 	s.Equal("cert.pem", cfg.TokenExchange.ClientAuth.CertificateFile.Get())
@@ -597,7 +582,7 @@ func (s *ValidateSuite) TestConfirmationRules() {
 
 	s.Run("valid tool-level rule is accepted", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]config.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "Uninstall a release."},
 		})
 		s.NoError(cfg.Validate(s.T().Context()))
@@ -605,7 +590,7 @@ func (s *ValidateSuite) TestConfirmationRules() {
 
 	s.Run("valid kube-level rule is accepted", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]config.ConfirmationRule{
 			{Verb: "delete", Kind: "Secret", Message: "Delete a Secret."},
 		})
 		s.NoError(cfg.Validate(s.T().Context()))
@@ -613,7 +598,7 @@ func (s *ValidateSuite) TestConfirmationRules() {
 
 	s.Run("rule mixing tool and kube fields is rejected", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]config.ConfirmationRule{
 			{Tool: "helm_uninstall", Verb: "delete", Message: "Mixed rule."},
 		})
 		err := cfg.Validate(s.T().Context())
@@ -623,7 +608,7 @@ func (s *ValidateSuite) TestConfirmationRules() {
 
 	s.Run("rule with no classifying fields is rejected", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]config.ConfirmationRule{
 			{Message: "No level fields."},
 		})
 		err := cfg.Validate(s.T().Context())
@@ -633,7 +618,7 @@ func (s *ValidateSuite) TestConfirmationRules() {
 
 	s.Run("reports all rule errors with indices", func() {
 		cfg := s.validConfig()
-		cfg.ConfirmationRules.SetForTest([]api.ConfirmationRule{
+		cfg.ConfirmationRules.SetForTest([]config.ConfirmationRule{
 			{Tool: "a", Verb: "delete", Message: "Mixed 1."},
 			{Kind: "Pod", Tool: "b", Message: "Mixed 2."},
 		})
@@ -683,7 +668,7 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 	s.Run("passthrough without require_oauth is accepted", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth.SetForTest(false)
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthPassthrough)
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthPassthrough)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
@@ -692,7 +677,7 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 		cfg.Port.SetForTest("8080")
 		cfg.RequireOAuth.SetForTest(true)
 		cfg.SkipJWTVerification.SetForTest(true)
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthPassthrough)
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthPassthrough)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
@@ -701,7 +686,7 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 		cfg.Port.SetForTest("8080")
 		cfg.RequireOAuth.SetForTest(true)
 		cfg.SkipJWTVerification.SetForTest(true)
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthKubeconfig)
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
 		s.Contains(err.Error(), "is not compatible with require_oauth=true")
@@ -710,7 +695,7 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 	s.Run("kubeconfig without require_oauth is accepted", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth.SetForTest(false)
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthKubeconfig)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
@@ -745,7 +730,7 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 	s.Run("token exchange with kubeconfig mode is rejected", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth.SetForTest(false)
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthKubeconfig)
 		cfg.TokenExchange.Strategy.SetForTest("rfc8693")
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)

@@ -189,12 +189,12 @@ func resolveStrategy(cfg *config.Config) string {
 	}
 
 	if cfg.KubeConfig.Get() != "" {
-		return api.ClusterProviderKubeConfig
+		return config.ClusterProviderKubeConfig
 	}
 
 	if _, inClusterConfigErr := InClusterConfig(); inClusterConfigErr == nil {
-		return api.ClusterProviderInCluster
+		return config.ClusterProviderInCluster
 	}
 
-	return api.ClusterProviderKubeConfig
+	return config.ClusterProviderKubeConfig
 }

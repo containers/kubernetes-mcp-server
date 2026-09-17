@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
@@ -12,11 +13,11 @@ import (
 func InitServiceTroubleshoot() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "service-troubleshoot",
 				Title:       "Troubleshoot Service Errors",
 				Description: "Investigate service errors using logs, traces, and Istio configuration to identify root causes",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Namespace where the service is deployed",
@@ -59,7 +60,10 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 
 	klogutil.FromContext(params.Context).Info("Starting service troubleshoot prompt...", "namespace", namespace, "service", service)
 
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return nil, err
+	}
 
 	logsContent := fetchKialiData(kiali, params, tools.KialiGetLogsEndpoint,
 		map[string]any{"namespace": namespace, "name": logTarget})

@@ -11,12 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
 // Validate validates config-level invariants that must hold at both startup and
@@ -42,10 +40,6 @@ func (c *Config) Validate(ctx context.Context) error {
 	})
 	if optErr != nil {
 		return optErr
-	}
-
-	if err := toolsets.Validate(c.Toolsets.Get()); err != nil {
-		return err
 	}
 	if c.MetricsPort.Get() != "" && c.Port.Get() == "" {
 		return fmt.Errorf("metrics_port requires port to be set (metrics port is only supported in HTTP mode)")
@@ -122,8 +116,8 @@ func validateMetricsPortNumber(v string) error {
 }
 
 func validateClusterAuthModeValue(mode string) error {
-	if mode != "" && mode != api.ClusterAuthPassthrough && mode != api.ClusterAuthKubeconfig {
-		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", mode, api.ClusterAuthPassthrough, api.ClusterAuthKubeconfig)
+	if mode != "" && mode != ClusterAuthPassthrough && mode != ClusterAuthKubeconfig {
+		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", mode, ClusterAuthPassthrough, ClusterAuthKubeconfig)
 	}
 	return nil
 }
@@ -135,7 +129,7 @@ func validateConfirmationFallback(fb string) error {
 	return nil
 }
 
-func validateConfirmationRules(rules []api.ConfirmationRule) error {
+func validateConfirmationRules(rules []ConfirmationRule) error {
 	var ruleErrors []error
 	for i, rule := range rules {
 		if ruleErr := rule.Validate(); ruleErr != nil {
@@ -217,19 +211,19 @@ func (c *Config) validateTokenExchange() error {
 	if auth.ClientID.Get() == "" {
 		return fmt.Errorf("token_exchange.client_auth.client_id is required when method is %q", auth.Method.Get())
 	}
-	switch api.TokenExchangeClientAuthMethod(auth.Method.Get()) {
-	case api.TokenExchangeClientAuthMethodSecretBasic, api.TokenExchangeClientAuthMethodSecretPost:
+	switch TokenExchangeClientAuthMethod(auth.Method.Get()) {
+	case TokenExchangeClientAuthMethodSecretBasic, TokenExchangeClientAuthMethodSecretPost:
 		if auth.ClientSecret.Get() == "" {
 			return fmt.Errorf("token_exchange.client_auth.client_secret is required when method is %q", auth.Method.Get())
 		}
-	case api.TokenExchangeClientAuthMethodPrivateKey:
+	case TokenExchangeClientAuthMethodPrivateKey:
 		if err := validateTokenExchangeFile("certificate_file", auth.CertificateFile.Get()); err != nil {
 			return err
 		}
 		if err := validateTokenExchangeFile("private_key_file", auth.PrivateKeyFile.Get()); err != nil {
 			return err
 		}
-	case api.TokenExchangeClientAuthMethodJWTFile:
+	case TokenExchangeClientAuthMethodJWTFile:
 		if err := validateTokenExchangeFile("token_file", auth.TokenFile.Get()); err != nil {
 			return err
 		}
@@ -255,9 +249,9 @@ func (c *Config) ValidateRequireTLS() error {
 	return validateExtendedRequireTLS(c.parsedClusterProviderConfigs, extensionProviderTable, requireTLS)
 }
 
-func validateExtendedRequireTLS(cfgs map[string]api.ExtendedConfig, table string, requireTLS bool) error {
+func validateExtendedRequireTLS(cfgs map[string]ExtendedConfig, table string, requireTLS bool) error {
 	for _, name := range slices.Sorted(maps.Keys(cfgs)) {
-		v, ok := cfgs[name].(api.RequireTLSValidator)
+		v, ok := cfgs[name].(RequireTLSValidator)
 		if !ok {
 			continue
 		}
@@ -270,12 +264,12 @@ func validateExtendedRequireTLS(cfgs map[string]api.ExtendedConfig, table string
 
 func (c *Config) ValidateClusterAuthMode() error {
 	mode := c.ClusterAuthMode.Get()
-	if mode == api.ClusterAuthKubeconfig && c.RequireOAuth.Get() {
-		return fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", api.ClusterAuthKubeconfig)
+	if mode == ClusterAuthKubeconfig && c.RequireOAuth.Get() {
+		return fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", ClusterAuthKubeconfig)
 	}
 	hasTokenExchange := c.GetTokenExchangeConfig() != nil
-	if mode == api.ClusterAuthKubeconfig && hasTokenExchange {
-		return fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", api.ClusterAuthKubeconfig)
+	if mode == ClusterAuthKubeconfig && hasTokenExchange {
+		return fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", ClusterAuthKubeconfig)
 	}
 	if !c.RequireOAuth.Get() && hasTokenExchange {
 		return fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)")

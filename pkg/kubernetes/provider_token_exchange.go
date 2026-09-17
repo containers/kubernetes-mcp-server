@@ -7,7 +7,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
@@ -108,16 +107,16 @@ func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth *config.
 	}
 	cfg.ClientID = auth.ClientID.Get()
 	cfg.ClientSecret = auth.ClientSecret.Get()
-	switch api.TokenExchangeClientAuthMethod(auth.Method.Get()) {
-	case api.TokenExchangeClientAuthMethodSecretBasic:
+	switch config.TokenExchangeClientAuthMethod(auth.Method.Get()) {
+	case config.TokenExchangeClientAuthMethodSecretBasic:
 		cfg.AuthStyle = tokenexchange.AuthStyleHeader
-	case api.TokenExchangeClientAuthMethodSecretPost:
+	case config.TokenExchangeClientAuthMethodSecretPost:
 		cfg.AuthStyle = tokenexchange.AuthStyleParams
-	case api.TokenExchangeClientAuthMethodPrivateKey:
+	case config.TokenExchangeClientAuthMethodPrivateKey:
 		cfg.AuthStyle = tokenexchange.AuthStyleAssertion
 		cfg.ClientCertFile = auth.CertificateFile.Get()
 		cfg.ClientKeyFile = auth.PrivateKeyFile.Get()
-	case api.TokenExchangeClientAuthMethodJWTFile:
+	case config.TokenExchangeClientAuthMethodJWTFile:
 		cfg.AuthStyle = tokenexchange.AuthStyleFederated
 		cfg.FederatedTokenFile = auth.TokenFile.Get()
 	default:

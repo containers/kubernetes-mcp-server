@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
@@ -33,7 +32,7 @@ type kubeConfigClusterProvider struct {
 var _ Provider = &kubeConfigClusterProvider{}
 
 func init() {
-	RegisterProvider(api.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
+	RegisterProvider(config.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
 }
 
 // newKubeConfigClusterProvider creates a provider that manages multiple clusters

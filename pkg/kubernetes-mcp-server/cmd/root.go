@@ -24,6 +24,7 @@ import (
 	internaloauth "github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
 
@@ -166,6 +167,9 @@ func (m *MCPServerOptions) Validate(ctx context.Context) error {
 }
 
 func (m *MCPServerOptions) validateConfig(ctx context.Context, cfg *config.Config) error {
+	if err := toolsets.Validate(cfg.Toolsets.Get()); err != nil {
+		return err
+	}
 	// Config-level validations (shared with SIGHUP reload)
 	return cfg.
 		WithProviderStrategies(kubernetes.GetRegisteredStrategies()).

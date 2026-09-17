@@ -13,7 +13,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
@@ -248,7 +247,7 @@ type Config struct {
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
 	ClusterAuthMode Option[string]
 	// DeniedResources are GVKs that tools must not access.
-	DeniedResources Option[[]api.GroupVersionKind]
+	DeniedResources Option[[]GroupVersionKind]
 	// When true, expose only tools annotated with readOnlyHint=true.
 	ReadOnly Option[bool]
 	// When true, disable tools annotated with destructiveHint=true.
@@ -270,12 +269,12 @@ type Config struct {
 	DisabledTools Option[[]string]
 	ToolOverrides Option[map[string]ToolOverride]
 	// Prompt configuration
-	Prompts Option[[]api.Prompt]
+	Prompts Option[[]Prompt]
 	// ConfirmationFallback is the global default fallback behavior when a client
 	// does not support elicitation. Valid values are "deny" and "allow".
 	ConfirmationFallback Option[string]
 	// ConfirmationRules define rules for prompting the user before dangerous actions.
-	ConfirmationRules Option[[]api.ConfirmationRule]
+	ConfirmationRules Option[[]ConfirmationRule]
 	// TLSCert is the path to the TLS certificate file for HTTPS.
 	TLSCert Option[string]
 	// TLSKey is the path to the TLS private key file for HTTPS.
@@ -344,9 +343,9 @@ type Config struct {
 	WorkspaceDebounceWindow Option[time.Duration]
 
 	// Internal: parsed provider configs (not exposed to TOML as Option fields)
-	parsedClusterProviderConfigs map[string]api.ExtendedConfig
+	parsedClusterProviderConfigs map[string]ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML as Option fields)
-	parsedToolsetConfigs map[string]api.ExtendedConfig
+	parsedToolsetConfigs map[string]ExtendedConfig
 	// Internal: which file last set cluster_provider_configs (for reload pinning)
 	clusterProviderConfigsSource Source
 	// Internal: which file last set toolset_configs
@@ -391,7 +390,7 @@ func newConfig() *Config {
 		ClusterProviderStrategy: opt("cluster_provider_strategy", "").desc("How the server finds clusters"),
 		ClusterAuthMode: opt("cluster_auth_mode", "").reload().validate(validateClusterAuthModeValue).
 			desc("How the MCP server authenticates to the cluster"),
-		DeniedResources:    opt("denied_resources", []api.GroupVersionKind(nil)).reload().desc("GVKs that tools must not access"),
+		DeniedResources:    opt("denied_resources", []GroupVersionKind(nil)).reload().desc("GVKs that tools must not access"),
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),
 		DisableDestructive: opt("disable_destructive", false).reload().desc("Disable tools annotated destructiveHint=true"),
 		ValidationEnabled:  opt("validation_enabled", false).reload().desc("Enable pre-execution validation of tool calls"),
@@ -401,10 +400,10 @@ func newConfig() *Config {
 		EnabledTools:  opt("enabled_tools", []string(nil)).reload().desc("If set, only these tools are exposed"),
 		DisabledTools: opt("disabled_tools", []string(nil)).reload().desc("Tools to hide"),
 		ToolOverrides: opt("tool_overrides", map[string]ToolOverride(nil)).reload().desc("Per-tool configuration overrides"),
-		Prompts:       opt("prompts", []api.Prompt(nil)).reload().desc("Custom MCP prompts"),
+		Prompts:       opt("prompts", []Prompt(nil)).reload().desc("Custom MCP prompts"),
 		ConfirmationFallback: opt("confirmation_fallback", "allow").reload().validate(validateConfirmationFallback).
 			desc("Fallback when a client does not support elicitation"),
-		ConfirmationRules: opt("confirmation_rules", []api.ConfirmationRule(nil)).reload().validate(validateConfirmationRules).
+		ConfirmationRules: opt("confirmation_rules", []ConfirmationRule(nil)).reload().validate(validateConfirmationRules).
 			desc("Rules for prompting before dangerous actions"),
 		TLSCert:    opt("tls_cert", "").validate(validateExistingFile("tls_cert")).desc("Path to TLS certificate file for HTTPS"),
 		TLSKey:     opt("tls_key", "").validate(validateExistingFile("tls_key")).desc("Path to TLS private key file for HTTPS"),
@@ -443,13 +442,13 @@ func newConfig() *Config {
 }
 
 // GetProviderConfig returns the parsed cluster_provider_configs entry for strategy.
-func (c *Config) GetProviderConfig(strategy string) (api.ExtendedConfig, bool) {
+func (c *Config) GetProviderConfig(strategy string) (ExtendedConfig, bool) {
 	cfg, ok := c.parsedClusterProviderConfigs[strategy]
 	return cfg, ok
 }
 
 // GetToolsetConfig returns the parsed toolset_configs entry for name.
-func (c *Config) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
+func (c *Config) GetToolsetConfig(name string) (ExtendedConfig, bool) {
 	cfg, ok := c.parsedToolsetConfigs[name]
 	return cfg, ok
 }
@@ -488,7 +487,7 @@ func (c *Config) ResolveClusterAuthMode() string {
 	if mode := c.ClusterAuthMode.Get(); mode != "" {
 		return mode
 	}
-	return api.ClusterAuthPassthrough
+	return ClusterAuthPassthrough
 }
 
 // WithProviderStrategies sets the known cluster-provider strategies for
@@ -1084,7 +1083,7 @@ func pinClusterProviderConfigs(ctx context.Context, prev, next *Config) {
 }
 
 // equalExtendedMaps reports whether a and b contain the same parsed extension configs.
-func equalExtendedMaps(a, b map[string]api.ExtendedConfig) bool {
+func equalExtendedMaps(a, b map[string]ExtendedConfig) bool {
 	if len(a) == 0 && len(b) == 0 {
 		return true
 	}

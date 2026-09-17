@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -167,7 +168,7 @@ type ServerResourceTemplate struct {
 
 type ToolHandlerParams struct {
 	context.Context
-	ExtendedConfigProvider
+	Config                  *config.Config
 	ClusterProviderStrategy string
 	KubernetesClient
 	FilteringProvider FilteringProvider

@@ -31,25 +31,23 @@ type NetObserv struct {
 }
 
 // NewNetObserv creates a client using toolset config, cluster detection, and the Kubernetes REST config.
-func NewNetObserv(ctx context.Context, configProvider api.ExtendedConfigProvider, k8s api.KubernetesClient, provider api.FilteringProvider) *NetObserv {
-	var restConfig *rest.Config
-	if k8s != nil {
-		restConfig = k8s.RESTConfig()
+func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Config, provider api.FilteringProvider) (*NetObserv, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is required")
 	}
-	cfg := configFromProvider(configProvider)
+	if restConfig == nil {
+		return nil, fmt.Errorf("kubernetes rest config is required")
+	}
 	client := &NetObserv{
-		bearerToken:     "",
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),
 		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
-		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
-	}
-	if restConfig != nil {
-		client.bearerToken = strings.TrimSpace(restConfig.BearerToken)
-		client.bearerTokenFile = strings.TrimSpace(restConfig.BearerTokenFile)
+		bearerToken:     strings.TrimSpace(restConfig.BearerToken),
+		bearerTokenFile: strings.TrimSpace(restConfig.BearerTokenFile),
 	}
 	var shared *Config
-	if cfg, ok := configProvider.GetToolsetConfig("netobserv"); ok {
-		if parsed, ok := cfg.(*Config); ok && parsed != nil {
+	if tc, ok := cfg.GetToolsetConfig("netobserv"); ok {
+		if parsed, ok := tc.(*Config); ok && parsed != nil {
 			shared = parsed
 		}
 	}
@@ -62,7 +60,7 @@ func NewNetObserv(ctx context.Context, configProvider api.ExtendedConfigProvider
 	client.pluginURL = resolved.ResolvedURL(isOpenShift)
 	client.insecure = resolved.Insecure
 	client.certificateAuthority = resolved.CertificateAuthority
-	return client
+	return client, nil
 }
 
 func (n *NetObserv) validateAndGetURL(endpoint string) (string, error) {
@@ -242,18 +240,4 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
 	}
 	return GetResponse{Body: string(respBody), Truncated: truncated}, nil
-}
-
-func configFromProvider(p api.ExtendedConfigProvider) *config.Config {
-	switch v := p.(type) {
-	case *config.Config:
-		if v != nil {
-			return v
-		}
-	case api.ToolHandlerParams:
-		return configFromProvider(v.ExtendedConfigProvider)
-	case api.PromptHandlerParams:
-		return configFromProvider(v.ExtendedConfigProvider)
-	}
-	return config.New()
 }

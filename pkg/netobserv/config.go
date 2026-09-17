@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
@@ -27,8 +26,8 @@ type Config struct {
 }
 
 var (
-	_ api.ExtendedConfig      = (*Config)(nil)
-	_ api.RequireTLSValidator = (*Config)(nil)
+	_ config.ExtendedConfig      = (*Config)(nil)
+	_ config.RequireTLSValidator = (*Config)(nil)
 )
 
 // ResolvedURL returns the plugin base URL, applying operator-aligned defaults when url is unset.
@@ -123,7 +122,7 @@ func (c *Config) ValidateRequireTLS(requireTLS bool) error {
 	return nil
 }
 
-func netobservToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func netobservToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (config.ExtendedConfig, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err

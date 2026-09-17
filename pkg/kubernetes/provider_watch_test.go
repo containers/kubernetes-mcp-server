@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,7 +55,7 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 	testCases := []func() (Provider, error){
 		func() (Provider, error) { return newKubeConfigClusterProvider(s.T().Context(), s.staticConfig) },
 		func() (Provider, error) {
-			return newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
+			return newSingleClusterProvider(config.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
 		},
 	}
 	for _, tc := range testCases {
@@ -121,7 +120,7 @@ func (s *ProviderWatchTargetsTestSuite) TestKubeConfigClusterProvider() {
 }
 
 func (s *ProviderWatchTargetsTestSuite) TestSingleClusterProvider() {
-	provider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
+	provider, err := newSingleClusterProvider(config.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
 	s.Require().NoError(err, "Expected no error from provider creation")
 
 	callback, waitForCallback := CallbackWaiter()

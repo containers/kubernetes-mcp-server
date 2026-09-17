@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -70,21 +71,21 @@ func (s *ConfirmationSuite) TestCheckToolRules() {
 
 	s.Run("no matching rules returns nil", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckToolRules(ctx, []api.ConfirmationRule{
+		err := CheckToolRules(ctx, []config.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}, "deny", elicitor, "pods_list", nil)
 		s.NoError(err)
 	})
 	s.Run("matching rule with accept returns nil", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionAccept}}
-		err := CheckToolRules(ctx, []api.ConfirmationRule{
+		err := CheckToolRules(ctx, []config.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}, "deny", elicitor, "helm_uninstall", nil)
 		s.NoError(err)
 	})
 	s.Run("matching rule with decline returns error", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckToolRules(ctx, []api.ConfirmationRule{
+		err := CheckToolRules(ctx, []config.ConfirmationRule{
 			{Tool: "helm_uninstall", Message: "uninstall"},
 		}, "deny", elicitor, "helm_uninstall", nil)
 		s.ErrorIs(err, ErrConfirmationDenied)
@@ -96,21 +97,21 @@ func (s *ConfirmationSuite) TestCheckKubeRules() {
 
 	s.Run("no matching rules returns nil", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckKubeRules(ctx, []api.ConfirmationRule{
+		err := CheckKubeRules(ctx, []config.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
 		}, "deny", elicitor, "get", "Pod", "", "v1", "", "default")
 		s.NoError(err)
 	})
 	s.Run("matching rule with accept returns nil", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionAccept}}
-		err := CheckKubeRules(ctx, []api.ConfirmationRule{
+		err := CheckKubeRules(ctx, []config.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
 		}, "deny", elicitor, "delete", "Pod", "", "v1", "", "kube-system")
 		s.NoError(err)
 	})
 	s.Run("matching rule with decline returns error", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckKubeRules(ctx, []api.ConfirmationRule{
+		err := CheckKubeRules(ctx, []config.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
 		}, "deny", elicitor, "delete", "Pod", "", "v1", "", "kube-system")
 		s.ErrorIs(err, ErrConfirmationDenied)

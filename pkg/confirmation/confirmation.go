@@ -7,6 +7,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
@@ -17,7 +18,7 @@ var ErrConfirmationDenied = errors.New("action requires confirmation")
 // CheckToolRules finds matching tool-level rules, merges them, and elicits confirmation.
 // Returns nil if no rules match or the user accepts. Returns an error if the user
 // declines or elicitation is not supported and the fallback is "deny".
-func CheckToolRules(ctx context.Context, rules []api.ConfirmationRule, fallback string, elicitor api.Elicitor,
+func CheckToolRules(ctx context.Context, rules []config.ConfirmationRule, fallback string, elicitor api.Elicitor,
 	toolName string, destructiveHint *bool) error {
 
 	matched := MatchToolLevelRules(rules, toolName, destructiveHint)
@@ -30,7 +31,7 @@ func CheckToolRules(ctx context.Context, rules []api.ConfirmationRule, fallback 
 
 // CheckKubeRules finds matching kube-level rules, merges them, and elicits confirmation.
 // Returns nil if no rules match or the user accepts.
-func CheckKubeRules(ctx context.Context, rules []api.ConfirmationRule, fallback string, elicitor api.Elicitor,
+func CheckKubeRules(ctx context.Context, rules []config.ConfirmationRule, fallback string, elicitor api.Elicitor,
 	verb, kind, group, version, name, namespace string) error {
 
 	matched := MatchKubeLevelRules(rules, verb, kind, group, version, name, namespace)

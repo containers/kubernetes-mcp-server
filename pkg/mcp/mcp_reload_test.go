@@ -192,7 +192,7 @@ func (s *ConfigReloadSuite) TestReloadDeniedResourcesRebuildsClients() {
 
 	newConfig := config.New()
 	newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
-	newConfig.DeniedResources.SetForTest([]api.GroupVersionKind{{Version: "v1", Kind: "Pod"}})
+	newConfig.DeniedResources.SetForTest([]config.GroupVersionKind{{Version: "v1", Kind: "Pod"}})
 	s.Require().NoError(server.ReloadConfiguration(s.T().Context(), newConfig))
 
 	k8s, err = provider.GetDerivedKubernetes(s.T().Context(), provider.GetDefaultTarget())

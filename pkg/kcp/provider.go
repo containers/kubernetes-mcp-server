@@ -12,7 +12,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
@@ -44,7 +43,7 @@ type kcpClusterProvider struct {
 var _ kubernetes.Provider = &kcpClusterProvider{}
 
 func init() {
-	kubernetes.RegisterProvider(api.ClusterProviderKcp, newKcpClusterProvider)
+	kubernetes.RegisterProvider(config.ClusterProviderKcp, newKcpClusterProvider)
 }
 
 // newKcpClusterProvider creates a provider that manages multiple kcp workspaces.

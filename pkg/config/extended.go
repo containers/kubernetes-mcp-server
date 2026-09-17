@@ -8,10 +8,9 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-type ExtendedConfigParser func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error)
+type ExtendedConfigParser func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error)
 
 type extendedConfigRegistry struct {
 	parsers map[string]ExtendedConfigParser
@@ -30,11 +29,11 @@ func (r *extendedConfigRegistry) register(name string, parser ExtendedConfigPars
 	r.parsers[name] = parser
 }
 
-func (r *extendedConfigRegistry) parseMaps(ctx context.Context, table string, configs map[string]any) (map[string]api.ExtendedConfig, error) {
+func (r *extendedConfigRegistry) parseMaps(ctx context.Context, table string, configs map[string]any) (map[string]ExtendedConfig, error) {
 	if len(configs) == 0 {
-		return make(map[string]api.ExtendedConfig), nil
+		return make(map[string]ExtendedConfig), nil
 	}
-	parsedConfigs := make(map[string]api.ExtendedConfig, len(configs))
+	parsedConfigs := make(map[string]ExtendedConfig, len(configs))
 
 	for name, raw := range configs {
 		parser, ok := r.parsers[name]

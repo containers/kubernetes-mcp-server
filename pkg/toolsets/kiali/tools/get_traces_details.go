@@ -42,7 +42,10 @@ func InitGetTraceDetails() []api.ServerTool {
 }
 
 func tracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	arguments := params.GetArguments()
 	content, err := kiali.ExecuteRequest(params.Context, KialiGetTraceDetailsEndpoint, arguments)
 	if err != nil {

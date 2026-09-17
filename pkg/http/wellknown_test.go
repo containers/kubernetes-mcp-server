@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -34,7 +34,7 @@ type WellknownSuite struct {
 
 func (s *WellknownSuite) SetupTest() {
 	s.BaseHttpSuite.SetupTest()
-	s.Config.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+	s.Config.ClusterProviderStrategy.SetForTest(config.ClusterProviderKubeConfig)
 	s.TestServerPayload = defaultWellknownPayload
 	s.TestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.EscapedPath(), "/.well-known/") {

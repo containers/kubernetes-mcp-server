@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 func TestPromptCallRequestAdapter_GetArguments(t *testing.T) {
@@ -65,10 +66,10 @@ func TestPromptCallRequestAdapter_GetArguments(t *testing.T) {
 
 func TestServerPromptToGoSdkPrompt_Conversion(t *testing.T) {
 	serverPrompt := api.ServerPrompt{
-		Prompt: api.Prompt{
+		Prompt: config.Prompt{
 			Name:        "test-prompt",
 			Description: "Test description",
-			Arguments: []api.PromptArgument{
+			Arguments: []config.PromptArgument{
 				{
 					Name:        "arg1",
 					Description: "First argument",
@@ -117,10 +118,10 @@ func TestServerPromptToGoSdkPrompt_Conversion(t *testing.T) {
 
 func TestServerPromptToGoSdkPrompt_EmptyArguments(t *testing.T) {
 	serverPrompt := api.ServerPrompt{
-		Prompt: api.Prompt{
+		Prompt: config.Prompt{
 			Name:        "no-args-prompt",
 			Description: "Prompt with no arguments",
-			Arguments:   []api.PromptArgument{},
+			Arguments:   []config.PromptArgument{},
 		},
 		Handler: func(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 			return api.NewPromptCallResult("Result", []api.PromptMessage{}, nil), nil
@@ -142,7 +143,7 @@ func TestServerPromptToGoSdkPrompt_EmptyArguments(t *testing.T) {
 func TestServerPromptToGoSdkPrompt_RBACMetadata(t *testing.T) {
 	rbac := api.RBACNone()
 	serverPrompt := api.ServerPrompt{
-		Prompt: api.Prompt{Name: "rbac-prompt"},
+		Prompt: config.Prompt{Name: "rbac-prompt"},
 		RBAC:   rbac,
 	}
 

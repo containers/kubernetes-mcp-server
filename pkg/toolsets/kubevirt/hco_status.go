@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -21,7 +22,7 @@ import (
 func initHCOStatus() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "hco-status",
 				Title:       fmt.Sprintf("%s HyperConverged Status", defaults.ProductName()),
 				Description: fmt.Sprintf("Generate a status report for the HyperConverged Cluster Operator (HCO) managing %s and related components", defaults.ProductName()),

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/confirmation"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog" //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -14,7 +15,7 @@ import (
 
 // ConfirmationValidator validates Kubernetes API requests against confirmation rules.
 type ConfirmationValidator struct {
-	rules    []api.ConfirmationRule
+	rules    []config.ConfirmationRule
 	fallback string
 }
 

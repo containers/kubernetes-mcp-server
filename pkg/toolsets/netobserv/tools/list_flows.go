@@ -20,7 +20,10 @@ func InitListFlows() []api.ServerTool {
 }
 
 func listFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client := netobservclient.NewNetObserv(params.Context, params, params.KubernetesClient, params.FilteringProvider)
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.FilteringProvider)
+	if err != nil {
+		return jsonAPIResult("", err)
+	}
 	content, err := client.ExecuteGet(params.Context, NetObservFlowsEndpoint, params.GetArguments())
 	return jsonAPIResult(content, wrapAPIError("list flow records", err))
 }

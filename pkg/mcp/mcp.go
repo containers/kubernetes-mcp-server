@@ -576,6 +576,9 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 	logger.V(1).Info("Reloading MCP server configuration...")
 
 	// Validate config-level invariants (same checks as startup)
+	if err := toolsets.Validate(newConfig.Toolsets.Get()); err != nil {
+		return fmt.Errorf("configuration reload rejected: %w", err)
+	}
 	if err := newConfig.
 		WithProviderStrategies(internalk8s.GetRegisteredStrategies()).
 		WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).

@@ -13,7 +13,6 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
@@ -30,22 +29,27 @@ type Kiali struct {
 }
 
 // NewKiali creates a new Kiali instance
-func NewKiali(configProvider api.ExtendedConfigProvider, kubernetes *rest.Config) *Kiali {
-	cfg := configFromProvider(configProvider)
+func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is required")
+	}
+	if kubernetes == nil {
+		return nil, fmt.Errorf("kubernetes rest config is required")
+	}
 	kiali := &Kiali{
-		bearerToken:     kubernetes.BearerToken,
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),
 		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
-		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
+		bearerToken:     kubernetes.BearerToken,
 	}
-	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
-		if kc, ok := cfg.(*Config); ok && kc != nil {
+	if tc, ok := cfg.GetToolsetConfig("kiali"); ok {
+		if kc, ok := tc.(*Config); ok && kc != nil {
 			kiali.kialiURL = kc.Url
 			kiali.kialiInsecure = kc.Insecure
 			kiali.certificateAuthority = kc.CertificateAuthority
 		}
 	}
-	return kiali
+	return kiali, nil
 }
 
 // validateAndGetURL validates the Kiali client configuration and returns the full URL
@@ -216,18 +220,4 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 		return "", fmt.Errorf("kiali API error: status %d", resp.StatusCode)
 	}
 	return string(respBody), nil
-}
-
-func configFromProvider(p api.ExtendedConfigProvider) *config.Config {
-	switch v := p.(type) {
-	case *config.Config:
-		if v != nil {
-			return v
-		}
-	case api.ToolHandlerParams:
-		return configFromProvider(v.ExtendedConfigProvider)
-	case api.PromptHandlerParams:
-		return configFromProvider(v.ExtendedConfigProvider)
-	}
-	return config.New()
 }

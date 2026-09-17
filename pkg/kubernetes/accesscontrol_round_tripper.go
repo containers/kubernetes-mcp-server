@@ -17,6 +17,7 @@ import (
 	authv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
@@ -24,7 +25,7 @@ import (
 // and optionally run validators before they reach the Kubernetes API.
 type AccessControlRoundTripper struct {
 	delegate           http.RoundTripper
-	deniedResources    []api.GroupVersionKind
+	deniedResources    []config.GroupVersionKind
 	restMapperProvider func() meta.RESTMapper
 	rawDiscovery       *rawDiscoveryCache
 	apiPathPrefix      string
@@ -34,14 +35,14 @@ type AccessControlRoundTripper struct {
 // AccessControlRoundTripperConfig configures the AccessControlRoundTripper.
 type AccessControlRoundTripperConfig struct {
 	Delegate             http.RoundTripper
-	DeniedResources      []api.GroupVersionKind
+	DeniedResources      []config.GroupVersionKind
 	RestMapperProvider   func() meta.RESTMapper
 	HostURL              string
 	DiscoveryProvider    func() discovery.DiscoveryInterface
 	RawDiscoveryProvider func() discovery.DiscoveryInterface
 	AuthClientProvider   func() authv1client.AuthorizationV1Interface
 	ValidationEnabled    bool
-	ConfirmationRules    []api.ConfirmationRule
+	ConfirmationRules    []config.ConfirmationRule
 	ConfirmationFallback string
 }
 

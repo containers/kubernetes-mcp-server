@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -20,11 +21,11 @@ import (
 func initVMTroubleshoot() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "vm-troubleshoot",
 				Title:       fmt.Sprintf("%s VirtualMachine Troubleshoot", defaults.ProductName()),
 				Description: fmt.Sprintf("Generate a step-by-step troubleshooting guide for diagnosing %s VirtualMachine issues", defaults.ProductName()),
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "The namespace of the VirtualMachine to troubleshoot",

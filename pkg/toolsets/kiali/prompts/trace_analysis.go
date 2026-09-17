@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
@@ -12,11 +13,11 @@ import (
 func InitTraceAnalysis() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "trace-analysis",
 				Title:       "Trace and Latency Investigation",
 				Description: "Investigate distributed traces for a service to identify latency bottlenecks, error sources, and slow spans",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Namespace where the service is deployed",
@@ -48,7 +49,10 @@ func traceAnalysisHandler(params api.PromptHandlerParams) (*api.PromptCallResult
 
 	klogutil.FromContext(params.Context).Info("Starting trace analysis prompt...", "namespace", namespace, "service", service)
 
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return nil, err
+	}
 
 	tracesContent := fetchKialiData(kiali, params, tools.KialiListTracesEndpoint,
 		map[string]any{"namespace": namespace, "serviceName": service, "limit": 20})

@@ -112,10 +112,10 @@ Toolsets can provide built-in prompts by implementing the `GetPrompts()` method.
 func (t *MyToolset) GetPrompts() []api.ServerPrompt {
     return []api.ServerPrompt{
         {
-            Prompt: api.Prompt{
+            Prompt: config.Prompt{
                 Name:        "my-workflow",
                 Description: "Custom workflow for my toolset",
-                Arguments: []api.PromptArgument{
+                Arguments: []config.PromptArgument{
                     {
                         Name:        "namespace",
                         Description: "Target namespace",

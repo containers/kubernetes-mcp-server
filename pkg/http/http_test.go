@@ -19,7 +19,6 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
@@ -280,7 +279,7 @@ func TestHealthCheck(t *testing.T) {
 		c := config.New()
 		c.Port.SetForTest("8080")
 		c.RequireOAuth.SetForTest(true)
-		c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+		c.ClusterProviderStrategy.SetForTest(config.ClusterProviderKubeConfig)
 		return c
 	}()}, func(ctx *httpContext) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/healthz", ctx.HttpAddress))
@@ -377,7 +376,7 @@ func TestBindAddress(t *testing.T) {
 			c.BindAddress.SetForTest("0.0.0.0")
 			c.Port.SetForTest("8080")
 			c.RequireOAuth.SetForTest(true)
-			c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+			c.ClusterProviderStrategy.SetForTest(config.ClusterProviderKubeConfig)
 			return c
 		}()}, func(ctx *httpContext) {
 			ctx.StopServer()
@@ -422,7 +421,7 @@ func TestBindAddress(t *testing.T) {
 			c.BindAddress.SetForTest("0.0.0.0")
 			c.Port.SetForTest("8080")
 			c.RequireOAuth.SetForTest(true)
-			c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+			c.ClusterProviderStrategy.SetForTest(config.ClusterProviderKubeConfig)
 			c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
 			return c
 		}(),
@@ -503,7 +502,7 @@ func TestMetricsPort(t *testing.T) {
 			Config: func() *config.Config {
 				c := config.New()
 				c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
-				c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+				c.ClusterProviderStrategy.SetForTest(config.ClusterProviderKubeConfig)
 				return c
 			}(),
 		}, func(ctx *httpContext) {
@@ -561,7 +560,7 @@ func TestMetricsPort(t *testing.T) {
 			Config: func() *config.Config {
 				c := config.New()
 				c.MetricsPort.SetForTest(strconv.Itoa(metricsAddr.Port))
-				c.ClusterProviderStrategy.SetForTest(api.ClusterProviderKubeConfig)
+				c.ClusterProviderStrategy.SetForTest(config.ClusterProviderKubeConfig)
 				return c
 			}(),
 		}, func(ctx *httpContext) {

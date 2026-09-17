@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/client-go/rest"
 )
 
 type ConfigSuite struct {
@@ -69,7 +70,8 @@ func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
 func (s *ConfigSuite) TestNewNetObserv_withoutToolsetConfigSection() {
 	base := config.New()
 	base.Toolsets.SetForTest(append(base.Toolsets.Get(), "netobserv"))
-	client := NewNetObserv(context.Background(), base, nil, nil)
+	client, err := NewNetObserv(context.Background(), base, &rest.Config{}, nil)
+	s.Require().NoError(err)
 	s.Equal(DefaultPluginURL(false), client.pluginURL)
 	s.False(client.insecure)
 }

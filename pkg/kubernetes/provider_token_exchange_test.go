@@ -13,7 +13,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
@@ -77,7 +76,7 @@ func applyExchange(cfg *config.Config, clientID, clientSecret, audience string, 
 	cfg.TokenExchange.Strategy.SetForTest(tokenexchange.StrategyRFC8693)
 	cfg.TokenExchange.Audience.SetForTest(audience)
 	cfg.TokenExchange.Scopes.SetForTest(scopes)
-	cfg.TokenExchange.ClientAuth.Method.SetForTest(string(api.TokenExchangeClientAuthMethodSecretPost))
+	cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodSecretPost))
 	cfg.TokenExchange.ClientAuth.ClientID.SetForTest(clientID)
 	cfg.TokenExchange.ClientAuth.ClientSecret.SetForTest(clientSecret)
 }
@@ -180,7 +179,7 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(api.TokenExchangeClientAuthMethodSecretBasic))
+			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodSecretBasic))
 			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
@@ -191,7 +190,7 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			snap := s.newSnapshot()
 			cfg := config.New()
 			applyExchange(cfg, "client", "", "audience", nil)
-			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(api.TokenExchangeClientAuthMethodPrivateKey))
+			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodPrivateKey))
 			cfg.TokenExchange.ClientAuth.CertificateFile.SetForTest("/old-cert.pem")
 			cfg.TokenExchange.ClientAuth.PrivateKeyFile.SetForTest("/old-key.pem")
 			p := newProvider(cfg)
@@ -212,7 +211,7 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			snap := s.newSnapshot()
 			cfg := config.New()
 			applyExchange(cfg, "client", "", "audience", nil)
-			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(api.TokenExchangeClientAuthMethodJWTFile))
+			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodJWTFile))
 			cfg.TokenExchange.ClientAuth.TokenFile.SetForTest("/old-token")
 			p := newProvider(cfg)
 

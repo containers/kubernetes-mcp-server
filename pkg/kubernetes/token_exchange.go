@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
@@ -33,9 +32,9 @@ func ExchangeTokenInContext(
 	}
 
 	switch cfg.ResolveClusterAuthMode() {
-	case api.ClusterAuthKubeconfig:
+	case config.ClusterAuthKubeconfig:
 		return context.WithValue(ctx, OAuthAuthorizationHeader, ""), nil
-	case api.ClusterAuthPassthrough:
+	case config.ClusterAuthPassthrough:
 		global := cfg.GetTokenExchangeConfig()
 		if global == nil {
 			return ctx, nil

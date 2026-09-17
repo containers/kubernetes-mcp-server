@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// McpConfigProviderSuite tests that ConfigProvider is accessible from tool and prompt handlers at execution time.
+// McpConfigProviderSuite tests that Config is accessible from tool and prompt handlers at execution time.
 type McpConfigProviderSuite struct {
 	BaseMcpSuite
 	originalToolsets []api.Toolset
@@ -77,7 +77,7 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 					Description: "Returns whether toolset config was found",
 				},
 				Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-					_, found := params.GetToolsetConfig("kiali")
+					_, found := params.Config.GetToolsetConfig("kiali")
 					if found {
 						return api.NewToolCallResult("found", nil), nil
 					}
@@ -178,7 +178,7 @@ func (s *McpConfigProviderSuite) TestPromptHandlerReceivesClusterProviderStrateg
 		name: "config-provider-test",
 		prompts: []api.ServerPrompt{
 			{
-				Prompt: api.Prompt{
+				Prompt: config.Prompt{
 					Name:        "get_strategy_prompt",
 					Description: "Returns the cluster provider strategy",
 				},

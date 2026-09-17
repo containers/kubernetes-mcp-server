@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
@@ -29,8 +28,8 @@ type singleClusterProvider struct {
 var _ Provider = &singleClusterProvider{}
 
 func init() {
-	RegisterProvider(api.ClusterProviderInCluster, newSingleClusterProvider(api.ClusterProviderInCluster))
-	RegisterProvider(api.ClusterProviderDisabled, newSingleClusterProvider(api.ClusterProviderDisabled))
+	RegisterProvider(config.ClusterProviderInCluster, newSingleClusterProvider(config.ClusterProviderInCluster))
+	RegisterProvider(config.ClusterProviderDisabled, newSingleClusterProvider(config.ClusterProviderDisabled))
 }
 
 // newSingleClusterProvider creates a provider that manages a single cluster.
@@ -57,7 +56,7 @@ func (p *singleClusterProvider) reset(ctx context.Context) error {
 }
 
 func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
-	if p.cfg != nil && p.cfg.KubeConfig.Get() != "" && p.strategy == api.ClusterProviderInCluster {
+	if p.cfg != nil && p.cfg.KubeConfig.Get() != "" && p.strategy == config.ClusterProviderInCluster {
 		return fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy",
 			p.cfg.KubeConfig.Get())
 	}
@@ -66,7 +65,7 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 		manager *Manager
 		err     error
 	)
-	if p.strategy == api.ClusterProviderInCluster || IsInCluster(p.cfg.KubeConfig.Get()) {
+	if p.strategy == config.ClusterProviderInCluster || IsInCluster(p.cfg.KubeConfig.Get()) {
 		manager, err = NewInClusterManager(ctx, p.cfg)
 	} else {
 		manager, err = NewKubeconfigManager(ctx, p.cfg, "")

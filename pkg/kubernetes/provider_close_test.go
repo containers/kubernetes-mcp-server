@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -66,7 +65,7 @@ func (s *ProviderCloseTestSuite) SetupTest() {
 		return c
 	}()
 
-	singleProvider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), cfg)
+	singleProvider, err := newSingleClusterProvider(config.ClusterProviderDisabled)(s.T().Context(), cfg)
 	s.Require().NoError(err)
 	kubeconfigProvider, err := newKubeConfigClusterProvider(s.T().Context(), cfg)
 	s.Require().NoError(err)

@@ -67,7 +67,7 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 		cfg := s.configuration.Load()
 		params := api.PromptHandlerParams{
 			Context:                 ctx,
-			ExtendedConfigProvider:  cfg.Config,
+			Config:                  cfg.Config,
 			ClusterProviderStrategy: cfg.ClusterProviderStrategy.Get(),
 			KubernetesClient:        k8s,
 			PromptCallRequest:       &promptCallRequestAdapter{request: request},

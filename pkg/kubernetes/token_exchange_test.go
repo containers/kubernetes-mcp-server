@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/stretchr/testify/suite"
@@ -21,27 +20,27 @@ type TokenExchangeRoutingSuite struct {
 func (s *TokenExchangeRoutingSuite) TestResolveClusterAuthMode() {
 	s.Run("defaults to passthrough", func() {
 		cfg := config.New()
-		s.Equal(api.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
+		s.Equal(config.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
 	})
 
 	s.Run("defaults to passthrough regardless of require_oauth", func() {
 		cfg := config.New()
 		cfg.Port.SetForTest("8080")
 		cfg.RequireOAuth.SetForTest(true)
-		s.Equal(api.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
+		s.Equal(config.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
 	})
 
 	s.Run("returns explicit kubeconfig when set", func() {
 		cfg := config.New()
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
-		s.Equal(api.ClusterAuthKubeconfig, cfg.ResolveClusterAuthMode())
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthKubeconfig)
+		s.Equal(config.ClusterAuthKubeconfig, cfg.ResolveClusterAuthMode())
 	})
 }
 
 func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 	s.Run("kubeconfig mode clears OAuth token", func() {
 		cfg := config.New()
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthKubeconfig)
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthKubeconfig)
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
 		result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
@@ -53,7 +52,7 @@ func (s *TokenExchangeRoutingSuite) TestGlobalTokenExchangeRouting() {
 
 	s.Run("passthrough mode preserves token", func() {
 		cfg := config.New()
-		cfg.ClusterAuthMode.SetForTest(api.ClusterAuthPassthrough)
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthPassthrough)
 
 		ctx := context.Background()
 		ctx = context.WithValue(ctx, OAuthAuthorizationHeader, "Bearer original-token")

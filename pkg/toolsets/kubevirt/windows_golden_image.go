@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	kubevirt "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
 	pod "github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -62,11 +63,11 @@ var windowsVersionDefaults = map[string]windowsDefaults{
 func initWindowsGoldenImage() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "windows-golden-image",
 				Title:       fmt.Sprintf("%s Windows Golden Image Creator", kubevirt.ProductName()),
 				Description: fmt.Sprintf("Guides creation of a Windows golden image via the %s windows-efi-installer Tekton pipeline", kubevirt.ProductName()),
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "winImageDownloadURL",
 						Description: "Microsoft Windows ISO download URL (must be https://)",

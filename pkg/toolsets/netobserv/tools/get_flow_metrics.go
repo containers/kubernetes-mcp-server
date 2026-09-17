@@ -62,7 +62,10 @@ func InitGetFlowMetrics() []api.ServerTool {
 }
 
 func getFlowMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client := netobservclient.NewNetObserv(params.Context, params, params.KubernetesClient, params.FilteringProvider)
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.FilteringProvider)
+	if err != nil {
+		return jsonAPIResult("", err)
+	}
 	content, err := client.ExecuteGet(params.Context, NetObservFlowMetricsEndpoint, params.GetArguments())
 	return jsonAPIResult(content, wrapAPIError("get flow metrics", err))
 }

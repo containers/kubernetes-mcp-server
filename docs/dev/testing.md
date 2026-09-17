@@ -189,7 +189,7 @@ name the toolset registers its parser under, not the toolset's exposed
 name**. The Kiali toolset registers its parser as `"kiali"`
 (see `pkg/kiali/config.go`), so even when downstream rebrands the
 toolset to `ossm`, the section is still `[toolset_configs.kiali]`
-and `params.GetToolsetConfig("kiali")` is the correct lookup. Resolve
+and `params.Config.GetToolsetConfig("kiali")` is the correct lookup. Resolve
 the *toolset name* dynamically via `GetName()` (see below), but keep
 the *toolset_configs key* hardcoded — using the dynamic name there will
 silently produce `(nil, false)`.

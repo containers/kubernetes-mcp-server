@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -204,7 +203,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 	})
 
 	s.Run("denied_resources", func() {
-		s.Equal([]api.GroupVersionKind{
+		s.Equal([]GroupVersionKind{
 			{Group: "apps", Version: "v1", Kind: "Deployment"},
 			{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
 		}, cfg.DeniedResources.Get())
@@ -216,7 +215,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		s.Equal("k8s-troubleshoot", prompt.Name)
 		s.Equal("Troubleshoot Kubernetes", prompt.Title)
 		s.Equal("Troubleshoot common Kubernetes issues", prompt.Description)
-		s.Equal([]api.PromptArgument{
+		s.Equal([]PromptArgument{
 			{Name: "namespace", Description: "Target namespace", Required: true},
 			{Name: "resource", Description: "Resource type to check", Required: false},
 		}, prompt.Arguments)
@@ -738,16 +737,16 @@ func (s *ConfigSuite) TestDropInWithDeniedResources() {
 
 	s.Run("drop-in replaces denied_resources array", func() {
 		s.Len(config.DeniedResources.Get(), 2, "denied_resources should have 2 entries from drop-in")
-		s.Contains(config.DeniedResources.Get(), api.GroupVersionKind{
+		s.Contains(config.DeniedResources.Get(), GroupVersionKind{
 			Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole",
 		})
-		s.Contains(config.DeniedResources.Get(), api.GroupVersionKind{
+		s.Contains(config.DeniedResources.Get(), GroupVersionKind{
 			Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding",
 		})
 	})
 
 	s.Run("original denied_resources from main config are replaced", func() {
-		s.NotContains(config.DeniedResources.Get(), api.GroupVersionKind{
+		s.NotContains(config.DeniedResources.Get(), GroupVersionKind{
 			Group: "apps", Version: "v1", Kind: "Deployment",
 		}, "original entry should be replaced by drop-in")
 	})

@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 // MatchToolLevelRules returns all tool-level rules that match the given tool call.
 // A rule matches if all of its non-empty fields match the call:
 //   - tool: exact match on tool name
 //   - destructive: matches when the tool's DestructiveHint equals the rule value
-func MatchToolLevelRules(rules []api.ConfirmationRule, toolName string, destructiveHint *bool) []api.ConfirmationRule {
-	var matched []api.ConfirmationRule
+func MatchToolLevelRules(rules []config.ConfirmationRule, toolName string, destructiveHint *bool) []config.ConfirmationRule {
+	var matched []config.ConfirmationRule
 	for i := range rules {
 		r := &rules[i]
 		if !r.IsToolLevel() {
@@ -39,8 +39,8 @@ func MatchToolLevelRules(rules []api.ConfirmationRule, toolName string, destruct
 //   - version: exact match on the API version
 //   - name: exact match on the resource name
 //   - namespace: exact match on the namespace
-func MatchKubeLevelRules(rules []api.ConfirmationRule, verb, kind, group, version, name, namespace string) []api.ConfirmationRule {
-	var matched []api.ConfirmationRule
+func MatchKubeLevelRules(rules []config.ConfirmationRule, verb, kind, group, version, name, namespace string) []config.ConfirmationRule {
+	var matched []config.ConfirmationRule
 	for i := range rules {
 		r := &rules[i]
 		if !r.IsKubeLevel() {
@@ -73,7 +73,7 @@ func MatchKubeLevelRules(rules []api.ConfirmationRule, verb, kind, group, versio
 // If a single rule matched, its message is used directly.
 // If multiple rules matched, messages are combined as a bulleted list.
 // The global fallback is always used as the effective fallback.
-func MergeMatchedRules(matched []api.ConfirmationRule, globalFallback string) (message string, effectiveFallback string) {
+func MergeMatchedRules(matched []config.ConfirmationRule, globalFallback string) (message string, effectiveFallback string) {
 	if len(matched) == 0 {
 		return "", globalFallback
 	}
