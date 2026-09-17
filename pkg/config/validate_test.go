@@ -477,6 +477,7 @@ func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {
 		Audience:           " audience ",
 		SubjectTokenType:   " subject-token-type ",
 		RequestedTokenType: " requested-token-type ",
+		TokenURL:           " https://sts-gateway.example.com/oauth/token ",
 		ClientAuth: &config.TokenExchangeClientAuth{
 			Method:          api.TokenExchangeClientAuthMethod(" client_secret_basic "),
 			ClientID:        " client ",
@@ -498,6 +499,99 @@ func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {
 	s.Equal("cert.pem", cfg.TokenExchange.ClientAuth.CertificateFile)
 	s.Equal("key.pem", cfg.TokenExchange.ClientAuth.PrivateKeyFile)
 	s.Equal("token", cfg.TokenExchange.ClientAuth.TokenFile)
+	s.Equal("https://sts-gateway.example.com/oauth/token", cfg.TokenExchange.TokenURL)
+}
+
+func (s *ValidateSuite) TestTokenExchangeTokenURL() {
+	s.Run("empty token_url requires authorization_url for OIDC discovery", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.SkipJWTVerification = true
+		cfg.AuthorizationURL = ""
+		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693", Audience: "audience"}
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token exchange requires token_exchange.token_url, or authorization_url")
+	})
+
+	s.Run("explicit token_url is accepted without authorization_url", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.SkipJWTVerification = true
+		cfg.AuthorizationURL = ""
+		cfg.TokenExchange = &config.TokenExchangeConfig{
+			Strategy: "rfc8693",
+			Audience: "audience",
+			TokenURL: "https://sts-gateway.example.com/oauth/token",
+		}
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("https token_url is accepted", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		cfg.TokenExchange = &config.TokenExchangeConfig{
+			Strategy: "rfc8693",
+			Audience: "audience",
+			TokenURL: "https://sts-gateway.example.com/oauth/token",
+		}
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("http token_url is accepted with warning", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		cfg.TokenExchange = &config.TokenExchangeConfig{
+			Strategy: "rfc8693",
+			Audience: "audience",
+			TokenURL: "http://sts-gateway.example.com/oauth/token",
+		}
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+
+	s.Run("invalid scheme is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		cfg.TokenExchange = &config.TokenExchangeConfig{
+			Strategy: "rfc8693",
+			Audience: "audience",
+			TokenURL: "ftp://sts-gateway.example.com/oauth/token",
+		}
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.token_url must use the http or https scheme")
+	})
+
+	s.Run("scheme-only URL with no host is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		cfg.TokenExchange = &config.TokenExchangeConfig{
+			Strategy: "rfc8693",
+			Audience: "audience",
+			TokenURL: "https://",
+		}
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.token_url must include a host")
+	})
+
+	s.Run("path-only URL with no scheme is rejected", func() {
+		cfg := s.validConfig()
+		cfg.RequireOAuth = true
+		cfg.AuthorizationURL = "https://example.com/auth"
+		cfg.TokenExchange = &config.TokenExchangeConfig{
+			Strategy: "rfc8693",
+			Audience: "audience",
+			TokenURL: "/oauth/token",
+		}
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.token_url must use the http or https scheme")
+	})
 }
 
 func (s *ValidateSuite) TestConfirmationFallback() {
@@ -676,14 +770,14 @@ func (s *ValidateSuite) TestClusterAuthMode() {
 		s.Contains(err.Error(), "token exchange requires require_oauth=true")
 	})
 
-	s.Run("token exchange without authorization_url is rejected", func() {
+	s.Run("token exchange without authorization_url or token_url is rejected", func() {
 		cfg := s.validConfig()
 		cfg.RequireOAuth = true
 		cfg.SkipJWTVerification = true
 		cfg.TokenExchange = &config.TokenExchangeConfig{Strategy: "rfc8693"}
 		err := cfg.Validate(s.T().Context())
 		s.Require().Error(err)
-		s.Contains(err.Error(), "token exchange requires authorization_url")
+		s.Contains(err.Error(), "token exchange requires token_exchange.token_url, or authorization_url")
 	})
 
 	s.Run("token exchange with kubeconfig mode is rejected", func() {

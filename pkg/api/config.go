@@ -73,6 +73,7 @@ type TokenExchangeConfig interface {
 	GetScopes() []string
 	GetSubjectTokenType() string
 	GetRequestedTokenType() string
+	GetTokenURL() string
 	GetClientAuth() TokenExchangeClientAuth
 }
 

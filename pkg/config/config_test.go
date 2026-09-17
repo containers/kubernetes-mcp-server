@@ -1132,6 +1132,7 @@ func (s *ConfigSuite) TestTokenExchangeParsing() {
 			scopes = ["scope"]
 			subject_token_type = "urn:ietf:params:oauth:token-type:access_token"
 			requested_token_type = "urn:ietf:params:oauth:token-type:access_token"
+			token_url = "https://sts-gateway.example.com/oauth/token"
 
 			[token_exchange.client_auth]
 			method = "client_secret_basic"
@@ -1147,8 +1148,22 @@ func (s *ConfigSuite) TestTokenExchangeParsing() {
 		s.Equal([]string{"scope"}, exchange.GetScopes())
 		s.Equal("urn:ietf:params:oauth:token-type:access_token", exchange.GetSubjectTokenType())
 		s.Equal("urn:ietf:params:oauth:token-type:access_token", exchange.GetRequestedTokenType())
+		s.Equal("https://sts-gateway.example.com/oauth/token", exchange.GetTokenURL())
 		s.Require().NotNil(exchange.GetClientAuth())
 		s.Equal("mcp-server", exchange.GetClientAuth().GetClientID())
+	})
+
+	s.Run("token_url defaults to empty (resolution falls back to OIDC discovery)", func() {
+		configPath := s.writeConfig(`
+			[token_exchange]
+			strategy = "rfc8693"
+			audience = "kubernetes-api"
+		`)
+		cfg, err := Read(s.T().Context(), configPath, "")
+		s.Require().NoError(err)
+		exchange := cfg.GetTokenExchangeConfig()
+		s.Require().NotNil(exchange)
+		s.Empty(exchange.GetTokenURL())
 	})
 
 	s.Run("absent block leaves token exchange disabled", func() {

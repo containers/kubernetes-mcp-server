@@ -311,6 +311,22 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			s.NotSame(first, second, "a reload that only changes token_exchange.requested_token_type must not reuse the stale cached config")
 			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.RequestedTokenType)
 		})
+
+		s.Run("token_url", func() {
+			snap := s.newSnapshot()
+			cfg := config.Default()
+			cfg.TokenExchange = exchangeConfig("client", "", "audience", nil)
+			p := newProvider(cfg)
+
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+			s.Require().NotNil(first)
+
+			cfg.TokenExchange.TokenURL = "https://sts-gateway.example.com/oauth/token"
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second, "a reload that only sets token_exchange.token_url must not reuse the stale cached config")
+			s.Equal("https://sts-gateway.example.com/oauth/token", second.TokenURL)
+		})
 	})
 
 	s.Run("wires require_tls enforcement into the built config", func() {
@@ -364,6 +380,28 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 		p.Close()
 		rebuilt := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.NotSame(first, rebuilt)
+	})
+}
+
+func (s *TokenExchangingProviderSuite) TestResolveTokenExchangeURL() {
+	snap := s.newSnapshot()
+
+	s.Run("explicit token_url wins over discovered endpoint", func() {
+		global := &config.TokenExchangeConfig{TokenURL: "https://explicit-sts.example.com/token"}
+		got := resolveTokenExchangeURL(global, snap.OIDCProvider)
+		s.Equal("https://explicit-sts.example.com/token", got, "explicit URL must take precedence over OIDC discovery")
+	})
+
+	s.Run("falls back to OIDC provider endpoint when token_url is empty", func() {
+		global := &config.TokenExchangeConfig{}
+		got := resolveTokenExchangeURL(global, snap.OIDCProvider)
+		s.Equal(snap.OIDCProvider.Endpoint().TokenURL, got, "empty explicit URL should fall back to OIDC-discovered endpoint")
+	})
+
+	s.Run("returns empty when neither source is available", func() {
+		global := &config.TokenExchangeConfig{}
+		got := resolveTokenExchangeURL(global, nil)
+		s.Equal("", got, "no explicit URL and no provider should yield empty string")
 	})
 }
 
