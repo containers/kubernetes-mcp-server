@@ -159,6 +159,7 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 		klogutil.FromContext(ctx).Error(otelLogErr, "Failed to create OTel log provider, log export disabled")
 	}
 
+	m.Config.Dump(ctx, nil)
 	return nil
 }
 
@@ -305,6 +306,7 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 					logger.Error(err, "Failed to reload log destination, keeping previous one")
 				}
 			}
+			newConfig.Dump(ctx, cfgState.Load())
 			// Publish the new config so the HTTP auth middleware picks it up.
 			cfgState.Store(newConfig)
 

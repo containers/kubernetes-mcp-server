@@ -806,7 +806,6 @@ func resolve(ctx context.Context, merged map[string]any, sources map[string]stri
 		pinClusterProviderConfigs(ctx, settings.previous, cfg)
 	}
 
-	dumpConfig(ctx, cfg, settings.previous)
 	return cfg, nil
 }
 
@@ -1090,8 +1089,10 @@ func equalExtendedMaps(a, b map[string]ExtendedConfig) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// dumpConfig logs every option at V(1), marking values that changed from prev.
-func dumpConfig(ctx context.Context, cfg *Config, prev *Config) {
+// Dump logs every option at V(1), marking values that changed from prev.
+// Call after logging is configured (cmd.Complete) and, on SIGHUP, only after
+// the reload has been applied. Pass nil prev at startup.
+func (cfg *Config) Dump(ctx context.Context, prev *Config) {
 	logger := klogutil.FromContext(ctx).V(1)
 	prevs := map[string]option{}
 	if prev != nil {

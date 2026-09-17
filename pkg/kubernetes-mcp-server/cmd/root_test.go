@@ -74,6 +74,15 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+func TestStartupOptionDump(t *testing.T) {
+	out, err := executeVersion(t, dumpTOML+`list_output = "yaml"`+"\n")
+	require.NoError(t, err)
+	assert.Contains(t, out, "config option")
+	assert.Contains(t, out, `option="list_output"`)
+	assert.Contains(t, out, "yaml")
+	assert.NotContains(t, out, "changed=true")
+}
+
 func TestDroppedFlagsAreRejected(t *testing.T) {
 	for _, flag := range []string{"--port=8080", "--kubeconfig=/tmp/x", "--toolsets=core", "--log-level=1"} {
 		t.Run(flag, func(t *testing.T) {

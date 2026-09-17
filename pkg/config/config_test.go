@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/textlogger"
 )
 
 type ConfigFileSuite struct {
@@ -1094,6 +1098,54 @@ func (s *ConfigSuite) TestPinNonReloadable() {
 	s.Require().NoError(err)
 	s.Equal("8080", next.Port.Get())
 	s.Equal(prev.Port.Source(), next.Port.Source())
+}
+
+func (s *ConfigSuite) TestDump() {
+	klogState := klog.CaptureState()
+	s.T().Cleanup(klogState.Restore)
+	fs := flag.NewFlagSet("klog", flag.ContinueOnError)
+	klog.InitFlags(fs)
+	s.Require().NoError(fs.Set("v", "1"))
+	buf := &bytes.Buffer{}
+	logger := textlogger.NewLogger(textlogger.NewConfig(
+		textlogger.Verbosity(1),
+		textlogger.Output(buf),
+	))
+	klog.SetLogger(logger)
+	ctx := klog.NewContext(s.T().Context(), logger)
+
+	cfg, err := ReadToml([]byte(`
+		port = "8080"
+		[token_exchange.client_auth]
+		client_secret = "super-secret"
+	`))
+	s.Require().NoError(err)
+
+	s.Run("logs every option with sources and redacts secrets", func() {
+		cfg.Dump(ctx, nil)
+		klog.Flush()
+		logs := buf.String()
+		s.Contains(logs, "config option")
+		s.Contains(logs, `option="port"`)
+		s.Contains(logs, "8080")
+		s.Contains(logs, `option="token_exchange.client_auth.client_secret"`)
+		s.Contains(logs, "<redacted>")
+		s.NotContains(logs, "super-secret")
+		s.NotContains(logs, "changed=true")
+	})
+
+	s.Run("marks values that differ from previous", func() {
+		buf.Reset()
+		next, err := ReadToml([]byte(`list_output = "yaml"`), WithPrevious(cfg))
+		s.Require().NoError(err)
+		next.Dump(ctx, cfg)
+		klog.Flush()
+		logs := buf.String()
+		s.Contains(logs, `option="list_output"`)
+		s.Contains(logs, "changed=true")
+		s.Contains(logs, "previous")
+		s.Contains(logs, "yaml")
+	})
 }
 
 func (s *ConfigSuite) TestConfirmationRulesDefaults() {

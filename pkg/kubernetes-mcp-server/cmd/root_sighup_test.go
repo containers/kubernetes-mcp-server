@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -223,6 +224,61 @@ func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigContinues() {
 			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
 		}, 2*time.Second, 50*time.Millisecond)
 	})
+}
+
+func (s *SIGHUPSuite) enableVerboseKlog() {
+	fs := flag.NewFlagSet("klog", flag.ContinueOnError)
+	klog.InitFlags(fs)
+	s.Require().NoError(fs.Set("v", "1"))
+}
+
+func (s *SIGHUPSuite) TestSIGHUPDumpAfterSuccessfulReload() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		list_output = "table"
+		toolsets = ["core", "config"]
+	`), 0o644))
+	_ = s.InitServer(configPath, "")
+	s.enableVerboseKlog()
+	s.logBuffer.Reset()
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		list_output = "yaml"
+		toolsets = ["core", "config"]
+	`), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return strings.Contains(s.logBuffer.String(), "Configuration reloaded successfully via SIGHUP")
+	}, 2*time.Second, 50*time.Millisecond)
+	logs := s.logBuffer.String()
+	s.Contains(logs, `option="list_output"`)
+	s.Contains(logs, "changed=true")
+	s.Contains(logs, "yaml")
+}
+
+func (s *SIGHUPSuite) TestSIGHUPRejectedReloadDoesNotDump() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		toolsets = ["core", "config"]
+	`), 0o644))
+	_ = s.InitServer(configPath, "")
+	s.enableVerboseKlog()
+	s.logBuffer.Reset()
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(`
+		toolsets = ["not-a-real-toolset"]
+	`), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return strings.Contains(s.logBuffer.String(), "Failed to apply reloaded configuration")
+	}, 2*time.Second, 50*time.Millisecond)
+	s.NotContains(s.logBuffer.String(), "changed=true")
+	s.NotContains(s.logBuffer.String(), `"config option"`)
+	s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 }
 
 func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
