@@ -32,7 +32,7 @@ const (
 // ConfigPathEnvName is the environment variable whose value is the path to the
 // main configuration TOML file. It is ignored if --config is provided.
 // Downstream builds may change this in defaultOverrides.
-var ConfigPathEnvName = "K8S_MCP_CONFIG_PATH"
+var ConfigPathEnvName = "MCP_CONFIG_PATH"
 
 // ToolOverride contains per-tool configuration overrides.
 type ToolOverride struct {

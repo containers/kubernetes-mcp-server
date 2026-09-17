@@ -168,7 +168,6 @@ These env names already exist and stay spelled as they were:
 
 - `OTEL_*`
 - `TLS_MIN_VERSION`, `TLS_CIPHER_SUITES`
-- `K8S_MCP_CONFIG_PATH` (bootstrap)
 - Folded bypasses: `KUBE_CLIENT_QPS`, `KUBE_CLIENT_BURST`,
   `KUBECONFIG_DEBOUNCE_WINDOW_MS`, `CLUSTER_STATE_POLL_INTERVAL_MS`,
   `CLUSTER_STATE_DEBOUNCE_WINDOW_MS`, `WORKSPACE_POLL_INTERVAL_MS`,
@@ -178,6 +177,16 @@ These env names already exist and stay spelled as they were:
 usual fallback still applies (documented as implicit, outside the ladder).
 
 `POD_NAMESPACE` stays implicit downward-API, not a `Config` field.
+
+### Bootstrap env rename
+
+`K8S_MCP_CONFIG_PATH` is renamed to `MCP_CONFIG_PATH`. There is no
+deprecation window and no compatibility shim; the old name is ignored.
+`--config` still beats `$MCP_CONFIG_PATH` when the flag is set.
+
+The container image (still) does **not** pass `--config` as `CMD`.
+However, it now writes a minimal `port = "8080"` config to `/etc/kubernetes-mcp-server/config.toml` and sets `ENV MCP_CONFIG_PATH` to point to it.
+`docker run -e MCP_CONFIG_PATH=...` and an explicit `--config` both override the image default.
 
 ### Defaults
 
@@ -291,7 +300,7 @@ builds:
 
 - [`pkg/config/config_default_overrides.go`](../../pkg/config/config_default_overrides.go)
   may change Option **defaults and spellings** (TOML / env names)
-  plus the bootstrap env name (`K8S_MCP_CONFIG_PATH`).
+  plus the bootstrap env name (`MCP_CONFIG_PATH`).
 - cmd reads bootstrap names from `pkg/config`. There is no
   `root_var_overrides.go`.
 
@@ -344,7 +353,7 @@ restart is required.
 ### Bootstrap
 
 Not `Config` fields. Path selection is its own ladder: `--config` beats
-`$K8S_MCP_CONFIG_PATH` (already true). `--config-dir` has no env equivalent
+`$MCP_CONFIG_PATH` (renamed from `$K8S_MCP_CONFIG_PATH`; no shim). `--config-dir` has no env equivalent
 and no default. It can be the only file source. Omit it and no directory
 is read. Relative `--config` and `--config-dir` are resolved against the
 working directory, independently of each other.
@@ -380,11 +389,11 @@ working directory, independently of each other.
 <td>string</td>
 <td><code>""</code></td>
 <td>—</td>
-<td><code>K8S_MCP_CONFIG_PATH</code></td>
+<td><code>MCP_CONFIG_PATH</code></td>
 <td><code>--config</code></td>
 <td>n/a (selects files to re-read)</td>
 <td>no</td>
-<td></td>
+<td>RENAME env <code>K8S_MCP_CONFIG_PATH</code> → <code>MCP_CONFIG_PATH</code>. No shim. Image uses this ENV; no <code>CMD --config</code>.</td>
 </tr>
 <tr>
 <td>config dir</td>

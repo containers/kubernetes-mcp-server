@@ -120,6 +120,32 @@ func TestConfig(t *testing.T) {
 			t.Fatalf("Expected config to be %s, got %s %v", expected, out.String(), err)
 		}
 	})
+	t.Run("set from MCP_CONFIG_PATH", func(t *testing.T) {
+		configPath := writeTOML(t, dumpTOML)
+		t.Setenv(config.ConfigPathEnvName, configPath)
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version"})
+		require.NoError(t, rootCmd.Execute())
+		assert.Contains(t, out.String(), `config.path="`+configPath+`"`)
+	})
+	t.Run("--config beats MCP_CONFIG_PATH", func(t *testing.T) {
+		flagPath := writeTOML(t, dumpTOML+`list_output = "table"`+"\n")
+		t.Setenv(config.ConfigPathEnvName, "invalid-path-from-env.toml")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--config", flagPath})
+		require.NoError(t, rootCmd.Execute())
+		assert.Contains(t, out.String(), `config.path="`+flagPath+`"`)
+	})
+	t.Run("K8S_MCP_CONFIG_PATH is not read", func(t *testing.T) {
+		t.Setenv("K8S_MCP_CONFIG_PATH", "invalid-path-from-legacy-env.toml")
+		ioStreams, out := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version"})
+		require.NoError(t, rootCmd.Execute())
+		assert.Contains(t, out.String(), "0.0.0")
+	})
 	t.Run("invalid path throws error", func(t *testing.T) {
 		ioStreams, _ := testStream()
 		rootCmd := NewMCPServer(ioStreams)

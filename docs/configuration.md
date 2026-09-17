@@ -48,7 +48,7 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
 Each option is resolved once per load. Later sources override earlier ones:
 
 1. **Defaults** — Built-in values (for example `list_output = "table"`)
-2. **Main configuration file** — `--config`, or `$K8S_MCP_CONFIG_PATH` if `--config` is unset. Optional when `--config-dir` supplies the files
+2. **Main configuration file** — `--config`, or `$MCP_CONFIG_PATH` if `--config` is unset. Optional when `--config-dir` supplies the files
 3. **`--config-dir` files** — lexical `.toml` files. Can be the only file source. Omitted means no directory is read
 4. **Environment variables** — Only where an option declares an env name. An empty or unset variable does not override
 5. **CLI** — Only `--config` / `--config-dir` / `--version`. These select files; they are not runtime option overrides
@@ -65,7 +65,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 # Use a main configuration file
 kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml
 # or
-K8S_MCP_CONFIG_PATH=/etc/kubernetes-mcp-server/config.toml kubernetes-mcp-server
+MCP_CONFIG_PATH=/etc/kubernetes-mcp-server/config.toml kubernetes-mcp-server
 
 # Use only drop-in configuration files (no main config)
 kubernetes-mcp-server --config-dir /etc/kubernetes-mcp-server/conf.d/
@@ -867,7 +867,7 @@ Empty or unset variables are ignored (they do not override TOML or defaults). No
 
 | Variable | TOML key | Notes |
 |----------|----------|-------|
-| `K8S_MCP_CONFIG_PATH` | — | Path to the main TOML file. Ignored if `--config` is set. |
+| `MCP_CONFIG_PATH` | — | Path to the main TOML file. Ignored if `--config` is set. |
 | `TLS_MIN_VERSION` | `tls_min_version` | |
 | `TLS_CIPHER_SUITES` | `tls_cipher_suites` | Comma-separated list |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `telemetry.endpoint` | |
@@ -891,7 +891,7 @@ Empty or unset variables are ignored (they do not override TOML or defaults). No
 | Option | Description |
 |--------|-------------|
 | `--version` | Print version information and quit |
-| `--config` | Path of the main TOML configuration file. Overrides `$K8S_MCP_CONFIG_PATH` |
+| `--config` | Path of the main TOML configuration file. Overrides `$MCP_CONFIG_PATH` |
 | `--config-dir` | Directory of lexical `.toml` files. Usable alone or with `--config`. Omitted means no drop-ins. Relative paths are resolved against the working directory |
 
 HTTP mode, kubeconfig, toolsets, TLS, OAuth, and the rest of the runtime surface are TOML (and, where listed above, env). There are no runtime flags for those options.

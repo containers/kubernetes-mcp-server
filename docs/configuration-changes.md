@@ -3,6 +3,7 @@
   - [Dropped CLI flags](#dropped-cli-flags)
   - [Drop-in directory](#drop-in-directory)
   - [Environment variables](#environment-variables)
+  - [Bootstrap env rename](#bootstrap-env-rename)
   - [Unknown keys](#unknown-keys)
   - [SIGHUP](#sighup)
   - [Stdio and OAuth](#stdio-and-oauth)
@@ -44,7 +45,7 @@ CLI that remains:
 | Flag | Env | Role |
 |------|-----|------|
 | `--version` | — | Print version |
-| `--config` | `K8S_MCP_CONFIG_PATH` (ignored if the flag is set) | Main TOML path |
+| `--config` | `MCP_CONFIG_PATH` (ignored if the flag is set) | Main TOML path |
 | `--config-dir` | — | Directory of `.toml` files (usable alone; no default) |
 
 ### Drop-in directory
@@ -53,11 +54,11 @@ CLI that remains:
 
 ### Environment variables
 
-Existing env names are kept. Empty env is unset (does not override files). Values are applied at load, including SIGHUP — not at getter time.
+Existing env names for runtime options are kept. Empty env is unset (does not override files). Values are applied at load, including SIGHUP — not at getter time.
 
 | Env | TOML | Notes |
 |-----|------|-------|
-| `K8S_MCP_CONFIG_PATH` | — | Bootstrap only |
+| `MCP_CONFIG_PATH` | — | Bootstrap only. **Renamed** from `K8S_MCP_CONFIG_PATH` (no shim) |
 | `TLS_MIN_VERSION` | `tls_min_version` | |
 | `TLS_CIPHER_SUITES` | `tls_cipher_suites` | Comma-separated |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `telemetry.endpoint` | |
@@ -75,6 +76,12 @@ Existing env names are kept. Empty env is unset (does not override files). Value
 | `WORKSPACE_DEBOUNCE_WINDOW_MS` | `workspace_debounce_window` | **New TOML key**; env is integer ms |
 
 No new `K8S_MCP_*` names were added for dropped flags.
+
+### Bootstrap env rename
+
+`K8S_MCP_CONFIG_PATH` is **renamed** to `MCP_CONFIG_PATH`. The old name is not read; there is no deprecation window and no compatibility shim. `--config` still wins when the flag is set.
+
+Since a config is now required for http mode (`port` must be set), the container image now writes `/etc/kubernetes-mcp-server/config.toml` and points `ENV MCP_CONFIG_PATH` to it. `docker run -e MCP_CONFIG_PATH=/cfg/config.toml …` overrides the image default; an explicit `--config` still wins over the env var.
 
 ### Unknown keys
 

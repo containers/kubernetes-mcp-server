@@ -82,6 +82,10 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
 }
 
+func (s *ConfigSuite) TestConfigPathEnvName() {
+	s.Equal("MCP_CONFIG_PATH", ConfigPathEnvName)
+}
+
 func (s *ConfigSuite) TestReadConfigMissingFile() {
 	config, err := Read(s.T().Context(), "non-existent-config.toml", "")
 	s.Run("returns error for missing file", func() {

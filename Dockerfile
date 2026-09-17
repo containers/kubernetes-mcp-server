@@ -18,6 +18,6 @@ WORKDIR /app
 COPY --from=builder /app/kubernetes-mcp-server /app/kubernetes-mcp-server
 RUN mkdir -p /etc/kubernetes-mcp-server && printf 'port = "8080"\n' > /etc/kubernetes-mcp-server/config.toml
 USER 65532:65532
+ENV MCP_CONFIG_PATH=/etc/kubernetes-mcp-server/config.toml
 ENTRYPOINT ["/app/kubernetes-mcp-server"]
-CMD ["--config", "/etc/kubernetes-mcp-server/config.toml"]
 EXPOSE 8080
