@@ -634,6 +634,10 @@ func Read(ctx context.Context, configPath, dropInConfigDir string, opts ...ReadC
 			logger.V(2).Info("Loading drop-in config file(s)", "num_config_files", len(dropInFiles), "config_dir", dropInConfigDir)
 		}
 		configFiles = append(configFiles, dropInFiles...)
+	} else if configDir != "" {
+		if err := rejectStaleImplicitConfD(ctx, configDir); err != nil {
+			return nil, err
+		}
 	}
 
 	merged, sources, err := mergeTOMLFiles(ctx, configFiles)
@@ -664,6 +668,36 @@ func loadDropInConfigs(ctx context.Context, dropInConfigDir string) ([]string, e
 		return nil, fmt.Errorf("drop-in config path is not a directory: %s", dropInConfigDir)
 	}
 	return getSortedConfigFiles(ctx, dropInConfigDir)
+}
+
+// rejectStaleImplicitConfD fails the load when <dir of --config>/conf.d still
+// contains .toml files that the previous implicit drop-in behavior would have
+// applied. Those files are not loaded; the caller must pass --config-dir.
+func rejectStaleImplicitConfD(ctx context.Context, configDir string) error {
+	implicit := filepath.Join(configDir, "conf.d")
+	info, err := os.Stat(implicit)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to stat %s: %w", implicit, err)
+	}
+	if !info.IsDir() {
+		return nil
+	}
+	files, err := getSortedConfigFiles(ctx, implicit)
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	names := make([]string, len(files))
+	for i, f := range files {
+		names[i] = filepath.Base(f)
+	}
+	return fmt.Errorf("%s is no longer loaded automatically (found %s); pass --config-dir %q to keep using it",
+		implicit, strings.Join(names, ", "), implicit)
 }
 
 // getSortedConfigFiles returns a sorted list of .toml files in the specified directory.

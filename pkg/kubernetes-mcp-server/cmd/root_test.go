@@ -265,6 +265,21 @@ func (s *CmdSuite) TestConfigDir() {
 		s.Require().NoError(err, "Nonexistent directories should be gracefully skipped")
 		s.Contains(out.String(), fmt.Sprintf(`config.list_output="%s"`, config.New().ListOutput.Get()), "Default values should be used")
 	})
+	s.Run("leftover sibling conf.d without --config-dir fails", func() {
+		tempDir := s.T().TempDir()
+		mainConfigPath := filepath.Join(tempDir, "config.toml")
+		s.Require().NoError(os.WriteFile(mainConfigPath, []byte(dumpTOML), 0o644))
+		s.Require().NoError(os.Mkdir(filepath.Join(tempDir, "conf.d"), 0o755))
+		s.Require().NoError(os.WriteFile(filepath.Join(tempDir, "conf.d", "10-override.toml"), []byte(`read_only = true`), 0o644))
+
+		ioStreams, _ := testStream()
+		rootCmd := NewMCPServer(ioStreams)
+		rootCmd.SetArgs([]string{"--version", "--config", mainConfigPath})
+		err := rootCmd.Execute()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "no longer loaded automatically")
+		s.Contains(err.Error(), "--config-dir")
+	})
 	s.Run("--config with --config-dir merges configs", func() {
 		tempDir := s.T().TempDir()
 		mainConfigPath := filepath.Join(tempDir, "config.toml")

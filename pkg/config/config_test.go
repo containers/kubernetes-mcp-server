@@ -459,18 +459,41 @@ func (s *ConfigSuite) TestSiblingConfDNotLoadedWithoutConfigDir() {
 
 	confDDir := filepath.Join(tempDir, "conf.d")
 	s.Require().NoError(os.Mkdir(confDDir, 0755))
-	s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "10-override.toml"), []byte(`
-		log_level = 5
-		port = "9090"
-	`), 0644))
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
+	s.Run("empty sibling conf.d is ignored", func() {
+		cfg, err := Read(s.T().Context(), mainConfigPath, "")
+		s.Require().NoError(err)
+		s.Equal(1, cfg.LogLevel.Get())
+		s.Equal("8080", cfg.Port.Get())
+	})
 
-	s.Run("does not load sibling conf.d unless --config-dir is set", func() {
-		s.Equal(1, config.LogLevel.Get())
-		s.Equal("8080", config.Port.Get())
+	s.Run("ignored files in sibling conf.d do not fail the load", func() {
+		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "README.md"), []byte("notes"), 0644))
+		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, ".hidden.toml"), []byte(`port = "1111"`), 0644))
+		cfg, err := Read(s.T().Context(), mainConfigPath, "")
+		s.Require().NoError(err)
+		s.Equal("8080", cfg.Port.Get())
+	})
+
+	s.Run("leftover .toml files fail the load", func() {
+		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "10-override.toml"), []byte(`
+			log_level = 5
+			port = "9090"
+		`), 0644))
+		cfg, err := Read(s.T().Context(), mainConfigPath, "")
+		s.Require().Error(err)
+		s.Nil(cfg)
+		s.Contains(err.Error(), "no longer loaded automatically")
+		s.Contains(err.Error(), "--config-dir")
+		s.Contains(err.Error(), "10-override.toml")
+		s.Contains(err.Error(), confDDir)
+	})
+
+	s.Run("explicit --config-dir still loads sibling conf.d", func() {
+		cfg, err := Read(s.T().Context(), mainConfigPath, confDDir)
+		s.Require().NoError(err)
+		s.Equal(5, cfg.LogLevel.Get())
+		s.Equal("9090", cfg.Port.Get())
 	})
 }
 

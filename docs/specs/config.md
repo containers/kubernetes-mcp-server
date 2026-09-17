@@ -404,7 +404,7 @@ working directory, independently of each other.
 <td><code>--config-dir</code></td>
 <td>n/a (selects files to re-read)</td>
 <td>no</td>
-<td>DROP implicit <code>conf.d</code> next to <code>--config</code>. Empty means no drop-ins. Relative paths resolve against the working directory, not the main file.</td>
+<td>DROP implicit <code>conf.d</code> next to <code>--config</code>. Empty means no drop-ins. Relative paths resolve against the working directory, not the main file. Leftover <code>.toml</code> files in that directory fail the load unless <code>--config-dir</code> is set.</td>
 </tr>
 </tbody>
 </table>

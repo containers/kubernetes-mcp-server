@@ -81,7 +81,7 @@ kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
 
 ### How Drop-in Files Work
 
-- **Opt-in**: Files under a directory are read only when `--config-dir` is set. A sibling `conf.d/` next to `--config` is not loaded unless you pass `--config-dir`.
+- **Opt-in**: Files under a directory are read only when `--config-dir` is set. A sibling `conf.d/` next to `--config` is not loaded unless you pass `--config-dir`. If that leftover directory still contains `.toml` files (the files the old implicit lookup would have applied), startup and SIGHUP fail until you pass `--config-dir` or remove them.
 - **Standalone**: `--config-dir` without `--config` is enough; those files are the whole TOML surface.
 - **Relative path**: Relative `--config` and `--config-dir` are resolved against the working directory, independently of each other.
 - **File Naming**: Use numeric prefixes to control loading order (e.g., `00-base.toml`, `10-cluster.toml`, `99-override.toml`)

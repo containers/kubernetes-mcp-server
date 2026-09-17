@@ -50,7 +50,7 @@ CLI that remains:
 
 ### Drop-in directory
 
-`--config-dir` loads a directory of `.toml` files and can be used without `--config`. A sibling `conf.d/` next to `--config` is no longer loaded automatically. Relative `--config` and `--config-dir` are resolved against the working directory, independently of each other.
+`--config-dir` loads a directory of `.toml` files and can be used without `--config`. A sibling `conf.d/` next to `--config` is no longer loaded automatically. If that directory still contains `.toml` files that the old implicit lookup would have applied, the load fails and tells you to pass `--config-dir`. Relative `--config` and `--config-dir` are resolved against the working directory, independently of each other.
 
 ### Environment variables
 
