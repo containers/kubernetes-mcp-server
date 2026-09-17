@@ -121,6 +121,7 @@ func (s *BaseMcpSuite) SetupTest() {
 	s.Cfg = config.BaseDefault()
 	s.Cfg.ListOutput.SetForTest("yaml")
 	s.Cfg.KubeConfig.SetForTest(test.EnvTestKubeconfigFile(s.T()))
+	test.ApplyEnvtestClientLimits(s.Cfg)
 }
 
 func (s *BaseMcpSuite) TearDownTest() {

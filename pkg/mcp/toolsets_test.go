@@ -45,6 +45,7 @@ func (s *ToolsetsSuite) SetupTest() {
 	s.Handle(test.NewDiscoveryClientHandler())
 	s.Cfg = configuration.BaseDefault()
 	s.Cfg.KubeConfig.SetForTest(s.KubeconfigFile(s.T()))
+	test.ApplyEnvtestClientLimits(s.Cfg)
 	s.updateJson = os.Getenv(updateJsonEnvVar) != ""
 }
 

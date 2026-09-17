@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	"k8s.io/klog/v2"
@@ -1095,6 +1096,58 @@ kiali = "invalid"
 		cfg, err := ReadToml([]byte(`http = {}`))
 		s.Require().NoError(err)
 		s.Equal(s.defaults.HTTP.ReadHeaderTimeout.Get(), cfg.HTTP.ReadHeaderTimeout.Get())
+	})
+}
+
+func (s *ConfigSuite) TestClientAndWatcherEnvVars() {
+	s.Run("KUBE_CLIENT_QPS maps to kube_client_qps", func() {
+		s.T().Setenv("KUBE_CLIENT_QPS", "1000")
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(float32(1000), cfg.KubeClientQPS.Get())
+		s.Equal(SourceEnv, cfg.KubeClientQPS.Source())
+	})
+	s.Run("KUBE_CLIENT_BURST maps to kube_client_burst", func() {
+		s.T().Setenv("KUBE_CLIENT_BURST", "2000")
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(2000, cfg.KubeClientBurst.Get())
+		s.Equal(SourceEnv, cfg.KubeClientBurst.Source())
+	})
+	s.Run("KUBECONFIG_DEBOUNCE_WINDOW_MS maps to kubeconfig_debounce_window", func() {
+		s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(10*time.Millisecond, cfg.KubeconfigDebounceWindow.Get())
+		s.Equal(SourceEnv, cfg.KubeconfigDebounceWindow.Source())
+	})
+	s.Run("CLUSTER_STATE_POLL_INTERVAL_MS maps to cluster_state_poll_interval", func() {
+		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(50*time.Millisecond, cfg.ClusterStatePollInterval.Get())
+		s.Equal(SourceEnv, cfg.ClusterStatePollInterval.Source())
+	})
+	s.Run("CLUSTER_STATE_DEBOUNCE_WINDOW_MS maps to cluster_state_debounce_window", func() {
+		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(10*time.Millisecond, cfg.ClusterStateDebounceWindow.Get())
+		s.Equal(SourceEnv, cfg.ClusterStateDebounceWindow.Source())
+	})
+	s.Run("WORKSPACE_POLL_INTERVAL_MS maps to workspace_poll_interval", func() {
+		s.T().Setenv("WORKSPACE_POLL_INTERVAL_MS", "25")
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(25*time.Millisecond, cfg.WorkspacePollInterval.Get())
+		s.Equal(SourceEnv, cfg.WorkspacePollInterval.Source())
+	})
+	s.Run("WORKSPACE_DEBOUNCE_WINDOW_MS maps to workspace_debounce_window", func() {
+		s.T().Setenv("WORKSPACE_DEBOUNCE_WINDOW_MS", "15")
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(15*time.Millisecond, cfg.WorkspaceDebounceWindow.Get())
+		s.Equal(SourceEnv, cfg.WorkspaceDebounceWindow.Source())
 	})
 }
 
