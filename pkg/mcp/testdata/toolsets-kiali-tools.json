@@ -1,5 +1,13 @@
 [
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": false,
@@ -63,6 +71,14 @@
     "title": "Workload: Logs"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": false,
@@ -79,6 +95,14 @@
     "title": "Get Mesh Status"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": false,
@@ -118,6 +142,14 @@
     "title": "Get Mesh Traffic Graph"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -198,6 +230,14 @@
     "title": "Get Metrics for a Resource"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -243,6 +283,14 @@
     "title": "Get Pod Performance"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -291,6 +339,14 @@
     "title": "List or Resource Details"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -315,6 +371,14 @@
     "title": "Get Trace Details"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -331,6 +395,14 @@
     "title": "List Mesh Clusters"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -379,6 +451,14 @@
     "title": "List Traces by Service Name"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
@@ -466,6 +546,14 @@
     "title": "Manage Istio, Gateway API, and Inference API Config: Create, Patch, Delete"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,

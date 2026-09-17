@@ -1,5 +1,28 @@
 [
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "clone.kubevirt.io",
+                  "resource": "virtualmachineclones"
+                }
+              },
+              "verbs": [
+                "create"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
@@ -34,6 +57,96 @@
     "title": "Virtual Machine: Clone"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "cdi.kubevirt.io",
+                  "resource": "datasources"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachineclusterpreferences"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachinepreferences"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachineclusterinstancetypes"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachineinstancetypes"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachines"
+                }
+              },
+              "verbs": [
+                "patch"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
@@ -159,6 +272,33 @@
     "title": "Virtual Machine: Create"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "template_name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.template.kubevirt.io",
+                  "resource": "virtualmachinetemplates",
+                  "subresource": "create"
+                }
+              },
+              "verbs": [
+                "create"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": false,
@@ -195,6 +335,104 @@
     "title": "Virtual Machine: Create from Template"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstances"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "guestosinfo"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "filesystemlist"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "userlist"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "interfacelist"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -236,6 +474,69 @@
     "title": "Virtual Machine: Guest Agent Info"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachines"
+                }
+              },
+              "verbs": [
+                "get",
+                "update"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "pause"
+                }
+              },
+              "verbs": [
+                "update"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "unpause"
+                }
+              },
+              "verbs": [
+                "update"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": false,
@@ -277,6 +578,142 @@
     "title": "Virtual Machine: Lifecycle"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachines"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstances"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "cdi.kubevirt.io",
+                  "resource": "datavolumes"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "persistentvolumeclaims"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods",
+                  "subresource": "log"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "events"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "apiGroup": "storage.k8s.io",
+                  "resource": "storageclasses"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstancemigrations"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
