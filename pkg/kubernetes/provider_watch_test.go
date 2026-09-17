@@ -41,7 +41,7 @@ func (s *ProviderWatchTargetsTestSuite) SetupTest() {
 		s.kubeconfig.Contexts[name].AuthInfo = s.kubeconfig.Contexts[s.kubeconfig.CurrentContext].AuthInfo
 	}
 
-	cfg, err := config.ReadToml(nil)
+	cfg, err := config.ReadToml(s.T().Context(), nil)
 	s.Require().NoError(err)
 	cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), s.kubeconfig))
 	s.staticConfig = cfg

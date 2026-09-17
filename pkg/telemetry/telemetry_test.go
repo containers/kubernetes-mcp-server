@@ -23,7 +23,7 @@ func TestTelemetry(t *testing.T) {
 }
 
 func initTestTracer(ctx context.Context, serviceName, serviceVersion string) (func(), error) {
-	cfg, err := config.ReadToml(nil)
+	cfg, err := config.ReadToml(ctx, nil)
 	if err != nil {
 		return func() {}, err
 	}
@@ -449,7 +449,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -460,7 +460,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "always_on")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -471,7 +471,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "always_off")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -483,7 +483,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.5")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -495,7 +495,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -506,7 +506,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "invalid")
 
-		_, err := config.ReadToml(nil)
+		_, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "OTEL_TRACES_SAMPLER_ARG")
 	})
@@ -516,7 +516,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "1.5")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -528,7 +528,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "-0.1")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -539,7 +539,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "parentbased_always_on")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -551,7 +551,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.1")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -562,7 +562,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "unknown_sampler")
 
 		sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-			cfg, err := config.ReadToml(nil)
+			cfg, err := config.ReadToml(s.T().Context(), nil)
 			s.Require().NoError(err)
 			return &cfg.Telemetry
 		}())
@@ -575,7 +575,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 			s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.0")
 
 			sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-				cfg, err := config.ReadToml(nil)
+				cfg, err := config.ReadToml(s.T().Context(), nil)
 				s.Require().NoError(err)
 				return &cfg.Telemetry
 			}())
@@ -587,7 +587,7 @@ func (s *TelemetrySuite) TestGetSamplerFromEnv() {
 			s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "1.0")
 
 			sampler := getSamplerFromConfig(s.T().Context(), func() *config.TelemetryConfig {
-				cfg, err := config.ReadToml(nil)
+				cfg, err := config.ReadToml(s.T().Context(), nil)
 				s.Require().NoError(err)
 				return &cfg.Telemetry
 			}())

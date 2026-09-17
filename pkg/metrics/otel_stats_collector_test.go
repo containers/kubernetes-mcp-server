@@ -247,7 +247,7 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 	s.Run("returns nil when OTEL_METRICS_EXPORTER is none", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "none")
 
-		cfg, err := config.ReadToml(nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		exporter, err := createMetricsExporter(context.Background(), &cfg.Telemetry)
 		s.NoError(err)
@@ -257,7 +257,7 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 	s.Run("returns nil when OTEL_METRICS_EXPORTER is none case-insensitive", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "NONE")
 
-		cfg, err := config.ReadToml(nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		exporter, err := createMetricsExporter(context.Background(), &cfg.Telemetry)
 		s.NoError(err)
@@ -354,7 +354,7 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
 		ctx := context.Background()
-		cfg, err := config.ReadToml(nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		exporter, err := createMetricsExporter(ctx, &cfg.Telemetry)
 		s.NoError(err)
@@ -368,7 +368,7 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
 
 		ctx := context.Background()
-		cfg, err := config.ReadToml(nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		exporter, err := createMetricsExporter(ctx, &cfg.Telemetry)
 		s.NoError(err)

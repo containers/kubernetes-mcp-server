@@ -33,7 +33,7 @@ func (s *KialiSuite) SetupTest() {
 	kubeConfig := s.Cfg.KubeConfig.Get()
 	listOutput := s.Cfg.ListOutput.Get()
 	readOnly := s.Cfg.ReadOnly.Get()
-	cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
 		[toolset_configs.kiali]
 		url = "%s"

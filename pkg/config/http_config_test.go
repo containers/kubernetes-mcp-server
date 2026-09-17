@@ -30,7 +30,7 @@ func (s *HTTPConfigSuite) TestTOMLParsing() {
 read_header_timeout = "5s"
 max_body_bytes = 33554432
 `)
-		cfg, err := ReadToml(tomlData)
+		cfg, err := ReadToml(s.T().Context(), tomlData)
 		s.Require().NoError(err)
 
 		s.Equal(5*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
@@ -41,7 +41,7 @@ max_body_bytes = 33554432
 		tomlData := []byte(`
 log_level = 1
 `)
-		cfg, err := ReadToml(tomlData)
+		cfg, err := ReadToml(s.T().Context(), tomlData)
 		s.Require().NoError(err)
 
 		s.Equal(10*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
@@ -53,7 +53,7 @@ log_level = 1
 [http]
 max_body_bytes = 33554432
 `)
-		cfg, err := ReadToml(tomlData)
+		cfg, err := ReadToml(s.T().Context(), tomlData)
 		s.Require().NoError(err)
 
 		s.Equal(int64(32<<20), cfg.HTTP.MaxBodyBytes.Get())
@@ -65,12 +65,12 @@ max_body_bytes = 33554432
 [http]
 read_header_timeout = "invalid"
 `)
-		_, err := ReadToml(tomlData)
+		_, err := ReadToml(s.T().Context(), tomlData)
 		s.Error(err)
 	})
 
 	s.Run("rejects unknown key inside http table", func() {
-		_, err := ReadToml([]byte(`
+		_, err := ReadToml(s.T().Context(), []byte(`
 [http]
 port = "8080"
 `))

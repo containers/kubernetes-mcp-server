@@ -44,7 +44,7 @@ func (s *DerivedClientCleanupSuite) SetupTest() {
 	kubeconfig.Clusters["fake"].Server = s.server.URL
 	kubeconfigFile := test.KubeconfigFile(s.T(), kubeconfig)
 
-	cfg := test.Must(config.ReadToml([]byte(`kubeconfig = "` + strings.ReplaceAll(kubeconfigFile, `\`, `\\`) + `"`)))
+	cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`kubeconfig = "`+strings.ReplaceAll(kubeconfigFile, `\`, `\\`)+`"`)))
 
 	var err error
 	s.manager, err = NewKubeconfigManager(s.T().Context(), cfg, "")

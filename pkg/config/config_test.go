@@ -65,7 +65,7 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 
 func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
 	s.Run("unspecified keys match BaseDefault", func() {
-		cfg, err := ReadToml([]byte(`log_level = 1`), WithBaseDefault())
+		cfg, err := ReadToml(s.T().Context(), []byte(`log_level = 1`), WithBaseDefault())
 		s.Require().NoError(err)
 		s.Equal(1, cfg.LogLevel.Get())
 		base := BaseDefault()
@@ -74,7 +74,7 @@ func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
 		s.Equal(SourceDefault, cfg.ReadOnly.Source())
 	})
 	s.Run("production ReadToml still starts from New", func() {
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(New().ReadOnly.Get(), cfg.ReadOnly.Get())
 		s.Equal(New().Toolsets.Get(), cfg.Toolsets.Get())
@@ -992,7 +992,7 @@ func (s *ConfigSuite) TestTokenExchangeParsing() {
 	})
 
 	s.Run("unknown top-level key parked in a table is rejected", func() {
-		_, err := ReadToml([]byte(`
+		_, err := ReadToml(s.T().Context(), []byte(`
 [http]
 read_header_timeout = "10s"
 port = "8080"
@@ -1003,7 +1003,7 @@ port = "8080"
 	})
 
 	s.Run("unknown field in prompts is rejected", func() {
-		_, err := ReadToml([]byte(`
+		_, err := ReadToml(s.T().Context(), []byte(`
 [[prompts]]
 name = "k8s-troubleshoot"
 typo = "oops"
@@ -1014,7 +1014,7 @@ typo = "oops"
 	})
 
 	s.Run("unknown field in confirmation_rules is rejected", func() {
-		_, err := ReadToml([]byte(`
+		_, err := ReadToml(s.T().Context(), []byte(`
 [[confirmation_rules]]
 tool = "helm_uninstall"
 message = "uninstall"
@@ -1026,7 +1026,7 @@ typo = "oops"
 	})
 
 	s.Run("unknown field in tool_overrides is rejected", func() {
-		_, err := ReadToml([]byte(`
+		_, err := ReadToml(s.T().Context(), []byte(`
 [tool_overrides.pods_list]
 description = "list pods"
 typo = "oops"
@@ -1039,38 +1039,38 @@ typo = "oops"
 
 func (s *ConfigSuite) TestWrongTableTypes() {
 	s.Run("http string is rejected", func() {
-		_, err := ReadToml([]byte(`http = "invalid"`))
+		_, err := ReadToml(s.T().Context(), []byte(`http = "invalid"`))
 		s.Require().Error(err)
 		s.Contains(err.Error(), `config key "http"`)
 		s.Contains(err.Error(), "expected a table")
 		s.Contains(err.Error(), "string")
 	})
 	s.Run("toolset_configs string is rejected", func() {
-		_, err := ReadToml([]byte(`toolset_configs = "invalid"`))
+		_, err := ReadToml(s.T().Context(), []byte(`toolset_configs = "invalid"`))
 		s.Require().Error(err)
 		s.Contains(err.Error(), `config key "toolset_configs"`)
 		s.Contains(err.Error(), "expected a table")
 	})
 	s.Run("cluster_provider_configs string is rejected", func() {
-		_, err := ReadToml([]byte(`cluster_provider_configs = "invalid"`))
+		_, err := ReadToml(s.T().Context(), []byte(`cluster_provider_configs = "invalid"`))
 		s.Require().Error(err)
 		s.Contains(err.Error(), `config key "cluster_provider_configs"`)
 		s.Contains(err.Error(), "expected a table")
 	})
 	s.Run("telemetry integer is rejected", func() {
-		_, err := ReadToml([]byte(`telemetry = 1`))
+		_, err := ReadToml(s.T().Context(), []byte(`telemetry = 1`))
 		s.Require().Error(err)
 		s.Contains(err.Error(), `config key "telemetry"`)
 		s.Contains(err.Error(), "expected a table")
 	})
 	s.Run("token_exchange string is rejected at load, not later validation", func() {
-		_, err := ReadToml([]byte(`token_exchange = "invalid"`))
+		_, err := ReadToml(s.T().Context(), []byte(`token_exchange = "invalid"`))
 		s.Require().Error(err)
 		s.Contains(err.Error(), `config key "token_exchange"`)
 		s.Contains(err.Error(), "expected a table")
 	})
 	s.Run("token_exchange.client_auth string is rejected", func() {
-		_, err := ReadToml([]byte(`
+		_, err := ReadToml(s.T().Context(), []byte(`
 [token_exchange]
 client_auth = "invalid"
 `))
@@ -1079,7 +1079,7 @@ client_auth = "invalid"
 		s.Contains(err.Error(), "expected a table")
 	})
 	s.Run("extension entry string is rejected", func() {
-		_, err := ReadToml([]byte(`
+		_, err := ReadToml(s.T().Context(), []byte(`
 [toolset_configs]
 kiali = "invalid"
 `))
@@ -1088,12 +1088,12 @@ kiali = "invalid"
 		s.Contains(err.Error(), "expected a table")
 	})
 	s.Run("empty http table is accepted", func() {
-		cfg, err := ReadToml([]byte(`[http]`))
+		cfg, err := ReadToml(s.T().Context(), []byte(`[http]`))
 		s.Require().NoError(err)
 		s.Equal(s.defaults.HTTP.ReadHeaderTimeout.Get(), cfg.HTTP.ReadHeaderTimeout.Get())
 	})
 	s.Run("empty http inline table is accepted", func() {
-		cfg, err := ReadToml([]byte(`http = {}`))
+		cfg, err := ReadToml(s.T().Context(), []byte(`http = {}`))
 		s.Require().NoError(err)
 		s.Equal(s.defaults.HTTP.ReadHeaderTimeout.Get(), cfg.HTTP.ReadHeaderTimeout.Get())
 	})
@@ -1102,49 +1102,49 @@ kiali = "invalid"
 func (s *ConfigSuite) TestClientAndWatcherEnvVars() {
 	s.Run("KUBE_CLIENT_QPS maps to kube_client_qps", func() {
 		s.T().Setenv("KUBE_CLIENT_QPS", "1000")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(float32(1000), cfg.KubeClientQPS.Get())
 		s.Equal(SourceEnv, cfg.KubeClientQPS.Source())
 	})
 	s.Run("KUBE_CLIENT_BURST maps to kube_client_burst", func() {
 		s.T().Setenv("KUBE_CLIENT_BURST", "2000")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(2000, cfg.KubeClientBurst.Get())
 		s.Equal(SourceEnv, cfg.KubeClientBurst.Source())
 	})
 	s.Run("KUBECONFIG_DEBOUNCE_WINDOW_MS maps to kubeconfig_debounce_window", func() {
 		s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(10*time.Millisecond, cfg.KubeconfigDebounceWindow.Get())
 		s.Equal(SourceEnv, cfg.KubeconfigDebounceWindow.Source())
 	})
 	s.Run("CLUSTER_STATE_POLL_INTERVAL_MS maps to cluster_state_poll_interval", func() {
 		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(50*time.Millisecond, cfg.ClusterStatePollInterval.Get())
 		s.Equal(SourceEnv, cfg.ClusterStatePollInterval.Source())
 	})
 	s.Run("CLUSTER_STATE_DEBOUNCE_WINDOW_MS maps to cluster_state_debounce_window", func() {
 		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(10*time.Millisecond, cfg.ClusterStateDebounceWindow.Get())
 		s.Equal(SourceEnv, cfg.ClusterStateDebounceWindow.Source())
 	})
 	s.Run("WORKSPACE_POLL_INTERVAL_MS maps to workspace_poll_interval", func() {
 		s.T().Setenv("WORKSPACE_POLL_INTERVAL_MS", "25")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(25*time.Millisecond, cfg.WorkspacePollInterval.Get())
 		s.Equal(SourceEnv, cfg.WorkspacePollInterval.Source())
 	})
 	s.Run("WORKSPACE_DEBOUNCE_WINDOW_MS maps to workspace_debounce_window", func() {
 		s.T().Setenv("WORKSPACE_DEBOUNCE_WINDOW_MS", "15")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal(15*time.Millisecond, cfg.WorkspaceDebounceWindow.Get())
 		s.Equal(SourceEnv, cfg.WorkspaceDebounceWindow.Source())
@@ -1154,7 +1154,7 @@ func (s *ConfigSuite) TestClientAndWatcherEnvVars() {
 func (s *ConfigSuite) TestEnvAndSource() {
 	s.Run("env overrides TOML and records SourceEnv", func() {
 		s.T().Setenv("KUBE_CLIENT_QPS", "50")
-		cfg, err := ReadToml([]byte(`kube_client_qps = 10.0`))
+		cfg, err := ReadToml(s.T().Context(), []byte(`kube_client_qps = 10.0`))
 		s.Require().NoError(err)
 		s.Equal(float32(50), cfg.KubeClientQPS.Get())
 		s.Equal(SourceEnv, cfg.KubeClientQPS.Source())
@@ -1163,7 +1163,7 @@ func (s *ConfigSuite) TestEnvAndSource() {
 
 	s.Run("empty env does not override TOML", func() {
 		s.T().Setenv("KUBE_CLIENT_QPS", "")
-		cfg, err := ReadToml([]byte(`kube_client_qps = 10.0`))
+		cfg, err := ReadToml(s.T().Context(), []byte(`kube_client_qps = 10.0`))
 		s.Require().NoError(err)
 		s.Equal(float32(10), cfg.KubeClientQPS.Get())
 		s.NotEqual(SourceEnv, cfg.KubeClientQPS.Source())
@@ -1179,7 +1179,7 @@ func (s *ConfigSuite) TestEnvAndSource() {
 	})
 
 	s.Run("sensitive values are redacted", func() {
-		cfg, err := ReadToml([]byte(`
+		cfg, err := ReadToml(s.T().Context(), []byte(`
 [token_exchange.client_auth]
 client_secret = "super-secret"
 `))
@@ -1190,9 +1190,9 @@ client_secret = "super-secret"
 }
 
 func (s *ConfigSuite) TestPinNonReloadable() {
-	prev, err := ReadToml([]byte(`port = "8080"`))
+	prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
 	s.Require().NoError(err)
-	next, err := ReadToml([]byte(`port = "9090"`), WithPrevious(prev))
+	next, err := ReadToml(s.T().Context(), []byte(`port = "9090"`), WithPrevious(prev))
 	s.Require().NoError(err)
 	s.Equal("8080", next.Port.Get())
 	s.Equal(prev.Port.Source(), next.Port.Source())
@@ -1212,7 +1212,7 @@ func (s *ConfigSuite) TestDump() {
 	klog.SetLogger(logger)
 	ctx := klog.NewContext(s.T().Context(), logger)
 
-	cfg, err := ReadToml([]byte(`
+	cfg, err := ReadToml(s.T().Context(), []byte(`
 		port = "8080"
 		[token_exchange.client_auth]
 		client_secret = "super-secret"
@@ -1234,7 +1234,7 @@ func (s *ConfigSuite) TestDump() {
 
 	s.Run("marks values that differ from previous", func() {
 		buf.Reset()
-		next, err := ReadToml([]byte(`list_output = "yaml"`), WithPrevious(cfg))
+		next, err := ReadToml(s.T().Context(), []byte(`list_output = "yaml"`), WithPrevious(cfg))
 		s.Require().NoError(err)
 		next.Dump(ctx, cfg)
 		klog.Flush()
@@ -1324,7 +1324,7 @@ func (s *ConfigSuite) TestGetTLSConfig() {
 	s.Run("env overrides TOML at load", func() {
 		s.T().Setenv(EnvTLSMinVersion, "1.3")
 		s.T().Setenv(EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")
-		cfg, err := ReadToml([]byte(`
+		cfg, err := ReadToml(s.T().Context(), []byte(`
 tls_min_version = "1.2"
 tls_cipher_suites = ["TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"]
 `))
@@ -1335,14 +1335,14 @@ tls_cipher_suites = ["TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"]
 
 	s.Run("parses comma-separated TLS_CIPHER_SUITES env var", func() {
 		s.T().Setenv(EnvTLSCipherSuites, "SUITE_A,SUITE_B")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.TLSCipherSuites.Get())
 	})
 
 	s.Run("trims whitespace from TLS_CIPHER_SUITES env var", func() {
 		s.T().Setenv(EnvTLSCipherSuites, " SUITE_A , SUITE_B ")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.TLSCipherSuites.Get())
 	})

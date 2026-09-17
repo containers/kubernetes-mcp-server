@@ -50,7 +50,7 @@ func (s *LogsSuite) TestNewLogProviderDisabledCases() {
 
 	s.Run("returns nil when OTEL_LOGS_EXPORTER is none", func() {
 		s.T().Setenv("OTEL_LOGS_EXPORTER", "none")
-		loaded, err := config.ReadToml(nil)
+		loaded, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		loaded.Telemetry.Endpoint.SetForTest("http://localhost:4317")
 		provider, err := NewLogProvider(s.T().Context(), &loaded.Telemetry, "svc", "1.0")

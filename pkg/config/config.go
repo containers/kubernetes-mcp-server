@@ -793,7 +793,7 @@ func recordSources(sources map[string]string, path string, val any, srcFile stri
 
 // ReadToml resolves TOML bytes with env overlays (no files). Used by tests
 // and by Complete when neither --config nor --config-dir is set.
-func ReadToml(configData []byte, opts ...ReadConfigOpt) (*Config, error) {
+func ReadToml(ctx context.Context, configData []byte, opts ...ReadConfigOpt) (*Config, error) {
 	settings := applyReadOpts(opts)
 	merged := map[string]any{}
 	sources := map[string]string{}
@@ -807,7 +807,7 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*Config, error) {
 		}
 		recordSources(sources, "", merged, src)
 	}
-	return resolve(context.Background(), merged, sources, settings)
+	return resolve(ctx, merged, sources, settings)
 }
 
 // resolve applies merged TOML, rejects unknown keys, overlays env, pins

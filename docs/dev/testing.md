@@ -173,7 +173,7 @@ In that case, use `ReadToml` and restore the runtime fields explicitly:
 kubeConfig := s.Cfg.KubeConfig
 listOutput := s.Cfg.ListOutput
 readOnly := s.Cfg.ReadOnly
-cfg, err := config.ReadToml([]byte(tomlStr))
+cfg, err := config.ReadToml(s.T().Context(), []byte(tomlStr))
 s.Require().NoError(err)
 s.Cfg = cfg
 s.Cfg.KubeConfig = kubeConfig

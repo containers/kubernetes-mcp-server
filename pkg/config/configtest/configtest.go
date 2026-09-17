@@ -32,7 +32,7 @@ func Telemetry(endpoint, protocol string) *config.TelemetryConfig {
 func MustReadTOML(t testing.TB, data string, opts ...config.ReadConfigOpt) *config.Config {
 	t.Helper()
 	opts = append([]config.ReadConfigOpt{config.WithBaseDefault()}, opts...)
-	cfg, err := config.ReadToml([]byte(data), opts...)
+	cfg, err := config.ReadToml(t.Context(), []byte(data), opts...)
 	if err != nil {
 		t.Fatalf("ReadToml: %v", err)
 	}

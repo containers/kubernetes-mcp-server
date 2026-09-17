@@ -50,7 +50,7 @@ func (s *HTTPTraceContextPropagationSuite) SetupTest() {
 	s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
 	// Initialize telemetry (exporter may fail but tracingEnabled will be set)
-	cfg, err := config.ReadToml(nil)
+	cfg, err := config.ReadToml(s.T().Context(), nil)
 	s.Require().NoError(err)
 	cleanup, _ := telemetry.InitTracerWithConfig(s.T().Context(), &cfg.Telemetry, "test", "1.0.0")
 	s.cleanupTelemetry = cleanup
@@ -375,7 +375,7 @@ func (s *TrustProxyHeadersSuite) SetupTest() {
 	// RequestMiddleware skips span creation when telemetry.Enabled() is false,
 	// so flip the flag on by initializing the tracer with an OTLP endpoint.
 	s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-	cfg, err := config.ReadToml(nil)
+	cfg, err := config.ReadToml(s.T().Context(), nil)
 	s.Require().NoError(err)
 	cleanup, err := telemetry.InitTracerWithConfig(s.T().Context(), &cfg.Telemetry, "test", "1.0.0")
 	s.Require().NoError(err, "Expected telemetry.InitTracerWithConfig to succeed")

@@ -351,7 +351,7 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 		}
 
 		kubeconfigPath := test.KubeconfigFile(s.T(), kubeconfig)
-		cfg, err := config.ReadToml(nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		cfg.KubeConfig.SetForTest(kubeconfigPath)
 		provider, err := NewProvider(s.T().Context(), cfg)

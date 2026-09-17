@@ -50,7 +50,7 @@ func (s *KialiSuite) TestNewKiali_NilRestConfig() {
 }
 
 func (s *KialiSuite) TestNewKiali_SetsFields() {
-	s.Config = test.Must(config.ReadToml([]byte(`
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
 		insecure = true
@@ -70,7 +70,7 @@ func (s *KialiSuite) TestNewKiali_SetsFields() {
 }
 
 func (s *KialiSuite) TestNewKiali_InvalidConfig() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "://invalid-url"
 	`))
@@ -81,7 +81,7 @@ func (s *KialiSuite) TestNewKiali_InvalidConfig() {
 
 func (s *KialiSuite) TestRequireTLS_ConfigValidation() {
 	s.Run("rejects HTTP URL when require_tls is enabled", func() {
-		_, err := config.ReadToml([]byte(`
+		_, err := config.ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.kiali]
 			url = "http://kiali.example/"
@@ -98,19 +98,19 @@ func (s *KialiSuite) TestRequireTLS_ConfigValidation() {
 		s.Require().NoError(err)
 		caFileForTOML := filepath.ToSlash(caFile)
 
-		cfg, err := config.ReadToml([]byte(`
+		cfg, err := config.ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.kiali]
 			url = "https://kiali.example/"
 			insecure = false
-			certificate_authority = "` + caFileForTOML + `"
+			certificate_authority = "`+caFileForTOML+`"
 		`))
 		s.Require().NoError(err)
 		s.NotNil(cfg)
 	})
 
 	s.Run("accepts HTTP URL when require_tls is disabled", func() {
-		cfg, err := config.ReadToml([]byte(`
+		cfg, err := config.ReadToml(s.T().Context(), []byte(`
 			require_tls = false
 			[toolset_configs.kiali]
 			url = "http://kiali.example/"
@@ -122,7 +122,7 @@ func (s *KialiSuite) TestRequireTLS_ConfigValidation() {
 }
 
 func (s *KialiSuite) TestCertificateRequiredForHTTPSWhenNotInsecure() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
 	`))
@@ -148,7 +148,7 @@ func (s *KialiSuite) TestNewKiali_NoKialiConfig() {
 }
 
 func (s *KialiSuite) TestValidateAndGetURL() {
-	s.Config = test.Must(config.ReadToml([]byte(`
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
 		insecure = true
@@ -186,7 +186,7 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 	})
 
 	s.Run("With base URL containing path", func() {
-		s.Config = test.Must(config.ReadToml([]byte(`
+		s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.kiali]
 			url = "http://kiali-istio-system.apps-crc.testing/kiali"
 			insecure = true
@@ -216,7 +216,7 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 	})
 
 	s.Run("Rejects absolute URLs in endpoint", func() {
-		s.Config = test.Must(config.ReadToml([]byte(`
+		s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.kiali]
 			url = "https://kiali.example/"
 			insecure = true
@@ -243,7 +243,7 @@ func (s *KialiSuite) TestValidateAndGetURL() {
 	})
 
 	s.Run("Preserves fragment in endpoint", func() {
-		s.Config = test.Must(config.ReadToml([]byte(`
+		s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.kiali]
 			url = "https://kiali.example/"
 			insecure = true
@@ -272,7 +272,7 @@ func (s *KialiSuite) TestExecuteRequest() {
 		_, _ = w.Write([]byte("ok"))
 	}))
 
-	s.Config = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.MockServer.Config().Host))))

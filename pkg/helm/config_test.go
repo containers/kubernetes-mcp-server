@@ -106,7 +106,7 @@ func (s *ConfigSuite) TestValidate() {
 
 func (s *ConfigSuite) TestParser() {
 	s.Run("parses allowed_registries from TOML", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.helm]
 			allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 		`)))
@@ -117,7 +117,7 @@ func (s *ConfigSuite) TestParser() {
 		s.Equal([]string{"oci://ghcr.io/myorg", "https://charts.example.com"}, hc.AllowedRegistries)
 	})
 	s.Run("parses empty config from TOML", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.helm]
 		`)))
 		helmCfg, ok := cfg.GetToolsetConfig("helm")
@@ -127,7 +127,7 @@ func (s *ConfigSuite) TestParser() {
 		s.Empty(hc.AllowedRegistries)
 	})
 	s.Run("rejects invalid allowed_registries entry", func() {
-		_, err := config.ReadToml([]byte(`
+		_, err := config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.helm]
 			allowed_registries = ["not-a-url"]
 		`))
@@ -135,7 +135,7 @@ func (s *ConfigSuite) TestParser() {
 		s.Contains(err.Error(), "must be a valid URL with scheme and host")
 	})
 	s.Run("rejects http:// in allowed_registries", func() {
-		_, err := config.ReadToml([]byte(`
+		_, err := config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.helm]
 			allowed_registries = ["http://evil.example.com"]
 		`))
@@ -143,7 +143,7 @@ func (s *ConfigSuite) TestParser() {
 		s.Contains(err.Error(), "must use oci:// or https:// scheme")
 	})
 	s.Run("parses storage_driver from TOML", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.helm]
 			storage_driver = "configmap"
 		`)))
@@ -154,7 +154,7 @@ func (s *ConfigSuite) TestParser() {
 		s.Equal("configmap", hc.StorageDriver)
 	})
 	s.Run("rejects unsupported storage_driver in TOML", func() {
-		_, err := config.ReadToml([]byte(`
+		_, err := config.ReadToml(s.T().Context(), []byte(`
 			[toolset_configs.helm]
 			storage_driver = "memory"
 		`))

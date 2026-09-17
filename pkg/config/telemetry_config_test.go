@@ -50,14 +50,14 @@ func (s *TelemetryConfigSuite) TestIsEnabled() {
 
 	s.Run("env var overrides empty config endpoint", func() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://env-endpoint:4317")
-		cfg, err := ReadToml(nil)
+		cfg, err := ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		s.True(cfg.Telemetry.IsEnabled())
 	})
 
 	s.Run("explicit disable overrides env var", func() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://env-endpoint:4317")
-		cfg, err := ReadToml([]byte(`
+		cfg, err := ReadToml(s.T().Context(), []byte(`
 [telemetry]
 enabled = false
 `))
@@ -80,7 +80,7 @@ func (s *TelemetryConfigSuite) TestGetEndpoint() {
 
 	s.Run("env var takes precedence over config", func() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://env-endpoint:4317")
-		cfg, err := ReadToml([]byte(`
+		cfg, err := ReadToml(s.T().Context(), []byte(`
 [telemetry]
 endpoint = "http://config-endpoint:4317"
 `))
@@ -103,7 +103,7 @@ func (s *TelemetryConfigSuite) TestGetProtocol() {
 
 	s.Run("env var takes precedence over config", func() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
-		cfg, err := ReadToml([]byte(`
+		cfg, err := ReadToml(s.T().Context(), []byte(`
 [telemetry]
 protocol = "http/protobuf"
 `))
@@ -126,7 +126,7 @@ func (s *TelemetryConfigSuite) TestGetTracesSampler() {
 
 	s.Run("env var takes precedence over config", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER", "always_off")
-		cfg, err := ReadToml([]byte(`
+		cfg, err := ReadToml(s.T().Context(), []byte(`
 [telemetry]
 traces_sampler = "always_on"
 `))
@@ -159,7 +159,7 @@ func (s *TelemetryConfigSuite) TestGetTracesSamplerArg() {
 
 	s.Run("env var takes precedence over config", func() {
 		s.T().Setenv("OTEL_TRACES_SAMPLER_ARG", "0.1")
-		cfg, err := ReadToml([]byte(`
+		cfg, err := ReadToml(s.T().Context(), []byte(`
 [telemetry]
 traces_sampler_arg = 0.5
 `))

@@ -335,13 +335,13 @@ func (s *ToolsetConfigSuite) TestParserSeesPinnedRequireTLS() {
 	})
 
 	s.Run("parser sees pinned true when file sets false", func() {
-		prev, err := ReadToml([]byte(`
+		prev, err := ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"
 		`))
 		s.Require().NoError(err)
-		next, err := ReadToml([]byte(`
+		next, err := ReadToml(s.T().Context(), []byte(`
 			require_tls = false
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"
@@ -352,13 +352,13 @@ func (s *ToolsetConfigSuite) TestParserSeesPinnedRequireTLS() {
 	})
 
 	s.Run("parser sees pinned false when file sets true", func() {
-		prev, err := ReadToml([]byte(`
+		prev, err := ReadToml(s.T().Context(), []byte(`
 			require_tls = false
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"
 		`))
 		s.Require().NoError(err)
-		next, err := ReadToml([]byte(`
+		next, err := ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"

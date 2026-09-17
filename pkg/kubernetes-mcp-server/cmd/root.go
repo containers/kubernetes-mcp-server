@@ -128,7 +128,7 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 			return fmt.Errorf("failed to read config: %w", err)
 		}
 	} else {
-		m.Config, err = config.ReadToml(nil)
+		m.Config, err = config.ReadToml(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("failed to read config: %w", err)
 		}

@@ -47,7 +47,7 @@ func (s *KialiRequireTLSSuite) setupConfig(requireTLS bool) {
 	kubeConfig := s.Cfg.KubeConfig.Get()
 	listOutput := s.Cfg.ListOutput.Get()
 	readOnly := s.Cfg.ReadOnly.Get()
-	s.Cfg = test.Must(config.ReadToml([]byte(fmt.Sprintf(`
+	s.Cfg = test.Must(config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
 		[toolset_configs.kiali]
 		url = "%s"

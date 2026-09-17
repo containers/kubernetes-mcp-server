@@ -45,8 +45,8 @@ users:
 	s.Require().NoError(err, "failed to create kubeconfig file")
 
 	s.Run("with no RequireOAuth (default) config", func() {
-		testCfg := test.Must(config.ReadToml([]byte(`
-			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
+		testCfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\\`)+`"
 		`)))
 		s.Run("without authorization header returns original clientset", func() {
 			testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
@@ -157,8 +157,8 @@ users:
 	})
 
 	s.Run("with no RequireOAuth (default) and RawConfig error", func() {
-		testCfg := test.Must(config.ReadToml([]byte(`
-			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
+		testCfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\\`)+`"
 		`)))
 
 		s.Run("with bearer token but RawConfig fails returns error", func() {
@@ -167,8 +167,8 @@ users:
 
 			// Corrupt the clientCmdConfig by setting it to a config that will fail on RawConfig()
 			badKubeconfigPath := filepath.Join(s.T().TempDir(), "nonexistent", "config")
-			badConfig := test.Must(config.ReadToml([]byte(`
-				kubeconfig = "` + strings.ReplaceAll(badKubeconfigPath, `\`, `\\`) + `"
+			badConfig := test.Must(config.ReadToml(s.T().Context(), []byte(`
+				kubeconfig = "`+strings.ReplaceAll(badKubeconfigPath, `\`, `\\`)+`"
 			`)))
 			badManager, _ := NewManager(s.T().Context(), badConfig, testManager.kubernetes.RESTConfig(), testManager.kubernetes.ToRawKubeConfigLoader())
 			// Replace the clientCmdConfig with one that will fail
@@ -188,8 +188,8 @@ users:
 
 	s.Run("with RequireOAuth=true and RawConfig error", func() {
 		badKubeconfigPath := filepath.Join(s.T().TempDir(), "nonexistent", "config")
-		testCfg := test.Must(config.ReadToml([]byte(`
-			kubeconfig = "` + strings.ReplaceAll(badKubeconfigPath, `\`, `\\`) + `"
+		testCfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(badKubeconfigPath, `\`, `\\`)+`"
 			require_oauth = true
 		`)))
 		testCfg.Port.SetForTest("8080")
@@ -200,8 +200,8 @@ users:
 			workingKubeconfigPath := filepath.Join(s.T().TempDir(), "working-config")
 			err := os.WriteFile(workingKubeconfigPath, []byte(kubeconfigContent), 0644)
 			s.Require().NoError(err)
-			workingConfig := test.Must(config.ReadToml([]byte(`
-				kubeconfig = "` + strings.ReplaceAll(workingKubeconfigPath, `\`, `\\`) + `"
+			workingConfig := test.Must(config.ReadToml(s.T().Context(), []byte(`
+				kubeconfig = "`+strings.ReplaceAll(workingKubeconfigPath, `\`, `\\`)+`"
 			`)))
 			testManager, err := NewKubeconfigManager(s.T().Context(), workingConfig, "")
 			s.Require().NoErrorf(err, "failed to create test manager: %v", err)
@@ -225,8 +225,8 @@ users:
 	})
 
 	s.Run("with no RequireOAuth (default) and NewKubernetes error", func() {
-		testCfg := test.Must(config.ReadToml([]byte(`
-			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
+		testCfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\\`)+`"
 		`)))
 
 		s.Run("with bearer token but invalid rest config returns error", func() {
@@ -244,8 +244,8 @@ users:
 	})
 
 	s.Run("with RequireOAuth=true and NewKubernetes error", func() {
-		testCfg := test.Must(config.ReadToml([]byte(`
-			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
+		testCfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\\`)+`"
 			require_oauth = true
 		`)))
 		testCfg.Port.SetForTest("8080")
@@ -267,8 +267,8 @@ users:
 	})
 
 	s.Run("with RequireOAuth=true", func() {
-		testCfg := test.Must(config.ReadToml([]byte(`
-			kubeconfig = "` + strings.ReplaceAll(kubeconfigPath, `\`, `\\`) + `"
+		testCfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\\`)+`"
 			require_oauth = true
 		`)))
 		testCfg.Port.SetForTest("8080")

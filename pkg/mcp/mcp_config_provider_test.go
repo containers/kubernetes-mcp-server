@@ -95,7 +95,7 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 	kubeConfig := s.Cfg.KubeConfig.Get()
 	listOutput := s.Cfg.ListOutput.Get()
 	readOnly := s.Cfg.ReadOnly.Get()
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		toolsets = ["config-provider-test"]
 		[toolset_configs.kiali]
 		url = "http://kiali.example/"

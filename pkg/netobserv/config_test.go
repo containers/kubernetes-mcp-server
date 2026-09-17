@@ -30,7 +30,7 @@ func (s *ConfigSuite) TestResolvedURL_namespaceOverride() {
 }
 
 func (s *ConfigSuite) TestReadToml_emptySectionUsesDefaults() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		toolsets = ["netobserv"]
 		[toolset_configs.netobserv]
 	`))
@@ -43,7 +43,7 @@ func (s *ConfigSuite) TestReadToml_emptySectionUsesDefaults() {
 }
 
 func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		toolsets = ["netobserv"]
 		[toolset_configs.netobserv]
 	`))

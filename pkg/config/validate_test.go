@@ -286,14 +286,14 @@ func (s *ValidateSuite) TestTLSSettings() {
 
 	s.Run("TLS_MIN_VERSION env overrides invalid config value", func() {
 		s.T().Setenv(config.EnvTLSMinVersion, "1.3")
-		cfg, err := config.ReadToml([]byte(`tls_min_version = "invalid"`))
+		cfg, err := config.ReadToml(s.T().Context(), []byte(`tls_min_version = "invalid"`))
 		s.Require().NoError(err)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("invalid TLS_MIN_VERSION env is rejected", func() {
 		s.T().Setenv(config.EnvTLSMinVersion, "bad")
-		cfg, err := config.ReadToml(nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		err = cfg.Validate(s.T().Context())
 		s.Require().Error(err)
@@ -302,14 +302,14 @@ func (s *ValidateSuite) TestTLSSettings() {
 
 	s.Run("TLS_CIPHER_SUITES env overrides invalid config value", func() {
 		s.T().Setenv(config.EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
-		cfg, err := config.ReadToml([]byte(`tls_cipher_suites = ["UNKNOWN_CIPHER"]`))
+		cfg, err := config.ReadToml(s.T().Context(), []byte(`tls_cipher_suites = ["UNKNOWN_CIPHER"]`))
 		s.Require().NoError(err)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("invalid TLS_CIPHER_SUITES env is rejected", func() {
 		s.T().Setenv(config.EnvTLSCipherSuites, "UNKNOWN_CIPHER")
-		cfg, err := config.ReadToml(nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
 		s.Require().NoError(err)
 		err = cfg.Validate(s.T().Context())
 		s.Require().Error(err)
