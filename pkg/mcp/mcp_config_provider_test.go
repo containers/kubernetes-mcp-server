@@ -153,7 +153,7 @@ func (s *McpConfigProviderSuite) TestStrategyReflectsConfigReload() {
 	})
 
 	// Reload config with different strategy
-	newConfig := config.New()
+	newConfig := config.BaseDefault()
 	newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
 	configtest.OverlayTOML(s.T(), &newConfig, `
 		toolsets = ["config-provider-test"]

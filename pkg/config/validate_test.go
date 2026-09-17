@@ -15,7 +15,7 @@ type ValidateSuite struct {
 }
 
 func (s *ValidateSuite) validConfig() *config.Config {
-	cfg := config.New()
+	cfg := config.BaseDefault()
 	return cfg
 }
 

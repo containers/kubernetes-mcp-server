@@ -62,6 +62,24 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	})
 }
 
+func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
+	s.Run("unspecified keys match BaseDefault", func() {
+		cfg, err := ReadToml([]byte(`log_level = 1`), WithBaseDefault())
+		s.Require().NoError(err)
+		s.Equal(1, cfg.LogLevel.Get())
+		base := BaseDefault()
+		s.Equal(base.ReadOnly.Get(), cfg.ReadOnly.Get())
+		s.Equal(base.Toolsets.Get(), cfg.Toolsets.Get())
+		s.Equal(SourceDefault, cfg.ReadOnly.Source())
+	})
+	s.Run("production ReadToml still starts from New", func() {
+		cfg, err := ReadToml(nil)
+		s.Require().NoError(err)
+		s.Equal(New().ReadOnly.Get(), cfg.ReadOnly.Get())
+		s.Equal(New().Toolsets.Get(), cfg.Toolsets.Get())
+	})
+}
+
 func (s *ConfigSuite) TestDocumentedOptions() {
 	opts := DocumentedOptions()
 	s.Require().NotEmpty(opts)

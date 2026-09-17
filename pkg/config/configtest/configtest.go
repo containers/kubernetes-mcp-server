@@ -27,8 +27,11 @@ func Telemetry(endpoint, protocol string) *config.TelemetryConfig {
 }
 
 // MustReadTOML parses TOML into a Config and fails the test on error.
+// The load starts from BaseDefault so downstream defaultOverrides do not
+// leak into unspecified keys.
 func MustReadTOML(t testing.TB, data string, opts ...config.ReadConfigOpt) *config.Config {
 	t.Helper()
+	opts = append([]config.ReadConfigOpt{config.WithBaseDefault()}, opts...)
 	cfg, err := config.ReadToml([]byte(data), opts...)
 	if err != nil {
 		t.Fatalf("ReadToml: %v", err)
@@ -36,9 +39,11 @@ func MustReadTOML(t testing.TB, data string, opts ...config.ReadConfigOpt) *conf
 	return cfg
 }
 
-// OverlayTOML replaces cfg with TOML-parsed config. Options still at their
-// default source keep the previous value (so suite SetForTest kubeconfig,
-// list_output, toolsets, etc. survive). TOML and env applied by ReadToml win.
+// OverlayTOML replaces cfg with TOML-parsed config. The load starts from
+// BaseDefault so downstream defaultOverrides do not leak into unspecified
+// keys. Options still at their default source keep the previous value (so
+// suite SetForTest kubeconfig, list_output, toolsets, etc. survive). TOML
+// and env applied by ReadToml win.
 func OverlayTOML(t testing.TB, cfg **config.Config, data string) {
 	t.Helper()
 	prev := *cfg

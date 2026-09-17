@@ -539,10 +539,12 @@ func DocumentedOptions() []DocumentedOption {
 // ReadConfigOpt customizes a Read / ReadToml load.
 type ReadConfigOpt func(*loadSettings)
 
-// loadSettings holds optional load-time knobs (config dir, previous Config for reload).
+// loadSettings holds optional load-time knobs (config dir, previous Config
+// for reload, BaseDefault vs New start).
 type loadSettings struct {
-	dirPath  string
-	previous *Config
+	dirPath     string
+	previous    *Config
+	baseDefault bool
 }
 
 // WithDirPath returns a ReadConfigOpt that sets the config directory path used
@@ -555,6 +557,13 @@ func WithDirPath(path string) ReadConfigOpt {
 // their previous values when this load is a SIGHUP reload.
 func WithPrevious(prev *Config) ReadConfigOpt {
 	return func(s *loadSettings) { s.previous = prev }
+}
+
+// WithBaseDefault starts the load from BaseDefault instead of New, so
+// downstream defaultOverrides do not leak into test overlays. Production
+// Read / ReadToml (Complete with no file) still use New.
+func WithBaseDefault() ReadConfigOpt {
+	return func(s *loadSettings) { s.baseDefault = true }
 }
 
 // KeepPreviousIfDefault copies values from prev onto next when next still has
@@ -806,6 +815,9 @@ func ReadToml(configData []byte, opts ...ReadConfigOpt) (*Config, error) {
 // effective require_tls (and other pinned values).
 func resolve(ctx context.Context, merged map[string]any, sources map[string]string, settings loadSettings) (*Config, error) {
 	cfg := New()
+	if settings.baseDefault {
+		cfg = BaseDefault()
+	}
 	if settings.dirPath != "" {
 		cfg.configDirPath = settings.dirPath
 	}
