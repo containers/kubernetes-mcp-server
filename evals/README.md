@@ -159,7 +159,7 @@ kinds:
 
 **Builtin agents** use mcpchecker's built-in LLM agent:
 
-- **`builtin-openai`** — `openai:gpt-5` (what CI runs)
+- **`builtin-openai`** — `openai:gpt-5.6-luna` (what CI runs)
 - **`builtin-anthropic`** — `anthropic:claude-sonnet-4-6`
 - **`builtin-google`** — `google:gemini-3.1-pro-preview`
 
