@@ -464,7 +464,7 @@ func TestAuthorizationURL(t *testing.T) {
 
 func TestStdioLogging(t *testing.T) {
 	t.Run("stdio disables klog", func(t *testing.T) {
-		out, err := executeVersion(t, "log_level = 1\n")
+		out, err := executeVersion(t, "port = \"\"\nlog_level = 1\n")
 		require.NoErrorf(t, err, "Expected no error executing command, got %v", err)
 		assert.Equalf(t, "0.0.0\n", out, "Expected only version output, got %s", out)
 	})
@@ -565,7 +565,7 @@ func TestRequireTLSValidation(t *testing.T) {
 	})
 
 	t.Run("require_tls in STDIO mode does not require TLS certs", func(t *testing.T) {
-		_, err := executeVersion(t, "require_tls = true\n")
+		_, err := executeVersion(t, "port = \"\"\nrequire_tls = true\n")
 		require.NoError(t, err)
 	})
 
@@ -792,7 +792,7 @@ func TestTLSValidation(t *testing.T) {
 		require.NoError(t, os.WriteFile(certPath, []byte("cert content"), 0o644))
 		require.NoError(t, os.WriteFile(keyPath, []byte("key content"), 0o644))
 
-		_, err := executeVersion(t, fmt.Sprintf("tls_cert = %q\ntls_key = %q\n", certPath, keyPath))
+		_, err := executeVersion(t, fmt.Sprintf("port = \"\"\ntls_cert = %q\ntls_key = %q\n", certPath, keyPath))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "tls_cert and tls_key require port to be set")
 	})

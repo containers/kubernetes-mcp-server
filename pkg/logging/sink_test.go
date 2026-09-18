@@ -59,7 +59,7 @@ func (s *SinkSuite) newSink(cfg *config.Config) *logging.Sink {
 func (s *SinkSuite) TestNewRoutesToConfiguredDestination() {
 	s.Run("stdio mode without log_file discards klog output", func() {
 		sink := s.newSink(func() *config.Config {
-			c := config.New()
+			c := config.BaseDefault()
 			c.LogLevel.SetForTest(1)
 			return c
 		}())
@@ -470,7 +470,7 @@ func (s *SinkSuite) TestReloadIgnoresPortChangeForServeMode() {
 	// in stdio mode whose config grows a Port would start writing klog to
 	// stdout, corrupting the MCP protocol channel.
 	sink := s.newSink(func() *config.Config {
-		c := config.New() // stdio mode (no Port)
+		c := config.BaseDefault() // stdio mode (no Port)
 		c.LogLevel.SetForTest(1)
 		return c
 	}())

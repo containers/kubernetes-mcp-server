@@ -177,6 +177,16 @@ type ToolHandlerParams struct {
 	Elicitor
 }
 
+// ExtendedConfig is configuration owned by a provider or toolset.
+//
+// Deprecated: use config.ExtendedConfig directly in new code.
+type ExtendedConfig = config.ExtendedConfig
+
+// GetToolsetConfig returns the parsed configuration for a toolset.
+func (p ToolHandlerParams) GetToolsetConfig(name string) (config.ExtendedConfig, bool) {
+	return p.Config.GetToolsetConfig(name)
+}
+
 type ToolHandlerFunc func(params ToolHandlerParams) (*ToolCallResult, error)
 
 // ErrElicitationNotSupported is returned when the MCP client does not support elicitation.
