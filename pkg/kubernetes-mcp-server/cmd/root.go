@@ -296,14 +296,36 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 			}
 
 			prev := cfgState.Load()
-			// Publish so HTTP middleware and token exchange observe the new
-			// config during apply. Roll back if ReloadConfiguration fails.
+			prevOAuth := oauthState.Load()
+			if prevOAuth == nil {
+				prevOAuth = &internaloauth.Snapshot{}
+			}
+
+			// Discover / rebuild the OAuth snapshot before publishing config so
+			// HTTP auth never observes new flags with the old provider.
+			if prevOAuth.HasProviderConfigChanged(internaloauth.SnapshotFromConfig(newConfig, prevOAuth.OIDCProvider, prevOAuth.HTTPClient)) {
+				logger.V(1).Info("OAuth configuration changed, recreating OIDC provider...")
+			}
+			nextOAuth, err := internaloauth.SnapshotForReload(prevOAuth, newConfig)
+			if err != nil {
+				logger.Error(err, "Failed to recreate OIDC provider during reload")
+				newConfig.Dump(ctx, prev)
+				continue
+			}
+			oauthChanged := prevOAuth.HasWellKnownConfigChanged(nextOAuth)
+
+			if oauthChanged {
+				oauthState.Store(nextOAuth)
+			}
 			cfgState.Store(newConfig)
 
 			err = mcpServer.ReloadConfiguration(ctx, newConfig)
 			if err != nil {
 				logger.Error(err, "Failed to apply reloaded configuration")
 				cfgState.Store(prev)
+				if oauthChanged {
+					oauthState.Store(prevOAuth)
+				}
 			} else if m.logSink != nil {
 				// Re-apply the log destination so log_file changes and file
 				// rotations are handled correctly. Failures are logged but never
@@ -320,27 +342,12 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 				}
 				continue
 			}
-
-			// Check if OAuth-relevant config changed and update the shared state
-			currentSnapshot := oauthState.Load()
-			if currentSnapshot == nil {
-				currentSnapshot = &internaloauth.Snapshot{}
-			}
-			newSnapshot := internaloauth.SnapshotFromConfig(newConfig, currentSnapshot.OIDCProvider, currentSnapshot.HTTPClient)
-			if currentSnapshot.HasProviderConfigChanged(newSnapshot) {
-				logger.V(1).Info("OAuth configuration changed, recreating OIDC provider...")
-				newProvider, newClient, err := internaloauth.CreateOIDCProviderAndClient(newConfig)
-				if err != nil {
-					logger.Error(err, "Failed to recreate OIDC provider during reload")
-					continue
+			if oauthChanged {
+				if prevOAuth.HasProviderConfigChanged(nextOAuth) {
+					logger.V(1).Info("OIDC provider and HTTP client updated successfully")
+				} else {
+					logger.V(1).Info("OAuth well-known configuration updated")
 				}
-				newSnapshot.OIDCProvider = newProvider
-				newSnapshot.HTTPClient = newClient
-				oauthState.Store(newSnapshot)
-				logger.V(1).Info("OIDC provider and HTTP client updated successfully")
-			} else if currentSnapshot.HasWellKnownConfigChanged(newSnapshot) {
-				oauthState.Store(newSnapshot)
-				logger.V(1).Info("OAuth well-known configuration updated")
 			}
 
 			logger.V(1).Info("Configuration reloaded successfully via SIGHUP")

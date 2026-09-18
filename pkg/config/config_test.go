@@ -1189,6 +1189,50 @@ client_secret = "super-secret"
 	})
 }
 
+func (s *ConfigSuite) TestStringValuesTrimmedOnLoad() {
+	s.Run("TOML scalar strings are trimmed", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+			port = " 8080 "
+			list_output = " yaml "
+		`))
+		s.Require().NoError(err)
+		s.Equal("8080", cfg.Port.Get())
+		s.Equal("yaml", cfg.ListOutput.Get())
+	})
+
+	s.Run("TOML string slices trim each element", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+			toolsets = [" core ", " config "]
+		`))
+		s.Require().NoError(err)
+		s.Equal([]string{"core", "config"}, cfg.Toolsets.Get())
+	})
+
+	s.Run("TOML durations trim before parse", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+			[http]
+			read_header_timeout = " 5s "
+		`))
+		s.Require().NoError(err)
+		s.Equal(5*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
+	})
+
+	s.Run("env strings are trimmed", func() {
+		s.T().Setenv(EnvTLSMinVersion, " 1.3 ")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal("1.3", cfg.TLSMinVersion.Get())
+	})
+
+	s.Run("whitespace-only difference is not a non-reloadable change", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`port = " 8080 "`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal("8080", next.Port.Get())
+	})
+}
+
 func (s *ConfigSuite) TestRejectNonReloadable() {
 	prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
 	s.Require().NoError(err)

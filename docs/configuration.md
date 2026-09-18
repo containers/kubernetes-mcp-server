@@ -55,6 +55,8 @@ Each option is resolved once per load. Later sources override earlier ones:
 
 Unknown TOML keys fail the load (startup and SIGHUP exit non-zero). Registered `toolset_configs.<name>` and `cluster_provider_configs.<name>` tables remain valid; unknown fields *inside* a registered block also fail.
 
+String options (including each element of a string list, and duration strings) have surrounding whitespace stripped at load from TOML and env. `tls_cert = " /certs/tls.crt "` is the same as `tls_cert = "/certs/tls.crt"`.
+
 After validation (startup and SIGHUP, success or failure) the server logs every option with its resolved value and source (file path, `<Env>`, or `<Default>`). Sensitive values are redacted. Independent validation errors are all reported. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config. A failed SIGHUP reload dumps when a config was produced, then the process exits.
 
 Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-only; the default (`port=""`, `require_oauth=false`) still works.
@@ -153,7 +155,7 @@ pkill -HUP kubernetes-mcp-server
 
 ### What Gets Reloaded
 
-SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value).
+SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change.
 
 Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
 

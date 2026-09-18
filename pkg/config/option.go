@@ -69,8 +69,6 @@ func (o *Option[T]) resetToDefault() {
 	o.setParsed(o.Default, SourceDefault)
 }
 
-func (o *Option[T]) replaceValue(v T) { o.value = v }
-
 func (o *Option[T]) keepFrom(other option) {
 	if src, ok := other.(*Option[T]); ok {
 		o.setParsed(src.value, src.source)
@@ -212,6 +210,22 @@ func (o Option[T]) validate(fn func(T) error) Option[T] {
 func parseTyped[T any](v any) (T, error) {
 	var zero T
 	switch any(zero).(type) {
+	case string:
+		s, err := asString(v)
+		if err != nil {
+			return zero, err
+		}
+		return any(strings.TrimSpace(s)).(T), nil
+	case []string:
+		parsed, err := parseTOMLViaDecode[T](v)
+		if err != nil {
+			return zero, err
+		}
+		ss := any(parsed).([]string)
+		for i := range ss {
+			ss[i] = strings.TrimSpace(ss[i])
+		}
+		return any(ss).(T), nil
 	case int:
 		n, err := asInt64(v)
 		return any(int(n)).(T), err
@@ -219,11 +233,11 @@ func parseTyped[T any](v any) (T, error) {
 		n, err := asInt64(v)
 		return any(n).(T), err
 	case time.Duration:
-		s, ok := v.(string)
-		if !ok {
+		s, err := asString(v)
+		if err != nil {
 			return zero, fmt.Errorf("expected duration string, got %T", v)
 		}
-		parsed, err := time.ParseDuration(s)
+		parsed, err := time.ParseDuration(strings.TrimSpace(s))
 		if err != nil {
 			return zero, fmt.Errorf("invalid duration %q: %w", s, err)
 		}
@@ -231,6 +245,14 @@ func parseTyped[T any](v any) (T, error) {
 	default:
 		return parseTOMLViaDecode[T](v)
 	}
+}
+
+func asString(v any) (string, error) {
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("expected string, got %T", v)
+	}
+	return s, nil
 }
 
 func asInt64(v any) (int64, error) {
@@ -264,7 +286,7 @@ func parseTOMLViaDecode[T any](v any) (T, error) {
 	return wrap.V, nil
 }
 
-func parseEnvString(s string) (string, error) { return s, nil }
+func parseEnvString(s string) (string, error) { return strings.TrimSpace(s), nil }
 
 func parseEnvInt(s string) (int, error) { return strconv.Atoi(s) }
 

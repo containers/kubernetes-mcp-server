@@ -93,6 +93,26 @@ func SnapshotFromConfig(cfg *config.Config, provider *oidc.Provider, httpClient 
 	}
 }
 
+// SnapshotForReload builds the OAuth snapshot that must be published together
+// with a reloaded Config. If provider-relevant fields changed, it performs
+// OIDC discovery. On error the caller must not commit the new Config.
+func SnapshotForReload(current *Snapshot, cfg *config.Config) (*Snapshot, error) {
+	if current == nil {
+		current = &Snapshot{}
+	}
+	next := SnapshotFromConfig(cfg, current.OIDCProvider, current.HTTPClient)
+	if !current.HasProviderConfigChanged(next) {
+		return next, nil
+	}
+	provider, client, err := CreateOIDCProviderAndClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	next.OIDCProvider = provider
+	next.HTTPClient = client
+	return next, nil
+}
+
 // CreateOIDCProviderAndClient builds an OIDC provider and HTTP client from config.
 // Returns (nil, nil, nil) when AuthorizationURL is empty (OAuth not configured).
 func CreateOIDCProviderAndClient(cfg *config.Config) (*oidc.Provider, *http.Client, error) {

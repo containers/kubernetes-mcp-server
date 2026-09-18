@@ -88,6 +88,9 @@ how a leaf opts out of TOML without a sentinel tag. Wrapping structs may
 still use `toml` tags for the **table name**; the walk prepends that
 prefix to each child's `TOMLKey`. TOML values are decoded by a shared
 type switch (`parseTyped`); there is no per-option `ParseTOML` hook.
+`parseTyped` strips surrounding whitespace from `string` values, each
+`[]string` element, and duration strings (TOML and env). Whitespace
+padding is not a SIGHUP change.
 
 There is no CLI vector for runtime options. Product CLI is bootstrap only
 (`--config` / `--config-dir` / `--version`). Those flags select files; they

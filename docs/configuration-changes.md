@@ -15,7 +15,7 @@ This document records configuration changes that may require action when upgradi
 
 ## Unified configuration surface
 
-Runtime configuration is a single Option model: each setting is resolved once per load from defaults, then files, then env. Provenance is logged at startup (`value (source)`). Unknown TOML keys fail the load.
+Runtime configuration is a single Option model: each setting is resolved once per load from defaults, then files, then env. Provenance is logged at startup (`value (source)`). Unknown TOML keys fail the load. String option values (including string-list elements and duration strings) have surrounding whitespace stripped at load.
 
 HTTP mode needs `port` in TOML (`--config` and/or `--config-dir`). The CLI no longer accepts runtime flags.
 
@@ -91,7 +91,7 @@ Removed `sts_*` / `token_exchange_strategy` keys are rejected with a pointer to 
 
 ### SIGHUP
 
-SIGHUP re-reads files and re-applies env. A parse, unknown-key, non-reloadable, or Validate failure exits the process. Validate failures dump the rejected config first. Non-reloadable options whose resolved value would change fail the load (checked before `toolset_configs` / `cluster_provider_configs` are parsed). An invalid or changed `cluster_provider_configs` table fails the load.
+SIGHUP re-reads files and re-applies env. A parse, unknown-key, non-reloadable, or Validate failure exits the process. Validate failures dump the rejected config first. Non-reloadable options whose resolved value would change fail the load (checked before `toolset_configs` / `cluster_provider_configs` are parsed). An invalid or changed `cluster_provider_configs` table fails the load. Surrounding whitespace on string values is stripped at load, so padding a non-reloadable path (for example `tls_cert`) is not a change.
 
 On SIGHUP the option dump includes `changed=true` and `previous` for values that differ from the prior config.
 

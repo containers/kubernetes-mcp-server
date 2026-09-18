@@ -195,10 +195,10 @@ func (s *ValidateSuite) TestCertificateAuthority() {
 	})
 
 	s.Run("whitespace-only is treated as empty", func() {
-		cfg := s.validConfig()
-		cfg.CertificateAuthority.SetForTest("   ")
-		s.NoError(cfg.Validate(s.T().Context()))
+		cfg, err := config.ReadToml(s.T().Context(), []byte(`certificate_authority = "   "`))
+		s.Require().NoError(err)
 		s.Equal("", cfg.CertificateAuthority.Get(), "whitespace should be trimmed from certificate_authority")
+		s.NoError(cfg.Validate(s.T().Context()))
 	})
 }
 
@@ -270,12 +270,14 @@ func (s *ValidateSuite) TestTLSCertKey() {
 	})
 
 	s.Run("whitespace-only tls_cert and tls_key are treated as empty", func() {
-		cfg := s.validConfig()
-		cfg.TLSCert.SetForTest("   ")
-		cfg.TLSKey.SetForTest("   ")
-		s.NoError(cfg.Validate(s.T().Context()))
+		cfg, err := config.ReadToml(s.T().Context(), []byte(`
+			tls_cert = "   "
+			tls_key = "   "
+		`))
+		s.Require().NoError(err)
 		s.Equal("", cfg.TLSCert.Get(), "whitespace should be trimmed from tls_cert")
 		s.Equal("", cfg.TLSKey.Get(), "whitespace should be trimmed from tls_key")
+		s.NoError(cfg.Validate(s.T().Context()))
 	})
 }
 
@@ -537,21 +539,24 @@ func (s *ValidateSuite) TestTokenExchangeClientAuth() {
 }
 
 func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {
-	cfg := s.validConfig()
-	cfg.Port.SetForTest("8080")
-	cfg.RequireOAuth.SetForTest(true)
-	cfg.AuthorizationURL.SetForTest("https://example.com/auth")
-	cfg.TokenExchange.Strategy.SetForTest(" rfc8693 ")
-	cfg.TokenExchange.Audience.SetForTest(" audience ")
-	cfg.TokenExchange.SubjectTokenType.SetForTest(" subject-token-type ")
-	cfg.TokenExchange.RequestedTokenType.SetForTest(" requested-token-type ")
-	cfg.TokenExchange.ClientAuth.Method.SetForTest(" client_secret_basic ")
-	cfg.TokenExchange.ClientAuth.ClientID.SetForTest(" client ")
-	cfg.TokenExchange.ClientAuth.ClientSecret.SetForTest(" secret ")
-	cfg.TokenExchange.ClientAuth.CertificateFile.SetForTest(" cert.pem ")
-	cfg.TokenExchange.ClientAuth.PrivateKeyFile.SetForTest(" key.pem ")
-	cfg.TokenExchange.ClientAuth.TokenFile.SetForTest(" token ")
-
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
+		port = "8080"
+		require_oauth = true
+		authorization_url = "https://example.com/auth"
+		[token_exchange]
+		strategy = " rfc8693 "
+		audience = " audience "
+		subject_token_type = " subject-token-type "
+		requested_token_type = " requested-token-type "
+		[token_exchange.client_auth]
+		method = " client_secret_basic "
+		client_id = " client "
+		client_secret = " secret "
+		certificate_file = " cert.pem "
+		private_key_file = " key.pem "
+		token_file = " token "
+	`))
+	s.Require().NoError(err)
 	s.Require().NoError(cfg.Validate(s.T().Context()))
 	s.Equal("rfc8693", cfg.TokenExchange.Strategy.Get())
 	s.Equal("audience", cfg.TokenExchange.Audience.Get())

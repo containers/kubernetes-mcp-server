@@ -21,11 +21,6 @@ import (
 // on SIGHUP reload. Independent checks are accumulated so a single call reports
 // every problem it can.
 func (c *Config) Validate(ctx context.Context) error {
-	c.CertificateAuthority.replaceValue(strings.TrimSpace(c.CertificateAuthority.Get()))
-	c.TLSCert.replaceValue(strings.TrimSpace(c.TLSCert.Get()))
-	c.TLSKey.replaceValue(strings.TrimSpace(c.TLSKey.Get()))
-	c.normalizeTokenExchange()
-
 	var errs []error
 	add := func(err error) {
 		if err != nil {
@@ -278,21 +273,6 @@ func (c *Config) ValidateClusterAuthMode() error {
 		errs = append(errs, fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)"))
 	}
 	return errors.Join(errs...)
-}
-
-func (c *Config) normalizeTokenExchange() {
-	te := &c.TokenExchange
-	te.Strategy.replaceValue(strings.TrimSpace(te.Strategy.Get()))
-	te.Audience.replaceValue(strings.TrimSpace(te.Audience.Get()))
-	te.SubjectTokenType.replaceValue(strings.TrimSpace(te.SubjectTokenType.Get()))
-	te.RequestedTokenType.replaceValue(strings.TrimSpace(te.RequestedTokenType.Get()))
-	auth := &te.ClientAuth
-	auth.Method.replaceValue(strings.TrimSpace(auth.Method.Get()))
-	auth.ClientID.replaceValue(strings.TrimSpace(auth.ClientID.Get()))
-	auth.ClientSecret.replaceValue(strings.TrimSpace(auth.ClientSecret.Get()))
-	auth.CertificateFile.replaceValue(strings.TrimSpace(auth.CertificateFile.Get()))
-	auth.PrivateKeyFile.replaceValue(strings.TrimSpace(auth.PrivateKeyFile.Get()))
-	auth.TokenFile.replaceValue(strings.TrimSpace(auth.TokenFile.Get()))
 }
 
 func validateTokenExchangeFile(name, path string) error {

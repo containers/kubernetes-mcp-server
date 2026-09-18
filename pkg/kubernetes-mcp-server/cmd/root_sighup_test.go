@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -77,6 +78,7 @@ type SIGHUPSuite struct {
 	server          *mcp.Server
 	stopSIGHUP      func()
 	cfgState        *config.ConfigState
+	oauthState      *oauth.State
 	reloadExited    atomic.Bool
 	reloadExitCode  atomic.Int32
 }
@@ -124,10 +126,10 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 			s.reloadExited.Store(true)
 		},
 	}
-	oauthState := oauth.NewState(&oauth.Snapshot{})
+	s.oauthState = oauth.NewState(&oauth.Snapshot{})
 
 	s.cfgState = config.NewConfigState(cfg)
-	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, oauthState, s.cfgState)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, s.oauthState, s.cfgState)
 	return opts
 }
 
@@ -216,6 +218,40 @@ func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigExits() {
 	s.Contains(s.logBuffer.String(), "Failed to reload configuration")
 	s.True(slices.Contains(s.server.GetEnabledTools(), "events_list"))
 	s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
+}
+
+func (s *SIGHUPSuite) TestSIGHUPOIDCDiscoveryFailureKeepsPreviousConfig() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		toolsets = ["core", "config"]
+	`)), 0o644))
+	_ = s.InitServer(configPath, "")
+
+	issuer := httptest.NewServer(http.NotFoundHandler())
+	issuer.Close()
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		toolsets = ["core", "config", "helm"]
+		authorization_url = %q
+	`, issuer.URL))), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return strings.Contains(s.logBuffer.String(), "Failed to recreate OIDC provider during reload")
+	}, 2*time.Second, 50*time.Millisecond)
+
+	s.Run("does not apply the candidate MCP config", func() {
+		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
+		s.Equal([]string{"core", "config"}, s.cfgState.Load().Toolsets.Get())
+	})
+	s.Run("does not publish a new OAuth snapshot", func() {
+		s.Empty(s.oauthState.Load().AuthorizationURL)
+		s.Nil(s.oauthState.Load().OIDCProvider)
+	})
+	s.Run("does not exit", func() {
+		s.False(s.reloadExited.Load())
+	})
 }
 
 func (s *SIGHUPSuite) enableVerboseKlog() {
@@ -357,6 +393,41 @@ func (s *SIGHUPSuite) TestSIGHUPRejectsNonReloadableMetricsPort() {
 	s.Equal(int32(1), s.reloadExitCode.Load())
 	s.Contains(s.logBuffer.String(), "non-reloadable option metrics_port changed")
 	s.Equal("9090", s.cfgState.Load().MetricsPort.Get())
+}
+
+func (s *SIGHUPSuite) TestSIGHUPIgnoresWhitespaceOnNonReloadableTLSPaths() {
+	certPath := filepath.Join(s.tempDir, "tls.crt")
+	keyPath := filepath.Join(s.tempDir, "tls.key")
+	s.Require().NoError(os.WriteFile(certPath, []byte("cert"), 0o644))
+	s.Require().NoError(os.WriteFile(keyPath, []byte("key"), 0o644))
+
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		port = "18080"
+		tls_cert = %q
+		tls_key = %q
+		toolsets = ["core", "config"]
+	`, certPath, keyPath))), 0o644))
+	_ = s.InitServer(configPath, "")
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		port = "18080"
+		tls_cert = " %s "
+		tls_key = " %s "
+		toolsets = ["core", "config", "helm"]
+	`, certPath, keyPath))), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Run("reloadable change is applied", func() {
+		s.Require().Eventually(func() bool {
+			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
+		}, 2*time.Second, 50*time.Millisecond)
+	})
+	s.Run("does not exit or rewrite the TLS paths", func() {
+		s.False(s.reloadExited.Load())
+		s.Equal(certPath, s.cfgState.Load().TLSCert.Get())
+		s.Equal(keyPath, s.cfgState.Load().TLSKey.Get())
+	})
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
