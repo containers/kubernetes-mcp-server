@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -134,7 +135,7 @@ func TestConfig(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version"})
 		require.NoError(t, rootCmd.Execute())
-		assert.Contains(t, out.String(), `config.path="`+configPath+`"`)
+		assert.Contains(t, out.String(), `config.path=`+strconv.Quote(configPath))
 	})
 	t.Run("--config beats MCP_CONFIG_PATH", func(t *testing.T) {
 		flagPath := writeTOML(t, dumpTOML+`list_output = "table"`+"\n")
@@ -143,7 +144,7 @@ func TestConfig(t *testing.T) {
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--config", flagPath})
 		require.NoError(t, rootCmd.Execute())
-		assert.Contains(t, out.String(), `config.path="`+flagPath+`"`)
+		assert.Contains(t, out.String(), `config.path=`+strconv.Quote(flagPath))
 	})
 	t.Run("K8S_MCP_CONFIG_PATH is not read", func(t *testing.T) {
 		t.Setenv("K8S_MCP_CONFIG_PATH", "invalid-path-from-legacy-env.toml")
