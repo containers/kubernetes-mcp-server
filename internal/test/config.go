@@ -4,7 +4,7 @@ import "github.com/containers/kubernetes-mcp-server/pkg/config"
 
 const (
 	EnvtestKubeClientQPS   float32 = 1000
-	EnvtestKubeClientBurst         = 2000
+	EnvtestKubeClientBurst int     = 2000
 )
 
 // ApplyEnvtestClientLimits sets high Kubernetes client QPS/burst on cfg so
