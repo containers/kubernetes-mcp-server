@@ -113,7 +113,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
 | defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
-| extraArgs | list | `[]` | Only bootstrap flags exist (`--config`, `--config-dir`, `--version`). Runtime settings must be in `config`. |
+| extraArgs | list | `[]` | Only bootstrap flags exist (`--config`, `--config-dir`, `--version`). Runtime settings go in `config` or the `tls` section. |
 | extraContainers | list | `[]` | Note: sidecars do not inherit defaultSecurityContext or the /tmp emptyDir mount; configure them per-container if needed. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
@@ -171,7 +171,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | serviceAccount.automountToken | bool | `true` | Whether to auto-mount the ServiceAccount token into the pod. Required for in-cluster Kubernetes API access (default). Set to false for OAuth passthrough deployments where the server uses the user's token instead of the ServiceAccount token. |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | If not set and create is true, a name is generated using the fullname template |
-| tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | TLS configuration |
+| tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | Certificate paths are written to the ConfigMap as tls_cert / tls_key. |
 | tls.certFile | string | `"tls.crt"` | Name of the certificate file within the secret (default: tls.crt) |
 | tls.enabled | bool | `false` | Enable TLS for the MCP server |
 | tls.keyFile | string | `"tls.key"` | Name of the key file within the secret (default: tls.key) |

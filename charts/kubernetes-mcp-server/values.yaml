@@ -207,8 +207,7 @@ initContainers: []
 
 # -- TLS configuration for the MCP server.
 # -- When enabled, the server will serve HTTPS and health probes will use the HTTPS scheme.
-# -- Certificate paths are written to the ConfigMap as tls_cert / tls_key (not as CLI flags).
-# -- This is the recommended way to enable TLS instead of using extraArgs.
+# -- Certificate paths are written to the ConfigMap as tls_cert / tls_key.
 tls:
   # -- Enable TLS for the MCP server
   enabled: false
