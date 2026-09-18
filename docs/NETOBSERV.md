@@ -78,7 +78,13 @@ Recommended settings (also in the example file):
 Grant the release ServiceAccount permission to:
 
 1. Use core Kubernetes tools (for example bind `view` or a custom ClusterRole).
-2. Call the NetObserv plugin API (the plugin enforces Kubernetes RBAC for the token).
+2. Call the NetObserv plugin API (the plugin enforces Kubernetes RBAC for the token). On OpenShift with NetObserv
+   multi-tenancy this means the operator-provided reader ClusterRoles:
+   - `netobserv-loki-reader` — `get` on `network.loki.grafana.com` (resourceName `logs`); required by `netobserv_list_flows` and `netobserv_export_flows`.
+   - `netobserv-metrics-reader` — `create` on `pods.metrics.k8s.io` (Thanos query authorization); required by `netobserv_get_flow_metrics`.
+
+   These are also what the tools advertise as [RBAC metadata](tool-rbac-metadata.md): a `bounded` declaration on OpenShift,
+   falling back to `unbounded` on other clusters where the plugin's Loki/Prometheus backend is not known.
 
 ### TLS
 
