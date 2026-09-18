@@ -18,52 +18,55 @@ import (
 )
 
 // Validate validates config-level invariants that must hold at both startup and
-// on SIGHUP reload.
+// on SIGHUP reload. Independent checks are accumulated so a single call reports
+// every problem it can.
 func (c *Config) Validate(ctx context.Context) error {
 	c.CertificateAuthority.replaceValue(strings.TrimSpace(c.CertificateAuthority.Get()))
 	c.TLSCert.replaceValue(strings.TrimSpace(c.TLSCert.Get()))
 	c.TLSKey.replaceValue(strings.TrimSpace(c.TLSKey.Get()))
 	c.normalizeTokenExchange()
 
-	if c.Port.Get() == "" && c.RequireOAuth.Get() {
-		return fmt.Errorf("require_oauth is not supported in stdio mode (port is empty); set port for HTTP or disable require_oauth")
+	var errs []error
+	add := func(err error) {
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
 
-	var optErr error
+	if c.Port.Get() == "" && c.RequireOAuth.Get() {
+		add(fmt.Errorf("require_oauth is not supported in stdio mode (port is empty); set port for HTTP or disable require_oauth"))
+	}
+
 	walkOptions(c, func(o option, path string) {
-		if optErr != nil {
-			return
-		}
 		if err := o.validateValue(); err != nil {
-			optErr = err
+			if path != "" {
+				add(fmt.Errorf("%s: %w", path, err))
+				return
+			}
+			add(err)
 		}
 	})
-	if optErr != nil {
-		return optErr
-	}
 	if c.MetricsPort.Get() != "" && c.Port.Get() == "" {
-		return fmt.Errorf("metrics_port requires port to be set (metrics port is only supported in HTTP mode)")
+		add(fmt.Errorf("metrics_port requires port to be set (metrics port is only supported in HTTP mode)"))
 	}
 	if c.MetricsPort.Get() != "" && c.MetricsPort.Get() == c.Port.Get() {
-		return fmt.Errorf("metrics_port must be different from port")
+		add(fmt.Errorf("metrics_port must be different from port"))
 	}
 	if c.ClusterProviderStrategy.Get() != "" && len(c.providerStrategies) > 0 {
 		if !slices.Contains(c.providerStrategies, c.ClusterProviderStrategy.Get()) {
-			return fmt.Errorf("invalid cluster_provider_strategy: %s, valid values are: %s", c.ClusterProviderStrategy.Get(), strings.Join(c.providerStrategies, ", "))
+			add(fmt.Errorf("invalid cluster_provider_strategy: %s, valid values are: %s", c.ClusterProviderStrategy.Get(), strings.Join(c.providerStrategies, ", ")))
 		}
 	}
 	if !c.RequireOAuth.Get() && (c.OAuthAudience.Get() != "" || c.AuthorizationURL.Get() != "" || c.ServerURL.Get() != "" || c.CertificateAuthority.Get() != "") {
-		return fmt.Errorf("oauth_audience, authorization_url, server_url and certificate_authority are only valid if require_oauth is enabled")
+		add(fmt.Errorf("oauth_audience, authorization_url, server_url and certificate_authority are only valid if require_oauth is enabled"))
 	}
 	if c.AuthorizationURL.Get() != "" {
 		u, err := url.Parse(c.AuthorizationURL.Get())
 		if err != nil {
-			return err
-		}
-		if u.Scheme != "https" && u.Scheme != "http" {
-			return fmt.Errorf("authorization_url must be a valid URL")
-		}
-		if u.Scheme == "http" {
+			add(err)
+		} else if u.Scheme != "https" && u.Scheme != "http" {
+			add(fmt.Errorf("authorization_url must be a valid URL"))
+		} else if u.Scheme == "http" {
 			klogutil.LogWarn(
 				klogutil.FromContext(ctx),
 				"authorization_url is using insecure scheme, this is not recommended production use",
@@ -71,30 +74,22 @@ func (c *Config) Validate(ctx context.Context) error {
 			)
 		}
 	}
-	if err := c.validateSkipJWTVerification(ctx); err != nil {
-		return err
-	}
+	add(c.validateSkipJWTVerification(ctx))
 	if (c.TLSCert.Get() != "" && c.TLSKey.Get() == "") || (c.TLSCert.Get() == "" && c.TLSKey.Get() != "") {
-		return fmt.Errorf("both tls_cert and tls_key must be provided together")
+		add(fmt.Errorf("both tls_cert and tls_key must be provided together"))
 	}
-	if err := c.ValidateRequireTLS(); err != nil {
-		return err
-	}
-	if err := c.ValidateClusterAuthMode(); err != nil {
-		return err
-	}
-	if err := c.validateTokenExchange(); err != nil {
-		return err
-	}
+	add(c.ValidateRequireTLS())
+	add(c.ValidateClusterAuthMode())
+	add(c.validateTokenExchange())
 	if c.TLSCert.Get() != "" && c.Port.Get() == "" {
-		return fmt.Errorf("tls_cert and tls_key require port to be set (TLS is only supported in HTTP mode)")
+		add(fmt.Errorf("tls_cert and tls_key require port to be set (TLS is only supported in HTTP mode)"))
 	}
 	if c.RequireTLS.Get() && c.Port.Get() != "" {
 		if c.TLSCert.Get() == "" || c.TLSKey.Get() == "" {
-			return fmt.Errorf("require_tls is enabled but TLS certificates are not configured (set tls_cert and tls_key)")
+			add(fmt.Errorf("require_tls is enabled but TLS certificates are not configured (set tls_cert and tls_key)"))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func validateListOutput(v string) error {
@@ -188,93 +183,101 @@ func (c *Config) validateTokenExchange() error {
 	if c.GetTokenExchangeConfig() == nil {
 		return nil
 	}
+	var errs []error
 	if c.AuthorizationURL.Get() == "" {
-		return fmt.Errorf("token exchange requires authorization_url to discover the token endpoint")
+		errs = append(errs, fmt.Errorf("token exchange requires authorization_url to discover the token endpoint"))
 	}
 	strategies := c.tokenExchangeStrategies
 	if len(strategies) == 0 {
 		strategies = tokenexchange.GetRegisteredStrategies()
 	}
 	if c.TokenExchange.Strategy.Get() == "" || !slices.Contains(strategies, c.TokenExchange.Strategy.Get()) {
-		return fmt.Errorf("invalid token_exchange.strategy %q: valid values are: %s", c.TokenExchange.Strategy.Get(), strings.Join(strategies, ", "))
+		errs = append(errs, fmt.Errorf("invalid token_exchange.strategy %q: valid values are: %s", c.TokenExchange.Strategy.Get(), strings.Join(strategies, ", ")))
 	}
 	auth := c.TokenExchange.ClientAuth
 	if !auth.configured() {
-		return nil
+		return errors.Join(errs...)
 	}
 	if auth.Method.Get() == "" {
 		if auth.ClientID.Get() != "" && auth.ClientSecret.Get() == "" && auth.CertificateFile.Get() == "" && auth.PrivateKeyFile.Get() == "" && auth.TokenFile.Get() == "" {
-			return nil
+			return errors.Join(errs...)
 		}
-		return fmt.Errorf("token_exchange.client_auth.method is required when client authentication fields are configured")
+		errs = append(errs, fmt.Errorf("token_exchange.client_auth.method is required when client authentication fields are configured"))
+		return errors.Join(errs...)
 	}
 	if auth.ClientID.Get() == "" {
-		return fmt.Errorf("token_exchange.client_auth.client_id is required when method is %q", auth.Method.Get())
+		errs = append(errs, fmt.Errorf("token_exchange.client_auth.client_id is required when method is %q", auth.Method.Get()))
 	}
 	switch TokenExchangeClientAuthMethod(auth.Method.Get()) {
 	case TokenExchangeClientAuthMethodSecretBasic, TokenExchangeClientAuthMethodSecretPost:
 		if auth.ClientSecret.Get() == "" {
-			return fmt.Errorf("token_exchange.client_auth.client_secret is required when method is %q", auth.Method.Get())
+			errs = append(errs, fmt.Errorf("token_exchange.client_auth.client_secret is required when method is %q", auth.Method.Get()))
 		}
 	case TokenExchangeClientAuthMethodPrivateKey:
 		if err := validateTokenExchangeFile("certificate_file", auth.CertificateFile.Get()); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 		if err := validateTokenExchangeFile("private_key_file", auth.PrivateKeyFile.Get()); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	case TokenExchangeClientAuthMethodJWTFile:
 		if err := validateTokenExchangeFile("token_file", auth.TokenFile.Get()); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	default:
-		return fmt.Errorf("invalid token_exchange.client_auth.method %q: must be client_secret_basic, client_secret_post, private_key_jwt, or jwt_file", auth.Method.Get())
+		errs = append(errs, fmt.Errorf("invalid token_exchange.client_auth.method %q: must be client_secret_basic, client_secret_post, private_key_jwt, or jwt_file", auth.Method.Get()))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (c *Config) ValidateRequireTLS() error {
 	requireTLS := c.RequireTLS.Get()
+	var errs []error
 	if requireTLS {
 		if err := ValidateURLsRequireTLS(map[string]string{
 			"authorization_url": c.AuthorizationURL.Get(),
 			"server_url":        c.ServerURL.Get(),
 		}); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	if err := validateExtendedRequireTLS(c.parsedToolsetConfigs, extensionToolsetTable, requireTLS); err != nil {
-		return err
+		errs = append(errs, err)
 	}
-	return validateExtendedRequireTLS(c.parsedClusterProviderConfigs, extensionProviderTable, requireTLS)
+	if err := validateExtendedRequireTLS(c.parsedClusterProviderConfigs, extensionProviderTable, requireTLS); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 func validateExtendedRequireTLS(cfgs map[string]ExtendedConfig, table string, requireTLS bool) error {
+	var errs []error
 	for _, name := range slices.Sorted(maps.Keys(cfgs)) {
 		v, ok := cfgs[name].(RequireTLSValidator)
 		if !ok {
 			continue
 		}
 		if err := v.ValidateRequireTLS(requireTLS); err != nil {
-			return fmt.Errorf("%s.%s: %w", table, name, err)
+			errs = append(errs, fmt.Errorf("%s.%s: %w", table, name, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (c *Config) ValidateClusterAuthMode() error {
 	mode := c.ClusterAuthMode.Get()
+	var errs []error
 	if mode == ClusterAuthKubeconfig && c.RequireOAuth.Get() {
-		return fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", ClusterAuthKubeconfig)
+		errs = append(errs, fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", ClusterAuthKubeconfig))
 	}
 	hasTokenExchange := c.GetTokenExchangeConfig() != nil
 	if mode == ClusterAuthKubeconfig && hasTokenExchange {
-		return fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", ClusterAuthKubeconfig)
+		errs = append(errs, fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", ClusterAuthKubeconfig))
 	}
 	if !c.RequireOAuth.Get() && hasTokenExchange {
-		return fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)")
+		errs = append(errs, fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)"))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (c *Config) normalizeTokenExchange() {

@@ -67,7 +67,6 @@ type Option[T any] struct {
     Description                string
     Default                    T
     ParseEnv                   func(string) (T, error) // required if EnvName != ""
-    ParseTOML                  func(any) (T, error)    // required if TOMLKey != ""
     Validate                   func(T) error           // per-value; cross-field stays on Config.Validate
     Reloadable                 bool
     Sensitive                  bool // redact in String / Describe / startup dump
@@ -87,7 +86,8 @@ BurntSushi. A field also stays overridable by downstream
 `defaultOverrides()` (spellings, not just defaults). Empty `TOMLKey` is
 how a leaf opts out of TOML without a sentinel tag. Wrapping structs may
 still use `toml` tags for the **table name**; the walk prepends that
-prefix to each child's `TOMLKey`.
+prefix to each child's `TOMLKey`. TOML values are decoded by a shared
+type switch (`parseTyped`); there is no per-option `ParseTOML` hook.
 
 There is no CLI vector for runtime options. Product CLI is bootstrap only
 (`--config` / `--config-dir` / `--version`). Those flags select files; they
@@ -277,9 +277,10 @@ still pinned back to the previous value.
 SIGHUP still requires the process to have been started with `--config`
 and/or `--config-dir`. Unavailable on Windows (unchanged).
 
-On every successful load (startup and SIGHUP) the server logs every option.
-On SIGHUP, options whose value differs from the previous config are marked
-`changed=true` with the previous `Describe()` value.
+After Validate (startup and SIGHUP, success or failure) the server logs every
+option. Independent Validate errors are accumulated. On SIGHUP, options whose
+value differs from the previous config are marked `changed=true` with the
+previous `Describe()` value.
 
 **Startup dump:** log every option via `Describe()`, secrets redacted.
 
@@ -321,7 +322,7 @@ Also in this package:
   ([`toolset_config.go`](../../pkg/config/toolset_config.go),
   [`provider_config.go`](../../pkg/config/provider_config.go))
 - drop-in merge (plus per-key file identity)
-- `Config.Validate` (per-value then cross-field)
+- `Config.Validate` (per-value then cross-field; all independent errors)
 
 ### Tests
 

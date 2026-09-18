@@ -55,7 +55,7 @@ Each option is resolved once per load. Later sources override earlier ones:
 
 Unknown TOML keys fail the load (startup exits non-zero). Registered `toolset_configs.<name>` and `cluster_provider_configs.<name>` tables remain valid; unknown fields *inside* a registered block also fail.
 
-On successful load the server logs every option with its resolved value and source (file path, `<Env>`, or `<Default>`). Sensitive values are redacted. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config.
+After validation (startup and SIGHUP, success or failure) the server logs every option with its resolved value and source (file path, `<Env>`, or `<Default>`). Sensitive values are redacted. Independent validation errors are all reported. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config.
 
 Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-only; the default (`port=""`, `require_oauth=false`) still works.
 

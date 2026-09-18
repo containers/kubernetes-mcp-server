@@ -19,6 +19,25 @@ func (s *ValidateSuite) validConfig() *config.Config {
 	return cfg
 }
 
+func (s *ValidateSuite) TestAccumulatesIndependentErrors() {
+	cfg := s.validConfig()
+	cfg.Port.SetForTest("")
+	cfg.RequireOAuth.SetForTest(true)
+	cfg.ListOutput.SetForTest("not-a-format")
+	cfg.MetricsPort.SetForTest("9090")
+	cfg.HTTP.RateLimitRPS.SetForTest(-1)
+	cfg.HTTP.RateLimitBurst.SetForTest(-5)
+	err := cfg.Validate(s.T().Context())
+	s.Require().Error(err)
+	msg := err.Error()
+	s.Contains(msg, "require_oauth is not supported in stdio mode")
+	s.Contains(msg, "invalid output name")
+	s.Contains(msg, "metrics_port requires port")
+	s.Contains(msg, "rate_limit_rps must not be negative")
+	s.Contains(msg, "rate_limit_burst must not be negative")
+	s.Contains(msg, "skip_jwt_verification=true")
+}
+
 func (s *ValidateSuite) TestValidDefaultConfig() {
 	s.Run("default config passes validation", func() {
 		cfg := s.validConfig()

@@ -84,6 +84,9 @@ func (s *ProviderConfigSuite) TestReadConfigValid() {
 		s.Equal("a string", testProviderConfig.StrProp, "Expected StrProp to be 'a string'")
 		s.Equal(42, testProviderConfig.IntProp, "Expected IntProp to be 42")
 	})
+	s.Run("records cluster_provider_configs source from the file", func() {
+		s.Equal(Source(validConfigPath), config.clusterProviderConfigsSource)
+	})
 }
 
 func (s *ProviderConfigSuite) TestReadConfigInvalidProviderConfig() {

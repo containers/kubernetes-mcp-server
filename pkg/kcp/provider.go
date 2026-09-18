@@ -102,7 +102,7 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 		return fmt.Errorf("failed to create base manager: %w", err)
 	}
 
-	workspaceList, err := p.discoverWorkspaces(ctx, restConfig, defaultWorkspace)
+	workspaceList, err := DiscoverAllWorkspaces(ctx, restConfig, defaultWorkspace)
 	if err != nil {
 		klogutil.LogWarn(klogutil.FromContext(ctx), "Failed to discover workspaces via API, falling back to kubeconfig", klogutil.Err(err))
 		workspaceList, err = workspacesFromKubeconfig(ctx, clientCmdConfig)
@@ -140,12 +140,6 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// discoverWorkspaces queries the kcp tenancy API to discover available workspaces.
-// It recursively discovers nested workspaces in the workspace hierarchy.
-func (p *kcpClusterProvider) discoverWorkspaces(ctx context.Context, restConfig *rest.Config, defaultWorkspace string) ([]string, error) {
-	return DiscoverAllWorkspaces(ctx, restConfig, defaultWorkspace)
 }
 
 // workspacesFromKubeconfig extracts workspace names from kubeconfig cluster URLs as a fallback.

@@ -223,7 +223,7 @@ tls:
   keyFile: tls.key
 
 # -- Extra arguments to pass to the kubernetes-mcp-server command line.
-# -- Only bootstrap flags remain (`--config`, `--config-dir`, `--version`). Runtime flags such as `--tls-cert` fail with `unknown flag`; put those settings in `config` or the `tls` section.
+# -- Only bootstrap flags exist (`--config`, `--config-dir`, `--version`). Runtime settings go in `config` or the `tls` section.
 extraArgs: []
 
 # -- Additional containers to add to the pod (sidecars).

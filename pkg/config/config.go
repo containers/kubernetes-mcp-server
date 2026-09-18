@@ -346,7 +346,7 @@ type Config struct {
 	parsedClusterProviderConfigs map[string]ExtendedConfig
 	// Internal: parsed toolset configs (not exposed to TOML as Option fields)
 	parsedToolsetConfigs map[string]ExtendedConfig
-	// Internal: which file last set cluster_provider_configs (for reload pinning)
+	// Internal: which file last set cluster_provider_configs (for Dump / reload pin)
 	clusterProviderConfigsSource Source
 	// Internal: which file last set toolset_configs
 	toolsetConfigsSource Source
@@ -1136,8 +1136,8 @@ func equalExtendedMaps(a, b map[string]ExtendedConfig) bool {
 }
 
 // Dump logs every option at V(1), marking values that changed from prev.
-// Call after logging is configured (cmd.Complete) and, on SIGHUP, only after
-// the reload has been applied. Pass nil prev at startup.
+// Call after logging is configured, after Validate, on both success and
+// failure (startup and SIGHUP). Pass nil prev at startup.
 func (cfg *Config) Dump(ctx context.Context, prev *Config) {
 	logger := klogutil.FromContext(ctx).V(1)
 	prevs := map[string]option{}
@@ -1154,4 +1154,40 @@ func (cfg *Config) Dump(ctx context.Context, prev *Config) {
 		}
 		logger.Info("config option", keys...)
 	})
+	cfg.dumpExtended(logger, extensionToolsetTable, cfg.parsedToolsetConfigs, cfg.toolsetConfigsSource, prev)
+	cfg.dumpExtended(logger, extensionProviderTable, cfg.parsedClusterProviderConfigs, cfg.clusterProviderConfigsSource, prev)
+}
+
+func (cfg *Config) dumpExtended(logger interface{ Info(string, ...any) }, name string, parsed map[string]ExtendedConfig, src Source, prev *Config) {
+	if src == "" {
+		src = SourceDefault
+	}
+	keys := []any{"option", name, "value", describeExtended(parsed, src)}
+	if prev != nil {
+		var prevParsed map[string]ExtendedConfig
+		var prevSrc Source
+		if name == extensionToolsetTable {
+			prevParsed = prev.parsedToolsetConfigs
+			prevSrc = prev.toolsetConfigsSource
+		} else {
+			prevParsed = prev.parsedClusterProviderConfigs
+			prevSrc = prev.clusterProviderConfigsSource
+		}
+		if !equalExtendedMaps(parsed, prevParsed) {
+			if prevSrc == "" {
+				prevSrc = SourceDefault
+			}
+			keys = append(keys, "changed", true, "previous", describeExtended(prevParsed, prevSrc))
+		}
+	}
+	logger.Info("config option", keys...)
+}
+
+func describeExtended(parsed map[string]ExtendedConfig, src Source) string {
+	names := make([]string, 0, len(parsed))
+	for name := range parsed {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return fmt.Sprintf("%v (%s)", names, src)
 }

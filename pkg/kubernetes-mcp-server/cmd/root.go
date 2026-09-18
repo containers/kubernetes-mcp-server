@@ -94,7 +94,9 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 					}
 				}
 			}()
-			if err := o.Validate(ctx); err != nil {
+			err := o.Validate(ctx)
+			o.Config.Dump(ctx, nil)
+			if err != nil {
 				return err
 			}
 			if err := o.Run(ctx); err != nil {
@@ -159,7 +161,6 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 		klogutil.FromContext(ctx).Error(otelLogErr, "Failed to create OTel log provider, log export disabled")
 	}
 
-	m.Config.Dump(ctx, nil)
 	return nil
 }
 
@@ -168,14 +169,13 @@ func (m *MCPServerOptions) Validate(ctx context.Context) error {
 }
 
 func (m *MCPServerOptions) validateConfig(ctx context.Context, cfg *config.Config) error {
-	if err := toolsets.Validate(cfg.Toolsets.Get()); err != nil {
-		return err
-	}
-	// Config-level validations (shared with SIGHUP reload)
-	return cfg.
-		WithProviderStrategies(kubernetes.GetRegisteredStrategies()).
-		WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
-		Validate(ctx)
+	return errors.Join(
+		toolsets.Validate(cfg.Toolsets.Get()),
+		cfg.
+			WithProviderStrategies(kubernetes.GetRegisteredStrategies()).
+			WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
+			Validate(ctx),
+	)
 }
 
 func (m *MCPServerOptions) Run(ctx context.Context) error {
@@ -295,22 +295,23 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 			// config during apply. Roll back if ReloadConfiguration fails.
 			cfgState.Store(newConfig)
 
-			if err := mcpServer.ReloadConfiguration(ctx, newConfig); err != nil {
+			err = mcpServer.ReloadConfiguration(ctx, newConfig)
+			if err != nil {
 				logger.Error(err, "Failed to apply reloaded configuration")
 				cfgState.Store(prev)
-				continue
-			}
-
-			// Re-apply the log destination so log_file changes and file
-			// rotations are handled correctly. Failures are logged but never
-			// fatal — the previous destination is preserved. logSink can be
-			// nil in tests that exercise the SIGHUP handler in isolation.
-			if m.logSink != nil {
-				if err := m.logSink.Reload(newConfig); err != nil {
-					logger.Error(err, "Failed to reload log destination, keeping previous one")
+			} else if m.logSink != nil {
+				// Re-apply the log destination so log_file changes and file
+				// rotations are handled correctly. Failures are logged but never
+				// fatal — the previous destination is preserved. logSink can be
+				// nil in tests that exercise the SIGHUP handler in isolation.
+				if reloadErr := m.logSink.Reload(newConfig); reloadErr != nil {
+					logger.Error(reloadErr, "Failed to reload log destination, keeping previous one")
 				}
 			}
 			newConfig.Dump(ctx, prev)
+			if err != nil {
+				continue
+			}
 
 			// Check if OAuth-relevant config changed and update the shared state
 			currentSnapshot := oauthState.Load()

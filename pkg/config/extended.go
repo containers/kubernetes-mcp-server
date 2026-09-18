@@ -202,12 +202,6 @@ func rejectContainerUnknown(raw, parsed any, path string) error {
 		return rejectUnknownMapOfStruct(child, derefType(rt.Elem()), path)
 	case rt.Kind() == reflect.Slice && derefType(rt.Elem()).Kind() == reflect.Struct:
 		return rejectUnknownSlice(raw, derefType(rt.Elem()), path)
-	case rt.Kind() == reflect.Struct:
-		child, ok := raw.(map[string]any)
-		if !ok {
-			return nil
-		}
-		return rejectUnknownStructKeys(child, parsed, path)
 	}
 	return nil
 }

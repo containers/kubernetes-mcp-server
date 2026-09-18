@@ -1230,6 +1230,8 @@ func (s *ConfigSuite) TestDump() {
 		s.Contains(logs, "<redacted>")
 		s.NotContains(logs, "super-secret")
 		s.NotContains(logs, "changed=true")
+		s.Contains(logs, `option="toolset_configs"`)
+		s.Contains(logs, `option="cluster_provider_configs"`)
 	})
 
 	s.Run("marks values that differ from previous", func() {
@@ -1243,6 +1245,26 @@ func (s *ConfigSuite) TestDump() {
 		s.Contains(logs, "changed=true")
 		s.Contains(logs, "previous")
 		s.Contains(logs, "yaml")
+	})
+
+	s.Run("logs toolset_configs with parse source", func() {
+		buf.Reset()
+		if _, ok := toolsetConfigRegistry.parsers["dump-ext"]; !ok {
+			RegisterToolsetConfig("dump-ext", toolsetConfigForTestParser)
+		}
+		loaded, err := ReadToml(s.T().Context(), []byte(`
+[toolset_configs.dump-ext]
+enabled = true
+endpoint = "https://example.com"
+timeout = 1
+`))
+		s.Require().NoError(err)
+		loaded.Dump(ctx, nil)
+		klog.Flush()
+		logs := buf.String()
+		s.Contains(logs, `option="toolset_configs"`)
+		s.Contains(logs, "dump-ext")
+		s.Contains(logs, "<toml>")
 	})
 }
 

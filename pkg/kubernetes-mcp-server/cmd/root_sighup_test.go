@@ -258,7 +258,7 @@ func (s *SIGHUPSuite) TestSIGHUPDumpAfterSuccessfulReload() {
 	s.Contains(logs, "yaml")
 }
 
-func (s *SIGHUPSuite) TestSIGHUPRejectedReloadDoesNotDump() {
+func (s *SIGHUPSuite) TestSIGHUPRejectedReloadStillDumps() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
 	s.Require().NoError(os.WriteFile(configPath, []byte(`
 		toolsets = ["core", "config"]
@@ -276,8 +276,10 @@ func (s *SIGHUPSuite) TestSIGHUPRejectedReloadDoesNotDump() {
 		klog.Flush()
 		return strings.Contains(s.logBuffer.String(), "Failed to apply reloaded configuration")
 	}, 2*time.Second, 50*time.Millisecond)
-	s.NotContains(s.logBuffer.String(), "changed=true")
-	s.NotContains(s.logBuffer.String(), `"config option"`)
+	logs := s.logBuffer.String()
+	s.Contains(logs, "config option")
+	s.Contains(logs, `option="toolsets"`)
+	s.Contains(logs, "changed=true")
 	s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 }
 

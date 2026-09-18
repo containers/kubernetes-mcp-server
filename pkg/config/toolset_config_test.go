@@ -83,6 +83,9 @@ func (s *ToolsetConfigSuite) TestReadConfigValid() {
 		s.Equal("https://example.com", testToolsetConfig.Endpoint, "Expected Endpoint to be 'https://example.com'")
 		s.Equal(30, testToolsetConfig.Timeout, "Expected Timeout to be 30")
 	})
+	s.Run("records toolset_configs source from the file", func() {
+		s.Equal(Source(validConfigPath), config.toolsetConfigsSource)
+	})
 }
 
 func (s *ToolsetConfigSuite) TestReadConfigInvalidToolsetConfig() {

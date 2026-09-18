@@ -161,6 +161,13 @@ func (s *ToolsetsSuite) TestValidate() {
 		s.NotNil(err, "Expected error if any toolset name is invalid")
 		s.Contains(err.Error(), "invalid toolset name: invalid", "Expected error message to contain invalid toolset name")
 	})
+	s.Run("Reports every invalid toolset name", func() {
+		err := Validate([]string{"bogus-a", "valid", "bogus-b"})
+		s.Require().Error(err)
+		s.Contains(err.Error(), "bogus-a")
+		s.Contains(err.Error(), "bogus-b")
+		s.NotContains(err.Error(), "bogus-a, valid")
+	})
 }
 
 func TestToolsets(t *testing.T) {

@@ -83,6 +83,13 @@ func TestStartupOptionDump(t *testing.T) {
 	assert.NotContains(t, out, "changed=true")
 }
 
+func TestStartupRejectedConfigStillDumps(t *testing.T) {
+	out, err := executeVersion(t, dumpTOML+`toolsets = ["not-a-real-toolset"]`+"\n")
+	require.Error(t, err)
+	assert.Contains(t, out, "config option")
+	assert.Contains(t, out, `option="toolsets"`)
+}
+
 func TestDroppedFlagsAreRejected(t *testing.T) {
 	for _, flag := range []string{"--port=8080", "--kubeconfig=/tmp/x", "--toolsets=core", "--log-level=1"} {
 		t.Run(flag, func(t *testing.T) {
