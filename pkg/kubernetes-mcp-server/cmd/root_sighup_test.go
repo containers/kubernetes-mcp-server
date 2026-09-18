@@ -223,7 +223,10 @@ func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigExits() {
 func (s *SIGHUPSuite) TestSIGHUPOIDCDiscoveryFailureKeepsPreviousConfig() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
 	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		port = "18080"
 		toolsets = ["core", "config"]
+		require_oauth = true
+		skip_jwt_verification = true
 	`)), 0o644))
 	_ = s.InitServer(configPath, "")
 
@@ -231,7 +234,9 @@ func (s *SIGHUPSuite) TestSIGHUPOIDCDiscoveryFailureKeepsPreviousConfig() {
 	issuer.Close()
 
 	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		port = "18080"
 		toolsets = ["core", "config", "helm"]
+		require_oauth = true
 		authorization_url = %q
 	`, issuer.URL))), 0o644))
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -251,6 +256,42 @@ func (s *SIGHUPSuite) TestSIGHUPOIDCDiscoveryFailureKeepsPreviousConfig() {
 	})
 	s.Run("does not exit", func() {
 		s.False(s.reloadExited.Load())
+	})
+}
+
+func (s *SIGHUPSuite) TestSIGHUPValidatesBeforeOAuthDiscovery() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		toolsets = ["core", "config"]
+	`)), 0o644))
+	_ = s.InitServer(configPath, "")
+
+	var discoveryRequests atomic.Int32
+	issuer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		discoveryRequests.Add(1)
+		http.NotFound(w, nil)
+	}))
+	s.T().Cleanup(issuer.Close)
+
+	// authorization_url without require_oauth is invalid and must be rejected
+	// before OIDC discovery or either live state is published.
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		toolsets = ["core", "config", "helm"]
+		authorization_url = %q
+	`, issuer.URL))), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return s.reloadExited.Load()
+	}, 2*time.Second, 50*time.Millisecond)
+
+	s.Run("does not attempt discovery", func() {
+		s.Equal(int32(0), discoveryRequests.Load())
+	})
+	s.Run("does not publish candidate state", func() {
+		s.Equal([]string{"core", "config"}, s.cfgState.Load().Toolsets.Get())
+		s.Empty(s.oauthState.Load().AuthorizationURL)
 	})
 }
 

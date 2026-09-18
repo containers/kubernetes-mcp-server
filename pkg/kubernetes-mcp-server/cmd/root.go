@@ -296,6 +296,13 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 			}
 
 			prev := cfgState.Load()
+			if err := m.validateConfig(ctx, newConfig); err != nil {
+				logger.Error(err, "Failed to apply reloaded configuration")
+				newConfig.Dump(ctx, prev)
+				m.exitProcess(1)
+				continue
+			}
+
 			prevOAuth := oauthState.Load()
 			if prevOAuth == nil {
 				prevOAuth = &internaloauth.Snapshot{}
