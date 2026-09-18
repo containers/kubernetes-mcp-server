@@ -569,6 +569,11 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Stat
 		return fmt.Errorf("failed to reload toolsets: %w", err)
 	}
 
+	// A successful reload also re-fetches cached cluster CAs right away, so
+	// a rotated CA is picked up on SIGHUP without waiting out
+	// ca_refresh_interval or restarting. Failures keep the previous CA.
+	s.p.RefreshCAs()
+
 	logger.V(1).Info("MCP server configuration reloaded successfully")
 	return nil
 }

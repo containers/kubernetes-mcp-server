@@ -82,11 +82,12 @@ func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 		}
 	}
 
-	for _, old := range p.managers {
-		if old != nil {
-			old.Close()
-		}
-	}
+	// Stop the previous watchers and release the previous managers (with
+	// their background CA refreshers) before the fresh state below replaces
+	// them. The new manager m is installed after this point, so it is
+	// untouched by Close.
+	p.Close()
+
 	p.managers = map[string]*Manager{
 		defaultContext: m,
 	}
@@ -98,7 +99,6 @@ func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 		p.managers[name] = nil
 	}
 
-	p.Close()
 	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig)
 	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient())
 	p.defaultContext = defaultContext
@@ -213,10 +213,38 @@ func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload Mcp
 	p.clusterStateWatcher.Watch(ctx, reload)
 }
 
+// Close stops the watchers and releases every manager's HTTP transport and
+// background CA refresh loop. reset() closes replaced managers on reload;
+// this ensures shutdown (and tests that only call Close) leave nothing
+// running behind. Manager.Close is idempotent, so calling it here and in
+// reset() is safe.
 func (p *kubeConfigClusterProvider) Close() {
 	for _, w := range []watcher.Watcher{p.kubeconfigWatcher, p.clusterStateWatcher} {
 		if !reflect.ValueOf(w).IsNil() {
 			w.Close()
 		}
+	}
+	for _, m := range p.managers {
+		if m != nil {
+			m.Close()
+		}
+	}
+}
+
+// RefreshCAs re-fetches every live manager's cluster CA now, so a rotated
+// CA is picked up on SIGHUP without waiting out ca_refresh_interval. The
+// snapshot keeps the fetch (bounded by caFetchMaxDuration) outside the
+// lock so a reset triggered meanwhile is not blocked on the network.
+func (p *kubeConfigClusterProvider) RefreshCAs() {
+	p.mu.RLock()
+	managers := make([]*Manager, 0, len(p.managers))
+	for _, m := range p.managers {
+		if m != nil {
+			managers = append(managers, m)
+		}
+	}
+	p.mu.RUnlock()
+	for _, m := range managers {
+		m.RefreshCAs()
 	}
 }

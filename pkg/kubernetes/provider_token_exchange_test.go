@@ -59,6 +59,7 @@ func (fakeDerivedProvider) GetTargets(context.Context) ([]string, error) { retur
 func (fakeDerivedProvider) GetDefaultTarget() string                     { return "" }
 func (fakeDerivedProvider) GetTargetParameterName() string               { return "" }
 func (fakeDerivedProvider) WatchTargets(context.Context, McpReload)      {}
+func (fakeDerivedProvider) RefreshCAs()                                  {}
 func (fakeDerivedProvider) Close()                                       {}
 func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kubernetes, error) {
 	return &Kubernetes{}, nil

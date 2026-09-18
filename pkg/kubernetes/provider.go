@@ -31,6 +31,12 @@ type Provider interface {
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
 	WatchTargets(ctx context.Context, reload McpReload)
+	// RefreshCAs re-fetches every held manager's cluster CA now, so a
+	// rotated cluster CA is picked up on SIGHUP config reload without
+	// waiting out the refresh interval. It lives on the interface rather
+	// than as an optional capability so no provider can silently miss the
+	// refresh.
+	RefreshCAs()
 	Close()
 }
 

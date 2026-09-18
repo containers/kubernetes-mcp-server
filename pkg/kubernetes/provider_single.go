@@ -69,7 +69,7 @@ func (p *singleClusterProvider) reset(ctx context.Context) error {
 		return err
 	}
 
-	p.Close()
+	p.closeWatchers()
 	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig)
 	p.clusterStateWatcher = watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient())
 	return nil
@@ -115,10 +115,30 @@ func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpRelo
 	p.clusterStateWatcher.Watch(ctx, reload)
 }
 
-func (p *singleClusterProvider) Close() {
+// closeWatchers stops the kubeconfig and cluster-state watchers without
+// touching the manager. reset() rebuilds watchers on reload and must not
+// kill the freshly-built manager's transport or CA refresher, so it calls
+// this instead of Close().
+func (p *singleClusterProvider) closeWatchers() {
 	for _, w := range []watcher.Watcher{p.kubeconfigWatcher, p.clusterStateWatcher} {
 		if !reflect.ValueOf(w).IsNil() {
 			w.Close()
 		}
+	}
+}
+
+func (p *singleClusterProvider) Close() {
+	p.closeWatchers()
+	if p.manager != nil {
+		p.manager.Close()
+	}
+}
+
+// RefreshCAs re-fetches the manager's cluster CA now, so a rotated CA is
+// picked up on SIGHUP config reload without waiting out
+// ca_refresh_interval.
+func (p *singleClusterProvider) RefreshCAs() {
+	if p.manager != nil {
+		p.manager.RefreshCAs()
 	}
 }
