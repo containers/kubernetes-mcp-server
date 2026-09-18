@@ -485,6 +485,8 @@ Fine-grained control over individual tools within enabled toolsets.
 | `enabled_tools` | string[] | `[]` | Allowlist of specific tools to enable. When set, only these tools are available. |
 | `disabled_tools` | string[] | `[]` | Denylist of specific tools to disable. Applied after `enabled_tools`. |
 
+The `configuration_view` tool is disabled by default in HTTP mode because it exposes kubeconfig contents. To expose it in HTTP mode, include `configuration_view` explicitly in `enabled_tools` along with every other tool the server should provide.
+
 **Example:**
 ```toml
 # Only enable specific tools
