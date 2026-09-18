@@ -85,13 +85,13 @@ Since a config is now required for http mode (`port` must be set), the container
 
 ### Unknown keys
 
-A file that contains any key not in the schema fails that load. Startup exits. SIGHUP logs the error and keeps the previous config. `toolset_configs.<name>` and `cluster_provider_configs.<name>` remain valid for registered extensions; unknown fields *inside* those blocks also fail.
+A file that contains any key not in the schema fails that load. Startup and SIGHUP exit. `toolset_configs.<name>` and `cluster_provider_configs.<name>` remain valid for registered extensions; unknown fields *inside* those blocks also fail.
 
 Removed `sts_*` / `token_exchange_strategy` keys are rejected with a pointer to the `[token_exchange]` table (see [below](#upgrading-from-0066)).
 
 ### SIGHUP
 
-SIGHUP re-reads files and re-applies env. Non-reloadable options whose resolved value would change keep the previous value and source; the server logs that a restart is required. Those options are pinned before `toolset_configs` / `cluster_provider_configs` are parsed, so extension TLS checks see the effective `require_tls`. An invalid `cluster_provider_configs` table on SIGHUP is logged and the previous table is kept so other reloadable keys still apply.
+SIGHUP re-reads files and re-applies env. A parse, unknown-key, non-reloadable, or Validate failure exits the process. Validate failures dump the rejected config first. Non-reloadable options whose resolved value would change fail the load (checked before `toolset_configs` / `cluster_provider_configs` are parsed). An invalid or changed `cluster_provider_configs` table fails the load.
 
 On SIGHUP the option dump includes `changed=true` and `previous` for values that differ from the prior config.
 
@@ -107,7 +107,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 
 ### Vectors at a glance
 
-`—` means that vector is off. Reload `yes` means a SIGHUP that changes the value takes effect; `no` means the previous value is pinned.
+`—` means that vector is off. Reload `yes` means a SIGHUP that changes the value takes effect; `no` means a SIGHUP that would change the value is rejected and the process exits.
 
 | TOML | Env | Reload |
 |------|-----|--------|

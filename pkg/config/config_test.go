@@ -1189,13 +1189,22 @@ client_secret = "super-secret"
 	})
 }
 
-func (s *ConfigSuite) TestPinNonReloadable() {
+func (s *ConfigSuite) TestRejectNonReloadable() {
 	prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
 	s.Require().NoError(err)
-	next, err := ReadToml(s.T().Context(), []byte(`port = "9090"`), WithPrevious(prev))
+	_, err = ReadToml(s.T().Context(), []byte(`port = "9090"`), WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option port changed")
+	s.Contains(err.Error(), "8080")
+	s.Contains(err.Error(), "9090")
+}
+
+func (s *ConfigSuite) TestReloadableChangeWithPreviousSucceeds() {
+	prev, err := ReadToml(s.T().Context(), []byte(`list_output = "table"`))
 	s.Require().NoError(err)
-	s.Equal("8080", next.Port.Get())
-	s.Equal(prev.Port.Source(), next.Port.Source())
+	next, err := ReadToml(s.T().Context(), []byte(`list_output = "yaml"`), WithPrevious(prev))
+	s.Require().NoError(err)
+	s.Equal("yaml", next.ListOutput.Get())
 }
 
 func (s *ConfigSuite) TestDump() {
@@ -1236,7 +1245,10 @@ func (s *ConfigSuite) TestDump() {
 
 	s.Run("marks values that differ from previous", func() {
 		buf.Reset()
-		next, err := ReadToml(s.T().Context(), []byte(`list_output = "yaml"`), WithPrevious(cfg))
+		next, err := ReadToml(s.T().Context(), []byte(`
+			port = "8080"
+			list_output = "yaml"
+		`), WithPrevious(cfg))
 		s.Require().NoError(err)
 		next.Dump(ctx, cfg)
 		klog.Flush()

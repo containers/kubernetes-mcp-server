@@ -330,45 +330,39 @@ func (s *ToolsetConfigSuite) TestConfigDirPathInContextStandalone() {
 	})
 }
 
-func (s *ToolsetConfigSuite) TestParserSeesPinnedRequireTLS() {
-	var captured bool
-	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
-		captured = RequireTLSFromContext(ctx)
-		return toolsetConfigForTestParser(ctx, primitive, md)
-	})
+func (s *ToolsetConfigSuite) TestReloadRejectsRequireTLSChange() {
+	RegisterToolsetConfig("test-toolset", toolsetConfigForTestParser)
 
-	s.Run("parser sees pinned true when file sets false", func() {
+	s.Run("require_tls true to false fails the load", func() {
 		prev, err := ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"
 		`))
 		s.Require().NoError(err)
-		next, err := ReadToml(s.T().Context(), []byte(`
+		_, err = ReadToml(s.T().Context(), []byte(`
 			require_tls = false
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"
 		`), WithPrevious(prev))
-		s.Require().NoError(err)
-		s.True(captured, "parser should see pinned require_tls=true, not the file's false")
-		s.True(next.RequireTLS.Get())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
 	})
 
-	s.Run("parser sees pinned false when file sets true", func() {
+	s.Run("require_tls false to true fails the load", func() {
 		prev, err := ReadToml(s.T().Context(), []byte(`
 			require_tls = false
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"
 		`))
 		s.Require().NoError(err)
-		next, err := ReadToml(s.T().Context(), []byte(`
+		_, err = ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.test-toolset]
 			endpoint = "https://example.com"
 		`), WithPrevious(prev))
-		s.Require().NoError(err)
-		s.False(captured, "parser should see pinned require_tls=false, not the file's true")
-		s.False(next.RequireTLS.Get())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
 	})
 }
 

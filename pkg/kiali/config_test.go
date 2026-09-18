@@ -115,10 +115,10 @@ func (s *ConfigSuite) TestConfigParser_AllowsSecureWithRequireTLS() {
 	s.False(kcfg.Insecure)
 }
 
-func (s *ConfigSuite) TestReloadPinsRequireTLSBeforeParse() {
+func (s *ConfigSuite) TestReloadRejectsRequireTLSChange() {
 	caFileForTOML := filepath.ToSlash(s.caFile)
 
-	s.Run("rejects kiali insecure when require_tls stays pinned true", func() {
+	s.Run("require_tls true to false fails the load", func() {
 		prev, err := config.ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.kiali]
@@ -134,23 +134,23 @@ func (s *ConfigSuite) TestReloadPinsRequireTLSBeforeParse() {
 			certificate_authority = "`+caFileForTOML+`"
 		`), config.WithPrevious(prev))
 		s.Require().Error(err)
-		s.Contains(err.Error(), "insecure=true disables certificate verification")
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
 	})
 
-	s.Run("allows kiali HTTP when require_tls stays pinned false", func() {
+	s.Run("require_tls false to true fails the load", func() {
 		prev, err := config.ReadToml(s.T().Context(), []byte(`
 			require_tls = false
 			[toolset_configs.kiali]
 			url = "http://kiali.example/"
 		`))
 		s.Require().NoError(err)
-		next, err := config.ReadToml(s.T().Context(), []byte(`
+		_, err = config.ReadToml(s.T().Context(), []byte(`
 			require_tls = true
 			[toolset_configs.kiali]
 			url = "http://kiali.example/"
 		`), config.WithPrevious(prev))
-		s.Require().NoError(err)
-		s.False(next.RequireTLS.Get())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
 	})
 }
 

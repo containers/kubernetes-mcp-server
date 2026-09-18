@@ -252,27 +252,25 @@ flowchart TD
   applyFile["Apply present keys; Source = file path"]
   unknown["Unknown keys: fail load"]
   applyEnv["Non-empty env; Source Env"]
-  pinOpts["SIGHUP: pin non-reloadable Options"]
+  pinOpts["SIGHUP: reject non-reloadable Option changes"]
   parseExt["Parse toolset_configs and cluster_provider_configs"]
-  pinProv["SIGHUP: pin cluster_provider_configs"]
+  pinProv["SIGHUP: reject cluster_provider_configs changes"]
   xval[Cross-field Validate]
   dump[Log Describe for every Option]
   boot --> def --> files --> applyFile --> unknown --> applyEnv --> pinOpts --> parseExt --> pinProv --> xval --> dump
 ```
 
-**SIGHUP:** re-read files, re-apply env, pin non-reloadable Options, parse
-extension tables, pin `cluster_provider_configs`, re-validate. If a
-non-`Reloadable` option's resolved value would change, keep the previous value
-and source and log that a restart is required.
+**SIGHUP:** re-read files, re-apply env, reject any non-reloadable Option whose
+resolved value would change, parse extension tables, reject
+`cluster_provider_configs` changes, re-validate. Parse, unknown-key,
+non-reloadable, and Validate failures exit the process. Validate failures
+dump the rejected config first.
 
-Pinning Options **before** extension parse means parsers that consult
-`require_tls` (Kiali, NetObserv) see the effective value, not a would-be-ignored
-change in the new files.
+Non-reloadable `require_tls` is checked before extension parse, so a would-be
+change fails the load before parsers run.
 
 `cluster_provider_configs` is not reloadable. A parse or validation error in
-that table on SIGHUP is logged and the previous map is kept so other reloadable
-keys in the same load still apply. After a successful parse, a changed map is
-still pinned back to the previous value.
+that table, or a successfully parsed but changed map, fails the load.
 
 SIGHUP still requires the process to have been started with `--config`
 and/or `--config-dir`. Unavailable on Windows (unchanged).
@@ -280,19 +278,16 @@ and/or `--config-dir`. Unavailable on Windows (unchanged).
 After Validate (startup and SIGHUP, success or failure) the server logs every
 option. Independent Validate errors are accumulated. On SIGHUP, options whose
 value differs from the previous config are marked `changed=true` with the
-previous `Describe()` value.
+previous `Describe()` value. A failed SIGHUP reload dumps then exits.
 
 **Startup dump:** log every option via `Describe()`, secrets redacted.
 
 **Unknown keys:** a file that contains any key not in the schema fails
-that load. Startup exits with a non-zero status. SIGHUP logs the error
-and keeps the previous `Config` (same as a parse/validate failure), except
-that an invalid `cluster_provider_configs` table is pinned to the previous
-map and the rest of the load proceeds. Registered extension tables remain valid; keys *inside* a
+that load. Startup and SIGHUP exit with a non-zero status. Registered
+extension tables remain valid; keys *inside* a
 registered `toolset_configs.<name>` / `cluster_provider_configs.<name>`
 block are checked by that parser (unknown nested fields there also
-fail at startup; on SIGHUP they fail the load for `toolset_configs` and
-are ignored for `cluster_provider_configs`).
+fail the load).
 
 ## Package layout
 
@@ -348,8 +343,8 @@ The `StaticConfig` → `Config` rename applies to every field and is not
 repeated in Change.
 
 Reload "yes" means a SIGHUP that changes the value takes effect without
-restart. "no" means the process keeps the previous value and logs that a
-restart is required.
+restart. "no" means a SIGHUP that would change the value is rejected and
+the process exits; restart to apply it.
 
 ### Bootstrap
 

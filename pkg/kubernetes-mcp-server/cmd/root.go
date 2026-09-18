@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
 
@@ -61,6 +62,9 @@ type MCPServerOptions struct {
 	Config     *config.Config
 
 	logSink *logging.Sink
+	// exit is os.Exit in production. Tests replace it so a SIGHUP Validate
+	// failure cannot kill the test process.
+	exit func(int)
 	genericiooptions.IOStreams
 }
 
@@ -286,7 +290,8 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 				config.WithPrevious(cfgState.Load()),
 			)
 			if err != nil {
-				logger.Error(err, "Failed to reload configuration from disk")
+				logger.Error(err, "Failed to reload configuration")
+				m.exitProcess(1)
 				continue
 			}
 
@@ -310,6 +315,9 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 			}
 			newConfig.Dump(ctx, prev)
 			if err != nil {
+				if errors.Is(err, mcp.ErrReloadRejected) {
+					m.exitProcess(1)
+				}
 				continue
 			}
 
@@ -346,4 +354,13 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 		close(sigHupCh)
 		<-done // Wait for goroutine to finish
 	}
+}
+
+func (m *MCPServerOptions) exitProcess(code int) {
+	klog.Flush()
+	if m.exit != nil {
+		m.exit(code)
+		return
+	}
+	os.Exit(code)
 }

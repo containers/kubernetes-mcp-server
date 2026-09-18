@@ -562,6 +562,10 @@ func (s *Server) GetEnabledResourceTemplates() []string {
 	return s.enabledResourceTemplates
 }
 
+// ErrReloadRejected is returned when ReloadConfiguration refuses a config that
+// fails Validate. The SIGHUP handler treats this as fatal.
+var ErrReloadRejected = errors.New("configuration reload rejected")
+
 // ReloadConfiguration reloads the configuration and reinitializes the server.
 // This is intended to be called by the server lifecycle manager when
 // configuration changes are detected.
@@ -587,7 +591,7 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 			WithTokenExchangeStrategies(tokenexchange.GetRegisteredStrategies()).
 			Validate(ctx),
 	); err != nil {
-		return fmt.Errorf("configuration reload rejected: %w", err)
+		return fmt.Errorf("%w: %w", ErrReloadRejected, err)
 	}
 
 	if err := s.withReloadLock(func() error {

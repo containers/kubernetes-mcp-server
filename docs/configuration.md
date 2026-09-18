@@ -53,9 +53,9 @@ Each option is resolved once per load. Later sources override earlier ones:
 4. **Environment variables** — Only where an option declares an env name. An empty or unset variable does not override
 5. **CLI** — Only `--config` / `--config-dir` / `--version`. These select files; they are not runtime option overrides
 
-Unknown TOML keys fail the load (startup exits non-zero). Registered `toolset_configs.<name>` and `cluster_provider_configs.<name>` tables remain valid; unknown fields *inside* a registered block also fail.
+Unknown TOML keys fail the load (startup and SIGHUP exit non-zero). Registered `toolset_configs.<name>` and `cluster_provider_configs.<name>` tables remain valid; unknown fields *inside* a registered block also fail.
 
-After validation (startup and SIGHUP, success or failure) the server logs every option with its resolved value and source (file path, `<Env>`, or `<Default>`). Sensitive values are redacted. Independent validation errors are all reported. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config.
+After validation (startup and SIGHUP, success or failure) the server logs every option with its resolved value and source (file path, `<Env>`, or `<Default>`). Sensitive values are redacted. Independent validation errors are all reported. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config. A failed SIGHUP reload dumps when a config was produced, then the process exits.
 
 Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-only; the default (`port=""`, `require_oauth=false`) still works.
 
@@ -81,7 +81,7 @@ kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
 
 ### How Drop-in Files Work
 
-- **Opt-in**: Files under a directory are read only when `--config-dir` is set. A sibling `conf.d/` next to `--config` is not loaded unless you pass `--config-dir`. If that leftover directory still contains `.toml` files (the files the old implicit lookup would have applied), startup and SIGHUP fail until you pass `--config-dir` or remove them.
+- **Opt-in**: Files under a directory are read only when `--config-dir` is set. A sibling `conf.d/` next to `--config` is not loaded unless you pass `--config-dir`. If that leftover directory still contains `.toml` files (the files the old implicit lookup would have applied), startup and SIGHUP exit until you pass `--config-dir` or remove them.
 - **Standalone**: `--config-dir` without `--config` is enough; those files are the whole TOML surface.
 - **Relative path**: Relative `--config` and `--config-dir` are resolved against the working directory, independently of each other.
 - **File Naming**: Use numeric prefixes to control loading order (e.g., `00-base.toml`, `10-cluster.toml`, `99-override.toml`)
@@ -157,11 +157,11 @@ SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re
 
 Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
 
-If the new files fail to parse or validate (including unknown keys), the previous configuration is kept. An invalid `cluster_provider_configs` table on SIGHUP is logged and the previous table is kept so other reloadable settings in that load still apply. `toolset_configs` parsers see the pinned `require_tls` value.
+If the new files fail to parse (including unknown keys), a non-reloadable option would change, or Validate fails, the process exits. When Validate fails, the rejected configuration is dumped first. `toolset_configs` parsers see the `require_tls` value from this load; a would-be `require_tls` change fails before those parsers run.
 
 ### What Requires a Restart
 
-Non-reloadable options keep their previous value and source on SIGHUP; the server logs that a restart is required. That includes:
+A SIGHUP that would change a non-reloadable option is rejected and the process exits. Restart to apply those values. That includes:
 
 - Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`
 - Process shape: `stateless`, `server_instructions`
@@ -225,7 +225,7 @@ tls_cipher_suites = [
 
 When neither TOML nor env is set, both inbound and outbound default to TLS 1.2 with Go's default cipher suites.
 
-Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) keeps the previous inbound value and logs that a restart is required. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali and NetObserv re-read TLS settings on each tool invocation.
+Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali and NetObserv re-read TLS settings on each tool invocation.
 
 ```bash
 # Example: Enforce TLS 1.3 minimum version (inbound + outbound)

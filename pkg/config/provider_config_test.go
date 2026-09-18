@@ -360,7 +360,7 @@ func (s *ProviderConfigSuite) TestConfigDirPathInContextStandalone() {
 	})
 }
 
-func (s *ProviderConfigSuite) TestPinNonReloadableProviderConfigs() {
+func (s *ProviderConfigSuite) TestRejectNonReloadableProviderConfigs() {
 	RegisterProviderConfig("test", providerConfigForTestParser)
 	prevPath := s.writeConfig(`
 		[cluster_provider_configs.test]
@@ -374,17 +374,12 @@ func (s *ProviderConfigSuite) TestPinNonReloadableProviderConfigs() {
 	`)
 	prev, err := Read(s.T().Context(), prevPath, "")
 	s.Require().NoError(err)
-	next, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
-	s.Require().NoError(err)
-	got, ok := next.GetProviderConfig("test")
-	s.Require().True(ok)
-	cfg, ok := got.(*ProviderConfigForTest)
-	s.Require().True(ok)
-	s.Equal("old", cfg.StrProp)
-	s.Equal(1, cfg.IntProp)
+	_, err = Read(s.T().Context(), nextPath, "", WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option cluster_provider_configs changed")
 }
 
-func (s *ProviderConfigSuite) TestReloadIgnoresInvalidProviderConfigs() {
+func (s *ProviderConfigSuite) TestReloadRejectsInvalidProviderConfigs() {
 	RegisterProviderConfig("test", providerConfigForTestParser)
 	prevPath := s.writeConfig(`
 		log_level = 1
@@ -395,38 +390,27 @@ func (s *ProviderConfigSuite) TestReloadIgnoresInvalidProviderConfigs() {
 	prev, err := Read(s.T().Context(), prevPath, "")
 	s.Require().NoError(err)
 
-	s.Run("keeps previous table when new table fails validation", func() {
+	s.Run("fails the load when new table fails validation", func() {
 		nextPath := s.writeConfig(`
 			log_level = 2
 			[cluster_provider_configs.test]
 			str_prop = "force-error"
 			int_prop = 2
 		`)
-		next, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
-		s.Require().NoError(err)
-		s.Equal(2, next.LogLevel.Get(), "reloadable options should still apply")
-		got, ok := next.GetProviderConfig("test")
-		s.Require().True(ok)
-		cfg, ok := got.(*ProviderConfigForTest)
-		s.Require().True(ok)
-		s.Equal("old", cfg.StrProp)
-		s.Equal(1, cfg.IntProp)
+		_, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "failed to validate extended config")
 	})
 
-	s.Run("keeps previous table when new table is unregistered", func() {
+	s.Run("fails the load when new table is unregistered", func() {
 		nextPath := s.writeConfig(`
 			log_level = 3
 			[cluster_provider_configs.unregistered]
 			str_prop = "new"
 		`)
-		next, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
-		s.Require().NoError(err)
-		s.Equal(3, next.LogLevel.Get(), "reloadable options should still apply")
-		got, ok := next.GetProviderConfig("test")
-		s.Require().True(ok)
-		cfg, ok := got.(*ProviderConfigForTest)
-		s.Require().True(ok)
-		s.Equal("old", cfg.StrProp)
+		_, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "cluster_provider_configs.unregistered")
 	})
 }
 

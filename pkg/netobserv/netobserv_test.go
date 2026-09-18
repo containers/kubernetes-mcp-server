@@ -245,7 +245,7 @@ func (s *NetObservSuite) TestRequireTLS_ConfigValidation() {
 		s.NotNil(cfg)
 	})
 
-	s.Run("rejects netobserv insecure when require_tls stays pinned true", func() {
+	s.Run("rejects require_tls change on reload", func() {
 		tempDir := s.T().TempDir()
 		caFile := filepath.Join(tempDir, "ca.crt")
 		s.Require().NoError(os.WriteFile(caFile, []byte("test ca content"), 0644))
@@ -265,7 +265,7 @@ func (s *NetObservSuite) TestRequireTLS_ConfigValidation() {
 			certificate_authority = "`+caFileForTOML+`"
 		`), config.WithPrevious(prev))
 		s.Require().Error(err)
-		s.ErrorContains(err, "insecure=true disables certificate verification")
+		s.ErrorContains(err, "non-reloadable option require_tls changed")
 	})
 
 	s.Run("Validate rejects insecure netobserv after require_tls is enabled", func() {
