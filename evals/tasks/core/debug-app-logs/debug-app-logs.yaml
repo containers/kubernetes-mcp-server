@@ -2,6 +2,7 @@ kind: Task
 metadata:
   labels:
     suite: core
+    readonly: "true"
     project: kubernetes
   annotations:
     project-name: "Kubernetes"
