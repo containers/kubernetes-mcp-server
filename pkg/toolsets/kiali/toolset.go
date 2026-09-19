@@ -24,14 +24,14 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	tools := slices.Concat(
-		kialiTools.InitGetMeshTrafficGraph(),
+		kialiTools.InitGetMeshTrafficGraph(p),
 		kialiTools.InitGetMeshStatus(),
 		kialiTools.InitManageIstioConfigRead(),
 		kialiTools.InitManageIstioConfig(),
 		kialiTools.InitListMeshClusters(),
-		kialiTools.InitListOrGetResources(),
+		kialiTools.InitListOrGetResources(p),
 		kialiTools.InitListTraces(),
 		kialiTools.InitGetTraceDetails(),
 		kialiTools.InitGetPodPerformance(),

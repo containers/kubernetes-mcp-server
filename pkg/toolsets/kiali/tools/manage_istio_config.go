@@ -66,7 +66,7 @@ func InitManageIstioConfig() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, RBAC: api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"), Handler: istioConfigHandler,
+		}, RBAC: IstioConfigWriteRBAC(), Handler: istioConfigHandler,
 	})
 	return ret
 }
