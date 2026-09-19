@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: netobserv-operator
+  namespace: openshift-netobserv-operator
+spec:
+  channel: stable
+  name: netobserv-operator
+  source: netobserv-konflux-fbc
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic

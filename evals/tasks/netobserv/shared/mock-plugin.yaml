@@ -149,6 +149,12 @@ data:
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            elif path == "/api/status":
+                status = {
+                    "loki": {"isEnabled": True, "isReady": True, "namespacesCount": 2},
+                    "prometheus": {"isEnabled": False, "isReady": False, "namespacesCount": 0}
+                }
+                body = json.dumps(status).encode()
             else:
                 self.send_response(404)
                 self.end_headers()
