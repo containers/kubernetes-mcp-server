@@ -1,0 +1,24 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    multicluster: "true"
+    suite: kiali
+  name: "Analyze Remote Service Metrics"
+  category: "Performance Analysis"
+  description: "Retrieves request-rate metrics for a service on the remote mesh cluster using meshCluster."
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "reviews"
+    - llmJudge:
+        contains: "west"
+  prompt:
+    inline: |
+      Show me inbound request rate metrics for the reviews service in the bookinfo namespace on the remote mesh cluster (not Kiali's home cluster) for the last 10 minutes.
+      When querying service metrics, use direction inbound so request series are not empty.
+      Indicate which mesh cluster the metrics are from.
