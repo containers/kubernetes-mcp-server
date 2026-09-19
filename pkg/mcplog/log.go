@@ -8,6 +8,7 @@ package mcplog
 import (
 	"context"
 	"regexp"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -150,6 +151,55 @@ func Sanitize(msg string) string {
 	}
 
 	return msg
+}
+
+var logSecretPattern = func() *regexp.Regexp {
+	patterns := []string{
+		"bearer ", "authorization:", "authorization=",
+		"-u ", "--user ",
+		"ssh-rsa ", "ssh-ed25519 ", "ssh-dss ",
+		"password=", "password:", "passwd=", "passwd:",
+		"token=", "token:", "secret=", "secret:",
+		"credential=", "credential:", "credentials=", "credentials:",
+		"api_key=", "api_key:", "api-key=", "api-key:", "apikey=", "apikey:",
+		"aws_secret_access_key=", "aws_secret_access_key:",
+		"auth=", "auth:", `"auth"=`, `"auth":`,
+	}
+	for i := range patterns {
+		patterns[i] = regexp.QuoteMeta(patterns[i])
+	}
+	return regexp.MustCompile(`(?i)(?:` + strings.Join(patterns, "|") + `)`)
+}()
+
+// SanitizeLog applies the standard sanitizer and best-effort line redaction for
+// credential formats commonly printed by command-line tools.
+func SanitizeLog(content string) string {
+	lines := strings.Split(content, "\n")
+	result := make([]string, 0, len(lines))
+	inPEMBlock := false
+	for _, rawLine := range lines {
+		lower := strings.ToLower(rawLine)
+		if inPEMBlock {
+			if strings.Contains(lower, "-----end") {
+				inPEMBlock = false
+			}
+			continue
+		}
+		if strings.Contains(lower, "-----begin") {
+			result = append(result, "[REDACTED PEM BLOCK]")
+			if !strings.Contains(lower, "-----end") {
+				inPEMBlock = true
+			}
+			continue
+		}
+
+		line := Sanitize(rawLine)
+		if match := logSecretPattern.FindStringIndex(line); match != nil {
+			line = line[:match[1]] + "[REDACTED]"
+		}
+		result = append(result, line)
+	}
+	return strings.Join(result, "\n")
 }
 
 // SendMCPLog sends a log notification to the MCP client and server logs.
