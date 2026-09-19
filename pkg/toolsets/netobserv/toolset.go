@@ -21,11 +21,11 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	return slices.Concat(
-		netobservTools.InitListFlows(),
-		netobservTools.InitGetFlowMetrics(),
-		netobservTools.InitExportFlows(),
+		netobservTools.InitListFlows(p),
+		netobservTools.InitGetFlowMetrics(p),
+		netobservTools.InitExportFlows(p),
 	)
 }
 

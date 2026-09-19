@@ -55,7 +55,7 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 	if shared != nil {
 		resolved = *shared
 	}
-	isOpenShift := isOpenShiftFromProvider(ctx, provider)
+	isOpenShift := IsOpenShiftFromProvider(ctx, provider)
 	resolved.applyDefaults(ctx, isOpenShift)
 	client.pluginURL = resolved.ResolvedURL(isOpenShift)
 	client.insecure = resolved.Insecure
