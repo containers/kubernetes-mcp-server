@@ -194,6 +194,10 @@ func TestConfig(t *testing.T) {
 		if m, err := regexp.MatchString(expectedStateless, out.String()); !m || err != nil {
 			t.Fatalf("Expected config to be %s, got %s %v", expectedStateless, out.String(), err)
 		}
+		expectedDisableLocalhostProtection := `config\.disable_localhost_protection=false`
+		if m, err := regexp.MatchString(expectedDisableLocalhostProtection, out.String()); !m || err != nil {
+			t.Fatalf("Expected config to be %s, got %s %v", expectedDisableLocalhostProtection, out.String(), err)
+		}
 	})
 	t.Run("stateless defaults to false", func(t *testing.T) {
 		out, err := executeVersion(t, dumpTOML)
@@ -209,6 +213,22 @@ func TestConfig(t *testing.T) {
 		expectedStateless := `config\.stateless=true`
 		if m, matchErr := regexp.MatchString(expectedStateless, out); !m || matchErr != nil {
 			t.Fatalf("Expected stateless mode to be true, got %s %v", out, err)
+		}
+	})
+	t.Run("disable_localhost_protection defaults to false", func(t *testing.T) {
+		out, err := executeVersion(t, dumpTOML)
+		require.NoError(t, err)
+		expected := `config\.disable_localhost_protection=false`
+		if m, matchErr := regexp.MatchString(expected, out); !m || matchErr != nil {
+			t.Fatalf("Expected disable_localhost_protection to be false by default, got %s %v", out, err)
+		}
+	})
+	t.Run("disable_localhost_protection set to true in TOML", func(t *testing.T) {
+		out, err := executeVersion(t, dumpTOML+"disable_localhost_protection = true\n")
+		require.NoError(t, err)
+		expected := `config\.disable_localhost_protection=true`
+		if m, matchErr := regexp.MatchString(expected, out); !m || matchErr != nil {
+			t.Fatalf("Expected disable_localhost_protection to be true, got %s %v", out, err)
 		}
 	})
 }

@@ -524,6 +524,10 @@ func (s *Server) ServeHTTP() *mcp.StreamableHTTPHandler {
 		// is not desired or possible.
 		// https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#listening-for-messages-from-the-server
 		Stateless: s.configuration.Load().Stateless.Get(),
+		// When true, skip go-sdk DNS-rebinding protection (loopback accept +
+		// non-localhost Host → 403). Needed behind kube-rbac-proxy and similar
+		// sidecars that proxy to 127.0.0.1 while preserving the Service Host.
+		DisableLocalhostProtection: s.configuration.Load().DisableLocalhostProtection.Get(),
 	})
 }
 

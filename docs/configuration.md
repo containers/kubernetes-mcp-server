@@ -166,7 +166,7 @@ If the new files fail to parse (including unknown keys), a non-reloadable option
 A SIGHUP that would change a non-reloadable option is rejected and the process exits. Restart to apply those values. That includes:
 
 - Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`
-- Process shape: `stateless`, `server_instructions`
+- Process shape: `stateless`, `disable_localhost_protection`, `server_instructions`
 - Cluster connection: `kubeconfig`, `cluster_provider_strategy`, `cluster_provider_configs`
 - Kubernetes client: `kube_client_qps`, `kube_client_burst`, watcher/poll timings
 - Telemetry: the `[telemetry]` table
@@ -186,11 +186,14 @@ SIGHUP is not available on Windows; restart the process.
 | `metrics_port` | string | `""` | When set (in HTTP mode), starts a separate HTTP server on this port serving only `/metrics`, `/stats`, and `/healthz` endpoints. Useful for Kubernetes deployments with network policies to separate metrics scraping from MCP protocol access. The metrics server uses the same `bind_address` but does not use TLS or OAuth. A warning is logged if `bind_address` is all interfaces (`0.0.0.0` or `::`). |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
+| `disable_localhost_protection` | boolean | `false` | When `true`, disables the MCP Go SDK DNS-rebinding check on Streamable HTTP. Leave `false` for local HTTP. Set `true` only behind a trusted reverse proxy that forwards to loopback while preserving the public or Service `Host` (see below). |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
 | `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, OAuth, token exchange, well-known metadata). |
 | `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Overridden by `TLS_CIPHER_SUITES` (comma-separated) when that env var is non-empty. Applies to inbound HTTPS and outbound clients. |
+
+The Streamable HTTP handler (go-sdk) rejects requests accepted on a loopback address (`127.0.0.1`, `::1`) when `Host` is not localhost. That blocks browser DNS rebinding against a local MCP server. It also 403s the usual in-pod sidecar pattern: kube-rbac-proxy `--upstream=http://127.0.0.1:8080/` keeps `Host: <service>:<port>`. Set `disable_localhost_protection = true` in that case. Do not enable it for a laptop process listening on all interfaces without a trusted proxy. `trust_proxy_headers` does not rewrite `Host` and does not disable this check. Changing the value requires a restart.
 
 **Example:**
 ```toml
@@ -910,6 +913,7 @@ port = "8080"
 bind_address = "0.0.0.0"
 list_output = "table"
 stateless = false
+disable_localhost_protection = false
 
 # HTTP server security
 [http]

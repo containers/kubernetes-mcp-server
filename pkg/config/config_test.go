@@ -93,10 +93,12 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 		paths[o.Path] = o
 	}
 	s.Contains(paths, "port")
+	s.Contains(paths, "disable_localhost_protection")
 	s.Contains(paths, "http.rate_limit_burst")
 	s.Contains(paths, "telemetry.endpoint")
 	s.Equal("OTEL_EXPORTER_OTLP_ENDPOINT", paths["telemetry.endpoint"].EnvName)
 	s.False(paths["port"].Reloadable)
+	s.False(paths["disable_localhost_protection"].Reloadable)
 	s.True(paths["log_level"].Reloadable)
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
 }
@@ -156,6 +158,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		read_only = true
 		disable_destructive = true
 		stateless = true
+		disable_localhost_protection = true
 
 		toolsets = ["core", "config", "helm", "metrics"]
 		
@@ -202,6 +205,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			{"read_only", cfg.ReadOnly.Get(), true},
 			{"disable_destructive", cfg.DisableDestructive.Get(), true},
 			{"stateless", cfg.Stateless.Get(), true},
+			{"disable_localhost_protection", cfg.DisableLocalhostProtection.Get(), true},
 			{"tls_cert", cfg.TLSCert.Get(), certPath},
 			{"tls_key", cfg.TLSKey.Get(), keyPath},
 		}
@@ -266,6 +270,9 @@ func (s *ConfigSuite) TestReadConfigStatelessDefaults() {
 	s.Run("stateless defaults to false", func() {
 		s.Falsef(config.Stateless.Get(), "Expected Stateless to default to false, got %v", config.Stateless.Get())
 	})
+	s.Run("disable_localhost_protection defaults to false", func() {
+		s.Falsef(config.DisableLocalhostProtection.Get(), "Expected DisableLocalhostProtection to default to false, got %v", config.DisableLocalhostProtection.Get())
+	})
 }
 
 func (s *ConfigSuite) TestReadConfigStatelessExplicitFalse() {
@@ -282,6 +289,22 @@ func (s *ConfigSuite) TestReadConfigStatelessExplicitFalse() {
 
 	s.Run("stateless explicit false", func() {
 		s.Falsef(config.Stateless.Get(), "Expected Stateless to be false, got %v", config.Stateless.Get())
+	})
+}
+
+func (s *ConfigSuite) TestReadConfigDisableLocalhostProtectionExplicitTrue() {
+	configPath := s.writeConfig(`
+		log_level = 1
+		port = "8080"
+		disable_localhost_protection = true
+	`)
+
+	config, err := Read(s.T().Context(), configPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("disable_localhost_protection explicit true", func() {
+		s.Truef(config.DisableLocalhostProtection.Get(), "Expected DisableLocalhostProtection to be true, got %v", config.DisableLocalhostProtection.Get())
 	})
 }
 
@@ -1243,6 +1266,17 @@ func (s *ConfigSuite) TestRejectNonReloadable() {
 	s.Contains(err.Error(), "9090")
 }
 
+func (s *ConfigSuite) TestRejectNonReloadableDisableLocalhostProtection() {
+	prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
+	s.Require().NoError(err)
+	_, err = ReadToml(s.T().Context(), []byte(`
+		port = "8080"
+		disable_localhost_protection = true
+	`), WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option disable_localhost_protection changed")
+}
+
 func (s *ConfigSuite) TestReloadableChangeWithPreviousSucceeds() {
 	prev, err := ReadToml(s.T().Context(), []byte(`list_output = "table"`))
 	s.Require().NoError(err)
@@ -1279,6 +1313,7 @@ func (s *ConfigSuite) TestDump() {
 		s.Contains(logs, "config option")
 		s.Contains(logs, `option="port"`)
 		s.Contains(logs, "8080")
+		s.Contains(logs, `option="disable_localhost_protection"`)
 		s.Contains(logs, `option="token_exchange.client_auth.client_secret"`)
 		s.Contains(logs, "<redacted>")
 		s.NotContains(logs, "super-secret")

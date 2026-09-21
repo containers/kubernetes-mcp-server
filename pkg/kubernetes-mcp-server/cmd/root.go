@@ -202,6 +202,7 @@ func (m *MCPServerOptions) Run(ctx context.Context) error {
 		"config.read_only", m.Config.ReadOnly.Get(),
 		"config.disable_destructive", m.Config.DisableDestructive.Get(),
 		"config.stateless", m.Config.Stateless.Get(),
+		"config.disable_localhost_protection", m.Config.DisableLocalhostProtection.Get(),
 		"config.telemetry.enabled", m.Config.Telemetry.IsEnabled(),
 		"config.cluster_provider_strategy", strategy,
 	)

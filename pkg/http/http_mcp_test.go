@@ -2,7 +2,9 @@ package http
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -66,4 +68,39 @@ func (s *McpTransportSuite) TestStreamableHttpTransport() {
 
 func TestMcpTransport(t *testing.T) {
 	suite.Run(t, new(McpTransportSuite))
+}
+
+const mcpInitializeBody = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}`
+
+func (s *McpTransportSuite) postInitializeWithHost(host string) *http.Response {
+	s.T().Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%s/mcp", s.Config.Port.Get())
+	req, err := http.NewRequestWithContext(s.T().Context(), http.MethodPost, url, strings.NewReader(mcpInitializeBody))
+	s.Require().NoError(err)
+	req.Host = host
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	s.Require().NoError(err)
+	return resp
+}
+
+func (s *McpTransportSuite) TestLocalhostProtectionHostHeader() {
+	s.Run("rejects non-localhost Host by default", func() {
+		s.Config.DisableLocalhostProtection.SetForTest(false)
+		s.StartServer()
+		resp := s.postInitializeWithHost("kubernetes-mcp-server:8443")
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		s.Require().NoError(err)
+		s.Equal(http.StatusForbidden, resp.StatusCode)
+		s.Contains(string(body), "invalid Host header")
+	})
+	s.Run("allows non-localhost Host when disabled", func() {
+		s.Config.DisableLocalhostProtection.SetForTest(true)
+		s.StartServer()
+		resp := s.postInitializeWithHost("kubernetes-mcp-server:8443")
+		defer func() { _ = resp.Body.Close() }()
+		s.NotEqual(http.StatusForbidden, resp.StatusCode)
+	})
 }
