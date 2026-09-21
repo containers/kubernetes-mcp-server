@@ -446,6 +446,95 @@ func (s *AuthorizationSuite) TestAuthorizationOidcTokenExchange() {
 	s.stopRunningServer()
 }
 
+func (s *AuthorizationSuite) TestAuthorizationTokenExchangeURLDecouplesIssuerFromGateway() {
+	idp := NewOidcTestServer(s.T())
+	s.T().Cleanup(idp.Close)
+	stsGateway := NewOidcTestServer(s.T())
+	s.T().Cleanup(stsGateway.Close)
+
+	rawClaims := `{
+		"iss": "` + idp.URL + `",
+		"exp": ` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `,
+		"aud": "%s"
+	}`
+	validUserToken := oidctest.SignIDToken(idp.PrivateKey, "test-oidc-key-id", oidc.RS256,
+		fmt.Sprintf(rawClaims, "mcp-server"))
+	validBackendToken := oidctest.SignIDToken(stsGateway.PrivateKey, "test-oidc-key-id", oidc.RS256,
+		fmt.Sprintf(rawClaims, "backend-audience"))
+
+	var idpTokenHits atomic.Int32
+	idp.TokenEndpointHandler = func(w http.ResponseWriter, r *http.Request) {
+		idpTokenHits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"idp /token must not be hit when token_exchange.token_url is set"}`))
+	}
+	var gatewayTokenHits atomic.Int32
+	stsGateway.TokenEndpointHandler = func(w http.ResponseWriter, r *http.Request) {
+		gatewayTokenHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":"%s","token_type":"Bearer","expires_in":253402297199}`, validBackendToken)
+	}
+
+	s.OidcProvider = idp.Provider
+	s.Config.AuthorizationURL.SetForTest(idp.URL)
+	s.Config.OAuthAudience.SetForTest("mcp-server")
+	s.Config.TokenExchange.Strategy.SetForTest("rfc8693")
+	s.Config.TokenExchange.Audience.SetForTest("backend-audience")
+	s.Config.TokenExchange.Scopes.SetForTest([]string{"backend-scope"})
+	s.Config.TokenExchange.TokenURL.SetForTest(stsGateway.URL + "/token")
+	s.Config.TokenExchange.ClientAuth.Method.SetForTest("client_secret_post")
+	s.Config.TokenExchange.ClientAuth.ClientID.SetForTest("test-sts-client-id")
+	s.Config.TokenExchange.ClientAuth.ClientSecret.SetForTest("test-sts-client-secret")
+
+	s.MockServer.ResetHandlers()
+	var backendAuth atomic.Value
+	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			backendAuth.Store(auth)
+		}
+	}))
+
+	s.StartServer()
+	s.StartClient(map[string]string{
+		"Authorization": "Bearer " + validUserToken,
+	})
+
+	s.Run("Initialize succeeds — IDP validates user token via JWKS", func() {
+		s.Require().NotNil(s.mcpClient.Session, "Expected session for successful authentication")
+		s.Require().NotNil(s.mcpClient.Session.InitializeResult(), "Expected initialize result to not be nil")
+	})
+
+	s.Run("Tool call triggers exchange against token_url, not authorization_url", func() {
+		toolResult, err := s.mcpClient.Session.CallTool(s.T().Context(), &mcp.CallToolParams{
+			Name:      "events_list",
+			Arguments: map[string]any{},
+		})
+		s.Require().NoError(err, "Expected no error calling tool")
+		s.Require().NotNil(toolResult, "Expected tool result to not be nil")
+	})
+
+	s.Run("STS gateway received the exchange request", func() {
+		s.Greater(gatewayTokenHits.Load(), int32(0),
+			"token_exchange.token_url gateway should have received at least one exchange POST")
+	})
+
+	s.Run("IDP /token endpoint was NOT used for exchange", func() {
+		s.Equal(int32(0), idpTokenHits.Load(),
+			"IDP /token must not be hit when token_exchange.token_url is configured — that would mean the trust boundary did not split")
+	})
+
+	s.Run("Backend receives exchanged token, not original user token", func() {
+		got, _ := backendAuth.Load().(string)
+		s.Require().NotEmpty(got, "Expected backend to receive an Authorization header")
+		s.Equal("Bearer "+validBackendToken, got,
+			"Backend must receive the gateway-minted token; receiving the original user token would mean exchange silently no-op'd")
+	})
+
+	s.mcpClient.Close()
+	s.mcpClient = nil
+	s.stopRunningServer()
+}
+
 func (s *AuthorizationSuite) TestAuthorizationPassthroughWarning() {
 	// When require_oauth=true, skip_jwt_verification=true, and no OIDC provider
 	// is configured (passthrough mode), a warning log should be emitted once.

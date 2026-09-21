@@ -635,11 +635,12 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `skip_jwt_verification` | boolean | `false` | When true and authorization_url is unset, the server forwards the bearer token without any local validation (no parse, no claims check, no audience check). Required to enable pure passthrough with non-JWT tokens (e.g., OpenShift OAuth sha256~…). When true and authorization_url is set, this flag has no effect — the configured OIDC provider validates tokens normally. Only use the no-authorization_url form when a downstream component (cluster, reverse proxy) is the authority. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
-| `token_exchange.strategy` | string | `""` | Required when `[token_exchange]` is used. Valid values are `rfc8693`, `keycloak-v1`, or `entra-obo`. The block enables global exchange and requires `require_oauth = true` and `authorization_url`. |
+| `token_exchange.strategy` | string | required | Registered token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. The block enables global exchange and requires `require_oauth = true`, plus either `token_exchange.token_url` or `authorization_url` to reach a token endpoint. |
 | `token_exchange.audience` | string | `""` | Audience for the exchanged token. |
 | `token_exchange.scopes` | string[] | `[]` | Scopes for the exchanged token. |
 | `token_exchange.subject_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `subject_token_type`. |
 | `token_exchange.requested_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `requested_token_type`. |
+| `token_exchange.token_url` | string | *(falls back to OIDC discovery)* | Explicit token-exchange endpoint. When set, takes precedence over the endpoint discovered from the OIDC provider at `authorization_url`. Use this to point token exchange at a separate STS gateway (cross-realm deployments), or to enable token exchange when no `authorization_url` is configured (e.g., with `skip_jwt_verification=true`). |
 | `token_exchange.client_auth.method` | string | none | Required when client credentials are configured: `client_secret_basic`, `client_secret_post`, `private_key_jwt`, or `jwt_file`. May be omitted when only `client_id` is set for a public client. |
 | `token_exchange.client_auth.client_id` | string | `""` | OAuth client ID. May be configured without a method or secret for a public client. |
 | `token_exchange.client_auth.client_secret` | string | `""` | Required by the client-secret methods. |
@@ -685,6 +686,27 @@ method = "private_key_jwt"
 client_id = "<CLIENT_ID>"
 certificate_file = "/path/to/client.crt"
 private_key_file = "/path/to/client.key"
+```
+
+**Example (separate STS gateway from user-token issuer):**
+
+`authorization_url` validates the user's bearer token; `token_exchange.token_url` is the
+distinct gateway that mints the delegated cluster token. The two URLs may point at
+different hosts/realms.
+```toml
+require_oauth     = true
+authorization_url = "https://idp.example.com/realms/users"
+oauth_audience    = "kubernetes-mcp-server"
+
+[token_exchange]
+strategy  = "rfc8693"
+audience  = "kubernetes-api"
+token_url = "https://sts-gateway.internal/oauth/token"
+
+[token_exchange.client_auth]
+method        = "client_secret_post"
+client_id     = "mcp-backend"
+client_secret = "your-client-secret"
 ```
 
 **Pure token passthrough (delegate validation to the cluster):**

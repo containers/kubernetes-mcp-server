@@ -70,15 +70,15 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Cont
 		return nil
 	}
 
-	var tokenURL string
-	if snap.OIDCProvider != nil {
+	tokenURL := global.TokenURL.Get()
+	if tokenURL == "" && snap.OIDCProvider != nil {
 		if endpoint := snap.OIDCProvider.Endpoint(); endpoint.TokenURL != "" {
 			tokenURL = endpoint.TokenURL
 		}
 	}
 	if tokenURL == "" {
 		p.tokenExchangeCache.clear()
-		klogutil.LogWarn(klogutil.FromContext(ctx), "OIDC provider returned no token endpoint; token exchange is unavailable",
+		klogutil.LogWarn(klogutil.FromContext(ctx), "no token endpoint available for token exchange (set token_exchange.token_url or configure authorization_url for OIDC discovery)",
 			klogutil.Field("strategy", global.Strategy.Get()))
 		return nil
 	}

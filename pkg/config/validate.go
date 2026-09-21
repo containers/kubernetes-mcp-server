@@ -75,7 +75,7 @@ func (c *Config) Validate(ctx context.Context) error {
 	}
 	add(c.ValidateRequireTLS())
 	add(c.ValidateClusterAuthMode())
-	add(c.validateTokenExchange())
+	add(c.validateTokenExchange(ctx))
 	if c.TLSCert.Get() != "" && c.Port.Get() == "" {
 		add(fmt.Errorf("tls_cert and tls_key require port to be set (TLS is only supported in HTTP mode)"))
 	}
@@ -174,13 +174,31 @@ func (c *Config) validateSkipJWTVerification(ctx context.Context) error {
 		"if the server is behind a trusted reverse proxy that verifies tokens")
 }
 
-func (c *Config) validateTokenExchange() error {
+func (c *Config) validateTokenExchange(ctx context.Context) error {
 	if c.GetTokenExchangeConfig() == nil {
 		return nil
 	}
 	var errs []error
-	if c.AuthorizationURL.Get() == "" {
-		errs = append(errs, fmt.Errorf("token exchange requires authorization_url to discover the token endpoint"))
+	if c.TokenExchange.TokenURL.Get() == "" && c.AuthorizationURL.Get() == "" {
+		errs = append(errs, fmt.Errorf("token exchange requires token_exchange.token_url, or authorization_url to discover the token endpoint"))
+	}
+	if tokenURL := c.TokenExchange.TokenURL.Get(); tokenURL != "" {
+		u, err := url.Parse(tokenURL)
+		if err != nil {
+			errs = append(errs, err)
+		} else if u.Scheme != "https" && u.Scheme != "http" {
+			errs = append(errs, fmt.Errorf("token_exchange.token_url must use the http or https scheme, got %q", u.Scheme))
+		} else if u.Host == "" {
+			// url.Parse accepts scheme-only inputs such as "https://", which would
+			// otherwise surface as a confusing failure at exchange time.
+			errs = append(errs, fmt.Errorf("token_exchange.token_url must include a host"))
+		} else if u.Scheme == "http" {
+			klogutil.LogWarn(
+				klogutil.FromContext(ctx),
+				"token_exchange.token_url is using insecure scheme, this is not recommended for production use",
+				klogutil.Field("url.scheme", "http"),
+			)
+		}
 	}
 	strategies := c.tokenExchangeStrategies
 	if len(strategies) == 0 {
