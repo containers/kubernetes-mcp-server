@@ -8,9 +8,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
+
+// toolsetConfigProvider is an optional test/helper surface that exposes
+// GetToolsetConfig. Production code obtains Kiali config from the derived
+// Kubernetes client's live *config.Config instead of widening shared providers.
+type toolsetConfigProvider interface {
+	GetToolsetConfig(name string) (config.ExtendedConfig, bool)
+}
 
 // KialiGVK is the GroupVersionKind for the Kiali custom resource installed by
 // the Kiali Operator (kialis.kiali.io CRD).
@@ -20,6 +28,10 @@ import (
 //   - no URL is set, a Kiali CRD/CR path can discover a working in-cluster
 //     Service URL via kubernetes.Provider (or well-known Service DNS when the
 //     Kiali GVK is present but no cluster client is available).
+//
+// URL checks read [toolset_configs.kiali] from the derived Kubernetes client's
+// live config when a kubernetes.Provider is available (tests may stub
+// GetToolsetConfig on the FilteringProvider instead).
 var KialiGVK = schema.GroupVersionKind{
 	Group:   "kiali.io",
 	Version: "v1alpha1",
@@ -49,14 +61,15 @@ func getDiscoveredURL() string {
 // HasKiali reports whether Kiali is reachable: either a configured URL passes
 // GET /api/status, or an in-cluster Service URL can be discovered and probed.
 //
-// fp supplies config and optional GVK discovery; kp is the Kubernetes provider
-// used for CR listing and bearer tokens (may be nil in tests).
+// fp supplies optional GVK discovery (and test stubs for toolset config); kp is
+// the Kubernetes provider used for live config, CR listing, and bearer tokens
+// (may be nil in tests).
 func HasKiali(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provider) bool {
 	return evaluateKialiAvailability(ctx, fp, kp)
 }
 
 func evaluateKialiAvailability(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provider) bool {
-	cfg, cfgOK := kialiConfigFromProvider(fp)
+	cfg, cfgOK := kialiConfigFrom(ctx, fp, kp)
 	if cfgOK && strings.TrimSpace(cfg.Url) != "" {
 		setDiscoveredURL("")
 		token := bearerTokenFromProvider(ctx, kp)
@@ -119,13 +132,30 @@ func storeDiscoveredURL(ctx context.Context, url string) {
 	klogutil.FromContext(ctx).V(1).Info("stored discovered Kiali URL for client use", "url", url)
 }
 
-func kialiConfigFromProvider(fp api.FilteringProvider) (*Config, bool) {
-	cfgProvider, ok := fp.(api.ExtendedConfigProvider)
-	if !ok || cfgProvider == nil {
+func kialiConfigFrom(ctx context.Context, fp api.FilteringProvider, kp kubernetes.Provider) (*Config, bool) {
+	// Unit tests may stub GetToolsetConfig on the FilteringProvider.
+	if cfgProvider, ok := fp.(toolsetConfigProvider); ok && cfgProvider != nil {
+		if kc, ok := kialiConfigFromExtended(cfgProvider.GetToolsetConfig("kiali")); ok {
+			return kc, true
+		}
+	}
+	// Production: use the live config already attached to the derived client.
+	if kp == nil {
 		return nil, false
 	}
-	ext, ok := cfgProvider.GetToolsetConfig("kiali")
-	if !ok {
+	k8s, err := kp.GetDerivedKubernetes(ctx, kp.GetDefaultTarget())
+	if err != nil || k8s == nil {
+		return nil, false
+	}
+	cfg := k8s.Config()
+	if cfg == nil {
+		return nil, false
+	}
+	return kialiConfigFromExtended(cfg.GetToolsetConfig("kiali"))
+}
+
+func kialiConfigFromExtended(ext config.ExtendedConfig, ok bool) (*Config, bool) {
+	if !ok || ext == nil {
 		return nil, false
 	}
 	kc, ok := ext.(*Config)

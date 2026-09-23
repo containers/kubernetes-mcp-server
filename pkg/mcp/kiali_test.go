@@ -683,8 +683,8 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		}))
 		defer statusSrv.Close()
 
-		kubeConfig := s.Cfg.KubeConfig
-		cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+		kubeConfig := s.Cfg.KubeConfig.Get()
+		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 			toolsets = ["%s"]
 			experimental_enable_target_compatibility_tool_filters = true
 			[toolset_configs.kiali]
@@ -693,7 +693,7 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		`, s.toolsetName, statusSrv.URL)))
 		s.Require().NoError(err)
 		s.Cfg = cfg
-		s.Cfg.KubeConfig = kubeConfig
+		s.Cfg.KubeConfig.SetForTest(kubeConfig)
 		s.InitMcpClient()
 
 		tools, err := s.ListTools()
@@ -709,8 +709,8 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 	})
 
 	s.Run("tools hidden when configured URL fails /api/status", func() {
-		kubeConfig := s.Cfg.KubeConfig
-		cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+		kubeConfig := s.Cfg.KubeConfig.Get()
+		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 			toolsets = ["%s"]
 			experimental_enable_target_compatibility_tool_filters = true
 			[toolset_configs.kiali]
@@ -719,7 +719,7 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		`, s.toolsetName)))
 		s.Require().NoError(err)
 		s.Cfg = cfg
-		s.Cfg.KubeConfig = kubeConfig
+		s.Cfg.KubeConfig.SetForTest(kubeConfig)
 		s.InitMcpClient()
 
 		tools, err := s.ListTools()

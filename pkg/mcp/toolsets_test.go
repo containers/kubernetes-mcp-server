@@ -185,8 +185,8 @@ func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
 func (s *ToolsetsSuite) TestKialiToolsFilteredWithoutCRDs() {
 	s.Run("Kiali tools are filtered out when Kiali GVK is not present and URL is unset", func() {
 		toolsetName := (&kiali.Toolset{}).GetName()
-		s.Cfg.Toolsets = []string{toolsetName}
-		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.Cfg.Toolsets.SetForTest([]string{toolsetName})
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
 		s.InitMcpClient()
 		tools, err := s.ListTools()
 		s.Run("ListTools returns tools", func() {

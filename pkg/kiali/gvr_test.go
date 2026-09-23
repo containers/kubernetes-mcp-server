@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 type fakeFilteringProvider struct {
@@ -29,17 +29,14 @@ func (f *fakeFilteringProvider) AnyTargetHasGVKs(_ context.Context, gvks []schem
 
 func (f *fakeFilteringProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return true }
 
-// fakeFilteringProviderWithConfig implements both FilteringProvider and ExtendedConfigProvider.
+// fakeFilteringProviderWithConfig implements FilteringProvider and exposes
+// GetToolsetConfig for HasKiali URL checks.
 type fakeFilteringProviderWithConfig struct {
 	fakeFilteringProvider
-	configs map[string]api.ExtendedConfig
+	configs map[string]config.ExtendedConfig
 }
 
-func (f *fakeFilteringProviderWithConfig) GetProviderConfig(string) (api.ExtendedConfig, bool) {
-	return nil, false
-}
-
-func (f *fakeFilteringProviderWithConfig) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
+func (f *fakeFilteringProviderWithConfig) GetToolsetConfig(name string) (config.ExtendedConfig, bool) {
 	cfg, ok := f.configs[name]
 	return cfg, ok
 }
@@ -134,7 +131,7 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 
 		p := &fakeFilteringProviderWithConfig{
 			fakeFilteringProvider: fakeFilteringProvider{hasGVKs: false},
-			configs: map[string]api.ExtendedConfig{
+			configs: map[string]config.ExtendedConfig{
 				"kiali": &Config{Url: srv.URL},
 			},
 		}
@@ -146,7 +143,7 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 	t.Run("disables when configured URL fails status probe", func(t *testing.T) {
 		p := &fakeFilteringProviderWithConfig{
 			fakeFilteringProvider: fakeFilteringProvider{hasGVKs: true},
-			configs: map[string]api.ExtendedConfig{
+			configs: map[string]config.ExtendedConfig{
 				"kiali": &Config{Url: "http://127.0.0.1:1"},
 			},
 		}
@@ -160,7 +157,7 @@ func TestHasKiali_DiscoverFromCR(t *testing.T) {
 	t.Run("returns false when no URL and provider cannot access cluster", func(t *testing.T) {
 		p := &fakeFilteringProviderWithConfig{
 			fakeFilteringProvider: fakeFilteringProvider{hasGVKs: true},
-			configs: map[string]api.ExtendedConfig{
+			configs: map[string]config.ExtendedConfig{
 				"kiali": &Config{},
 			},
 		}
