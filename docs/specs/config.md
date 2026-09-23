@@ -492,6 +492,17 @@ working directory, independently of each other.
 <td>DROP <code>--list-output</code></td>
 </tr>
 <tr>
+<td>apps_enabled</td>
+<td>bool</td>
+<td><code>false</code></td>
+<td><code>apps_enabled</code></td>
+<td>—</td>
+<td>—</td>
+<td>no</td>
+<td>no</td>
+<td>Enable MCP Apps UI resources; requires restart</td>
+</tr>
+<tr>
 <td>stateless</td>
 <td>bool</td>
 <td><code>false</code></td>

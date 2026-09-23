@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,12 +21,15 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 		return nil, nil, fmt.Errorf("invalid URI %q: %w", res.Resource.URI, err)
 	}
 
-	var meta mcp.Meta
+	meta := mcp.Meta(maps.Clone(res.Resource.Meta))
 	if res.RBAC != nil {
 		if err := res.RBAC.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("resource %q: invalid RBAC metadata: %w", res.Resource.Name, err)
 		}
-		meta = mcp.Meta{api.RBACMetadataKey: res.RBAC}
+		if meta == nil {
+			meta = mcp.Meta{}
+		}
+		meta[api.RBACMetadataKey] = res.RBAC
 	}
 
 	mcpResource := &mcp.Resource{
@@ -56,6 +60,7 @@ func ServerResourceToGoSdkResource(_ *Server, res api.ServerResource) (*mcp.Reso
 				MIMEType: mimeType,
 				Text:     content.Text,
 				Blob:     content.Blob,
+				Meta:     meta,
 			}},
 		}, nil
 	}

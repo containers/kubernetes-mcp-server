@@ -58,6 +58,9 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("Stateless is false", func() {
 		s.False(base.Stateless.Get())
 	})
+	s.Run("AppsEnabled is false", func() {
+		s.False(base.AppsEnabled.Get())
+	})
 	s.Run("LogLevel is 0", func() {
 		s.Equal(0, base.LogLevel.Get())
 	})
@@ -98,6 +101,7 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.Contains(paths, "telemetry.endpoint")
 	s.Equal("OTEL_EXPORTER_OTLP_ENDPOINT", paths["telemetry.endpoint"].EnvName)
 	s.False(paths["port"].Reloadable)
+	s.False(paths["apps_enabled"].Reloadable)
 	s.False(paths["disable_localhost_protection"].Reloadable)
 	s.True(paths["log_level"].Reloadable)
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
@@ -158,6 +162,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		read_only = true
 		disable_destructive = true
 		stateless = true
+		apps_enabled = true
 		disable_localhost_protection = true
 
 		toolsets = ["core", "config", "helm", "metrics"]
@@ -205,6 +210,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			{"read_only", cfg.ReadOnly.Get(), true},
 			{"disable_destructive", cfg.DisableDestructive.Get(), true},
 			{"stateless", cfg.Stateless.Get(), true},
+			{"apps_enabled", cfg.AppsEnabled.Get(), true},
 			{"disable_localhost_protection", cfg.DisableLocalhostProtection.Get(), true},
 			{"tls_cert", cfg.TLSCert.Get(), certPath},
 			{"tls_key", cfg.TLSKey.Get(), keyPath},
@@ -1275,6 +1281,15 @@ func (s *ConfigSuite) TestRejectNonReloadableDisableLocalhostProtection() {
 	`), WithPrevious(prev))
 	s.Require().Error(err)
 	s.Contains(err.Error(), "non-reloadable option disable_localhost_protection changed")
+}
+
+func (s *ConfigSuite) TestAppsEnabledChangeRequiresRestart() {
+	prev, err := ReadToml(s.T().Context(), []byte(`apps_enabled = false`))
+	s.Require().NoError(err)
+
+	_, err = ReadToml(s.T().Context(), []byte(`apps_enabled = true`), WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option apps_enabled changed")
 }
 
 func (s *ConfigSuite) TestReloadableChangeWithPreviousSucceeds() {
