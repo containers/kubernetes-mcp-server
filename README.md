@@ -427,17 +427,17 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **guest-observability_loki_query** - Executes a LogQL range query against the configured Loki backend for virtual machine guest log investigation.
 
-Guest telemetry uses a label contract for reliable VM attribution. The namespace and vm_name labels together identify the KubeVirt VM that produced the telemetry. The os and source labels classify the guest operating system and telemetry source.
+Guest telemetry uses namespace and vm_name as VM identity labels, while os and source classify the guest operating system and telemetry source. A collector label may also be available for orphan guest telemetry when the standard contract labels are absent.
 
-For Windows guest-log investigations, use os="windows" or source="windows_eventlog" when those classification labels are available.
+Loki label matchers exclude streams where the matched label is absent. An empty result from a query using namespace, vm_name, os, or source therefore does not prove that matching guest events are absent. When relevant telemetry may have incomplete labels, a bounded follow-up query can use progressively fewer contract-label matchers while preserving filters for the event itself.
 
-If namespace or vm_name is missing, the telemetry may still establish that an event occurred, but it cannot reliably identify the affected VM. Do not infer missing VM identity from unrelated Kubernetes workload metadata.
+A missing label matcher should not be replaced with a log-content filter containing that label's value unless the value is known to occur in the log message. Removing namespace="example" and adding |= "example", for example, does not establish namespace association.
 
-If a namespace-scoped search does not find the specific event being investigated, perform one bounded follow-up query without the namespace matcher while retaining the strongest available classification labels and event identifier. Telemetry returned without namespace must not be attributed to the requested namespace.
+For event-content searches, stable event identifiers and case-insensitive matching are useful when provider or component capitalization is not guaranteed. For Windows guest-log investigations, available classification labels such as os="windows" or source="windows_eventlog" should be retained in the initial query together with the event-content filter. Windows storage reset telemetry commonly contains Event ID 129 and the StorPort provider.
 
-If os or source is missing, report the missing classification field rather than inventing it; the remaining labels and log content may still provide useful diagnostic evidence.
+If an event is discovered after identity labels are removed, event detection and VM attribution must be treated separately. Reliable VM identity requires both namespace and vm_name from the telemetry. Missing os or source represents classification uncertainty but does not by itself invalidate identity when namespace and vm_name are present.
 
-Missing contract labels are surfaced explicitly so callers can distinguish reliable attribution from incomplete telemetry.
+Results may include guest telemetry contract warnings identifying missing identity or classification labels and whether VM attribution is reliable.
   - `direction` (`string`) - Log ordering direction: backward returns newest matching entries first; forward returns oldest matching entries first.
   - `end` (`string`) - Optional RFC3339 end timestamp with explicit timezone.
 When start and end are omitted, the query defaults to the previous one

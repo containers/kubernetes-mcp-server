@@ -428,30 +428,52 @@ func (s *LokiSuite) TestLokiOversizedResponseRejected() {
 	)
 }
 
-func (s *LokiSuite) TestLokiHTTPClient() {
-	s.Run("reuses cached client", func() {
-		client := &Loki{}
+func resetLokiTransportCache() {
+	lokiTransportCache.Lock()
+	defer lokiTransportCache.Unlock()
 
-		first, err := client.getHTTPClient()
+	if lokiTransportCache.entry != nil {
+		lokiTransportCache.entry.transport.CloseIdleConnections()
+	}
+
+	lokiTransportCache.entry = nil
+}
+
+func (s *LokiSuite) TestLokiHTTPClient() {
+	s.T().Cleanup(resetLokiTransportCache)
+
+	s.Run("reuses transport across Loki instances", func() {
+		resetLokiTransportCache()
+		firstLoki := &Loki{}
+		secondLoki := &Loki{}
+
+		first, err := firstLoki.getHTTPClient()
 		s.Require().NoError(
 			err,
 			"failed to create first HTTP client",
 		)
 
-		second, err := client.getHTTPClient()
+		second, err := secondLoki.getHTTPClient()
 		s.Require().NoError(
 			err,
-			"failed to get cached HTTP client",
+			"failed to create second HTTP client",
+		)
+
+		s.NotSame(
+			first,
+			second,
+			"HTTP clients may be created per Loki instance",
 		)
 
 		s.Same(
-			first,
-			second,
-			"expected HTTP client to be reused",
+			first.Transport,
+			second.Transport,
+			"expected HTTP transport to be reused across Loki instances",
 		)
 	})
 
-	s.Run("rebuilds client when CA file changes", func() {
+	s.Run("rebuilds transport when CA file changes", func() {
+		resetLokiTransportCache()
 		dir := s.T().TempDir()
 		caFile := filepath.Join(dir, "ca.crt")
 
@@ -464,11 +486,11 @@ func (s *LokiSuite) TestLokiHTTPClient() {
 			"failed to write CA file",
 		)
 
-		client := &Loki{
+		firstLoki := &Loki{
 			certificateAuthority: caFile,
 		}
 
-		first, err := client.getHTTPClient()
+		first, err := firstLoki.getHTTPClient()
 		s.Require().NoError(
 			err,
 			"failed to create first HTTP client",
@@ -493,16 +515,48 @@ func (s *LokiSuite) TestLokiHTTPClient() {
 			"failed to update CA file timestamp",
 		)
 
-		second, err := client.getHTTPClient()
+		secondLoki := &Loki{
+			certificateAuthority: caFile,
+		}
+
+		second, err := secondLoki.getHTTPClient()
 		s.Require().NoError(
 			err,
 			"failed to rebuild HTTP client",
 		)
 
 		s.NotSame(
-			first,
-			second,
-			"expected HTTP client to be rebuilt after CA file change",
+			first.Transport,
+			second.Transport,
+			"expected HTTP transport to be rebuilt after CA file change",
+		)
+	})
+
+	s.Run("does not share transport across TLS configurations", func() {
+		resetLokiTransportCache()
+		firstLoki := &Loki{
+			insecure: false,
+		}
+		secondLoki := &Loki{
+			insecure: true,
+		}
+
+		first, err := firstLoki.getHTTPClient()
+		s.Require().NoError(
+			err,
+			"failed to create first HTTP client",
+		)
+
+		second, err := secondLoki.getHTTPClient()
+		s.Require().NoError(
+			err,
+			"failed to create second HTTP client",
+		)
+
+		s.NotSame(
+			first.Transport,
+			second.Transport,
+			"expected different TLS configurations to use different transports",
 		)
 	})
 }

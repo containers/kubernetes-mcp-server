@@ -55,6 +55,24 @@ type lokiCAFileState struct {
 	size    int64
 }
 
+type lokiTransportCacheKey struct {
+	insecure             bool
+	certificateAuthority string
+	tlsMinVersion        string
+	tlsCipherSuites      string
+}
+
+type lokiTransportCacheEntry struct {
+	key         lokiTransportCacheKey
+	transport   *http.Transport
+	caFileState *lokiCAFileState
+}
+
+var lokiTransportCache struct {
+	sync.Mutex
+	entry *lokiTransportCacheEntry
+}
+
 // Loki is an HTTP client for the Loki HTTP API.
 type Loki struct {
 	baseURL              string
@@ -64,10 +82,6 @@ type Loki struct {
 	tlsMinVersion        string
 	tlsCipherSuites      []string
 	requireTLS           func() bool
-
-	httpClientMu sync.Mutex
-	httpClient   *http.Client
-	caFileState  *lokiCAFileState
 }
 
 // NewLoki creates a Loki client using guest-observability
@@ -470,32 +484,70 @@ func (l *Loki) queryRangeURL(
 }
 
 func (l *Loki) getHTTPClient() (*http.Client, error) {
-	l.httpClientMu.Lock()
-	defer l.httpClientMu.Unlock()
+	transport, err := l.getHTTPTransport()
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   DefaultLokiTimeout,
+		CheckRedirect: func(
+			_ *http.Request,
+			_ []*http.Request,
+		) error {
+			return errLokiRedirectsNotAllowed
+		},
+	}
+
+	if l.requireTLS != nil {
+		client = config.NewTLSEnforcingClient(
+			client,
+			l.requireTLS,
+		)
+	}
+
+	return client, nil
+}
+
+func (l *Loki) getHTTPTransport() (*http.Transport, error) {
+	key := lokiTransportCacheKey{
+		insecure:             l.insecure,
+		certificateAuthority: strings.TrimSpace(l.certificateAuthority),
+		tlsMinVersion:        l.tlsMinVersion,
+		tlsCipherSuites:      strings.Join(l.tlsCipherSuites, "\x00"),
+	}
 
 	caState, err := l.currentCAFileState()
 	if err != nil {
 		return nil, err
 	}
 
-	if l.httpClient != nil &&
-		sameLokiCAFileState(l.caFileState, caState) {
-		return l.httpClient, nil
+	lokiTransportCache.Lock()
+	defer lokiTransportCache.Unlock()
+
+	if entry := lokiTransportCache.entry; entry != nil &&
+		entry.key == key &&
+		sameLokiCAFileState(entry.caFileState, caState) {
+		return entry.transport, nil
 	}
 
-	client, err := l.createHTTPClient()
+	transport, err := l.createHTTPTransport()
 	if err != nil {
 		return nil, err
 	}
 
-	if l.httpClient != nil {
-		l.httpClient.CloseIdleConnections()
+	if lokiTransportCache.entry != nil {
+		lokiTransportCache.entry.transport.CloseIdleConnections()
 	}
 
-	l.httpClient = client
-	l.caFileState = caState
+	lokiTransportCache.entry = &lokiTransportCacheEntry{
+		key:         key,
+		transport:   transport,
+		caFileState: caState,
+	}
 
-	return l.httpClient, nil
+	return transport, nil
 }
 
 func (l *Loki) currentCAFileState() (*lokiCAFileState, error) {
@@ -531,7 +583,7 @@ func sameLokiCAFileState(
 		current.size == latest.size
 }
 
-func (l *Loki) createHTTPClient() (*http.Client, error) {
+func (l *Loki) createHTTPTransport() (*http.Transport, error) {
 	var tlsOptions []tlsutil.TLSConfigOption
 
 	if l.insecure {
@@ -579,26 +631,8 @@ func (l *Loki) createHTTPClient() (*http.Client, error) {
 		)
 	}
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig:       tlsConfig,
-			ResponseHeaderTimeout: DefaultLokiTimeout,
-		},
-		Timeout: DefaultLokiTimeout,
-		CheckRedirect: func(
-			_ *http.Request,
-			_ []*http.Request,
-		) error {
-			return errLokiRedirectsNotAllowed
-		},
-	}
-
-	if l.requireTLS != nil {
-		client = config.NewTLSEnforcingClient(
-			client,
-			l.requireTLS,
-		)
-	}
-
-	return client, nil
+	return &http.Transport{
+		TLSClientConfig:       tlsConfig,
+		ResponseHeaderTimeout: DefaultLokiTimeout,
+	}, nil
 }

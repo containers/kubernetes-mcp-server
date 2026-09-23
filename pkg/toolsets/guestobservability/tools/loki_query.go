@@ -112,10 +112,6 @@ func lokiQueryHandler(
 		request.Limit = int(value)
 	}
 
-	if value, ok := arguments["limit"].(int); ok {
-		request.Limit = value
-	}
-
 	if value, ok := arguments["direction"].(string); ok {
 		request.Direction = value
 	}
