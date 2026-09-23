@@ -99,8 +99,34 @@ func (s *McpTransportSuite) TestLocalhostProtectionHostHeader() {
 	s.Run("allows non-localhost Host when disabled", func() {
 		s.Config.DisableLocalhostProtection.SetForTest(true)
 		s.StartServer()
-		resp := s.postInitializeWithHost("kubernetes-mcp-server:8443")
-		defer func() { _ = resp.Body.Close() }()
-		s.NotEqual(http.StatusForbidden, resp.StatusCode)
+		client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1.33.7"}, nil)
+		transport := &mcp.StreamableClientTransport{
+			Endpoint: fmt.Sprintf("http://127.0.0.1:%s/mcp", s.Config.Port.Get()),
+			HTTPClient: &http.Client{
+				Timeout:   http.DefaultClient.Timeout,
+				Transport: hostHeaderRoundTripper{host: "kubernetes-mcp-server:8443"},
+			},
+		}
+		session, err := client.Connect(s.T().Context(), transport, nil)
+		s.Require().NoError(err, "initialize handshake should succeed with a non-localhost Host")
+		defer func() { _ = session.Close() }()
+		s.Require().NotNil(session.InitializeResult())
 	})
+}
+
+// hostHeaderRoundTripper sends requests to the URL host but sets Host to a
+// different value (the kube-rbac-proxy / Service-name case).
+type hostHeaderRoundTripper struct {
+	host string
+	base http.RoundTripper
+}
+
+func (t hostHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	cloned := req.Clone(req.Context())
+	cloned.Host = t.host
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(cloned)
 }
