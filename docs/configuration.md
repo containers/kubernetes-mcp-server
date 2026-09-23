@@ -186,14 +186,25 @@ SIGHUP is not available on Windows; restart the process.
 | `metrics_port` | string | `""` | When set (in HTTP mode), starts a separate HTTP server on this port serving only `/metrics`, `/stats`, and `/healthz` endpoints. Useful for Kubernetes deployments with network policies to separate metrics scraping from MCP protocol access. The metrics server uses the same `bind_address` but does not use TLS or OAuth. A warning is logged if `bind_address` is all interfaces (`0.0.0.0` or `::`). |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
-| `disable_localhost_protection` | boolean | `false` | When `true`, disables the MCP Go SDK DNS-rebinding check on Streamable HTTP. Leave `false` for local HTTP. Set `true` only behind a trusted reverse proxy that forwards to loopback while preserving the public or Service `Host` (see below). |
+| `disable_localhost_protection` | boolean | `false` | When `true`, disables the MCP Go SDK DNS-rebinding check on Streamable HTTP. Leave `false` for local HTTP. Set `true` only behind a trusted reverse proxy that forwards to loopback while preserving the public or Service `Host`. For that sidecar pattern, also set `bind_address = "127.0.0.1"` (see below). |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
 | `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, OAuth, token exchange, well-known metadata). |
 | `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Overridden by `TLS_CIPHER_SUITES` (comma-separated) when that env var is non-empty. Applies to inbound HTTPS and outbound clients. |
 
-The Streamable HTTP handler (go-sdk) rejects requests accepted on a loopback address (`127.0.0.1`, `::1`) when `Host` is not localhost. That blocks browser DNS rebinding against a local MCP server. It also 403s the usual in-pod sidecar pattern: kube-rbac-proxy `--upstream=http://127.0.0.1:8080/` keeps `Host: <service>:<port>`. Set `disable_localhost_protection = true` in that case. Do not enable it for a laptop process listening on all interfaces without a trusted proxy. `trust_proxy_headers` does not rewrite `Host` and does not disable this check. Changing the value requires a restart.
+The Streamable HTTP handler (go-sdk) rejects requests accepted on a loopback address (`127.0.0.1`, `::1`) when `Host` is not localhost. That blocks browser DNS rebinding against a local MCP server. It also 403s the usual in-pod sidecar pattern: kube-rbac-proxy `--upstream=http://127.0.0.1:8080/` keeps `Host: <service>:<port>`. Set `disable_localhost_protection = true` in that case.
+
+For that sidecar deploy, also set `bind_address = "127.0.0.1"` so only the proxy can reach the MCP port. The flag is not what enforces that: default `bind_address` is `0.0.0.0`, and traffic to `podIP:<port>` never hits the Host check (the accept address is not loopback), so other pods can skip kube-rbac-proxy. `metrics_port` uses the same `bind_address`; cluster Prometheus scrapes will fail unless metrics are scraped from a sidecar or you keep a non-loopback bind.
+
+Do not enable `disable_localhost_protection` for a laptop process listening on all interfaces without a trusted proxy. `trust_proxy_headers` does not rewrite `Host` and does not disable this check. Changing the value requires a restart.
+
+**Sidecar (kube-rbac-proxy):**
+```toml
+port = "8080"
+bind_address = "127.0.0.1"
+disable_localhost_protection = true
+```
 
 **Example:**
 ```toml
