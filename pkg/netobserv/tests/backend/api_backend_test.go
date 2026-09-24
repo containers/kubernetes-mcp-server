@@ -83,22 +83,31 @@ func (s *ContractTestSuite) TestListFlowsEndpoint() {
 func (s *ContractTestSuite) TestGetMetricsEndpoint() {
 	resp, err := s.callEndpoint("GET", "/api/flow/metrics", map[string]string{
 		"aggregateBy": "namespace",
+		"type":        "Bytes",
+		"function":    "rate",
 		"startTime":   fmt.Sprintf("%d", time.Now().Add(-5*time.Minute).Unix()),
 		"endTime":     fmt.Sprintf("%d", time.Now().Unix()),
 	})
-	s.NoError(err, "HTTP request should succeed")
+	if !s.NoError(err, "HTTP request should succeed") {
+		return
+	}
 	defer resp.Body.Close()
 
-	s.NotEqual(404, resp.StatusCode, "/api/flow/metrics should be registered")
-
-	if resp.StatusCode == 200 {
-		body, err := io.ReadAll(resp.Body)
-		s.NoError(err)
-
-		var result map[string]interface{}
-		s.NoError(json.Unmarshal(body, &result), "response should be valid JSON")
-		s.Contains(result, "status", "response should have 'status' field")
+	if !s.Equal(http.StatusOK, resp.StatusCode, "/api/flow/metrics should accept a valid metrics query") {
+		return
 	}
+
+	body, err := io.ReadAll(resp.Body)
+	if !s.NoError(err) {
+		return
+	}
+
+	var result map[string]interface{}
+	if !s.NoError(json.Unmarshal(body, &result), "response should be valid JSON") {
+		return
+	}
+	s.Equal("success", result["status"], "response should report success")
+	s.Contains(result, "data", "response should have 'data' field")
 }
 
 // TestExportFlowsEndpoint validates /api/loki/export is registered

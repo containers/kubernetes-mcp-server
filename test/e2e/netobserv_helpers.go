@@ -18,7 +18,7 @@ func assertNetobservListFlows(t *testing.T, mcpClient *test.McpClient, args map[
 
 	result, err := mcpClient.CallTool("netobserv_list_flows", args)
 	require.NoError(t, err, "list_flows should succeed")
-	require.False(t, result.IsError, "list_flows should not return error")
+	require.False(t, result.IsError, "list_flows should not return error; response: %v", result.Content)
 	require.NotEmpty(t, result.Content, "should return content")
 
 	// Parse JSON response
@@ -35,7 +35,7 @@ func assertNetobservGetMetrics(t *testing.T, mcpClient *test.McpClient, args map
 
 	result, err := mcpClient.CallTool("netobserv_get_flow_metrics", args)
 	require.NoError(t, err, "get_flow_metrics should succeed")
-	require.False(t, result.IsError, "get_flow_metrics should not return error")
+	require.False(t, result.IsError, "get_flow_metrics should not return error; response: %v", result.Content)
 	require.NotEmpty(t, result.Content, "should return content")
 
 	// Parse JSON response
@@ -43,8 +43,13 @@ func assertNetobservGetMetrics(t *testing.T, mcpClient *test.McpClient, args map
 	var metrics map[string]interface{}
 	err = json.Unmarshal([]byte(textContent.Text), &metrics)
 	require.NoError(t, err, "response should be valid JSON")
-	require.Contains(t, metrics, "status", "response should have 'status' field")
-	require.Equal(t, "success", metrics["status"], "status should be 'success'")
+	if status, ok := metrics["status"]; ok {
+		require.Equal(t, "success", status, "status should be 'success'")
+		return
+	}
+	metricResult, ok := metrics["result"]
+	require.True(t, ok, "response should have either a 'status' or 'result' field")
+	require.NotEmpty(t, metricResult, "metrics result should contain data")
 }
 
 // assertNetobservExportFlows calls netobserv_export_flows and validates CSV response

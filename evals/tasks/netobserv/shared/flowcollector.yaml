@@ -5,6 +5,10 @@ metadata:
 spec:
   namespace: netobserv
   deploymentModel: Service
+  networkPolicy:
+    enable: true
+    additionalNamespaces:
+      - e2e-netobserv-real
   agent:
     type: eBPF
     ebpf:

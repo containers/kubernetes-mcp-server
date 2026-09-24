@@ -447,11 +447,14 @@ func TestNetObservReal(t *testing.T) {
 
 			// Deploy MCP server configured to use real plugin service
 			configTOML := fmt.Sprintf(`
-[toolsets.netobserv]
-url = "http://netobserv-plugin.%s.svc.cluster.local:9001"
+toolsets = ["core", "netobserv"]
+
+[toolset_configs.netobserv]
+namespace = "%s"
 `, pluginNamespace)
 
 			dep := deployServer(ctx, t, cfg, "netobserv-real",
+				withNamespace("e2e-netobserv-real"),
 				withConfig(configTOML),
 				withValues(viewClusterRoleBindingValues()),
 			)
@@ -475,6 +478,8 @@ url = "http://netobserv-plugin.%s.svc.cluster.local:9001"
 			assertNetobservGetMetrics(t, s.mcpClient, map[string]any{
 				"timeRange":   makeTimeRange(15),
 				"aggregateBy": "namespace",
+				"type":        "Bytes",
+				"function":    "rate",
 			})
 
 			return ctx
