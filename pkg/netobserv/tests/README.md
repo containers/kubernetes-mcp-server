@@ -20,7 +20,7 @@ Via environment variables:
 ```bash
 # Against mock plugin
 kubectl apply -f ../../../evals/tasks/netobserv/shared/mock-plugin.yaml
-kubectl port-forward svc/netobserv-mock 9001:9001
+kubectl port-forward -n netobserv svc/netobserv-plugin 9001:9001
 
 NETOBSERV_URL=http://localhost:9001 go test -tags netobserv_contract -v ./backend/
 
@@ -37,9 +37,10 @@ NETOBSERV_URL=http://localhost:9001 go test -tags netobserv_contract -v ./backen
 - Tests ensure endpoints return non-404 (registered)
 - Schema validation for successful responses
 
-## Integration with CI
+## CI
 
-Contract tests run in kubernetes-mcp-server CI to catch plugin API regressions.
+These tests use the `netobserv_contract` build tag and are not currently wired into
+CI. Run the command above to execute them locally.
 
 ## What These Tests Cover
 
