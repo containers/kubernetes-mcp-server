@@ -3,6 +3,4 @@ kind: OperatorGroup
 metadata:
   name: openshift-netobserv-operator
   namespace: openshift-netobserv-operator
-spec:
-  targetNamespaces:
-  - openshift-netobserv-operator
+spec: {}

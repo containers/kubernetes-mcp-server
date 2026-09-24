@@ -13,6 +13,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -176,7 +177,14 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 		if err == nil && len(pods.Items) > 0 {
 			allReady := true
 			for _, pod := range pods.Items {
-				if pod.Status.Phase != "Running" {
+				podReady := false
+				for _, condition := range pod.Status.Conditions {
+					if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+						podReady = true
+						break
+					}
+				}
+				if pod.Status.Phase != corev1.PodRunning || !podReady {
 					allReady = false
 					break
 				}
