@@ -112,6 +112,7 @@ type Server struct {
 	enabledResources         []string
 	enabledResourceTemplates []string
 	p                        internalk8s.Provider
+	httpTransport            bool
 	metrics                  *metrics.Metrics // Metrics collection system
 	rateLimitDone            chan struct{}    // Closed to stop the rate limiter reaper goroutine
 	closeOnce                sync.Once
@@ -146,7 +147,8 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 				Instructions: configuration.ServerInstructions.Get(),
 				Logger:       sdkLogger,
 			}),
-		p: targetProvider,
+		p:             targetProvider,
+		httpTransport: configuration.Port.Get() != "",
 	}
 	s.configuration.Store(&configuration)
 
@@ -427,6 +429,7 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 	filter := CompositeFilter(
 		cfg.isToolApplicable,
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
+		ShouldIncludeConfigurationViewTool(s.httpTransport, cfg.EnabledTools.Get()),
 	)
 	mutator := ComposeMutators(
 		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget()),

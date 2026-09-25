@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -84,6 +85,29 @@ func (s *ConfigurationSuite) TestContextsList() {
 			s.Regexp(`^https?://(127\.0\.0\.1|localhost):\d+$`, lastServer, "expected real server URL for fake-context, got %v", lastServer)
 		})
 	})
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewHiddenOverHTTPByDefault() {
+	s.Cfg.Port.SetForTest("8080")
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.False(slices.ContainsFunc(tools.Tools, func(tool *mcp.Tool) bool {
+		return tool.Name == "configuration_view"
+	}))
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewExplicitlyEnabledOverHTTP() {
+	s.Cfg.Port.SetForTest("8080")
+	s.Cfg.EnabledTools.SetForTest([]string{"configuration_view"})
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.True(slices.ContainsFunc(tools.Tools, func(tool *mcp.Tool) bool {
+		return tool.Name == "configuration_view"
+	}))
 }
 
 func (s *ConfigurationSuite) TestConfigurationView() {
