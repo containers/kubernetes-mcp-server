@@ -386,14 +386,6 @@ func (m *McpClient) StartCapturingNotifications() *NotificationCapture {
 	return m.notifications
 }
 
-// Notifications returns a snapshot of all notifications captured so far.
-func (c *NotificationCapture) Notifications() []*CapturedNotification {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return append([]*CapturedNotification(nil), c.notifications...)
-}
-
 // RequireNotification waits for a notification matching the specified method and fails the test if not received.
 // Iterates through all captured notifications looking for a match, waiting for new ones if needed.
 // The method parameter specifies which notification method to wait for (e.g., "notifications/tools/list_changed").

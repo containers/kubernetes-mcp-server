@@ -49,6 +49,9 @@ func (a *ToolApp) Validate() error {
 		}
 		return fmt.Errorf("app URI %q must be absolute", a.URI)
 	}
+	if u.Scheme != "ui" || u.Host == "" {
+		return fmt.Errorf("app URI %q must use the ui:// scheme", a.URI)
+	}
 	if a.Handler == nil {
 		return errors.New("app handler must not be nil")
 	}

@@ -52,13 +52,46 @@ func (s *McpAppsMetadataSuite) TestAppResourcesValidation() {
 		}})
 		s.ErrorContains(err, "URI")
 	})
-	s.Run("rejects duplicate app URIs", func() {
+	s.Run("rejects an app whose URI does not use ui", func() {
+		_, err := appResources([]api.ServerTool{{
+			Tool: api.Tool{Name: "http-uri"},
+			App: &api.ToolApp{
+				URI:     "https://example.com/app",
+				Handler: func(_ context.Context) (string, error) { return "", nil },
+			},
+		}})
+		s.ErrorContains(err, "ui://")
+	})
+	s.Run("rejects a ui URI without an authority", func() {
+		_, err := appResources([]api.ServerTool{{
+			Tool: api.Tool{Name: "ui-uri-without-authority"},
+			App: &api.ToolApp{
+				URI:     "ui:app",
+				Handler: func(_ context.Context) (string, error) { return "", nil },
+			},
+		}})
+		s.ErrorContains(err, "ui://")
+	})
+	s.Run("shares one app resource between tools", func() {
+		app := &api.ToolApp{
+			URI:     "ui://example/shared-app",
+			Handler: func(_ context.Context) (string, error) { return "", nil },
+		}
+		resources, err := appResources([]api.ServerTool{
+			{Tool: api.Tool{Name: "first"}, App: app},
+			{Tool: api.Tool{Name: "second"}, App: app},
+		})
+		s.Require().NoError(err)
+		s.Len(resources, 1)
+		s.Equal(app.URI, resources[0].Resource.URI)
+	})
+	s.Run("rejects separate app declarations with duplicate URIs", func() {
 		app := func(context.Context) (string, error) { return "", nil }
 		_, err := appResources([]api.ServerTool{
 			{Tool: api.Tool{Name: "first"}, App: &api.ToolApp{URI: "ui://example/app", Handler: app}},
 			{Tool: api.Tool{Name: "second"}, App: &api.ToolApp{URI: "ui://example/app", Handler: app}},
 		})
-		s.ErrorContains(err, "same MCP App URI")
+		s.ErrorContains(err, "different app")
 	})
 }
 

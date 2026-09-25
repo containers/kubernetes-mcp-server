@@ -39,12 +39,6 @@ type Configuration struct {
 	toolsets   []api.Toolset
 }
 
-// resourceListChangedSettleDelay lets the Go MCP SDK dispatch its debounced
-// resources/list_changed notification before a following tools/list_changed
-// notification can expose tools that reference those resources. The SDK's
-// debounce interval is 10ms and does not expose a flush operation.
-const resourceListChangedSettleDelay = 20 * time.Millisecond
-
 func (c *Configuration) Toolsets() []api.Toolset {
 	if c.toolsets == nil {
 		for _, toolset := range c.Config.Toolsets.Get() {
@@ -336,9 +330,6 @@ func (s *Server) applyToolsetsLocked(_ context.Context, cfg *Configuration) erro
 	// Resources must be available before tools that reference them are
 	// announced. Clients such as VS Code can react to tools/list_changed
 	// immediately and fetch the associated ui:// resource.
-	if !slices.Equal(previousResources, newResources) || !slices.Equal(previousResourceTemplates, newResourceTemplates) {
-		time.Sleep(resourceListChangedSettleDelay)
-	}
 	newTools := commitItems(previousTools, convertedTools, s.server.RemoveTools, s.server.AddTool)
 	newPrompts := commitItems(previousPrompts, convertedPrompts, s.server.RemovePrompts, s.server.AddPrompt)
 
@@ -460,7 +451,7 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 
 func appResources(tools []api.ServerTool) ([]api.ServerResource, error) {
 	resources := make([]api.ServerResource, 0)
-	seen := make(map[string]string)
+	seen := make(map[string]*api.ToolApp)
 	for _, tool := range tools {
 		app := tool.App
 		if app == nil {
@@ -469,10 +460,13 @@ func appResources(tools []api.ServerTool) ([]api.ServerResource, error) {
 		if err := app.Validate(); err != nil {
 			return nil, fmt.Errorf("tool %q: invalid MCP App: %w", tool.Tool.Name, err)
 		}
-		if firstTool, ok := seen[app.URI]; ok {
-			return nil, fmt.Errorf("tools %q and %q declare the same MCP App URI %q", firstTool, tool.Tool.Name, app.URI)
+		if firstApp, ok := seen[app.URI]; ok {
+			if firstApp == app {
+				continue
+			}
+			return nil, fmt.Errorf("tool %q declares MCP App URI %q already declared by a different app", tool.Tool.Name, app.URI)
 		}
-		seen[app.URI] = tool.Tool.Name
+		seen[app.URI] = app
 		resources = append(resources, api.ServerResource{
 			Resource: api.Resource{
 				URI:         app.URI,

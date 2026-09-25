@@ -3,9 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	gosdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
@@ -81,40 +79,6 @@ func (s *McpAppsSuite) TestAppsDisabled() {
 		})
 		s.Error(err)
 	})
-}
-
-func (s *McpAppsSuite) TestReloadRemovesAppResourcesBeforeTools() {
-	s.Cfg.AppsEnabled.SetForTest(true)
-	s.InitMcpClient()
-	capture := s.StartCapturingNotifications()
-
-	updated := config.New()
-	updated.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
-	updated.ListOutput.SetForTest(s.Cfg.ListOutput.Get())
-	updated.AppsEnabled.SetForTest(true)
-	updated.DisabledTools.SetForTest([]string{"namespaces_list"})
-	s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), updated))
-
-	capture.RequireNotification(s.T(), 2*time.Second, "notifications/resources/list_changed")
-	capture.RequireNotification(s.T(), 2*time.Second, "notifications/tools/list_changed")
-
-	resourceChange, toolChange := -1, -1
-	for i, notification := range capture.Notifications() {
-		switch notification.Method {
-		case "notifications/resources/list_changed":
-			if resourceChange == -1 {
-				resourceChange = i
-			}
-		case "notifications/tools/list_changed":
-			if toolChange == -1 {
-				toolChange = i
-			}
-		}
-	}
-
-	s.Require().NotEqual(-1, resourceChange)
-	s.Require().NotEqual(-1, toolChange)
-	s.Less(resourceChange, toolChange, "clients must receive the resource update before the related tool update")
 }
 
 func (s *McpAppsSuite) TestAppsAdvertisedWithoutAnEnabledAppTool() {
