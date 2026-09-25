@@ -129,6 +129,12 @@ func (s *ParamsSuite) TestRequiredString() {
 		s.Contains(err.Error(), "name parameter required")
 	})
 
+	s.Run("reports a missing parameter when value is null", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": nil}}}
+		_, err := RequiredString(params, "name")
+		s.ErrorContains(err, "name parameter required")
+	})
+
 	s.Run("returns error when value is not a string", func() {
 		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": 123}}}
 		result, err := RequiredString(params, "name")
@@ -153,6 +159,11 @@ func (s *ParamsSuite) TestOptionalString() {
 
 	s.Run("returns default when key is missing", func() {
 		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		s.Equal("default-value", OptionalString(params, "name", "default-value"))
+	})
+
+	s.Run("returns default when value is null", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": nil}}}
 		s.Equal("default-value", OptionalString(params, "name", "default-value"))
 	})
 
@@ -185,6 +196,11 @@ func (s *ParamsSuite) TestOptionalBool() {
 
 	s.Run("returns default when key is missing", func() {
 		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		s.True(OptionalBool(params, "enabled", true))
+	})
+
+	s.Run("returns default when value is null", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"enabled": nil}}}
 		s.True(OptionalBool(params, "enabled", true))
 	})
 
@@ -230,6 +246,19 @@ func (s *ParamsSuite) TestParamsWrapper() {
 
 	s.Run("missing optional keys do not set an error", func() {
 		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		p := WrapParams(params)
+		s.Equal("fallback", p.OptionalString("namespace", "fallback"))
+		s.True(p.OptionalBool("enabled", true))
+		s.Equal(int64(99), p.OptionalInt64("count", 99))
+		s.NoError(p.Err())
+	})
+
+	s.Run("null optional values fall back to defaults without an error", func() {
+		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{
+			"namespace": nil,
+			"enabled":   nil,
+			"count":     nil,
+		}}}
 		p := WrapParams(params)
 		s.Equal("fallback", p.OptionalString("namespace", "fallback"))
 		s.True(p.OptionalBool("enabled", true))
