@@ -24,6 +24,11 @@ When the `kiali` toolset is enabled, a Kiali toolset configuration is required v
 
 - The server uses your existing Kubernetes credentials (from kubeconfig or in-cluster) to set a bearer token for Kiali calls.
 - If you pass an HTTP Authorization header to the MCP HTTP endpoint, that is not required for Kiali; Kiali calls use the server's configured token.
+- Kiali enforces access with that token (namespace get/list and, for writes and logs, resource RBAC). Tools advertise this as [RBAC metadata](tool-rbac-metadata.md):
+  - **Bounded** for tools whose Kubernetes checks are derivable from arguments or a finite kind enum (logs, resource details, Istio config read/write, metrics/traces namespace gate, traffic graph). On OpenShift, resource/graph declarations also include `deploymentconfigs` and `routes` from the operator's viewer role.
+  - **Unbounded** for mesh-wide status and mesh cluster listing, where Kiali aggregates control-plane and observability backends that cannot be expressed as a finite Kubernetes requirement set.
+
+  Binding the caller's identity to the operator-provided `kiali-viewer` (read) or `kiali` (read/write) ClusterRole remains the practical way to grant the full surface those tools may need.
 
 ### Multi-cluster support
 

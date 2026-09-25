@@ -11,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitListOrGetResources() []api.ServerTool {
+func InitListOrGetResources(p api.FilteringProvider) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_resource_details"
 	ret = append(ret, api.ServerTool{
@@ -51,7 +51,7 @@ func InitListOrGetResources() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, RBAC: api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"), Handler: listOrGetResourcesHandler,
+		}, RBAC: ResourcesRBAC(p), Handler: listOrGetResourcesHandler,
 	})
 
 	return ret

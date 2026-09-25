@@ -29,7 +29,7 @@ func InitListMeshClusters() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, RBAC: api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"), Handler: listMeshClustersHandler,
+		}, RBAC: ListClustersRBAC(), Handler: listMeshClustersHandler,
 	})
 	return ret
 }

@@ -25,7 +25,7 @@ func InitListApplications() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(nil),
 			Handler: listResourceHandler("app"),
 		},
 	}
@@ -39,7 +39,7 @@ func InitListNamespaces() []api.ServerPrompt {
 				Title:       "List Mesh Namespaces",
 				Description: "List all namespaces with their sidecar injection status and Istio labels",
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(nil),
 			Handler: listResourceHandler("namespace"),
 		},
 	}
@@ -60,7 +60,7 @@ func InitListServices() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(nil),
 			Handler: listResourceHandler("service"),
 		},
 	}
@@ -81,7 +81,7 @@ func InitListWorkloads() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.ResourcesRBAC(nil),
 			Handler: listResourceHandler("workload"),
 		},
 	}
@@ -102,7 +102,7 @@ func InitListIstioConfig() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.IstioConfigReadRBAC(),
 			Handler: listIstioConfigHandler,
 		},
 	}
@@ -170,7 +170,7 @@ func InitMeshTopology() []api.ServerPrompt {
 				Title:       "Mesh Topology Overview",
 				Description: "Show the mesh topology including control plane components and cluster connectivity",
 			},
-			RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+			RBAC:    tools.MeshStatusRBAC(),
 			Handler: meshTopologyHandler,
 		},
 	}
