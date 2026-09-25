@@ -37,6 +37,7 @@ Living documentation for implemented and planned features:
 | **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 | **[Structured Tool Output](specs/structured-output.md)** | Conventions for tools that emit `structuredContent` | Implemented |
 | **[Config Option Framework](specs/config.md)** | Unified `Option[T]` config: vectors, precedence, provenance | Implemented |
+| **[MCP Apps](mcp-apps.md)** | Interactive UI resources associated with MCP tools | Implemented |
 
 ## Advanced Topics
 
@@ -49,5 +50,4 @@ Living documentation for implemented and planned features:
 ## Reference
 
 - **[Main README](../README.md)** - Project overview and general information
-
 

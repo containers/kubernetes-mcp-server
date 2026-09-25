@@ -225,6 +225,9 @@ type Config struct {
 	MetricsPort Option[string]
 	// ListOutput is the output format for resource list operations (yaml or table).
 	ListOutput Option[string]
+	// AppsEnabled enables MCP Apps UI resources for tools that declare an app.
+	// Defaults to false so existing MCP clients retain their current behavior.
+	AppsEnabled Option[bool]
 	// Stateless configures the MCP server to operate in stateless mode.
 	// When true, the server will not send notifications to clients (e.g., tools/list_changed, prompts/list_changed).
 	// This is useful for container deployments, load balancing, and serverless environments where
@@ -392,6 +395,7 @@ func newConfig() *Config {
 		BindAddress: opt("bind_address", "0.0.0.0").desc("Address to bind the HTTP server"),
 		MetricsPort: opt("metrics_port", "").validate(validateMetricsPortNumber).desc("Separate metrics server port"),
 		ListOutput:  opt("list_output", "table").reload().validate(validateListOutput).desc("Output format for resource list operations"),
+		AppsEnabled: opt("apps_enabled", false).desc("Enable MCP Apps UI resources (requires restart)"),
 		Stateless:   opt("stateless", false).desc("Run without tool/prompt change notifications"),
 		DisableLocalhostProtection: opt("disable_localhost_protection", false).
 			desc("Disable Streamable HTTP DNS-rebinding Host check (loopback + non-localhost Host)"),

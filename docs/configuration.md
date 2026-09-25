@@ -166,7 +166,7 @@ If the new files fail to parse (including unknown keys), a non-reloadable option
 A SIGHUP that would change a non-reloadable option is rejected and the process exits. Restart to apply those values. That includes:
 
 - Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`
-- Process shape: `stateless`, `disable_localhost_protection`, `server_instructions`
+- Process shape: `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`
 - Cluster connection: `kubeconfig`, `cluster_provider_strategy`, `cluster_provider_configs`
 - Kubernetes client: `kube_client_qps`, `kube_client_burst`, watcher/poll timings
 - Telemetry: the `[telemetry]` table
@@ -185,6 +185,7 @@ SIGHUP is not available on Windows; restart the process.
 | `bind_address` | string | `"0.0.0.0"` | Address to bind the HTTP server to. Set to `127.0.0.1` to restrict to localhost. A warning is logged when listening on all interfaces (`0.0.0.0` or `::`) without TLS or OAuth, and when a separate metrics port is bound to all interfaces (the metrics server never uses TLS or OAuth). |
 | `metrics_port` | string | `""` | When set (in HTTP mode), starts a separate HTTP server on this port serving only `/metrics`, `/stats`, and `/healthz` endpoints. Useful for Kubernetes deployments with network policies to separate metrics scraping from MCP protocol access. The metrics server uses the same `bind_address` but does not use TLS or OAuth. A warning is logged if `bind_address` is all interfaces (`0.0.0.0` or `::`). |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
+| `apps_enabled` | boolean | `false` | Enables MCP Apps resources and interactive views for tools that support them. Requires server restart. |
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
 | `disable_localhost_protection` | boolean | `false` | When `true`, disables the MCP Go SDK DNS-rebinding check on Streamable HTTP. Leave `false` for local HTTP. Set `true` only behind a trusted reverse proxy that forwards to loopback while preserving the public or Service `Host`. For that sidecar pattern, also set `bind_address = "127.0.0.1"` (see below). |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |

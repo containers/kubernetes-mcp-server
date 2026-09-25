@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -11,14 +13,49 @@ import (
 )
 
 type ServerTool struct {
-	Tool               Tool
-	RBAC               *RBACMetadata
-	Handler            ToolHandlerFunc
+	Tool    Tool
+	RBAC    *RBACMetadata
+	Handler ToolHandlerFunc
+	// App optionally associates this tool with an MCP Apps UI resource.
+	// The MCP server registers the resource and adds its URI to tool metadata
+	// only when MCP Apps are enabled.
+	App                *ToolApp
 	ClusterAware       *bool
 	TargetListProvider *bool
 	// TargetCompatibilityFilters is a slice of closures, each of which answers whether the ServerTool
 	// should be exposed (true) or not (false).
 	TargetCompatibilityFilters []func() bool
+}
+
+// ToolApp describes the UI resource rendered for a tool result.
+// Handler returns a complete, self-contained HTML document.
+type ToolApp struct {
+	URI         string
+	Name        string
+	Description string
+	Meta        map[string]any
+	Handler     func(context.Context) (string, error)
+}
+
+// Validate verifies that an app can be safely registered as an MCP resource.
+func (a *ToolApp) Validate() error {
+	if a == nil {
+		return errors.New("app must not be nil")
+	}
+	u, err := url.Parse(a.URI)
+	if err != nil || u.Scheme == "" {
+		if err != nil {
+			return fmt.Errorf("invalid app URI %q: %w", a.URI, err)
+		}
+		return fmt.Errorf("app URI %q must be absolute", a.URI)
+	}
+	if u.Scheme != "ui" || u.Host == "" {
+		return fmt.Errorf("app URI %q must use the ui:// scheme", a.URI)
+	}
+	if a.Handler == nil {
+		return errors.New("app handler must not be nil")
+	}
+	return nil
 }
 
 // IsClusterAware indicates whether the tool can accept a "cluster" or "context" parameter
@@ -120,6 +157,7 @@ type Resource struct {
 	Name        string
 	Description string
 	MIMEType    string
+	Meta        map[string]any
 }
 
 // ResourceContent is the value returned by a resource handler.
