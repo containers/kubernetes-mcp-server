@@ -7,7 +7,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-func InitGetFlowMetrics() []api.ServerTool {
+func InitGetFlowMetrics(p api.FilteringProvider) []api.ServerTool {
 	props := flowQueryProperties()
 	props["dataSource"] = &jsonschema.Schema{
 		Type:        "string",
@@ -57,7 +57,7 @@ func InitGetFlowMetrics() []api.ServerTool {
 			InputSchema: toolInputSchema(props, []string{"aggregateBy"}),
 			Annotations: readOnlyAnnotations("Get NetObserv Flow Metrics"),
 		},
-		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
+		RBAC:    metricsRBAC(p),
 		Handler: getFlowMetricsHandler,
 	}}
 }
