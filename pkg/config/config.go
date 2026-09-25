@@ -183,6 +183,8 @@ type TokenExchangeConfig struct {
 	SubjectTokenType Option[string]
 	// RequestedTokenType is an RFC 8693 requested_token_type override.
 	RequestedTokenType Option[string]
+	// TokenURL is the explicit token-exchange endpoint. Falls back to OIDC discovery when empty.
+	TokenURL Option[string]
 	// ClientAuth is nested under [token_exchange.client_auth].
 	ClientAuth TokenExchangeClientAuth `toml:"client_auth"`
 	// present is true when a [token_exchange] table appeared in TOML,
@@ -198,6 +200,7 @@ func newTokenExchangeConfig() TokenExchangeConfig {
 		Scopes:             opt("scopes", []string(nil)).reload().desc("Scopes for token exchange"),
 		SubjectTokenType:   opt("subject_token_type", "").reload().desc("RFC 8693 subject_token_type override"),
 		RequestedTokenType: opt("requested_token_type", "").reload().desc("RFC 8693 requested_token_type override"),
+		TokenURL:           opt("token_url", "").reload().desc("Explicit RFC 8693 token-exchange endpoint"),
 		ClientAuth:         newTokenExchangeClientAuth(),
 	}
 }

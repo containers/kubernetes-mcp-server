@@ -310,6 +310,22 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 			s.NotSame(first, second, "a reload that only changes token_exchange.requested_token_type must not reuse the stale cached config")
 			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.RequestedTokenType)
 		})
+
+		s.Run("token_url", func() {
+			snap := s.newSnapshot()
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			p := newProvider(cfg)
+
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+			s.Require().NotNil(first)
+
+			cfg.TokenExchange.TokenURL.SetForTest("https://sts-gateway.example.com/oauth/token")
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second, "a reload that only sets token_exchange.token_url must not reuse the stale cached config")
+			s.Equal("https://sts-gateway.example.com/oauth/token", second.TokenURL)
+		})
 	})
 
 	s.Run("wires require_tls enforcement into the built config", func() {
