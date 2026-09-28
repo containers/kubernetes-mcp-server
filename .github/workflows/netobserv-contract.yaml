@@ -1,0 +1,61 @@
+name: NetObserv Contract Tests
+
+on:
+  pull_request:
+    branches: ['main']
+    paths:
+      - '.github/workflows/netobserv-contract.yaml'
+      - 'Makefile'
+      - 'go.mod'
+      - 'go.sum'
+      - 'build/minikube.mk'
+      - 'build/netobserv.mk'
+      - 'build/tools.mk'
+      - 'evals/tasks/netobserv/shared/**'
+      - 'pkg/netobserv/**'
+      - 'pkg/toolsets/netobserv/**'
+      - 'test/e2e/netobserv_*.go'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  netobserv-contract:
+    name: Run NetObserv backend contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MINIKUBE_PROFILE: netobserv-contract
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+        with:
+          go-version-file: go.mod
+
+      - name: Create Minikube cluster
+        run: make minikube-create-cluster kubectl
+
+      - name: Run NetObserv backend contract tests
+        env:
+          KUBECONFIG: ${{ github.workspace }}/_output/kubeconfig
+          NETOBSERV_URL: http://127.0.0.1:9001
+        run: |
+          set -euo pipefail
+          trap 'result=$?; make teardown-netobserv || true; exit "$result"' EXIT
+          make setup-netobserv
+          go test -tags=netobserv_contract -v -count=1 ./pkg/netobserv/tests/backend/
+
+      - name: Delete Minikube cluster
+        if: always()
+        run: make minikube-delete-cluster

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,13 +113,21 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
 			output, err := cmd.CombinedOutput()
 			require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
+			t.Cleanup(func() {
+				cmd := exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+				_ = cmd.Run()
+			})
 		} else {
 			t.Logf("FlowCollector already exists")
 		}
 
-		// Wait for console plugin to be ready and return
-		return waitForConsolePlugin(ctx, t, clientset, pluginNamespace)
+		// Wait for FlowCollector and its managed components to be ready.
+		waitForFlowCollector(ctx, t, kubeconfig)
+		return pluginNamespace
 	}
+	t.Cleanup(func() {
+		cleanupNetObservOperator(t, kubeconfig)
+	})
 
 	// Create CatalogSource (y-stream Konflux catalog)
 	t.Logf("Creating CatalogSource: netobserv-konflux-fbc")
@@ -148,6 +157,14 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 		}
 		time.Sleep(5 * time.Second)
 	}
+
+	// Konflux bundle images are mirrored from registry.redhat.io to quay.io.
+	// Match the operator backend tests by installing the cluster-wide IDMS before
+	// subscribing to the operator.
+	t.Logf("Creating NetObserv ImageDigestMirrorSet")
+	cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "operator-idms.yaml"), "--kubeconfig", kubeconfig)
+	output, err = cmd.CombinedOutput()
+	require.NoError(t, err, "Failed to create NetObserv ImageDigestMirrorSet: %s", string(output))
 
 	// Create namespaces
 	t.Logf("Creating namespaces")
@@ -215,8 +232,9 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 	output, err = cmd.CombinedOutput()
 	require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
 
-	// Wait for console plugin service to be ready
-	return waitForConsolePlugin(ctx, t, clientset, pluginNamespace)
+	// Wait for FlowCollector and its managed components to be ready.
+	waitForFlowCollector(ctx, t, kubeconfig)
+	return pluginNamespace
 }
 
 // checkNetObservOperatorStatus checks if NetObserv operator is already deployed and ready
@@ -258,41 +276,30 @@ func checkNetObservOperatorStatus(ctx context.Context, t *testing.T, kubeconfig 
 	return true
 }
 
-// waitForConsolePlugin waits for the NetObserv console plugin to be ready
-func waitForConsolePlugin(ctx context.Context, t *testing.T, clientset kubernetes.Interface, pluginNamespace string) string {
+// waitForFlowCollector waits for the FlowCollector and its managed components to be ready.
+func waitForFlowCollector(ctx context.Context, t *testing.T, kubeconfig string) {
 	t.Helper()
 
-	t.Logf("Waiting for console plugin service to be ready...")
-	deadline := time.Now().Add(10 * time.Minute)
-	for time.Now().Before(deadline) {
-		svc, err := clientset.CoreV1().Services(pluginNamespace).Get(ctx, "netobserv-plugin", metav1.GetOptions{})
-		if err == nil && svc != nil {
-			// Also check if plugin pods are running
-			pods, err := clientset.CoreV1().Pods(pluginNamespace).List(ctx, metav1.ListOptions{
-				LabelSelector: "app=netobserv-plugin",
-			})
-			if err == nil && len(pods.Items) > 0 {
-				allReady := true
-				for _, pod := range pods.Items {
-					if pod.Status.Phase != "Running" {
-						allReady = false
-						break
-					}
-				}
-				if allReady {
-					t.Logf("Console plugin is ready in namespace: %s", pluginNamespace)
-					return pluginNamespace
-				}
-			}
-		}
-		time.Sleep(10 * time.Second)
+	t.Logf("Waiting for FlowCollector to become Ready...")
+	waitCmd := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition=Ready", "flowcollector/cluster", "--timeout=10m", "--kubeconfig", kubeconfig)
+	waitOutput, waitErr := waitCmd.CombinedOutput()
+	if waitErr == nil {
+		t.Logf("FlowCollector is ready: %s", strings.TrimSpace(string(waitOutput)))
+		return
 	}
 
-	require.Fail(t, "Console plugin did not become ready in time")
-	return pluginNamespace
+	statusCmd := exec.CommandContext(ctx, "kubectl", "get", "flowcollector", "cluster", "-o", "yaml", "--kubeconfig", kubeconfig)
+	statusOutput, statusErr := statusCmd.CombinedOutput()
+	if statusErr != nil {
+		require.NoError(t, waitErr, "FlowCollector did not become Ready: %s; failed to retrieve FlowCollector status: %v: %s",
+			strings.TrimSpace(string(waitOutput)), statusErr, strings.TrimSpace(string(statusOutput)))
+		return
+	}
+	require.NoError(t, waitErr, "FlowCollector did not become Ready: %s\nFlowCollector status:\n%s",
+		strings.TrimSpace(string(waitOutput)), strings.TrimSpace(string(statusOutput)))
 }
 
-// cleanupNetObservOperator removes NetObserv operator and FlowCollector
+// cleanupNetObservOperator removes the NetObserv operator, FlowCollector, and IDMS.
 func cleanupNetObservOperator(t *testing.T, kubeconfig string) {
 	t.Helper()
 
@@ -317,6 +324,10 @@ func cleanupNetObservOperator(t *testing.T, kubeconfig string) {
 
 	// Delete CatalogSource
 	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "operator-catalogsource.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+	_ = cmd.Run()
+
+	// Delete the ImageDigestMirrorSet.
+	cmd = exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "operator-idms.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
 	_ = cmd.Run()
 }
 
@@ -439,9 +450,6 @@ func TestNetObservReal(t *testing.T) {
 			case "deploy":
 				t.Logf("NETOBSERV_OPERATOR=deploy - deploying NetObserv operator and FlowCollector")
 				pluginNamespace = deployNetObservOperator(ctx, t, kubeconfig, clientset)
-				t.Cleanup(func() {
-					cleanupNetObservOperator(t, kubeconfig)
-				})
 
 			case "use-existing":
 				t.Logf("NETOBSERV_OPERATOR=use-existing - checking for existing operator")

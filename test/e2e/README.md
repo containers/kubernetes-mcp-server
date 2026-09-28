@@ -60,9 +60,11 @@ MCP_SERVER_IMAGE=registry.example.com/project/kubernetes-mcp-server:tag \
 go test -tags e2e -run '^TestNetObservReal$' -v -count=1 ./test/e2e/
 ```
 
-The test deploys the MCP server in `e2e-netobserv-real`. Deploy mode is intended for
-a disposable test cluster: cleanup removes the test FlowCollector, operator
-subscription/group/namespaces, and the `netobserv-konflux-fbc` CatalogSource.
+The test deploys the MCP server in `e2e-netobserv-real`. Deploy mode applies the
+cluster-wide ImageDigestMirrorSet for the Konflux images and removes it during cleanup,
+along with the test FlowCollector, operator subscription/group/namespaces, and the
+`netobserv-konflux-fbc` CatalogSource. The runner needs cluster-admin permissions to
+create and delete the cluster-scoped IDMS.
 
 Keycloak fixtures (realm, clients, users, groups) live in
 `dev/config/keycloak/realm-import.yaml`; RBAC bindings for OIDC identities live in
