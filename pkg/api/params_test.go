@@ -115,14 +115,14 @@ func (m *mockToolCallRequest) GetArguments() map[string]any {
 
 func (s *ParamsSuite) TestRequiredString() {
 	s.Run("returns string value when present", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": "test-value"}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"name": "test-value"}}}
 		result, err := RequiredString(params, "name")
 		s.NoError(err)
 		s.Equal("test-value", result)
 	})
 
 	s.Run("returns error when key is missing", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{}}}
 		result, err := RequiredString(params, "name")
 		s.Error(err)
 		s.Equal("", result)
@@ -130,7 +130,7 @@ func (s *ParamsSuite) TestRequiredString() {
 	})
 
 	s.Run("returns error when value is not a string", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": 123}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"name": 123}}}
 		result, err := RequiredString(params, "name")
 		s.Error(err)
 		s.Equal("", result)
@@ -138,7 +138,7 @@ func (s *ParamsSuite) TestRequiredString() {
 	})
 
 	s.Run("returns empty string when value is empty string", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": ""}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"name": ""}}}
 		result, err := RequiredString(params, "name")
 		s.NoError(err)
 		s.Equal("", result)
@@ -147,61 +147,61 @@ func (s *ParamsSuite) TestRequiredString() {
 
 func (s *ParamsSuite) TestOptionalString() {
 	s.Run("returns string value when present", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": "test-value"}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"name": "test-value"}}}
 		s.Equal("test-value", OptionalString(params, "name", "default"))
 	})
 
 	s.Run("returns default when key is missing", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{}}}
 		s.Equal("default-value", OptionalString(params, "name", "default-value"))
 	})
 
 	s.Run("returns default when value is not a string", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": 123}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"name": 123}}}
 		s.Equal("fallback", OptionalString(params, "name", "fallback"))
 	})
 
 	s.Run("returns empty string when value is empty string", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"name": ""}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"name": ""}}}
 		s.Equal("", OptionalString(params, "name", "default"))
 	})
 
 	s.Run("returns empty string when default is empty and key is missing", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{}}}
 		s.Equal("", OptionalString(params, "name", ""))
 	})
 }
 
 func (s *ParamsSuite) TestOptionalBool() {
 	s.Run("returns true when value is true", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"enabled": true}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"enabled": true}}}
 		s.True(OptionalBool(params, "enabled", false))
 	})
 
 	s.Run("returns false when value is false", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"enabled": false}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"enabled": false}}}
 		s.False(OptionalBool(params, "enabled", true))
 	})
 
 	s.Run("returns default when key is missing", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{}}}
 		s.True(OptionalBool(params, "enabled", true))
 	})
 
 	s.Run("returns default when value is not a bool", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"enabled": "true"}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"enabled": "true"}}}
 		s.True(OptionalBool(params, "enabled", true))
 	})
 
 	s.Run("returns false default when key is missing", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{}}}
 		s.False(OptionalBool(params, "enabled", false))
 	})
 }
 
 func (s *ParamsSuite) TestParamsWrapper() {
 	s.Run("no error when all extractions succeed", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{
 			"name":    "hello",
 			"enabled": true,
 			"count":   float64(42),
@@ -214,7 +214,7 @@ func (s *ParamsSuite) TestParamsWrapper() {
 	})
 
 	s.Run("sticky error captures first type mismatch and suppresses subsequent extractions", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{
 			"namespace": 123,
 			"name":      456,
 		}}}
@@ -229,7 +229,7 @@ func (s *ParamsSuite) TestParamsWrapper() {
 	})
 
 	s.Run("missing optional keys do not set an error", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{}}}
 		p := WrapParams(params)
 		s.Equal("fallback", p.OptionalString("namespace", "fallback"))
 		s.True(p.OptionalBool("enabled", true))
@@ -238,7 +238,7 @@ func (s *ParamsSuite) TestParamsWrapper() {
 	})
 
 	s.Run("RequiredString missing key sets error", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{}}}
 		p := WrapParams(params)
 		s.Equal("", p.RequiredString("name"))
 		s.Error(p.Err())
@@ -246,7 +246,7 @@ func (s *ParamsSuite) TestParamsWrapper() {
 	})
 
 	s.Run("OptionalInt64 with wrong type sets error", func() {
-		params := ToolHandlerParams{ToolCallRequest: &mockToolCallRequest{args: map[string]any{"count": "nope"}}}
+		params := ToolHandlerParams{Request: &mockToolCallRequest{args: map[string]any{"count": "nope"}}}
 		p := WrapParams(params)
 		s.Equal(int64(7), p.OptionalInt64("count", 7), "returns default when type mismatch is recorded")
 		s.Error(p.Err())

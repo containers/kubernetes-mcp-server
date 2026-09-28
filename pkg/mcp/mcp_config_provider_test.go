@@ -5,13 +5,12 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
 
-// McpConfigProviderSuite tests that Config is accessible from tool and prompt handlers at execution time.
+// McpConfigProviderSuite tests that Config is accessible from handlers at execution time.
 type McpConfigProviderSuite struct {
 	BaseMcpSuite
 	originalToolsets []api.Toolset
@@ -28,42 +27,6 @@ func (s *McpConfigProviderSuite) TearDownTest() {
 	for _, toolset := range s.originalToolsets {
 		toolsets.Register(toolset)
 	}
-}
-
-func (s *McpConfigProviderSuite) TestToolHandlerReceivesClusterProviderStrategy() {
-	// Register a tool whose handler reads the cluster provider strategy from ConfigProvider
-	testToolset := &configProviderToolset{
-		name: "config-provider-test",
-		tools: []api.ServerTool{
-			{
-				Tool: api.Tool{
-					Name:        "get_strategy",
-					Description: "Returns the cluster provider strategy from ConfigProvider",
-				},
-				Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-					strategy := params.ClusterProviderStrategy
-					return api.NewToolCallResult(strategy, nil), nil
-				},
-			},
-		},
-	}
-
-	toolsets.Clear()
-	toolsets.Register(testToolset)
-	configtest.OverlayTOML(s.T(), &s.Cfg, `
-		toolsets = ["config-provider-test"]
-		cluster_provider_strategy = "kubeconfig"
-	`)
-	s.InitMcpClient()
-
-	s.Run("tool handler can access cluster provider strategy", func() {
-		result, err := s.CallTool("get_strategy", map[string]interface{}{})
-		s.NoError(err)
-		s.Require().NotNil(result)
-		s.Require().Len(result.Content, 1)
-		text := result.Content[0].(*mcp.TextContent).Text
-		s.Equal("kubeconfig", text)
-	})
 }
 
 func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
@@ -115,104 +78,6 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 		s.Require().Len(result.Content, 1)
 		text := result.Content[0].(*mcp.TextContent).Text
 		s.Equal("found", text)
-	})
-}
-
-func (s *McpConfigProviderSuite) TestStrategyReflectsConfigReload() {
-	// Register a tool that returns the strategy
-	testToolset := &configProviderToolset{
-		name: "config-provider-test",
-		tools: []api.ServerTool{
-			{
-				Tool: api.Tool{
-					Name:        "get_strategy",
-					Description: "Returns the cluster provider strategy from ConfigProvider",
-				},
-				Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-					return api.NewToolCallResult(params.ClusterProviderStrategy, nil), nil
-				},
-			},
-		},
-	}
-
-	toolsets.Clear()
-	toolsets.Register(testToolset)
-	configtest.OverlayTOML(s.T(), &s.Cfg, `
-		toolsets = ["config-provider-test"]
-		cluster_provider_strategy = "kubeconfig"
-	`)
-	s.InitMcpClient()
-
-	s.Run("initial strategy is kubeconfig", func() {
-		result, err := s.CallTool("get_strategy", map[string]interface{}{})
-		s.Require().NoError(err)
-		s.Require().NotNil(result)
-		s.Require().Len(result.Content, 1)
-		text := result.Content[0].(*mcp.TextContent).Text
-		s.Equal("kubeconfig", text)
-	})
-
-	// Reload config with different strategy
-	newConfig := config.BaseDefault()
-	newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
-	configtest.OverlayTOML(s.T(), &newConfig, `
-		toolsets = ["config-provider-test"]
-		cluster_provider_strategy = "in-cluster"
-	`)
-	err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
-	s.Require().NoError(err)
-
-	s.Run("strategy reflects config reload", func() {
-		result, err := s.CallTool("get_strategy", map[string]interface{}{})
-		s.Require().NoError(err)
-		s.Require().NotNil(result)
-		s.Require().Len(result.Content, 1)
-		text := result.Content[0].(*mcp.TextContent).Text
-		s.Equal("in-cluster", text)
-	})
-}
-
-func (s *McpConfigProviderSuite) TestPromptHandlerReceivesClusterProviderStrategy() {
-	// Register a prompt whose handler reads the strategy from ConfigProvider
-	testToolset := &configProviderToolset{
-		name: "config-provider-test",
-		prompts: []api.ServerPrompt{
-			{
-				Prompt: config.Prompt{
-					Name:        "get_strategy_prompt",
-					Description: "Returns the cluster provider strategy",
-				},
-				Handler: func(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
-					strategy := params.ClusterProviderStrategy
-					return api.NewPromptCallResult("strategy", []api.PromptMessage{
-						{
-							Role: "user",
-							Content: api.PromptContent{
-								Type: "text",
-								Text: strategy,
-							},
-						},
-					}, nil), nil
-				},
-			},
-		},
-	}
-
-	toolsets.Clear()
-	toolsets.Register(testToolset)
-	configtest.OverlayTOML(s.T(), &s.Cfg, `
-		toolsets = ["config-provider-test"]
-		cluster_provider_strategy = "kubeconfig"
-	`)
-	s.InitMcpClient()
-
-	s.Run("prompt handler can access cluster provider strategy", func() {
-		result, err := s.GetPrompt("get_strategy_prompt", nil)
-		s.NoError(err)
-		s.Require().NotNil(result)
-		s.Require().Len(result.Messages, 1)
-		text := result.Messages[0].Content.(*mcp.TextContent).Text
-		s.Equal("kubeconfig", text)
 	})
 }
 

@@ -1,10 +1,6 @@
 package api
 
-import (
-	"context"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
-)
+import "github.com/containers/kubernetes-mcp-server/pkg/config"
 
 // ServerPrompt represents a prompt that can be registered with the MCP server.
 // Prompts provide pre-defined workflow templates and guidance to AI assistants.
@@ -61,14 +57,12 @@ func NewPromptCallResult(description string, messages []PromptMessage, err error
 	}
 }
 
-// PromptHandlerParams contains the parameters passed to a prompt handler
-type PromptHandlerParams struct {
-	context.Context
-	Config                  *config.Config
-	ClusterProviderStrategy string
-	KubernetesClient
-	PromptCallRequest
-	Elicitor
+// PromptHandlerParams contains the shared handler environment and prompt request.
+type PromptHandlerParams HandlerParams[PromptCallRequest]
+
+// GetArguments returns the arguments supplied with the prompt call.
+func (p PromptHandlerParams) GetArguments() map[string]string {
+	return p.Request.GetArguments()
 }
 
 // PromptHandlerFunc is a function that handles prompt execution

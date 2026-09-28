@@ -42,7 +42,7 @@ func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if _, ok := args["format"]; !ok {
 		args["format"] = DefaultExportFormat
 	}
-	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.FilteringProvider)
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
 	if err != nil {
 		return jsonAPIResult("", err)
 	}

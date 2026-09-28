@@ -23,6 +23,8 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
 )
 
 type NetObservSuite struct {
@@ -173,9 +175,9 @@ func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
 	s.Len(response.Body, 16)
 }
 
-func (s *NetObservSuite) TestNewNetObserv_usesDefaultURLWithoutConfigSection() {
+func (s *NetObservSuite) TestNewNetObserv_usesSafeDefaultURLWithoutDiscovery() {
 	client := s.mustNewClient()
-	s.Equal(DefaultPluginURL(false), client.pluginURL)
+	s.Equal(DefaultPluginURL(true), client.pluginURL)
 }
 
 func (s *NetObservSuite) TestCreateHTTPClient_AppliesTLSSettings() {
@@ -312,12 +314,13 @@ func (s *NetObservSuite) TestExecuteGet_rejectsRedirects() {
 	s.ErrorContains(err, "redirects are not allowed")
 }
 
-func (s *NetObservSuite) TestNewNetObserv_openShiftProviderUsesHTTPSURL() {
-	// A provider that reports the OpenShift Project GVK must synthesize an https:// URL so the
-	// bearer token is never sent in cleartext. This is also the fail-open direction: on a discovery
-	// error AnyTargetHasGVKs returns true, so this same https path is taken instead of leaking over http.
-	provider := &mockFilteringProvider{hasGVKs: true}
-	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), provider)
+func (s *NetObservSuite) TestNewNetObserv_openShiftTargetUsesHTTPSURL() {
+	srv := httptest.NewServer(test.NewInOpenShiftHandler())
+	s.T().Cleanup(srv.Close)
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: srv.URL})
+	s.Require().NoError(err)
+
+	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), discoveryClient)
 	s.Require().NoError(err)
 	s.Equal(DefaultPluginURL(true), client.pluginURL)
 }

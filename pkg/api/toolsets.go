@@ -8,7 +8,6 @@ import (
 	"net/url"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -28,13 +27,12 @@ type ServerTool struct {
 }
 
 // ToolApp describes the UI resource rendered for a tool result.
-// Handler returns a complete, self-contained HTML document.
 type ToolApp struct {
 	URI         string
 	Name        string
 	Description string
 	Meta        map[string]any
-	Handler     func(context.Context) (string, error)
+	Handler     ResourceHandler
 }
 
 // Validate verifies that an app can be safely registered as an MCP resource.
@@ -171,10 +169,17 @@ type ResourceContent struct {
 	Blob []byte
 }
 
+// ResourceCallRequest provides the URI requested by an MCP resource read.
+type ResourceCallRequest interface {
+	GetURI() string
+}
+
+// ResourceHandlerParams contains the parameters passed to resource handlers.
+type ResourceHandlerParams HandlerParams[ResourceCallRequest]
+
 // ResourceHandler is called when a client reads a resource.
-// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
-type ResourceHandler func(ctx context.Context) (*ResourceContent, error)
+type ResourceHandler func(params ResourceHandlerParams) (*ResourceContent, error)
 
 // ServerResource represents a resource that can be registered with the MCP server.
 type ServerResource struct {
@@ -192,10 +197,9 @@ type ResourceTemplate struct {
 }
 
 // ResourceTemplateHandler is called when a client reads a resource matching a template.
-// Session state (auth, request context) is available on ctx via sessionInjectionMiddleware.
-// The uri parameter is the actual resource URI that matches the template.
+// The request URI is available from params.Request.GetURI().
 // Handlers should return a ResourceContent with exactly one of Text or Blob set.
-type ResourceTemplateHandler func(ctx context.Context, uri string) (*ResourceContent, error)
+type ResourceTemplateHandler func(params ResourceHandlerParams) (*ResourceContent, error)
 
 // ServerResourceTemplate represents a resource template that can be registered with the MCP server.
 type ServerResourceTemplate struct {
@@ -204,15 +208,12 @@ type ServerResourceTemplate struct {
 	Handler          ResourceTemplateHandler
 }
 
-type ToolHandlerParams struct {
-	context.Context
-	Config                  *config.Config
-	ClusterProviderStrategy string
-	KubernetesClient
-	FilteringProvider FilteringProvider
-	ToolCallRequest
-	ListOutput output.Output
-	Elicitor
+// ToolHandlerParams contains the shared handler environment and tool request.
+type ToolHandlerParams HandlerParams[ToolCallRequest]
+
+// GetArguments returns the arguments supplied with the tool call.
+func (p ToolHandlerParams) GetArguments() map[string]any {
+	return p.Request.GetArguments()
 }
 
 // ExtendedConfig is configuration owned by a provider or toolset.
