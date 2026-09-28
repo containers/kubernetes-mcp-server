@@ -337,7 +337,9 @@ func TestNetObservMock(t *testing.T) {
 			// Deploy MCP server configured to use mock plugin
 			dep := deployServer(ctx, t, cfg, "netobserv-mock",
 				withConfig(`
-[toolsets.netobserv]
+toolsets = ["core", "netobserv"]
+
+[toolset_configs.netobserv]
 url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 `),
 				withValues(viewClusterRoleBindingValues()),
