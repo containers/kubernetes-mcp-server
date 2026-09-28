@@ -1,0 +1,51 @@
+name: Browser Tests
+
+on:
+  pull_request:
+    branches: ['main']
+    paths-ignore:
+      - '.gitignore'
+      - 'LICENSE'
+      - '**/*.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  browser-test:
+    name: Run browser tests
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Create test cluster
+        run: make minikube-create-cluster
+
+      - name: Run browser tests
+        run: KUBECONFIG="$PWD/_output/kubeconfig" make browser-test
+
+      - name: Cleanup
+        if: always()
+        run: make minikube-delete-cluster
