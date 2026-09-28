@@ -378,6 +378,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 			assertNetobservGetMetrics(t, s.mcpClient, map[string]any{
 				"timeRange":   makeTimeRange(5),
 				"aggregateBy": "namespace",
+				"type":        "Bytes",
 			})
 
 			return ctx

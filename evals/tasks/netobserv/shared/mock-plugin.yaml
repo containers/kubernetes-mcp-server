@@ -115,6 +115,10 @@ data:
                 if not has_time_window(query):
                     self.send_error(400, "startTime and endTime are required")
                     return
+                filters = first(query, "filters")
+                if filters and not any(operator in filters for operator in ("=", "~", ">")):
+                    self.send_error(400, "invalid filter expression")
+                    return
                 namespace = first(query, "namespace")
                 if namespace and namespace != "default":
                     body = json.dumps({"result": [], "stats": {"flows": 0}}).encode()
