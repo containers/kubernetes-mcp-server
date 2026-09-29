@@ -615,6 +615,20 @@ func (s *ValidateSuite) TestTokenExchangeTokenURL() {
 		s.Require().Error(err)
 		s.Contains(err.Error(), "token_exchange.token_url must use the http or https scheme")
 	})
+
+	s.Run("http token_url is rejected when require_tls is enabled", func() {
+		cfg := s.validConfig()
+		cfg.Port.SetForTest("8080")
+		cfg.RequireOAuth.SetForTest(true)
+		cfg.AuthorizationURL.SetForTest("https://example.com/auth")
+		cfg.RequireTLS.SetForTest(true)
+		cfg.TokenExchange.Strategy.SetForTest("rfc8693")
+		cfg.TokenExchange.TokenURL.SetForTest("http://sts-gateway.example.com/oauth/token")
+		err := cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "token_exchange.token_url")
+		s.Contains(err.Error(), "secure scheme required")
+	})
 }
 
 func (s *ValidateSuite) TestTokenExchangeWhitespaceNormalization() {

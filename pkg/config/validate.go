@@ -248,8 +248,9 @@ func (c *Config) ValidateRequireTLS() error {
 	var errs []error
 	if requireTLS {
 		if err := ValidateURLsRequireTLS(map[string]string{
-			"authorization_url": c.AuthorizationURL.Get(),
-			"server_url":        c.ServerURL.Get(),
+			"authorization_url":        c.AuthorizationURL.Get(),
+			"server_url":               c.ServerURL.Get(),
+			"token_exchange.token_url": c.TokenExchange.TokenURL.Get(),
 		}); err != nil {
 			errs = append(errs, err)
 		}
