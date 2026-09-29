@@ -1,10 +1,17 @@
 package mcp
 
 import (
+	"context"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 )
 
 // McpToolProcessingSuite tests MCP tool processing (isToolApplicable)
@@ -53,6 +60,50 @@ func (s *McpToolProcessingSuite) TestReadOnly() {
 			s.Falsef(tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint,
 				"Tool %s is destructive but should not be in read-only mode", tool.Name)
 		}
+	})
+}
+
+// TestReadOnlyBlocksWriteToolInvocation verifies read_only = true is enforced
+func (s *McpToolProcessingSuite) TestReadOnlyBlocksWriteToolInvocation() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		read_only = true
+	`)
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+
+	s.Run("pods_delete", func() {
+		_, err := kc.CoreV1().Pods("default").Create(s.T().Context(), &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "a-pod-protected-by-read-only"},
+			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create test pod")
+		s.T().Cleanup(func() {
+			_ = kc.CoreV1().Pods("default").Delete(context.Background(), "a-pod-protected-by-read-only", metav1.DeleteOptions{})
+		})
+
+		_, err = s.CallTool("pods_delete", map[string]any{"name": "a-pod-protected-by-read-only", "namespace": "default"})
+		s.Run("is rejected as an unknown tool", func() {
+			s.Require().Error(err, "expected pods_delete to be rejected in read-only mode")
+			s.Contains(err.Error(), "unknown tool")
+		})
+		s.Run("does not delete the pod", func() {
+			_, getErr := kc.CoreV1().Pods("default").Get(s.T().Context(), "a-pod-protected-by-read-only", metav1.GetOptions{})
+			s.NoError(getErr, "pod should still exist after a rejected pods_delete")
+		})
+	})
+
+	s.Run("resources_create_or_update", func() {
+		_, err := s.CallTool("resources_create_or_update", map[string]any{
+			"resource": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-configmap-blocked-by-read-only\n  namespace: default\n",
+		})
+		s.Run("is rejected as an unknown tool", func() {
+			s.Require().Error(err, "expected resources_create_or_update to be rejected in read-only mode")
+			s.Contains(err.Error(), "unknown tool")
+		})
+		s.Run("does not create the resource", func() {
+			_, getErr := kc.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-configmap-blocked-by-read-only", metav1.GetOptions{})
+			s.Truef(apierrors.IsNotFound(getErr), "configmap should not exist after a rejected resources_create_or_update, got: %v", getErr)
+		})
 	})
 }
 
