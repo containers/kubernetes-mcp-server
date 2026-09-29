@@ -1,6 +1,7 @@
 package tekton
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
 func pipelineTroubleshootPrompts() []api.ServerPrompt {
@@ -261,32 +263,50 @@ type pipelineEventTarget struct {
 	name string
 }
 
-func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun) string {
-	targets := []pipelineEventTarget{{kind: "PipelineRun", name: pipelineRunName}}
-	for _, taskRun := range taskRuns {
-		targets = append(targets, pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
-		if taskRun.Status.PodName != "" {
-			targets = append(targets, pipelineEventTarget{kind: "Pod", name: taskRun.Status.PodName})
+func pipelineRunEventTargets(pipelineRunName string, taskRuns []tektonv1.TaskRun) []pipelineEventTarget {
+	targets := make([]pipelineEventTarget, 0, 1+2*len(taskRuns))
+	seen := make(map[pipelineEventTarget]struct{})
+	add := func(target pipelineEventTarget) {
+		if target.name == "" {
+			return
 		}
+		if _, exists := seen[target]; exists {
+			return
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, target)
 	}
 
+	add(pipelineEventTarget{kind: "PipelineRun", name: pipelineRunName})
+	for _, taskRun := range taskRuns {
+		add(pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
+		add(pipelineEventTarget{kind: "Pod", name: taskRun.Status.PodName})
+	}
+	return targets
+}
+
+func listPipelineRunWarningEvents(ctx context.Context, events corev1client.EventInterface, pipelineRunName string, taskRuns []tektonv1.TaskRun, limit int, onError func(pipelineEventTarget, error)) ([]corev1.Event, bool) {
+	targets := pipelineRunEventTargets(pipelineRunName, taskRuns)
 	matched := make([]corev1.Event, 0)
 	seen := make(map[string]struct{})
-	for _, target := range targets {
-		if target.name == "" {
-			continue
-		}
-		selector := fields.SelectorFromSet(fields.Set{
+
+	for i, target := range targets {
+		options := metav1.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{
 			"involvedObject.kind": target.kind,
 			"involvedObject.name": target.name,
-		}).String()
-		events, err := params.CoreV1().Events(namespace).List(params.Context, metav1.ListOptions{FieldSelector: selector})
+			"type":                corev1.EventTypeWarning,
+		}).String()}
+		if limit > 0 {
+			options.Limit = int64(limit - len(matched))
+		}
+		list, err := events.List(ctx, options)
 		if err != nil {
-			klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to list events for PipelineRun troubleshoot target",
-				klogutil.Field("kind", target.kind), klogutil.Field("name", target.name), klogutil.Err(err))
+			if onError != nil {
+				onError(target, err)
+			}
 			continue
 		}
-		for _, event := range events.Items {
+		for _, event := range list.Items {
 			if event.Type != corev1.EventTypeWarning {
 				continue
 			}
@@ -294,13 +314,34 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 			if key == "" {
 				key = event.GetNamespace() + "/" + event.GetName()
 			}
-			if _, ok := seen[key]; ok {
+			if _, exists := seen[key]; exists {
 				continue
 			}
 			seen[key] = struct{}{}
 			matched = append(matched, event)
 		}
+		if limit > 0 && len(matched) >= limit {
+			return matched, list.Continue != "" || i < len(targets)-1
+		}
+		if list.Continue != "" {
+			return matched, true
+		}
 	}
+	return matched, false
+}
+
+func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun) string {
+	matched, _ := listPipelineRunWarningEvents(
+		params.Context,
+		params.CoreV1().Events(namespace),
+		pipelineRunName,
+		taskRuns,
+		0,
+		func(target pipelineEventTarget, err error) {
+			klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to list events for PipelineRun troubleshoot target",
+				klogutil.Field("kind", target.kind), klogutil.Field("name", target.name), klogutil.Err(err))
+		},
+	)
 	if len(matched) == 0 {
 		return "*No related warning events found*"
 	}

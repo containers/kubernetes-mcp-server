@@ -26,7 +26,7 @@ const (
 	pipelineRunActionCancel  pipelineRunLifecycleAction = "cancel"
 )
 
-func pipelineRunTools() []api.ServerTool {
+func pipelineRunTools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -116,6 +116,7 @@ func pipelineRunTools() []api.ServerTool {
 			),
 			Handler: getPipelineRunLogs,
 		},
+		pipelineRunDiagnoseTool(ctx, inspector),
 	}
 }
 
