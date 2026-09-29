@@ -81,6 +81,44 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 	})
 }
 
+func (s *McpConfigProviderSuite) TestToolHandlerReceivesReloadedConfig() {
+	testToolset := &configProviderToolset{
+		name: "config-provider-test",
+		tools: []api.ServerTool{
+			{
+				Tool: api.Tool{
+					Name:        "get_list_output",
+					Description: "Returns the configured list output format",
+				},
+				Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+					return api.NewToolCallResult(params.Config.ListOutput.Get(), nil), nil
+				},
+			},
+		},
+	}
+
+	toolsets.Clear()
+	toolsets.Register(testToolset)
+	s.Cfg.Toolsets.SetForTest([]string{testToolset.name})
+	s.InitMcpClient()
+
+	result, err := s.CallTool("get_list_output", map[string]interface{}{})
+	s.Require().NoError(err)
+	s.Require().Len(result.Content, 1)
+	s.Equal("yaml", result.Content[0].(*mcp.TextContent).Text)
+
+	newConfig := config.New()
+	newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
+	newConfig.ListOutput.SetForTest("table")
+	newConfig.Toolsets.SetForTest([]string{testToolset.name})
+	s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig))
+
+	result, err = s.CallTool("get_list_output", map[string]interface{}{})
+	s.Require().NoError(err)
+	s.Require().Len(result.Content, 1)
+	s.Equal("table", result.Content[0].(*mcp.TextContent).Text)
+}
+
 // configProviderToolset is a mock toolset for testing ConfigProvider access
 type configProviderToolset struct {
 	name    string
