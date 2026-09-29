@@ -12,7 +12,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
@@ -29,7 +28,7 @@ type LokiConfig struct {
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
 }
 
-var _ api.ExtendedConfig = (*Config)(nil)
+var _ config.ExtendedConfig = (*Config)(nil)
 
 func (c *Config) Validate() error {
 	if c == nil {
@@ -79,7 +78,7 @@ func toolsetConfigParser(
 	ctx context.Context,
 	primitive toml.Primitive,
 	md toml.MetaData,
-) (api.ExtendedConfig, error) {
+) (config.ExtendedConfig, error) {
 	var cfg Config
 
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {

@@ -175,7 +175,7 @@ func (s *LokiSuite) TestPrepareLokiQueryRange() {
 }
 
 func (s *LokiSuite) TestNewLokiAuthenticationConfig() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 [toolset_configs.guest-observability.loki]
 url = "http://127.0.0.1:3101"
 tenant = "application"

@@ -170,7 +170,7 @@ func (s *ConfigSuite) TestConfigValidate() {
 func (s *ConfigSuite) TestToolsetConfigParsing() {
 	s.Run("valid configuration", func() {
 		s.Run("parses Loki configuration", func() {
-			cfg, err := config.ReadToml([]byte(`
+			cfg, err := config.ReadToml(s.T().Context(), []byte(`
 [toolset_configs.guest-observability.loki]
 url = "http://127.0.0.1:3101"
 tenant = "application"
@@ -208,7 +208,7 @@ tenant = "application"
 
 	s.Run("TLS validation", func() {
 		s.Run("require_tls rejects HTTP Loki endpoint", func() {
-			_, err := config.ReadToml([]byte(`
+			_, err := config.ReadToml(s.T().Context(), []byte(`
 require_tls = true
 
 [toolset_configs.guest-observability.loki]
@@ -222,7 +222,7 @@ url = "http://127.0.0.1:3101"
 		})
 
 		s.Run("require_tls rejects insecure Loki configuration", func() {
-			_, err := config.ReadToml([]byte(`
+			_, err := config.ReadToml(s.T().Context(), []byte(`
 require_tls = true
 
 [toolset_configs.guest-observability.loki]

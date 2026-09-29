@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
@@ -90,14 +89,14 @@ type Loki struct {
 // NewLoki creates a Loki client using guest-observability
 // toolset configuration.
 func NewLoki(
-	configProvider api.BaseConfig,
+	cfg *config.Config,
 	restConfig *rest.Config,
 ) (*Loki, error) {
-	if configProvider == nil {
-		return nil, errors.New("configuration provider is required")
+	if cfg == nil {
+		return nil, errors.New("config is required")
 	}
 
-	extended, ok := configProvider.GetToolsetConfig(ToolsetName)
+	extended, ok := cfg.GetToolsetConfig(ToolsetName)
 	if !ok {
 		return nil, errors.New(
 			"guest-observability toolset configuration is required",
@@ -113,9 +112,9 @@ func NewLoki(
 
 	client, err := newLokiFromConfig(
 		guestConfig,
-		configProvider.GetTLSMinVersionConfig(),
-		configProvider.GetTLSCipherSuitesConfig(),
-		configProvider.IsRequireTLS,
+		cfg.TLSMinVersion.Get(),
+		cfg.TLSCipherSuites.Get(),
+		func() bool { return cfg.RequireTLS.Get() },
 	)
 	if err != nil {
 		return nil, err

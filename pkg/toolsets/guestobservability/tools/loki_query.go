@@ -128,7 +128,7 @@ func lokiQueryHandler(
 	}
 
 	client, err := guestobservability.NewLoki(
-		params,
+		params.Config,
 		restConfig,
 	)
 	if err != nil {
