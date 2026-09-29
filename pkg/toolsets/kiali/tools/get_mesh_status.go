@@ -29,7 +29,9 @@ func InitGetMeshStatus() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, RBAC: api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"), Handler: getMeshStatusHandler,
+		},
+		RBAC:    api.RBACUnbounded("Kubernetes API access is delegated to Kiali and its permissions cannot be derived from this capability's arguments"),
+		Handler: getMeshStatusHandler,
 	})
 	return ret
 }
