@@ -17,6 +17,7 @@ Each contains:
 - `eval-kiali.yaml` — eval config for the `kiali` task suite (+ core/config)
 - `eval-tekton.yaml` — eval config for the `tekton` task suite (+ core/config)
 - `eval-netobserv.yaml` — eval config for the `netobserv` task suite (+ core/config)
+- `eval-guest-observability.yaml` — eval config for the `guest-observability` task suite (+ core/config)
 - `eval-all.yaml` — eval config that runs all task suites
 
 Not all agent directories have every eval file yet — `builtin-openai` is the most complete set, used by the CI workflow.

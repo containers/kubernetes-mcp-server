@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/client-go/rest"
 )
 
 type LokiSuite struct {
@@ -172,6 +174,63 @@ func (s *LokiSuite) TestPrepareLokiQueryRange() {
 	})
 }
 
+func (s *LokiSuite) TestNewLokiAuthenticationConfig() {
+	cfg, err := config.ReadToml([]byte(`
+[toolset_configs.guest-observability.loki]
+url = "http://127.0.0.1:3101"
+tenant = "application"
+`))
+	s.Require().NoError(
+		err,
+		"failed to parse guest-observability configuration",
+	)
+
+	s.Run("copies bearer credentials from REST config", func() {
+		client, err := NewLoki(
+			cfg,
+			&rest.Config{
+				BearerToken:     " token-xyz ",
+				BearerTokenFile: " /var/run/secrets/token ",
+			},
+		)
+		s.Require().NoError(
+			err,
+			"failed to create Loki client",
+		)
+
+		s.Equal(
+			"token-xyz",
+			client.bearerToken,
+			"unexpected bearer token",
+		)
+		s.Equal(
+			"/var/run/secrets/token",
+			client.bearerTokenFile,
+			"unexpected bearer token file",
+		)
+	})
+
+	s.Run("supports unauthenticated Loki", func() {
+		client, err := NewLoki(
+			cfg,
+			nil,
+		)
+		s.Require().NoError(
+			err,
+			"failed to create unauthenticated Loki client",
+		)
+
+		s.Empty(
+			client.bearerToken,
+			"did not expect bearer token",
+		)
+		s.Empty(
+			client.bearerTokenFile,
+			"did not expect bearer token file",
+		)
+	})
+}
+
 func (s *LokiSuite) TestLokiQueryRange() {
 	type capturedRequest struct {
 		Query  url.Values
@@ -275,6 +334,189 @@ func (s *LokiSuite) TestLokiQueryRange() {
 		request.Header.Get("X-Scope-OrgID"),
 		"unexpected X-Scope-OrgID",
 	)
+}
+
+func (s *LokiSuite) TestLokiAuthorization() {
+	ctx := context.Background()
+	query := LokiQueryRangeRequest{
+		Query: `{source="windows_eventlog"}`,
+	}
+
+	s.Run("sets bearer authorization header", func() {
+		client := &Loki{
+			baseURL:     "http://example.com",
+			bearerToken: "token-xyz",
+		}
+
+		req, err := client.newQueryRangeRequest(
+			ctx,
+			query,
+		)
+		s.Require().NoError(err)
+
+		s.Equal(
+			"Bearer token-xyz",
+			req.Header.Get("Authorization"),
+			"unexpected Authorization header",
+		)
+	})
+
+	s.Run("does not duplicate bearer prefix", func() {
+		client := &Loki{
+			baseURL:     "http://example.com",
+			bearerToken: "Bearer token-xyz",
+		}
+
+		req, err := client.newQueryRangeRequest(
+			ctx,
+			query,
+		)
+		s.Require().NoError(err)
+
+		s.Equal(
+			"Bearer token-xyz",
+			req.Header.Get("Authorization"),
+			"unexpected Authorization header",
+		)
+	})
+
+	s.Run("reads bearer token file at request time", func() {
+		tokenFile := filepath.Join(
+			s.T().TempDir(),
+			"token",
+		)
+
+		s.Require().NoError(
+			os.WriteFile(
+				tokenFile,
+				[]byte("token-one\n"),
+				0600,
+			),
+		)
+
+		client := &Loki{
+			baseURL:         "http://example.com",
+			bearerTokenFile: tokenFile,
+		}
+
+		first, err := client.newQueryRangeRequest(
+			ctx,
+			query,
+		)
+		s.Require().NoError(err)
+
+		s.Equal(
+			"Bearer token-one",
+			first.Header.Get("Authorization"),
+			"unexpected Authorization header",
+		)
+
+		s.Require().NoError(
+			os.WriteFile(
+				tokenFile,
+				[]byte("token-two\n"),
+				0600,
+			),
+		)
+
+		second, err := client.newQueryRangeRequest(
+			ctx,
+			query,
+		)
+		s.Require().NoError(err)
+
+		s.Equal(
+			"Bearer token-two",
+			second.Header.Get("Authorization"),
+			"expected rotated bearer token to be read from file",
+		)
+	})
+
+	s.Run("prefers inline bearer token over token file", func() {
+		tokenFile := filepath.Join(
+			s.T().TempDir(),
+			"token",
+		)
+
+		s.Require().NoError(
+			os.WriteFile(
+				tokenFile,
+				[]byte("file-token\n"),
+				0600,
+			),
+		)
+
+		client := &Loki{
+			baseURL:         "http://example.com",
+			bearerToken:     "inline-token",
+			bearerTokenFile: tokenFile,
+		}
+
+		req, err := client.newQueryRangeRequest(
+			ctx,
+			query,
+		)
+		s.Require().NoError(err)
+
+		s.Equal(
+			"Bearer inline-token",
+			req.Header.Get("Authorization"),
+			"expected inline bearer token to take precedence",
+		)
+	})
+
+	s.Run("returns error when configured bearer token file cannot be read", func() {
+		missingTokenFile := filepath.Join(
+			s.T().TempDir(),
+			"missing-token",
+		)
+
+		client := &Loki{
+			baseURL:         "http://example.com",
+			bearerTokenFile: missingTokenFile,
+		}
+
+		req, err := client.newQueryRangeRequest(
+			ctx,
+			query,
+		)
+
+		s.Require().Error(
+			err,
+			"expected unreadable bearer token file to fail request creation",
+		)
+		s.Nil(
+			req,
+			"did not expect request when bearer token file cannot be read",
+		)
+		s.Contains(
+			err.Error(),
+			"failed to read Loki bearer token file",
+			"unexpected error",
+		)
+		s.Contains(
+			err.Error(),
+			missingTokenFile,
+			"expected token file path in error",
+		)
+	})
+
+	s.Run("omits authorization when credentials are absent", func() {
+		client := &Loki{
+			baseURL: "http://example.com",
+		}
+
+		req, err := client.newQueryRangeRequest(
+			ctx,
+			query,
+		)
+		s.Require().NoError(err)
+
+		s.Empty(
+			req.Header.Get("Authorization"),
+			"expected Authorization header to be omitted",
+		)
+	})
 }
 
 func (s *LokiSuite) TestLokiHTTPError() {

@@ -46,10 +46,11 @@ spec:
 
     - llmJudge:
         contains: >-
-          The affected VM can be identified as win-event-129 and the
-          os=windows label provides Windows classification, but source
-          is missing. The response should report that guest log-source
-          provenance is incomplete rather than inventing a source label.
+          The affected VM can be identified as win-event-129 because the
+          namespace and vm_name identity labels are present, but source is
+          missing. VM attribution remains reliable, while guest log-source
+          provenance is incomplete. The response should not invent a source
+          label.
 
   cleanup:
     - script:

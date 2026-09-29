@@ -13,7 +13,6 @@ data:
     from http.server import BaseHTTPRequestHandler, HTTPServer
     from datetime import datetime, timezone, timedelta
     import json
-    import time
     import re
     import os
     import urllib.parse
@@ -140,9 +139,11 @@ data:
         },
     ]
 
+
     def first(query, key, default=""):
         values = query.get(key, [])
         return values[0] if values else default
+
 
     def record_request(path, query):
         global LAST_REQUEST
@@ -157,6 +158,7 @@ data:
 
         LAST_REQUEST = entry
         REQUEST_HISTORY.append(entry)
+
 
     LABEL_MATCHER_RE = re.compile(
         r'([A-Za-z_][A-Za-z0-9_]*)\s*(=~|!~|!=|=)\s*"([^"]*)"'
@@ -242,10 +244,14 @@ data:
                     return False
 
             elif operator == "!~":
-                if actual is not None and re.fullmatch(expected, actual) is not None:
+                if (
+                    actual is not None
+                    and re.fullmatch(expected, actual) is not None
+                ):
                     return False
 
         return True
+
 
     def parse_rfc3339(value):
         if value.endswith("Z"):
@@ -253,12 +259,14 @@ data:
 
         return datetime.fromisoformat(value).astimezone(timezone.utc)
 
+
     def event_timestamp():
         return datetime.now(timezone.utc) - timedelta(minutes=5)
 
 
     def event_timestamp_ns(ts):
         return str(int(ts.timestamp() * 1_000_000_000))
+
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -410,16 +418,16 @@ data:
                         continue
 
                     result.append(
-                    {
-                        "stream": stream["labels"],
-                        "values": [
-                            [
-                                event_timestamp_ns(event_time),
-                                stream["message"],
-                            ]
-                        ],
-                    }
-                )
+                        {
+                            "stream": stream["labels"],
+                            "values": [
+                                [
+                                    event_timestamp_ns(event_time),
+                                    stream["message"],
+                                ]
+                            ],
+                        }
+                    )
 
             self.send_json(
                 200,
@@ -431,6 +439,7 @@ data:
                     },
                 },
             )
+
 
     if __name__ == "__main__":
         HTTPServer(("0.0.0.0", 3100), Handler).serve_forever()

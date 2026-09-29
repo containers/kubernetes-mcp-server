@@ -110,21 +110,6 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 				"expected vm_name in missing labels",
 			)
 
-			expectedFragments := []string{
-				"The affected VM is UNKNOWN",
-				"Do not name, rank, suggest, or speculate",
-				`"most likely" or "strongest candidate"`,
-				"Do not infer VM identity from VM names",
-			}
-
-			for _, fragment := range expectedFragments {
-				s.Contains(
-					warning.Message,
-					fragment,
-					"expected warning to contain %q",
-					fragment,
-				)
-			}
 		})
 
 		s.Run("missing namespace makes VM identity unreliable", func() {
@@ -159,21 +144,11 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 				warning.IdentityReliable,
 				"expected identity to be unreliable when namespace is missing",
 			)
-			expectedFragments := []string{
-				"vm_name alone does not identify a namespaced VM",
-				"must be treated as unassociated",
-				"same vm_name is not sufficient",
-				"Do not describe the association as probable, likely, or inferred",
-			}
-
-			for _, fragment := range expectedFragments {
-				s.Contains(
-					warning.Message,
-					fragment,
-					"expected warning to contain %q",
-					fragment,
-				)
-			}
+			s.Contains(
+				warning.Missing,
+				"namespace",
+				"expected namespace in missing labels",
+			)
 		})
 
 		s.Run("missing both identity labels reports VM and namespace unknown", func() {
@@ -216,11 +191,6 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 				"vm_name",
 				"expected vm_name in missing labels",
 			)
-			s.Contains(
-				warning.Message,
-				"The affected VM and namespace are UNKNOWN",
-				"unexpected warning",
-			)
 		})
 	})
 
@@ -261,11 +231,6 @@ func (s *LokiQueryContractSuite) TestAddGuestTelemetryContractWarnings() {
 				warning.Missing,
 				"os",
 				"expected os in missing labels",
-			)
-			s.Contains(
-				warning.Message,
-				"Preserve this classification uncertainty",
-				"unexpected warning",
 			)
 		})
 	})

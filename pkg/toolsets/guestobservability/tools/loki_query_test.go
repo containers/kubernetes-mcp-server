@@ -42,41 +42,6 @@ func (s *LokiQuerySuite) TestInitLokiQuery() {
 				"expected non-empty tool description",
 			)
 
-			expectedFragments := []string{
-				"LogQL range query",
-				"namespace",
-				"vm_name",
-				"os",
-				"source",
-				"collector",
-				"orphan guest telemetry",
-				"label matchers exclude streams",
-				"does not prove that matching guest events are absent",
-				"progressively fewer contract-label matchers",
-				"event itself",
-				"should not be replaced with a log-content filter",
-				"does not establish namespace association",
-				"stable event identifiers",
-				"case-insensitive matching",
-				`os="windows"`,
-				`source="windows_eventlog"`,
-				"retained in the initial query",
-				"Event ID 129",
-				"StorPort",
-				"event detection and VM attribution",
-				"Reliable VM identity requires both namespace and vm_name",
-				"classification uncertainty",
-				"guest telemetry contract warnings",
-			}
-
-			for _, fragment := range expectedFragments {
-				s.Contains(
-					tool.Description,
-					fragment,
-					"expected tool description to contain %q",
-					fragment,
-				)
-			}
 		})
 	})
 

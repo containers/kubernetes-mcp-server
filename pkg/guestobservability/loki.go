@@ -18,6 +18,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
+	"k8s.io/client-go/rest"
 )
 
 const (
@@ -77,6 +78,8 @@ var lokiTransportCache struct {
 type Loki struct {
 	baseURL              string
 	tenant               string
+	bearerToken          string
+	bearerTokenFile      string
 	insecure             bool
 	certificateAuthority string
 	tlsMinVersion        string
@@ -88,6 +91,7 @@ type Loki struct {
 // toolset configuration.
 func NewLoki(
 	configProvider api.BaseConfig,
+	restConfig *rest.Config,
 ) (*Loki, error) {
 	if configProvider == nil {
 		return nil, errors.New("configuration provider is required")
@@ -107,12 +111,26 @@ func NewLoki(
 		)
 	}
 
-	return newLokiFromConfig(
+	client, err := newLokiFromConfig(
 		guestConfig,
 		configProvider.GetTLSMinVersionConfig(),
 		configProvider.GetTLSCipherSuitesConfig(),
 		configProvider.IsRequireTLS,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	if restConfig != nil {
+		client.bearerToken = strings.TrimSpace(
+			restConfig.BearerToken,
+		)
+		client.bearerTokenFile = strings.TrimSpace(
+			restConfig.BearerTokenFile,
+		)
+	}
+
+	return client, nil
 }
 
 func newLokiFromConfig(
@@ -156,7 +174,9 @@ func (l *Loki) QueryRange(
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	return readLokiResponse(ctx, resp)
 }
@@ -188,6 +208,14 @@ func (l *Loki) newQueryRangeRequest(
 		return nil, err
 	}
 
+	authHeader, err := l.authorizationHeader()
+	if err != nil {
+		return nil, err
+	}
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+
 	if l.tenant != "" {
 		req.Header.Set("X-Scope-OrgID", l.tenant)
 	}
@@ -196,6 +224,33 @@ func (l *Loki) newQueryRangeRequest(
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
 
 	return req, nil
+}
+
+func (l *Loki) authorizationHeader() (string, error) {
+	token := l.bearerToken
+
+	if token == "" && l.bearerTokenFile != "" {
+		data, err := os.ReadFile(l.bearerTokenFile)
+		if err != nil {
+			return "", fmt.Errorf(
+				"failed to read Loki bearer token file %q: %w",
+				l.bearerTokenFile,
+				err,
+			)
+		}
+
+		token = strings.TrimSpace(string(data))
+	}
+
+	if token == "" {
+		return "", nil
+	}
+
+	if strings.HasPrefix(token, "Bearer ") {
+		return token, nil
+	}
+
+	return "Bearer " + token, nil
 }
 
 func (l *Loki) doRequest(

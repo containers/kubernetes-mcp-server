@@ -3,7 +3,7 @@ package defaults
 const (
 	DefaultToolsetName = "guest-observability"
 
-	DefaultToolsetDescription = "Guest observability tools for querying metrics and logs from virtual machine guest operating systems."
+	DefaultToolsetDescription = "Virtual machine guest log observability tools backed by Loki. Check the [Guest Observability documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/guest-observability.md) for more details."
 )
 
 func ToolsetName() string {

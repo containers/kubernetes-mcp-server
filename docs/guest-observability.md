@@ -39,6 +39,16 @@ certificate_authority = "/path/to/ca.crt"
 
 Relative `certificate_authority` paths are resolved relative to the server configuration directory.
 
+### Authentication
+
+When the selected Kubernetes REST configuration provides bearer credentials, Guest Observability forwards them to Loki using the `Authorization` header.
+
+If `BearerToken` is set, it is used for the bearer `Authorization` header. If `BearerToken` is empty and `BearerTokenFile` is set, the token file is read when each Loki request is made so rotated tokens can be used.
+
+If neither bearer credential is available, the Loki request is sent without an `Authorization` header. This supports Loki deployments that do not require authentication.
+
+The optional `tenant` setting is independent of authentication. It sets the `X-Scope-OrgID` header and does not provide credentials.
+
 For development or testing with an HTTPS endpoint whose certificate cannot be verified:
 
 ```toml
@@ -188,4 +198,6 @@ Use `insecure = true` only for development or testing.
 
 ### Loki returns an authorization error
 
-Verify the Loki backend access configuration and, when applicable, the configured `tenant`.
+For a Loki deployment that requires bearer authentication, verify that the selected Kubernetes REST configuration provides a valid `BearerToken` or `BearerTokenFile` and that the credential is authorized to query the Loki backend.
+
+If the Loki deployment uses multi-tenancy, also verify the configured `tenant`. The tenant is sent using `X-Scope-OrgID` and is separate from authentication.

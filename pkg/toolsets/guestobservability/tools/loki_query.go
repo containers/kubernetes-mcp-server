@@ -3,9 +3,11 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -120,8 +122,14 @@ func lokiQueryHandler(
 		request.Step = value
 	}
 
+	var restConfig *rest.Config
+	if params.KubernetesClient != nil {
+		restConfig = params.RESTConfig()
+	}
+
 	client, err := guestobservability.NewLoki(
 		params,
+		restConfig,
 	)
 	if err != nil {
 		return api.NewToolCallResult(
@@ -153,7 +161,6 @@ func lokiQueryHandler(
 type guestTelemetryContractWarning struct {
 	Missing          []string `json:"missing"`
 	IdentityReliable bool     `json:"identityReliable"`
-	Message          string   `json:"message"`
 }
 
 func lokiQueryResult(content string) *api.ToolCallResult {
@@ -236,7 +243,7 @@ func guestTelemetryContractWarnings(
 
 		warnings = append(
 			warnings,
-			newGuestTelemetryContractWarning(stream, missing),
+			newGuestTelemetryContractWarning(missing),
 		)
 	}
 
@@ -281,19 +288,15 @@ func missingGuestTelemetryContractLabels(
 }
 
 func newGuestTelemetryContractWarning(
-	stream map[string]any,
 	missing []string,
 ) guestTelemetryContractWarning {
 	identityReliable :=
-		hasNonEmptyStringLabel(stream, "namespace") &&
-			hasNonEmptyStringLabel(stream, "vm_name")
+		!slices.Contains(missing, "namespace") &&
+			!slices.Contains(missing, "vm_name")
 
 	return guestTelemetryContractWarning{
 		Missing:          missing,
 		IdentityReliable: identityReliable,
-		Message: guestTelemetryContractWarningMessage(
-			missing,
-		),
 	}
 }
 
@@ -304,66 +307,4 @@ func hasNonEmptyStringLabel(
 	value, ok := stream[label].(string)
 
 	return ok && value != ""
-}
-
-func guestTelemetryContractWarningMessage(
-	missing []string,
-) string {
-	missingNamespace := containsString(
-		missing,
-		"namespace",
-	)
-
-	missingVMName := containsString(
-		missing,
-		"vm_name",
-	)
-
-	switch {
-	case missingNamespace && missingVMName:
-		return "Guest telemetry is missing namespace and vm_name. " +
-			"The affected VM and namespace are UNKNOWN. " +
-			"Do not name, rank, suggest, or speculate about candidate " +
-			"VMs, and do not associate the event with a namespace " +
-			"unless the telemetry contains an explicit correlation field."
-
-	case missingVMName:
-		return "Guest telemetry is missing vm_name. " +
-			"The affected VM is UNKNOWN. " +
-			"Do not name, rank, suggest, or speculate about candidate " +
-			`VMs, including a "most likely" or "strongest candidate" VM. ` +
-			"Do not infer VM identity from VM names, unrelated Kubernetes " +
-			"workload metadata, or elimination among known VMs unless " +
-			"the telemetry contains an explicit correlation field."
-
-	case missingNamespace:
-		return "Guest telemetry is missing namespace. " +
-			"vm_name alone does not identify a namespaced VM. " +
-			"The event must be treated as unassociated with the user's " +
-			"requested namespace unless the same telemetry contains an " +
-			"explicit correlation field. A separate stream with the same " +
-			"vm_name is not sufficient to establish namespace association. " +
-			"Do not describe the association as probable, likely, or inferred."
-
-	default:
-		return fmt.Sprintf(
-			"Guest telemetry is missing classification label(s): %s. "+
-				"Preserve this classification uncertainty rather than "+
-				"inventing the missing value.",
-			strings.Join(missing, ", "),
-		)
-	}
-}
-
-func containsString(
-	values []string,
-	target string,
-) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-
-	return false
 }
