@@ -184,6 +184,7 @@ The `docs/` directory contains user-facing documentation:
 The `docs/specs/` directory contains feature specifications (living documentation for coding agents):
 
 - `docs/specs/validation.md` – Pre-execution validation layer specification (resource existence, schema, RBAC)
+- `docs/specs/tool-response-limits.md` – Page size, log tail, and byte caps for list and log tools
 
 ### Documentation conventions
 

@@ -28,6 +28,7 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
   - [Toolsets](#toolsets)
   - [Tool Filtering](#tool-filtering)
   - [Tool Overrides](#tool-overrides)
+  - [Response Size Limits](#response-size-limits)
   - [Denied Resources](#denied-resources)
   - [Server Instructions](#server-instructions)
   - [Prompts](#prompts)
@@ -157,7 +158,7 @@ pkill -HUP kubernetes-mcp-server
 
 SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change.
 
-Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
+Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, response size limits, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
 
 If the new files fail to parse (including unknown keys), a non-reloadable option would change, or Validate fails, the process exits. When Validate fails, the rejected configuration is dumped first. `toolset_configs` parsers see the `require_tls` value from this load; a would-be `require_tls` change fails before those parsers run.
 
@@ -532,6 +533,33 @@ description = "List pods in the cluster. Prefer using label selectors over listi
 [tool_overrides.resources_get]
 description = "Get a Kubernetes resource by name. Always specify the namespace explicitly rather than relying on the default."
 ```
+
+### Response Size Limits
+
+These bound list page size, log tail, and the text bytes placed in a tool result. All four keys are reloadable. There is no environment variable for them.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_list_page_size` | integer | `200` | Kubernetes list page size when a list tool's `limit` argument is omitted, and the ceiling when it is set. |
+| `max_tool_response_bytes` | integer | `1048576` | Maximum text bytes placed in a tool result (1 MiB). |
+| `max_log_tail_lines` | integer | `1000` | Ceiling on a log tool's tail. The tool's own default tail stays 100. |
+| `response_limits` | map | `{}` | Per-tool overrides of the three fields above. The key is a registered tool name. |
+
+`response_limits` is one map. This reference does not list a block per tool. Any registered tool name is a valid key, including a tool that target compatibility, toolset selection, or the read-only and destructive gates currently hide. An unknown tool name fails the load.
+
+Each entry may set any of `max_list_page_size`, `max_tool_response_bytes`, and `max_log_tail_lines`. An omitted field inherits the global of the same name. A set value replaces it for that tool and may be larger or smaller than the global. `0` and negative values fail the load. A field the tool's read path does not consult has no effect.
+
+```toml
+max_tool_response_bytes = 1048576
+
+[response_limits.resources_list]
+max_list_page_size = 50
+
+[response_limits.pods_log]
+max_log_tail_lines = 500
+```
+
+To keep the previous Kiali and NetObserv constants, copy the drop-in described in [Configuration Changes](configuration-changes.md#tool-response-limits) into `--config-dir`.
 
 ### Denied Resources
 

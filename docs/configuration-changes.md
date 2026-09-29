@@ -10,6 +10,7 @@
   - [Vectors at a glance](#vectors-at-a-glance)
   - [Migration examples](#migration-examples)
 - [Upgrading from 0.0.66](#upgrading-from-0066)
+- [Tool response limits](#tool-response-limits)
 
 This document records configuration changes that may require action when upgrading between releases. Add newer release transitions as separate sections so upgrade guidance remains available without cluttering the current [configuration reference](configuration.md).
 
@@ -179,3 +180,69 @@ The legacy top-level `token_exchange_strategy` and `sts_*` settings were removed
 | `sts_federated_token_file` | `token_exchange.client_auth.token_file` |
 
 Map legacy `sts_auth_style` values as follows: `params` to `client_secret_post`, `header` to `client_secret_basic`, `assertion` to `private_key_jwt`, and `federated` to `jwt_file`. Configurations that omitted `token_exchange_strategy` used the built-in STS path and should use `client_secret_basic` to preserve HTTP Basic client authentication.
+
+## Tool response limits
+
+List and log calls, and the Kiali, NetObserv, and Tekton reads that used private size constants, share `max_tool_response_bytes` (default 1 MiB), `max_list_page_size` (default 200), and `max_log_tail_lines` (default 1000). A tool overrides one of those through `[response_limits.<tool>]`. See [Tool Response Limits](specs/tool-response-limits.md).
+
+These constants move to that default:
+
+| Read | Previous constant | After this change, with no override |
+|------|-------------------|-------------------------------------|
+| Every `kiali_*` tool (`ExecuteRequest`) | 512 KiB (524288) | 1 MiB |
+| `netobserv_list_flows`, `netobserv_get_flow_metrics` | 4 MiB (4194304) | 1 MiB |
+| `netobserv_export_flows` | 2 MiB (2097152) | 1 MiB |
+| `tekton_taskrun_logs`, `tekton_pipelinerun_logs`, per container | 1 MiB (1048576) | 1 MiB |
+
+Core list tools and `pods_log` / `nodes_log` had no byte cap. They gain the defaults above. `nodes_log` with `tailLines` 0 no longer returns the whole file; it uses the default tail of 100, clamped by `max_log_tail_lines`.
+
+To keep the Kiali and NetObserv constants, copy `docs/examples/zz-response-limits-previous.toml` into the directory passed to `--config-dir`. Implementation adds that file with the following contents. The server does not load it by itself. Drop-ins merge in lexical order, and the `zz-` prefix sorts after other files that set the same keys. A downstream build that renames the Kiali or NetObserv toolset must rename the keys to the names that binary registers.
+
+```toml
+[response_limits.kiali_get_logs]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_get_mesh_status]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_get_mesh_traffic_graph]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_get_metrics]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_get_pod_performance]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_get_resource_details]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_get_trace_details]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_list_mesh_clusters]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_list_traces]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_manage_istio_config]
+max_tool_response_bytes = 524288
+
+[response_limits.kiali_manage_istio_config_read]
+max_tool_response_bytes = 524288
+
+[response_limits.netobserv_list_flows]
+max_tool_response_bytes = 4194304
+
+[response_limits.netobserv_get_flow_metrics]
+max_tool_response_bytes = 4194304
+
+[response_limits.netobserv_export_flows]
+max_tool_response_bytes = 2097152
+```
+
+That file does not restore two behaviors that were not a single constant:
+
+- Core list and log calls stay bounded. A value of `0` is rejected, so the previous unbounded read is not a configuration.
+- Tekton still stops each container at 1 MiB, and the concatenated result stops at the same number. The previous code had no aggregate cap.
