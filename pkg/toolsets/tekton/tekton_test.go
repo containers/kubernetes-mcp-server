@@ -3,6 +3,7 @@ package tekton_test
 import (
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 	"github.com/stretchr/testify/suite"
 )
@@ -19,7 +20,7 @@ func (s *TektonSuite) TestToolset() {
 	ts := &tekton.Toolset{}
 	s.Equal("tekton", ts.GetName())
 	s.NotEmpty(ts.GetDescription())
-	tools := ts.GetTools(nil)
+	tools := ts.GetTools(s.T().Context(), api.ToolsetContext{})
 	s.NotEmpty(tools)
-	s.NotEmpty(ts.GetPrompts())
+	s.NotEmpty(ts.GetPrompts(s.T().Context(), api.ToolsetContext{}))
 }

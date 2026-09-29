@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -23,7 +24,7 @@ const (
 	ActionUnpause Action = "unpause"
 )
 
-func Tools(p api.FilteringProvider) []api.ServerTool {
+func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -78,7 +79,7 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 			),
 			Handler: lifecycle,
 			TargetCompatibilityFilters: []func() bool{
-				kubevirt.HasVirtualMachine(p),
+				kubevirt.HasVirtualMachine(ctx, inspector),
 			},
 		},
 	}

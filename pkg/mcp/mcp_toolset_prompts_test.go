@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -366,19 +367,19 @@ func (m *mockToolsetWithPrompts) GetDescription() string {
 	return m.description
 }
 
-func (m *mockToolsetWithPrompts) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (m *mockToolsetWithPrompts) GetTools(context.Context, api.ToolsetContext) []api.ServerTool {
 	return nil
 }
 
-func (m *mockToolsetWithPrompts) GetPrompts() []api.ServerPrompt {
+func (m *mockToolsetWithPrompts) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
 	return m.prompts
 }
 
-func (m *mockToolsetWithPrompts) GetResources() []api.ServerResource {
+func (m *mockToolsetWithPrompts) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
-func (m *mockToolsetWithPrompts) GetResourceTemplates() []api.ServerResourceTemplate {
+func (m *mockToolsetWithPrompts) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
 

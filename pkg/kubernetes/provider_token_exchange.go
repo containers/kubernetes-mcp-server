@@ -5,8 +5,6 @@ import (
 	"strings"
 	"sync"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
@@ -206,14 +204,6 @@ func (p *tokenExchangingProvider) PublishKubernetesConfig(cfg *config.Config) {
 func (p *tokenExchangingProvider) Close() {
 	p.tokenExchangeCache.clear()
 	p.provider.Close()
-}
-
-func (p *tokenExchangingProvider) AnyTargetHasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
-	return p.provider.AnyTargetHasGVKs(ctx, gvks)
-}
-
-func (p *tokenExchangingProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	return p.provider.IsTargetCompatibilityToolFiltersEnabled()
 }
 
 // tokenExchangeConfigCache owns synchronization and lifecycle management for

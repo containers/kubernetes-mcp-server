@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -722,11 +723,17 @@ func (m *mockResourceToolset) GetName() string {
 	}
 	return "resource-test"
 }
-func (m *mockResourceToolset) GetDescription() string                            { return "Test toolset for resources" }
-func (m *mockResourceToolset) GetTools(_ api.FilteringProvider) []api.ServerTool { return nil }
-func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt                    { return nil }
-func (m *mockResourceToolset) GetResources() []api.ServerResource                { return m.resources }
-func (m *mockResourceToolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (m *mockResourceToolset) GetDescription() string { return "Test toolset for resources" }
+func (m *mockResourceToolset) GetTools(context.Context, api.ToolsetContext) []api.ServerTool {
+	return nil
+}
+func (m *mockResourceToolset) GetPrompts(context.Context, api.ToolsetContext) []api.ServerPrompt {
+	return nil
+}
+func (m *mockResourceToolset) GetResources(context.Context, api.ToolsetContext) []api.ServerResource {
+	return m.resources
+}
+func (m *mockResourceToolset) GetResourceTemplates(context.Context, api.ToolsetContext) []api.ServerResourceTemplate {
 	return m.resourceTemplates
 }
 

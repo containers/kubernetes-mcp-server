@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -11,7 +12,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitListOrGetResources(p api.FilteringProvider) []api.ServerTool {
+func InitListOrGetResources(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_resource_details"
 	ret = append(ret, api.ServerTool{
@@ -51,7 +52,7 @@ func InitListOrGetResources(p api.FilteringProvider) []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, RBAC: ResourcesRBAC(p), Handler: listOrGetResourcesHandler,
+		}, RBAC: ResourcesRBAC(ctx, inspector), Handler: listOrGetResourcesHandler,
 	})
 
 	return ret

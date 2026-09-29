@@ -4,25 +4,38 @@ import (
 	"context"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type fakeFilteringProvider struct {
+type fakeInspector struct {
 	hasGVKs     bool
 	queriedGVKs []schema.GroupVersionKind
 }
 
-func (f *fakeFilteringProvider) AnyTargetHasGVKs(_ context.Context, gvks []schema.GroupVersionKind) bool {
+func (f *fakeInspector) Discovery() api.AggregateDiscovery       { return f }
+func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeInspector) HasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) api.BoolResults {
 	f.queriedGVKs = gvks
-	return f.hasGVKs
+	return api.BoolResults(api.NewResults(ctx, f, func(context.Context, string) (bool, error) {
+		return f.hasGVKs, nil
+	}))
 }
-
-func (f *fakeFilteringProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return true }
+func (f *fakeInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
+		return &metav1.APIResourceList{}, nil
+	})
+}
+func (f *fakeInspector) IsMultiTarget() bool                          { return false }
+func (f *fakeInspector) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
+func (f *fakeInspector) GetDefaultTarget() string                     { return "" }
+func (f *fakeInspector) GetTargetParameterName() string               { return "" }
 
 func TestHasVirtualMachineTemplate(t *testing.T) {
 	t.Run("queries for VirtualMachineTemplate GVK", func(t *testing.T) {
-		p := &fakeFilteringProvider{hasGVKs: true}
-		filter := HasVirtualMachineTemplate(p)
+		p := &fakeInspector{hasGVKs: true}
+		filter := HasVirtualMachineTemplate(t.Context(), p)
 		filter()
 
 		if len(p.queriedGVKs) != 1 {
@@ -34,14 +47,14 @@ func TestHasVirtualMachineTemplate(t *testing.T) {
 	})
 
 	t.Run("returns true when provider has VirtualMachineTemplate GVK", func(t *testing.T) {
-		filter := HasVirtualMachineTemplate(&fakeFilteringProvider{hasGVKs: true})
+		filter := HasVirtualMachineTemplate(t.Context(), &fakeInspector{hasGVKs: true})
 		if !filter() {
 			t.Error("expected HasVirtualMachineTemplate to return true")
 		}
 	})
 
 	t.Run("returns false when provider does not have VirtualMachineTemplate GVK", func(t *testing.T) {
-		filter := HasVirtualMachineTemplate(&fakeFilteringProvider{hasGVKs: false})
+		filter := HasVirtualMachineTemplate(t.Context(), &fakeInspector{hasGVKs: false})
 		if filter() {
 			t.Error("expected HasVirtualMachineTemplate to return false")
 		}
@@ -50,8 +63,8 @@ func TestHasVirtualMachineTemplate(t *testing.T) {
 
 func TestHasVirtualMachine(t *testing.T) {
 	t.Run("queries for VirtualMachine GVK", func(t *testing.T) {
-		p := &fakeFilteringProvider{hasGVKs: true}
-		filter := HasVirtualMachine(p)
+		p := &fakeInspector{hasGVKs: true}
+		filter := HasVirtualMachine(t.Context(), p)
 		filter()
 
 		if len(p.queriedGVKs) != 1 {
@@ -63,14 +76,14 @@ func TestHasVirtualMachine(t *testing.T) {
 	})
 
 	t.Run("returns true when provider has VirtualMachine GVK", func(t *testing.T) {
-		filter := HasVirtualMachine(&fakeFilteringProvider{hasGVKs: true})
+		filter := HasVirtualMachine(t.Context(), &fakeInspector{hasGVKs: true})
 		if !filter() {
 			t.Error("expected HasVirtualMachine to return true")
 		}
 	})
 
 	t.Run("returns false when provider does not have VirtualMachine GVK", func(t *testing.T) {
-		filter := HasVirtualMachine(&fakeFilteringProvider{hasGVKs: false})
+		filter := HasVirtualMachine(t.Context(), &fakeInspector{hasGVKs: false})
 		if filter() {
 			t.Error("expected HasVirtualMachine to return false")
 		}

@@ -27,16 +27,18 @@ var (
 
 // HasNodeMetrics returns a TargetCompatibilityFilter that checks whether any
 // target cluster has the NodeMetrics GVK registered.
-func HasNodeMetrics(p api.FilteringProvider) func() bool {
+func HasNodeMetrics(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{NodeMetricsGVK})
+		hasGVK, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{NodeMetricsGVK}).Any()
+		return err != nil || hasGVK
 	}
 }
 
 // HasPodMetrics returns a TargetCompatibilityFilter that checks whether any
 // target cluster has the PodMetrics GVK registered.
-func HasPodMetrics(p api.FilteringProvider) func() bool {
+func HasPodMetrics(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{PodMetricsGVK})
+		hasGVK, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{PodMetricsGVK}).Any()
+		return err != nil || hasGVK
 	}
 }

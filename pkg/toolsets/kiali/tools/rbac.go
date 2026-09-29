@@ -110,7 +110,7 @@ func IstioConfigReadRBAC() *api.RBACMetadata {
 
 // ResourcesRBAC declares get/list for every resourceType enum value of
 // kiali_get_resource_details. On OpenShift, DeploymentConfigs are included.
-func ResourcesRBAC(p api.FilteringProvider) *api.RBACMetadata {
+func ResourcesRBAC(ctx context.Context, inspector api.ClusterInspector) *api.RBACMetadata {
 	ns := &api.RBACNamespace{AllNamespaces: true}
 	reqs := []api.RBACRequirement{
 		resourceReq([]string{"get", "list"}, "", "namespaces", nil, nil),
@@ -123,7 +123,7 @@ func ResourcesRBAC(p api.FilteringProvider) *api.RBACMetadata {
 	reqs = appendReqs(reqs, resourceReqs([]string{"get", "list"}, "batch",
 		[]string{"jobs", "cronjobs"}, ns)...)
 	reqs = appendReqs(reqs, resourceReq([]string{"get", "list"}, "argoproj.io", "applications", ns, nil))
-	if kialiclient.IsOpenShiftFromProvider(context.Background(), p) {
+	if kialiclient.IsOpenShiftFromInspector(ctx, inspector) {
 		reqs = appendReqs(reqs,
 			resourceReq([]string{"get", "list"}, "apps.openshift.io", "deploymentconfigs", ns, nil),
 			resourceReq([]string{"get"}, "route.openshift.io", "routes", ns, nil),
@@ -149,7 +149,7 @@ func NamespaceAccessRBAC(namespaceNameArg string) *api.RBACMetadata {
 // GraphRBAC covers traffic-graph topology reads: namespace access plus the workload/service
 // objects Kiali may resolve while building the graph. The namespaces argument is a
 // comma-separated list, so AllNamespaces is the conservative bound.
-func GraphRBAC(p api.FilteringProvider) *api.RBACMetadata {
+func GraphRBAC(ctx context.Context, inspector api.ClusterInspector) *api.RBACMetadata {
 	ns := &api.RBACNamespace{AllNamespaces: true}
 	reqs := []api.RBACRequirement{
 		resourceReq([]string{"get", "list"}, "", "namespaces", nil, nil),
@@ -158,7 +158,7 @@ func GraphRBAC(p api.FilteringProvider) *api.RBACMetadata {
 	}
 	reqs = appendReqs(reqs, resourceReqs([]string{"get", "list"}, "apps",
 		[]string{"deployments", "statefulsets", "daemonsets", "replicasets"}, ns)...)
-	if kialiclient.IsOpenShiftFromProvider(context.Background(), p) {
+	if kialiclient.IsOpenShiftFromInspector(ctx, inspector) {
 		reqs = appendReqs(reqs,
 			resourceReq([]string{"get", "list"}, "apps.openshift.io", "deploymentconfigs", ns, nil),
 		)

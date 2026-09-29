@@ -18,7 +18,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 )
 
-func initNamespaces(p api.FilteringProvider) []api.ServerTool {
+func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
@@ -72,9 +72,10 @@ func initNamespaces(p api.FilteringProvider) []api.ServerTool {
 		Handler: projectsList,
 		TargetCompatibilityFilters: []func() bool{
 			func() bool {
-				return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{
+				hasGVKs, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{
 					{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-				})
+				}).Any()
+				return err != nil || hasGVKs
 			},
 		},
 	})

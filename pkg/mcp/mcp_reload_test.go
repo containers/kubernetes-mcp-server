@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -30,15 +31,21 @@ type brokenToolset struct{}
 
 func (brokenToolset) GetName() string        { return "broken-test-toolset" }
 func (brokenToolset) GetDescription() string { return "test-only toolset that fails convert phase" }
-func (brokenToolset) GetTools(api.FilteringProvider) []api.ServerTool {
+func (brokenToolset) GetTools(context.Context, api.ToolsetContext) []api.ServerTool {
 	return []api.ServerTool{{Tool: api.Tool{
 		Name:        "broken-tool",
 		InputSchema: &jsonschema.Schema{Type: "string"},
 	}}}
 }
-func (brokenToolset) GetPrompts() []api.ServerPrompt                     { return nil }
-func (brokenToolset) GetResources() []api.ServerResource                 { return nil }
-func (brokenToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
+func (brokenToolset) GetPrompts(context.Context, api.ToolsetContext) []api.ServerPrompt {
+	return nil
+}
+func (brokenToolset) GetResources(context.Context, api.ToolsetContext) []api.ServerResource {
+	return nil
+}
+func (brokenToolset) GetResourceTemplates(context.Context, api.ToolsetContext) []api.ServerResourceTemplate {
+	return nil
+}
 
 type ConfigReloadSuite struct {
 	BaseMcpSuite
@@ -558,7 +565,6 @@ func (s *ConfigReloadSuite) TestConcurrentReadsDuringReload() {
 				_ = cfg.Stateless.Get()
 				_ = cfg.LogLevel.Get()
 				_, _ = provider.GetDerivedKubernetes(s.T().Context(), provider.GetDefaultTarget())
-				_ = provider.IsTargetCompatibilityToolFiltersEnabled()
 				observedReads.Add(1)
 			}
 		}()

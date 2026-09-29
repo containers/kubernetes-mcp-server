@@ -49,9 +49,10 @@ func (s *ProviderSingleTestSuite) TestWithOpenShiftCluster() {
 	s.mockServer.ResetHandlers()
 	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.Run("has OpenShift Project GVK", func() {
-		hasProjects := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
+		hasProjects, err := NewClusterInspector(s.provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-		})
+		}).Any()
+		s.Require().NoError(err)
 		s.True(hasProjects, "Expected provider to report OpenShift Project GVK available")
 	})
 }
@@ -59,9 +60,10 @@ func (s *ProviderSingleTestSuite) TestWithOpenShiftCluster() {
 func (s *ProviderSingleTestSuite) TestWithNonOpenShiftGVK() {
 	s.Run("does not have non-existent GVK", func() {
 		// Default (non-OpenShift) discovery returns a 404 for the missing GroupVersion.
-		hasGVK := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
+		hasGVK, err := NewClusterInspector(s.provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "nonexistent.example.com", Version: "v1", Kind: "Foo"},
-		})
+		}).Any()
+		s.Require().NoError(err)
 		s.False(hasGVK, "Expected provider to report no nonexistent GVK")
 	})
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/stretchr/testify/suite"
@@ -11,11 +13,22 @@ import (
 
 type fakeProvider struct{}
 
-func (f *fakeProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
-	return true
+func (f *fakeProvider) Discovery() api.AggregateDiscovery       { return f }
+func (f *fakeProvider) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeProvider) HasGVKs(ctx context.Context, _ []schema.GroupVersionKind) api.BoolResults {
+	return api.BoolResults(api.NewResults(ctx, f, func(context.Context, string) (bool, error) {
+		return true, nil
+	}))
 }
-
-func (f *fakeProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return false }
+func (f *fakeProvider) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
+		return &metav1.APIResourceList{}, nil
+	})
+}
+func (f *fakeProvider) IsMultiTarget() bool                          { return false }
+func (f *fakeProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
+func (f *fakeProvider) GetDefaultTarget() string                     { return "" }
+func (f *fakeProvider) GetTargetParameterName() string               { return "" }
 
 type GuestAgentToolSuite struct {
 	suite.Suite
@@ -23,7 +36,7 @@ type GuestAgentToolSuite struct {
 
 func (s *GuestAgentToolSuite) TestToolRegistration() {
 	s.Run("tool is registered", func() {
-		tools := Tools(&fakeProvider{})
+		tools := Tools(s.T().Context(), &fakeProvider{})
 		s.Require().Len(tools, 1, "Expected 1 guest agent tool")
 		s.Equal("vm_guest_info", tools[0].Tool.Name)
 		s.Equal("Virtual Machine: Guest Agent Info", tools[0].Tool.Annotations.Title)
@@ -34,7 +47,7 @@ func (s *GuestAgentToolSuite) TestToolRegistration() {
 	})
 
 	s.Run("tool has correct properties", func() {
-		tools := Tools(&fakeProvider{})
+		tools := Tools(s.T().Context(), &fakeProvider{})
 		tool := tools[0].Tool
 
 		// Check annotations

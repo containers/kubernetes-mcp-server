@@ -58,17 +58,9 @@ func (r McpReloader) ClusterStateCallback() func() error {
 	}
 }
 
-// ManagerProvider provides access to the underlying Manager instances for each target.
-type ManagerProvider interface {
-	// GetTargetManagers returns managers for all targets.
-	// Returns an error if managers for any target cannot be retrieved.
-	GetTargetManagers(ctx context.Context) ([]*Manager, error)
-}
-
 type Provider interface {
-	// Embed the base TargetProvider and FilteringProvider interfaces
+	// Embed the base TargetProvider interface.
 	api.TargetProvider
-	api.FilteringProvider
 	// GetDerivedKubernetes returns a Kubernetes client for the specified target
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	// WatchTargets sets up a watcher for changes in the cluster targets and

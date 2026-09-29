@@ -52,9 +52,10 @@ func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 	s.mockServer.ResetHandlers()
 	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.Run("has OpenShift Project GVK", func() {
-		hasProjects := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
+		hasProjects, err := NewClusterInspector(s.provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-		})
+		}).Any()
+		s.Require().NoError(err)
 		s.True(hasProjects, "Expected provider to report OpenShift Project GVK available")
 	})
 }
@@ -62,14 +63,15 @@ func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 func (s *ProviderKubeconfigTestSuite) TestWithNonOpenShiftGVK() {
 	s.Run("does not have non-existent GVK", func() {
 		// Default (non-OpenShift) discovery returns a 404 for the missing GroupVersion.
-		hasGVK := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
+		hasGVK, err := NewClusterInspector(s.provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 			{Group: "nonexistent.example.com", Version: "v1", Kind: "Foo"},
-		})
+		}).Any()
+		s.Require().NoError(err)
 		s.False(hasGVK, "Expected provider to report no nonexistent GVK")
 	})
 }
 
-func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
+func (s *ProviderKubeconfigTestSuite) TestAggregateGVKInspectionAcrossContexts() {
 	projectGVK := []schema.GroupVersionKind{
 		{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
 	}
@@ -95,7 +97,9 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
-		s.True(provider.AnyTargetHasGVKs(s.T().Context(), projectGVK), "Expected Project GVK when at least one target is OpenShift")
+		hasGVK, err := NewClusterInspector(provider).Discovery().HasGVKs(s.T().Context(), projectGVK).Any()
+		s.Require().NoError(err)
+		s.True(hasGVK, "Expected Project GVK when at least one target is OpenShift")
 	})
 
 	s.Run("returns false when no target has the GVK", func() {
@@ -119,10 +123,12 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
-		s.False(provider.AnyTargetHasGVKs(s.T().Context(), projectGVK), "Expected no Project GVK when no target is OpenShift")
+		hasGVK, err := NewClusterInspector(provider).Discovery().HasGVKs(s.T().Context(), projectGVK).Any()
+		s.Require().NoError(err)
+		s.False(hasGVK, "Expected no Project GVK when no target is OpenShift")
 	})
 
-	s.Run("returns true when the parent context is canceled", func() {
+	s.Run("does not fail open when the parent context is canceled", func() {
 		a := test.NewMockServer()
 		s.T().Cleanup(a.Close)
 		a.Handle(test.NewDiscoveryClientHandler())
@@ -146,7 +152,9 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		ctx, cancel := context.WithCancel(s.T().Context())
 		cancel()
 
-		s.True(provider.AnyTargetHasGVKs(ctx, projectGVK), "Expected fail-open when parent context is canceled")
+		hasGVK, err := NewClusterInspector(provider).Discovery().HasGVKs(ctx, projectGVK).Any()
+		s.False(hasGVK)
+		s.NoError(err)
 	})
 
 	s.Run("returns true without waiting for a hanging target", func() {
@@ -176,7 +184,8 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.T().Cleanup(provider.Close)
 
 		start := time.Now()
-		has := provider.AnyTargetHasGVKs(s.T().Context(), projectGVK)
+		has, err := NewClusterInspector(provider).Discovery().HasGVKs(s.T().Context(), projectGVK).Any()
+		s.Require().NoError(err)
 		s.True(has, "Expected Project GVK from the OpenShift target")
 		s.Less(time.Since(start), 2*time.Second, "Expected to return before the hanging target's discovery timeout")
 	})
@@ -275,9 +284,9 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentReads() {
 			func() { _ = s.provider.GetDefaultTarget() },
 			func() { _ = s.provider.IsMultiTarget() },
 			func() {
-				_ = s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
+				_, _ = NewClusterInspector(s.provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 					{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-				})
+				}).Any()
 			},
 			func() { _, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context") },
 			func() { _ = s.provider.GetTargetParameterName() },
@@ -377,9 +386,9 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 						_, _ = provider.GetTargets(context.Background())
 						_ = provider.GetDefaultTarget()
 						_ = provider.IsMultiTarget()
-						_ = provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
+						_, _ = NewClusterInspector(provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
 							{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-						})
+						}).Any()
 						_, _ = provider.GetDerivedKubernetes(context.Background(), "fake-context")
 					}
 				}

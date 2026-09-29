@@ -18,7 +18,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type TokenExchangingProviderSuite struct {
@@ -66,13 +65,6 @@ func (fakeDerivedProvider) Close()                                 {}
 func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kubernetes, error) {
 	return &Kubernetes{}, nil
 }
-func (fakeDerivedProvider) AnyTargetHasGVKs(context.Context, []schema.GroupVersionKind) bool {
-	return true
-}
-func (fakeDerivedProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	return false
-}
-
 func applyExchange(cfg *config.Config, clientID, clientSecret, audience string, scopes []string) {
 	cfg.TokenExchange.Strategy.SetForTest(tokenexchange.StrategyRFC8693)
 	cfg.TokenExchange.Audience.SetForTest(audience)

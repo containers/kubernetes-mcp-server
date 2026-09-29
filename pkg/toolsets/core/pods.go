@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initPods(p api.FilteringProvider) []api.ServerTool {
+func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "pods_list",
@@ -196,7 +197,7 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 			Namespace: &api.RBACNamespace{AllNamespaces: true},
 		}), Handler: podsTop,
 			TargetCompatibilityFilters: []func() bool{
-				kubernetes.HasPodMetrics(p),
+				kubernetes.HasPodMetrics(ctx, inspector),
 			},
 		},
 		{Tool: api.Tool{
