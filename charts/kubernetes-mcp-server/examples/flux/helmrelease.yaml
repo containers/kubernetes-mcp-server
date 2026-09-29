@@ -1,0 +1,69 @@
+# Read-only kubernetes-mcp-server released by Flux from the OCI Helm chart.
+#
+# Access model: one ServiceAccount bound to the built-in `view` ClusterRole
+# through a RoleBinding in each allow-listed namespace. There is no
+# ClusterRoleBinding, so every namespace that is not listed (default,
+# kube-system, ...) stays inaccessible. RBAC has no deny rules, hence an
+# allow-list. `view` does not grant secrets, pods/exec or pods/portforward.
+# `read_only` and `denied_resources` are a second layer, not the security boundary.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kubernetes-mcp-server
+  namespace: kubernetes-mcp-server
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: kubernetes-mcp-server
+      version: 0.1.x
+      sourceRef:
+        kind: HelmRepository
+        name: kubernetes-mcp-server
+  values:
+    # Pin the image: the chart default is `latest`, which is not reproducible in GitOps.
+    image:
+      version: v0.0.67
+
+    # Reach the server through an authenticating gateway or a private
+    # Service; the chart enables an Ingress by default.
+    ingress:
+      enabled: false
+
+    config:
+      port: '{{ .Values.service.port }}'
+      read_only: true
+      toolsets:
+        - core
+      denied_resources:
+        - group: ''
+          version: v1
+          kind: Secret
+
+    rbac:
+      create: true
+      # Optional cluster-scoped read of namespaces so that the namespace list works.
+      extraClusterRoles:
+        - name: namespaces
+          rules:
+            - apiGroups: ['']
+              resources: [namespaces]
+              verbs: [get, list, watch]
+      extraClusterRoleBindings:
+        - name: namespaces
+          roleRef:
+            name: namespaces
+      # One RoleBinding per allow-listed namespace. Each namespace must exist.
+      extraRoleBindings:
+        - name: view-app-dev
+          namespace: app-dev
+          roleRef:
+            kind: ClusterRole
+            name: view
+            external: true
+        - name: view-app-prod
+          namespace: app-prod
+          roleRef:
+            kind: ClusterRole
+            name: view
+            external: true

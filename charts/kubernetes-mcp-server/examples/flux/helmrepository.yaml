@@ -1,0 +1,11 @@
+# OCI HelmRepository for the chart published to ghcr.io/containers/charts.
+# The chart is public, so no secretRef is needed.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: kubernetes-mcp-server
+  namespace: kubernetes-mcp-server
+spec:
+  type: oci
+  interval: 1h
+  url: oci://ghcr.io/containers/charts
