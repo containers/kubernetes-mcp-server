@@ -55,15 +55,18 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 	if shared != nil {
 		resolved = *shared
 	}
-	if cfg, err := DetectConfig(ctx, k8s); err == nil && cfg.Found {
-		if resolved.Namespace == "" {
-			resolved.Namespace = cfg.Namespace
-		}
-		if resolved.Service == "" {
-			resolved.Service = cfg.Service
-		}
-		if resolved.Port == 0 {
-			resolved.Port = cfg.Port
+	if backendCfgProvider, ok := provider.(NetObservConfigProvider); ok {
+		backendCfg := backendCfgProvider.NetObservConfig(ctx)
+		if backendCfg.Found && !backendCfg.Unknown {
+			if resolved.Namespace == "" {
+				resolved.Namespace = backendCfg.Namespace
+			}
+			if resolved.Service == "" {
+				resolved.Service = backendCfg.Service
+			}
+			if resolved.Port == 0 {
+				resolved.Port = backendCfg.Port
+			}
 		}
 	}
 	isOpenShift := IsOpenShiftFromProvider(ctx, provider)

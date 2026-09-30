@@ -220,8 +220,8 @@ func (p *tokenExchangingProvider) NetObservConfig(ctx context.Context) netobserv
 	return netobserv.EffectiveConfig{Unknown: true}
 }
 
-func (p *tokenExchangingProvider) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
-	if cfg := p.baseConfig(); cfg != nil {
+func (p *tokenExchangingProvider) GetToolsetConfig(name string) (config.ExtendedConfig, bool) {
+	if cfg := p.config(); cfg != nil {
 		return cfg.GetToolsetConfig(name)
 	}
 	return nil, false
