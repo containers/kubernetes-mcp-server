@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var sensitivePatterns = []*regexp.Regexp{
+var sensitivePatterns = [...]*regexp.Regexp{
 	// Generic JSON/YAML fields.
 	regexp.MustCompile(`("password"\s*:\s*)"(?:\\.|[^"\\])*"`),
 	regexp.MustCompile(`("token"\s*:\s*)"(?:\\.|[^"\\])*"`),
@@ -50,8 +50,8 @@ var sensitivePatterns = []*regexp.Regexp{
 
 var (
 	pemHeaderPattern        = regexp.MustCompile(`-----BEGIN ((?:[A-Z0-9]+ )*PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----`)
-	logSecretPattern        = regexp.MustCompile(`(?i)(\b"?(?:password|passwd|token|secret|credentials?|api[_-]?key|apikey|aws_secret_access_key|auth)"?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s,;}\]]+)`)
-	yamlSecretBlockPattern  = regexp.MustCompile(`(?i)^(\s*"?(?:password|passwd|token|secret|credentials?|api[_-]?key|apikey|aws_secret_access_key|auth)"?\s*:\s*)[|>][0-9+-]*\s*(?:#.*)?$`)
+	logSecretPattern        = regexp.MustCompile(`(?i)(\b"?(?:password|passwd|token|secret|credentials?|api[_-]?key|apikey|access[_-]?key|client[_-]?secret|private[_-]?key|aws_secret_access_key|auth)"?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s,;}\]]+)`)
+	yamlSecretBlockPattern  = regexp.MustCompile(`(?i)^(\s*"?(?:password|passwd|token|secret|credentials?|api[_-]?key|apikey|access[_-]?key|client[_-]?secret|private[_-]?key|aws_secret_access_key|auth)"?\s*:\s*)[|>][0-9+-]*\s*(?:#.*)?$`)
 	authorizationPattern    = regexp.MustCompile(`(?i)(\bauthorization\s*[:=]\s*)(?:(?:bearer|basic)\s+)?[^\s,;}]+`)
 	credentialSchemePattern = regexp.MustCompile(`(?i)(\b(?:bearer|basic)\s+)[^\s,;}]+`)
 	sshKeyPattern           = regexp.MustCompile(`(?i)(\b(?:ssh-rsa|ssh-ed25519|ssh-dss)\s+)[^\s]+`)

@@ -57,6 +57,24 @@ func (s *SanitizerSuite) TestLog() {
 		s.Equal("secret=[REDACTED] token=[REDACTED] complete", actual)
 	})
 
+	s.Run("redacts additional credential key names", func() {
+		tests := []struct {
+			name  string
+			input string
+			want  string
+		}{
+			{"client secret", "client_secret: client-value failed", "client_secret: [REDACTED] failed"},
+			{"access key", "access_key=access-value failed", "access_key=[REDACTED] failed"},
+			{"private key", "private_key: private-value failed", "private_key: [REDACTED] failed"},
+		}
+		for _, test := range tests {
+			s.Run(test.name, func() {
+				actual, _ := sanitize.Log(test.input)
+				s.Equal(test.want, actual)
+			})
+		}
+	})
+
 	s.Run("preserves user flags", func() {
 		input := "Deploying with --user 1000 and mounting /workspace"
 		actual, _ := sanitize.Log(input)
