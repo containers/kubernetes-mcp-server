@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	netobservclient "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
@@ -29,7 +30,26 @@ const (
 
 // flowsRBAC declares the RBAC for the Loki-backed flow tools (list, export).
 // On OpenShift this mirrors the netobserv-loki-reader ClusterRole; otherwise it is unbounded.
-func flowsRBAC(p api.FilteringProvider) *api.RBACMetadata {
+func flowsRBAC(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) *api.RBACMetadata {
+	if len(cfg) > 0 && cfg[0].Unknown {
+		return api.RBACUnbounded(unboundedFlowsReason)
+	}
+	if len(cfg) > 0 && cfg[0].Found && !cfg[0].Unknown {
+		if !cfg[0].LokiEnabled {
+			return nil
+		}
+		if !strings.EqualFold(cfg[0].LokiMode, "LokiStack") {
+			return nil
+		}
+		return api.RBACBounded(api.RBACRequirement{
+			Verbs: []string{"get"},
+			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+				APIGroup: "loki.grafana.com",
+				Resource: "network",
+			}},
+			ResourceName: &api.RBACResourceName{Name: "logs"},
+		})
+	}
 	if netobservclient.IsOpenShiftFromProvider(context.Background(), p) {
 		return api.RBACBounded(api.RBACRequirement{
 			Verbs: []string{"get"},
@@ -45,7 +65,15 @@ func flowsRBAC(p api.FilteringProvider) *api.RBACMetadata {
 
 // metricsRBAC declares the RBAC for the Prometheus-backed flow metrics tool.
 // On OpenShift this mirrors the netobserv-metrics-reader ClusterRole; otherwise it is unbounded.
-func metricsRBAC(p api.FilteringProvider) *api.RBACMetadata {
+func metricsRBAC(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) *api.RBACMetadata {
+	if len(cfg) > 0 && cfg[0].Unknown {
+		return api.RBACUnbounded(unboundedMetricsReason)
+	}
+	if len(cfg) > 0 && cfg[0].Found && !cfg[0].Unknown {
+		if !cfg[0].PrometheusEnabled || !strings.EqualFold(cfg[0].PrometheusMode, "Auto") {
+			return nil
+		}
+	}
 	if netobservclient.IsOpenShiftFromProvider(context.Background(), p) {
 		return api.RBACBounded(api.RBACRequirement{
 			Verbs: []string{"create"},

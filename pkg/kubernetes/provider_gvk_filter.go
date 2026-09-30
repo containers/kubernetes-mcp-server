@@ -5,6 +5,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
@@ -14,6 +15,55 @@ import (
 // It can be embedded in provider implementations to add AnyTargetHasGVKs functionality.
 type ProviderGVKFilter struct {
 	managerProvider ManagerProvider
+}
+
+// NetObservConfig discovers FlowCollector settings across targets. A discovery
+// failure returns Unknown so consumers retain the manual/fail-open behavior.
+func (f *ProviderGVKFilter) NetObservConfig(ctx context.Context) netobserv.EffectiveConfig {
+	result := netobserv.EffectiveConfig{}
+	mgrs, err := f.managerProvider.GetTargetManagers(ctx)
+	if err != nil {
+		result.Unknown = true
+		return result
+	}
+	for _, mgr := range mgrs {
+		if mgr == nil {
+			result.Unknown = true
+			continue
+		}
+		k, err := mgr.Derived(ctx)
+		if err != nil {
+			result.Unknown = true
+			continue
+		}
+		cfg, err := netobserv.DetectConfig(ctx, k)
+		if err != nil {
+			result.Unknown = true
+			continue
+		}
+		if !cfg.Found {
+			continue
+		}
+		result.Found = true
+		result.LokiEnabled = result.LokiEnabled || cfg.LokiEnabled
+		result.PrometheusEnabled = result.PrometheusEnabled || cfg.PrometheusEnabled
+		if cfg.LokiMode == "LokiStack" || result.LokiMode == "" {
+			result.LokiMode = cfg.LokiMode
+		}
+		if cfg.PrometheusMode == "Auto" || result.PrometheusMode == "" {
+			result.PrometheusMode = cfg.PrometheusMode
+		}
+		if result.Namespace == "" {
+			result.Namespace = cfg.Namespace
+		}
+		if result.Service == "" {
+			result.Service = cfg.Service
+		}
+		if result.Port == 0 {
+			result.Port = cfg.Port
+		}
+	}
+	return result
 }
 
 // NewProviderGVKFilter creates a new ProviderGVKFilter that wraps a ManagerProvider.

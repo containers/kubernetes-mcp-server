@@ -55,6 +55,17 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 	if shared != nil {
 		resolved = *shared
 	}
+	if cfg, err := DetectConfig(ctx, k8s); err == nil && cfg.Found {
+		if resolved.Namespace == "" {
+			resolved.Namespace = cfg.Namespace
+		}
+		if resolved.Service == "" {
+			resolved.Service = cfg.Service
+		}
+		if resolved.Port == 0 {
+			resolved.Port = cfg.Port
+		}
+	}
 	isOpenShift := IsOpenShiftFromProvider(ctx, provider)
 	resolved.applyDefaults(ctx, isOpenShift)
 	client.pluginURL = resolved.ResolvedURL(isOpenShift)
