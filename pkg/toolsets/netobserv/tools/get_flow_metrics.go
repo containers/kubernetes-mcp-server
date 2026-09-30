@@ -7,7 +7,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-func InitGetFlowMetrics(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
+func InitGetFlowMetrics(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
 	props := flowQueryProperties()
 	props["dataSource"] = &jsonschema.Schema{
 		Type:        "string",

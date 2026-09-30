@@ -6,7 +6,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv/internal/defaults"
 )
 
-func InitListFlows(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
+func InitListFlows(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
 	name := defaults.ToolsetName() + "_list_flows"
 	return []api.ServerTool{{
 		Tool: api.Tool{

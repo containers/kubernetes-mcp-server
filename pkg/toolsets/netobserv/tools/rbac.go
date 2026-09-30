@@ -6,7 +6,10 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	netobservclient "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+var openshiftProjectGVK = schema.GroupVersionKind{Group: "project.openshift.io", Version: "v1", Kind: "Project"}
 
 // The NetObserv tools query the console plugin backend over HTTP and forward the caller's
 // bearer token; the plugin performs its own SubjectAccessReview against that token. On
@@ -30,7 +33,7 @@ const (
 
 // flowsRBAC declares the RBAC for the Loki-backed flow tools (list, export).
 // On OpenShift this mirrors the netobserv-loki-reader ClusterRole; otherwise it is unbounded.
-func flowsRBAC(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) *api.RBACMetadata {
+func flowsRBAC(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) *api.RBACMetadata {
 	if len(cfg) > 0 && cfg[0].Unknown {
 		return api.RBACUnbounded(unboundedFlowsReason)
 	}
@@ -50,7 +53,7 @@ func flowsRBAC(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) 
 			ResourceName: &api.RBACResourceName{Name: "logs"},
 		})
 	}
-	if netobservclient.IsOpenShiftFromProvider(context.Background(), p) {
+	if api.AnyTargetHasGVK(context.Background(), p, openshiftProjectGVK) {
 		return api.RBACBounded(api.RBACRequirement{
 			Verbs: []string{"get"},
 			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
@@ -65,7 +68,7 @@ func flowsRBAC(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) 
 
 // metricsRBAC declares the RBAC for the Prometheus-backed flow metrics tool.
 // On OpenShift this mirrors the netobserv-metrics-reader ClusterRole; otherwise it is unbounded.
-func metricsRBAC(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) *api.RBACMetadata {
+func metricsRBAC(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) *api.RBACMetadata {
 	if len(cfg) > 0 && cfg[0].Unknown {
 		return api.RBACUnbounded(unboundedMetricsReason)
 	}
@@ -74,7 +77,7 @@ func metricsRBAC(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig
 			return nil
 		}
 	}
-	if netobservclient.IsOpenShiftFromProvider(context.Background(), p) {
+	if api.AnyTargetHasGVK(context.Background(), p, openshiftProjectGVK) {
 		return api.RBACBounded(api.RBACRequirement{
 			Verbs: []string{"create"},
 			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{

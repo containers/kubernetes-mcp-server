@@ -456,6 +456,7 @@ func (s *Server) collectApplicableTools(ctx context.Context, cfg *Configuration)
 func (s *Server) toolsetContext(cfg *Configuration) api.ToolsetContext {
 	return api.ToolsetContext{
 		Inspector:                         internalk8s.NewClusterInspector(s.p),
+		Config:                            cfg.Config,
 		TargetCompatibilityFiltersEnabled: cfg.EnableTargetCompatibilityToolFilters.Get(),
 	}
 }

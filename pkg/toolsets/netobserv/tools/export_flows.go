@@ -7,7 +7,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-func InitExportFlows(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
+func InitExportFlows(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
 	props := flowQueryProperties()
 	props["format"] = &jsonschema.Schema{
 		Type:        "string",

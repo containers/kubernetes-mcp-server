@@ -36,26 +36,16 @@ var flowCollectorGVRs = []schema.GroupVersionResource{
 	{Group: "flows.netobserv.io", Version: "v1beta1", Resource: "flowcollectors"},
 }
 
-// NetObservConfigProvider is implemented by cluster providers that can inspect
-// the FlowCollector. It is intentionally optional so custom providers retain
-// the existing manual configuration behavior.
-type NetObservConfigProvider interface {
-	NetObservConfig(context.Context) EffectiveConfig
-}
-
 // DetectConfig reads the cluster-scoped FlowCollector named "cluster".
 // A missing CR is a normal fallback to manual configuration; other errors are
 // reported so callers can fail open rather than hiding tools.
-func DetectConfig(ctx context.Context, k8s api.KubernetesClient) (EffectiveConfig, error) {
-	if k8s == nil || k8s.DiscoveryClient() == nil || k8s.DynamicClient() == nil {
+func DetectConfig(ctx context.Context, inspector api.ClusterInspector) (EffectiveConfig, error) {
+	if inspector == nil {
 		return EffectiveConfig{}, nil
 	}
 	var gvr schema.GroupVersionResource
 	for i, gvk := range flowCollectorGVKs {
-		has, err := api.HasGVKs(k8s.DiscoveryClient(), []schema.GroupVersionKind{gvk})
-		if err != nil {
-			return EffectiveConfig{}, err
-		}
+		has := api.AnyTargetHasGVK(ctx, inspector, gvk)
 		if has {
 			gvr = flowCollectorGVRs[i]
 			break
@@ -64,7 +54,7 @@ func DetectConfig(ctx context.Context, k8s api.KubernetesClient) (EffectiveConfi
 	if gvr.Resource == "" {
 		return EffectiveConfig{}, nil
 	}
-	obj, err := k8s.DynamicClient().Resource(gvr).Get(ctx, "cluster", metav1.GetOptions{})
+	obj, err := inspector.Unstructured().Resource(gvr).Get(ctx, "cluster", metav1.GetOptions{}).Default()
 	if apierrors.IsNotFound(err) {
 		return EffectiveConfig{}, nil
 	}
