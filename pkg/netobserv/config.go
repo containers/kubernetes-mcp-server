@@ -23,6 +23,11 @@ type Config struct {
 	Port                 int    `toml:"port,omitempty"`
 	Insecure             bool   `toml:"insecure,omitempty"`
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	// Backend settings are used when FlowCollector autodetection is unavailable.
+	LokiEnabled       *bool  `toml:"loki_enabled,omitempty"`
+	LokiMode          string `toml:"loki_mode,omitempty"`
+	PrometheusEnabled *bool  `toml:"prometheus_enabled,omitempty"`
+	PrometheusMode    string `toml:"prometheus_mode,omitempty"`
 }
 
 var (

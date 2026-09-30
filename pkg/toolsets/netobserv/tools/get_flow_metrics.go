@@ -7,7 +7,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-func InitGetFlowMetrics(p api.FilteringProvider) []api.ServerTool {
+func InitGetFlowMetrics(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
 	props := flowQueryProperties()
 	props["dataSource"] = &jsonschema.Schema{
 		Type:        "string",
@@ -57,7 +57,7 @@ func InitGetFlowMetrics(p api.FilteringProvider) []api.ServerTool {
 			InputSchema: toolInputSchema(props, []string{"aggregateBy"}),
 			Annotations: readOnlyAnnotations("Get NetObserv Flow Metrics"),
 		},
-		RBAC:    metricsRBAC(p),
+		RBAC:    metricsRBAC(p, cfg...),
 		Handler: getFlowMetricsHandler,
 	}}
 }
