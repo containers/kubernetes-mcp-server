@@ -5,6 +5,8 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	netobserv "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv/internal/defaults"
 	netobservTools "github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv/tools"
@@ -22,12 +24,28 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ context.Context, _ api.ToolsetContext) []api.ServerTool {
-	return slices.Concat(
-		netobservTools.InitListFlows(),
-		netobservTools.InitGetFlowMetrics(),
-		netobservTools.InitExportFlows(),
-	)
+func (t *Toolset) GetTools(ctx context.Context, tc api.ToolsetContext) []api.ServerTool {
+	cfg, err := netobserv.DetectConfig(ctx, tc.Inspector)
+	if err != nil {
+		cfg.Unknown = true
+	}
+	if tc.Config != nil {
+		if configValue, ok := tc.Config.GetToolsetConfig(defaults.ToolsetName()); ok {
+			if netobservCfg, ok := configValue.(*netobserv.Config); ok {
+				cfg = mergeManualConfig(cfg, netobservCfg)
+			}
+		}
+	}
+	flowsEnabled := !cfg.Found || cfg.Unknown || cfg.LokiEnabled
+	metricsEnabled := !cfg.Found || cfg.Unknown || cfg.LokiEnabled || cfg.PrometheusEnabled
+	var tools []api.ServerTool
+	if flowsEnabled {
+		tools = slices.Concat(tools, netobservTools.InitListFlows(tc.Inspector, cfg), netobservTools.InitExportFlows(tc.Inspector, cfg))
+	}
+	if metricsEnabled {
+		tools = slices.Concat(tools, netobservTools.InitGetFlowMetrics(tc.Inspector, cfg))
+	}
+	return tools
 }
 
 func (t *Toolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {

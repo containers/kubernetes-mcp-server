@@ -108,6 +108,7 @@ func (s *ServerTool) IsTargetListProvider() bool {
 
 type ToolsetContext struct {
 	Inspector                         ClusterInspector
+	Config                            *config.Config
 	TargetCompatibilityFiltersEnabled bool
 }
 
