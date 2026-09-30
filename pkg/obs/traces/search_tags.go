@@ -74,6 +74,7 @@ e.g. '{ resource.service.name="payment-service" }' to only show tags present in 
 			},
 		},
 		Handler: searchTagsHandler,
+		RBAC:    rbacTempoDiscovery(),
 		TargetCompatibilityFilters: []func() bool{
 			hasTempoStackCRD(p),
 		},

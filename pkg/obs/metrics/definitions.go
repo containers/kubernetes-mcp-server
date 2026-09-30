@@ -46,6 +46,7 @@ func initListMetrics() api.ServerTool {
 		},
 		Handler:      listMetricsHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -79,6 +80,7 @@ func initExecuteInstantQuery() api.ServerTool {
 		},
 		Handler:      executeInstantQueryHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -128,6 +130,7 @@ func initExecuteRangeQuery() api.ServerTool {
 		},
 		Handler:      executeRangeQueryHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -167,6 +170,7 @@ func initShowTimeseries() api.ServerTool {
 		},
 		Handler:      showTimeseriesHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -203,6 +207,7 @@ func initGetLabelNames() api.ServerTool {
 		},
 		Handler:      getLabelNamesHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -244,6 +249,7 @@ func initGetLabelValues() api.ServerTool {
 		},
 		Handler:      getLabelValuesHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -281,6 +287,7 @@ func initGetSeries() api.ServerTool {
 		},
 		Handler:      getSeriesHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -329,6 +336,7 @@ func initGetAlerts() api.ServerTool {
 		},
 		Handler:      getAlertsHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }
 
@@ -357,5 +365,6 @@ func initGetSilences() api.ServerTool {
 		},
 		Handler:      getSilencesHandler,
 		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
 	}
 }

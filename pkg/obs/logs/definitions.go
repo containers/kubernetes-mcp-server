@@ -56,6 +56,7 @@ Call this first when using Loki Operator managed stacks so you can pass lokiName
 			},
 		},
 		Handler: listInstancesHandler,
+		RBAC:    rbacLokiDiscovery(),
 		TargetCompatibilityFilters: []func() bool{
 			hasLokiStackCRD(p),
 		},
@@ -93,6 +94,7 @@ func initLabelNames(p api.FilteringProvider) api.ServerTool {
 			},
 		},
 		Handler: labelNamesHandler,
+		RBAC:    rbacLokiDiscovery(),
 		TargetCompatibilityFilters: []func() bool{
 			hasLokiStackCRD(p),
 		},
@@ -135,6 +137,7 @@ func initLabelValues(p api.FilteringProvider) api.ServerTool {
 			},
 		},
 		Handler: labelValuesHandler,
+		RBAC:    rbacLokiDiscovery(),
 		TargetCompatibilityFilters: []func() bool{
 			hasLokiStackCRD(p),
 		},
@@ -190,6 +193,7 @@ func initQueryRange(p api.FilteringProvider) api.ServerTool {
 			},
 		},
 		Handler: queryRangeHandler,
+		RBAC:    rbacLokiDiscovery(),
 		TargetCompatibilityFilters: []func() bool{
 			hasLokiStackCRD(p),
 		},
