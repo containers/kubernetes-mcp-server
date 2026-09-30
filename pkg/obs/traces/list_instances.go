@@ -36,6 +36,7 @@ Always print the output of this tool in a table.`,
 			},
 		},
 		Handler: listInstancesHandler,
+		RBAC:    rbacTempoDiscovery(),
 		TargetCompatibilityFilters: []func() bool{
 			hasTempoStackCRD(p),
 		},

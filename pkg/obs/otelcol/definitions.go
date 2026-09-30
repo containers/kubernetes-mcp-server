@@ -66,6 +66,7 @@ func initListComponents(p api.FilteringProvider) api.ServerTool {
 			},
 		},
 		Handler: ListComponentsHandler,
+		RBAC:    rbacNoKubernetes(),
 		TargetCompatibilityFilters: []func() bool{
 			hasOpenTelemetryCollectorCRD(p),
 		},
@@ -105,6 +106,7 @@ func initGetComponentSchema(p api.FilteringProvider) api.ServerTool {
 			},
 		},
 		Handler: GetComponentSchemaHandler,
+		RBAC:    rbacNoKubernetes(),
 		TargetCompatibilityFilters: []func() bool{
 			hasOpenTelemetryCollectorCRD(p),
 		},
@@ -152,6 +154,7 @@ func initValidateConfig(p api.FilteringProvider) api.ServerTool {
 			},
 		},
 		Handler: ValidateConfigHandler,
+		RBAC:    rbacNoKubernetes(),
 		TargetCompatibilityFilters: []func() bool{
 			hasOpenTelemetryCollectorCRD(p),
 		},
@@ -176,6 +179,7 @@ func initGetVersions(p api.FilteringProvider) api.ServerTool {
 			},
 		},
 		Handler: GetVersionsHandler,
+		RBAC:    rbacNoKubernetes(),
 		TargetCompatibilityFilters: []func() bool{
 			hasOpenTelemetryCollectorCRD(p),
 		},
