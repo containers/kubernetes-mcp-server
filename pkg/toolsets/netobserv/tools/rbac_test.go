@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	netobservclient "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -74,6 +75,31 @@ func (s *RBACSuite) TestMetricsRBAC() {
 		s.Require().NoError(meta.Validate())
 		s.Require().NotNil(meta.Unbounded)
 		s.NotEmpty(meta.Unbounded.Reason)
+	})
+}
+
+func (s *RBACSuite) TestDetectedBackendRBAC() {
+	s.Run("LokiStack is bounded regardless of cluster platform", func() {
+		meta := flowsRBAC(nil, netobservclient.EffectiveConfig{Found: true, LokiEnabled: true, LokiMode: "LokiStack"})
+		s.Require().NotNil(meta)
+		s.NotNil(meta.Bounded)
+		s.Nil(meta.Unbounded)
+	})
+
+	s.Run("other Loki modes skip RBAC declaration", func() {
+		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: true, LokiMode: "Manual"})
+		s.Nil(meta)
+	})
+
+	s.Run("disabled Loki skips flow RBAC declaration", func() {
+		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: false})
+		s.Nil(meta)
+	})
+
+	s.Run("unknown detection remains fail open", func() {
+		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: true}, netobservclient.EffectiveConfig{Unknown: true})
+		s.Require().NotNil(meta)
+		s.NotNil(meta.Unbounded)
 	})
 }
 

@@ -7,7 +7,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-func InitExportFlows(p api.FilteringProvider) []api.ServerTool {
+func InitExportFlows(p api.FilteringProvider, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
 	props := flowQueryProperties()
 	props["format"] = &jsonschema.Schema{
 		Type:        "string",
@@ -29,7 +29,7 @@ func InitExportFlows(p api.FilteringProvider) []api.ServerTool {
 			InputSchema: toolInputSchema(props, nil),
 			Annotations: readOnlyAnnotations("Export NetObserv Flows as CSV"),
 		},
-		RBAC:    flowsRBAC(p),
+		RBAC:    flowsRBAC(p, cfg...),
 		Handler: exportFlowsHandler,
 	}}
 }
