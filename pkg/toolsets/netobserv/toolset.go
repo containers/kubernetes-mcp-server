@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	netobserv "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv/internal/defaults"
@@ -29,7 +30,7 @@ func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 		cfg = provider.NetObservConfig(context.Background())
 	}
 	if provider, ok := p.(interface {
-		GetToolsetConfig(string) (api.ExtendedConfig, bool)
+		GetToolsetConfig(string) (config.ExtendedConfig, bool)
 	}); ok {
 		if configValue, ok := provider.GetToolsetConfig(defaults.ToolsetName()); ok {
 			if netobservCfg, ok := configValue.(*netobserv.Config); ok {
