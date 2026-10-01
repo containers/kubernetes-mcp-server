@@ -65,7 +65,14 @@ func isTrustedImpersonationProxy(remoteAddr string, cidrs []string) bool {
 	addr := peer.Addr().Unmap()
 	for _, cidr := range cidrs {
 		prefix, err := netip.ParsePrefix(cidr)
-		if err == nil && prefix.Contains(addr) {
+		if err != nil {
+			continue
+		}
+		// Mapped IPv4 prefixes reserve 96 bits before the IPv4 network bits.
+		if prefix.Addr().Is4In6() && prefix.Bits() >= 96 {
+			prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+		}
+		if prefix.Contains(addr) {
 			return true
 		}
 	}

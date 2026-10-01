@@ -137,6 +137,18 @@ func (s *ImpersonationIntegrationSuite) TestBackendCannotAccessWorkloadsWithoutI
 	s.True(apierrors.IsForbidden(err), "backend must not have workload access: %v", err)
 }
 
+func (s *ImpersonationIntegrationSuite) TestBackgroundDiscoveryWithoutCallerIdentity() {
+	ctx := s.T().Context()
+	provider, err := kubernetes.NewProvider(ctx, s.manager.Config())
+	s.Require().NoError(err)
+	defer provider.Close()
+	s.True(provider.AnyTargetHasGVKs(ctx, []schema.GroupVersionKind{{Version: "v1", Kind: "Pod"}}))
+	s.False(provider.AnyTargetHasGVKs(ctx, []schema.GroupVersionKind{{Group: "absent.example.com", Version: "v1", Kind: "Absent"}}),
+		"background discovery must distinguish missing APIs without a caller identity")
+	_, err = provider.GetDerivedKubernetes(ctx, provider.GetDefaultTarget())
+	s.ErrorContains(err, "identity required", "background discovery must not enable anonymous tool calls")
+}
+
 func (s *ImpersonationIntegrationSuite) TestNamespaceAndClusterAuthorization() {
 	ctx := s.T().Context()
 	client := s.client(impersonationUsers[0], impersonationReadGroup)

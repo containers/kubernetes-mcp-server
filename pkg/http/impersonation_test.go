@@ -115,3 +115,35 @@ func (s *ImpersonationMiddlewareSuite) TestProxyReload() {
 	handler.ServeHTTP(rr, req)
 	s.Equal(http.StatusUnauthorized, rr.Code)
 }
+
+func (s *ImpersonationMiddlewareSuite) TestIPv4MappedProxyCIDR() {
+	for _, tc := range []struct {
+		cidr   string
+		peer   string
+		status int
+	}{
+		{"::ffff:127.0.0.1/128", "[::ffff:127.0.0.1]:1234", http.StatusNoContent},
+		{"::ffff:127.0.0.1/128", "127.0.0.1:1234", http.StatusNoContent},
+		{"::ffff:127.0.0.1/128", "[::ffff:127.0.0.2]:1234", http.StatusUnauthorized},
+		{"::ffff:127.0.0.1/128", "127.0.0.2:1234", http.StatusUnauthorized},
+		{"::ffff:127.0.0.0/120", "127.0.0.255:1234", http.StatusNoContent},
+		{"::ffff:127.0.0.0/120", "127.0.1.1:1234", http.StatusUnauthorized},
+		{"::ffff:127.0.0.0/120", "[::1]:1234", http.StatusUnauthorized},
+	} {
+		s.Run(tc.cidr+"/"+tc.peer, func() {
+			cfg := config.BaseDefault()
+			cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
+			cfg.ImpersonationTrustedProxies.SetForTest([]string{tc.cidr})
+			handler := ImpersonationMiddleware(config.NewConfigState(cfg))(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			req.RemoteAddr = tc.peer
+			req.Header.Set("Authorization", "Bearer frontend")
+			req.Header.Set("Impersonate-User", "alice")
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+			s.Equal(tc.status, rr.Code)
+		})
+	}
+}

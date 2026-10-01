@@ -112,7 +112,11 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 		}
 	}
 
-	k8s, err := baseManager.Derived(ctx)
+	// Provider-owned watchers run before any MCP caller has authenticated.
+	k8s := baseManager.BackgroundClient()
+	if p.cfg.ResolveClusterAuthMode() != config.ClusterAuthImpersonation {
+		k8s, err = baseManager.Derived(ctx)
+	}
 	if err != nil {
 		baseManager.Close()
 		return fmt.Errorf("failed to get kubernetes client: %w", err)
