@@ -9,6 +9,8 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	serverconfig "github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/os-observability/redhat-opentelemetry-collector/configschemas"
+
+	"github.com/rhobs/obs-mcp/pkg/toolcfg"
 )
 
 const ToolsetName = "observability/otelcol"
@@ -20,7 +22,7 @@ type Config struct {
 	SchemaFS fs.FS
 }
 
-var _ api.ExtendedConfig = (*Config)(nil)
+var _ serverconfig.ExtendedConfig = (*Config)(nil)
 
 // NewDefaultConfig returns the default otelcol configuration using the
 // embedded schemas from redhat-opentelemetry-collector.
@@ -80,7 +82,7 @@ func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
 
 // getConfig retrieves the otelcol toolset configuration from params.
 func getConfig(params api.ToolHandlerParams) *Config {
-	if cfg, ok := params.GetToolsetConfig(ToolsetName); ok {
+	if cfg, ok := toolcfg.From(params, ToolsetName); ok {
 		if otelcolCfg, ok := cfg.(*Config); ok {
 			return otelcolCfg
 		}
@@ -96,7 +98,7 @@ func getSchemaLoader(config *Config) (SchemaLoader, error) {
 	return NewSchemaLoaderFromFS(config.SchemaFS, "schemas"), nil
 }
 
-func otelColToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func otelColToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (serverconfig.ExtendedConfig, error) {
 	cfg := *NewDefaultConfig()
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err

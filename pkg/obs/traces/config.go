@@ -11,6 +11,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/instrumentation"
 	"github.com/rhobs/obs-mcp/pkg/openshift"
+	"github.com/rhobs/obs-mcp/pkg/toolcfg"
 	"github.com/rhobs/obs-mcp/pkg/traces/discovery"
 )
 
@@ -47,7 +48,7 @@ type Config struct {
 	ClientMetrics *instrumentation.ClientMetrics `toml:"-"`
 }
 
-var _ api.ExtendedConfig = (*Config)(nil)
+var _ serverconfig.ExtendedConfig = (*Config)(nil)
 
 var defaultConfig = &Config{
 	UseRoute: false,
@@ -80,7 +81,7 @@ func (c *Config) applyUseRouteResolver() {
 	c.Resolver = &openshift.RouteClient{}
 }
 
-func tempoToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func tempoToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (serverconfig.ExtendedConfig, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err
@@ -90,7 +91,7 @@ func tempoToolsetParser(_ context.Context, primitive toml.Primitive, md toml.Met
 }
 
 func getToolsetConfig(params api.ToolHandlerParams) *Config {
-	if cfg, ok := params.GetToolsetConfig(ToolsetName); ok {
+	if cfg, ok := toolcfg.From(params, ToolsetName); ok {
 		if tempoCfg, ok := cfg.(*Config); ok {
 			return tempoCfg
 		}

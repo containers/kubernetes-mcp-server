@@ -8,6 +8,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/rhobs/obs-mcp/pkg/auth"
+	"github.com/rhobs/obs-mcp/pkg/toolcfg"
 )
 
 type mockKubernetesClient struct {
@@ -19,22 +20,6 @@ func (m *mockKubernetesClient) RESTConfig() *rest.Config {
 	return m.restConfig
 }
 
-type mockConfigProvider struct {
-	api.BaseConfig
-	config *Config
-}
-
-func (m *mockConfigProvider) GetProviderConfig(string) (api.ExtendedConfig, bool) {
-	return nil, false
-}
-
-func (m *mockConfigProvider) GetToolsetConfig(name string) (api.ExtendedConfig, bool) {
-	if name == ToolsetName && m.config != nil {
-		return m.config, true
-	}
-	return nil, false
-}
-
 type mockToolCallRequest struct {
 	arguments map[string]any
 }
@@ -44,10 +29,12 @@ func (m *mockToolCallRequest) GetArguments() map[string]any {
 }
 
 func newTestParams(ctx context.Context, restConfig *rest.Config, cfg *Config) api.ToolHandlerParams {
+	if cfg != nil {
+		ctx = toolcfg.With(ctx, ToolsetName, cfg)
+	}
 	return api.ToolHandlerParams{
 		Context:          ctx,
 		KubernetesClient: &mockKubernetesClient{restConfig: restConfig},
-		BaseConfig:       &mockConfigProvider{config: cfg},
 		ToolCallRequest:  &mockToolCallRequest{},
 	}
 }

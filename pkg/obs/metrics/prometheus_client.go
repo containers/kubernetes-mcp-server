@@ -11,6 +11,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/metrics/alertmanager"
 	"github.com/rhobs/obs-mcp/pkg/metrics/prometheus"
+	"github.com/rhobs/obs-mcp/pkg/toolcfg"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 
 // getConfig retrieves the obs-mcp toolset configuration from params.
 func getConfig(params api.ToolHandlerParams) *Config {
-	if cfg, ok := params.GetToolsetConfig(ToolsetName); ok {
+	if cfg, ok := toolcfg.From(params, ToolsetName); ok {
 		if obsCfg, ok := cfg.(*Config); ok {
 			return obsCfg
 		}
