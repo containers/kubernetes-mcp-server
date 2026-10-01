@@ -3,6 +3,8 @@ package kubernetes
 import (
 	"os"
 	"testing"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 )
 
 func TestMain(m *testing.M) {
@@ -14,5 +16,8 @@ func TestMain(m *testing.M) {
 	// Run tests
 	code := m.Run()
 
+	if err := test.StopEnvTest(); err != nil {
+		panic(err)
+	}
 	os.Exit(code)
 }

@@ -17,7 +17,8 @@ import (
 )
 
 type Manager struct {
-	kubernetes *Kubernetes
+	kubernetes    *Kubernetes
+	backendConfig *rest.Config
 
 	config atomic.Pointer[config.Config]
 }
@@ -148,13 +149,10 @@ func NewManager(ctx context.Context, cfg *config.Config, restConfig *rest.Config
 
 	applyRateLimit(restConfig, cfg)
 
-	m := &Manager{}
+	// Keep backend credentials without wrappers that capture the base client's authorization state.
+	m := &Manager{backendConfig: copyBackendConfig(restConfig)}
 	m.config.Store(cfg)
 	var err error
-	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
-	//k8s.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
-	//	return &impersonateRoundTripper{original}
-	//})
 	m.kubernetes, err = newKubernetesFromLive(ctx, &m.config, clientCmdConfig, restConfig)
 	if err != nil {
 		return nil, err
@@ -180,6 +178,25 @@ func (m *Manager) Config() *config.Config {
 }
 
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
+	identity, ok := ImpersonationIdentityFromContext(ctx)
+	if cfg := m.config.Load(); cfg.ResolveClusterAuthMode() == config.ClusterAuthImpersonation {
+		if !ok {
+			return nil, errors.New("trusted proxy impersonation identity required")
+		}
+		if err := identity.Validate(); err != nil {
+			return nil, err
+		}
+		derivedCfg := copyBackendConfig(m.backendConfig)
+		derivedCfg.Impersonate = rest.ImpersonationConfig{UserName: identity.UserName, Groups: identity.Groups}
+		if ua, ok := ctx.Value(UserAgentHeader).(string); ok && ua != "" {
+			derivedCfg.UserAgent = ua
+		}
+		return m.newDerived(ctx, derivedCfg)
+	}
+	// A reload can publish the HTTP/provider config before this manager's config.
+	if ok && identity.Validate() == nil {
+		return nil, errors.New("impersonation identity requires impersonation cluster auth mode")
+	}
 	authorization, ok := ctx.Value(OAuthAuthorizationHeader).(string)
 	hasToken := ok && strings.HasPrefix(authorization, "Bearer ")
 	logger := klogutil.FromContext(ctx)
@@ -221,6 +238,17 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		Timeout:     m.kubernetes.RESTConfig().Timeout,
 		Impersonate: rest.ImpersonationConfig{},
 	}
+	return m.newDerived(ctx, derivedCfg)
+}
+
+func copyBackendConfig(cfg *rest.Config) *rest.Config {
+	copy := *cfg
+	// client-go CopyConfig mutates ExecProvider.Config; isolate it before concurrent derivation.
+	copy.ExecProvider = cfg.ExecProvider.DeepCopy()
+	return rest.CopyConfig(&copy)
+}
+
+func (m *Manager) newDerived(ctx context.Context, derivedCfg *rest.Config) (*Kubernetes, error) {
 	clientCmdApiConfig, err := m.kubernetes.clientCmdConfig.RawConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)

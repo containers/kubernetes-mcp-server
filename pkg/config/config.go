@@ -257,9 +257,11 @@ type Config struct {
 	// A non-empty kubeconfig path selects the kubeconfig provider even when this is empty.
 	ClusterProviderStrategy Option[string]
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
-	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
+	// Valid values: "passthrough", "kubeconfig", and "impersonation" (backend credentials with trusted proxy identity).
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
 	ClusterAuthMode Option[string]
+	// ImpersonationTrustedProxies restricts identity headers to immediate peers in these CIDRs.
+	ImpersonationTrustedProxies Option[[]string]
 	// DeniedResources are GVKs that tools must not access.
 	DeniedResources Option[[]GroupVersionKind]
 	// When true, expose only tools annotated with readOnlyHint=true.
@@ -407,6 +409,8 @@ func newConfig() *Config {
 		ClusterProviderStrategy: opt("cluster_provider_strategy", "").desc("How the server finds clusters"),
 		ClusterAuthMode: opt("cluster_auth_mode", "").reload().validate(validateClusterAuthModeValue).
 			desc("How the MCP server authenticates to the cluster"),
+		ImpersonationTrustedProxies: opt("impersonation_trusted_proxies", []string(nil)).reload().validate(validateImpersonationTrustedProxies).
+			desc("Trusted immediate proxy CIDRs for cluster impersonation"),
 		DeniedResources:    opt("denied_resources", []GroupVersionKind(nil)).reload().desc("GVKs that tools must not access"),
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),
 		DisableDestructive: opt("disable_destructive", false).reload().desc("Disable tools annotated destructiveHint=true"),
@@ -1110,6 +1114,9 @@ func parseExtensions(ctx context.Context, cfg *Config, merged map[string]any, so
 func rejectNonReloadable(prev, next *Config) error {
 	prevs := optionsByPath(prev)
 	var errs []error
+	if err := next.ValidateReload(prev); err != nil {
+		errs = append(errs, err)
+	}
 	walkOptions(next, func(o option, path string) {
 		p, ok := prevs[path]
 		if !ok || o.reloadable() || o.equalValue(p) {

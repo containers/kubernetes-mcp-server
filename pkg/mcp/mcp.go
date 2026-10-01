@@ -180,6 +180,7 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 	)
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
+	s.server.AddReceivingMiddleware(impersonationIdentityPropagationMiddleware)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
 	s.server.AddReceivingMiddleware(protocolReceivingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
@@ -675,6 +676,9 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 	}
 
 	if err := s.withReloadLock(func() error {
+		if err := newConfig.ValidateReload(s.configuration.Load().Config); err != nil {
+			return fmt.Errorf("%w: %w", ErrReloadRejected, err)
+		}
 		if err := s.p.ReloadConfig(ctx, newConfig); err != nil {
 			return fmt.Errorf("failed to reload kubernetes provider: %w", err)
 		}

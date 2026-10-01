@@ -36,6 +36,10 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 	if kubernetes == nil {
 		return nil, fmt.Errorf("kubernetes rest config is required")
 	}
+	// Kiali cannot enforce Kubernetes impersonation on its separate HTTP API.
+	if cfg.ResolveClusterAuthMode() == config.ClusterAuthImpersonation || kubernetes.Impersonate.UserName != "" {
+		return nil, fmt.Errorf("kiali does not support Kubernetes impersonation")
+	}
 	kiali := &Kiali{
 		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),

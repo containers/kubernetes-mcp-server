@@ -174,6 +174,20 @@ func authHeaderPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
+func impersonationIdentityPropagationMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		// Stateful transports retain initialization context; only current request metadata is authoritative.
+		identity := internalk8s.ImpersonationIdentity{}
+		if extra := req.GetExtra(); extra != nil && extra.TokenInfo != nil {
+			if current, ok := extra.TokenInfo.Extra[internalk8s.ImpersonationIdentityTokenInfoKey].(internalk8s.ImpersonationIdentity); ok &&
+				current.UserName == extra.TokenInfo.UserID {
+				identity = current
+			}
+		}
+		return next(internalk8s.WithImpersonationIdentity(ctx, identity), method, req)
+	}
+}
+
 func userAgentPropagationMiddleware(serverName, serverVersion string) func(mcp.MethodHandler) mcp.MethodHandler {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (result mcp.Result, err error) {

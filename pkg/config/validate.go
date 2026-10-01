@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"net/url"
 	"os"
 	"slices"
@@ -106,10 +107,20 @@ func validateMetricsPortNumber(v string) error {
 }
 
 func validateClusterAuthModeValue(mode string) error {
-	if mode != "" && mode != ClusterAuthPassthrough && mode != ClusterAuthKubeconfig {
-		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q or %q", mode, ClusterAuthPassthrough, ClusterAuthKubeconfig)
+	if mode != "" && mode != ClusterAuthPassthrough && mode != ClusterAuthKubeconfig && mode != ClusterAuthImpersonation {
+		return fmt.Errorf("invalid cluster_auth_mode %q: must be %q, %q or %q", mode, ClusterAuthPassthrough, ClusterAuthKubeconfig, ClusterAuthImpersonation)
 	}
 	return nil
+}
+
+func validateImpersonationTrustedProxies(proxies []string) error {
+	var errs []error
+	for _, proxy := range proxies {
+		if _, err := netip.ParsePrefix(proxy); err != nil {
+			errs = append(errs, fmt.Errorf("invalid CIDR %q: %w", proxy, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func validateConfirmationFallback(fb string) error {
@@ -285,13 +296,38 @@ func (c *Config) ValidateClusterAuthMode() error {
 		errs = append(errs, fmt.Errorf("cluster_auth_mode %q is not compatible with require_oauth=true: all authenticated users would share a single cluster identity, breaking per-user audit trails; use passthrough or token exchange to preserve user identity on the cluster", ClusterAuthKubeconfig))
 	}
 	hasTokenExchange := c.GetTokenExchangeConfig() != nil
-	if mode == ClusterAuthKubeconfig && hasTokenExchange {
-		errs = append(errs, fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", ClusterAuthKubeconfig))
+	if (mode == ClusterAuthKubeconfig || mode == ClusterAuthImpersonation) && hasTokenExchange {
+		errs = append(errs, fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", mode))
 	}
 	if !c.RequireOAuth.Get() && hasTokenExchange {
 		errs = append(errs, fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)"))
 	}
+	if mode == ClusterAuthImpersonation {
+		if c.Port.Get() == "" {
+			errs = append(errs, fmt.Errorf("cluster_auth_mode %q requires port to be set (impersonation is only supported in HTTP mode)", mode))
+		}
+		if len(c.ImpersonationTrustedProxies.Get()) == 0 {
+			errs = append(errs, fmt.Errorf("cluster_auth_mode %q requires impersonation_trusted_proxies with at least one CIDR", mode))
+		}
+		if c.SkipJWTVerification.Get() {
+			errs = append(errs, fmt.Errorf("skip_jwt_verification is incompatible with cluster_auth_mode %q; configure authorization_url for local OAuth verification or leave require_oauth disabled for trusted proxy authentication", mode))
+		}
+	} else if len(c.ImpersonationTrustedProxies.Get()) > 0 || (c.ImpersonationTrustedProxies.Source() != "" && c.ImpersonationTrustedProxies.Source() != SourceDefault) {
+		errs = append(errs, fmt.Errorf("impersonation_trusted_proxies is only valid with cluster_auth_mode %q", ClusterAuthImpersonation))
+	}
 	return errors.Join(errs...)
+}
+
+// ValidateReload rejects auth mode transitions that invalidate existing session identity bindings.
+func (c *Config) ValidateReload(previous *Config) error {
+	if previous == nil {
+		return nil
+	}
+	oldMode, newMode := previous.ResolveClusterAuthMode(), c.ResolveClusterAuthMode()
+	if oldMode != newMode && (oldMode == ClusterAuthImpersonation || newMode == ClusterAuthImpersonation) {
+		return fmt.Errorf("cluster_auth_mode change from %q to %q requires a process restart to reset session identity bindings", oldMode, newMode)
+	}
+	return nil
 }
 
 func validateTokenExchangeFile(name, path string) error {

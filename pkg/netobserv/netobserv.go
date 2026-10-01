@@ -38,6 +38,10 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 	if restConfig == nil {
 		return nil, fmt.Errorf("kubernetes rest config is required")
 	}
+	// The plugin API cannot enforce Kubernetes impersonation on backend credentials.
+	if cfg.ResolveClusterAuthMode() == config.ClusterAuthImpersonation || restConfig.Impersonate.UserName != "" {
+		return nil, fmt.Errorf("netobserv does not support Kubernetes impersonation")
+	}
 	client := &NetObserv{
 		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),

@@ -17,6 +17,34 @@ type TokenExchangeRoutingSuite struct {
 	suite.Suite
 }
 
+func (s *TokenExchangeRoutingSuite) TestImpersonationNeverExchangesCallerToken() {
+	for _, token := range []string{"", "Bearer caller-token"} {
+		s.Run(token, func() {
+			cfg := config.BaseDefault()
+			cfg.ClusterAuthMode.SetForTest("impersonation")
+			ctx := context.WithValue(s.T().Context(), OAuthAuthorizationHeader, token)
+			ctx = WithImpersonationIdentity(ctx, ImpersonationIdentity{UserName: "alice"})
+			s.Run("removes caller credential", func() {
+				result, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
+				s.Require().NoError(err)
+				s.Empty(result.Value(OAuthAuthorizationHeader))
+			})
+			s.Run("rejects global exchange", func() {
+				cfg.TokenExchange.Strategy.SetForTest(tokenexchange.StrategyRFC8693)
+				_, err := ExchangeTokenInContext(ctx, cfg, fakeDerivedProvider{}, "", nil)
+				s.Error(err)
+			})
+			s.Run("rejects per-target exchange", func() {
+				cfg := config.BaseDefault()
+				cfg.ClusterAuthMode.SetForTest("impersonation")
+				provider := fakeTokenExchangeProvider{exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{}}
+				_, err := ExchangeTokenInContext(ctx, cfg, provider, "target", nil)
+				s.Error(err)
+			})
+		})
+	}
+}
+
 func (s *TokenExchangeRoutingSuite) TestResolveClusterAuthMode() {
 	s.Run("defaults to passthrough", func() {
 		cfg := config.New()

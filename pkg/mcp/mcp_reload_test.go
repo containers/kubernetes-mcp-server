@@ -63,6 +63,36 @@ func (s *ConfigReloadSuite) TearDownTest() {
 	}
 }
 
+func (s *ConfigReloadSuite) TestImpersonationModeChangesRequireRestart() {
+	for _, initialMode := range []string{config.ClusterAuthPassthrough, config.ClusterAuthImpersonation} {
+		s.Run(initialMode, func() {
+			initial := config.BaseDefault()
+			initial.KubeConfig = s.Cfg.KubeConfig
+			initial.Port.SetForTest("8080")
+			initial.ClusterAuthMode.SetForTest(initialMode)
+			if initialMode == config.ClusterAuthImpersonation {
+				initial.ImpersonationTrustedProxies.SetForTest([]string{"127.0.0.1/32"})
+			}
+			provider, err := kubernetes.NewProvider(s.T().Context(), initial)
+			s.Require().NoError(err)
+			server, err := NewServer(s.T().Context(), Configuration{Config: initial}, provider)
+			s.Require().NoError(err)
+			defer server.Close()
+			next := config.BaseDefault()
+			next.KubeConfig = initial.KubeConfig
+			next.Port = initial.Port
+			if initialMode == config.ClusterAuthPassthrough {
+				next.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
+				next.ImpersonationTrustedProxies.SetForTest([]string{"127.0.0.1/32"})
+			} else {
+				next.ClusterAuthMode.SetForTest(config.ClusterAuthPassthrough)
+			}
+			err = server.ReloadConfiguration(s.T().Context(), next)
+			s.ErrorContains(err, "restart", "sessions established under different identity rules cannot survive a mode change")
+		})
+	}
+}
+
 func (s *ConfigReloadSuite) TestConfigurationReload() {
 	// Initialize server with initial config
 	provider, err := kubernetes.NewProvider(s.T().Context(), s.Cfg)
