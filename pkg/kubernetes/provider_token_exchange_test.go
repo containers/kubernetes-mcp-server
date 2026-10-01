@@ -25,6 +25,15 @@ type TokenExchangingProviderSuite struct {
 	suite.Suite
 }
 
+func (s *TokenExchangingProviderSuite) TestImpersonationRejectsPerTargetExchangeWithoutOAuthSnapshot() {
+	cfg := config.BaseDefault()
+	cfg.ClusterAuthMode.SetForTest("impersonation")
+	provider := fakeTokenExchangeProvider{exchangeConfig: &tokenexchange.TargetTokenExchangeConfig{}}
+	wrapped := newTokenExchangingProvider(provider, func() *config.Config { return cfg }, oauth.NewState(nil))
+	_, err := wrapped.GetDerivedKubernetes(s.T().Context(), "target")
+	s.ErrorContains(err, "per-target token exchange is incompatible")
+}
+
 type observedTokenRequest struct {
 	clientID         string
 	clientSecret     string

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -73,7 +74,12 @@ func targetHasGVKs(ctx context.Context, logger klog.Logger, mgr *Manager, gvks [
 		return true
 	}
 
-	k, err := mgr.Derived(ctx)
+	// Capability inventory has no caller during startup or background refresh.
+	k := mgr.BackgroundClient()
+	var err error
+	if mgr.Config().ResolveClusterAuthMode() != config.ClusterAuthImpersonation {
+		k, err = mgr.Derived(ctx)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return true

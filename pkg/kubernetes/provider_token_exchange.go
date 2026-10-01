@@ -35,11 +35,18 @@ func newTokenExchangingProvider(
 }
 
 func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error) {
+	cfg := p.config()
+	if cfg != nil && cfg.ResolveClusterAuthMode() == config.ClusterAuthImpersonation {
+		ctx, err := ExchangeTokenInContext(ctx, cfg, p.provider, target, nil)
+		if err != nil {
+			return nil, err
+		}
+		return p.provider.GetDerivedKubernetes(ctx, target)
+	}
 	snap := p.oauthState.Load()
 	if snap == nil {
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
-	cfg := p.config()
 	if cfg == nil {
 		// Defensive only: production wiring always supplies a non-nil config
 		// (NewProvider defaults the provider to return cfg, and the cmd path

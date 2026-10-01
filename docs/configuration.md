@@ -168,6 +168,7 @@ A SIGHUP that would change a non-reloadable option is rejected and the process e
 - Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`
 - Process shape: `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`
 - Cluster connection: `kubeconfig`, `cluster_provider_strategy`, `cluster_provider_configs`
+- Authentication mode: changing `cluster_auth_mode` into or out of `impersonation` resets session identity bindings and requires a restart. The trusted proxy CIDRs remain reloadable.
 - Kubernetes client: `kube_client_qps`, `kube_client_burst`, watcher/poll timings
 - Telemetry: the `[telemetry]` table
 
@@ -664,7 +665,8 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `token_exchange.client_auth.certificate_file` | string | `""` | Certificate PEM required by `private_key_jwt`. |
 | `token_exchange.client_auth.private_key_file` | string | `""` | Private-key PEM required by `private_key_jwt`. |
 | `token_exchange.client_auth.token_file` | string | `""` | JWT file required by `jwt_file`. |
-| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
+| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent), `kubeconfig` (always use kubeconfig credentials), or `impersonation` (use backend credentials with a trusted proxy's user and groups). Defaults to `passthrough`. Changing into or out of `impersonation` requires a restart. |
+| `impersonation_trusted_proxies` | string[] | `[]` | Immediate proxy peer CIDRs allowed to supply impersonation identity. Required and nonempty in `impersonation` mode; invalid in other modes. Uses the connection peer address, never `X-Forwarded-For`. Reloadable. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
 | `trust_proxy_headers` | boolean | `false` | When `true`, honor `X-Forwarded-*` / `X-Real-IP` from a reverse proxy. Leave `false` unless the server is behind a trusted proxy. |
@@ -738,6 +740,18 @@ cluster_auth_mode     = "passthrough"
 - `oauth_audience`, `authorization_url`, and other JWT-related options are **ignored** in this mode
 
 For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) or [ENTRA_ID_SETUP.md](ENTRA_ID_SETUP.md).
+
+**Trusted proxy impersonation (shared backend credentials, individual user authorization):**
+```toml
+port = "8080"
+cluster_auth_mode = "impersonation"
+impersonation_trusted_proxies = ["127.0.0.1/32", "::1/128"]
+kubeconfig = "/etc/kubernetes-mcp-server/kubeconfig"
+```
+
+The proxy authenticates every request, forwards the caller's bearer token, and supplies `Impersonate-User` and `Impersonate-Group` headers derived from that identity. MCP uses its backend credentials to connect to Kubernetes and impersonates the supplied identity; the incoming bearer token is not sent to Kubernetes. Missing identity or an untrusted peer is rejected without falling back to the backend identity.
+
+This mode supports stateful and stateless HTTP. It rejects stdio, `skip_jwt_verification = true`, and token exchange. For additional local OIDC validation, set `require_oauth = true` with `authorization_url` and the expected `oauth_audience`. See [Trusted Proxy Impersonation](authentication-impersonation.md) for the proxy trust boundary and Kubernetes permissions.
 
 ### Telemetry
 

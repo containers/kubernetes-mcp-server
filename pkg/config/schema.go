@@ -19,6 +19,9 @@ const (
 	// ClusterAuthKubeconfig uses kubeconfig credentials (e.g., ServiceAccount token).
 	// Use when cluster auth is separate from MCP client auth.
 	ClusterAuthKubeconfig = "kubeconfig"
+
+	// ClusterAuthImpersonation uses backend credentials with a trusted proxy's user identity.
+	ClusterAuthImpersonation = "impersonation"
 )
 
 // ExtendedConfig is the interface that all configuration extensions must implement.
