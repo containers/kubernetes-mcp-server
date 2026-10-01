@@ -7,7 +7,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ToolsetsSuite struct {
@@ -64,14 +63,12 @@ func (f *fakeProvider) GetTargetParameterName() string { return "" }
 
 func (f *fakeProvider) Discovery() api.AggregateDiscovery       { return f }
 func (f *fakeProvider) Unstructured() api.AggregateUnstructured { return nil }
-func (f *fakeProvider) HasGVKs(ctx context.Context, _ []schema.GroupVersionKind) api.BoolResults {
-	return api.BoolResults(api.NewResults(ctx, f, func(context.Context, string) (bool, error) {
-		return true, nil
-	}))
-}
 func (f *fakeProvider) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
-		return &metav1.APIResourceList{}, nil
+		return &metav1.APIResourceList{APIResources: []metav1.APIResource{
+			{Kind: "Project"}, {Kind: "Route"}, {Kind: "NodeMetrics"}, {Kind: "PodMetrics"},
+			{Kind: "VirtualMachine"}, {Kind: "VirtualMachineTemplate"},
+		}}, nil
 	})
 }
 

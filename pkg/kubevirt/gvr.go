@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -131,8 +132,16 @@ var (
 // target cluster has the VirtualMachineTemplate GVK registered.
 func HasVirtualMachineTemplate(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		hasGVK, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{VirtualMachineTemplateGVK}).Any()
-		return err != nil || hasGVK
+		available, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, VirtualMachineTemplateGVK.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
+			for _, resource := range list.APIResources {
+				if resource.Kind == VirtualMachineTemplateGVK.Kind {
+					return true
+				}
+			}
+			return false
+		})
+		// Discovery errors fail open unless they confirm the resource is absent.
+		return available || (err != nil && !api.IsNotFound(err))
 	}
 }
 
@@ -171,8 +180,16 @@ var (
 // target cluster has the VirtualMachine GVK registered.
 func HasVirtualMachine(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		hasGVK, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{VirtualMachineGVK}).Any()
-		return err != nil || hasGVK
+		available, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, VirtualMachineGVK.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
+			for _, resource := range list.APIResources {
+				if resource.Kind == VirtualMachineGVK.Kind {
+					return true
+				}
+			}
+			return false
+		})
+		// Discovery errors fail open unless they confirm the resource is absent.
+		return available || (err != nil && !api.IsNotFound(err))
 	}
 }
 

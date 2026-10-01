@@ -17,7 +17,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type documentationInspector struct{}
@@ -30,15 +29,12 @@ func (i *documentationInspector) Unstructured() api.AggregateUnstructured {
 	return nil
 }
 
-func (i *documentationInspector) HasGVKs(ctx context.Context, _ []schema.GroupVersionKind) api.BoolResults {
-	return api.BoolResults(api.NewResults(ctx, i, func(context.Context, string) (bool, error) {
-		return true, nil
-	}))
-}
-
 func (i *documentationInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, i, func(context.Context, string) (*metav1.APIResourceList, error) {
-		return &metav1.APIResourceList{}, nil
+		return &metav1.APIResourceList{APIResources: []metav1.APIResource{
+			{Kind: "Project"}, {Kind: "Route"}, {Kind: "NodeMetrics"}, {Kind: "PodMetrics"},
+			{Kind: "VirtualMachine"}, {Kind: "VirtualMachineTemplate"},
+		}}, nil
 	})
 }
 

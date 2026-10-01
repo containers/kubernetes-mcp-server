@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -72,10 +72,16 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 		Handler: projectsList,
 		TargetCompatibilityFilters: []func() bool{
 			func() bool {
-				hasGVKs, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{
-					{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-				}).Any()
-				return err != nil || hasGVKs
+				available, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, "project.openshift.io/v1").Any(func(list *metav1.APIResourceList) bool {
+					for _, resource := range list.APIResources {
+						if resource.Kind == "Project" {
+							return true
+						}
+					}
+					return false
+				})
+				// Discovery errors fail open unless they confirm the resource is absent.
+				return available || (err != nil && !api.IsNotFound(err))
 			},
 		},
 	})

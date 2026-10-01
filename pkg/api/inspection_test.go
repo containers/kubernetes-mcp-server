@@ -81,11 +81,11 @@ func (s *ResultsTestSuite) TestAny() {
 func (s *ResultsTestSuite) TestAll() {
 	s.Run("returns true when every target matches", func() {
 		provider := &resultsTargetProvider{targets: []string{"a", "b"}}
-		results := BoolResults(NewResults(s.T().Context(), provider, func(context.Context, string) (bool, error) {
+		results := NewResults(s.T().Context(), provider, func(context.Context, string) (bool, error) {
 			return true, nil
-		}))
+		})
 
-		matched, err := results.All()
+		matched, err := results.All(func(value bool) bool { return value })
 
 		s.Require().NoError(err)
 		s.True(matched)
@@ -93,7 +93,7 @@ func (s *ResultsTestSuite) TestAll() {
 
 	s.Run("returns false without an error when one target does not match", func() {
 		provider := &resultsTargetProvider{targets: []string{"matched", "unmatched", "failed"}}
-		results := BoolResults(NewResults(s.T().Context(), provider, func(_ context.Context, target string) (bool, error) {
+		results := NewResults(s.T().Context(), provider, func(_ context.Context, target string) (bool, error) {
 			switch target {
 			case "unmatched":
 				return false, nil
@@ -102,9 +102,9 @@ func (s *ResultsTestSuite) TestAll() {
 			default:
 				return true, nil
 			}
-		}))
+		})
 
-		matched, err := results.All()
+		matched, err := results.All(func(value bool) bool { return value })
 
 		s.NoError(err)
 		s.False(matched)
@@ -112,14 +112,14 @@ func (s *ResultsTestSuite) TestAll() {
 
 	s.Run("returns an error when all successful targets match", func() {
 		provider := &resultsTargetProvider{targets: []string{"matched", "failed"}}
-		results := BoolResults(NewResults(s.T().Context(), provider, func(_ context.Context, target string) (bool, error) {
+		results := NewResults(s.T().Context(), provider, func(_ context.Context, target string) (bool, error) {
 			if target == "failed" {
 				return false, errors.New("inspection failed")
 			}
 			return true, nil
-		}))
+		})
 
-		matched, err := results.All()
+		matched, err := results.All(func(value bool) bool { return value })
 
 		s.False(matched)
 		s.ErrorContains(err, "inspection failed")
@@ -173,11 +173,11 @@ func (s *ResultsTestSuite) TestTargetEnumeration() {
 
 	s.Run("uses vacuous truth for an empty target set", func() {
 		provider := &resultsTargetProvider{}
-		results := BoolResults(NewResults(s.T().Context(), provider, func(context.Context, string) (bool, error) {
+		results := NewResults(s.T().Context(), provider, func(context.Context, string) (bool, error) {
 			return false, nil
-		}))
+		})
 
-		matched, err := results.All()
+		matched, err := results.All(func(value bool) bool { return value })
 
 		s.Require().NoError(err)
 		s.True(matched)

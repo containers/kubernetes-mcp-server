@@ -53,17 +53,6 @@ func (s *ProviderInspectorTestSuite) TearDownTest() {
 }
 
 func (s *ProviderInspectorTestSuite) TestDiscovery() {
-	s.Run("finds a GVK on the default target", func() {
-		results := s.inspector.Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
-			{Version: "v1", Kind: "Pod"},
-		})
-
-		found, err := results.Default()
-
-		s.Require().NoError(err)
-		s.True(found)
-	})
-
 	s.Run("returns resources for a group version", func() {
 		results := s.inspector.Discovery().ServerResourcesForGroupVersion(s.T().Context(), "v1")
 
@@ -72,17 +61,6 @@ func (s *ProviderInspectorTestSuite) TestDiscovery() {
 		s.Require().NoError(err)
 		s.Equal("v1", resources.GroupVersion)
 		s.Len(resources.APIResources, 2)
-	})
-
-	s.Run("reports a missing GVK without an error", func() {
-		results := s.inspector.Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
-			{Group: "missing.example.com", Version: "v1", Kind: "Missing"},
-		})
-
-		found, err := results.Default()
-
-		s.NoError(err)
-		s.False(found)
 	})
 
 	s.Run("returns an error for an unavailable group version", func() {

@@ -2,12 +2,14 @@ package kubernetes
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 )
 
@@ -49,22 +51,19 @@ func (s *ProviderSingleTestSuite) TestWithOpenShiftCluster() {
 	s.mockServer.ResetHandlers()
 	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.Run("has OpenShift Project GVK", func() {
-		hasProjects, err := NewClusterInspector(s.provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
-			{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-		}).Any()
+		resources, err := NewClusterInspector(s.provider).Discovery().ServerResourcesForGroupVersion(s.T().Context(), "project.openshift.io/v1").Default()
 		s.Require().NoError(err)
-		s.True(hasProjects, "Expected provider to report OpenShift Project GVK available")
+		s.True(slices.ContainsFunc(resources.APIResources, func(resource metav1.APIResource) bool {
+			return resource.Kind == "Project"
+		}), "Expected OpenShift Project in discovery")
 	})
 }
 
 func (s *ProviderSingleTestSuite) TestWithNonOpenShiftGVK() {
 	s.Run("does not have non-existent GVK", func() {
 		// Default (non-OpenShift) discovery returns a 404 for the missing GroupVersion.
-		hasGVK, err := NewClusterInspector(s.provider).Discovery().HasGVKs(s.T().Context(), []schema.GroupVersionKind{
-			{Group: "nonexistent.example.com", Version: "v1", Kind: "Foo"},
-		}).Any()
-		s.Require().NoError(err)
-		s.False(hasGVK, "Expected provider to report no nonexistent GVK")
+		_, err := NewClusterInspector(s.provider).Discovery().ServerResourcesForGroupVersion(s.T().Context(), "nonexistent.example.com/v1").Default()
+		s.True(api.IsNotFound(err), "Expected provider to report no nonexistent group/version: %v", err)
 	})
 }
 

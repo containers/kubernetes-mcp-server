@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 
@@ -29,8 +30,16 @@ var (
 // target cluster has the NodeMetrics GVK registered.
 func HasNodeMetrics(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		hasGVK, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{NodeMetricsGVK}).Any()
-		return err != nil || hasGVK
+		available, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, NodeMetricsGVK.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
+			for _, resource := range list.APIResources {
+				if resource.Kind == NodeMetricsGVK.Kind {
+					return true
+				}
+			}
+			return false
+		})
+		// Discovery errors fail open unless they confirm the resource is absent.
+		return available || (err != nil && !api.IsNotFound(err))
 	}
 }
 
@@ -38,7 +47,15 @@ func HasNodeMetrics(ctx context.Context, inspector api.ClusterInspector) func() 
 // target cluster has the PodMetrics GVK registered.
 func HasPodMetrics(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		hasGVK, err := inspector.Discovery().HasGVKs(ctx, []schema.GroupVersionKind{PodMetricsGVK}).Any()
-		return err != nil || hasGVK
+		available, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, PodMetricsGVK.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
+			for _, resource := range list.APIResources {
+				if resource.Kind == PodMetricsGVK.Kind {
+					return true
+				}
+			}
+			return false
+		})
+		// Discovery errors fail open unless they confirm the resource is absent.
+		return available || (err != nil && !api.IsNotFound(err))
 	}
 }

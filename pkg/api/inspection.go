@@ -16,7 +16,6 @@ type ClusterInspector interface {
 }
 
 type AggregateDiscovery interface {
-	HasGVKs(context.Context, []schema.GroupVersionKind) BoolResults
 	ServerResourcesForGroupVersion(
 		ctx context.Context,
 		groupVersion string,
@@ -162,25 +161,6 @@ func (r Results[T]) Values() ([]T, error) {
 	}
 
 	return values, err
-}
-
-// BoolResults provides conveniences on top of Results for boolean functions.
-type BoolResults Results[bool]
-
-func (r BoolResults) Any() (bool, error) {
-	return Results[bool](r).Any(func(b bool) bool { return b })
-}
-
-func (r BoolResults) All() (bool, error) {
-	return Results[bool](r).All(func(b bool) bool { return b })
-}
-
-func (r BoolResults) Default() (bool, error) {
-	return Results[bool](r).Default()
-}
-
-func (r BoolResults) Values() ([]bool, error) {
-	return Results[bool](r).Values()
 }
 
 type result[T any] struct {
