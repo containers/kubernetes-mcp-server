@@ -18,7 +18,7 @@ LD_FLAGS = -s -w \
 COMMON_BUILD_ARGS = -ldflags "$(LD_FLAGS)"
 
 GOLANGCI_LINT = $(shell pwd)/_output/tools/bin/golangci-lint
-GOLANGCI_LINT_VERSION ?= v2.11.4
+GOLANGCI_LINT_VERSION ?= v2.14.0
 
 # NPM version should not append the -dirty flag
 GIT_TAG_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
@@ -80,17 +80,17 @@ format: ## Format the code
 tidy: ## Tidy up the go modules
 	go mod tidy
 
-# Download and install golangci-lint if not already installed
+# Download and install the requested golangci-lint version if needed
 .PHONY: golangci-lint
 golangci-lint:
-	@[ -f $(GOLANGCI_LINT) ] || { \
+	@[ "$$($(GOLANGCI_LINT) version --short 2>/dev/null)" = "$(patsubst v%,%,$(GOLANGCI_LINT_VERSION))" ] || { \
 		set -e ;\
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
+		curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
 	}
 
 .PHONY: lint
 lint: golangci-lint ## Lint the code
-	$(GOLANGCI_LINT) run --verbose --print-resources-usage
+	$(GOLANGCI_LINT) run --verbose
 
 .PHONY: update-readme-tools
 update-readme-tools: ## Update the README.md and docs/configuration.md files with the latest toolsets
