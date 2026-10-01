@@ -96,7 +96,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 
 		// get the correct derived Kubernetes client for the target specified in the request
 		cluster := toolCallRequest.GetString(s.p.GetTargetParameterName(), s.p.GetDefaultTarget())
-		k, err := s.p.GetDerivedKubernetes(ctx, cluster)
+		params, err := newHandlerParams(s, ctx, cfg, api.ToolCallRequest(toolCallRequest), cluster)
 		if err != nil {
 			if errors.Is(err, kubernetes.ErrUnknownTarget) {
 				return NewTextResult("", fmt.Errorf("target %q: %w", cluster, err)), nil
@@ -104,16 +104,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 			return nil, err
 		}
 
-		result, err := tool.Handler(api.ToolHandlerParams{
-			Context:                 ctx,
-			Config:                  cfg.Config,
-			ClusterProviderStrategy: cfg.ClusterProviderStrategy.Get(),
-			KubernetesClient:        k,
-			FilteringProvider:       s.p,
-			ToolCallRequest:         toolCallRequest,
-			ListOutput:              cfg.ListOutput(),
-			Elicitor:                &sessionElicitor{},
-		})
+		result, err := tool.Handler(api.ToolHandlerParams(params))
 		if err != nil {
 			return nil, err
 		}

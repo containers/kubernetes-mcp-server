@@ -72,7 +72,7 @@ func (s *ConfigSuite) TestNewNetObserv_withoutToolsetConfigSection() {
 	base.Toolsets.SetForTest(append(base.Toolsets.Get(), "netobserv"))
 	client, err := NewNetObserv(context.Background(), base, &rest.Config{}, nil)
 	s.Require().NoError(err)
-	s.Equal(DefaultPluginURL(false), client.pluginURL)
+	s.Equal(DefaultPluginURL(true), client.pluginURL)
 	s.False(client.insecure)
 }
 

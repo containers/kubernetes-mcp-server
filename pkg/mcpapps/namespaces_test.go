@@ -1,9 +1,9 @@
 package mcpapps
 
 import (
-	"context"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -16,8 +16,9 @@ func (s *NamespacesAppSuite) TestNamespacesList() {
 		s.Equal("ui://kubernetes-mcp-server/namespaces-list", app.URI)
 	})
 	s.Run("returns an offline HTML application", func() {
-		html, err := app.Handler(context.Background())
+		content, err := app.Handler(api.ResourceHandlerParams{Context: s.T().Context()})
 		s.Require().NoError(err)
+		html := content.Text
 		s.Contains(html, "<!doctype html>")
 		s.Contains(html, "ui/notifications/tool-result")
 		s.Contains(html, "sortColumn='Name'")

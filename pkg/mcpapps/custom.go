@@ -1,7 +1,6 @@
 package mcpapps
 
 import (
-	"context"
 	"maps"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -10,13 +9,13 @@ import (
 // ContentProvider supplies the complete, self-contained HTML document for an
 // MCP App resource. Toolsets may use it to assemble HTML from embedded assets
 // when the resource is read.
-type ContentProvider func(context.Context) (string, error)
+type ContentProvider func(api.ResourceHandlerParams) (string, error)
 
 // StaticHTML adapts a static, already bundled HTML document into a
 // ContentProvider. It is intended for content embedded by a toolset with
 // //go:embed.
 func StaticHTML(html string) ContentProvider {
-	return func(context.Context) (string, error) {
+	return func(_ api.ResourceHandlerParams) (string, error) {
 		return html, nil
 	}
 }
@@ -48,9 +47,20 @@ func WithMetadata(meta map[string]any) CustomOption {
 // assembles embedded assets when the resource is read.
 func Custom(uri, name string, content ContentProvider, options ...CustomOption) *api.ToolApp {
 	app := &api.ToolApp{
-		URI:     uri,
-		Name:    name,
-		Handler: content,
+		URI:  uri,
+		Name: name,
+	}
+	if content != nil {
+		app.Handler = func(params api.ResourceHandlerParams) (*api.ResourceContent, error) {
+			res, err := content(params)
+			if err != nil {
+				return nil, err
+			}
+
+			return &api.ResourceContent{
+				Text: res,
+			}, nil
+		}
 	}
 	for _, option := range options {
 		if option != nil {

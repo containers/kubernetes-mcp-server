@@ -21,7 +21,7 @@ func InitListFlows() []api.ServerTool {
 }
 
 func listFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.FilteringProvider)
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
 	if err != nil {
 		return jsonAPIResult("", err)
 	}

@@ -478,13 +478,7 @@ func appResources(tools []api.ServerTool) ([]api.ServerResource, error) {
 				MIMEType:    "text/html;profile=mcp-app",
 				Meta:        app.Meta,
 			},
-			Handler: func(ctx context.Context) (*api.ResourceContent, error) {
-				html, err := app.Handler(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return &api.ResourceContent{Text: html}, nil
-			},
+			Handler: app.Handler,
 		})
 	}
 	return resources, nil

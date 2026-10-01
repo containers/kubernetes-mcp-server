@@ -43,7 +43,7 @@ func (s *VMTroubleshootSuite) TestVMTroubleshootPrompt() {
 		handler := prompts[0].Handler
 
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{
 					"name": "test-vm",
 				},
@@ -61,7 +61,7 @@ func (s *VMTroubleshootSuite) TestVMTroubleshootPrompt() {
 		handler := prompts[0].Handler
 
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{
 					"namespace": "test-ns",
 				},

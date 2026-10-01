@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -36,6 +35,9 @@ func (s *McpAppsMetadataSuite) TestWithAppResourceURI() {
 }
 
 func (s *McpAppsMetadataSuite) TestAppResourcesValidation() {
+	handler := func(api.ResourceHandlerParams) (*api.ResourceContent, error) {
+		return &api.ResourceContent{Text: ""}, nil
+	}
 	s.Run("rejects an app without a handler", func() {
 		_, err := appResources([]api.ServerTool{{
 			Tool: api.Tool{Name: "missing-handler"},
@@ -47,7 +49,7 @@ func (s *McpAppsMetadataSuite) TestAppResourcesValidation() {
 		_, err := appResources([]api.ServerTool{{
 			Tool: api.Tool{Name: "missing-uri"},
 			App: &api.ToolApp{
-				Handler: func(_ context.Context) (string, error) { return "", nil },
+				Handler: handler,
 			},
 		}})
 		s.ErrorContains(err, "URI")
@@ -57,7 +59,7 @@ func (s *McpAppsMetadataSuite) TestAppResourcesValidation() {
 			Tool: api.Tool{Name: "http-uri"},
 			App: &api.ToolApp{
 				URI:     "https://example.com/app",
-				Handler: func(_ context.Context) (string, error) { return "", nil },
+				Handler: handler,
 			},
 		}})
 		s.ErrorContains(err, "ui://")
@@ -67,7 +69,7 @@ func (s *McpAppsMetadataSuite) TestAppResourcesValidation() {
 			Tool: api.Tool{Name: "ui-uri-without-authority"},
 			App: &api.ToolApp{
 				URI:     "ui:app",
-				Handler: func(_ context.Context) (string, error) { return "", nil },
+				Handler: handler,
 			},
 		}})
 		s.ErrorContains(err, "ui://")
@@ -75,7 +77,7 @@ func (s *McpAppsMetadataSuite) TestAppResourcesValidation() {
 	s.Run("shares one app resource between tools", func() {
 		app := &api.ToolApp{
 			URI:     "ui://example/shared-app",
-			Handler: func(_ context.Context) (string, error) { return "", nil },
+			Handler: handler,
 		}
 		resources, err := appResources([]api.ServerTool{
 			{Tool: api.Tool{Name: "first"}, App: app},
@@ -86,10 +88,9 @@ func (s *McpAppsMetadataSuite) TestAppResourcesValidation() {
 		s.Equal(app.URI, resources[0].Resource.URI)
 	})
 	s.Run("rejects separate app declarations with duplicate URIs", func() {
-		app := func(context.Context) (string, error) { return "", nil }
 		_, err := appResources([]api.ServerTool{
-			{Tool: api.Tool{Name: "first"}, App: &api.ToolApp{URI: "ui://example/app", Handler: app}},
-			{Tool: api.Tool{Name: "second"}, App: &api.ToolApp{URI: "ui://example/app", Handler: app}},
+			{Tool: api.Tool{Name: "first"}, App: &api.ToolApp{URI: "ui://example/app", Handler: handler}},
+			{Tool: api.Tool{Name: "second"}, App: &api.ToolApp{URI: "ui://example/app", Handler: handler}},
 		})
 		s.ErrorContains(err, "different app")
 	})

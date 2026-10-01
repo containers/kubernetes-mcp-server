@@ -65,7 +65,7 @@ func (s *PromptsTestSuite) TestPromptHandler() {
 			"required_arg": "World",
 			"optional_arg": " of Go",
 		}}
-		result, err := handler(api.PromptHandlerParams{PromptCallRequest: params})
+		result, err := handler(api.PromptHandlerParams{Request: params})
 		s.NoError(err)
 		s.NotNil(result)
 		s.Len(result.Messages, 1)
@@ -75,7 +75,7 @@ func (s *PromptsTestSuite) TestPromptHandler() {
 		params := &testPromptRequest{args: map[string]string{
 			"required_arg": "Universe",
 		}}
-		result, err := handler(api.PromptHandlerParams{PromptCallRequest: params})
+		result, err := handler(api.PromptHandlerParams{Request: params})
 		s.NoError(err)
 		s.NotNil(result)
 		s.Len(result.Messages, 1)
@@ -85,7 +85,7 @@ func (s *PromptsTestSuite) TestPromptHandler() {
 		params := &testPromptRequest{args: map[string]string{
 			"optional_arg": " of Go",
 		}}
-		result, err := handler(api.PromptHandlerParams{PromptCallRequest: params})
+		result, err := handler(api.PromptHandlerParams{Request: params})
 		s.Error(err)
 		s.Contains(err.Error(), "required argument 'required_arg' is missing")
 		s.Nil(result)
