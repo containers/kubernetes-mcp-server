@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// The loopback proxy uses a short-lived, self-signed test certificate.
+test.use({ ignoreHTTPSErrors: true });
+
 test("namespaces_list renders in the MCP Apps basic host", async ({ page }) => {
-  await page.goto(process.env.BROWSER_TEST_URL || "http://127.0.0.1:18082");
+  await page.goto(process.env.BROWSER_TEST_URL || "https://127.0.0.1:18082");
   const toolSelect = page.locator("select").nth(1);
   await expect(toolSelect.locator('option[value="namespaces_list"]')).toHaveCount(1, { timeout: 30_000 });
   await toolSelect.selectOption("namespaces_list");
