@@ -47,7 +47,7 @@ type Config struct {
 	ClientMetrics *instrumentation.ClientMetrics `toml:"-"`
 }
 
-var _ api.ExtendedConfig = (*Config)(nil)
+var _ serverconfig.ExtendedConfig = (*Config)(nil)
 
 var DefaultConfig = &Config{}
 
@@ -78,7 +78,7 @@ func (c *Config) applyUseRouteResolver() {
 	c.Resolver = &openshift.LogsGatewayResolver{}
 }
 
-func logsToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func logsToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (serverconfig.ExtendedConfig, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err
