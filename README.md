@@ -613,6 +613,49 @@ Examples:
   - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
 
+- **netobserv_export_flows** - Exports NetObserv flow records as CSV with the same filters as list_flows. Use when the user needs downloadable flow data for audits or offline analysis.
+  - `columns` (`string`) - Optional comma-separated column names to include (e.g. SrcK8S_Namespace,DstK8S_Namespace,Bytes). Omit to export all columns present in the result.
+  - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
+  - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
+
+Syntax:
+- key=value — exact match; key=a,b — OR multiple values for the same key
+- key~pattern — regex / contains match; key!~pattern — NOT regex
+- key!=value — not equal; key>number — numeric greater-or-equal (e.g. Bytes>1000)
+- AND within a group: & (e.g. SrcK8S_Namespace=default&Proto=6)
+- OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
+
+Prefer the dedicated "namespace" parameter for namespace scope when possible.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
+
+Common Kubernetes fields (Src/Dst prefixes mirror each other):
+- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
+- SrcK8S_Type, DstK8S_Type (e.g. Pod, Service, Node)
+- SrcK8S_OwnerName, DstK8S_OwnerName, SrcK8S_OwnerType, DstK8S_OwnerType (for Deployment, StatefulSet, etc.)
+- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone, K8S_ClusterName, UDN
+
+Network & flow:
+- SrcAddr, DstAddr (IPs), SrcPort, DstPort, Proto (IANA number, e.g. 6=TCP, 17=UDP)
+- FlowDirection (0=Ingress, 1=Egress, 2=Inner), Bytes, Packets, Dscp, Flags
+
+Packet drops (often with recordType flowLog and packetLoss dropped/hasDrops):
+- PktDropPackets, PktDropBytes, PktDropLatestState, PktDropLatestDropCause
+
+DNS:
+- DnsName, DnsId, DnsLatencyMs, DnsErrno, DnsFlagsResponseCode
+
+Examples:
+- SrcK8S_Namespace=openshift-netobserv&SrcK8S_Name~my-app
+- Proto=6&DstPort=443
+- SrcK8S_Name=pod-a|SrcK8S_Name=pod-b
+  - `format` (`string`) - Export format. Only csv is supported.
+  - `limit` (`integer`) - Maximum number of flow records to return. Default 100.
+  - `namespace` (`string`) - Restrict results to flows where source or destination namespace matches (dev-scoped Loki tenant).
+  - `packetLoss` (`string`) - Packet loss filter.
+  - `recordType` (`string`) - Flow record type filter.
+  - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
+  - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
+
 - **netobserv_get_flow_metrics** - Returns aggregated NetObserv flow metrics as topology or time-series data. Use for throughput, TLS/DNS/drop breakdowns, and namespace or workload traffic analysis; see aggregateBy and groups for grouping options.
   - `aggregateBy` (`string`) **(required)** - Primary dimension for netobserv_get_flow_metrics (console plugin /api/flow/metrics).
 
@@ -724,49 +767,6 @@ Examples:
   - `step` (`string`) - Query resolution step (e.g. 30s, 1m).
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
   - `type` (`string`) - Metric type to aggregate.
-
-- **netobserv_export_flows** - Exports NetObserv flow records as CSV with the same filters as list_flows. Use when the user needs downloadable flow data for audits or offline analysis.
-  - `columns` (`string`) - Optional comma-separated column names to include (e.g. SrcK8S_Namespace,DstK8S_Namespace,Bytes). Omit to export all columns present in the result.
-  - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
-  - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
-
-Syntax:
-- key=value — exact match; key=a,b — OR multiple values for the same key
-- key~pattern — regex / contains match; key!~pattern — NOT regex
-- key!=value — not equal; key>number — numeric greater-or-equal (e.g. Bytes>1000)
-- AND within a group: & (e.g. SrcK8S_Namespace=default&Proto=6)
-- OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
-
-Prefer the dedicated "namespace" parameter for namespace scope when possible.
-Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
-
-Common Kubernetes fields (Src/Dst prefixes mirror each other):
-- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
-- SrcK8S_Type, DstK8S_Type (e.g. Pod, Service, Node)
-- SrcK8S_OwnerName, DstK8S_OwnerName, SrcK8S_OwnerType, DstK8S_OwnerType (for Deployment, StatefulSet, etc.)
-- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone, K8S_ClusterName, UDN
-
-Network & flow:
-- SrcAddr, DstAddr (IPs), SrcPort, DstPort, Proto (IANA number, e.g. 6=TCP, 17=UDP)
-- FlowDirection (0=Ingress, 1=Egress, 2=Inner), Bytes, Packets, Dscp, Flags
-
-Packet drops (often with recordType flowLog and packetLoss dropped/hasDrops):
-- PktDropPackets, PktDropBytes, PktDropLatestState, PktDropLatestDropCause
-
-DNS:
-- DnsName, DnsId, DnsLatencyMs, DnsErrno, DnsFlagsResponseCode
-
-Examples:
-- SrcK8S_Namespace=openshift-netobserv&SrcK8S_Name~my-app
-- Proto=6&DstPort=443
-- SrcK8S_Name=pod-a|SrcK8S_Name=pod-b
-  - `format` (`string`) - Export format. Only csv is supported.
-  - `limit` (`integer`) - Maximum number of flow records to return. Default 100.
-  - `namespace` (`string`) - Restrict results to flows where source or destination namespace matches (dev-scoped Loki tenant).
-  - `packetLoss` (`string`) - Packet loss filter.
-  - `recordType` (`string`) - Flow record type filter.
-  - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
-  - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
 
 </details>
 

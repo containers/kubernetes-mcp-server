@@ -55,7 +55,21 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 	if shared != nil {
 		resolved = *shared
 	}
-	isOpenShift := isOpenShiftFromProvider(ctx, provider)
+	if backendCfgProvider, ok := provider.(NetObservConfigProvider); ok {
+		backendCfg := backendCfgProvider.NetObservConfig(ctx)
+		if backendCfg.Found && !backendCfg.Unknown {
+			if resolved.Namespace == "" {
+				resolved.Namespace = backendCfg.Namespace
+			}
+			if resolved.Service == "" {
+				resolved.Service = backendCfg.Service
+			}
+			if resolved.Port == 0 {
+				resolved.Port = backendCfg.Port
+			}
+		}
+	}
+	isOpenShift := IsOpenShiftFromProvider(ctx, provider)
 	resolved.applyDefaults(ctx, isOpenShift)
 	client.pluginURL = resolved.ResolvedURL(isOpenShift)
 	client.insecure = resolved.Insecure

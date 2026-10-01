@@ -18,12 +18,12 @@ type OpenShiftSuite struct {
 
 func (s *OpenShiftSuite) TestIsOpenShiftFromProvider() {
 	s.Run("returns false without provider", func() {
-		s.False(isOpenShiftFromProvider(context.Background(), nil))
+		s.False(IsOpenShiftFromProvider(context.Background(), nil))
 	})
 
 	s.Run("delegates to FilteringProvider", func() {
 		provider := &mockFilteringProvider{hasGVKs: true}
-		s.True(isOpenShiftFromProvider(context.Background(), provider))
+		s.True(IsOpenShiftFromProvider(context.Background(), provider))
 		s.Equal(openshiftProjectGVKs, provider.lastGVKs)
 	})
 }

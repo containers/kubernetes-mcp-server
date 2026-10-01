@@ -14,9 +14,9 @@ var openshiftProjectGVKs = []schema.GroupVersionKind{{
 	Kind:    "Project",
 }}
 
-// isOpenShiftFromProvider reports whether the connected cluster is OpenShift using the
+// IsOpenShiftFromProvider reports whether the connected cluster is OpenShift using the
 // framework-provided FilteringProvider (same GVK signal as the cluster-state watcher).
-func isOpenShiftFromProvider(ctx context.Context, provider api.FilteringProvider) bool {
+func IsOpenShiftFromProvider(ctx context.Context, provider api.FilteringProvider) bool {
 	if provider == nil {
 		return false
 	}

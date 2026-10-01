@@ -9,6 +9,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
@@ -210,6 +211,20 @@ func (p *tokenExchangingProvider) Close() {
 
 func (p *tokenExchangingProvider) AnyTargetHasGVKs(ctx context.Context, gvks []schema.GroupVersionKind) bool {
 	return p.provider.AnyTargetHasGVKs(ctx, gvks)
+}
+
+func (p *tokenExchangingProvider) NetObservConfig(ctx context.Context) netobserv.EffectiveConfig {
+	if provider, ok := p.provider.(netobserv.NetObservConfigProvider); ok {
+		return provider.NetObservConfig(ctx)
+	}
+	return netobserv.EffectiveConfig{Unknown: true}
+}
+
+func (p *tokenExchangingProvider) GetToolsetConfig(name string) (config.ExtendedConfig, bool) {
+	if cfg := p.config(); cfg != nil {
+		return cfg.GetToolsetConfig(name)
+	}
+	return nil, false
 }
 
 func (p *tokenExchangingProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
