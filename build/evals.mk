@@ -84,7 +84,16 @@ claude-agent-acp: ## Install the claude-agent-acp adapter for the acp-anthropic 
 
 .PHONY: run-evals
 run-evals: mcpchecker jq $(if $(filter acp-anthropic,$(AGENT)),claude-agent-acp) ## Run mcpchecker evals (knobs: SUITE, AGENT, MODEL; see evals/README.md)
-	$(if $(MODEL),ANTHROPIC_MODEL=$(MODEL) )PATH="$(shell pwd)/_output/tools/node_modules/.bin:$(PATH)" $(MCPCHECKER) check $(EVAL_CONFIG) \
+	@# Prefer MCP_EVAL_KUBECONFIG, when set, so setup/verify kubectl targets the
+	@# same cluster as make run-server (which also gives MCP_EVAL_KUBECONFIG
+	@# priority over KUBECONFIG; keep these two targets in sync).
+	@# TODO: mcpchecker kubernetes extension should respect KUBECONFIG directly
+	@# (upstream issue: mcpchecker doesn't properly propagate KUBECONFIG to extensions).
+	@if [ -n "$(MCP_EVAL_KUBECONFIG)" ]; then \
+		export KUBECONFIG="$(MCP_EVAL_KUBECONFIG)"; \
+	fi; \
+	$(if $(MODEL),ANTHROPIC_MODEL=$(MODEL) )PATH="$(shell pwd)/_output/tools/bin:$(shell pwd)/_output/tools/node_modules/.bin:$${PATH}" \
+		$(MCPCHECKER) check $(EVAL_CONFIG) \
 		$(if $(EVAL_LABEL_SELECTOR),--label-selector $(EVAL_LABEL_SELECTOR),) \
 		$(if $(EVAL_TASK_FILTER),--run "$(EVAL_TASK_FILTER)",) \
 		$(if $(filter true,$(EVAL_VERBOSE)),--verbose,) \
