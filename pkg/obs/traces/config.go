@@ -11,6 +11,7 @@ import (
 	"github.com/rhobs/obs-mcp/pkg/auth"
 	"github.com/rhobs/obs-mcp/pkg/instrumentation"
 	"github.com/rhobs/obs-mcp/pkg/openshift"
+	"github.com/rhobs/obs-mcp/pkg/toolcfg"
 	"github.com/rhobs/obs-mcp/pkg/traces/discovery"
 )
 
@@ -90,7 +91,7 @@ func tempoToolsetParser(_ context.Context, primitive toml.Primitive, md toml.Met
 }
 
 func getToolsetConfig(params api.ToolHandlerParams) *Config {
-	if cfg, ok := params.GetToolsetConfig(ToolsetName); ok {
+	if cfg, ok := toolcfg.From(params, ToolsetName); ok {
 		if tempoCfg, ok := cfg.(*Config); ok {
 			return tempoCfg
 		}

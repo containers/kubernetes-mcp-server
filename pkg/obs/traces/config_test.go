@@ -14,10 +14,10 @@ import (
 // use_route=true must leave a non-nil OpenShift Resolver on the parsed config.
 func TestTOMLUseRouteInstallsResolver(t *testing.T) {
 	t.Run("use_route true installs RouteClient", func(t *testing.T) {
-		serverCfg, err := serverconfig.ReadToml([]byte(`
+		serverCfg, err := serverconfig.ReadToml(t.Context(), []byte(`
 [toolset_configs."observability/traces"]
 use_route = true
-`))
+`), serverconfig.WithBaseDefault())
 		require.NoError(t, err)
 
 		ext, ok := serverCfg.GetToolsetConfig(ToolsetName)
@@ -32,10 +32,10 @@ use_route = true
 	})
 
 	t.Run("use_route false leaves Resolver nil", func(t *testing.T) {
-		serverCfg, err := serverconfig.ReadToml([]byte(`
+		serverCfg, err := serverconfig.ReadToml(t.Context(), []byte(`
 [toolset_configs."observability/traces"]
 use_route = false
-`))
+`), serverconfig.WithBaseDefault())
 		require.NoError(t, err)
 
 		ext, ok := serverCfg.GetToolsetConfig(ToolsetName)
