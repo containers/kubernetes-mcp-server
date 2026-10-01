@@ -164,7 +164,7 @@ type option interface {
 
 func stringify(v any) string {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return "<unset>"
 		}
@@ -334,7 +334,7 @@ func walkOptions(v any, fn func(o option, path string)) {
 }
 
 func walkValue(v reflect.Value, prefix string, fn func(option, string), tables *[]string) {
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return
 		}

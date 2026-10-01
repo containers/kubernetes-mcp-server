@@ -117,7 +117,7 @@ func tomlFields(v any) map[string]reflect.Type {
 	if rt == nil {
 		return out
 	}
-	if rt.Kind() == reflect.Ptr {
+	if rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	if rt.Kind() != reflect.Struct {
@@ -142,7 +142,7 @@ func tomlFields(v any) map[string]reflect.Type {
 }
 
 func derefType(t reflect.Type) reflect.Type {
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		return t.Elem()
 	}
 	return t
