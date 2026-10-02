@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -35,21 +34,11 @@ type flowCollectorConfig struct {
 	Spec struct {
 		Namespace string `json:"namespace"`
 		Loki      struct {
-			Enable *bool  `json:"enable"`
-			Mode   string `json:"mode"`
-			Manual struct {
-				QuerierURL string `json:"querierUrl"`
-				StatusURL  string `json:"statusUrl"`
-			} `json:"manual"`
-			Microservices struct {
-				QuerierURL string `json:"querierUrl"`
-			} `json:"microservices"`
+			Enable     *bool  `json:"enable"`
+			Mode       string `json:"mode"`
 			Monolithic struct {
-				URL string `json:"url"`
+				InstallDemoLoki bool `json:"installDemoLoki"`
 			} `json:"monolithic"`
-			LokiStack struct {
-				Namespace string `json:"namespace"`
-			} `json:"lokiStack"`
 		} `json:"loki"`
 	} `json:"spec"`
 }
@@ -137,10 +126,12 @@ func getFlowCollectorConfig(ctx context.Context, t *testing.T, kubeconfig string
 	return config, nil
 }
 
-func requireFlowCollectorLokiEnabled(t *testing.T, config flowCollectorConfig) {
+func requireFlowCollectorDemoLoki(t *testing.T, config flowCollectorConfig) {
 	t.Helper()
 	require.NotNil(t, config.Spec.Loki.Enable, "FlowCollector spec.loki.enable must be set to true")
 	require.True(t, *config.Spec.Loki.Enable, "FlowCollector spec.loki.enable must be true to run real NetObserv tests")
+	require.Equal(t, "Monolithic", config.Spec.Loki.Mode, "FlowCollector spec.loki.mode must be Monolithic to run real NetObserv tests")
+	require.True(t, config.Spec.Loki.Monolithic.InstallDemoLoki, "FlowCollector spec.loki.monolithic.installDemoLoki must be true to run real NetObserv tests")
 }
 
 func netObservPluginNamespace(ctx context.Context, t *testing.T, clientset kubernetes.Interface, config flowCollectorConfig) string {
@@ -166,7 +157,7 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 		t.Logf("FlowCollector already exists; reusing its configuration")
 		require.True(t, checkNetObservOperatorStatus(ctx, t, kubeconfig, clientset, operatorNamespace),
 			"an existing FlowCollector was found, but the NetObserv operator is not ready")
-		requireFlowCollectorLokiEnabled(t, config)
+		requireFlowCollectorDemoLoki(t, config)
 		waitForFlowCollector(ctx, t, kubeconfig)
 		pluginNamespace = netObservPluginNamespace(ctx, t, clientset, config)
 		waitForLokiReady(ctx, t, kubeconfig, clientset, config, pluginNamespace)
@@ -190,7 +181,7 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 		config, err := getFlowCollectorConfig(ctx, t, kubeconfig)
 		require.NoError(t, err, "Failed to read the FlowCollector created by the test")
 
-		requireFlowCollectorLokiEnabled(t, config)
+		requireFlowCollectorDemoLoki(t, config)
 		waitForFlowCollector(ctx, t, kubeconfig)
 		pluginNamespace = netObservPluginNamespace(ctx, t, clientset, config)
 		waitForLokiReady(ctx, t, kubeconfig, clientset, config, pluginNamespace)
@@ -305,7 +296,7 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 
 	config, err = getFlowCollectorConfig(ctx, t, kubeconfig)
 	require.NoError(t, err, "Failed to read the FlowCollector created by the test")
-	requireFlowCollectorLokiEnabled(t, config)
+	requireFlowCollectorDemoLoki(t, config)
 
 	// Wait for FlowCollector and Loki to be ready.
 	waitForFlowCollector(ctx, t, kubeconfig)
@@ -398,50 +389,41 @@ func waitForFlowCollector(ctx context.Context, t *testing.T, kubeconfig string) 
 		strings.TrimSpace(string(waitOutput)), strings.TrimSpace(string(statusOutput)))
 }
 
-// waitForLokiReady waits until the Loki endpoint configured on the FlowCollector accepts requests.
+// waitForLokiReady waits until the Monolithic demo Loki service accepts requests.
 func waitForLokiReady(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface, config flowCollectorConfig, pluginNamespace string) {
 	t.Helper()
 
-	lokiURL, serviceNamespace, serviceName, servicePort, inCluster, err := flowCollectorLokiStatusTarget(config, pluginNamespace)
-	require.NoError(t, err, "resolve Loki readiness endpoint from FlowCollector")
-
-	checkURL := *lokiURL
-	checkURL.Path = "/ready"
-	checkURL.RawQuery = ""
-	if !inCluster {
-		t.Logf("Waiting for configured external Loki endpoint %s...", checkURL.Redacted())
-	} else {
-		restCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-		require.NoError(t, err, "build rest config for Loki readiness check")
-
-		deadline := time.Now().Add(3 * time.Minute)
-		var serviceErr error
-		for time.Now().Before(deadline) {
-			_, serviceErr = clientset.CoreV1().Services(serviceNamespace).Get(ctx, serviceName, metav1.GetOptions{})
-			if serviceErr == nil {
-				break
-			}
-			select {
-			case <-ctx.Done():
-				require.Fail(t, "context cancelled while waiting for Loki service: "+ctx.Err().Error())
-				return
-			case <-time.After(2 * time.Second):
-			}
-		}
-		require.NoError(t, serviceErr, "Loki service %s/%s was not created within 3 minutes", serviceNamespace, serviceName)
-		if lokiURL.Scheme == "https" {
-			findPodForService(ctx, t, clientset, serviceNamespace, serviceName, 3*time.Minute)
-			t.Logf("Loki service %s/%s has a ready pod", serviceNamespace, serviceName)
-			return
-		}
-
-		localURL, stopPortForward := portForwardServiceWithTimeout(ctx, t, restCfg, clientset, serviceNamespace, serviceName, servicePort, 3*time.Minute)
-		defer stopPortForward()
-		localCheckURL, err := url.Parse(localURL)
-		require.NoError(t, err, "parse local Loki port-forward URL")
-		checkURL = *localCheckURL
-		checkURL.Path = "/ready"
+	serviceNamespace := config.Spec.Namespace
+	if serviceNamespace == "" {
+		serviceNamespace = pluginNamespace
 	}
+	const serviceName = "loki"
+	const servicePort = 3100
+
+	restCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	require.NoError(t, err, "build rest config for Loki readiness check")
+
+	deadline := time.Now().Add(3 * time.Minute)
+	var serviceErr error
+	for time.Now().Before(deadline) {
+		_, serviceErr = clientset.CoreV1().Services(serviceNamespace).Get(ctx, serviceName, metav1.GetOptions{})
+		if serviceErr == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			require.Fail(t, "context cancelled while waiting for Loki service: "+ctx.Err().Error())
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+	require.NoError(t, serviceErr, "Loki service %s/%s was not created within 3 minutes", serviceNamespace, serviceName)
+
+	localURL, stopPortForward := portForwardServiceWithTimeout(ctx, t, restCfg, clientset, serviceNamespace, serviceName, servicePort, 3*time.Minute)
+	defer stopPortForward()
+	checkURL, err := url.Parse(localURL)
+	require.NoError(t, err, "parse local Loki port-forward URL")
+	checkURL.Path = "/ready"
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	deadline := time.Now().Add(3 * time.Minute)
@@ -466,71 +448,6 @@ func waitForLokiReady(ctx context.Context, t *testing.T, kubeconfig string, clie
 	}
 
 	require.Fail(t, "Loki did not become ready within 3 minutes; last /ready response: "+lastStatus)
-}
-
-func flowCollectorLokiStatusTarget(config flowCollectorConfig, pluginNamespace string) (*url.URL, string, string, int, bool, error) {
-	lokiNamespace := config.Spec.Namespace
-	if lokiNamespace == "" {
-		lokiNamespace = pluginNamespace
-	}
-	statusURL := ""
-	mode := config.Spec.Loki.Mode
-	if mode == "" {
-		mode = "Monolithic"
-	}
-	switch mode {
-	case "Monolithic":
-		statusURL = config.Spec.Loki.Monolithic.URL
-		if statusURL == "" {
-			statusURL = "http://loki:3100/"
-		}
-	case "Manual":
-		statusURL = config.Spec.Loki.Manual.StatusURL
-		if statusURL == "" {
-			statusURL = config.Spec.Loki.Manual.QuerierURL
-		}
-		if statusURL == "" {
-			statusURL = "http://loki:3100/"
-		}
-	case "Microservices":
-		statusURL = config.Spec.Loki.Microservices.QuerierURL
-		if statusURL == "" {
-			statusURL = "http://loki-query-frontend:3100/"
-		}
-	case "LokiStack":
-		lokiStackNamespace := config.Spec.Loki.LokiStack.Namespace
-		if lokiStackNamespace == "" {
-			lokiStackNamespace = lokiNamespace
-		}
-		statusURL = fmt.Sprintf("https://loki-query-frontend-http.%s.svc:3100/", lokiStackNamespace)
-	default:
-		return nil, "", "", 0, false, fmt.Errorf("unsupported FlowCollector spec.loki.mode %q", config.Spec.Loki.Mode)
-	}
-
-	parsedURL, err := url.Parse(statusURL)
-	if err != nil || parsedURL.Scheme == "" || parsedURL.Hostname() == "" {
-		return nil, "", "", 0, false, fmt.Errorf("invalid Loki status URL %q", statusURL)
-	}
-
-	host := parsedURL.Hostname()
-	serviceName, serviceNamespace, inCluster := "", "", false
-	parts := strings.Split(host, ".")
-	if len(parts) >= 3 && parts[2] == "svc" {
-		serviceName, serviceNamespace, inCluster = parts[0], parts[1], true
-	} else if !strings.Contains(host, ".") {
-		serviceName, serviceNamespace, inCluster = host, lokiNamespace, true
-	}
-
-	servicePort := 3100
-	if parsedURL.Port() != "" {
-		servicePort, err = strconv.Atoi(parsedURL.Port())
-		if err != nil {
-			return nil, "", "", 0, false, fmt.Errorf("invalid Loki service port in URL %q", statusURL)
-		}
-	} else if parsedURL.Scheme == "https" {
-		servicePort = 443
-	}
-	return parsedURL, serviceNamespace, serviceName, servicePort, inCluster, nil
 }
 
 // cleanupNetObservOperator removes the NetObserv operator, FlowCollector, and IDMS.
