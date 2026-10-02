@@ -4,24 +4,37 @@ import (
 	"context"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type RBACSuite struct {
 	suite.Suite
 }
 
-// stubFilteringProvider reports a fixed answer for AnyTargetHasGVKs, standing in for
+// stubInspector reports a fixed discovery result, standing in for
 // OpenShift (project.openshift.io present) or plain Kubernetes.
-type stubFilteringProvider struct {
+type stubInspector struct {
 	isOpenShift bool
 }
 
-func (m *stubFilteringProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return true }
-
-func (m *stubFilteringProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
-	return m.isOpenShift
+func (m *stubInspector) Discovery() api.AggregateDiscovery       { return m }
+func (m *stubInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (m *stubInspector) GetTargets(context.Context) ([]string, error) {
+	return []string{""}, nil
+}
+func (m *stubInspector) GetDefaultTarget() string       { return "" }
+func (m *stubInspector) GetTargetParameterName() string { return "" }
+func (m *stubInspector) IsMultiTarget() bool            { return false }
+func (m *stubInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
+	return api.NewResults(ctx, m, func(context.Context, string) (*metav1.APIResourceList, error) {
+		list := &metav1.APIResourceList{}
+		if m.isOpenShift {
+			list.APIResources = []metav1.APIResource{{Kind: "Project"}}
+		}
+		return list, nil
+	})
 }
 
 func (s *RBACSuite) TestLogsRBAC() {
@@ -61,7 +74,7 @@ func (s *RBACSuite) TestIstioConfigReadRBAC() {
 
 func (s *RBACSuite) TestResourcesRBAC() {
 	s.Run("includes openshift resources on OpenShift", func() {
-		meta := ResourcesRBAC(&stubFilteringProvider{isOpenShift: true})
+		meta := ResourcesRBAC(s.T().Context(), &stubInspector{isOpenShift: true})
 		s.Require().NoError(meta.Validate())
 		s.Require().NotNil(meta.Bounded)
 		var hasDC, hasRoute bool
@@ -81,7 +94,7 @@ func (s *RBACSuite) TestResourcesRBAC() {
 	})
 
 	s.Run("omits openshift resources off OpenShift", func() {
-		meta := ResourcesRBAC(&stubFilteringProvider{isOpenShift: false})
+		meta := ResourcesRBAC(s.T().Context(), &stubInspector{isOpenShift: false})
 		s.Require().NoError(meta.Validate())
 		for _, req := range meta.Bounded.Requirements {
 			if req.Target.Resource == nil {
@@ -93,7 +106,7 @@ func (s *RBACSuite) TestResourcesRBAC() {
 	})
 
 	s.Run("omits openshift resources without provider", func() {
-		meta := ResourcesRBAC(nil)
+		meta := ResourcesRBAC(s.T().Context(), nil)
 		s.Require().NoError(meta.Validate())
 		for _, req := range meta.Bounded.Requirements {
 			if req.Target.Resource == nil {
@@ -114,11 +127,11 @@ func (s *RBACSuite) TestNamespaceAccessRBAC() {
 }
 
 func (s *RBACSuite) TestGraphRBAC() {
-	ocp := GraphRBAC(&stubFilteringProvider{isOpenShift: true})
+	ocp := GraphRBAC(s.T().Context(), &stubInspector{isOpenShift: true})
 	s.Require().NoError(ocp.Validate())
 	s.NotNil(ocp.Bounded)
 
-	plain := GraphRBAC(&stubFilteringProvider{isOpenShift: false})
+	plain := GraphRBAC(s.T().Context(), &stubInspector{isOpenShift: false})
 	s.Require().NoError(plain.Validate())
 	s.Less(len(plain.Bounded.Requirements), len(ocp.Bounded.Requirements))
 }
@@ -131,8 +144,8 @@ func (s *RBACSuite) TestUnboundedHelpers() {
 }
 
 func (s *RBACSuite) TestInitToolsCarryRBAC() {
-	ocp := &stubFilteringProvider{isOpenShift: true}
-	plain := &stubFilteringProvider{isOpenShift: false}
+	ocp := &stubInspector{isOpenShift: true}
+	plain := &stubInspector{isOpenShift: false}
 
 	s.Run("bounded tools", func() {
 		s.NotNil(InitGetLogs()[0].RBAC.Bounded)
@@ -142,10 +155,10 @@ func (s *RBACSuite) TestInitToolsCarryRBAC() {
 		s.NotNil(InitListTraces()[0].RBAC.Bounded)
 		s.NotNil(InitGetPodPerformance()[0].RBAC.Bounded)
 		s.NotNil(InitGetTraceDetails()[0].RBAC.Bounded)
-		s.NotNil(InitListOrGetResources(plain)[0].RBAC.Bounded)
-		s.NotNil(InitGetMeshTrafficGraph(plain)[0].RBAC.Bounded)
-		s.NotNil(InitListOrGetResources(ocp)[0].RBAC.Bounded)
-		s.NotNil(InitGetMeshTrafficGraph(ocp)[0].RBAC.Bounded)
+		s.NotNil(InitListOrGetResources(s.T().Context(), plain)[0].RBAC.Bounded)
+		s.NotNil(InitGetMeshTrafficGraph(s.T().Context(), plain)[0].RBAC.Bounded)
+		s.NotNil(InitListOrGetResources(s.T().Context(), ocp)[0].RBAC.Bounded)
+		s.NotNil(InitGetMeshTrafficGraph(s.T().Context(), ocp)[0].RBAC.Bounded)
 	})
 
 	s.Run("unbounded tools", func() {

@@ -243,7 +243,7 @@ func (s *Server) applyToolsets(ctx context.Context, cfg *Configuration) error {
 	})
 }
 
-func (s *Server) applyToolsetsLocked(_ context.Context, cfg *Configuration) error {
+func (s *Server) applyToolsetsLocked(ctx context.Context, cfg *Configuration) error {
 	// TODO: No option to perform a full replacement of tools.
 	// s.server.SetTools(tools...)
 
@@ -262,9 +262,9 @@ func (s *Server) applyToolsetsLocked(_ context.Context, cfg *Configuration) erro
 	// Collect applicable items against cfg (NOT s.configuration) so that a
 	// pending ReloadConfiguration can probe a candidate config without making
 	// it observable to concurrent readers until the convert phase succeeds.
-	applicableTools := s.collectApplicableTools(cfg)
-	applicablePrompts := s.collectApplicablePrompts(cfg)
-	applicableResources := s.collectApplicableResources(cfg)
+	applicableTools := s.collectApplicableTools(ctx, cfg)
+	applicablePrompts := s.collectApplicablePrompts(ctx, cfg)
+	applicableResources := s.collectApplicableResources(ctx, cfg)
 	if cfg.AppsEnabled.Get() {
 		generatedAppResources, err := appResources(applicableTools)
 		if err != nil {
@@ -272,7 +272,7 @@ func (s *Server) applyToolsetsLocked(_ context.Context, cfg *Configuration) erro
 		}
 		applicableResources = append(applicableResources, generatedAppResources...)
 	}
-	applicableResourceTemplates := s.collectApplicableResourceTemplates(cfg)
+	applicableResourceTemplates := s.collectApplicableResourceTemplates(ctx, cfg)
 
 	// Phase 1: convert all items to SDK types. This validates URIs, URITemplates,
 	// and any per-item conversion before any SDK mutation, so a bad item in any
@@ -425,7 +425,7 @@ func commitItems[M, H any](
 }
 
 // collectApplicableTools returns tools after applying filtering and mutation
-func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
+func (s *Server) collectApplicableTools(ctx context.Context, cfg *Configuration) []api.ServerTool {
 	filter := CompositeFilter(
 		cfg.isToolApplicable,
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
@@ -438,8 +438,9 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 	)
 
 	tools := make([]api.ServerTool, 0)
+	toolsetContext := s.toolsetContext(cfg)
 	for _, toolset := range cfg.Toolsets() {
-		for _, tool := range toolset.GetTools(s.p) {
+		for _, tool := range toolset.GetTools(ctx, toolsetContext) {
 			tool = mutator(tool)
 			if filter(tool) {
 				if cfg.AppsEnabled.Get() && tool.App != nil {
@@ -450,6 +451,13 @@ func (s *Server) collectApplicableTools(cfg *Configuration) []api.ServerTool {
 		}
 	}
 	return tools
+}
+
+func (s *Server) toolsetContext(cfg *Configuration) api.ToolsetContext {
+	return api.ToolsetContext{
+		Inspector:                         internalk8s.NewClusterInspector(s.p),
+		TargetCompatibilityFiltersEnabled: cfg.EnableTargetCompatibilityToolFilters.Get(),
+	}
 }
 
 func appResources(tools []api.ServerTool) ([]api.ServerResource, error) {
@@ -501,12 +509,13 @@ func withAppResourceURI(meta map[string]any, uri string) map[string]any {
 }
 
 // collectApplicablePrompts returns prompts after applying mutation and merging toolset and config prompts
-func (s *Server) collectApplicablePrompts(cfg *Configuration) []api.ServerPrompt {
+func (s *Server) collectApplicablePrompts(ctx context.Context, cfg *Configuration) []api.ServerPrompt {
 	mutator := WithPromptTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget())
 
 	toolsetPrompts := make([]api.ServerPrompt, 0)
+	toolsetContext := s.toolsetContext(cfg)
 	for _, toolset := range cfg.Toolsets() {
-		for _, prompt := range toolset.GetPrompts() {
+		for _, prompt := range toolset.GetPrompts(ctx, toolsetContext) {
 			toolsetPrompts = append(toolsetPrompts, mutator(prompt))
 		}
 	}
@@ -515,13 +524,14 @@ func (s *Server) collectApplicablePrompts(cfg *Configuration) []api.ServerPrompt
 }
 
 // collectApplicableResources returns resources from all enabled toolsets after filtering and mutation
-func (s *Server) collectApplicableResources(cfg *Configuration) []api.ServerResource {
+func (s *Server) collectApplicableResources(ctx context.Context, cfg *Configuration) []api.ServerResource {
 	filter := CompositeResourceFilter()
 	mutator := ComposeResourceMutators()
 
 	resources := make([]api.ServerResource, 0)
+	toolsetContext := s.toolsetContext(cfg)
 	for _, toolset := range cfg.Toolsets() {
-		for _, resource := range toolset.GetResources() {
+		for _, resource := range toolset.GetResources(ctx, toolsetContext) {
 			resource = mutator(resource)
 			if filter(resource) {
 				resources = append(resources, resource)
@@ -532,13 +542,14 @@ func (s *Server) collectApplicableResources(cfg *Configuration) []api.ServerReso
 }
 
 // collectApplicableResourceTemplates returns resource templates from all enabled toolsets after filtering and mutation
-func (s *Server) collectApplicableResourceTemplates(cfg *Configuration) []api.ServerResourceTemplate {
+func (s *Server) collectApplicableResourceTemplates(ctx context.Context, cfg *Configuration) []api.ServerResourceTemplate {
 	filter := CompositeResourceTemplateFilter()
 	mutator := ComposeResourceTemplateMutators()
 
 	templates := make([]api.ServerResourceTemplate, 0)
+	toolsetContext := s.toolsetContext(cfg)
 	for _, toolset := range cfg.Toolsets() {
-		for _, template := range toolset.GetResourceTemplates() {
+		for _, template := range toolset.GetResourceTemplates(ctx, toolsetContext) {
 			template = mutator(template)
 			if filter(template) {
 				templates = append(templates, template)

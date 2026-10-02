@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -25,27 +26,27 @@ func (t *Toolset) GetDescription() string {
 	return "Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)"
 }
 
-func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	return slices.Concat(
 		initEvents(),
-		initNamespaces(p),
-		initNodes(p),
-		initPods(p),
-		initResources(p),
+		initNamespaces(ctx, toolsetContext.Inspector),
+		initNodes(ctx, toolsetContext.Inspector),
+		initPods(ctx, toolsetContext.Inspector),
+		initResources(ctx, toolsetContext.Inspector, toolsetContext.TargetCompatibilityFiltersEnabled),
 	)
 }
 
-func (t *Toolset) GetPrompts() []api.ServerPrompt {
+func (t *Toolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
 	return slices.Concat(
 		initHealthChecks(),
 	)
 }
 
-func (t *Toolset) GetResources() []api.ServerResource {
+func (t *Toolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
-func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
 

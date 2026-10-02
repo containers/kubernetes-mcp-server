@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -128,12 +129,18 @@ type configProviderToolset struct {
 
 func (t *configProviderToolset) GetName() string        { return t.name }
 func (t *configProviderToolset) GetDescription() string { return "Test toolset for ConfigProvider" }
-func (t *configProviderToolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *configProviderToolset) GetTools(context.Context, api.ToolsetContext) []api.ServerTool {
 	return t.tools
 }
-func (t *configProviderToolset) GetPrompts() []api.ServerPrompt                     { return t.prompts }
-func (t *configProviderToolset) GetResources() []api.ServerResource                 { return nil }
-func (t *configProviderToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
+func (t *configProviderToolset) GetPrompts(context.Context, api.ToolsetContext) []api.ServerPrompt {
+	return t.prompts
+}
+func (t *configProviderToolset) GetResources(context.Context, api.ToolsetContext) []api.ServerResource {
+	return nil
+}
+func (t *configProviderToolset) GetResourceTemplates(context.Context, api.ToolsetContext) []api.ServerResourceTemplate {
+	return nil
+}
 
 func TestMcpConfigProvider(t *testing.T) {
 	suite.Run(t, new(McpConfigProviderSuite))

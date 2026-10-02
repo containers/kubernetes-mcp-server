@@ -17,7 +17,7 @@ func (s *ClusterHealthCheckSuite) TestPromptIsRegistered() {
 		toolset := &Toolset{}
 
 		// Get prompts from the toolset
-		prompts := toolset.GetPrompts()
+		prompts := toolset.GetPrompts(s.T().Context(), api.ToolsetContext{})
 
 		s.Require().NotNil(prompts, "GetPrompts should not return nil")
 		s.Require().NotEmpty(prompts, "GetPrompts should return at least one prompt")
@@ -58,7 +58,7 @@ func (s *ClusterHealthCheckSuite) TestPromptIsRegistered() {
 }
 
 func (s *ClusterHealthCheckSuite) TestPromptRBACMetadata() {
-	prompt := (&Toolset{}).GetPrompts()[0]
+	prompt := (&Toolset{}).GetPrompts(s.T().Context(), api.ToolsetContext{})[0]
 
 	s.Equal(api.RBACBounded(
 		api.RBACRequirement{

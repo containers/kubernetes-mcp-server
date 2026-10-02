@@ -1,6 +1,7 @@
 package kiali
 
 import (
+	"context"
 	"slices"
 
 	"k8s.io/utils/ptr"
@@ -24,14 +25,14 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	tools := slices.Concat(
-		kialiTools.InitGetMeshTrafficGraph(p),
+		kialiTools.InitGetMeshTrafficGraph(ctx, toolsetContext.Inspector),
 		kialiTools.InitGetMeshStatus(),
 		kialiTools.InitManageIstioConfigRead(),
 		kialiTools.InitManageIstioConfig(),
 		kialiTools.InitListMeshClusters(),
-		kialiTools.InitListOrGetResources(p),
+		kialiTools.InitListOrGetResources(ctx, toolsetContext.Inspector),
 		kialiTools.InitListTraces(),
 		kialiTools.InitGetTraceDetails(),
 		kialiTools.InitGetPodPerformance(),
@@ -46,19 +47,19 @@ func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
 	return tools
 }
 
-func (t *Toolset) GetPrompts() []api.ServerPrompt {
+func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerPrompt {
 	prompts := slices.Concat(
-		kialiPrompts.InitListApplications(),
+		kialiPrompts.InitListApplications(ctx, toolsetContext.Inspector),
 		kialiPrompts.InitListIstioConfig(),
-		kialiPrompts.InitListNamespaces(),
-		kialiPrompts.InitListServices(),
-		kialiPrompts.InitListWorkloads(),
+		kialiPrompts.InitListNamespaces(ctx, toolsetContext.Inspector),
+		kialiPrompts.InitListServices(ctx, toolsetContext.Inspector),
+		kialiPrompts.InitListWorkloads(ctx, toolsetContext.Inspector),
 		kialiPrompts.InitMeshHealthCheck(),
 		kialiPrompts.InitMeshTopology(),
-		kialiPrompts.InitTrafficTopology(),
+		kialiPrompts.InitTrafficTopology(ctx, toolsetContext.Inspector),
 		kialiPrompts.InitServiceTroubleshoot(),
 		kialiPrompts.InitTraceAnalysis(),
-		kialiPrompts.InitIstioConfigReview(),
+		kialiPrompts.InitIstioConfigReview(ctx, toolsetContext.Inspector),
 	)
 	// Same as tools: mesh scope is not selected via provider context.
 	for i := range prompts {
@@ -67,11 +68,11 @@ func (t *Toolset) GetPrompts() []api.ServerPrompt {
 	return prompts
 }
 
-func (t *Toolset) GetResources() []api.ServerResource {
+func (t *Toolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
-func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
 

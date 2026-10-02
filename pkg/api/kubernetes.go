@@ -6,7 +6,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
@@ -56,36 +55,25 @@ type KubernetesClient interface {
 	MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client
 }
 
-// HasGVKs checks if all specified GVKs are available using the provided discovery interface.
-// Returns (true, nil) if all GVKs are found.
-// Returns (false, nil) if any GVK is missing (either the GroupVersion doesn't exist or the Kind is not found).
-// Returns (false, err) if discovery fails with a non-404 error.
-// Callers should decide how to interpret non-404 errors based on their context.
-func HasGVKs(discoveryClient discovery.DiscoveryInterface, gvks []schema.GroupVersionKind) (bool, error) {
-	for _, gvk := range gvks {
-		resourceList, err := discoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
-		if err != nil {
-			// If the GroupVersion doesn't exist (404), treat as "GVK not found" rather than an error.
-			// The discovery client may return either a StatusError with IsNotFound() true,
-			// or memory.ErrCacheNotFound when a cached memcache client sees an absent GroupVersion.
-			if apierrors.IsNotFound(err) || errors.Is(err, memory.ErrCacheNotFound) {
-				return false, nil
-			}
-			// Other errors (network issues, etc.) are returned to the caller
-			return false, err
-		}
-
-		found := false
-		for _, apiResource := range resourceList.APIResources {
-			if apiResource.Kind == gvk.Kind {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false, nil
-		}
+// IsNotFound reports Kubernetes API and cached discovery not-found errors.
+// For aggregated errors, every underlying error must be not-found.
+func IsNotFound(err error) bool {
+	if err == nil {
+		return false
 	}
-
-	return true, nil
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		if len(joined.Unwrap()) == 0 {
+			return false
+		}
+		for _, cause := range joined.Unwrap() {
+			if !IsNotFound(cause) {
+				return false
+			}
+		}
+		return true
+	}
+	if wrapped := errors.Unwrap(err); wrapped != nil {
+		return IsNotFound(wrapped)
+	}
+	return apierrors.IsNotFound(err) || errors.Is(err, memory.ErrCacheNotFound)
 }

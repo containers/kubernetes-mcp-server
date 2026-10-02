@@ -19,7 +19,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func Tools(p api.FilteringProvider) []api.ServerTool {
+func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -109,7 +109,7 @@ func Tools(p api.FilteringProvider) []api.ServerTool {
 				},
 			),
 			TargetCompatibilityFilters: []func() bool{
-				kubevirt.HasVirtualMachine(p),
+				kubevirt.HasVirtualMachine(ctx, inspector),
 			},
 			Handler: troubleshoot,
 		},

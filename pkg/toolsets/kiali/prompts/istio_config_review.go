@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -10,7 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
-func InitIstioConfigReview() []api.ServerPrompt {
+func InitIstioConfigReview(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
 			Prompt: config.Prompt{
@@ -25,7 +26,7 @@ func InitIstioConfigReview() []api.ServerPrompt {
 					},
 				},
 			},
-			RBAC:    tools.MergeRBACBounded(tools.IstioConfigReadRBAC(), tools.ResourcesRBAC(nil)),
+			RBAC:    tools.MergeRBACBounded(tools.IstioConfigReadRBAC(), tools.ResourcesRBAC(ctx, inspector)),
 			Handler: istioConfigReviewHandler,
 		},
 	}

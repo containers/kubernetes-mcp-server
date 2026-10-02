@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -11,7 +12,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetMeshTrafficGraph(p api.FilteringProvider) []api.ServerTool {
+func InitGetMeshTrafficGraph(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_mesh_traffic_graph"
 	ret = append(ret, api.ServerTool{
@@ -45,7 +46,7 @@ func InitGetMeshTrafficGraph(p api.FilteringProvider) []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, RBAC: GraphRBAC(p), Handler: getMeshGraphHandler,
+		}, RBAC: GraphRBAC(ctx, inspector), Handler: getMeshGraphHandler,
 	})
 	return ret
 }

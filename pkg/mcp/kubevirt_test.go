@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	kubevirtgvr "github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	kubevirttesting "github.com/containers/kubernetes-mcp-server/pkg/kubevirt/testing"
@@ -780,7 +781,7 @@ func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 
 			textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
 			s.Require().True(ok, "expected TextContent")
-			promptTitle := (&kubevirttoolset.Toolset{}).GetPrompts()[0].Prompt.Title
+			promptTitle := (&kubevirttoolset.Toolset{}).GetPrompts(s.T().Context(), api.ToolsetContext{})[0].Prompt.Title
 			s.Contains(textContent.Text, fmt.Sprintf("# %sing Guide", promptTitle))
 			s.Contains(textContent.Text, "test-vm")
 			s.Contains(textContent.Text, "default")

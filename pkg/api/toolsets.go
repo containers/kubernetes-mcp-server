@@ -75,6 +75,11 @@ func (s *ServerTool) IsTargetListProvider() bool {
 	return false
 }
 
+type ToolsetContext struct {
+	Inspector                         ClusterInspector
+	TargetCompatibilityFiltersEnabled bool
+}
+
 type Toolset interface {
 	// GetName returns the name of the toolset.
 	// Used to identify the toolset in configuration, logs, and command-line arguments.
@@ -83,16 +88,16 @@ type Toolset interface {
 	// GetDescription returns a human-readable description of the toolset.
 	// Will be used to generate documentation and help text.
 	GetDescription() string
-	GetTools(p FilteringProvider) []ServerTool
+	GetTools(ctx context.Context, toolsetContext ToolsetContext) []ServerTool
 	// GetPrompts returns the prompts provided by this toolset.
 	// Returns nil if the toolset doesn't provide any prompts.
-	GetPrompts() []ServerPrompt
+	GetPrompts(ctx context.Context, toolsetContext ToolsetContext) []ServerPrompt
 	// GetResources returns the resources provided by this toolset.
 	// Returns nil if the toolset doesn't provide any resources.
-	GetResources() []ServerResource
+	GetResources(ctx context.Context, toolsetContext ToolsetContext) []ServerResource
 	// GetResourceTemplates returns the resource templates provided by this toolset.
 	// Returns nil if the toolset doesn't provide any resource templates.
-	GetResourceTemplates() []ServerResourceTemplate
+	GetResourceTemplates(ctx context.Context, toolsetContext ToolsetContext) []ServerResourceTemplate
 }
 
 type ToolCallRequest interface {

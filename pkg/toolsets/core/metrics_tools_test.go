@@ -2,23 +2,41 @@ package core
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery/cached/memory"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-type fakeFilteringProvider struct {
-	hasGVKs bool
+type fakeInspector struct {
+	available bool
+	err       error
 }
 
-func (f *fakeFilteringProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
-	return f.hasGVKs
+func (f *fakeInspector) Discovery() api.AggregateDiscovery       { return f }
+func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
+		if f.err != nil {
+			return nil, f.err
+		}
+		list := &metav1.APIResourceList{}
+		if f.available {
+			list.APIResources = []metav1.APIResource{{Kind: "NodeMetrics"}, {Kind: "PodMetrics"}}
+		}
+		return list, nil
+	})
 }
-
-func (f *fakeFilteringProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return true }
+func (f *fakeInspector) IsMultiTarget() bool                          { return false }
+func (f *fakeInspector) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
+func (f *fakeInspector) GetDefaultTarget() string                     { return "" }
+func (f *fakeInspector) GetTargetParameterName() string               { return "" }
 
 type MetricsToolsSuite struct {
 	suite.Suite
@@ -35,30 +53,47 @@ func (s *MetricsToolsSuite) findTool(tools []api.ServerTool, name string) *api.S
 
 func (s *MetricsToolsSuite) TestNodesTopRegistration() {
 	s.Run("nodes_top has TargetCompatibilityFilter", func() {
-		tool := s.findTool(initNodes(&fakeFilteringProvider{hasGVKs: true}), "nodes_top")
+		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{available: true}), "nodes_top")
 		s.Require().NotNil(tool, "expected nodes_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
 		s.True(tool.TargetCompatibilityFilters[0](), "Filter should return true when metrics GVK is available")
 	})
 
 	s.Run("nodes_top filter returns false without metrics GVK", func() {
-		tool := s.findTool(initNodes(&fakeFilteringProvider{hasGVKs: false}), "nodes_top")
+		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{available: false}), "nodes_top")
 		s.Require().NotNil(tool, "expected nodes_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1)
 		s.False(tool.TargetCompatibilityFilters[0](), "Filter should return false when metrics GVK is unavailable")
+	})
+
+	s.Run("nodes_top fails open when discovery is unavailable", func() {
+		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{err: errors.New("discovery unavailable")}), "nodes_top")
+		s.Require().NotNil(tool)
+		s.True(tool.TargetCompatibilityFilters[0]())
+	})
+
+	s.Run("nodes_top stays unavailable when discovery confirms absence", func() {
+		for _, err := range []error{
+			apierrors.NewNotFound(schema.GroupResource{Resource: "metrics.k8s.io"}, "v1beta1"),
+			memory.ErrCacheNotFound,
+		} {
+			tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{err: err}), "nodes_top")
+			s.Require().NotNil(tool)
+			s.False(tool.TargetCompatibilityFilters[0]())
+		}
 	})
 }
 
 func (s *MetricsToolsSuite) TestPodsTopRegistration() {
 	s.Run("pods_top has TargetCompatibilityFilter", func() {
-		tool := s.findTool(initPods(&fakeFilteringProvider{hasGVKs: true}), "pods_top")
+		tool := s.findTool(initPods(s.T().Context(), &fakeInspector{available: true}), "pods_top")
 		s.Require().NotNil(tool, "expected pods_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
 		s.True(tool.TargetCompatibilityFilters[0](), "Filter should return true when metrics GVK is available")
 	})
 
 	s.Run("pods_top filter returns false without metrics GVK", func() {
-		tool := s.findTool(initPods(&fakeFilteringProvider{hasGVKs: false}), "pods_top")
+		tool := s.findTool(initPods(s.T().Context(), &fakeInspector{available: false}), "pods_top")
 		s.Require().NotNil(tool, "expected pods_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1)
 		s.False(tool.TargetCompatibilityFilters[0](), "Filter should return false when metrics GVK is unavailable")

@@ -27,9 +27,8 @@ const kcpTargetParameterName = "workspace"
 // It discovers workspaces via the kcp tenancy API and creates
 // managers for each workspace on-demand.
 type kcpClusterProvider struct {
-	mu  sync.RWMutex
-	cfg *config.Config
-	*kubernetes.ProviderGVKFilter
+	mu                  sync.RWMutex
+	cfg                 *config.Config
 	baseServerURL       string
 	restConfig          *rest.Config
 	clientCmdConfig     clientcmd.ClientConfig
@@ -52,7 +51,6 @@ func newKcpClusterProvider(ctx context.Context, cfg *config.Config) (kubernetes.
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
-	ret.ProviderGVKFilter = kubernetes.NewProviderGVKFilter(ret)
 	return ret, nil
 }
 
@@ -255,12 +253,6 @@ func (p *kcpClusterProvider) findOrCreateWorkspaceContext(
 	return contextName
 }
 
-func (p *kcpClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
-}
-
 func (p *kcpClusterProvider) IsMultiTarget() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -280,25 +272,6 @@ func (p *kcpClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.getTargetsUnsync()
-}
-
-func (p *kcpClusterProvider) GetTargetManagers(ctx context.Context) ([]*kubernetes.Manager, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	contextNames, err := p.getTargetsUnsync()
-	if err != nil {
-		return nil, err
-	}
-	mgrs := make([]*kubernetes.Manager, 0, len(p.managers))
-	for _, cn := range contextNames {
-		mgr, err := p.managerForWorkspace(ctx, cn, true)
-		if err != nil {
-			return nil, err
-		}
-		mgrs = append(mgrs, mgr)
-	}
-	return mgrs, nil
 }
 
 func (p *kcpClusterProvider) GetTargetParameterName() string {

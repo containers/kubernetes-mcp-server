@@ -38,6 +38,15 @@ func (s *OpenShiftSuite) TestClusterIsOpenShiftFromDiscovery() {
 		s.False(clusterIsOpenShiftFromDiscovery(dc))
 	})
 
+	s.Run("returns false when the OpenShift API group is absent", func() {
+		srv := httptest.NewServer(http.NotFoundHandler())
+		s.T().Cleanup(srv.Close)
+
+		dc, err := discovery.NewDiscoveryClientForConfig(&rest.Config{Host: srv.URL})
+		s.Require().NoError(err)
+		s.False(clusterIsOpenShiftFromDiscovery(dc))
+	})
+
 	s.Run("uses safe defaults when discovery fails", func() {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "discovery unavailable", http.StatusInternalServerError)

@@ -7,17 +7,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-var openshiftProjectGVKs = []schema.GroupVersionKind{{
+var openshiftProjectGVK = schema.GroupVersionKind{
 	Group:   "project.openshift.io",
 	Version: "v1",
 	Kind:    "Project",
-}}
+}
 
-// IsOpenShiftFromProvider reports whether the connected cluster is OpenShift using the
-// framework-provided FilteringProvider (same GVK signal as the cluster-state watcher).
-func IsOpenShiftFromProvider(ctx context.Context, provider api.FilteringProvider) bool {
-	if provider == nil {
+// IsOpenShiftFromInspector reports whether any connected cluster is OpenShift.
+// On discovery errors, retain OpenShift-specific RBAC requirements as a conservative bound.
+func IsOpenShiftFromInspector(ctx context.Context, inspector api.ClusterInspector) bool {
+	if inspector == nil {
 		return false
 	}
-	return provider.AnyTargetHasGVKs(ctx, openshiftProjectGVKs)
+	return api.AnyTargetHasGVK(ctx, inspector, openshiftProjectGVK)
 }

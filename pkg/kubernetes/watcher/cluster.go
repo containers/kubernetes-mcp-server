@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
@@ -189,11 +188,17 @@ func (w *ClusterState) captureState() clusterState {
 		}
 		sort.Strings(state.apiGroups)
 	}
-	// Check if this is an OpenShift cluster by looking for the Project GVK
-	// For backward compatibility, treat discovery errors as "not OpenShift"
-	hasProject, err := api.HasGVKs(w.discoveryClient, []schema.GroupVersionKind{
-		{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-	})
-	state.isOpenShift = err == nil && hasProject
+	// Unlike compatibility filters, the watcher treats discovery errors as "not OpenShift".
+	// Failing closed avoids flapping reloads and imposing unnecessary OpenShift RBAC.
+	gvk := schema.GroupVersionKind{Group: "project.openshift.io", Version: "v1", Kind: "Project"}
+	resources, err := w.discoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
+	if err == nil {
+		for _, resource := range resources.APIResources {
+			if resource.Kind == gvk.Kind {
+				state.isOpenShift = true
+				break
+			}
+		}
+	}
 	return state
 }

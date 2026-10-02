@@ -129,9 +129,9 @@ var (
 
 // HasVirtualMachineTemplate returns a TargetCompatibilityFilter that checks whether any
 // target cluster has the VirtualMachineTemplate GVK registered.
-func HasVirtualMachineTemplate(p api.FilteringProvider) func() bool {
+func HasVirtualMachineTemplate(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{VirtualMachineTemplateGVK})
+		return api.AnyTargetHasGVK(ctx, inspector, VirtualMachineTemplateGVK)
 	}
 }
 
@@ -168,9 +168,9 @@ var (
 
 // HasVirtualMachine returns a TargetCompatibilityFilter that checks whether any
 // target cluster has the VirtualMachine GVK registered.
-func HasVirtualMachine(p api.FilteringProvider) func() bool {
+func HasVirtualMachine(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{VirtualMachineGVK})
+		return api.AnyTargetHasGVK(ctx, inspector, VirtualMachineGVK)
 	}
 }
 

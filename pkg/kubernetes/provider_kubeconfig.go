@@ -19,9 +19,8 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
-	mu  sync.RWMutex
-	cfg *config.Config
-	*ProviderGVKFilter
+	mu                  sync.RWMutex
+	cfg                 *config.Config
 	defaultContext      string
 	managers            map[string]*Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
@@ -43,7 +42,6 @@ func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Prov
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
-	ret.ProviderGVKFilter = NewProviderGVKFilter(ret)
 	return ret, nil
 }
 
@@ -143,12 +141,6 @@ func (p *kubeConfigClusterProvider) managerForContext(ctx context.Context, kubeC
 	return m, nil
 }
 
-func (p *kubeConfigClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
-}
-
 func (p *kubeConfigClusterProvider) IsMultiTarget() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -168,26 +160,6 @@ func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, err
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.getTargetsUnsync()
-}
-
-func (p *kubeConfigClusterProvider) GetTargetManagers(ctx context.Context) ([]*Manager, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	contextNames, err := p.getTargetsUnsync()
-	if err != nil {
-		return nil, err
-	}
-	managers := make([]*Manager, 0, len(contextNames))
-	for _, cn := range contextNames {
-		mgr, err := p.managerForContext(ctx, cn, true)
-		if err != nil {
-			return nil, err
-		}
-		managers = append(managers, mgr)
-	}
-
-	return managers, nil
 }
 
 func (p *kubeConfigClusterProvider) GetTargetParameterName() string {

@@ -15,9 +15,8 @@ import (
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
-	mu  sync.RWMutex
-	cfg *config.Config
-	*ProviderGVKFilter
+	mu                  sync.RWMutex
+	cfg                 *config.Config
 	strategy            string
 	manager             *Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
@@ -43,7 +42,6 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 		if err := ret.reset(ctx); err != nil {
 			return nil, err
 		}
-		ret.ProviderGVKFilter = NewProviderGVKFilter(ret)
 		return ret, nil
 	}
 }
@@ -87,24 +85,12 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 	return nil
 }
 
-func (p *singleClusterProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.cfg.EnableTargetCompatibilityToolFilters.Get()
-}
-
 func (p *singleClusterProvider) IsMultiTarget() bool {
 	return false
 }
 
 func (p *singleClusterProvider) GetTargets(_ context.Context) ([]string, error) {
 	return []string{""}, nil
-}
-
-func (p *singleClusterProvider) GetTargetManagers(_ context.Context) ([]*Manager, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return []*Manager{p.manager}, nil
 }
 
 func (p *singleClusterProvider) GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error) {
