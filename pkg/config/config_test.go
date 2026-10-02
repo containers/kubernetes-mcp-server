@@ -64,6 +64,9 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("LogLevel is 0", func() {
 		s.Equal(0, base.LogLevel.Get())
 	})
+	s.Run("MaxInFlight is 64", func() {
+		s.Equal(64, base.MaxInFlight.Get())
+	})
 }
 
 func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
@@ -104,7 +107,37 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.False(paths["apps_enabled"].Reloadable)
 	s.False(paths["disable_localhost_protection"].Reloadable)
 	s.True(paths["log_level"].Reloadable)
+	s.Contains(paths, "max_in_flight")
+	s.True(paths["max_in_flight"].Reloadable)
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
+}
+
+func (s *ConfigSuite) TestMaxInFlight() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 8`))
+		s.Require().NoError(err)
+		s.Equal(8, cfg.MaxInFlight.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 0`))
+		s.Require().NoError(err)
+		s.Equal(0, cfg.MaxInFlight.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "max_in_flight must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 64`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(2, next.MaxInFlight.Get())
+	})
 }
 
 func (s *ConfigSuite) TestConfigPathEnvName() {

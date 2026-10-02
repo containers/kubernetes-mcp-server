@@ -26,6 +26,11 @@ const (
 	// set but rate_limit_burst is not specified (zero value).
 	DefaultRateLimitBurst = 10
 
+	// DefaultMaxInFlight is the default number of tools/call, prompts/get, and
+	// resources/read handlers that may run at once in this process.
+	// 0 disables the limit.
+	DefaultMaxInFlight = 64
+
 	extensionToolsetTable  = "toolset_configs"
 	extensionProviderTable = "cluster_provider_configs"
 )
@@ -228,6 +233,9 @@ type Config struct {
 	MetricsPort Option[string]
 	// ListOutput is the output format for resource list operations (yaml or table).
 	ListOutput Option[string]
+	// MaxInFlight is the maximum number of tools/call, prompts/get, and
+	// resources/read handlers running in this process. 0 disables the limit.
+	MaxInFlight Option[int]
 	// AppsEnabled enables MCP Apps UI resources for tools that declare an app.
 	// Defaults to false so existing MCP clients retain their current behavior.
 	AppsEnabled Option[bool]
@@ -398,6 +406,12 @@ func newConfig() *Config {
 		BindAddress: opt("bind_address", "0.0.0.0").desc("Address to bind the HTTP server"),
 		MetricsPort: opt("metrics_port", "").validate(validateMetricsPortNumber).desc("Separate metrics server port"),
 		ListOutput:  opt("list_output", "table").reload().validate(validateListOutput).desc("Output format for resource list operations"),
+		MaxInFlight: opt("max_in_flight", DefaultMaxInFlight).reload().validate(func(v int) error {
+			if v < 0 {
+				return fmt.Errorf("max_in_flight must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max concurrent tools/call, prompts/get, and resources/read (0 disables)"),
 		AppsEnabled: opt("apps_enabled", false).desc("Enable MCP Apps UI resources (requires restart)"),
 		Stateless:   opt("stateless", false).desc("Run without tool/prompt change notifications"),
 		DisableLocalhostProtection: opt("disable_localhost_protection", false).

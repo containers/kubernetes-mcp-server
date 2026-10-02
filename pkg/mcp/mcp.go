@@ -178,6 +178,9 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 			return rate.Limit(rps), burst
 		}),
 	)
+	s.server.AddReceivingMiddleware(inFlightMiddleware(func() int {
+		return s.configuration.Load().MaxInFlight.Get()
+	}))
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))

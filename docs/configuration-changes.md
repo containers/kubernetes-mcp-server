@@ -97,7 +97,7 @@ On SIGHUP the option dump includes `changed=true` and `previous` for values that
 
 Requires restart: listen/TLS (`port`, `bind_address`, `metrics_port`, `tls_*`, `http.read_header_timeout`), `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`, `kubeconfig`, `cluster_provider_strategy`, Kubernetes client QPS/burst and watcher timings, `[telemetry]`, `cluster_provider_configs`.
 
-Reloadable: logging, `list_output`, access-control and tool filtering, toolsets/prompts/confirmation, OAuth and `[token_exchange]`, `trust_proxy_headers`, HTTP body/rate-limit settings, `toolset_configs`.
+Reloadable: logging, `list_output`, `max_in_flight`, access-control and tool filtering, toolsets/prompts/confirmation, OAuth and `[token_exchange]`, `trust_proxy_headers`, HTTP body/rate-limit settings, `toolset_configs`.
 
 Still requires `--config` and/or `--config-dir`. Unavailable on Windows.
 
@@ -114,6 +114,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 | `log_level`, `log_file` | — | yes |
 | `port`, `bind_address`, `metrics_port`, `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled` | — | no |
 | `list_output` | — | yes |
+| `max_in_flight` | — | yes |
 | `kubeconfig`, `cluster_provider_strategy` | — | no |
 | `cluster_auth_mode`, `denied_resources`, `read_only`, `disable_destructive`, `validation_enabled`, `experimental_enable_target_compatibility_tool_filters` | — | yes |
 | `toolsets`, `enabled_tools`, `disabled_tools`, `tool_overrides`, `prompts`, `confirmation_*` | — | yes |
