@@ -131,9 +131,7 @@ var (
 // target cluster has the VirtualMachineTemplate GVK registered.
 func HasVirtualMachineTemplate(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		available, err := api.AnyTargetHasGVK(ctx, inspector, VirtualMachineTemplateGVK)
-		// Discovery errors fail open unless they confirm the resource is absent.
-		return available || (err != nil && !api.IsNotFound(err))
+		return api.AnyTargetHasGVK(ctx, inspector, VirtualMachineTemplateGVK)
 	}
 }
 
@@ -172,9 +170,7 @@ var (
 // target cluster has the VirtualMachine GVK registered.
 func HasVirtualMachine(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		available, err := api.AnyTargetHasGVK(ctx, inspector, VirtualMachineGVK)
-		// Discovery errors fail open unless they confirm the resource is absent.
-		return available || (err != nil && !api.IsNotFound(err))
+		return api.AnyTargetHasGVK(ctx, inspector, VirtualMachineGVK)
 	}
 }
 

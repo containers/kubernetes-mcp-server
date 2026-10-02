@@ -72,9 +72,7 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 		Handler: projectsList,
 		TargetCompatibilityFilters: []func() bool{
 			func() bool {
-				available, err := api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "project.openshift.io", Version: "v1", Kind: "Project"})
-				// Discovery errors fail open unless they confirm the resource is absent.
-				return available || (err != nil && !api.IsNotFound(err))
+				return api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "project.openshift.io", Version: "v1", Kind: "Project"})
 			},
 		},
 	})

@@ -29,9 +29,7 @@ var (
 // target cluster has the NodeMetrics GVK registered.
 func HasNodeMetrics(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		available, err := api.AnyTargetHasGVK(ctx, inspector, NodeMetricsGVK)
-		// Discovery errors fail open unless they confirm the resource is absent.
-		return available || (err != nil && !api.IsNotFound(err))
+		return api.AnyTargetHasGVK(ctx, inspector, NodeMetricsGVK)
 	}
 }
 
@@ -39,8 +37,6 @@ func HasNodeMetrics(ctx context.Context, inspector api.ClusterInspector) func() 
 // target cluster has the PodMetrics GVK registered.
 func HasPodMetrics(ctx context.Context, inspector api.ClusterInspector) func() bool {
 	return func() bool {
-		available, err := api.AnyTargetHasGVK(ctx, inspector, PodMetricsGVK)
-		// Discovery errors fail open unless they confirm the resource is absent.
-		return available || (err != nil && !api.IsNotFound(err))
+		return api.AnyTargetHasGVK(ctx, inspector, PodMetricsGVK)
 	}
 }

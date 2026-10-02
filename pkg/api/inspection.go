@@ -22,9 +22,13 @@ type AggregateDiscovery interface {
 	) Results[*metav1.APIResourceList]
 }
 
-// AnyTargetHasGVK reports whether any target exposes the given GVK.
-func AnyTargetHasGVK(ctx context.Context, inspector ClusterInspector, gvk schema.GroupVersionKind) (bool, error) {
-	return inspector.Discovery().ServerResourcesForGroupVersion(ctx, gvk.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
+// AnyTargetHasGVK reports whether any target exposes the given GVKs
+//
+// AnyTargetHasGVK fails open on errors, so that we do not hide tools that _may_ be valid
+// This is primarily useful for deciding to disable tools that depend on GVKs when those GVKs
+// are definitely not present.
+func AnyTargetHasGVK(ctx context.Context, inspector ClusterInspector, gvk schema.GroupVersionKind) bool {
+	hasGVK, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, gvk.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
 		for _, resource := range list.APIResources {
 			if resource.Kind == gvk.Kind {
 				return true
@@ -32,6 +36,8 @@ func AnyTargetHasGVK(ctx context.Context, inspector ClusterInspector, gvk schema
 		}
 		return false
 	})
+
+	return hasGVK || (err != nil && !IsNotFound(err))
 }
 
 type AggregateUnstructured interface {

@@ -19,6 +19,5 @@ func IsOpenShiftFromInspector(ctx context.Context, inspector api.ClusterInspecto
 	if inspector == nil {
 		return false
 	}
-	available, err := api.AnyTargetHasGVK(ctx, inspector, openshiftProjectGVK)
-	return available || (err != nil && !api.IsNotFound(err))
+	return api.AnyTargetHasGVK(ctx, inspector, openshiftProjectGVK)
 }

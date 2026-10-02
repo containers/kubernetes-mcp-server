@@ -23,9 +23,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 	if !targetCompatibilityFiltersEnabled {
 		commonApiVersion += ", route.openshift.io/v1 Route"
 	} else {
-		available, err := api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "route.openshift.io", Version: "v1", Kind: "Route"})
-		// Discovery errors fail open unless they confirm the resource is absent.
-		if available || (err != nil && !api.IsNotFound(err)) {
+		available := api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "route.openshift.io", Version: "v1", Kind: "Route"})
+		if available  {
 			commonApiVersion += ", route.openshift.io/v1 Route"
 		}
 	}
