@@ -4,10 +4,14 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
@@ -24,6 +29,29 @@ import (
 type netobservState struct {
 	dep       *serverDeployment
 	mcpClient *test.McpClient
+}
+
+type flowCollectorConfig struct {
+	Spec struct {
+		Namespace string `json:"namespace"`
+		Loki      struct {
+			Enable *bool  `json:"enable"`
+			Mode   string `json:"mode"`
+			Manual struct {
+				QuerierURL string `json:"querierUrl"`
+				StatusURL  string `json:"statusUrl"`
+			} `json:"manual"`
+			Microservices struct {
+				QuerierURL string `json:"querierUrl"`
+			} `json:"microservices"`
+			Monolithic struct {
+				URL string `json:"url"`
+			} `json:"monolithic"`
+			LokiStack struct {
+				Namespace string `json:"namespace"`
+			} `json:"lokiStack"`
+		} `json:"loki"`
+	} `json:"spec"`
 }
 
 var (
@@ -74,8 +102,8 @@ func cleanupMockNetObservPlugin(t *testing.T, kubeconfig string) {
 	_ = cmd.Run() // Best effort cleanup
 }
 
-// checkNetObservOperatorDeployed checks if NetObserv operator is deployed and returns the plugin namespace
-func checkNetObservOperatorDeployed(ctx context.Context, t *testing.T, clientset kubernetes.Interface) (string, bool) {
+// findNetObservPluginNamespace finds the namespace used by the NetObserv plugin service.
+func findNetObservPluginNamespace(ctx context.Context, t *testing.T, clientset kubernetes.Interface) (string, bool) {
 	t.Helper()
 
 	// Check common namespaces where NetObserv plugin runs
@@ -93,6 +121,38 @@ func checkNetObservOperatorDeployed(ctx context.Context, t *testing.T, clientset
 	return "", false
 }
 
+func getFlowCollectorConfig(ctx context.Context, t *testing.T, kubeconfig string) (flowCollectorConfig, error) {
+	t.Helper()
+
+	cmd := exec.CommandContext(ctx, "kubectl", "get", "flowcollector", "cluster", "-o", "json", "--kubeconfig", kubeconfig)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return flowCollectorConfig{}, fmt.Errorf("get FlowCollector cluster: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+
+	var config flowCollectorConfig
+	if err := json.Unmarshal(output, &config); err != nil {
+		return flowCollectorConfig{}, fmt.Errorf("parse FlowCollector cluster: %w", err)
+	}
+	return config, nil
+}
+
+func requireFlowCollectorLokiEnabled(t *testing.T, config flowCollectorConfig) {
+	t.Helper()
+	require.NotNil(t, config.Spec.Loki.Enable, "FlowCollector spec.loki.enable must be set to true")
+	require.True(t, *config.Spec.Loki.Enable, "FlowCollector spec.loki.enable must be true to run real NetObserv tests")
+}
+
+func netObservPluginNamespace(ctx context.Context, t *testing.T, clientset kubernetes.Interface, config flowCollectorConfig) string {
+	t.Helper()
+	if config.Spec.Namespace != "" {
+		return config.Spec.Namespace
+	}
+	namespace, found := findNetObservPluginNamespace(ctx, t, clientset)
+	require.True(t, found, "FlowCollector spec.namespace is empty and no netobserv-plugin Service was found")
+	return namespace
+}
+
 // deployNetObservOperator deploys NetObserv operator and FlowCollector
 func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface) string {
 	t.Helper()
@@ -100,29 +160,40 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 	operatorNamespace := "openshift-netobserv-operator"
 	pluginNamespace := "netobserv"
 
+	// Reuse an existing FlowCollector only when its required Loki-backed setup is usable.
+	config, flowCollectorErr := getFlowCollectorConfig(ctx, t, kubeconfig)
+	if flowCollectorErr == nil {
+		t.Logf("FlowCollector already exists; reusing its configuration")
+		require.True(t, checkNetObservOperatorStatus(ctx, t, kubeconfig, clientset, operatorNamespace),
+			"an existing FlowCollector was found, but the NetObserv operator is not ready")
+		requireFlowCollectorLokiEnabled(t, config)
+		waitForFlowCollector(ctx, t, kubeconfig)
+		pluginNamespace = netObservPluginNamespace(ctx, t, clientset, config)
+		waitForLokiReady(ctx, t, kubeconfig, clientset, config, pluginNamespace)
+		return pluginNamespace
+	}
+	require.True(t, isFlowCollectorMissingError(flowCollectorErr), "failed to check for an existing FlowCollector: %v", flowCollectorErr)
+
 	// Check if operator is already deployed
 	if checkNetObservOperatorStatus(ctx, t, kubeconfig, clientset, operatorNamespace) {
 		t.Logf("NetObserv operator already deployed and ready, skipping operator deployment")
 
-		// Still need to ensure FlowCollector exists
-		t.Logf("Checking FlowCollector...")
-		cmd := exec.CommandContext(ctx, "kubectl", "get", "flowcollector", "cluster", "--kubeconfig", kubeconfig)
-		if cmd.Run() != nil {
-			// FlowCollector doesn't exist, create it
-			t.Logf("Creating FlowCollector")
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
-			output, err := cmd.CombinedOutput()
-			require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
-			t.Cleanup(func() {
-				cmd := exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
-				_ = cmd.Run()
-			})
-		} else {
-			t.Logf("FlowCollector already exists")
-		}
+		// No FlowCollector exists, so create the test configuration.
+		t.Logf("Creating FlowCollector")
+		cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig)
+		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
+		t.Cleanup(func() {
+			cmd := exec.Command("kubectl", "delete", "-f", filepath.Join(netobservManifestDir, "flowcollector.yaml"), "--kubeconfig", kubeconfig, "--ignore-not-found")
+			_ = cmd.Run()
+		})
+		config, err := getFlowCollectorConfig(ctx, t, kubeconfig)
+		require.NoError(t, err, "Failed to read the FlowCollector created by the test")
 
-		// Wait for FlowCollector and its managed components to be ready.
+		requireFlowCollectorLokiEnabled(t, config)
 		waitForFlowCollector(ctx, t, kubeconfig)
+		pluginNamespace = netObservPluginNamespace(ctx, t, clientset, config)
+		waitForLokiReady(ctx, t, kubeconfig, clientset, config, pluginNamespace)
 		return pluginNamespace
 	}
 	t.Cleanup(func() {
@@ -232,9 +303,26 @@ func deployNetObservOperator(ctx context.Context, t *testing.T, kubeconfig strin
 	output, err = cmd.CombinedOutput()
 	require.NoError(t, err, "Failed to create FlowCollector: %s", string(output))
 
-	// Wait for FlowCollector and its managed components to be ready.
+	config, err = getFlowCollectorConfig(ctx, t, kubeconfig)
+	require.NoError(t, err, "Failed to read the FlowCollector created by the test")
+	requireFlowCollectorLokiEnabled(t, config)
+
+	// Wait for FlowCollector and Loki to be ready.
 	waitForFlowCollector(ctx, t, kubeconfig)
+	pluginNamespace = netObservPluginNamespace(ctx, t, clientset, config)
+	waitForLokiReady(ctx, t, kubeconfig, clientset, config, pluginNamespace)
 	return pluginNamespace
+}
+
+func isFlowCollectorMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "notfound") ||
+		strings.Contains(message, "not found") ||
+		strings.Contains(message, "no matches for kind") ||
+		strings.Contains(message, "doesn't have a resource type")
 }
 
 // checkNetObservOperatorStatus checks if NetObserv operator is already deployed and ready
@@ -257,10 +345,21 @@ func checkNetObservOperatorStatus(ctx context.Context, t *testing.T, kubeconfig 
 		return false
 	}
 
-	// Check if all operator pods are running
+	// Check if all operator pods are ready
 	for _, pod := range pods.Items {
 		if pod.Status.Phase != "Running" {
 			t.Logf("Operator pod %s not running (phase: %s), operator will be deployed", pod.Name, pod.Status.Phase)
+			return false
+		}
+		ready := false
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+				ready = true
+				break
+			}
+		}
+		if !ready {
+			t.Logf("Operator pod %s is not Ready, operator will be deployed", pod.Name)
 			return false
 		}
 	}
@@ -297,6 +396,141 @@ func waitForFlowCollector(ctx context.Context, t *testing.T, kubeconfig string) 
 	}
 	require.NoError(t, waitErr, "FlowCollector did not become Ready: %s\nFlowCollector status:\n%s",
 		strings.TrimSpace(string(waitOutput)), strings.TrimSpace(string(statusOutput)))
+}
+
+// waitForLokiReady waits until the Loki endpoint configured on the FlowCollector accepts requests.
+func waitForLokiReady(ctx context.Context, t *testing.T, kubeconfig string, clientset kubernetes.Interface, config flowCollectorConfig, pluginNamespace string) {
+	t.Helper()
+
+	lokiURL, serviceNamespace, serviceName, servicePort, inCluster, err := flowCollectorLokiStatusTarget(config, pluginNamespace)
+	require.NoError(t, err, "resolve Loki readiness endpoint from FlowCollector")
+
+	checkURL := *lokiURL
+	checkURL.Path = "/ready"
+	checkURL.RawQuery = ""
+	if !inCluster {
+		t.Logf("Waiting for configured external Loki endpoint %s...", checkURL.Redacted())
+	} else {
+		restCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+		require.NoError(t, err, "build rest config for Loki readiness check")
+
+		deadline := time.Now().Add(3 * time.Minute)
+		var serviceErr error
+		for time.Now().Before(deadline) {
+			_, serviceErr = clientset.CoreV1().Services(serviceNamespace).Get(ctx, serviceName, metav1.GetOptions{})
+			if serviceErr == nil {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				require.Fail(t, "context cancelled while waiting for Loki service: "+ctx.Err().Error())
+				return
+			case <-time.After(2 * time.Second):
+			}
+		}
+		require.NoError(t, serviceErr, "Loki service %s/%s was not created within 3 minutes", serviceNamespace, serviceName)
+		if lokiURL.Scheme == "https" {
+			findPodForService(ctx, t, clientset, serviceNamespace, serviceName, 3*time.Minute)
+			t.Logf("Loki service %s/%s has a ready pod", serviceNamespace, serviceName)
+			return
+		}
+
+		localURL, stopPortForward := portForwardServiceWithTimeout(ctx, t, restCfg, clientset, serviceNamespace, serviceName, servicePort, 3*time.Minute)
+		defer stopPortForward()
+		localCheckURL, err := url.Parse(localURL)
+		require.NoError(t, err, "parse local Loki port-forward URL")
+		checkURL = *localCheckURL
+		checkURL.Path = "/ready"
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	deadline := time.Now().Add(3 * time.Minute)
+	lastStatus := "no response"
+	t.Logf("Waiting for Loki /ready endpoint at %s...", checkURL.Redacted())
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL.String(), nil)
+		require.NoError(t, err, "create Loki readiness request")
+
+		response, err := client.Do(req)
+		if err != nil {
+			lastStatus = err.Error()
+		} else {
+			lastStatus = response.Status
+			_ = response.Body.Close()
+			if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+				t.Logf("Loki is ready: %s", response.Status)
+				return
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	require.Fail(t, "Loki did not become ready within 3 minutes; last /ready response: "+lastStatus)
+}
+
+func flowCollectorLokiStatusTarget(config flowCollectorConfig, pluginNamespace string) (*url.URL, string, string, int, bool, error) {
+	lokiNamespace := config.Spec.Namespace
+	if lokiNamespace == "" {
+		lokiNamespace = pluginNamespace
+	}
+	statusURL := ""
+	mode := config.Spec.Loki.Mode
+	if mode == "" {
+		mode = "Monolithic"
+	}
+	switch mode {
+	case "Monolithic":
+		statusURL = config.Spec.Loki.Monolithic.URL
+		if statusURL == "" {
+			statusURL = "http://loki:3100/"
+		}
+	case "Manual":
+		statusURL = config.Spec.Loki.Manual.StatusURL
+		if statusURL == "" {
+			statusURL = config.Spec.Loki.Manual.QuerierURL
+		}
+		if statusURL == "" {
+			statusURL = "http://loki:3100/"
+		}
+	case "Microservices":
+		statusURL = config.Spec.Loki.Microservices.QuerierURL
+		if statusURL == "" {
+			statusURL = "http://loki-query-frontend:3100/"
+		}
+	case "LokiStack":
+		lokiStackNamespace := config.Spec.Loki.LokiStack.Namespace
+		if lokiStackNamespace == "" {
+			lokiStackNamespace = lokiNamespace
+		}
+		statusURL = fmt.Sprintf("https://loki-query-frontend-http.%s.svc:3100/", lokiStackNamespace)
+	default:
+		return nil, "", "", 0, false, fmt.Errorf("unsupported FlowCollector spec.loki.mode %q", config.Spec.Loki.Mode)
+	}
+
+	parsedURL, err := url.Parse(statusURL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Hostname() == "" {
+		return nil, "", "", 0, false, fmt.Errorf("invalid Loki status URL %q", statusURL)
+	}
+
+	host := parsedURL.Hostname()
+	serviceName, serviceNamespace, inCluster := "", "", false
+	parts := strings.Split(host, ".")
+	if len(parts) >= 3 && parts[2] == "svc" {
+		serviceName, serviceNamespace, inCluster = parts[0], parts[1], true
+	} else if !strings.Contains(host, ".") {
+		serviceName, serviceNamespace, inCluster = host, lokiNamespace, true
+	}
+
+	servicePort := 3100
+	if parsedURL.Port() != "" {
+		servicePort, err = strconv.Atoi(parsedURL.Port())
+		if err != nil {
+			return nil, "", "", 0, false, fmt.Errorf("invalid Loki service port in URL %q", statusURL)
+		}
+	} else if parsedURL.Scheme == "https" {
+		servicePort = 443
+	}
+	return parsedURL, serviceNamespace, serviceName, servicePort, inCluster, nil
 }
 
 // cleanupNetObservOperator removes the NetObserv operator, FlowCollector, and IDMS.
@@ -430,12 +664,12 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 	testenv.Test(t, f)
 }
 
-// TestNetObservReal tests NetObserv MCP tools against real plugin (requires operator)
-// Set NETOBSERV_OPERATOR=deploy to deploy operator, or NETOBSERV_OPERATOR=use-existing to use pre-deployed operator
+// TestNetObservReal tests NetObserv MCP tools against a FlowCollector with Loki enabled.
+// Set NETOBSERV_OPERATOR=deploy to reuse a ready installation or deploy missing prerequisites.
 func TestNetObservReal(t *testing.T) {
 	operatorMode := os.Getenv("NETOBSERV_OPERATOR")
 	if operatorMode == "" {
-		t.Skip("Skipping real plugin tests - set NETOBSERV_OPERATOR=deploy or NETOBSERV_OPERATOR=use-existing to run")
+		t.Skip("Skipping real plugin tests - set NETOBSERV_OPERATOR=deploy to run")
 	}
 
 	f := features.New("netobserv-real").
@@ -444,25 +678,12 @@ func TestNetObservReal(t *testing.T) {
 			clientset, err := clientsetFromKubeconfig(kubeconfig)
 			require.NoError(t, err, "create clientset")
 
-			var pluginNamespace string
-
-			switch operatorMode {
-			case "deploy":
-				t.Logf("NETOBSERV_OPERATOR=deploy - deploying NetObserv operator and FlowCollector")
-				pluginNamespace = deployNetObservOperator(ctx, t, kubeconfig, clientset)
-
-			case "use-existing":
-				t.Logf("NETOBSERV_OPERATOR=use-existing - checking for existing operator")
-				var found bool
-				pluginNamespace, found = checkNetObservOperatorDeployed(ctx, t, clientset)
-				if !found {
-					t.Skip("NetObserv operator not found - deploy it first or use NETOBSERV_OPERATOR=deploy")
-				}
-				t.Logf("Using existing NetObserv plugin in namespace: %s", pluginNamespace)
-
-			default:
-				t.Skipf("Invalid NETOBSERV_OPERATOR value: %s (use 'deploy' or 'use-existing')", operatorMode)
+			if operatorMode != "deploy" {
+				t.Skipf("Invalid NETOBSERV_OPERATOR value: %s (use 'deploy')", operatorMode)
 			}
+
+			t.Logf("Ensuring NetObserv operator, FlowCollector, and Loki are ready")
+			pluginNamespace := deployNetObservOperator(ctx, t, kubeconfig, clientset)
 
 			// Deploy MCP server configured to use real plugin service
 			configTOML := fmt.Sprintf(`
