@@ -327,6 +327,62 @@ func getMcpReqUserAgent(req mcp.Request) string {
 // conflict with standard JSON-RPC codes or existing SDK application codes.
 const CodeRateLimitExceeded = -32029
 
+// CodeInFlightLimitExceeded is the JSON-RPC error code returned when
+// max_in_flight slots are all in use.
+//
+// -32003 is jsonrpc2.ErrClientClosing, so this does not echo HTTP 503.
+// -32030 sits next to CodeRateLimitExceeded (-32029) in the server-error range.
+const CodeInFlightLimitExceeded = -32030
+
+// inFlightLimitedMethods are the MCP methods that occupy a max_in_flight slot.
+func inFlightLimitedMethod(method string) bool {
+	switch method {
+	case "tools/call", "prompts/get", "resources/read":
+		return true
+	default:
+		return false
+	}
+}
+
+// inFlightMiddleware caps how many tools/call, prompts/get, and resources/read
+// handlers run at once in this process. The three methods share one pool.
+// limitFn is read on every acquire so a reload takes effect on the next call.
+// A limit <= 0 disables the cap. Lowering the limit does not cancel handlers
+// that already hold a slot; they release when they return, including on panic.
+func inFlightMiddleware(limitFn func() int) mcp.Middleware {
+	var (
+		mu       sync.Mutex
+		inFlight int
+	)
+
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if !inFlightLimitedMethod(method) {
+				return next(ctx, method, req)
+			}
+
+			mu.Lock()
+			limit := limitFn()
+			if limit <= 0 {
+				mu.Unlock()
+				return next(ctx, method, req)
+			}
+			if inFlight >= limit {
+				mu.Unlock()
+				return nil, &jsonrpc.Error{Code: CodeInFlightLimitExceeded, Message: "max_in_flight limit exceeded"}
+			}
+			inFlight++
+			mu.Unlock()
+			defer func() {
+				mu.Lock()
+				inFlight--
+				mu.Unlock()
+			}()
+			return next(ctx, method, req)
+		}
+	}
+}
+
 // rateLimitingMiddleware creates a per-session rate limiting middleware.
 // Each session gets its own rate.Limiter keyed by session ID.
 // Requests with an empty session ID (e.g. STDIO transport before initialization) bypass rate limiting.
