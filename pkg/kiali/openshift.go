@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -20,13 +19,6 @@ func IsOpenShiftFromInspector(ctx context.Context, inspector api.ClusterInspecto
 	if inspector == nil {
 		return false
 	}
-	available, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, openshiftProjectGVK.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
-		for _, resource := range list.APIResources {
-			if resource.Kind == openshiftProjectGVK.Kind {
-				return true
-			}
-		}
-		return false
-	})
+	available, err := api.AnyTargetHasGVK(ctx, inspector, openshiftProjectGVK)
 	return available || (err != nil && !api.IsNotFound(err))
 }

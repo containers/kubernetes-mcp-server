@@ -55,6 +55,8 @@ func (p *providerInspector) ServerResourcesForGroupVersion(
 			return nil, err
 		}
 
+		// client-go discovery does not accept a context, so an Any/All short-circuit
+		// cannot cancel a ServerResourcesForGroupVersion request already in flight.
 		return client.discoveryClient.ServerResourcesForGroupVersion(groupVersion)
 	})
 }

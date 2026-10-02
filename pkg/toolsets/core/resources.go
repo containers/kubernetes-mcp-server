@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
@@ -24,14 +23,7 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 	if !targetCompatibilityFiltersEnabled {
 		commonApiVersion += ", route.openshift.io/v1 Route"
 	} else {
-		available, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, "route.openshift.io/v1").Any(func(list *metav1.APIResourceList) bool {
-			for _, resource := range list.APIResources {
-				if resource.Kind == "Route" {
-					return true
-				}
-			}
-			return false
-		})
+		available, err := api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "route.openshift.io", Version: "v1", Kind: "Route"})
 		// Discovery errors fail open unless they confirm the resource is absent.
 		if available || (err != nil && !api.IsNotFound(err)) {
 			commonApiVersion += ", route.openshift.io/v1 Route"

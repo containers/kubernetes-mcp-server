@@ -22,6 +22,18 @@ type AggregateDiscovery interface {
 	) Results[*metav1.APIResourceList]
 }
 
+// AnyTargetHasGVK reports whether any target exposes the given GVK.
+func AnyTargetHasGVK(ctx context.Context, inspector ClusterInspector, gvk schema.GroupVersionKind) (bool, error) {
+	return inspector.Discovery().ServerResourcesForGroupVersion(ctx, gvk.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
+		for _, resource := range list.APIResources {
+			if resource.Kind == gvk.Kind {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 type AggregateUnstructured interface {
 	Resource(resource schema.GroupVersionResource) AggregateNamespaceableResourceInterface
 }

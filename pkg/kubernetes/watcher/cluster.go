@@ -188,8 +188,8 @@ func (w *ClusterState) captureState() clusterState {
 		}
 		sort.Strings(state.apiGroups)
 	}
-	// Check if this is an OpenShift cluster by looking for the Project GVK
-	// For backward compatibility, treat discovery errors as "not OpenShift"
+	// Unlike compatibility filters, the watcher treats discovery errors as "not OpenShift".
+	// Failing closed avoids flapping reloads and imposing unnecessary OpenShift RBAC.
 	gvk := schema.GroupVersionKind{Group: "project.openshift.io", Version: "v1", Kind: "Project"}
 	resources, err := w.discoveryClient.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
 	if err == nil {
