@@ -2,10 +2,6 @@ package tokenexchange
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"net/url"
-	"strings"
 
 	"golang.org/x/oauth2"
 )
@@ -16,34 +12,16 @@ type keycloakV1Exchanger struct{}
 var _ TokenExchanger = &keycloakV1Exchanger{}
 
 func (e *keycloakV1Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error) {
-	httpClient, err := cfg.HTTPClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to acquire http client to talk to IdP for target: %w", err)
-	}
-
 	subjectTokenType := cfg.SubjectTokenType
 	if subjectTokenType == "" {
 		subjectTokenType = TokenTypeAccessToken
 	}
 
-	data := url.Values{}
-	data.Set(FormKeyGrantType, GrantTypeTokenExchange)
-	data.Set(FormKeySubjectToken, subjectToken)
-	data.Set(FormKeySubjectTokenType, subjectTokenType)
-	data.Set(FormKeyAudience, cfg.Audience)
+	data := buildBaseExchangeForm(cfg, subjectToken, subjectTokenType)
 
 	if cfg.SubjectIssuer != "" {
 		data.Set(FormKeySubjectIssuer, cfg.SubjectIssuer)
 	}
 
-	if len(cfg.Scopes) > 0 {
-		data.Set(FormKeyScope, strings.Join(cfg.Scopes, " "))
-	}
-
-	headers := http.Header{}
-	if err := injectClientAuth(ctx, cfg, data, headers); err != nil {
-		return nil, err
-	}
-
-	return doTokenExchange(ctx, httpClient, cfg.TokenURL, data, headers)
+	return executeExchange(ctx, cfg, data)
 }
