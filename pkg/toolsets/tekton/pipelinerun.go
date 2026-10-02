@@ -26,7 +26,7 @@ const (
 	pipelineRunActionCancel  pipelineRunLifecycleAction = "cancel"
 )
 
-func pipelineRunTools() []api.ServerTool {
+func pipelineRunTools(p api.FilteringProvider) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -116,6 +116,7 @@ func pipelineRunTools() []api.ServerTool {
 			),
 			Handler: getPipelineRunLogs,
 		},
+		pipelineRunDiagnoseTool(p),
 	}
 }
 
