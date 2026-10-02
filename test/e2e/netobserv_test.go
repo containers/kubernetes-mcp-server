@@ -426,10 +426,10 @@ func waitForLokiReady(ctx context.Context, t *testing.T, kubeconfig string, clie
 	checkURL.Path = "/ready"
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	deadline := time.Now().Add(3 * time.Minute)
+	readinessDeadline := time.Now().Add(3 * time.Minute)
 	lastStatus := "no response"
 	t.Logf("Waiting for Loki /ready endpoint at %s...", checkURL.Redacted())
-	for time.Now().Before(deadline) {
+	for time.Now().Before(readinessDeadline) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL.String(), nil)
 		require.NoError(t, err, "create Loki readiness request")
 
