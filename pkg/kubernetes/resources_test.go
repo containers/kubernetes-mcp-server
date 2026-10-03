@@ -87,7 +87,7 @@ func (s *ResourcesTestSuite) SetupTest() {
 
 	k, err := NewKubernetes(
 		s.T().Context(),
-		&config.StaticConfig{},
+		config.New(),
 		clientcmd.NewDefaultClientConfig(*s.mockServer.Kubeconfig(), &clientcmd.ConfigOverrides{}),
 		s.mockServer.Config(),
 	)
