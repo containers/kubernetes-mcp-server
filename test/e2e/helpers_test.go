@@ -296,15 +296,27 @@ func portForwardService(
 	namespace, serviceName string,
 	servicePort int,
 ) (string, func()) {
+	return portForwardServiceWithTimeout(ctx, t, restCfg, clientset, namespace, serviceName, servicePort, 30*time.Second)
+}
+
+func portForwardServiceWithTimeout(
+	ctx context.Context,
+	t *testing.T,
+	restCfg *rest.Config,
+	clientset kubernetes.Interface,
+	namespace, serviceName string,
+	servicePort int,
+	podReadyTimeout time.Duration,
+) (string, func()) {
 	t.Helper()
 
-	podName := findPodForService(ctx, t, clientset, namespace, serviceName)
+	podName := findPodForService(ctx, t, clientset, namespace, serviceName, podReadyTimeout)
 	localPort, stopFn := startPortForward(ctx, t, restCfg, namespace, podName, servicePort)
 
 	return fmt.Sprintf("http://127.0.0.1:%d", localPort), stopFn
 }
 
-func findPodForService(ctx context.Context, t *testing.T, clientset kubernetes.Interface, namespace, serviceName string) string {
+func findPodForService(ctx context.Context, t *testing.T, clientset kubernetes.Interface, namespace, serviceName string, timeout time.Duration) string {
 	t.Helper()
 
 	svc, err := clientset.CoreV1().Services(namespace).Get(ctx, serviceName, metav1.GetOptions{})
@@ -312,7 +324,7 @@ func findPodForService(ctx context.Context, t *testing.T, clientset kubernetes.I
 	selector := labels.SelectorFromSet(svc.Spec.Selector)
 
 	var podName string
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -344,7 +356,7 @@ func findPodForService(ctx context.Context, t *testing.T, clientset kubernetes.I
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	require.NotEmpty(t, podName, "no ready pod found for service %s/%s within 30s", namespace, serviceName)
+	require.NotEmpty(t, podName, "no ready pod found for service %s/%s within %s", namespace, serviceName, timeout)
 	return podName
 }
 
