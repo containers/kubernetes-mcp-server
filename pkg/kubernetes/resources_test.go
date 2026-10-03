@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -9,9 +10,13 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -172,9 +177,104 @@ spec:
 	s.assertLastPath("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/test.example.com")
 }
 
+func (s *ResourcesTestSuite) TestScopeDiscoveryErrorIsReturned() {
+	scopeErr := errors.New("scope discovery failed")
+	tests := []struct {
+		name string
+		call func(*Core) error
+	}{
+		{
+			name: "get",
+			call: func(core *Core) error {
+				_, err := core.ResourcesGet(s.T().Context(), nodeGVKPtr(), "test-namespace", "test-node")
+				return err
+			},
+		},
+		{
+			name: "list",
+			call: func(core *Core) error {
+				_, err := core.ResourcesList(s.T().Context(), nodeGVKPtr(), "test-namespace", api.ListOptions{})
+				return err
+			},
+		},
+		{
+			name: "delete",
+			call: func(core *Core) error {
+				return core.ResourcesDelete(s.T().Context(), nodeGVKPtr(), "test-namespace", "test-node", nil)
+			},
+		},
+		{
+			name: "scale",
+			call: func(core *Core) error {
+				_, err := core.ResourcesScale(s.T().Context(), nodeGVKPtr(), "test-namespace", "test-node", 1, false)
+				return err
+			},
+		},
+		{
+			name: "create or update",
+			call: func(core *Core) error {
+				_, err := core.ResourcesCreateOrUpdate(s.T().Context(), `apiVersion: v1
+kind: Node
+metadata:
+  name: test-node
+  namespace: test-namespace
+`)
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			err := tt.call(newCoreWithDiscoveryError(scopeErr))
+			s.ErrorIs(err, scopeErr)
+		})
+	}
+}
+
 func (s *ResourcesTestSuite) assertLastPath(expected string) {
 	s.Require().NotEmpty(s.paths)
 	s.Equal(expected, s.paths[len(s.paths)-1])
+}
+
+func nodeGVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{Version: "v1", Kind: "Node"}
+}
+
+func nodeGVKPtr() *schema.GroupVersionKind {
+	gvk := nodeGVK()
+	return &gvk
+}
+
+type discoveryErrorClient struct {
+	discovery.CachedDiscoveryInterface
+	err error
+}
+
+func (d discoveryErrorClient) ServerResourcesForGroupVersion(string) (*metav1.APIResourceList, error) {
+	return nil, d.err
+}
+
+type resettableRESTMapper struct {
+	meta.RESTMapper
+}
+
+func (resettableRESTMapper) Reset() {}
+
+func newCoreWithDiscoveryError(err error) *Core {
+	mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{{Version: "v1"}})
+	mapper.Add(nodeGVK(), meta.RESTScopeRoot)
+	k := &Kubernetes{
+		discoveryClient: discoveryErrorClient{err: err},
+		dynamicClient: fake.NewSimpleDynamicClientWithCustomListKinds(
+			runtime.NewScheme(),
+			map[schema.GroupVersionResource]string{
+				{Version: "v1", Resource: "nodes"}: "NodeList",
+			},
+		),
+		restMapper: resettableRESTMapper{RESTMapper: mapper},
+	}
+	return NewCore(k)
 }
 
 func TestResources(t *testing.T) {
