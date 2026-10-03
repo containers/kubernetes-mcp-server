@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	labelutil "k8s.io/apimachinery/pkg/labels"
@@ -143,14 +144,38 @@ func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, p
 
 	req := pods.GetLogs(name, logOptions)
 	res := req.Do(ctx)
-	if res.Error() != nil {
-		return "", res.Error()
+	if err := res.Error(); err != nil {
+		return "", extractKubernetesError(err)
 	}
 	rawData, err := res.Raw()
 	if err != nil {
 		return "", err
 	}
 	return string(rawData), nil
+}
+
+// extractKubernetesError ensures the returned error carries the actual message
+// from the Kubernetes API server. client-go's StatusError.Error() returns only
+// ErrStatus.Message, which some error paths leave empty (e.g., HTTP 400 from
+// the pod log endpoint when a container has been terminated). In those cases
+// the real server message is preserved in StatusDetails.Causes — extract it
+// so callers receive an actionable error instead of an empty string.
+func extractKubernetesError(err error) error {
+	var statusErr *apierrors.StatusError
+	if !errors.As(err, &statusErr) {
+		return err
+	}
+	if statusErr.ErrStatus.Message != "" {
+		return err
+	}
+	if details := statusErr.ErrStatus.Details; details != nil {
+		for _, cause := range details.Causes {
+			if cause.Message != "" {
+				return fmt.Errorf("%s: %s", statusErr.ErrStatus.Reason, cause.Message)
+			}
+		}
+	}
+	return fmt.Errorf("%s (HTTP %d)", statusErr.ErrStatus.Reason, statusErr.ErrStatus.Code)
 }
 
 func (c *Core) PodsRun(ctx context.Context, namespace, name, image string, port int32) ([]*unstructured.Unstructured, error) {
