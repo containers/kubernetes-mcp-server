@@ -17,6 +17,7 @@ Each contains:
 - `eval-kiali.yaml` — eval config for the `kiali` task suite (+ core/config)
 - `eval-tekton.yaml` — eval config for the `tekton` task suite (+ core/config)
 - `eval-netobserv.yaml` — eval config for the `netobserv` task suite (+ core/config)
+- `eval-guest-observability.yaml` — eval config for the `guest-observability` task suite (+ core/config)
 - `eval-all.yaml` — eval config that runs all task suites
 - `eval-core-readonly.yaml` (`builtin-openai` only so far) — eval config for the
   `core-readonly` suite. Proves a model can still complete real diagnostic

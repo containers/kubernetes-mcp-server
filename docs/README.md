@@ -26,6 +26,7 @@ Choose the guide that matches your needs:
 - **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
 - **[NetObserv](NETOBSERV.md)** - Network observability flows, metrics, and alerts (Helm on OpenShift)
 - **[KubeVirt](kubevirt.md)** - KubeVirt virtual machine management tools
+- **[Guest Observability](guest-observability.md)** - Virtual machine guest log investigation using Loki
 - **[Tekton](tekton.md)** - Tekton PipelineRun, TaskRun, and troubleshooting tools
 
 ## Feature Specifications
