@@ -29,12 +29,14 @@ func InitExportFlows(p api.ClusterInspector, cfg ...netobservclient.EffectiveCon
 			InputSchema: toolInputSchema(props, nil),
 			Annotations: readOnlyAnnotations("Export NetObserv Flows as CSV"),
 		},
-		RBAC:    flowsRBAC(p, cfg...),
-		Handler: exportFlowsHandler,
+		RBAC: flowsRBAC(p, cfg...),
+		Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+			return exportFlowsHandler(params, cfg...)
+		},
 	}}
 }
 
-func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+func exportFlowsHandler(params api.ToolHandlerParams, detected ...netobservclient.EffectiveConfig) (*api.ToolCallResult, error) {
 	args := params.GetArguments()
 	if args == nil {
 		args = map[string]any{}
@@ -42,7 +44,7 @@ func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if _, ok := args["format"]; !ok {
 		args["format"] = DefaultExportFormat
 	}
-	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient(), detected...)
 	if err != nil {
 		return jsonAPIResult("", err)
 	}

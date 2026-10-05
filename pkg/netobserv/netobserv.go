@@ -31,7 +31,7 @@ type NetObserv struct {
 }
 
 // NewNetObserv creates a client using toolset config, cluster detection, and the Kubernetes REST config.
-func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface) (*NetObserv, error) {
+func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface, detected ...EffectiveConfig) (*NetObserv, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is required")
 	}
@@ -54,6 +54,17 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 	resolved := Config{}
 	if shared != nil {
 		resolved = *shared
+	}
+	if len(detected) > 0 && detected[0].Found {
+		if resolved.Namespace == "" {
+			resolved.Namespace = detected[0].Namespace
+		}
+		if resolved.Service == "" {
+			resolved.Service = detected[0].Service
+		}
+		if resolved.Port == 0 {
+			resolved.Port = detected[0].Port
+		}
 	}
 	isOpenShift := clusterIsOpenShiftFromDiscovery(discoveryClient)
 	resolved.applyDefaults(ctx, isOpenShift)
