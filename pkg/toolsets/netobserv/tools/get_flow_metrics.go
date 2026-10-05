@@ -57,13 +57,15 @@ func InitGetFlowMetrics(p api.ClusterInspector, cfg ...netobservclient.Effective
 			InputSchema: toolInputSchema(props, []string{"aggregateBy"}),
 			Annotations: readOnlyAnnotations("Get NetObserv Flow Metrics"),
 		},
-		RBAC:    metricsRBAC(p, cfg...),
-		Handler: getFlowMetricsHandler,
+		RBAC: metricsRBAC(p, cfg...),
+		Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+			return getFlowMetricsHandler(params, cfg...)
+		},
 	}}
 }
 
-func getFlowMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
+func getFlowMetricsHandler(params api.ToolHandlerParams, detected ...netobservclient.EffectiveConfig) (*api.ToolCallResult, error) {
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient(), detected...)
 	if err != nil {
 		return jsonAPIResult("", err)
 	}

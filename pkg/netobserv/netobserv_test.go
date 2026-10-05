@@ -77,6 +77,38 @@ func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 	s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}, client.tlsCipherSuites)
 }
 
+func (s *NetObservSuite) TestNewNetObserv_UsesDetectedEndpointFields() {
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
+		[toolset_configs.netobserv]
+		loki_mode = "LokiStack"
+	`)))
+	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), nil, EffectiveConfig{
+		Found:     true,
+		Namespace: "observability",
+		Service:   "netobserv-console",
+		Port:      9443,
+	})
+	s.Require().NoError(err)
+	s.Equal("https://netobserv-console.observability.svc.cluster.local:9443", client.pluginURL)
+}
+
+func (s *NetObservSuite) TestNewNetObserv_ExplicitEndpointFieldsWinOverDetection() {
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
+		[toolset_configs.netobserv]
+		namespace = "manual"
+		service = "manual-service"
+		port = 8080
+	`)))
+	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), nil, EffectiveConfig{
+		Found:     true,
+		Namespace: "detected",
+		Service:   "detected-service",
+		Port:      9443,
+	})
+	s.Require().NoError(err)
+	s.Equal("https://manual-service.manual.svc.cluster.local:8080", client.pluginURL)
+}
+
 func (s *NetObservSuite) TestExecuteGet() {
 	var seenAuth string
 	var seenPath string

@@ -15,13 +15,15 @@ func InitListFlows(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfi
 			InputSchema: toolInputSchema(flowQueryProperties(), nil),
 			Annotations: readOnlyAnnotations("List NetObserv Flow Records"),
 		},
-		RBAC:    flowsRBAC(p, cfg...),
-		Handler: listFlowsHandler,
+		RBAC: flowsRBAC(p, cfg...),
+		Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+			return listFlowsHandler(params, cfg...)
+		},
 	}}
 }
 
-func listFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
+func listFlowsHandler(params api.ToolHandlerParams, detected ...netobservclient.EffectiveConfig) (*api.ToolCallResult, error) {
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient(), detected...)
 	if err != nil {
 		return jsonAPIResult("", err)
 	}
