@@ -53,7 +53,7 @@ func flowsRBAC(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) *
 			ResourceName: &api.RBACResourceName{Name: "logs"},
 		})
 	}
-	if api.AnyTargetHasGVK(context.Background(), p, openshiftProjectGVK) {
+	if p != nil && api.AnyTargetHasGVK(context.Background(), p, openshiftProjectGVK) {
 		return api.RBACBounded(api.RBACRequirement{
 			Verbs: []string{"get"},
 			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
@@ -77,7 +77,7 @@ func metricsRBAC(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig)
 			return nil
 		}
 	}
-	if api.AnyTargetHasGVK(context.Background(), p, openshiftProjectGVK) {
+	if p != nil && api.AnyTargetHasGVK(context.Background(), p, openshiftProjectGVK) {
 		return api.RBACBounded(api.RBACRequirement{
 			Verbs: []string{"create"},
 			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
