@@ -18,7 +18,7 @@ type searchTagsOutput struct {
 
 var searchTagsOutputSchema = tools.MustSchema[searchTagsOutput]()
 
-func initSearchTags(p api.FilteringProvider) api.ServerTool {
+func initSearchTags(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name: "tempo_search_tags",

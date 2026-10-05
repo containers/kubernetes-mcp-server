@@ -56,27 +56,27 @@ func (t *Toolset) GetDescription() string {
 }
 
 // GetTools returns all tools provided by this toolset.
-func (t *Toolset) GetTools(p api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(_ context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	return []api.ServerTool{
-		initListComponents(p),
-		initGetComponentSchema(p),
-		initValidateConfig(p),
-		initGetVersions(p),
+		initListComponents(toolsetContext.Inspector),
+		initGetComponentSchema(toolsetContext.Inspector),
+		initValidateConfig(toolsetContext.Inspector),
+		initGetVersions(toolsetContext.Inspector),
 	}
 }
 
 // GetPrompts returns prompts provided by this toolset.
-func (t *Toolset) GetPrompts() []api.ServerPrompt {
+func (t *Toolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
 	return nil
 }
 
 // GetResources returns resources provided by this toolset.
-func (t *Toolset) GetResources() []api.ServerResource {
+func (t *Toolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
 // GetResourceTemplates returns resource templates provided by this toolset.
-func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
 

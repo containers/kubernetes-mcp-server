@@ -34,15 +34,13 @@ var (
 	}
 )
 
-func hasOpenTelemetryCollectorCRD(p api.FilteringProvider) func() bool {
+func hasOpenTelemetryCollectorCRD(p api.ClusterInspector) func() bool {
 	return func() bool {
-		return p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{
-			openTelemetryCollectorGVK,
-		})
+		return api.AnyTargetHasGVK(context.TODO(), p, openTelemetryCollectorGVK)
 	}
 }
 
-func initListComponents(p api.FilteringProvider) api.ServerTool {
+func initListComponents(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_list_components",
@@ -73,7 +71,7 @@ func initListComponents(p api.FilteringProvider) api.ServerTool {
 	}
 }
 
-func initGetComponentSchema(p api.FilteringProvider) api.ServerTool {
+func initGetComponentSchema(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_get_component_schema",
@@ -113,7 +111,7 @@ func initGetComponentSchema(p api.FilteringProvider) api.ServerTool {
 	}
 }
 
-func initValidateConfig(p api.FilteringProvider) api.ServerTool {
+func initValidateConfig(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_validate_config",
@@ -161,7 +159,7 @@ func initValidateConfig(p api.FilteringProvider) api.ServerTool {
 	}
 }
 
-func initGetVersions(p api.FilteringProvider) api.ServerTool {
+func initGetVersions(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_get_versions",

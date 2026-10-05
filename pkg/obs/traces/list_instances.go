@@ -15,7 +15,7 @@ type listInstancesOutput struct {
 
 var listInstancesOutputSchema = tools.MustSchema[listInstancesOutput]()
 
-func initListInstances(p api.FilteringProvider) api.ServerTool {
+func initListInstances(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name: "tempo_list_instances",

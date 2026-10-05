@@ -21,8 +21,8 @@ func (m *mockToolCallRequest) GetArguments() map[string]any {
 func handlerParams(t *testing.T, args map[string]any) api.ToolHandlerParams {
 	t.Helper()
 	return api.ToolHandlerParams{
-		Context:         toolcfg.With(t.Context(), ToolsetName, &Config{SchemaFS: configschemas.Schemas}),
-		ToolCallRequest: &mockToolCallRequest{arguments: args},
+		Context: toolcfg.With(t.Context(), ToolsetName, &Config{SchemaFS: configschemas.Schemas}),
+		Request: &mockToolCallRequest{arguments: args},
 	}
 }
 

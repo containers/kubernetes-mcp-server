@@ -18,7 +18,7 @@ type getTraceByIDOutput struct {
 
 var getTraceByIDOutputSchema = tools.MustSchema[getTraceByIDOutput]()
 
-func initGetTraceByID(p api.FilteringProvider) api.ServerTool {
+func initGetTraceByID(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name: "tempo_get_trace_by_id",
