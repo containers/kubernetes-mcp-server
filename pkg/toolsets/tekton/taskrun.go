@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/buffer"
 	"k8s.io/utils/ptr"
 )
 
@@ -258,13 +259,20 @@ func readContainerLog(ctx context.Context, client api.KubernetesClient, namespac
 		_ = stream.Close()
 	}()
 
-	logData, err := io.ReadAll(io.LimitReader(stream, maxBytes+1))
+	logText, truncated, err := readLogTail(stream, maxBytes)
 	if err != nil {
 		return "", false, fmt.Errorf("error reading logs for container %s: %w", container, err)
 	}
-	truncated := int64(len(logData)) > maxBytes
-	if truncated {
-		logData = logData[:maxBytes]
+	return logText, truncated, nil
+}
+
+func readLogTail(reader io.Reader, maxBytes int64) (string, bool, error) {
+	logTail, err := buffer.NewTypedRingFixed[byte](int(maxBytes))
+	if err != nil {
+		return "", false, fmt.Errorf("invalid byte limit %d: %w", maxBytes, err)
 	}
-	return string(logData), truncated, nil
+	if _, err := io.Copy(logTail, reader); err != nil {
+		return "", false, err
+	}
+	return string(logTail.Slice()), logTail.TotalWritten() > maxBytes, nil
 }

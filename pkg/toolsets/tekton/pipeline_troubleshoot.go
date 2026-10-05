@@ -115,7 +115,7 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 		pipelineText:     fetchPipelineDefinitionForPrompt(params, namespace, pipelineRun),
 		taskRunsText:     taskRunsText,
 		logsText:         fetchPipelineRunLogsForPrompt(params, namespace, taskRuns),
-		eventsText:       fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns),
+		eventsText:       fetchPipelineRunEventsForPrompt(params, namespace, name, pipelineRun, taskRuns),
 		pacText:          fetchPipelineRunPACRepositoriesForPrompt(params, namespace),
 		tektonConfigText: fetchTektonConfigsForPrompt(params),
 	}
@@ -196,7 +196,7 @@ func pipelineSpecBlock(source string, pipelineSpec map[string]interface{}) strin
 }
 
 func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string) ([]tektonv1.TaskRun, string) {
-	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "")
+	taskRuns, _, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "", 0)
 	if err != nil {
 		return nil, fmt.Sprintf("*Error listing TaskRuns: %v*", err)
 	}
@@ -263,7 +263,7 @@ type pipelineEventTarget struct {
 	name string
 }
 
-func pipelineRunEventTargets(pipelineRunName string, taskRuns []tektonv1.TaskRun) []pipelineEventTarget {
+func pipelineRunEventTargets(pipelineRunName string, pipelineRun metav1.Object, taskRuns []tektonv1.TaskRun) []pipelineEventTarget {
 	targets := make([]pipelineEventTarget, 0, 1+2*len(taskRuns))
 	seen := make(map[pipelineEventTarget]struct{})
 	add := func(target pipelineEventTarget) {
@@ -278,15 +278,18 @@ func pipelineRunEventTargets(pipelineRunName string, taskRuns []tektonv1.TaskRun
 	}
 
 	add(pipelineEventTarget{kind: "PipelineRun", name: pipelineRunName})
-	for _, taskRun := range taskRuns {
-		add(pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
-		add(pipelineEventTarget{kind: "Pod", name: taskRun.Status.PodName})
+	for i := range taskRuns {
+		if pipelineRun != nil && !metav1.IsControlledBy(&taskRuns[i], pipelineRun) {
+			continue
+		}
+		add(pipelineEventTarget{kind: "TaskRun", name: taskRuns[i].Name})
+		add(pipelineEventTarget{kind: "Pod", name: taskRuns[i].Status.PodName})
 	}
 	return targets
 }
 
-func listPipelineRunWarningEvents(ctx context.Context, events corev1client.EventInterface, pipelineRunName string, taskRuns []tektonv1.TaskRun, limit int, onError func(pipelineEventTarget, error)) ([]corev1.Event, bool) {
-	targets := pipelineRunEventTargets(pipelineRunName, taskRuns)
+func listPipelineRunWarningEvents(ctx context.Context, events corev1client.EventInterface, pipelineRunName string, pipelineRun metav1.Object, taskRuns []tektonv1.TaskRun, limit int, onError func(pipelineEventTarget, error)) ([]corev1.Event, bool) {
+	targets := pipelineRunEventTargets(pipelineRunName, pipelineRun, taskRuns)
 	matched := make([]corev1.Event, 0)
 	seen := make(map[string]struct{})
 
@@ -330,11 +333,12 @@ func listPipelineRunWarningEvents(ctx context.Context, events corev1client.Event
 	return matched, false
 }
 
-func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun) string {
+func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, pipelineRun metav1.Object, taskRuns []tektonv1.TaskRun) string {
 	matched, _ := listPipelineRunWarningEvents(
 		params.Context,
 		params.CoreV1().Events(namespace),
 		pipelineRunName,
+		pipelineRun,
 		taskRuns,
 		0,
 		func(target pipelineEventTarget, err error) {

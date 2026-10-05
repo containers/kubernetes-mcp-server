@@ -25,7 +25,7 @@ func (p *filteringProvider) ServerResourcesForGroupVersion(ctx context.Context, 
 		return list, nil
 	})
 }
-func (p *filteringProvider) IsMultiTarget() bool                           { return false }
+func (p *filteringProvider) IsMultiTarget() bool                          { return false }
 func (p *filteringProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
 func (p *filteringProvider) GetDefaultTarget() string                     { return "" }
 func (p *filteringProvider) GetTargetParameterName() string               { return "" }
@@ -44,6 +44,8 @@ func (s *TektonSuite) TestOnlyDiagnosisRequiresPipelineRunGVK() {
 		foundDiagnosis = true
 		s.Require().Len(tool.TargetCompatibilityFilters, 1)
 		s.False(tool.TargetCompatibilityFilters[0]())
+		s.Require().NotNil(tool.Tool.Annotations.OpenWorldHint)
+		s.True(*tool.Tool.Annotations.OpenWorldHint)
 	}
 	s.True(foundDiagnosis)
 	s.Equal([]string{"tekton.dev/v1"}, provider.requested)
