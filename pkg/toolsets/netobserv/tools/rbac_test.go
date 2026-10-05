@@ -7,28 +7,44 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	netobservclient "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type RBACSuite struct {
 	suite.Suite
 }
 
-// stubFilteringProvider reports a fixed answer for AnyTargetHasGVKs, standing in for
-// OpenShift (project.openshift.io present) or plain Kubernetes.
-type stubFilteringProvider struct {
+type stubInspector struct {
 	isOpenShift bool
 }
 
-func (m *stubFilteringProvider) IsTargetCompatibilityToolFiltersEnabled() bool { return true }
+func (m *stubInspector) Discovery() api.AggregateDiscovery       { return m }
+func (m *stubInspector) Unstructured() api.AggregateUnstructured { return nil }
 
-func (m *stubFilteringProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
-	return m.isOpenShift
+func (m *stubInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
+	return api.NewResults(ctx, stubTargetProvider{}, func(context.Context, string) (*metav1.APIResourceList, error) {
+		if m.isOpenShift {
+			return &metav1.APIResourceList{APIResources: []metav1.APIResource{{Kind: "Project"}}}, nil
+		}
+		return &metav1.APIResourceList{}, nil
+	})
 }
+
+type stubTargetProvider struct{}
+
+func (stubTargetProvider) IsMultiTarget() bool { return false }
+func (stubTargetProvider) GetTargets(context.Context) ([]string, error) {
+	return []string{"default"}, nil
+}
+func (stubTargetProvider) GetDefaultTarget() string       { return "default" }
+func (stubTargetProvider) GetTargetParameterName() string { return "target" }
+
+var _ api.ClusterInspector = (*stubInspector)(nil)
+var _ api.AggregateDiscovery = (*stubInspector)(nil)
 
 func (s *RBACSuite) TestFlowsRBAC() {
 	s.Run("bounded loki-reader on OpenShift", func() {
-		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: true})
+		meta := flowsRBAC(&stubInspector{isOpenShift: true})
 		s.Require().NoError(meta.Validate())
 		s.Require().NotNil(meta.Bounded)
 		s.Require().Len(meta.Bounded.Requirements, 1)
@@ -43,7 +59,7 @@ func (s *RBACSuite) TestFlowsRBAC() {
 	})
 
 	s.Run("unbounded off OpenShift", func() {
-		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: false})
+		meta := flowsRBAC(&stubInspector{isOpenShift: false})
 		s.Require().NoError(meta.Validate())
 		s.Require().NotNil(meta.Unbounded)
 		s.NotEmpty(meta.Unbounded.Reason)
@@ -58,7 +74,7 @@ func (s *RBACSuite) TestFlowsRBAC() {
 
 func (s *RBACSuite) TestMetricsRBAC() {
 	s.Run("bounded metrics-reader on OpenShift", func() {
-		meta := metricsRBAC(&stubFilteringProvider{isOpenShift: true})
+		meta := metricsRBAC(&stubInspector{isOpenShift: true})
 		s.Require().NoError(meta.Validate())
 		s.Require().NotNil(meta.Bounded)
 		s.Require().Len(meta.Bounded.Requirements, 1)
@@ -71,7 +87,7 @@ func (s *RBACSuite) TestMetricsRBAC() {
 	})
 
 	s.Run("unbounded off OpenShift", func() {
-		meta := metricsRBAC(&stubFilteringProvider{isOpenShift: false})
+		meta := metricsRBAC(&stubInspector{isOpenShift: false})
 		s.Require().NoError(meta.Validate())
 		s.Require().NotNil(meta.Unbounded)
 		s.NotEmpty(meta.Unbounded.Reason)
@@ -87,25 +103,25 @@ func (s *RBACSuite) TestDetectedBackendRBAC() {
 	})
 
 	s.Run("other Loki modes skip RBAC declaration", func() {
-		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: true, LokiMode: "Manual"})
+		meta := flowsRBAC(&stubInspector{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: true, LokiMode: "Manual"})
 		s.Nil(meta)
 	})
 
 	s.Run("disabled Loki skips flow RBAC declaration", func() {
-		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: false})
+		meta := flowsRBAC(&stubInspector{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: false})
 		s.Nil(meta)
 	})
 
 	s.Run("unknown detection remains fail open", func() {
-		meta := flowsRBAC(&stubFilteringProvider{isOpenShift: true}, netobservclient.EffectiveConfig{Unknown: true})
+		meta := flowsRBAC(&stubInspector{isOpenShift: true}, netobservclient.EffectiveConfig{Unknown: true})
 		s.Require().NotNil(meta)
 		s.NotNil(meta.Unbounded)
 	})
 }
 
 func (s *RBACSuite) TestInitToolsCarryRBAC() {
-	ocp := &stubFilteringProvider{isOpenShift: true}
-	plain := &stubFilteringProvider{isOpenShift: false}
+	ocp := &stubInspector{isOpenShift: true}
+	plain := &stubInspector{isOpenShift: false}
 
 	for name, tools := range map[string][]api.ServerTool{
 		"list_flows":   InitListFlows(ocp),
