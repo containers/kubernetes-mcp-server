@@ -13,6 +13,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
@@ -20,6 +21,7 @@ import (
 
 // NetObserv is an HTTP client for the NetObserv console plugin backend API.
 type NetObserv struct {
+	cfg                  *config.Config
 	bearerToken          string
 	bearerTokenFile      string
 	pluginURL            string
@@ -39,6 +41,7 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 		return nil, fmt.Errorf("kubernetes rest config is required")
 	}
 	client := &NetObserv{
+		cfg:             cfg,
 		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),
 		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
@@ -171,26 +174,37 @@ func (n *NetObserv) authorizationHeader(ctx context.Context) string {
 	return "Bearer " + token
 }
 
-const maxJSONResponseBodySize = 4 << 20 // 4 MiB
+func (n *NetObserv) backendLimit() (int64, error) {
+	// Unreachable today: NewNetObserv rejects a nil config and stores it. The
+	// error is defense against a future bug that builds a NetObserv without one.
+	if n == nil || n.cfg == nil {
+		return 0, kubernetes.ErrBackendLimitUnavailable
+	}
+	return n.cfg.MaxBackendResponseBytes.Get(), nil
+}
 
 // ExecuteGet performs a GET request against the plugin API with query parameters derived from arguments.
 func (n *NetObserv) ExecuteGet(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
-	response, err := n.executeGet(ctx, endpoint, arguments, "application/json", maxJSONResponseBodySize, false)
+	response, err := n.executeGet(ctx, endpoint, arguments, "application/json")
 	if err != nil {
 		return "", err
 	}
 	return response.Body, nil
 }
 
-func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string, maxBodySize int64, truncate bool) (GetResponse, error) {
+func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string) (GetResponse, error) {
 	requestURL, err := n.validateAndGetURL(endpoint)
 	if err != nil {
 		return GetResponse{}, err
 	}
-	return n.executeGetAbsolute(ctx, requestURL, arguments, accept, maxBodySize, truncate)
+	return n.executeGetAbsolute(ctx, requestURL, arguments, accept)
 }
 
-func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string, maxBodySize int64, truncate bool) (GetResponse, error) {
+func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string) (GetResponse, error) {
+	limit, err := n.backendLimit()
+	if err != nil {
+		return GetResponse{}, err
+	}
 	u, err := url.Parse(requestURL)
 	if err != nil {
 		return GetResponse{}, fmt.Errorf("failed to parse request URL: %w", err)
@@ -221,17 +235,13 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		return GetResponse{}, fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
+	respBody, err := io.ReadAll(kubernetes.LimitResponseBody(resp.Body, limit))
 	if err != nil {
-		return GetResponse{}, fmt.Errorf("failed to read response body: %w", err)
-	}
-	truncated := false
-	if int64(len(respBody)) > maxBodySize {
-		if !truncate {
-			return GetResponse{}, fmt.Errorf("netobserv API response exceeded maximum allowed size of %d bytes", maxBodySize)
+		var tooLarge *kubernetes.BackendResponseTooLargeError
+		if errors.As(err, &tooLarge) {
+			return GetResponse{}, tooLarge
 		}
-		respBody = respBody[:maxBodySize]
-		truncated = true
+		return GetResponse{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {
@@ -239,5 +249,5 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		}
 		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
 	}
-	return GetResponse{Body: string(respBody), Truncated: truncated}, nil
+	return GetResponse{Body: string(respBody)}, nil
 }

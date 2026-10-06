@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,10 +16,12 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 type Kiali struct {
+	cfg                  *config.Config
 	bearerToken          string
 	kialiURL             string
 	kialiInsecure        bool
@@ -37,6 +40,7 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 		return nil, fmt.Errorf("kubernetes rest config is required")
 	}
 	kiali := &Kiali{
+		cfg:             cfg,
 		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),
 		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
@@ -165,13 +169,21 @@ func (k *Kiali) authorizationHeader() string {
 	return "Bearer " + token
 }
 
-// maxResponseBodySize is the maximum number of bytes read from a Kiali API
-// response. Responses exceeding this limit are truncated to prevent unbounded
-// memory consumption from a misbehaving or compromised upstream server.
-const maxResponseBodySize = 512 << 10 // 512 KiB
+func (k *Kiali) backendLimit() (int64, error) {
+	// Unreachable today: NewKiali rejects a nil config and stores it. The error
+	// is defense against a future bug that builds a Kiali without one.
+	if k == nil || k.cfg == nil {
+		return 0, kubernetes.ErrBackendLimitUnavailable
+	}
+	return k.cfg.MaxBackendResponseBytes.Get(), nil
+}
 
-// executeRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
+// ExecuteRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
 func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
+	limit, err := k.backendLimit()
+	if err != nil {
+		return "", err
+	}
 	ApiCallURL, err := k.validateAndGetURL(endpoint)
 	if err != nil {
 		return "", err
@@ -206,12 +218,13 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
+	respBody, err := io.ReadAll(kubernetes.LimitResponseBody(resp.Body, limit))
 	if err != nil {
+		var tooLarge *kubernetes.BackendResponseTooLargeError
+		if errors.As(err, &tooLarge) {
+			return "", tooLarge
+		}
 		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-	if int64(len(respBody)) > maxResponseBodySize {
-		return "", fmt.Errorf("kiali API response exceeded maximum allowed size of %d bytes", maxResponseBodySize)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {

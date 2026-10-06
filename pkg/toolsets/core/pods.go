@@ -464,7 +464,7 @@ func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 		command = append(command, s)
 	}
-	stdout, stderr, err := kubernetes.NewCore(params).PodsExec(params, ns, name, container, command)
+	stdout, stderr, err := kubernetes.NewCore(params).PodsExec(params, params.Config, ns, name, container, command)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to exec in pod %s in namespace %s: %w", name, ns, err)), nil
 	}

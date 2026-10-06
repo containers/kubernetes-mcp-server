@@ -1,6 +1,6 @@
 # Memory bounds
 
-Status: **In progress** — `max_in_flight` and `mcp_max_result_bytes` are implemented. `max_backend_response_bytes` is not.
+Status: **Implemented**.
 
 Three reloadable top-level options cap each backend response, each tool result, and how many calls run at once. `0` disables that limit. They are TOML fields on [`Config`](../../pkg/config/config.go), registered with `opt(...).reload()`. Document them together in [`docs/configuration.md`](../configuration.md).
 
