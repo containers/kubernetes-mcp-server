@@ -72,6 +72,8 @@ func initVMTroubleshoot() []api.ServerPrompt {
 	}
 }
 
+const vmTroubleshootAssistantText = "I'll analyze the collected data to diagnose the VirtualMachine issues systematically."
+
 // vmTroubleshootHandler implements the VM troubleshooting prompt
 func vmTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 	args := params.GetArguments()
@@ -97,11 +99,9 @@ func vmTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCallResul
 	vmiYaml, vmi := fetchVirtualMachineInstanceStatus(ctx, dynamicClient, namespace, name)
 	volumesYaml := fetchVirtualMachineVolumes(namespace, name, vm, vmi)
 	podYaml, podNames := fetchVirtLauncherPod(ctx, dynamicClient, namespace, name)
-	podLogsText := fetchVirtLauncherPodLogs(ctx, params.KubernetesClient, namespace, podNames)
-	eventsYaml := fetchEvents(ctx, params.KubernetesClient, namespace, name)
 
-	// Build the troubleshooting guide message with embedded resource data
-	guideText := fmt.Sprintf(`# %s VirtualMachine Troubleshooting Guide
+	formatGuide := func(podLogsText, eventsYaml string) string {
+		return fmt.Sprintf(`# %s VirtualMachine Troubleshooting Guide
 
 ## VM: %s (namespace: %s)
 
@@ -216,27 +216,55 @@ After completing troubleshooting and attempting fixes, report:
 - **Action Taken:** What was done to fix the issue (or "None" if no fix was needed/possible)
 - **Result:** Whether the fix was successful or further action is needed
 `, defaults.ProductName(), name, namespace, defaults.ProductName(), vmYaml, vmiYaml, volumesYaml, podYaml, podLogsText, eventsYaml)
+	}
 
-	return api.NewPromptCallResult(
-		"VirtualMachine troubleshooting guide generated",
-		[]api.PromptMessage{
-			{
-				Role: "user",
-				Content: api.PromptContent{
-					Type: "text",
-					Text: guideText,
-				},
-			},
-			{
-				Role: "assistant",
-				Content: api.PromptContent{
-					Type: "text",
-					Text: "I'll analyze the collected data to diagnose the VirtualMachine issues systematically.",
-				},
-			},
+	podLogsText := fetchVirtLauncherPodLogs(ctx, params.KubernetesClient, namespace, podNames)
+	eventsYaml := fetchEvents(ctx, params.KubernetesClient, namespace, name)
+	// guideLim reserves the assistant message, which counts toward the same
+	// result. Skeleton is the guide with the log and event holes empty. If
+	// that string is already over guideLim, return it cut to guideLim plus
+	// the truncation notice and leave the holes empty. If it fits,
+	// FitSections fills the holes in order. The first section that does not
+	// fit is cut and carries the notice; later sections are left empty. A
+	// section that fills the remaining room exactly leaves the next
+	// non-empty section as the notice alone.
+	lim := api.ResultLimit(ctx)
+	if lim > 0 {
+		skeleton := formatGuide("", "")
+		guideLim := lim - int64(len(vmTroubleshootAssistantText))
+		if guideLim <= 0 || int64(len(skeleton)) > guideLim {
+			guide := ""
+			if guideLim > 0 {
+				b := api.NewBuilderWithBudget(guideLim)
+				b.WriteString(skeleton)
+				guide = b.String()
+			}
+			return vmTroubleshootResult(guide, true), nil
+		}
+		fitted := api.FitSections(guideLim-int64(len(skeleton)), podLogsText, eventsYaml)
+		podLogsText, eventsYaml = fitted[0], fitted[1]
+	}
+	return vmTroubleshootResult(formatGuide(podLogsText, eventsYaml), true), nil
+}
+
+func vmTroubleshootResult(guide string, includeAssistant bool) *api.PromptCallResult {
+	messages := []api.PromptMessage{{
+		Role: "user",
+		Content: api.PromptContent{
+			Type: "text",
+			Text: guide,
 		},
-		nil,
-	), nil
+	}}
+	if includeAssistant {
+		messages = append(messages, api.PromptMessage{
+			Role: "assistant",
+			Content: api.PromptContent{
+				Type: "text",
+				Text: vmTroubleshootAssistantText,
+			},
+		})
+	}
+	return api.NewPromptCallResult("VirtualMachine troubleshooting guide generated", messages, nil)
 }
 
 // fetchVirtualMachineStatus fetches the VirtualMachine resource and returns its status as YAML
@@ -361,28 +389,28 @@ func fetchVirtLauncherPod(ctx context.Context, dynamicClient dynamic.Interface, 
 
 // fetchVirtLauncherPodLogs fetches logs from the virt-launcher pod containers
 func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, namespace string, podNames []string) string {
+	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
 	if len(podNames) == 0 {
-		return "### virt-launcher Pod Logs\n\n*No virt-launcher pod found - no logs available*"
+		b.WriteString("### virt-launcher Pod Logs\n\n*No virt-launcher pod found - no logs available*")
+		return b.String()
 	}
 
 	core := kubernetes.NewCore(client)
-	var result strings.Builder
-	result.WriteString("### virt-launcher Pod Logs\n\n")
+	b.WriteString("### virt-launcher Pod Logs\n\n")
 
 	containerName := "compute"
 	for _, podName := range podNames {
-		fmt.Fprintf(&result, "#### Pod: %s\n\n", podName)
-
-		// Fetch last 50 lines of logs
+		if b.Truncated() {
+			break
+		}
 		logs, err := core.PodsLog(ctx, namespace, podName, containerName, false, 50)
 		if err != nil {
-			return fmt.Sprintf("### virt-launcher Pod Logs\n\n*Error fetching logs: %v*", err)
+			return api.LimitString(ctx, fmt.Sprintf("### virt-launcher Pod Logs\n\n*Error fetching logs: %v*", err))
 		}
-
-		fmt.Fprintf(&result, "**Container: %s**\n\n```\n%s\n```\n\n", containerName, logs)
+		b.WriteString(fmt.Sprintf("#### Pod: %s\n\n**Container: %s**\n\n```\n%s\n```\n\n", podName, containerName, logs))
 	}
 
-	return result.String()
+	return b.String()
 }
 
 // fetchEvents fetches events related to the VM and returns them formatted
@@ -394,7 +422,7 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 		ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + vmName},
 	})
 	if err != nil {
-		return fmt.Sprintf("### Events\n\n*Error listing events: %v*", err)
+		return api.LimitString(ctx, fmt.Sprintf("### Events\n\n*Error listing events: %v*", err))
 	}
 
 	var relatedEvents []map[string]any
@@ -414,7 +442,7 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 	// as a field selector; list all events in the namespace and filter client-side.
 	allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
 	if err != nil {
-		return fmt.Sprintf("### Events\n\n*Error listing events: %v*", err)
+		return api.LimitString(ctx, fmt.Sprintf("### Events\n\n*Error listing events: %v*", err))
 	}
 	for _, event := range allEvents {
 		involvedObj, ok := event["InvolvedObject"].(map[string]string)
@@ -429,13 +457,21 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 	}
 
 	if len(relatedEvents) == 0 {
-		return "### Events\n\n*No events found related to this VM*"
+		return api.LimitString(ctx, "### Events\n\n*No events found related to this VM*")
 	}
 
 	yamlStr, err := output.MarshalYaml(relatedEvents)
 	if err != nil {
-		return fmt.Sprintf("### Events\n\n*Error marshaling events: %v*", err)
+		return api.LimitString(ctx, fmt.Sprintf("### Events\n\n*Error marshaling events: %v*", err))
 	}
 
-	return fmt.Sprintf("### Events (related to %s)\n\n```yaml\n%s```", vmName, yamlStr)
+	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
+	b.WriteString(fmt.Sprintf("### Events (related to %s)\n\n```yaml\n", vmName))
+	if !b.Truncated() {
+		b.WriteString(yamlStr)
+	}
+	if !b.Truncated() {
+		b.WriteString("```")
+	}
+	return b.String()
 }
