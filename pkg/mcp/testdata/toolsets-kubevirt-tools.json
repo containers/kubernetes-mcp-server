@@ -63,6 +63,79 @@
           "requirements": [
             {
               "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstances"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "vnc/screenshot"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Virtual Machine: Console Screenshot"
+    },
+    "description": "Capture a screenshot of the graphical (VNC) console of a VirtualMachine on KubeVirt as a PNG image. Use this to see what is currently displayed on the VM's screen (for example firmware, a bootloader, or a login prompt). Read-only: it never sends input to the guest.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "The name of the virtual machine",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "vm_console_screenshot",
+    "title": "Virtual Machine: Console Screenshot"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
                 "all": true
               },
               "target": {

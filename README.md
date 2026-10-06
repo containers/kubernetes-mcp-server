@@ -264,7 +264,7 @@ and only needed for the project-specific scenarios noted.
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
 | [Kubernetes](https://kubernetes.io) | - | 32 |
-| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 26 |
+| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
 
@@ -534,6 +534,10 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - The name of the source virtual machine to clone
   - `namespace` (`string`) **(required)** - The namespace of the source virtual machine
   - `targetName` (`string`) **(required)** - The name for the new cloned virtual machine
+
+- **vm_console_screenshot** - Capture a screenshot of the graphical (VNC) console of a VirtualMachine on KubeVirt as a PNG image. Use this to see what is currently displayed on the VM's screen (for example firmware, a bootloader, or a login prompt). Read-only: it never sends input to the guest.
+  - `name` (`string`) **(required)** - The name of the virtual machine
+  - `namespace` (`string`) **(required)** - The namespace of the virtual machine
 
 - **vm_create** - Create a VirtualMachine on KubeVirt with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.
   - `autostart` (`boolean`) - Optional flag to automatically start the VM after creation (sets runStrategy to Always instead of Halted). Defaults to false.
