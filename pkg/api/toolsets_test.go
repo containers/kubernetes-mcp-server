@@ -103,6 +103,51 @@ func (s *ToolsetsSuite) TestNewToolCallResultStructured() {
 	})
 }
 
+func (s *ToolsetsSuite) TestToolContent() {
+	s.Run("NewTextToolContent", func() {
+		content := NewTextToolContent("hello world")
+		s.True(content.IsText())
+		s.Equal("hello world", content.Text())
+		s.Empty(content.MIMEType)
+	})
+	s.Run("an explicit text/ MIME type is still text", func() {
+		content := &ToolContent{Data: []byte("<p>hello</p>"), MIMEType: "text/html"}
+		s.True(content.IsText())
+	})
+	s.Run("NewImageToolContent copies bytes for safety", func() {
+		original := []byte{0x89, 0x50, 0x4e, 0x47}
+		content := NewImageToolContent(original, "image/png")
+		s.False(content.IsText())
+		s.Equal("image/png", content.MIMEType)
+		s.Equal(original, content.Data)
+
+		// Verify mutation safety: modifying original doesn't affect content
+		original[0] = 0xFF
+		s.NotEqual(0xFF, content.Data[0], "NewImageToolContent must copy bytes, not reference")
+	})
+}
+
+func (s *ToolsetsSuite) TestNewToolCallResultContentBlocks() {
+	s.Run("text-only content", func() {
+		block := NewTextToolContent("screenshot description")
+		result := NewToolCallResultContentBlocks(block)
+		s.Len(result.ContentBlocks, 1)
+		s.Equal(block, result.ContentBlocks[0])
+		s.Nil(result.Error)
+		s.Nil(result.StructuredContent)
+	})
+	s.Run("text and image blocks", func() {
+		pngBytes := []byte{0x89, 0x50, 0x4e, 0x47}
+		result := NewToolCallResultContentBlocks(
+			NewTextToolContent("The VM is showing a boot prompt"),
+			NewImageToolContent(pngBytes, "image/png"),
+		)
+		s.Len(result.ContentBlocks, 2)
+		s.True(result.ContentBlocks[0].IsText())
+		s.False(result.ContentBlocks[1].IsText())
+	})
+}
+
 func (s *ToolsetsSuite) TestNewToolCallResultFull() {
 	s.Run("sets text, structured, and nil error", func() {
 		structured := []map[string]any{{"name": "pod-1"}}

@@ -6,10 +6,41 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/google/jsonschema-go/jsonschema"
 )
+
+// ToolContent represents a single content block in a multi-content tool result.
+// Used by tools that return both text and images (e.g., vm_console_screenshot).
+type ToolContent struct {
+	Data     []byte
+	MIMEType string
+}
+
+func (c *ToolContent) IsText() bool {
+	return c != nil && (c.MIMEType == "" || strings.HasPrefix(c.MIMEType, "text/"))
+}
+
+func (c *ToolContent) Text() string {
+	if c == nil {
+		return ""
+	}
+	return string(c.Data)
+}
+
+// NewTextToolContent creates a text content block.
+func NewTextToolContent(text string) *ToolContent {
+	return &ToolContent{Data: []byte(text)}
+}
+
+// NewImageToolContent creates an image content block, copying the byte slice for safety.
+func NewImageToolContent(data []byte, mimeType string) *ToolContent {
+	dataCopy := make([]byte, len(data))
+	copy(dataCopy, data)
+	return &ToolContent{Data: dataCopy, MIMEType: mimeType}
+}
 
 type ServerTool struct {
 	Tool    Tool
@@ -105,12 +136,17 @@ type ToolCallRequest interface {
 }
 
 type ToolCallResult struct {
-	// Raw content returned by the tool.
+	// Raw content returned by the tool. Ignored whenever ContentBlocks is
+	// non-empty (see ContentBlocks) - not required to be left empty in that case,
+	// simply unused.
 	Content string
 	// StructuredContent is an optional JSON-serializable value for MCP Apps UI rendering.
 	// When set, it is passed as structuredContent in the MCP CallToolResult alongside Content.
 	// Must be completely omitted (nil) when not used.
 	StructuredContent any
+	// ContentBlocks are SDK-neutral content blocks (text and/or images) for multi-content
+	// tools. When non-empty, these take precedence over the legacy Content field above.
+	ContentBlocks []*ToolContent
 	// Error (non-protocol) to send back to the LLM.
 	Error error
 }
@@ -119,6 +155,17 @@ type ToolCallResult struct {
 // Use this for tools that return human-readable text output.
 func NewToolCallResult(content string, err error) *ToolCallResult {
 	return NewToolCallResultFull(content, nil, err)
+}
+
+// NewToolCallResultContentBlocks creates a ToolCallResult from content blocks (text and/or
+// images). Use this for multi-content tools like vm_console_screenshot.
+//
+// It takes no structured/error parameters, unlike its siblings below: set
+// ToolCallResult.StructuredContent or .Error directly on the result if a caller needs them
+// (the growing NewToolCallResult...() family would benefit from an options pattern instead of
+// each new combination growing its own constructor, but that's a larger change than this one).
+func NewToolCallResultContentBlocks(blocks ...*ToolContent) *ToolCallResult {
+	return &ToolCallResult{ContentBlocks: blocks}
 }
 
 // NewToolCallResultFull creates a ToolCallResult with both human-readable text
