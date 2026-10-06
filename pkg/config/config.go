@@ -35,6 +35,11 @@ const (
 	// resource result. 0 disables the limit.
 	DefaultMcpMaxResultBytes = 16 << 20
 
+	// DefaultMaxBackendResponseBytes is the default cap on one Kubernetes,
+	// Kiali, or NetObserv response, and on the combined stdout and stderr
+	// retained by one pods_exec. 0 disables the limit.
+	DefaultMaxBackendResponseBytes = 4 << 20
+
 	extensionToolsetTable  = "toolset_configs"
 	extensionProviderTable = "cluster_provider_configs"
 )
@@ -237,6 +242,10 @@ type Config struct {
 	MetricsPort Option[string]
 	// ListOutput is the output format for resource list operations (yaml or table).
 	ListOutput Option[string]
+	// MaxBackendResponseBytes is the maximum number of bytes read from one
+	// Kubernetes API, Kiali, or NetObserv response. pods_exec counts stdout
+	// and stderr together against the same limit. 0 disables the limit.
+	MaxBackendResponseBytes Option[int64]
 	// MaxInFlight is the maximum number of tools/call, prompts/get, and
 	// resources/read handlers running in this process. 0 disables the limit.
 	MaxInFlight Option[int]
@@ -414,6 +423,12 @@ func newConfig() *Config {
 		BindAddress: opt("bind_address", "0.0.0.0").desc("Address to bind the HTTP server"),
 		MetricsPort: opt("metrics_port", "").validate(validateMetricsPortNumber).desc("Separate metrics server port"),
 		ListOutput:  opt("list_output", "table").reload().validate(validateListOutput).desc("Output format for resource list operations"),
+		MaxBackendResponseBytes: opt("max_backend_response_bytes", int64(DefaultMaxBackendResponseBytes)).reload().validate(func(v int64) error {
+			if v < 0 {
+				return fmt.Errorf("max_backend_response_bytes must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max bytes of one Kubernetes, Kiali, or NetObserv response (0 disables)"),
 		MaxInFlight: opt("max_in_flight", DefaultMaxInFlight).reload().validate(func(v int) error {
 			if v < 0 {
 				return fmt.Errorf("max_in_flight must not be negative (got %d)", v)

@@ -17,8 +17,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-const maxLogBytesPerContainer = 1 << 20 // 1 MiB
-
 func taskRunTools() []api.ServerTool {
 	return []api.ServerTool{
 		{
@@ -254,7 +252,7 @@ func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *
 		_ = stream.Close()
 	}()
 
-	logBytes, err := io.ReadAll(io.LimitReader(stream, maxLogBytesPerContainer))
+	logBytes, err := io.ReadAll(stream)
 	if err != nil {
 		sb.WriteString(fmt.Sprintf("[%s: %s] error reading logs: %v\n", kind, name, err))
 		return

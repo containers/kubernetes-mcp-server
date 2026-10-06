@@ -68,7 +68,8 @@ func (s *ResultBudgetSuite) TestLimitStringUsesTheContextCap() {
 	s.Equal(int64(4), ResultLimit(ctx))
 	s.Equal("abcd"+ResultTruncationNotice, LimitString(ctx, "abcdef"))
 	s.Equal("abcdef", LimitString(context.Background(), "abcdef"))
-	s.Equal(int64(3), ResultLimit(WithResultBudget(nil, 3)))
+	//lint:ignore SA1012 we're testing the path where WithResultBudget subs an ephemeral context when it receives nil
+	s.Equal(int64(3), ResultLimit(WithResultBudget(nil, 3))) //nolint:staticcheck // we're testing the path where WithResultBudget subs an ephemeral context when it receives nil
 	s.Equal(int64(0), ResultLimit(WithResultBudget(context.Background(), 0)))
 }
 

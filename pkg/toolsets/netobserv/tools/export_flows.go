@@ -48,10 +48,6 @@ func exportFlowsHandler(params api.ToolHandlerParams, detected ...netobservclien
 	if err != nil {
 		return jsonAPIResult("", err)
 	}
-	response, err := client.ExecuteGetAccept(params.Context, NetObservExportFlowsEndpoint, args, "text/csv,*/*", DefaultExportMaxBodyBytes)
-	content := response.Body
-	if response.Truncated {
-		content += "\n\n[truncated: export exceeded maximum response size]"
-	}
-	return textAPIResult(content, wrapAPIError("export flows", err))
+	response, err := client.ExecuteGetAccept(params.Context, NetObservExportFlowsEndpoint, args, "text/csv,*/*")
+	return textAPIResult(response.Body, wrapAPIError("export flows", err))
 }
