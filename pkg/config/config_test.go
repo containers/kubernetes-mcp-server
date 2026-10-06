@@ -67,6 +67,9 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("MaxInFlight is 64", func() {
 		s.Equal(64, base.MaxInFlight.Get())
 	})
+	s.Run("McpMaxResultBytes is 16MiB", func() {
+		s.Equal(int64(16<<20), base.McpMaxResultBytes.Get())
+	})
 }
 
 func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
@@ -109,6 +112,8 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.True(paths["log_level"].Reloadable)
 	s.Contains(paths, "max_in_flight")
 	s.True(paths["max_in_flight"].Reloadable)
+	s.Contains(paths, "mcp_max_result_bytes")
+	s.True(paths["mcp_max_result_bytes"].Reloadable)
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
 }
 
@@ -137,6 +142,34 @@ func (s *ConfigSuite) TestMaxInFlight() {
 		next, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 2`), WithPrevious(prev))
 		s.Require().NoError(err)
 		s.Equal(2, next.MaxInFlight.Get())
+	})
+}
+
+func (s *ConfigSuite) TestMcpMaxResultBytes() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 32`))
+		s.Require().NoError(err)
+		s.Equal(int64(32), cfg.McpMaxResultBytes.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 0`))
+		s.Require().NoError(err)
+		s.Equal(int64(0), cfg.McpMaxResultBytes.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "mcp_max_result_bytes must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 16777216`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(int64(2), next.McpMaxResultBytes.Get())
 	})
 }
 

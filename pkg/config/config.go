@@ -31,6 +31,10 @@ const (
 	// 0 disables the limit.
 	DefaultMaxInFlight = 64
 
+	// DefaultMcpMaxResultBytes is the default cap on one tool, prompt, or
+	// resource result. 0 disables the limit.
+	DefaultMcpMaxResultBytes = 16 << 20
+
 	extensionToolsetTable  = "toolset_configs"
 	extensionProviderTable = "cluster_provider_configs"
 )
@@ -236,6 +240,10 @@ type Config struct {
 	// MaxInFlight is the maximum number of tools/call, prompts/get, and
 	// resources/read handlers running in this process. 0 disables the limit.
 	MaxInFlight Option[int]
+	// McpMaxResultBytes is the maximum size of one tool, prompt, or resource
+	// result. For a tool, the size is len(Content) plus the JSON size of
+	// StructuredContent when that field is set. 0 disables the limit.
+	McpMaxResultBytes Option[int64]
 	// AppsEnabled enables MCP Apps UI resources for tools that declare an app.
 	// Defaults to false so existing MCP clients retain their current behavior.
 	AppsEnabled Option[bool]
@@ -412,6 +420,12 @@ func newConfig() *Config {
 			}
 			return nil
 		}).desc("Max concurrent tools/call, prompts/get, and resources/read (0 disables)"),
+		McpMaxResultBytes: opt("mcp_max_result_bytes", int64(DefaultMcpMaxResultBytes)).reload().validate(func(v int64) error {
+			if v < 0 {
+				return fmt.Errorf("mcp_max_result_bytes must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max bytes of one tool, prompt, or resource result (0 disables)"),
 		AppsEnabled: opt("apps_enabled", false).desc("Enable MCP Apps UI resources (requires restart)"),
 		Stateless:   opt("stateless", false).desc("Run without tool/prompt change notifications"),
 		DisableLocalhostProtection: opt("disable_localhost_protection", false).

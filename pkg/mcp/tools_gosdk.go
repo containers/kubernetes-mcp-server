@@ -94,6 +94,9 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 			return NewTextResult("", confirmErr), nil
 		}
 
+		limit := cfg.McpMaxResultBytes.Get()
+		ctx = api.WithResultBudget(ctx, limit)
+
 		// get the correct derived Kubernetes client for the target specified in the request
 		cluster := toolCallRequest.GetString(s.p.GetTargetParameterName(), s.p.GetDefaultTarget())
 		params, err := newHandlerParams(s, ctx, cfg, api.ToolCallRequest(toolCallRequest), cluster)
@@ -110,6 +113,9 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		}
 		if result.Error != nil {
 			mcplog.HandleK8sError(ctx, result.Error, tool.Tool.Name)
+		}
+		if err := rejectOversizedToolResult(limit, result); err != nil {
+			return nil, err
 		}
 		// If result has multi-content blocks, use the multi-content converter;
 		// otherwise fall back to legacy Content field.
