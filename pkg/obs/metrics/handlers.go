@@ -533,7 +533,7 @@ func getAlertsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 		return api.NewToolCallResult("", fmt.Errorf("failed to get alerts: %w", err)), nil
 	}
 
-	args := params.GetArguments()
+	args := params.Request.GetArguments()
 	active := GetBoolPtr(args, "active")
 	silenced := GetBoolPtr(args, "silenced")
 	inhibited := GetBoolPtr(args, "inhibited")

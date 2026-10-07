@@ -102,8 +102,8 @@ func newPromParams(t *testing.T, mockClient *MockedLoader, args map[string]any) 
 	t.Helper()
 	ctx := context.WithValue(t.Context(), testPromClientKey, prometheus.Loader(mockClient))
 	return api.ToolHandlerParams{
-		Context:         ctx,
-		ToolCallRequest: &mockToolCallRequest{arguments: args},
+		Context: ctx,
+		Request: &mockToolCallRequest{arguments: args},
 	}
 }
 
@@ -111,8 +111,8 @@ func newAlertmanagerParams(t *testing.T, mockClient *MockedAlertmanagerLoader, a
 	t.Helper()
 	ctx := context.WithValue(t.Context(), testAMClientKey, alertmanager.Loader(mockClient))
 	return api.ToolHandlerParams{
-		Context:         ctx,
-		ToolCallRequest: &mockToolCallRequest{arguments: args},
+		Context: ctx,
+		Request: &mockToolCallRequest{arguments: args},
 	}
 }
 

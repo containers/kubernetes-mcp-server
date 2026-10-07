@@ -19,7 +19,7 @@ type searchTracesOutput struct {
 
 var searchTracesOutputSchema = tools.MustSchema[searchTracesOutput]()
 
-func initSearchTraces(p api.FilteringProvider) api.ServerTool {
+func initSearchTraces(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name: "tempo_search_traces",

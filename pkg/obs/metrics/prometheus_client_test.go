@@ -35,7 +35,7 @@ func newTestParams(ctx context.Context, restConfig *rest.Config, cfg *Config) ap
 	return api.ToolHandlerParams{
 		Context:          ctx,
 		KubernetesClient: &mockKubernetesClient{restConfig: restConfig},
-		ToolCallRequest:  &mockToolCallRequest{},
+		Request:          &mockToolCallRequest{},
 	}
 }
 

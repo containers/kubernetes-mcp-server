@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"context"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
@@ -20,7 +22,7 @@ func (t *Toolset) GetDescription() string {
 }
 
 // GetTools returns all tools provided by this toolset.
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(_ context.Context, _ api.ToolsetContext) []api.ServerTool {
 	return []api.ServerTool{
 		initListMetrics(),
 		initExecuteInstantQuery(),
@@ -35,18 +37,18 @@ func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 }
 
 // GetPrompts returns prompts provided by this toolset.
-func (t *Toolset) GetPrompts() []api.ServerPrompt {
+func (t *Toolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
 	// Currently, prompts are not supported through this toolset
 	// The workflow instructions are embedded in the tool descriptions
 	return nil
 }
 
 // GetResources returns resources provided by this toolset.
-func (t *Toolset) GetResources() []api.ServerResource {
+func (t *Toolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
 // GetResourceTemplates returns resource templates provided by this toolset.
-func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
