@@ -1,0 +1,72 @@
+# Re-expose `configuration_view` over HTTP for the eval/CI environment.
+#
+# `enabled_tools` is an exclusive allowlist (pkg/config/config.go): once set, ANY
+# tool not listed here is hidden, regardless of which toolsets are active. This
+# file is copied into every mcpchecker.yaml matrix job that uses the default
+# MCP_CONFIG_DIR, so the list below enumerates every tool across every toolset
+# this project ships, not just the "core"/"config" ones, to avoid silently
+# hiding tools in the helm/kiali/kubevirt/tekton/netobserv/all matrix jobs.
+#
+# This list was generated from the running binary. To regenerate it after adding/renaming tools:
+#
+#   make build
+#   printf 'toolsets = ["core","config","helm","kiali","kubevirt","tekton","netobserv","kcp"]\n' > /tmp/all-toolsets.toml
+#   (echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}'; \
+#    sleep 1; echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'; \
+#    sleep 1; echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 2) \
+#     | KUBECONFIG=<any-valid-kubeconfig> ./kubernetes-mcp-server --config /tmp/all-toolsets.toml \
+#     | python3 -c "import json,sys;[print(t['name']) for t in [json.loads(l) for l in sys.stdin if l.strip()][-1]['result']['tools']]" | sort
+
+enabled_tools = [
+  "configuration_view",
+  "events_list",
+  "helm_install",
+  "helm_list",
+  "helm_uninstall",
+  "kcp_workspace_describe",
+  "kcp_workspaces_list",
+  "kiali_get_logs",
+  "kiali_get_mesh_status",
+  "kiali_get_mesh_traffic_graph",
+  "kiali_get_metrics",
+  "kiali_get_pod_performance",
+  "kiali_get_resource_details",
+  "kiali_get_trace_details",
+  "kiali_list_mesh_clusters",
+  "kiali_list_traces",
+  "kiali_manage_istio_config",
+  "kiali_manage_istio_config_read",
+  "namespaces_list",
+  "netobserv_export_flows",
+  "netobserv_get_flow_metrics",
+  "netobserv_list_flows",
+  "nodes_log",
+  "nodes_stats_summary",
+  "nodes_top",
+  "pods_delete",
+  "pods_exec",
+  "pods_get",
+  "pods_list",
+  "pods_list_in_namespace",
+  "pods_log",
+  "pods_run",
+  "pods_top",
+  "projects_list",
+  "resources_create_or_update",
+  "resources_delete",
+  "resources_get",
+  "resources_list",
+  "resources_scale",
+  "tekton_pipeline_start",
+  "tekton_pipelinerun_lifecycle",
+  "tekton_pipelinerun_logs",
+  "tekton_task_start",
+  "tekton_taskrun_logs",
+  "tekton_taskrun_restart",
+  "vm_clone",
+  "vm_create",
+  "vm_create_from_template",
+  "vm_guest_info",
+  "vm_lifecycle",
+  "vm_troubleshoot",
+]
