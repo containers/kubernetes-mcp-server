@@ -2,12 +2,14 @@ package core
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -40,7 +42,8 @@ func initEvents() []api.ServerTool {
 			Verbs:     []string{"list"},
 			Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "events"}},
 			Namespace: &api.RBACNamespace{Argument: "namespace"},
-		}), Handler: eventsList},
+		}), Handler: eventsList,
+			App: mcpapps.Table("ui://kubernetes-mcp-server/events-list", "Events list", mcpapps.WithDescription("Interactive table of Kubernetes events"))},
 	}
 }
 
@@ -56,12 +59,28 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
 	}
+	rows := make([]map[string]any, 0, len(eventMap))
+	for _, event := range eventMap {
+		row := maps.Clone(event)
+		if object, ok := event["InvolvedObject"].(map[string]string); ok {
+			row["InvolvedObject"] = object["Kind"] + "/" + object["Name"]
+		}
+		rows = append(rows, row)
+	}
+	structured := map[string]any{
+		"columns": []string{"Namespace", "Timestamp", "Type", "Reason", "InvolvedObject", "Message"},
+		"items":   rows,
+	}
 	if len(eventMap) == 0 {
-		return api.NewToolCallResult("# No events found", nil), nil
+		return api.NewToolCallResultFull("# No events found", structured, nil), nil
 	}
 	yamlEvents, err := output.MarshalYaml(eventMap)
 	if err != nil {
 		err = fmt.Errorf("failed to list events in all namespaces: %w", err)
 	}
-	return api.NewToolCallResult(fmt.Sprintf("# The following events (YAML format) were found:\n%s", yamlEvents), err), nil
+	return api.NewToolCallResultFull(
+		fmt.Sprintf("# The following events (YAML format) were found:\n%s", yamlEvents),
+		structured,
+		err,
+	), nil
 }
