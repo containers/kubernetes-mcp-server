@@ -7,7 +7,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-func InitExportFlows() []api.ServerTool {
+func InitExportFlows(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
 	props := flowQueryProperties()
 	props["format"] = &jsonschema.Schema{
 		Type:        "string",
@@ -29,12 +29,14 @@ func InitExportFlows() []api.ServerTool {
 			InputSchema: toolInputSchema(props, nil),
 			Annotations: readOnlyAnnotations("Export NetObserv Flows as CSV"),
 		},
-		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
-		Handler: exportFlowsHandler,
+		RBAC: flowsRBAC(p, cfg...),
+		Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+			return exportFlowsHandler(params, cfg...)
+		},
 	}}
 }
 
-func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+func exportFlowsHandler(params api.ToolHandlerParams, detected ...netobservclient.EffectiveConfig) (*api.ToolCallResult, error) {
 	args := params.GetArguments()
 	if args == nil {
 		args = map[string]any{}
@@ -42,7 +44,7 @@ func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if _, ok := args["format"]; !ok {
 		args["format"] = DefaultExportFormat
 	}
-	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient(), detected...)
 	if err != nil {
 		return jsonAPIResult("", err)
 	}

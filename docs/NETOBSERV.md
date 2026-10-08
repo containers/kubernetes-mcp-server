@@ -78,7 +78,14 @@ Recommended settings (also in the example file):
 Grant the release ServiceAccount permission to:
 
 1. Use core Kubernetes tools (for example bind `view` or a custom ClusterRole).
-2. Call the NetObserv plugin API (the plugin enforces Kubernetes RBAC for the token).
+2. Call the NetObserv plugin API (the plugin enforces Kubernetes RBAC for the token). On OpenShift with NetObserv
+   multi-tenancy this means the operator-provided reader ClusterRoles:
+   - `netobserv-loki-reader` — `get` on `network.loki.grafana.com` (resourceName `logs`); required by `netobserv_list_flows` and `netobserv_export_flows`.
+   - `netobserv-metrics-reader` — `create` on `pods.metrics.k8s.io` (Thanos query authorization); required by `netobserv_get_flow_metrics`.
+
+   The tools derive their RBAC metadata from the FlowCollector. LokiStack advertises the bounded Loki reader requirement;
+   other Loki modes omit the declaration because their backend permissions cannot be inferred. If detection fails,
+   the tools fail open with `unbounded` metadata.
 
 ### TLS
 
@@ -96,6 +103,10 @@ Global `tls_min_version` / `tls_cipher_suites` (and `TLS_MIN_VERSION` / `TLS_CIP
 | `port` | `9001` | Plugin port |
 | `insecure` | `true` if service CA file missing | Skip TLS verify (avoid in production) |
 | `certificate_authority` | auto: service CA on OCP | CA file path for HTTPS |
+| `loki_enabled` | autodetected | Manual Loki enablement override when FlowCollector detection is unavailable or needs overriding |
+| `loki_mode` | autodetected | Manual Loki mode override, such as `LokiStack`, `Manual`, or `Monolithic` |
+| `prometheus_enabled` | autodetected | Manual Prometheus enablement override |
+| `prometheus_mode` | autodetected | Manual Prometheus mode override, such as `Auto` or `Manual` |
 
 ## Local development
 
