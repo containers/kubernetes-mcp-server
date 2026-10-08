@@ -23,11 +23,6 @@ kubectl apply -f ../../../evals/tasks/netobserv/shared/mock-plugin.yaml
 kubectl port-forward -n netobserv svc/netobserv-plugin 9001:9001
 
 NETOBSERV_URL=http://localhost:9001 go test -tags netobserv_contract -v ./backend/
-
-# Against real plugin (requires NetObserv operator deployed)
-oc port-forward -n netobserv svc/netobserv-plugin 9001:9001
-
-NETOBSERV_URL=http://localhost:9001 go test -tags netobserv_contract -v ./backend/
 ```
 
 ## Test Structure
