@@ -37,18 +37,20 @@ func RandomPortAddress() (*net.TCPAddr, error) {
 	return tcpAddr, nil
 }
 
+// WaitForServer waits up to 5 seconds for the server to accept TCP connections
 func WaitForServer(tcpAddr *net.TCPAddr) error {
-	var conn *net.TCPConn
-	var err error
-	for i := 0; i < 10; i++ {
-		conn, err = net.DialTCP("tcp", nil, tcpAddr)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		conn, err := net.DialTCP("tcp", nil, tcpAddr)
 		if err == nil {
 			_ = conn.Close()
-			break
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("server at %s did not start: %w", tcpAddr, err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return err
 }
 
 // WaitForHealthz waits for the /healthz endpoint to return a non-404 response
