@@ -26,6 +26,11 @@ impersonation_trusted_proxies = ["127.0.0.1/32", "::1/128"]
 	}{
 		{"trusted proxy authentication", valid, ""},
 		{"stateless mode", valid + `stateless = true`, ""},
+		{"explicit kubeconfig provider", valid + `cluster_provider_strategy = "kubeconfig"`, ""},
+		{"in-cluster provider is rejected", valid + `cluster_provider_strategy = "in-cluster"`, "only supports kubeconfig"},
+		{"KCP provider is rejected", valid + `cluster_provider_strategy = "kcp"`, "only supports kubeconfig"},
+		{"disabled provider is rejected", valid + `cluster_provider_strategy = "disabled"`, "only supports kubeconfig"},
+		{"custom provider is rejected", valid + `cluster_provider_strategy = "custom"`, "only supports kubeconfig"},
 		{"additional OIDC verification", valid + `
 require_oauth = true
 authorization_url = "https://idp.example.com"

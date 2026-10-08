@@ -19,9 +19,11 @@ kubeconfig = "/etc/kubernetes-mcp-server/kubeconfig"
 
 The example trusts a proxy on the same host or in the same pod. For a separate proxy, configure its immediate peer CIDRs. Forwarded address headers do not affect this check. `trust_proxy_headers` does not grant permission to supply an impersonation identity.
 
-MCP preserves backend authentication from kubeconfig or the in-cluster service account. The caller's bearer token is used for MCP authentication and session binding, not for Kubernetes authentication. The server never falls back to the backend identity when an impersonation request is missing identity.
+This mode supports HTTP and kubeconfig-backed clusters only. In-cluster, KCP, disabled, and custom providers are rejected. When running inside a pod, set an explicit `kubeconfig` path to select the kubeconfig provider; there is no automatic fallback to the pod's service account.
 
-Provider discovery and background watchers use the backend identity: grant it API discovery access and, for KCP, permission to list workspaces. Tool and prompt requests still require a caller identity and use impersonation.
+MCP preserves backend authentication from kubeconfig. The caller's bearer token is used for MCP authentication and session binding, not for Kubernetes authentication. The server never falls back to the backend identity when an impersonation request is missing identity.
+
+Provider discovery and background watchers use the backend identity: grant it API discovery access. Tool and prompt requests still require a caller identity and use impersonation.
 
 Stateful and stateless HTTP are supported. Changing into or out of impersonation mode requires a restart so existing sessions cannot retain incompatible identity bindings. The trusted proxy list is reloadable; updates affect subsequent requests. Token exchange and stdio are incompatible with this mode.
 

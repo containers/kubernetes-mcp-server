@@ -55,6 +55,38 @@ func (s *ProviderTestSuite) TearDownTest() {
 	}
 }
 
+func (s *ProviderTestSuite) TestImpersonationRequiresKubeconfigProvider() {
+	for _, strategy := range []string{"in-cluster", "kcp", "disabled", "custom"} {
+		s.Run(strategy, func() {
+			cfg := config.BaseDefault()
+			cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
+			cfg.ClusterProviderStrategy.SetForTest(strategy)
+			provider, err := NewProvider(s.T().Context(), cfg)
+			s.ErrorContains(err, "only supports kubeconfig")
+			s.Nil(provider)
+		})
+	}
+	s.Run("auto-detected in-cluster provider", func() {
+		InClusterConfig = func() (*rest.Config, error) { return &rest.Config{}, nil }
+		cfg := config.BaseDefault()
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
+		provider, err := NewProvider(s.T().Context(), cfg)
+		s.ErrorContains(err, "only supports kubeconfig")
+		s.Nil(provider)
+	})
+	s.Run("explicit kubeconfig overrides in-cluster detection", func() {
+		InClusterConfig = func() (*rest.Config, error) { return &rest.Config{}, nil }
+		cfg := config.BaseDefault()
+		cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
+		cfg.KubeConfig.SetForTest(s.kubeconfigPath)
+		provider, err := NewProvider(s.T().Context(), cfg)
+		s.Require().NoError(err)
+		defer provider.Close()
+		_, err = provider.GetDerivedKubernetes(s.T().Context(), provider.GetDefaultTarget())
+		s.ErrorContains(err, "identity required")
+	})
+}
+
 func (s *ProviderTestSuite) TestNewProviderInCluster() {
 	InClusterConfig = func() (*rest.Config, error) {
 		return &rest.Config{}, nil

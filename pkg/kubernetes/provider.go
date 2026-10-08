@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -128,6 +129,9 @@ func NewProvider(ctx context.Context, cfg *config.Config, opts ...ProviderOption
 	}
 
 	strategy := resolveStrategy(cfg)
+	if cfg.ResolveClusterAuthMode() == config.ClusterAuthImpersonation && strategy != config.ClusterProviderKubeConfig {
+		return nil, fmt.Errorf("cluster_auth_mode %q only supports kubeconfig-backed clusters, not provider %q; set kubeconfig to an explicit file path when running inside a pod", config.ClusterAuthImpersonation, strategy)
+	}
 
 	factory, err := getProviderFactory(strategy)
 	if err != nil {

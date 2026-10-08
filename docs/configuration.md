@@ -665,7 +665,7 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `token_exchange.client_auth.certificate_file` | string | `""` | Certificate PEM required by `private_key_jwt`. |
 | `token_exchange.client_auth.private_key_file` | string | `""` | Private-key PEM required by `private_key_jwt`. |
 | `token_exchange.client_auth.token_file` | string | `""` | JWT file required by `jwt_file`. |
-| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent), `kubeconfig` (always use kubeconfig credentials), or `impersonation` (use backend credentials with a trusted proxy's user and groups). Defaults to `passthrough`. Changing into or out of `impersonation` requires a restart. |
+| `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent), `kubeconfig` (always use kubeconfig credentials), or `impersonation` (HTTP and kubeconfig provider only; use kubeconfig credentials with a trusted proxy's user and groups). Defaults to `passthrough`. Changing into or out of `impersonation` requires a restart. |
 | `impersonation_trusted_proxies` | string[] | `[]` | Immediate proxy peer CIDRs allowed to supply impersonation identity. Required and nonempty in `impersonation` mode; invalid in other modes. Uses the connection peer address, never `X-Forwarded-For`. Reloadable. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
@@ -751,7 +751,7 @@ kubeconfig = "/etc/kubernetes-mcp-server/kubeconfig"
 
 The proxy authenticates every request, forwards the caller's bearer token, and supplies `Impersonate-User` and `Impersonate-Group` headers derived from that identity. MCP uses its backend credentials to connect to Kubernetes and impersonates the supplied identity; the incoming bearer token is not sent to Kubernetes. Missing identity or an untrusted peer is rejected without falling back to the backend identity.
 
-This mode supports stateful and stateless HTTP. It rejects stdio, `skip_jwt_verification = true`, and token exchange. For additional local OIDC validation, set `require_oauth = true` with `authorization_url` and the expected `oauth_audience`. See [Trusted Proxy Impersonation](authentication-impersonation.md) for the proxy trust boundary and Kubernetes permissions.
+This mode supports stateful and stateless HTTP with kubeconfig-backed clusters. It rejects stdio, other cluster providers, `skip_jwt_verification = true`, and token exchange. For additional local OIDC validation, set `require_oauth = true` with `authorization_url` and the expected `oauth_audience`. See [Trusted Proxy Impersonation](authentication-impersonation.md) for the proxy trust boundary and Kubernetes permissions.
 
 ### Telemetry
 

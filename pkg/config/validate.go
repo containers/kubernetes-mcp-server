@@ -306,6 +306,9 @@ func (c *Config) ValidateClusterAuthMode() error {
 		if c.Port.Get() == "" {
 			errs = append(errs, fmt.Errorf("cluster_auth_mode %q requires port to be set (impersonation is only supported in HTTP mode)", mode))
 		}
+		if strategy := c.ClusterProviderStrategy.Get(); strategy != "" && strategy != ClusterProviderKubeConfig {
+			errs = append(errs, fmt.Errorf("cluster_auth_mode %q only supports kubeconfig-backed clusters, not provider %q", mode, strategy))
+		}
 		if len(c.ImpersonationTrustedProxies.Get()) == 0 {
 			errs = append(errs, fmt.Errorf("cluster_auth_mode %q requires impersonation_trusted_proxies with at least one CIDR", mode))
 		}

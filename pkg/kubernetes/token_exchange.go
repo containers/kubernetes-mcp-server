@@ -20,12 +20,6 @@ func ExchangeTokenInContext(
 	globalConfig *tokenexchange.TargetTokenExchangeConfig,
 ) (context.Context, error) {
 	if cfg.ResolveClusterAuthMode() == config.ClusterAuthImpersonation {
-		if cfg.GetTokenExchangeConfig() != nil {
-			return ctx, fmt.Errorf("token_exchange is incompatible with cluster_auth_mode %q", config.ClusterAuthImpersonation)
-		}
-		if tep, ok := provider.(TokenExchangeProvider); ok && tep.GetTokenExchangeConfig(target) != nil {
-			return ctx, fmt.Errorf("per-target token exchange is incompatible with cluster_auth_mode %q", config.ClusterAuthImpersonation)
-		}
 		identity, ok := ImpersonationIdentityFromContext(ctx)
 		if !ok {
 			return ctx, fmt.Errorf("trusted proxy impersonation identity required")
