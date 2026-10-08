@@ -92,30 +92,6 @@ func (s *ImpersonationMiddlewareSuite) TestDisabledAndHealth() {
 	}
 }
 
-func (s *ImpersonationMiddlewareSuite) TestProxyReload() {
-	cfg := config.BaseDefault()
-	cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
-	cfg.ImpersonationTrustedProxies.SetForTest([]string{"127.0.0.1/32"})
-	state := config.NewConfigState(cfg)
-	handler := ImpersonationMiddleware(state)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-	req.RemoteAddr = "127.0.0.1:1234"
-	req.Header.Set("Authorization", "Bearer frontend")
-	req.Header.Set("Impersonate-User", "alice")
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	s.Equal(http.StatusNoContent, rr.Code)
-	next := config.BaseDefault()
-	next.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
-	next.ImpersonationTrustedProxies.SetForTest([]string{"192.0.2.0/24"})
-	state.Store(next)
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	s.Equal(http.StatusUnauthorized, rr.Code)
-}
-
 func (s *ImpersonationMiddlewareSuite) TestIPv4MappedProxyCIDR() {
 	for _, tc := range []struct {
 		cidr   string

@@ -17,11 +17,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientauthenticationv1 "k8s.io/client-go/pkg/apis/clientauthentication/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
@@ -84,11 +82,7 @@ func (s *ImpersonationExecSuite) TestConcurrentClientsAndCredentialRefresh() {
 			{Name: "GORACE", Value: "atexit_sleep_ms=0"},
 		},
 	}
-	cfg := config.BaseDefault()
-	cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
-	manager, err := kubernetes.NewManager(s.T().Context(), cfg, backend, clientcmd.NewDefaultClientConfig(*server.Kubeconfig(), nil))
-	s.Require().NoError(err)
-	s.T().Cleanup(manager.Close)
+	manager := newImpersonationManager(s.T(), backend, server.Kubeconfig())
 	ctx := kubernetes.WithImpersonationIdentity(s.T().Context(), kubernetes.ImpersonationIdentity{UserName: "alice"})
 	start := make(chan struct{})
 	results := make(chan error, 12)

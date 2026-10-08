@@ -63,12 +63,16 @@ func (s *ConfigReloadSuite) TearDownTest() {
 	}
 }
 
-func (s *ConfigReloadSuite) TestImpersonationModeChangesRequireRestart() {
-	for _, initialMode := range []string{config.ClusterAuthPassthrough, config.ClusterAuthImpersonation} {
-		s.Run(initialMode, func() {
+func (s *ConfigReloadSuite) TestImpersonationChangesRequireRestart() {
+	for _, change := range []string{"enable", "disable", "trusted proxy CIDRs"} {
+		s.Run(change, func() {
 			initial := config.BaseDefault()
 			initial.KubeConfig = s.Cfg.KubeConfig
 			initial.Port.SetForTest("8080")
+			initialMode := config.ClusterAuthImpersonation
+			if change == "enable" {
+				initialMode = config.ClusterAuthPassthrough
+			}
 			initial.ClusterAuthMode.SetForTest(initialMode)
 			if initialMode == config.ClusterAuthImpersonation {
 				initial.ImpersonationTrustedProxies.SetForTest([]string{"127.0.0.1/32"})
@@ -81,14 +85,15 @@ func (s *ConfigReloadSuite) TestImpersonationModeChangesRequireRestart() {
 			next := config.BaseDefault()
 			next.KubeConfig = initial.KubeConfig
 			next.Port = initial.Port
-			if initialMode == config.ClusterAuthPassthrough {
+			switch change {
+			case "enable", "trusted proxy CIDRs":
 				next.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
-				next.ImpersonationTrustedProxies.SetForTest([]string{"127.0.0.1/32"})
-			} else {
+				next.ImpersonationTrustedProxies.SetForTest([]string{"192.0.2.1/32"})
+			case "disable":
 				next.ClusterAuthMode.SetForTest(config.ClusterAuthPassthrough)
 			}
 			err = server.ReloadConfiguration(s.T().Context(), next)
-			s.ErrorContains(err, "restart", "sessions established under different identity rules cannot survive a mode change")
+			s.ErrorContains(err, "restart", "impersonation mode and proxy trust changes require a restart")
 		})
 	}
 }

@@ -25,7 +25,7 @@ MCP preserves backend authentication from kubeconfig. The caller's bearer token 
 
 Provider discovery and background watchers use the backend identity: grant it API discovery access. Tool and prompt requests still require a caller identity and use impersonation.
 
-Stateful and stateless HTTP are supported. Changing into or out of impersonation mode requires a restart so existing sessions cannot retain incompatible identity bindings. The trusted proxy list is reloadable; updates affect subsequent requests. Token exchange and stdio are incompatible with this mode.
+Stateful and stateless HTTP are supported. Changing into or out of impersonation mode, or changing the trusted proxy CIDRs, requires a restart. Token exchange and stdio are incompatible with this mode.
 
 Kiali and NetObserv are unsupported in impersonation mode. Their separate HTTP APIs do not enforce the Kubernetes impersonation identity, so client construction fails before any external request. This also applies to an impersonated client retained across an authentication-mode reload. Backend credentials are never forwarded to those APIs through this mode; use only toolsets that perform operations through the derived Kubernetes client.
 

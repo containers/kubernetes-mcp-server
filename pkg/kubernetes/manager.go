@@ -177,12 +177,6 @@ func (m *Manager) Config() *config.Config {
 	return m.config.Load()
 }
 
-// BackgroundClient provides backend credentials for provider discovery and watchers.
-// Request handlers must use Derived so caller authentication remains mandatory.
-func (m *Manager) BackgroundClient() *Kubernetes {
-	return m.kubernetes
-}
-
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	identity, ok := ImpersonationIdentityFromContext(ctx)
 	if cfg := m.config.Load(); cfg.ResolveClusterAuthMode() == config.ClusterAuthImpersonation {

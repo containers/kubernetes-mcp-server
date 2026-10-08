@@ -143,7 +143,7 @@ func NewProvider(ctx context.Context, cfg *config.Config, opts ...ProviderOption
 		return nil, err
 	}
 
-	if providerOpts.oauthState != nil {
+	if providerOpts.oauthState != nil && cfg.ResolveClusterAuthMode() != config.ClusterAuthImpersonation {
 		configProvider := providerOpts.configProvider
 		if configProvider == nil {
 			configProvider = func() *config.Config {

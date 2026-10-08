@@ -3,12 +3,16 @@ package test
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -95,11 +99,40 @@ func (m *MockServer) KubeconfigFile(t *testing.T) string {
 	return KubeconfigFile(t, m.Kubeconfig())
 }
 
+// TLSKubeconfig enables kubeconfig authentication, which client-go omits over plaintext HTTP.
+func (m *MockServer) TLSKubeconfig(t *testing.T) *api.Config {
+	t.Helper()
+	backendURL, err := url.Parse(m.config.Host)
+	require.NoError(t, err)
+	backend := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(backendURL))
+	t.Cleanup(backend.Close)
+	raw := m.Kubeconfig()
+	raw.Clusters["fake"].Server = backend.URL
+	raw.Clusters["fake"].CertificateAuthorityData = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: backend.Certificate().Raw})
+	return raw
+}
+
 func KubeconfigFile(t *testing.T, kubeconfig *api.Config) string {
 	kubeconfigFile := filepath.Join(t.TempDir(), "config")
 	err := clientcmd.WriteToFile(*kubeconfig, kubeconfigFile)
 	require.NoError(t, err, "Expected no error writing kubeconfig file")
 	return kubeconfigFile
+}
+
+// RecordRequests captures request snapshots safely across concurrent clients.
+func RecordRequests() (http.Handler, func() []*http.Request) {
+	var mu sync.Mutex
+	var requests []*http.Request
+	recorder := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		requests = append(requests, r.Clone(r.Context()))
+	})
+	return recorder, func() []*http.Request {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(requests)
+	}
 }
 
 func WriteObject(w http.ResponseWriter, obj runtime.Object) {

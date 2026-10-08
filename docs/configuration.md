@@ -168,7 +168,7 @@ A SIGHUP that would change a non-reloadable option is rejected and the process e
 - Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`
 - Process shape: `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`
 - Cluster connection: `kubeconfig`, `cluster_provider_strategy`, `cluster_provider_configs`
-- Authentication mode: changing `cluster_auth_mode` into or out of `impersonation` resets session identity bindings and requires a restart. The trusted proxy CIDRs remain reloadable.
+- Impersonation: changing `cluster_auth_mode` into or out of `impersonation`, or changing `impersonation_trusted_proxies`, requires a restart.
 - Kubernetes client: `kube_client_qps`, `kube_client_burst`, watcher/poll timings
 - Telemetry: the `[telemetry]` table
 
@@ -666,7 +666,7 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `token_exchange.client_auth.private_key_file` | string | `""` | Private-key PEM required by `private_key_jwt`. |
 | `token_exchange.client_auth.token_file` | string | `""` | JWT file required by `jwt_file`. |
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent), `kubeconfig` (always use kubeconfig credentials), or `impersonation` (HTTP and kubeconfig provider only; use kubeconfig credentials with a trusted proxy's user and groups). Defaults to `passthrough`. Changing into or out of `impersonation` requires a restart. |
-| `impersonation_trusted_proxies` | string[] | `[]` | Immediate proxy peer CIDRs allowed to supply impersonation identity. Required and nonempty in `impersonation` mode; invalid in other modes. Uses the connection peer address, never `X-Forwarded-For`. Reloadable. |
+| `impersonation_trusted_proxies` | string[] | `[]` | Immediate proxy peer CIDRs allowed to supply impersonation identity. Required and nonempty in `impersonation` mode; invalid in other modes. Uses the connection peer address, never `X-Forwarded-For`. Changes require a restart. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
 | `trust_proxy_headers` | boolean | `false` | When `true`, honor `X-Forwarded-*` / `X-Real-IP` from a reverse proxy. Leave `false` unless the server is behind a trusted proxy. |

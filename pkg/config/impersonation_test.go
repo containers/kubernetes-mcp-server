@@ -85,7 +85,7 @@ strategy = "rfc8693"
 	}
 }
 
-func (s *ImpersonationConfigSuite) TestProxyAllowlistReload() {
+func (s *ImpersonationConfigSuite) TestProxyAllowlistRequiresRestart() {
 	const initial = `
 port = "8080"
 cluster_auth_mode = "impersonation"
@@ -98,18 +98,18 @@ port = "8080"
 cluster_auth_mode = "impersonation"
 impersonation_trusted_proxies = ["10.20.30.40/32"]
 `
-	next, err := config.ReadToml(s.T().Context(), []byte(reloaded), config.WithBaseDefault(), config.WithPrevious(previous))
-	s.Require().NoError(err)
-	s.NoError(next.Validate(s.T().Context()))
-	s.Equal([]string{"10.20.30.40/32"}, next.ImpersonationTrustedProxies.Get())
+	_, err = config.ReadToml(s.T().Context(), []byte(reloaded), config.WithBaseDefault(), config.WithPrevious(previous))
+	s.ErrorContains(err, "non-reloadable option impersonation_trusted_proxies")
+	s.ErrorContains(err, "restart")
 	s.Equal([]string{"127.0.0.1/32"}, previous.ImpersonationTrustedProxies.Get())
+	_, err = config.ReadToml(s.T().Context(), []byte(initial), config.WithBaseDefault(), config.WithPrevious(previous))
+	s.NoError(err, "an unchanged allowlist must not block other configuration reloads")
 }
 
 func (s *ImpersonationConfigSuite) TestDefaultsAndMetadata() {
 	cfg := config.BaseDefault()
 	s.Equal(config.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
 	s.Empty(cfg.ImpersonationTrustedProxies.Get())
-	s.True(cfg.ImpersonationTrustedProxies.Reloadable)
 	s.Equal("impersonation_trusted_proxies", cfg.ImpersonationTrustedProxies.TOMLKey)
 }
 

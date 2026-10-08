@@ -16,10 +16,11 @@ import (
 // ImpersonationMiddleware accepts identities only from explicitly trusted peers.
 // The proxy must authenticate every request and replace client-supplied headers.
 func ImpersonationMiddleware(cfgState *config.ConfigState) func(http.Handler) http.Handler {
+	trustedProxies := slices.Clone(cfgState.Load().ImpersonationTrustedProxies.Get())
 	return func(next http.Handler) http.Handler {
 		verified := auth.RequireBearerToken(func(_ context.Context, _ string, r *http.Request) (*auth.TokenInfo, error) {
 			cfg := cfgState.Load()
-			if cfg.ClusterAuthMode.Get() != config.ClusterAuthImpersonation || !isTrustedImpersonationProxy(r.RemoteAddr, cfg.ImpersonationTrustedProxies.Get()) {
+			if cfg.ClusterAuthMode.Get() != config.ClusterAuthImpersonation || !isTrustedImpersonationProxy(r.RemoteAddr, trustedProxies) {
 				return nil, auth.ErrInvalidToken
 			}
 			if len(r.Header.Values("Authorization")) != 1 || len(r.Header.Values("Impersonate-User")) != 1 {

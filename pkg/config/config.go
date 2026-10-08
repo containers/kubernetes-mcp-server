@@ -409,7 +409,7 @@ func newConfig() *Config {
 		ClusterProviderStrategy: opt("cluster_provider_strategy", "").desc("How the server finds clusters"),
 		ClusterAuthMode: opt("cluster_auth_mode", "").reload().validate(validateClusterAuthModeValue).
 			desc("How the MCP server authenticates to the cluster"),
-		ImpersonationTrustedProxies: opt("impersonation_trusted_proxies", []string(nil)).reload().validate(validateImpersonationTrustedProxies).
+		ImpersonationTrustedProxies: opt("impersonation_trusted_proxies", []string(nil)).validate(validateImpersonationTrustedProxies).
 			desc("Trusted immediate proxy CIDRs for cluster impersonation"),
 		DeniedResources:    opt("denied_resources", []GroupVersionKind(nil)).reload().desc("GVKs that tools must not access"),
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),

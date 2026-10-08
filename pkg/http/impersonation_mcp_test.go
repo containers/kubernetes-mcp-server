@@ -4,11 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
-	"net/http/httputil"
-	"net/url"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,13 +25,7 @@ func TestImpersonationMCP(t *testing.T) { suite.Run(t, new(ImpersonationMCPSuite
 func (s *ImpersonationMCPSuite) SetupTest() {
 	s.BaseHttpSuite.SetupTest()
 	s.Config = config.BaseDefault()
-	backendURL, err := url.Parse(s.MockServer.Config().Host)
-	s.Require().NoError(err)
-	backend := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(backendURL))
-	s.T().Cleanup(backend.Close)
-	kubeconfig := s.MockServer.Kubeconfig()
-	kubeconfig.Clusters["fake"].Server = backend.URL
-	kubeconfig.Clusters["fake"].InsecureSkipTLSVerify = true
+	kubeconfig := s.MockServer.TLSKubeconfig(s.T())
 	kubeconfig.AuthInfos["fake"].Token = "backend-credential"
 	s.Config.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
 	s.Config.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
@@ -80,15 +70,12 @@ func (s *ImpersonationMCPSuite) TestCurrentIdentityAndConcurrentUsers() {
 	for _, stateless := range []bool{false, true} {
 		s.Run(fmt.Sprintf("stateless=%v", stateless), func() {
 			s.Config.Stateless.SetForTest(stateless)
-			var mu sync.Mutex
-			observed := make(map[string][]http.Header)
+			recorder, received := test.RecordRequests()
+			s.MockServer.Handle(recorder)
 			s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.HasSuffix(r.URL.Path, "/pods") {
 					return
 				}
-				mu.Lock()
-				observed[r.URL.Path] = append(observed[r.URL.Path], r.Header.Clone())
-				mu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"apiVersion":"v1","kind":"PodList","items":[]}`)
 			}))
@@ -114,7 +101,10 @@ func (s *ImpersonationMCPSuite) TestCurrentIdentityAndConcurrentUsers() {
 			for range 10 {
 				s.Require().NoError(<-errors)
 			}
-			mu.Lock()
+			observed := make(map[string][]http.Header)
+			for _, request := range received() {
+				observed[request.URL.Path] = append(observed[request.URL.Path], request.Header)
+			}
 			for namespace, expected := range map[string]struct{ user, group string }{
 				"alice-before": {"alice", "readers"},
 				"alice-after":  {"alice", "restricted-readers"},
@@ -128,7 +118,6 @@ func (s *ImpersonationMCPSuite) TestCurrentIdentityAndConcurrentUsers() {
 					s.Equal("Bearer backend-credential", headers.Get("Authorization"))
 				}
 			}
-			mu.Unlock()
 			s.Require().NoError(alice.Close())
 			s.Require().NoError(bob.Close())
 			s.stopRunningServer()

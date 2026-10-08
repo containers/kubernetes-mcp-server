@@ -321,7 +321,7 @@ func (c *Config) ValidateClusterAuthMode() error {
 	return errors.Join(errs...)
 }
 
-// ValidateReload rejects auth mode transitions that invalidate existing session identity bindings.
+// ValidateReload keeps session identity and proxy trust fixed until restart.
 func (c *Config) ValidateReload(previous *Config) error {
 	if previous == nil {
 		return nil
@@ -329,6 +329,9 @@ func (c *Config) ValidateReload(previous *Config) error {
 	oldMode, newMode := previous.ResolveClusterAuthMode(), c.ResolveClusterAuthMode()
 	if oldMode != newMode && (oldMode == ClusterAuthImpersonation || newMode == ClusterAuthImpersonation) {
 		return fmt.Errorf("cluster_auth_mode change from %q to %q requires a process restart to reset session identity bindings", oldMode, newMode)
+	}
+	if !slices.Equal(previous.ImpersonationTrustedProxies.Get(), c.ImpersonationTrustedProxies.Get()) {
+		return fmt.Errorf("impersonation_trusted_proxies change requires a process restart")
 	}
 	return nil
 }

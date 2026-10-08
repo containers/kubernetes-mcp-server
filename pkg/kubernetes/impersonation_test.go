@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/helm"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,16 +27,21 @@ type ImpersonationSuite struct {
 	suite.Suite
 }
 
+func newImpersonationManager(t *testing.T, backend *rest.Config, raw *clientcmdapi.Config) *kubernetes.Manager {
+	t.Helper()
+	cfg := config.BaseDefault()
+	cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
+	manager, err := kubernetes.NewManager(t.Context(), cfg, backend, clientcmd.NewDefaultClientConfig(*raw, nil))
+	require.NoError(t, err)
+	t.Cleanup(manager.Close)
+	return manager
+}
+
 func (s *ImpersonationSuite) TestClientPathsPreserveIdentityAndBackendAuthentication() {
 	server := test.NewMockServer()
 	s.T().Cleanup(server.Close)
-	var mu sync.Mutex
-	var received []http.Header
-	server.Handle(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		received = append(received, r.Header.Clone())
-	}))
+	recorder, received := test.RecordRequests()
+	server.Handle(recorder)
 	discovery := test.NewDiscoveryClientHandler(metav1.APIResourceList{
 		GroupVersion: "metrics.k8s.io/v1beta1",
 		APIResources: []metav1.APIResource{{Name: "pods", Kind: "PodMetrics", Namespaced: true, Verbs: metav1.Verbs{"list"}}},
@@ -84,16 +89,12 @@ func (s *ImpersonationSuite) TestClientPathsPreserveIdentityAndBackendAuthentica
 			_, _ = io.WriteString(streams.StdoutStream, "executed")
 		}
 	}))
-	cfg := config.BaseDefault()
-	cfg.ClusterAuthMode.SetForTest("impersonation")
 	backend := rest.CopyConfig(server.Config())
 	backend.BearerToken = "backend-credential"
 	backend.Impersonate = rest.ImpersonationConfig{UserName: "old-user", Groups: []string{"old-admin-group"}, UID: "old-uid", Extra: map[string][]string{"old": {"value"}}}
 	raw := server.Kubeconfig()
 	raw.AuthInfos["fake"].Token = "backend-credential"
-	manager, err := kubernetes.NewManager(s.T().Context(), cfg, backend, clientcmd.NewDefaultClientConfig(*raw, nil))
-	s.Require().NoError(err)
-	s.T().Cleanup(manager.Close)
+	manager := newImpersonationManager(s.T(), backend, raw)
 	ctx, cancel := context.WithTimeout(s.T().Context(), 30*time.Second)
 	s.T().Cleanup(cancel)
 	ctx = context.WithValue(ctx, kubernetes.OAuthAuthorizationHeader, "Bearer caller-token-never-forwarded")
@@ -138,14 +139,12 @@ func (s *ImpersonationSuite) TestClientPathsPreserveIdentityAndBackendAuthentica
 	}
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
-			mu.Lock()
-			received = nil
-			mu.Unlock()
+			before := len(received())
 			s.Require().NoError(tc.run())
-			mu.Lock()
-			defer mu.Unlock()
-			s.Require().NotEmpty(received, "exercise an actual backend request")
-			for _, headers := range received {
+			requests := received()[before:]
+			s.Require().NotEmpty(requests, "exercise an actual backend request")
+			for _, request := range requests {
+				headers := request.Header
 				s.Equal("Bearer backend-credential", headers.Get("Authorization"))
 				s.Equal("alice", headers.Get("Impersonate-User"))
 				s.Equal([]string{"readers"}, headers.Values("Impersonate-Group"))
@@ -168,15 +167,11 @@ func (s *ImpersonationSuite) TestClientPathsPreserveIdentityAndBackendAuthentica
 func (s *ImpersonationSuite) TestMissingIdentityNeverFallsBackToBackendCredentials() {
 	for _, authorization := range []string{"", "Bearer caller-token"} {
 		s.Run(authorization, func() {
-			cfg := config.BaseDefault()
-			cfg.ClusterAuthMode.SetForTest("impersonation")
-			manager, err := kubernetes.NewManager(s.T().Context(), cfg,
+			manager := newImpersonationManager(s.T(),
 				&rest.Config{Host: "https://unused.example", BearerToken: "backend-token"},
-				clientcmd.NewDefaultClientConfig(*clientcmdapi.NewConfig(), nil))
-			s.Require().NoError(err)
-			s.T().Cleanup(manager.Close)
+				clientcmdapi.NewConfig())
 			ctx := context.WithValue(s.T().Context(), kubernetes.OAuthAuthorizationHeader, authorization)
-			_, err = manager.Derived(ctx)
+			_, err := manager.Derived(ctx)
 			s.Error(err, "a missing proxy identity must never yield a backend client")
 		})
 	}

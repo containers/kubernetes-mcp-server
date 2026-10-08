@@ -75,7 +75,7 @@ func targetHasGVKs(ctx context.Context, logger klog.Logger, mgr *Manager, gvks [
 	}
 
 	// Capability inventory has no caller during startup or background refresh.
-	k := mgr.BackgroundClient()
+	k := mgr.kubernetes
 	var err error
 	if mgr.Config().ResolveClusterAuthMode() != config.ClusterAuthImpersonation {
 		k, err = mgr.Derived(ctx)

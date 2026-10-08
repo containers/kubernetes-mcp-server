@@ -6,15 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
@@ -26,23 +24,18 @@ func TestMultiClusterImpersonation(t *testing.T) {
 }
 
 func (s *MultiClusterImpersonationSuite) TestConcurrentUsersKeepTargetCredentialsAndIdentity() {
-	type receivedRequest struct {
-		target  string
-		headers http.Header
-	}
-	var mu sync.Mutex
-	var received []receivedRequest
+	received := make(map[string]func() []*http.Request)
 	raw := clientcmdapi.NewConfig()
 	versions := map[string]string{"cluster-a": "v1.35.1", "cluster-b": "v1.35.2"}
 	for target, version := range versions {
+		recorder, requests := test.RecordRequests()
+		received[target] = requests
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/version" {
 				http.NotFound(w, r)
 				return
 			}
-			mu.Lock()
-			received = append(received, receivedRequest{target, r.Header.Clone()})
-			mu.Unlock()
+			recorder.ServeHTTP(w, r)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprintf(w, `{"major":"1","minor":"35","gitVersion":%q}`, version)
 		}))
@@ -57,10 +50,8 @@ func (s *MultiClusterImpersonationSuite) TestConcurrentUsersKeepTargetCredential
 		raw.Contexts[target] = &clientcmdapi.Context{Cluster: target, AuthInfo: target}
 	}
 	raw.CurrentContext = "cluster-a"
-	kubeconfigFile := filepath.Join(s.T().TempDir(), "kubeconfig")
-	s.Require().NoError(clientcmd.WriteToFile(*raw, kubeconfigFile))
 	cfg := config.BaseDefault()
-	cfg.KubeConfig.SetForTest(kubeconfigFile)
+	cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), raw))
 	cfg.ClusterProviderStrategy.SetForTest(config.ClusterProviderKubeConfig)
 	cfg.ClusterAuthMode.SetForTest(config.ClusterAuthImpersonation)
 	ctx, cancel := context.WithTimeout(s.T().Context(), 15*time.Second)
@@ -101,21 +92,20 @@ func (s *MultiClusterImpersonationSuite) TestConcurrentUsersKeepTargetCredential
 			s.FailNow("concurrent impersonation requests did not finish", ctx.Err().Error())
 		}
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	counts := make(map[string]int)
-	s.Len(received, cap(results))
-	for _, request := range received {
-		user := request.headers.Get("Impersonate-User")
-		s.Contains([]string{"alice", "bob"}, user)
-		s.Equal([]string{user + "-group"}, request.headers.Values("Impersonate-Group"))
-		s.Equal("Bearer "+request.target+"-backend-credential", request.headers.Get("Authorization"))
-		s.NotContains(fmt.Sprint(request.headers), "caller-token-never-forwarded")
-		counts[request.target+"/"+user]++
-	}
-	for target := range versions {
+	for target, requests := range received {
+		counts := make(map[string]int)
+		recorded := requests()
+		s.Len(recorded, 2*callsPerIdentity)
+		for _, request := range recorded {
+			user := request.Header.Get("Impersonate-User")
+			s.Contains([]string{"alice", "bob"}, user)
+			s.Equal([]string{user + "-group"}, request.Header.Values("Impersonate-Group"))
+			s.Equal("Bearer "+target+"-backend-credential", request.Header.Get("Authorization"))
+			s.NotContains(fmt.Sprint(request.Header), "caller-token-never-forwarded")
+			counts[user]++
+		}
 		for _, user := range []string{"alice", "bob"} {
-			s.Equal(callsPerIdentity, counts[target+"/"+user], "each target must receive both distinct callers")
+			s.Equal(callsPerIdentity, counts[user], "each target must receive both distinct callers")
 		}
 	}
 }

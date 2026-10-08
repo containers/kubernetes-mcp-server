@@ -33,6 +33,7 @@ var impersonationNamespaces = []string{"mcp-test-alice", "mcp-test-bob"}
 type ImpersonationIntegrationSuite struct {
 	suite.Suite
 	manager *kubernetes.Manager
+	admin   *clientset.Clientset
 	bot     *clientset.Clientset
 }
 
@@ -41,6 +42,7 @@ func (s *ImpersonationIntegrationSuite) SetupSuite() {
 	ctx := s.T().Context()
 	admin, err := clientset.NewForConfig(environment.Config)
 	s.Require().NoError(err)
+	s.admin = admin
 	botUser, err := environment.AddUser(envtest.User{Name: "mcp-test:bot"}, environment.Config)
 	s.Require().NoError(err)
 	s.bot, err = clientset.NewForConfig(botUser.Config())
@@ -55,12 +57,7 @@ func (s *ImpersonationIntegrationSuite) SetupSuite() {
 		},
 	}, metav1.CreateOptions{})
 	s.Require().NoError(err)
-	_, err = admin.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "mcp-test-impersonate"},
-		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "mcp-test-impersonate"},
-		Subjects:   []rbacv1.Subject{{APIGroup: rbacv1.GroupName, Kind: "User", Name: "mcp-test:bot"}},
-	}, metav1.CreateOptions{})
-	s.Require().NoError(err)
+	s.bindBackend("mcp-test-impersonate", "mcp-test:bot")
 	_, err = admin.RbacV1().ClusterRoles().Create(ctx, &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: "mcp-test-read"},
 		Rules: []rbacv1.PolicyRule{
@@ -122,6 +119,22 @@ func (s *ImpersonationIntegrationSuite) TearDownSuite() {
 	if s.manager != nil {
 		s.manager.Close()
 	}
+}
+
+func (s *ImpersonationIntegrationSuite) bindBackend(name, user string) *rbacv1.ClusterRoleBinding {
+	binding, err := s.admin.RbacV1().ClusterRoleBindings().Create(s.T().Context(), &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "mcp-test-impersonate"},
+		Subjects:   []rbacv1.Subject{{APIGroup: rbacv1.GroupName, Kind: "User", Name: user}},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	return binding
+}
+
+func (s *ImpersonationIntegrationSuite) authorizeBackend(binding *rbacv1.ClusterRoleBinding, user string) {
+	binding.Subjects[0].Name = user
+	_, err := s.admin.RbacV1().ClusterRoleBindings().Update(s.T().Context(), binding, metav1.UpdateOptions{})
+	s.Require().NoError(err)
 }
 
 func (s *ImpersonationIntegrationSuite) client(user string, groups ...string) *kubernetes.Kubernetes {
@@ -285,18 +298,11 @@ func (s *ImpersonationIntegrationSuite) TestKubeconfigCertificateRotation() {
 	ctx, cancel := context.WithCancel(s.T().Context())
 	defer cancel()
 	environment := test.EnvTest()
-	admin, err := clientset.NewForConfig(environment.Config)
-	s.Require().NoError(err)
 	oldBot, err := environment.AddUser(envtest.User{Name: "mcp-test:rotation-old"}, environment.Config)
 	s.Require().NoError(err)
 	newBot, err := environment.AddUser(envtest.User{Name: "mcp-test:rotation-new"}, environment.Config)
 	s.Require().NoError(err)
-	binding, err := admin.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "mcp-test-rotation"},
-		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "mcp-test-impersonate"},
-		Subjects:   []rbacv1.Subject{{APIGroup: rbacv1.GroupName, Kind: "User", Name: "mcp-test:rotation-old"}},
-	}, metav1.CreateOptions{})
-	s.Require().NoError(err)
+	binding := s.bindBackend("mcp-test-rotation", "mcp-test:rotation-old")
 	oldKubeconfig, err := oldBot.KubeConfig()
 	s.Require().NoError(err)
 	newKubeconfig, err := newBot.KubeConfig()
@@ -320,9 +326,7 @@ func (s *ImpersonationIntegrationSuite) TestKubeconfigCertificateRotation() {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Changing the backend subject lets the API prove that requests use the replacement certificate.
-	binding.Subjects[0].Name = "mcp-test:rotation-new"
-	_, err = admin.RbacV1().ClusterRoleBindings().Update(ctx, binding, metav1.UpdateOptions{})
-	s.Require().NoError(err)
+	s.authorizeBackend(binding, "mcp-test:rotation-new")
 	s.Require().Eventually(func() bool {
 		_, err := oldClient.CoreV1().ConfigMaps(impersonationNamespaces[0]).List(ctx, metav1.ListOptions{})
 		return apierrors.IsForbidden(err)
