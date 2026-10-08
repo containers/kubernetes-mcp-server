@@ -6,11 +6,14 @@ import (
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -73,7 +76,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 				KindArgument:       "kind",
 			}},
 			Namespace: &api.RBACNamespace{Argument: "namespace"},
-		}), Handler: resourcesList},
+		}), Handler: resourcesList,
+			App: mcpapps.Table("ui://kubernetes-mcp-server/resources-list", "Resources list", mcpapps.WithDescription("Interactive table of Kubernetes resources"))},
 		{Tool: api.Tool{
 			Name:        "resources_get",
 			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
@@ -113,7 +117,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 			}},
 			Namespace:    &api.RBACNamespace{Argument: "namespace"},
 			ResourceName: &api.RBACResourceName{Argument: "name"},
-		}), Handler: resourcesGet},
+		}), Handler: resourcesGet,
+			App: mcpapps.Resource("ui://kubernetes-mcp-server/resources-get", "Resource details", mcpapps.WithDescription("Interactive Kubernetes resource details"))},
 		{Tool: api.Tool{
 			Name:        "resources_create_or_update",
 			Description: "Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.\n" + commonApiVersion,
@@ -271,6 +276,13 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to format resources: %w", err)), nil
+	}
+	// Empty Table responses have no structured output from the printer. Supply
+	// an explicit empty list for Apps without altering nonempty or non-Apps results.
+	if params.Config.AppsEnabled.Get() && printed.Structured == nil && ret.GetObjectKind().GroupVersionKind() == metav1.SchemeGroupVersion.WithKind("Table") {
+		if rows, _, err := unstructured.NestedSlice(ret.UnstructuredContent(), "rows"); err == nil && len(rows) == 0 {
+			printed.Structured = map[string]any{"items": []map[string]any{}}
+		}
 	}
 	return api.NewToolCallResultFull(printed.Text, printed.Structured, nil), nil
 }

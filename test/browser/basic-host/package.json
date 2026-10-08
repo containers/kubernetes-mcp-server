@@ -1,0 +1,29 @@
+{
+  "name": "kubernetes-mcp-server-basic-host",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && INPUT=index.html vite build && INPUT=sandbox.html vite build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/core": "2.3.1",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "cors": "2.8.5",
+    "express": "5.2.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "4.2.0"
+  },
+  "devDependencies": {
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/node": "22.10.0",
+    "@types/react": "19.2.8",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "4.7.0",
+    "bun": "1.3.10",
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
+  }
+}

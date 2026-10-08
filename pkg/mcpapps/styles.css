@@ -1,0 +1,55 @@
+/* Shared by every standard app. Keep assets embedded for disconnected use. */
+:root {
+  color-scheme: light dark;
+  --app-text: #1f2937;
+  --app-background: #fff;
+  --app-muted: #6b7280;
+  --app-border: #d1d5db;
+  --app-stripe: #f9fafb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --app-text: #f3f4f6;
+    --app-background: #1f2937;
+    --app-muted: #d1d5db;
+    --app-border: #4b5563;
+    --app-stripe: #374151;
+  }
+}
+:root[data-theme="dark"] {
+  --app-text: #f3f4f6;
+  --app-background: #1f2937;
+  --app-muted: #d1d5db;
+  --app-border: #4b5563;
+  --app-stripe: #374151;
+}
+body {
+  font: 14px system-ui, sans-serif;
+  margin: 0;
+  padding: 12px;
+  color: var(--app-text);
+  background: var(--app-background);
+}
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px; text-align: left; border-bottom: 1px solid var(--app-border); overflow-wrap: anywhere; }
+th, tr:nth-child(even) { background: var(--app-stripe); }
+th button {
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  font-weight: bold;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.status { color: var(--app-muted); font-style: italic; }
+pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.resource-details h1 { margin: 0 0 16px; font-size: 20px; }
+.resource-details h2 { margin: 0 0 8px; font-size: 16px; }
+.resource-details section, .resource-details details { margin-bottom: 16px; }
+.resource-details summary { cursor: pointer; font-weight: bold; padding: 8px 0; }
+.resource-details dl { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr); gap: 8px 16px; margin: 0; }
+.resource-details dt { color: var(--app-muted); overflow-wrap: anywhere; }
+.resource-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.resource-details ol { padding-left: 20px; margin: 0; }
+.resource-details li { margin-bottom: 8px; }
