@@ -82,6 +82,37 @@ test("shared table preserves column order and supports both sort directions", as
   await expect(app.locator("tbody tr td:first-child")).toHaveText(["z", "a"]);
 });
 
+test("shared table sorts Age oldest first like kubectl and can reverse", async ({ page }) => {
+  const app = await openApp(page);
+  const ages = ["0s", "9s", "10s", "90s", "2m3s", "2m10s", "9m", "10m", "1h", "23h", "1d", "1d2h", "400d", "2y"];
+  await result(page, { columns: ["Name", "Age"], items: [...ages].reverse().map((Age, i) => ({ Name: "row-" + i, Age })) });
+  const age = app.getByRole("button", { name: "Age", exact: true });
+  await age.click();
+  await expect(app.locator("tbody tr td:nth-child(2)")).toHaveText([...ages].reverse());
+  await expect(app.getByRole("columnheader", { name: "Age", exact: true })).toHaveAttribute("aria-sort", "descending");
+  await age.click();
+  await expect(app.locator("tbody tr td:nth-child(2)")).toHaveText(ages);
+  await expect(app.getByRole("columnheader", { name: "Age", exact: true })).toHaveAttribute("aria-sort", "ascending");
+});
+
+test("Age sorting keeps missing and invalid ages after known durations", async ({ page }) => {
+  const app = await openApp(page);
+  await result(page, { columns: ["Name", "Age"], items: [
+    { Name: "missing" }, { Name: "invalid", Age: "1h-invalid" },
+    { Name: "empty", Age: "" }, { Name: "unknown", Age: "<unknown>" },
+    { Name: "young", Age: "9m" }, { Name: "old", Age: "2h" },
+  ] });
+  const age = app.getByRole("button", { name: "Age", exact: true });
+  await age.click();
+  await expect(app.locator("tbody tr td:first-child").filter({ hasText: /^(old|young)$/ })).toHaveText(["old", "young"]);
+  await expect(app.locator("tbody tr td:first-child").nth(0)).toHaveText("old");
+  await expect(app.locator("tbody tr td:first-child").nth(1)).toHaveText("young");
+  await age.click();
+  await expect(app.locator("tbody tr td:first-child").nth(0)).toHaveText("young");
+  await expect(app.locator("tbody tr td:first-child").nth(1)).toHaveText("old");
+  await expect(app.locator("tbody tr")).toHaveCount(6);
+});
+
 test("shared table handles empty results and recovers from errors", async ({ page }) => {
   const app = await openApp(page);
   await result(page, { items: [] });
@@ -114,6 +145,67 @@ test("shared table displays full Kubernetes objects as compact rows", async ({ p
   await expect(app.locator("tbody td:first-child")).toHaveText("example");
 });
 
+test("YAML Deployment rows show readiness and replica counts", async ({ page }) => {
+  const app = await openApp(page);
+  await result(page, { items: [
+    { apiVersion: "apps/v1", kind: "Deployment", metadata: { name: "web", namespace: "team-a" },
+      spec: { replicas: 3 }, status: { readyReplicas: 2, updatedReplicas: 3, availableReplicas: 1 } },
+    { apiVersion: "apps/v1", kind: "Deployment", metadata: { name: "new" } },
+    { apiVersion: "apps/v1", kind: "Deployment", metadata: { name: "scaled-down" }, spec: { replicas: 0 } },
+  ] });
+  await expect(app.getByRole("columnheader")).toHaveText([
+    "Name", "Namespace", "Ready", "Up-to-date", "Available", "Age", "Labels", "apiVersion", "kind",
+  ]);
+  await expect(app.locator("tbody tr").last().locator("td")).toHaveText([
+    "web", "team-a", "2/3", "3", "1", "", "", "apps/v1", "Deployment",
+  ]);
+  await expect(app.locator("tbody tr td:nth-child(3)")).toHaveText(["0/1", "0/0", "2/3"]);
+  await app.getByRole("button", { name: "Name", exact: true }).click();
+  await expect(app.locator("tbody tr td:nth-child(3)")).toHaveText(["2/3", "0/0", "0/1"]);
+});
+
+test("YAML Ingress rows show routing and load-balancer fields", async ({ page }) => {
+  const app = await openApp(page);
+  const host = '<img src="invalid" onerror="window.injected=true">';
+  await result(page, { items: [{
+    apiVersion: "networking.k8s.io/v1", kind: "Ingress", metadata: { name: "web", namespace: "team-a" },
+    spec: { ingressClassName: "nginx", rules: [{ host: "web.example.com" }, { host }], tls: [{ secretName: "web-tls" }] },
+    status: { loadBalancer: { ingress: [{ ip: "10.0.0.2" }, { hostname: "lb.example.com" }, { ip: "10.0.0.2" }] } },
+  }] });
+  await expect(app.getByRole("columnheader")).toHaveText([
+    "Name", "Namespace", "Class", "Hosts", "Address", "Ports", "Age", "Labels", "apiVersion", "kind",
+  ]);
+  await expect(app.locator("tbody td")).toHaveText([
+    "web", "team-a", "nginx", "web.example.com," + host, "10.0.0.2,lb.example.com", "80, 443",
+    "", "", "networking.k8s.io/v1", "Ingress",
+  ]);
+  await expect(app.locator("img")).toHaveCount(0);
+  await result(page, { items: [{ apiVersion: "networking.k8s.io/v1", kind: "Ingress", metadata: { name: "new" } }] });
+  await expect(app.locator("tbody td")).toHaveText(["new", "<none>", "*", "", "80", "", "", "networking.k8s.io/v1", "Ingress"]);
+});
+
+test("API-server table cells retain resource-specific and custom columns", async ({ page }) => {
+  const app = await openApp(page);
+  for (const row of [
+    { Name: "web", Ready: "2/3", "Up-to-date": 3, Available: 1, Age: "5m", Images: "nginx:latest", Selector: "app=web" },
+    { Name: "web", Class: "nginx", Hosts: "web.example.com", Address: "10.0.0.2", Ports: "80, 443", Age: "5m" },
+    { Name: "custom", Phase: "Reconciling", Endpoint: "example.com" },
+  ]) {
+    await result(page, { items: [row] });
+    const columns = await app.getByRole("columnheader").allTextContents();
+    expect([...columns].sort()).toEqual(Object.keys(row).sort());
+    await expect(app.locator("tbody td")).toHaveText(columns.map(column => String(row[column])));
+  }
+});
+
+test("same-named custom kinds do not inherit built-in list fields", async ({ page }) => {
+  const app = await openApp(page);
+  for (const kind of ["Deployment", "Ingress"]) {
+    await result(page, { items: [{ apiVersion: "example.com/v1", kind, metadata: { name: "custom" } }] });
+    await expect(app.getByRole("columnheader")).toHaveText(["Name", "Age", "Labels", "apiVersion", "kind"]);
+  }
+});
+
 test("metric headers and cells render untrusted content as text", async ({ page }) => {
   const app = await openApp(page, "metrics");
   const header = '<img src="data:,invalid" onerror="window.injected=true">';
@@ -121,6 +213,18 @@ test("metric headers and cells render untrusted content as text", async ({ page 
   await expect(app.getByRole("columnheader")).toHaveText(header);
   await expect(app.locator("tbody")).toHaveText("<script>bad()</script>");
   await expect(app.locator("th img, td script")).toHaveCount(0);
+});
+
+test("list and metrics tables wrap long headers and values in narrow frames", async ({ page }) => {
+  for (const kind of ["table", "metrics"]) {
+    const app = await openApp(page, kind);
+    await page.locator("iframe").evaluate(frame => { frame.style.width = "320px"; });
+    const header = "LongHeader".repeat(20), value = "label=value".repeat(30);
+    await result(page, { columns: ["Name", header], items: [{ Name: "pod-name-".repeat(25), [header]: value }] });
+    await expect(app.locator("tbody td:nth-child(2)")).toHaveText(value);
+    await expect(app.getByRole("columnheader").nth(1)).toHaveText(header);
+    await expect.poll(() => app.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  }
 });
 
 test("metrics sort CPU and memory quantities numerically", async ({ page }) => {

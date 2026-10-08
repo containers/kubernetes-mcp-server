@@ -31,7 +31,7 @@ body {
   background: var(--app-background);
 }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 8px; text-align: left; border-bottom: 1px solid var(--app-border); }
+th, td { padding: 8px; text-align: left; border-bottom: 1px solid var(--app-border); overflow-wrap: anywhere; }
 th, tr:nth-child(even) { background: var(--app-stripe); }
 th button {
   cursor: pointer;
@@ -53,4 +53,3 @@ pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px ui-m
 .resource-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .resource-details ol { padding-left: 20px; margin: 0; }
 .resource-details li { margin-bottom: 8px; }
-.resource-details td { overflow-wrap: anywhere; }

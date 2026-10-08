@@ -59,7 +59,22 @@
     return Number(match[1]) * (factors[match[2]] || 1);
   }
 
+  function ageSeconds(value) {
+    const age = text(value);
+    if (!/^(?:\d+[smhdy])+$/.test(age)) return NaN;
+    const units = { s: 1, m: 60, h: 3600, d: 86400, y: 365 * 86400 };
+    return [...age.matchAll(/(\d+)([smhdy])/g)]
+      .reduce((seconds, match) => seconds + Number(match[1]) * units[match[2]], 0);
+  }
+
   function compare(left, right) {
+    if (sortColumn === "Age") {
+      const a = ageSeconds(left.Age), b = ageSeconds(right.Age);
+      if (Number.isFinite(a) && Number.isFinite(b)) return a - b;
+      // Keep unavailable ages last after the caller applies the sort direction.
+      if (Number.isFinite(a)) return descending ? 1 : -1;
+      if (Number.isFinite(b)) return descending ? -1 : 1;
+    }
     if (kind === "metrics" && (sortColumn === "CPU" || sortColumn === "Memory")) {
       const a = quantity(left[sortColumn]), b = quantity(right[sortColumn]);
       if (Number.isFinite(a) && Number.isFinite(b)) return a - b;
@@ -78,6 +93,21 @@
     };
     if (metadata.namespace) row.Namespace = metadata.namespace;
     if (typeof resource.status?.phase === "string") row.Status = resource.status.phase;
+    // YAML results contain full objects rather than API-server table cells.
+    // Derive the standard list fields for these built-in types on the display
+    // copy only; an unrelated CRD with the same kind must not be interpreted.
+    if (resource.kind === "Deployment" && resource.apiVersion.startsWith("apps/")) {
+      row.Ready = (resource.status?.readyReplicas ?? 0) + "/" + (resource.spec?.replicas ?? 1);
+      row["Up-to-date"] = resource.status?.updatedReplicas ?? 0;
+      row.Available = resource.status?.availableReplicas ?? 0;
+    }
+    if (resource.kind === "Ingress" && resource.apiVersion.startsWith("networking.k8s.io/")) {
+      row.Class = resource.spec?.ingressClassName ?? "<none>";
+      row.Hosts = (resource.spec?.rules || []).map(rule => rule.host).filter(Boolean).join(",") || "*";
+      row.Address = [...new Set((resource.status?.loadBalancer?.ingress || [])
+        .map(address => address.ip || address.hostname).filter(Boolean))].sort().join(",");
+      row.Ports = resource.spec?.tls?.length ? "80, 443" : "80";
+    }
     const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(metadata.creationTimestamp)) / 1000));
     if (Number.isFinite(seconds)) {
       row.Age = seconds < 60 ? seconds + "s" : seconds < 3600 ? Math.floor(seconds / 60) + "m"
@@ -95,7 +125,8 @@
         ? resourceRow(row) : row;
     });
     const declared = Array.isArray(data.columns) ? data.columns.filter(c => typeof c === "string")
-      : ["Name", "Namespace", "Status", "Age", "Labels", "apiVersion", "kind"];
+      : ["Name", "Namespace", "Status", "Ready", "Up-to-date", "Available", "Class", "Hosts", "Address", "Ports",
+        "Age", "Labels", "apiVersion", "kind"];
     const keys = new Set(rows.flatMap(Object.keys));
     columns = [...declared.filter(c => keys.delete(c)), ...[...keys].sort()];
     if (!columns.includes(sortColumn)) {
@@ -119,7 +150,8 @@
       button.type = "button";
       button.textContent = column;
       button.onclick = () => {
-        descending = column === sortColumn ? !descending : false;
+        // Match kubectl's creationTimestamp sort: oldest first for Age.
+        descending = column === sortColumn ? !descending : column === "Age";
         sortColumn = column;
         renderTable({ columns, items: rows });
       };

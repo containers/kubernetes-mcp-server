@@ -11,8 +11,10 @@ import (
 )
 
 // tableAppStructured converts Kubernetes lists into compact, predictable rows
-// for the shared Table app. This is independent from list_output so the app
-// receives usable rows when the tool's text result is YAML.
+// for the Pod, Namespace, and Project tools, whose status is expressed as a
+// phase. This is independent from list_output so the app receives usable rows
+// when the tool's text result is YAML. Generic resources_list results do not
+// use this helper: they retain API-server table cells or full YAML objects.
 func tableAppStructured(ret runtime.Unstructured, structured any) map[string]any {
 	columns := []string{"Name", "Namespace", "Status", "Age", "Labels", "apiVersion", "kind"}
 	list, ok := ret.(*unstructured.UnstructuredList)
