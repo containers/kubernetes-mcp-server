@@ -160,14 +160,10 @@ func (c *httpContext) beforeEach(t *testing.T) {
 		return Serve(klog.NewContext(cancelCtx, c.logger), mcpServer, config.NewConfigState(c.Config), c.OAuthState)
 	})
 	c.WaitForShutdown = group.Wait
-	// Wait for HTTP server to start (using net)
-	for i := 0; i < 10; i++ {
-		conn, err := net.Dial("tcp", c.HttpAddress)
-		if err == nil {
-			_ = conn.Close()
-			break
-		}
-		time.Sleep(50 * time.Millisecond) // Wait before retrying
+	// Loopback reaches the server for every bind address these tests use (127.0.0.1, 0.0.0.0, ::)
+	serverAddr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: ln.Addr().(*net.TCPAddr).Port}
+	if err := test.WaitForServer(serverAddr); err != nil {
+		t.Fatalf("HTTP server did not start: %v", err)
 	}
 }
 
