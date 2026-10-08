@@ -4,8 +4,7 @@ Cluster-backed end-to-end tests for `kubernetes-mcp-server`, built on
 [`sigs.k8s.io/e2e-framework`](https://github.com/kubernetes-sigs/e2e-framework).
 Each test deploys the server (via its Helm chart) into a fresh namespace on a real
 Kubernetes cluster, drives it through the MCP protocol, and cross-checks the results
-against the Kubernetes API. The standard local setup uses Minikube; the optional
-NetObserv real-plugin test requires OpenShift and OLM.
+against the Kubernetes API. The standard local setup uses Minikube.
 
 This document is **living documentation**: it describes what the suite covers today.
 Update it when you add or change tests.
@@ -43,26 +42,9 @@ Lighter setups exist when you don't need every component:
 ### NetObserv tests
 
 `TestNetObservMock` deploys the mock plugin and runs as part of the normal E2E suite.
-`TestNetObservReal` is skipped unless `NETOBSERV_OPERATOR` is set:
-
-- `NETOBSERV_OPERATOR=use-existing` uses an installed NetObserv operator and skips
-  if its plugin service is unavailable.
-- `NETOBSERV_OPERATOR=deploy` installs the operator and FlowCollector from the
-  NetObserv Konflux catalog, then tests the live plugin.
-
-Run the real-plugin test against an OpenShift cluster with OLM, `kubectl`, and
-`helm` available. The server image must be pullable by the cluster:
-
-```bash
-KUBECONFIG=/path/to/openshift-kubeconfig \
-NETOBSERV_OPERATOR=deploy \
-MCP_SERVER_IMAGE=registry.example.com/project/kubernetes-mcp-server:tag \
-go test -tags e2e -run '^TestNetObservReal$' -v -count=1 ./test/e2e/
-```
-
-The test deploys the MCP server in `e2e-netobserv-real`. Deploy mode is intended for
-a disposable test cluster: cleanup removes the test FlowCollector, operator
-subscription/group/namespaces, and the `netobserv-konflux-fbc` CatalogSource.
+The `netobserv-contract.yaml` workflow runs the backend contract tests against the mock
+plugin in a dedicated Minikube cluster when NetObserv code, fixtures, or workflow setup
+changes.
 
 Keycloak fixtures (realm, clients, users, groups) live in
 `dev/config/keycloak/realm-import.yaml`; RBAC bindings for OIDC identities live in
@@ -85,7 +67,7 @@ is missing, and `TestKuadrantGatewayTools` skips without the gateway service.
 | `setup_test.go` | clientset + `helm` shell helpers |
 | `helpers_test.go` | `deployServer` + Helm/port-forward/healthz plumbing, value helpers |
 | `helpers_unit_test.go` | pure unit tests (e.g. `TestImageSpec`) — compile-check the package without a cluster |
-| `netobserv_test.go`, `netobserv_helpers.go` | mock and real NetObserv plugin E2E tests and response assertions |
+| `netobserv_test.go`, `netobserv_helpers.go` | mock NetObserv plugin E2E test and response assertions |
 | `oauth_test.go` | OAuth toolkit: token/discovery/CA helpers, JWT minting, identity discriminator, `requireUnauthorized` |
 | `oauth_flows_test.go` | OAuth flow tests: rejection surface, server modes, forwarded identity, STS variants, groups→RBAC |
 | `smoke_test.go` | `TestSmoke` — baseline deploy + tool calls |
