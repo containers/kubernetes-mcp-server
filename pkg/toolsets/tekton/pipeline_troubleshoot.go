@@ -92,6 +92,8 @@ type pipelineTroubleshootData struct {
 	tektonConfigText string
 }
 
+const pipelineTroubleshootAssistantText = "I'll analyze the collected Tekton data to identify the PipelineRun issue."
+
 func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 	args := params.GetArguments()
 	namespace := args["namespace"]
@@ -112,33 +114,62 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 		pipelineRunText:  pipelineRunText,
 		pipelineText:     fetchPipelineDefinitionForPrompt(params, namespace, pipelineRun),
 		taskRunsText:     taskRunsText,
-		logsText:         fetchPipelineRunLogsForPrompt(params, namespace, taskRuns),
-		eventsText:       fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns),
 		pacText:          fetchPipelineRunPACRepositoriesForPrompt(params, namespace),
 		tektonConfigText: fetchTektonConfigsForPrompt(params),
 	}
 
-	promptText := buildPipelineTroubleshootPrompt(data)
-	return api.NewPromptCallResult(
-		"PipelineRun troubleshooting data gathered successfully",
-		[]api.PromptMessage{
-			{
-				Role: "user",
-				Content: api.PromptContent{
-					Type: "text",
-					Text: promptText,
-				},
-			},
-			{
-				Role: "assistant",
-				Content: api.PromptContent{
-					Type: "text",
-					Text: "I'll analyze the collected Tekton data to identify the PipelineRun issue.",
-				},
-			},
+	// guideLim reserves the assistant message, which counts toward the same
+	// result. Skeleton is the guide with the log and event holes empty. If
+	// that string is already over guideLim, return it cut to guideLim plus
+	// the truncation notice and leave the holes empty. If it fits,
+	// FitSections fills the holes in order. The first section that does not
+	// fit is cut and carries the notice; later sections are left empty. A
+	// section that fills the remaining room exactly leaves the next
+	// non-empty section as the notice alone.
+	lim := api.ResultLimit(params.Context)
+	if lim > 0 {
+		skeleton := buildPipelineTroubleshootPrompt(data)
+		guideLim := lim - int64(len(pipelineTroubleshootAssistantText))
+		if guideLim <= 0 || int64(len(skeleton)) > guideLim {
+			guide := ""
+			if guideLim > 0 {
+				b := api.NewBuilderWithBudget(guideLim)
+				b.WriteString(skeleton)
+				guide = b.String()
+			}
+			return pipelineTroubleshootResult(guide, true), nil
+		}
+		room := guideLim - int64(len(skeleton))
+		logs := fetchPipelineRunLogsForPrompt(params, namespace, taskRuns)
+		events := fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns)
+		fitted := api.FitSections(room, logs, events)
+		data.logsText = fitted[0]
+		data.eventsText = fitted[1]
+	} else {
+		data.logsText = fetchPipelineRunLogsForPrompt(params, namespace, taskRuns)
+		data.eventsText = fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns)
+	}
+	return pipelineTroubleshootResult(buildPipelineTroubleshootPrompt(data), true), nil
+}
+
+func pipelineTroubleshootResult(guide string, includeAssistant bool) *api.PromptCallResult {
+	messages := []api.PromptMessage{{
+		Role: "user",
+		Content: api.PromptContent{
+			Type: "text",
+			Text: guide,
 		},
-		nil,
-	), nil
+	}}
+	if includeAssistant {
+		messages = append(messages, api.PromptMessage{
+			Role: "assistant",
+			Content: api.PromptContent{
+				Type: "text",
+				Text: pipelineTroubleshootAssistantText,
+			},
+		})
+	}
+	return api.NewPromptCallResult("PipelineRun troubleshooting data gathered successfully", messages, nil)
 }
 
 func fetchPipelineRunForPrompt(params api.PromptHandlerParams, namespace, name string) (*unstructured.Unstructured, string) {
@@ -216,34 +247,29 @@ func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace
 }
 
 func fetchPipelineRunLogsForPrompt(params api.PromptHandlerParams, namespace string, taskRuns []tektonv1.TaskRun) string {
+	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
 	if len(taskRuns) == 0 {
-		return "*No TaskRuns found, so no failed or errored step logs are available*"
+		b.WriteString("*No TaskRuns found, so no failed or errored step logs are available*")
+		return b.String()
 	}
 
-	var sb strings.Builder
 	for _, taskRun := range taskRuns {
-		var taskLogs strings.Builder
-		for _, step := range taskRun.Status.Steps {
-			if step.Name == "" || !failedOrErroredStep(step) {
-				continue
+		header := fmt.Sprintf("### TaskRun: %s\n\n", taskRun.Name)
+		if !appendTaskBlock(b, header, "\n", func(taskLogs *api.BuilderWithBudget) {
+			for _, step := range taskRun.Status.Steps {
+				if step.Name == "" || !failedOrErroredStep(step) {
+					continue
+				}
+				collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, taskLogs, namespace, &taskRun, step.Name, kubernetes.DefaultTailLines)
 			}
-			collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, &taskLogs, namespace, &taskRun, step.Name, kubernetes.DefaultTailLines)
+		}) {
+			break
 		}
-		taskLogsText := taskLogs.String()
-		if strings.TrimSpace(taskLogsText) == "" {
-			continue
-		}
-		fmt.Fprintf(&sb, "### TaskRun: %s\n\n", taskRun.Name)
-		sb.WriteString(taskLogsText)
-		if !strings.HasSuffix(taskLogsText, "\n") {
-			sb.WriteString("\n")
-		}
-		sb.WriteString("\n")
 	}
-	if sb.Len() == 0 {
-		return "*No failed or errored step logs available for this PipelineRun*"
+	if b.Len() == 0 {
+		b.WriteString("*No failed or errored step logs available for this PipelineRun*")
 	}
-	return sb.String()
+	return b.String()
 }
 
 func failedOrErroredStep(step tektonv1.StepState) bool {

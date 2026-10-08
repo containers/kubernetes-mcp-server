@@ -22,6 +22,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
@@ -47,6 +48,11 @@ func (s *NetObservSuite) mustNewClient() *NetObserv {
 	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), nil)
 	s.Require().NoError(err)
 	return client
+}
+
+func (s *NetObservSuite) TestBackendLimitRequiresConfig() {
+	_, err := (&NetObserv{}).backendLimit()
+	s.ErrorIs(err, kubernetes.ErrBackendLimitUnavailable)
 }
 
 func (s *NetObservSuite) TestNewNetObserv_NilConfig() {
@@ -127,13 +133,15 @@ func (s *NetObservSuite) TestExecuteGet() {
 	})
 
 	s.Run("returns error when JSON response exceeds maximum allowed size", func() {
+		s.Config.MaxBackendResponseBytes.SetForTest(8)
 		s.MockServer.ResetHandlers()
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte(strings.Repeat("x", maxJSONResponseBodySize+1)))
+			_, _ = w.Write([]byte(strings.Repeat("x", 9)))
 		}))
 		_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
-		s.Require().Error(err)
-		s.ErrorContains(err, fmt.Sprintf("exceeded maximum allowed size of %d bytes", maxJSONResponseBodySize))
+		var tooLarge *kubernetes.BackendResponseTooLargeError
+		s.Require().ErrorAs(err, &tooLarge)
+		s.Equal(int64(8), tooLarge.Limit)
 	})
 }
 
@@ -151,28 +159,29 @@ func (s *NetObservSuite) TestExecuteGetAccept_csv() {
 
 	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", map[string]any{
 		"format": "csv",
-	}, "text/csv,*/*", 2<<20)
+	}, "text/csv,*/*")
 	s.Require().NoError(err)
 	s.Equal("col1,col2\na,b", response.Body)
-	s.False(response.Truncated)
 	s.Equal("text/csv,*/*", seenAccept)
 }
 
-func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
+func (s *NetObservSuite) TestExecuteGetAccept_overCap() {
 	s.MockServer.ResetHandlers()
 	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", 32)))
 	}))
 	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+		max_backend_response_bytes = 16
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
 	client := s.mustNewClient()
 
-	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*", 16)
-	s.Require().NoError(err)
-	s.True(response.Truncated)
-	s.Len(response.Body, 16)
+	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*")
+	var tooLarge *kubernetes.BackendResponseTooLargeError
+	s.Require().ErrorAs(err, &tooLarge)
+	s.Equal(int64(16), tooLarge.Limit)
+	s.Empty(response.Body)
 }
 
 func (s *NetObservSuite) TestNewNetObserv_usesSafeDefaultURLWithoutDiscovery() {

@@ -21,6 +21,7 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
 - [Configuration Reference](#configuration-reference-1)
   - [Server Settings](#server-settings)
   - [HTTP Server Security](#http-server-security)
+  - [Memory Bounds](#memory-bounds)
   - [Kubernetes Connection](#kubernetes-connection)
     - [Client Limits and Watcher Timing](#client-limits-and-watcher-timing)
     - [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod)
@@ -157,7 +158,7 @@ pkill -HUP kubernetes-mcp-server
 
 SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change.
 
-Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
+Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, `max_backend_response_bytes`, `max_in_flight`, `mcp_max_result_bytes`, and so on). Toolset registries are rebuilt.
 
 If the new files fail to parse (including unknown keys), a non-reloadable option would change, or Validate fails, the process exits. When Validate fails, the rejected configuration is dumped first. `toolset_configs` parsers see the `require_tls` value from this load; a would-be `require_tls` change fails before those parsers run.
 
@@ -284,6 +285,29 @@ read_header_timeout = "10s"
 max_body_bytes = 16777216    # 16 MB
 rate_limit_rps = 5           # 5 requests per second per session
 rate_limit_burst = 10        # allow bursts of up to 10 requests
+```
+
+### Memory Bounds
+
+Process-wide caps on work this server holds in memory. They apply to stdio and HTTP. `0` disables a limit. Each option is reloadable.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_backend_response_bytes` | integer | `4194304` | Maximum bytes read from one Kubernetes API, Kiali, or NetObserv response. `pods_exec` counts stdout and stderr together. An exact fit is allowed. The next byte closes the body and the call returns an error. `0` disables the cap. HTTP `101` upgrades and `/openapi/` responses are not capped. `pods_exec` keeps the bytes already stored and appends a truncation notice; any other exec stream error drops that output. |
+| `mcp_max_result_bytes` | integer | `16777216` | Maximum bytes of one tool, prompt, or resource result. A tool counts `Content` plus the JSON size of `StructuredContent` when that field is set. When `ContentBlocks` is set, those block bytes replace `Content`, including image data. A tool error counts the error text. A prompt counts message text. A resource counts its text or blob. Log and event assembly stops at the cap and appends a truncation notice. The notice may make the result longer than the cap by the length of that notice. A result larger than the cap plus that notice is rejected and is not sent. |
+| `max_in_flight` | integer | `64` | Maximum number of `tools/call`, `prompts/get`, and `resources/read` requests running at once in this process. When every slot is in use, another of those requests is rejected with JSON-RPC error `-32030` (`max_in_flight limit exceeded`). Other methods are not counted. Every session shares one pool. |
+
+`max_backend_response_bytes` is read from the live config on each backend call. An exact fit is allowed. The next byte closes the body and returns an error, so client-go does not decode the rest. `0` leaves that read uncapped. Switching-protocol (`101`) responses and paths containing `/openapi/` are skipped. `pods_exec` shares one counter across stdout and stderr; at the cap it cancels the exec, keeps the bytes already stored, and appends a truncation notice. Any other exec stream error drops those buffers.
+
+`mcp_max_result_bytes` is read on each call. An exact fit is allowed. `0` disables the check. Lowering it does not change a call already running. A write that does not fit is cut and a truncation notice is appended; that notice may exceed the cap by its own length.
+
+A running call keeps its slot until the handler returns. Lowering `max_in_flight` does not cancel calls already running; new calls are rejected until the number in flight drops below the new cap. Raising it, or setting `0`, takes effect on the next acquire. A call that started while the limit was `0` does not take a slot if the limit is raised before that call returns.
+
+**Example:**
+```toml
+max_backend_response_bytes = 4194304
+mcp_max_result_bytes = 16777216
+max_in_flight = 64
 ```
 
 ### Kubernetes Connection
@@ -948,6 +972,9 @@ log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
 bind_address = "0.0.0.0"
 list_output = "table"
+max_backend_response_bytes = 4194304
+mcp_max_result_bytes = 16777216
+max_in_flight = 64
 stateless = false
 disable_localhost_protection = false
 

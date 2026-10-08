@@ -3,6 +3,7 @@ package kubevirt
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -12,11 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-)
 
-// ConsoleMaxScreenshotBytes bounds the size of a VNC screenshot PNG read into
-// memory. Responses larger than this are rejected rather than buffered whole.
-const ConsoleMaxScreenshotBytes = 4 * 1024 * 1024 // 4 MiB
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+)
 
 // Screenshot captures the current contents of a VirtualMachineInstance's
 // graphical (VNC) console and returns the raw PNG bytes along with the decoded
@@ -80,18 +79,14 @@ func fetchScreenshot(ctx context.Context, restConfig *rest.Config, namespace, na
 	}
 	defer func() { _ = stream.Close() }()
 
-	// Read one byte past the limit so a response exactly at the limit still
-	// succeeds while anything larger is detected as truncated and rejected.
-	data, err := io.ReadAll(io.LimitReader(stream, ConsoleMaxScreenshotBytes+1))
+	// Size is capped by max_backend_response_bytes on the shared round tripper.
+	data, err := io.ReadAll(stream)
 	if err != nil {
-		return nil, &ConsoleError{Code: ConsoleCodeScreenshotUnavailable, Err: fmt.Errorf("failed to read screenshot data: %w", err)}
-	}
-
-	if len(data) > ConsoleMaxScreenshotBytes {
-		return nil, &ConsoleError{
-			Code: ConsoleCodeScreenshotTooLarge,
-			Err:  fmt.Errorf("screenshot exceeds the maximum allowed size of %d bytes", ConsoleMaxScreenshotBytes),
+		var tooLarge *kubernetes.BackendResponseTooLargeError
+		if errors.As(err, &tooLarge) {
+			return nil, tooLarge
 		}
+		return nil, &ConsoleError{Code: ConsoleCodeScreenshotUnavailable, Err: fmt.Errorf("failed to read screenshot data: %w", err)}
 	}
 
 	if len(data) == 0 {

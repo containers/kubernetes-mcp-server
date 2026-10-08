@@ -64,6 +64,15 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("LogLevel is 0", func() {
 		s.Equal(0, base.LogLevel.Get())
 	})
+	s.Run("MaxBackendResponseBytes is 4MiB", func() {
+		s.Equal(int64(4<<20), base.MaxBackendResponseBytes.Get())
+	})
+	s.Run("MaxInFlight is 64", func() {
+		s.Equal(64, base.MaxInFlight.Get())
+	})
+	s.Run("McpMaxResultBytes is 16MiB", func() {
+		s.Equal(int64(16<<20), base.McpMaxResultBytes.Get())
+	})
 }
 
 func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
@@ -104,7 +113,97 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.False(paths["apps_enabled"].Reloadable)
 	s.False(paths["disable_localhost_protection"].Reloadable)
 	s.True(paths["log_level"].Reloadable)
+	s.Contains(paths, "max_backend_response_bytes")
+	s.True(paths["max_backend_response_bytes"].Reloadable)
+	s.Contains(paths, "max_in_flight")
+	s.True(paths["max_in_flight"].Reloadable)
+	s.Contains(paths, "mcp_max_result_bytes")
+	s.True(paths["mcp_max_result_bytes"].Reloadable)
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
+}
+
+func (s *ConfigSuite) TestMaxBackendResponseBytes() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 32`))
+		s.Require().NoError(err)
+		s.Equal(int64(32), cfg.MaxBackendResponseBytes.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 0`))
+		s.Require().NoError(err)
+		s.Equal(int64(0), cfg.MaxBackendResponseBytes.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "max_backend_response_bytes must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 4194304`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(int64(2), next.MaxBackendResponseBytes.Get())
+	})
+}
+
+func (s *ConfigSuite) TestMaxInFlight() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 8`))
+		s.Require().NoError(err)
+		s.Equal(8, cfg.MaxInFlight.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 0`))
+		s.Require().NoError(err)
+		s.Equal(0, cfg.MaxInFlight.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "max_in_flight must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 64`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(2, next.MaxInFlight.Get())
+	})
+}
+
+func (s *ConfigSuite) TestMcpMaxResultBytes() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 32`))
+		s.Require().NoError(err)
+		s.Equal(int64(32), cfg.McpMaxResultBytes.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 0`))
+		s.Require().NoError(err)
+		s.Equal(int64(0), cfg.McpMaxResultBytes.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "mcp_max_result_bytes must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 16777216`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`mcp_max_result_bytes = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(int64(2), next.McpMaxResultBytes.Get())
+	})
 }
 
 func (s *ConfigSuite) TestConfigPathEnvName() {

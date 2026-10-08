@@ -136,33 +136,53 @@ func troubleshoot(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	dataVolumeYaml := fetchDataVolumeStatus(ctx, dynamicClient, namespace, vm)
 	cloudInitYaml := extractCloudInit(vm, vmi)
 	podYaml, podNames, podDiag := fetchVirtLauncherPod(ctx, dynamicClient, namespace, name)
-	podLogsText := fetchVirtLauncherPodLogs(ctx, params.KubernetesClient, namespace, podNames)
-	eventsYaml := fetchEvents(ctx, params.KubernetesClient, namespace, name, podNames)
-
 	issuesSection := analyzeIssues(ctx, dynamicClient, namespace, name, vm, vmi, podDiag)
 
-	report := fmt.Sprintf(`# VirtualMachine Diagnostic Report: %s/%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-`, namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, dataVolumeYaml, cloudInitYaml, podYaml, podLogsText, eventsYaml)
-
+	podLogsText := fetchVirtLauncherPodLogs(ctx, params.KubernetesClient, namespace, podNames)
+	eventsYaml := fetchEvents(ctx, params.KubernetesClient, namespace, name, podNames)
+	// Skeleton is the report with the log and event holes empty. If that
+	// string is already over the cap, return it cut to the cap plus the
+	// truncation notice and leave the holes empty. If it fits, FitSections
+	// fills the holes in order. The first section that does not fit is cut
+	// and carries the notice; later sections are left empty. A section that
+	// fills the remaining room exactly leaves the next non-empty section as
+	// the notice alone.
+	lim := api.ResultLimit(ctx)
+	if lim > 0 {
+		skeleton := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, dataVolumeYaml, cloudInitYaml, podYaml, "", "")
+		if int64(len(skeleton)) > lim {
+			b := api.NewBuilderWithBudget(lim)
+			b.WriteString(skeleton)
+			return api.NewToolCallResult(b.String(), nil), nil
+		}
+		fitted := api.FitSections(lim-int64(len(skeleton)), podLogsText, eventsYaml)
+		podLogsText, eventsYaml = fitted[0], fitted[1]
+	}
+	report := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, dataVolumeYaml, cloudInitYaml, podYaml, podLogsText, eventsYaml)
 	return api.NewToolCallResult(report, nil), nil
+}
+
+func formatVMDiagnosticReport(namespace, name, issues, vm, vmi, volumes, dataVolume, cloudInit, pod, logs, events string) string {
+	return fmt.Sprintf(`# VirtualMachine Diagnostic Report: %s/%s
+
+%s
+
+%s
+
+%s
+
+%s
+
+%s
+
+%s
+
+%s
+
+%s
+
+%s
+`, namespace, name, issues, vm, vmi, volumes, dataVolume, cloudInit, pod, logs, events)
 }
 
 func fetchVMStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (string, *unstructured.Unstructured) {
@@ -367,25 +387,29 @@ func extractPodDiagnostics(pod *unstructured.Unstructured) map[string]interface{
 }
 
 func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, namespace string, podNames []string) string {
+	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
 	if len(podNames) == 0 {
-		return "## virt-launcher Pod Logs\n\n*No pod found — no logs available*"
+		b.WriteString("## virt-launcher Pod Logs\n\n*No pod found — no logs available*")
+		return b.String()
 	}
 
 	core := kubernetes.NewCore(client)
-	var result strings.Builder
-	result.WriteString("## virt-launcher Pod Logs\n\n")
+	b.WriteString("## virt-launcher Pod Logs\n\n")
 
 	containerName := "compute"
 	for _, podName := range podNames {
+		if b.Truncated() {
+			break
+		}
 		logs, err := core.PodsLog(ctx, namespace, podName, containerName, false, 50)
 		if err != nil {
-			fmt.Fprintf(&result, "### %s\n\n*Error fetching logs: %v*\n\n", podName, err)
+			b.WriteString(fmt.Sprintf("### %s\n\n*Error fetching logs: %v*\n\n", podName, err))
 			continue
 		}
-		fmt.Fprintf(&result, "### %s (container: %s)\n\n```\n%s\n```\n\n", podName, containerName, redactLogSecrets(logs))
+		b.WriteString(fmt.Sprintf("### %s (container: %s)\n\n```\n%s\n```\n\n", podName, containerName, redactLogSecrets(logs)))
 	}
 
-	return result.String()
+	return b.String()
 }
 
 func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vmName string, podNames []string) string {
@@ -407,29 +431,33 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 		relatedEvents = append(relatedEvents, events...)
 	}
 
+	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
 	if len(relatedEvents) == 0 && len(eventErrors) == 0 {
-		return "## Events\n\n*No events found related to this VM*"
+		b.WriteString("## Events\n\n*No events found related to this VM*")
+		return b.String()
 	}
 
-	var result strings.Builder
-	result.WriteString("## Events")
+	b.WriteString("## Events")
 	if len(eventErrors) > 0 {
-		result.WriteString("\n\n")
+		b.WriteString("\n\n")
 		for _, e := range eventErrors {
-			fmt.Fprintf(&result, "*%s*\n", e)
+			if b.Truncated() {
+				break
+			}
+			b.WriteString(fmt.Sprintf("*%s*\n", e))
 		}
 	}
 
-	if len(relatedEvents) > 0 {
+	if len(relatedEvents) > 0 && !b.Truncated() {
 		yamlStr, err := output.MarshalYaml(relatedEvents)
 		if err != nil {
-			fmt.Fprintf(&result, "\n\n*Error marshaling events: %v*", err)
+			b.WriteString(fmt.Sprintf("\n\n*Error marshaling events: %v*", err))
 		} else {
-			fmt.Fprintf(&result, "\n\n```yaml\n%s```", yamlStr)
+			b.WriteString(fmt.Sprintf("\n\n```yaml\n%s```", yamlStr))
 		}
 	}
 
-	return result.String()
+	return b.String()
 }
 
 func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace string, vm *unstructured.Unstructured) string {

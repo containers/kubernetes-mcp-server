@@ -26,6 +26,20 @@ const (
 	// set but rate_limit_burst is not specified (zero value).
 	DefaultRateLimitBurst = 10
 
+	// DefaultMaxInFlight is the default number of tools/call, prompts/get, and
+	// resources/read handlers that may run at once in this process.
+	// 0 disables the limit.
+	DefaultMaxInFlight = 64
+
+	// DefaultMcpMaxResultBytes is the default cap on one tool, prompt, or
+	// resource result. 0 disables the limit.
+	DefaultMcpMaxResultBytes = 16 << 20
+
+	// DefaultMaxBackendResponseBytes is the default cap on one Kubernetes,
+	// Kiali, or NetObserv response, and on the combined stdout and stderr
+	// retained by one pods_exec. 0 disables the limit.
+	DefaultMaxBackendResponseBytes = 4 << 20
+
 	extensionToolsetTable  = "toolset_configs"
 	extensionProviderTable = "cluster_provider_configs"
 )
@@ -228,6 +242,17 @@ type Config struct {
 	MetricsPort Option[string]
 	// ListOutput is the output format for resource list operations (yaml or table).
 	ListOutput Option[string]
+	// MaxBackendResponseBytes is the maximum number of bytes read from one
+	// Kubernetes API, Kiali, or NetObserv response. pods_exec counts stdout
+	// and stderr together against the same limit. 0 disables the limit.
+	MaxBackendResponseBytes Option[int64]
+	// MaxInFlight is the maximum number of tools/call, prompts/get, and
+	// resources/read handlers running in this process. 0 disables the limit.
+	MaxInFlight Option[int]
+	// McpMaxResultBytes is the maximum size of one tool, prompt, or resource
+	// result. For a tool, the size is len(Content) plus the JSON size of
+	// StructuredContent when that field is set. 0 disables the limit.
+	McpMaxResultBytes Option[int64]
 	// AppsEnabled enables MCP Apps UI resources for tools that declare an app.
 	// Defaults to false so existing MCP clients retain their current behavior.
 	AppsEnabled Option[bool]
@@ -398,6 +423,24 @@ func newConfig() *Config {
 		BindAddress: opt("bind_address", "0.0.0.0").desc("Address to bind the HTTP server"),
 		MetricsPort: opt("metrics_port", "").validate(validateMetricsPortNumber).desc("Separate metrics server port"),
 		ListOutput:  opt("list_output", "table").reload().validate(validateListOutput).desc("Output format for resource list operations"),
+		MaxBackendResponseBytes: opt("max_backend_response_bytes", int64(DefaultMaxBackendResponseBytes)).reload().validate(func(v int64) error {
+			if v < 0 {
+				return fmt.Errorf("max_backend_response_bytes must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max bytes of one Kubernetes, Kiali, or NetObserv response (0 disables)"),
+		MaxInFlight: opt("max_in_flight", DefaultMaxInFlight).reload().validate(func(v int) error {
+			if v < 0 {
+				return fmt.Errorf("max_in_flight must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max concurrent tools/call, prompts/get, and resources/read (0 disables)"),
+		McpMaxResultBytes: opt("mcp_max_result_bytes", int64(DefaultMcpMaxResultBytes)).reload().validate(func(v int64) error {
+			if v < 0 {
+				return fmt.Errorf("mcp_max_result_bytes must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max bytes of one tool, prompt, or resource result (0 disables)"),
 		AppsEnabled: opt("apps_enabled", false).desc("Enable MCP Apps UI resources (requires restart)"),
 		Stateless:   opt("stateless", false).desc("Run without tool/prompt change notifications"),
 		DisableLocalhostProtection: opt("disable_localhost_protection", false).
