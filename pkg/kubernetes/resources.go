@@ -32,9 +32,15 @@ func (c *Core) ResourcesList(ctx context.Context, gvk *schema.GroupVersionKind, 
 	}
 
 	// Check if operation is allowed for all namespaces (applicable for namespaced resources)
-	isNamespaced, _ := c.isNamespaced(gvk)
+	isNamespaced, err := c.isNamespaced(gvk)
+	if err != nil {
+		return nil, err
+	}
 	if isNamespaced && !c.canIUse(ctx, gvr, namespace, "list") && namespace == "" {
 		namespace = c.NamespaceOrDefault("")
+	} else if !isNamespaced {
+		// Cluster-scoped resources never have a namespace, even when the caller provides one.
+		namespace = ""
 	}
 	if options.AsTable {
 		return c.resourcesListAsTable(ctx, gvk, gvr, namespace, options)
@@ -49,8 +55,15 @@ func (c *Core) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, n
 	}
 
 	// If it's a namespaced resource and namespace wasn't provided, try to use the default configured one
-	if namespaced, nsErr := c.isNamespaced(gvk); nsErr == nil && namespaced {
+	namespaced, err := c.isNamespaced(gvk)
+	if err != nil {
+		return nil, err
+	}
+	if namespaced {
 		namespace = c.NamespaceOrDefault(namespace)
+	} else {
+		// Cluster-scoped resources never have a namespace, even when the caller provides one.
+		namespace = ""
 	}
 	return c.DynamicClient().Resource(*gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
@@ -80,8 +93,15 @@ func (c *Core) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind
 	}
 
 	// If it's a namespaced resource and namespace wasn't provided, try to use the default configured one
-	if namespaced, nsErr := c.isNamespaced(gvk); nsErr == nil && namespaced {
+	namespaced, err := c.isNamespaced(gvk)
+	if err != nil {
+		return err
+	}
+	if namespaced {
 		namespace = c.NamespaceOrDefault(namespace)
+	} else {
+		// Cluster-scoped resources never have a namespace, even when the caller provides one.
+		namespace = ""
 	}
 	return c.DynamicClient().Resource(*gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{
 		GracePeriodSeconds: gracePeriodSeconds,
@@ -102,12 +122,17 @@ func (c *Core) ResourcesScale(
 
 	var resourceClient dynamic.ResourceInterface
 
-	if namespaced, nsErr := c.isNamespaced(gvk); nsErr == nil && namespaced {
+	namespaced, err := c.isNamespaced(gvk)
+	if err != nil {
+		return nil, err
+	}
+	if namespaced {
 		resourceClient = c.
 			DynamicClient().
 			Resource(*gvr).
 			Namespace(c.NamespaceOrDefault(namespace))
 	} else {
+		// Cluster-scoped resources never have a namespace, even when the caller provides one.
 		resourceClient = c.DynamicClient().Resource(*gvr)
 	}
 
@@ -187,8 +212,15 @@ func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstruc
 
 		namespace := obj.GetNamespace()
 		// If it's a namespaced resource and namespace wasn't provided, try to use the default configured one
-		if namespaced, nsErr := c.isNamespaced(&gvk); nsErr == nil && namespaced {
+		namespaced, err := c.isNamespaced(&gvk)
+		if err != nil {
+			return nil, err
+		}
+		if namespaced {
 			namespace = c.NamespaceOrDefault(namespace)
+		} else {
+			// Cluster-scoped resources never have a namespace, even when the caller provides one.
+			namespace = ""
 		}
 		resources[i], rErr = c.DynamicClient().Resource(*gvr).Namespace(namespace).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{
 			FieldManager: version.BinaryName,
