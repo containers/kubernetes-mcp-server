@@ -1,0 +1,177 @@
+package discovery
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/url"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
+)
+
+type TempoInstance struct {
+	Kind         KindType `json:"kind"`
+	Namespace    string   `json:"tempoNamespace"`
+	Name         string   `json:"tempoName"`
+	Multitenancy bool     `json:"multitenancy"`
+	Tenants      []string `json:"tenants,omitempty"`
+	Status       string   `json:"status"`
+	baseURL      string
+}
+
+type KindType string
+
+const (
+	KindTempoStack      KindType = "TempoStack"
+	KindTempoMonolithic KindType = "TempoMonolithic"
+)
+
+// ListInstances lists all Tempo CRs and resolves their base URLs.
+// resolver is used for cluster-based discovery (e.g. OpenShift Routes); nil falls back to service DNS.
+func ListInstances(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver) ([]TempoInstance, error) {
+	tempos := []TempoInstance{}
+
+	tempoStacks, err := listTempoStacks(ctx, k8sClient, resolver)
+	if err != nil {
+		return nil, err
+	}
+	tempos = append(tempos, tempoStacks...)
+
+	tempoMonolithics, err := listTempoMonolithics(ctx, k8sClient, resolver)
+	if err != nil {
+		return nil, err
+	}
+	tempos = append(tempos, tempoMonolithics...)
+
+	return tempos, nil
+}
+
+func listTempoStacks(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver) ([]TempoInstance, error) {
+	list, err := k8sClient.Resource(tempoStackGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list TempoStacks: %w", err)
+	}
+
+	var instances []TempoInstance
+	for _, item := range list.Items {
+		var tempo TempoStack
+		err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, &tempo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse TempoStack: %w", err)
+		}
+
+		multitenancy := tempo.Spec.Tenants != nil && len(tempo.Spec.Tenants.Authentication) > 0
+
+		var serviceName string
+		var tenants []string
+		if multitenancy {
+			serviceName = DNSName(fmt.Sprintf("tempo-%s-gateway", tempo.Name))
+			for _, auth := range tempo.Spec.Tenants.Authentication {
+				tenants = append(tenants, auth.TenantName)
+			}
+		} else {
+			serviceName = DNSName(fmt.Sprintf("tempo-%s-query-frontend", tempo.Name))
+		}
+
+		baseURL, err := resolveBaseURL(ctx, k8sClient, resolver, tempo.Namespace, serviceName, multitenancy)
+		if err != nil {
+			slog.Warn("Failed to resolve base URL for TempoStack, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
+			continue
+		}
+
+		status := getStatusFromConditions(tempo.Status.Conditions)
+
+		instances = append(instances, TempoInstance{
+			Kind:         KindTempoStack,
+			Namespace:    tempo.Namespace,
+			Name:         tempo.Name,
+			Multitenancy: multitenancy,
+			Tenants:      tenants,
+			Status:       status,
+			baseURL:      baseURL,
+		})
+	}
+
+	return instances, nil
+}
+
+func listTempoMonolithics(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver) ([]TempoInstance, error) {
+	list, err := k8sClient.Resource(tempoMonolithicGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list TempoMonolithics: %w", err)
+	}
+
+	var instances []TempoInstance
+	for _, item := range list.Items {
+		var tempo TempoMonolithic
+		err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, &tempo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse TempoMonolithic: %w", err)
+		}
+
+		multitenancy := tempo.Spec.Multitenancy != nil && tempo.Spec.Multitenancy.Enabled && len(tempo.Spec.Multitenancy.Authentication) > 0
+
+		var serviceName string
+		var tenants []string
+		if multitenancy {
+			serviceName = DNSName(fmt.Sprintf("tempo-%s-gateway", tempo.Name))
+			for _, auth := range tempo.Spec.Multitenancy.Authentication {
+				tenants = append(tenants, auth.TenantName)
+			}
+		} else {
+			serviceName = DNSName(fmt.Sprintf("tempo-%s", tempo.Name))
+		}
+
+		baseURL, err := resolveBaseURL(ctx, k8sClient, resolver, tempo.Namespace, serviceName, multitenancy)
+		if err != nil {
+			slog.Warn("Failed to resolve base URL for TempoMonolithic, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
+			continue
+		}
+
+		status := getStatusFromConditions(tempo.Status.Conditions)
+
+		instances = append(instances, TempoInstance{
+			Kind:         KindTempoMonolithic,
+			Namespace:    tempo.Namespace,
+			Name:         tempo.Name,
+			Multitenancy: multitenancy,
+			Tenants:      tenants,
+			Status:       status,
+			baseURL:      baseURL,
+		})
+	}
+
+	return instances, nil
+}
+
+func getStatusFromConditions(conditions []metav1.Condition) string {
+	for _, cond := range conditions {
+		if cond.Status == metav1.ConditionTrue {
+			return cond.Type
+		}
+	}
+	return ""
+}
+
+func resolveBaseURL(ctx context.Context, k8sClient dynamic.Interface, resolver EndpointResolver, namespace, serviceName string, multitenancy bool) (string, error) {
+	if resolver != nil {
+		endpoint, err := resolver.ResolveEndpoint(ctx, k8sClient, namespace, serviceName)
+		if err == nil {
+			return endpoint, nil
+		}
+		slog.Debug("Route not found, falling back to service DNS", "namespace", namespace, "service", serviceName, "error", err)
+	}
+	if multitenancy {
+		return fmt.Sprintf("https://%s.%s.svc:8080", serviceName, namespace), nil
+	}
+	return fmt.Sprintf("http://%s.%s.svc:3200", serviceName, namespace), nil
+}
+
+func (t *TempoInstance) GetURL(tenant string) string {
+	if t.Multitenancy {
+		return fmt.Sprintf("%s/api/traces/v1/%s/tempo", t.baseURL, url.PathEscape(tenant))
+	}
+	return t.baseURL
+}
