@@ -225,6 +225,19 @@ jobs:
             printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s"}]}' "$1" "$2" "$3"
           }
 
+          kiali_multicluster_entry='{
+            "suite":"kiali-multicluster",
+            "eval-config":"evals/tasks/kiali/multicluster/eval.yaml",
+            "toolsets":"core,config,kiali",
+            "mcp-config-dir":"dev/config/mcp-configs-multicluster",
+            "baseline-result":"openai-agent-multicluster-latest.json",
+            "job-display-name":"Run MCP Multicluster Evaluation"
+          }'
+
+          append_kiali_multicluster() {
+            echo "$1" | jq -c --argjson mc "$kiali_multicluster_entry" '.include += [$mc]'
+          }
+
           case "$SUITE" in
             schedule-matrix)
               # Weekly schedule: run all individual suites in parallel.
@@ -234,6 +247,7 @@ jobs:
             {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm"},
             {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
             {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
+            {"suite":"kiali-multicluster","eval-config":"evals/tasks/kiali/multicluster/eval.yaml","toolsets":"core,config,kiali","mcp-config-dir":"dev/config/mcp-configs-multicluster","baseline-result":"openai-agent-multicluster-latest.json","job-display-name":"Run MCP Multicluster Evaluation"},
             {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
             {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"},
             {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"}
@@ -248,7 +262,7 @@ jobs:
               MATRIX=$(single_matrix kubevirt "${EVAL_DIR}/eval-kubevirt.yaml" "core,config,kubevirt,tekton")
               ;;
             kiali)
-              MATRIX=$(single_matrix kiali "${EVAL_DIR}/eval-kiali.yaml" "core,config,kiali")
+              MATRIX=$(append_kiali_multicluster "$(single_matrix kiali "${EVAL_DIR}/eval-kiali.yaml" "core,config,kiali")")
               ;;
             tekton)
               MATRIX=$(single_matrix tekton "${EVAL_DIR}/eval-tekton.yaml" "core,config,tekton")
@@ -260,7 +274,7 @@ jobs:
               MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "core,config")
               ;;
             all)
-              MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")
+              MATRIX=$(append_kiali_multicluster "$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")")
               ;;
             *)
               # Default to core suite (matches 'core' or any unrecognized suite)
@@ -272,7 +286,7 @@ jobs:
 
   # Run mcpchecker evaluation with Minikube cluster
   run-evaluation:
-    name: 'Run MCP Evaluation (${{ matrix.suite }})'
+    name: ${{ matrix.job-display-name || format('Run MCP Evaluation ({0})', matrix.suite) }}
     needs: check-trigger
     if: needs.check-trigger.outputs.should-run == 'true'
     runs-on: ubuntu-latest
@@ -302,15 +316,31 @@ jobs:
           go-version-file: go.mod
 
       - name: Setup Minikube cluster
+        if: matrix.suite != 'kiali-multicluster'
         run: make minikube-create-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE"
 
       # Core tasks always run (every eval includes them) and the resize-pvc
       # task needs a resize-capable StorageClass, so always install the CSI driver.
       - name: Install CSI hostPath driver (resize-capable StorageClass)
+        if: matrix.suite != 'kiali-multicluster'
         run: make csi-hostpath-install
 
+      - name: Setup Node
+        if: matrix.suite == 'kiali-multicluster'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Enable Corepack
+        if: matrix.suite == 'kiali-multicluster'
+        run: corepack enable
+
+      - name: Setup multicluster Kind + Istio/Kiali
+        if: matrix.suite == 'kiali-multicluster'
+        run: make setup-kiali-multicluster
+
       - name: Install Istio/Kiali and bookinfo demo
-        if: contains(matrix.toolsets, 'kiali')
+        if: matrix.suite != 'kiali-multicluster' && contains(matrix.toolsets, 'kiali')
         run: make setup-kiali
 
       - name: Install KubeVirt
@@ -332,7 +362,7 @@ jobs:
         run: make run-server
         env:
           TOOLSETS: ${{ matrix.toolsets }}
-          MCP_CONFIG_DIR: 'dev/config/mcp-configs'
+          MCP_CONFIG_DIR: ${{ matrix.mcp-config-dir || 'dev/config/mcp-configs' }}
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
@@ -362,13 +392,17 @@ jobs:
         if: always()
         run: |
           make stop-server || true
-          make stop-netobserv || true
-          make teardown-netobserv || true
-          make minikube-delete-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE" || true
+          if [[ "${{ matrix.suite }}" == "kiali-multicluster" ]]; then
+            make kind-delete-multicluster || true
+          else
+            make stop-netobserv || true
+            make teardown-netobserv || true
+            make minikube-delete-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE" || true
+          fi
 
       # Compare PR results against baseline from main branch
       - name: Fetch baseline results from main
-        if: needs.check-trigger.outputs.is-pr == 'true'
+        if: needs.check-trigger.outputs.is-pr == 'true' && matrix.suite != 'kiali-multicluster'
         env:
           EVAL_CONFIG: ${{ matrix.eval-config }}
         run: |
@@ -377,6 +411,12 @@ jobs:
           RESULT_NAME="builtin-openai-${SUITE}"
           git fetch origin main --depth=1
           git show "origin/main:evals/results/${RESULT_NAME}-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
+
+      - name: Fetch baseline results from main
+        if: needs.check-trigger.outputs.is-pr == 'true' && matrix.suite == 'kiali-multicluster'
+        run: |
+          git fetch origin main --depth=1
+          git show "origin/main:evals/results/openai-agent-multicluster-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
 
       - name: Check diff prerequisites
         id: diff-check
@@ -442,7 +482,7 @@ jobs:
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: eval-context-${{ matrix.suite }}
+          name: ${{ matrix.suite == 'kiali-multicluster' && 'eval-context-multicluster' || format('eval-context-{0}', matrix.suite) }}
           path: eval-context/
           retention-days: 1
 
@@ -480,7 +520,11 @@ jobs:
 
             # Extract suite name: mcpchecker-results-core -> core
             SUITE=$(basename "$SUITE_DIR" | sed 's/^mcpchecker-results-//')
-            RESULT_NAME="builtin-openai-${SUITE}"
+            if [[ "$SUITE" == "kiali-multicluster" ]]; then
+              DEST="evals/results/openai-agent-multicluster-latest.json"
+            else
+              DEST="evals/results/builtin-openai-${SUITE}-latest.json"
+            fi
 
             RESULTS_FILE=$(ls -t "${SUITE_DIR}"/mcpchecker-*-out.json 2>/dev/null | head -1)
             if [ -z "$RESULTS_FILE" ]; then
@@ -488,8 +532,8 @@ jobs:
               continue
             fi
 
-            cp "$RESULTS_FILE" "evals/results/${RESULT_NAME}-latest.json"
-            echo "Copied ${SUITE} results to evals/results/${RESULT_NAME}-latest.json"
+            cp "$RESULTS_FILE" "$DEST"
+            echo "Copied ${SUITE} results to ${DEST}"
           done
 
       - name: Create Pull Request
