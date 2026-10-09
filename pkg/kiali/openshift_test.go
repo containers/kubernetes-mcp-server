@@ -22,8 +22,9 @@ type mockInspector struct {
 	lastGroupVersion string
 }
 
-func (m *mockInspector) Discovery() api.AggregateDiscovery       { return m }
-func (m *mockInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (m *mockInspector) Discovery() api.AggregateDiscovery         { return m }
+func (m *mockInspector) Unstructured() api.AggregateUnstructured   { return nil }
+func (m *mockInspector) DefaultBearerToken(context.Context) string { return "" }
 func (m *mockInspector) GetTargets(context.Context) ([]string, error) {
 	return []string{""}, nil
 }

@@ -13,6 +13,8 @@ import (
 type ClusterInspector interface {
 	Discovery() AggregateDiscovery
 	Unstructured() AggregateUnstructured
+	// DefaultBearerToken returns the bearer token for the default cluster target, if available.
+	DefaultBearerToken(ctx context.Context) string
 }
 
 type AggregateDiscovery interface {

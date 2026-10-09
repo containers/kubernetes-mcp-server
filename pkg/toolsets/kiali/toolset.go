@@ -10,7 +10,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
@@ -53,8 +52,11 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 }
 
 func kialiAvailable(ctx context.Context, toolsetContext api.ToolsetContext) bool {
-	kp := kubernetes.ClusterProvider(toolsetContext.Inspector)
-	return kialiclient.HasKiali(ctx, toolsetContext.Config, kp)
+	token := ""
+	if toolsetContext.Inspector != nil {
+		token = toolsetContext.Inspector.DefaultBearerToken(ctx)
+	}
+	return kialiclient.HasKiali(ctx, toolsetContext.Config, token)
 }
 
 func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerPrompt {

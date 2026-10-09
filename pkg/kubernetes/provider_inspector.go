@@ -14,15 +14,6 @@ func NewClusterInspector(provider Provider) api.ClusterInspector {
 	return &providerInspector{provider: provider}
 }
 
-// ClusterProvider returns the Kubernetes provider behind an inspector created
-// by NewClusterInspector, or nil for other inspectors.
-func ClusterProvider(inspector api.ClusterInspector) Provider {
-	if pi, ok := inspector.(*providerInspector); ok {
-		return pi.provider
-	}
-	return nil
-}
-
 type providerInspector struct {
 	provider Provider
 }
@@ -45,6 +36,14 @@ func (p *providerInspector) Discovery() api.AggregateDiscovery {
 
 func (p *providerInspector) Unstructured() api.AggregateUnstructured {
 	return p
+}
+
+func (p *providerInspector) DefaultBearerToken(ctx context.Context) string {
+	k8s, err := p.provider.GetDerivedKubernetes(ctx, p.provider.GetDefaultTarget())
+	if err != nil || k8s == nil || k8s.RESTConfig() == nil {
+		return ""
+	}
+	return k8s.RESTConfig().BearerToken
 }
 
 func (p *providerInspector) Resource(resource schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {

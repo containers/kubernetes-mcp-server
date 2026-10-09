@@ -19,8 +19,9 @@ type fakeInspector struct {
 	err       error
 }
 
-func (f *fakeInspector) Discovery() api.AggregateDiscovery       { return f }
-func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeInspector) Discovery() api.AggregateDiscovery         { return f }
+func (f *fakeInspector) Unstructured() api.AggregateUnstructured   { return nil }
+func (f *fakeInspector) DefaultBearerToken(context.Context) string { return "" }
 func (f *fakeInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
 		if f.err != nil {

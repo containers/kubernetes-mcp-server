@@ -104,19 +104,19 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		if !HasKiali(context.Background(), kialiTestConfig(srv.URL), nil) {
+		if !HasKiali(context.Background(), kialiTestConfig(srv.URL), "") {
 			t.Fatal("expected HasKiali true for reachable configured URL")
 		}
 	})
 
 	t.Run("disables when configured URL fails status probe", func(t *testing.T) {
-		if HasKiali(context.Background(), kialiTestConfig("http://127.0.0.1:1"), nil) {
+		if HasKiali(context.Background(), kialiTestConfig("http://127.0.0.1:1"), "") {
 			t.Fatal("expected HasKiali false for unreachable configured URL")
 		}
 	})
 
 	t.Run("disables when URL is not configured", func(t *testing.T) {
-		if HasKiali(context.Background(), config.New(), nil) {
+		if HasKiali(context.Background(), config.New(), "") {
 			t.Fatal("expected HasKiali false without configured URL")
 		}
 	})
@@ -139,7 +139,7 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
-		if HasKiali(ctx, kialiTestConfig("http://"+listener.Addr().String()), nil) {
+		if HasKiali(ctx, kialiTestConfig("http://"+listener.Addr().String()), "") {
 			t.Fatal("expected HasKiali false on probe timeout")
 		}
 	})

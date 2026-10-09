@@ -29,6 +29,8 @@ func (i *documentationInspector) Unstructured() api.AggregateUnstructured {
 	return nil
 }
 
+func (i *documentationInspector) DefaultBearerToken(context.Context) string { return "" }
+
 func (i *documentationInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, i, func(context.Context, string) (*metav1.APIResourceList, error) {
 		return &metav1.APIResourceList{APIResources: []metav1.APIResource{
