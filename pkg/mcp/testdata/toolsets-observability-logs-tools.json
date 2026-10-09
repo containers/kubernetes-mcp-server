@@ -1,0 +1,440 @@
+[
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "loki.grafana.com",
+                  "resource": "lokistacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Loki Label Names"
+    },
+    "description": "List available Loki label names for a time range. Use this before writing LogQL queries.",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+          "type": "string"
+        },
+        "lokiName": {
+          "description": "Name of the LokiStack. Use loki_list_instances to discover valid values.",
+          "type": "string"
+        },
+        "lokiNamespace": {
+          "description": "Kubernetes namespace of the LokiStack. Use loki_list_instances to discover valid values.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "Loki tenant ID (X-Scope-OrgID). For LokiStack gateway modes (e.g. openshift-network) this selects the `/api/logs/v1/\u003ctenant\u003e` path; use `network` for openshift-network.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "loki_label_names",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "labels"
+      ],
+      "type": "object"
+    },
+    "title": "List Loki Label Names"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "loki.grafana.com",
+                  "resource": "lokistacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Loki Label Values"
+    },
+    "description": "List possible values for a Loki label key. Use this to build precise label matchers in LogQL.",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+          "type": "string"
+        },
+        "label": {
+          "description": "Label key to inspect (for example namespace, pod, container).",
+          "type": "string"
+        },
+        "lokiName": {
+          "description": "Name of the LokiStack. Use loki_list_instances to discover valid values.",
+          "type": "string"
+        },
+        "lokiNamespace": {
+          "description": "Kubernetes namespace of the LokiStack. Use loki_list_instances to discover valid values.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "Loki tenant ID (X-Scope-OrgID). For LokiStack gateway modes (e.g. openshift-network) this selects the `/api/logs/v1/\u003ctenant\u003e` path; use `network` for openshift-network.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
+    "name": "loki_label_values",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "type": "object"
+    },
+    "title": "List Loki Label Values"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "loki.grafana.com",
+                  "resource": "lokistacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List LokiStack Instances"
+    },
+    "description": "List LokiStack instances available in the Kubernetes cluster.\nCall this first when using Loki Operator managed stacks so you can pass lokiNamespace and lokiName to other Loki tools.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "loki_list_instances",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instances": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "lokiName": {
+                "type": "string"
+              },
+              "lokiNamespace": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "lokiNamespace",
+              "lokiName",
+              "status",
+              "url"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "instances"
+      ],
+      "type": "object"
+    },
+    "title": "List LokiStack Instances"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "loki.grafana.com",
+                  "resource": "lokistacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Execute Loki Range Query"
+    },
+    "description": "Execute a Loki LogQL range query and return matching log streams and lines.\n\nUse precise label matchers and a short time window first.",
+    "inputSchema": {
+      "properties": {
+        "direction": {
+          "description": "Search direction: backward (default) or forward.",
+          "type": "string"
+        },
+        "duration": {
+          "description": "Lookback duration from now when start/end are omitted (for example 5m, 1h). Defaults to 15m.",
+          "pattern": "^\\d+[smhdwy]$",
+          "type": "string"
+        },
+        "end": {
+          "description": "End time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of log lines to return. Defaults to 100, max 1000.",
+          "type": "integer"
+        },
+        "lokiName": {
+          "description": "Name of the LokiStack. Use loki_list_instances to discover valid values.",
+          "type": "string"
+        },
+        "lokiNamespace": {
+          "description": "Kubernetes namespace of the LokiStack. Use loki_list_instances to discover valid values.",
+          "type": "string"
+        },
+        "query": {
+          "description": "LogQL query string.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time as RFC3339, Unix timestamp, NOW, or NOW-relative expression (optional).",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "Loki tenant ID (X-Scope-OrgID). For LokiStack gateway modes (e.g. openshift-network) this selects the `/api/logs/v1/\u003ctenant\u003e` path; use `network` for openshift-network.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "loki_query_range",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "resultType": {
+          "type": "string"
+        },
+        "streams": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "entries": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "line": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "timestamp",
+                    "line"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "labels": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "labels",
+              "entries"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "resultType",
+        "streams"
+      ],
+      "type": "object"
+    },
+    "title": "Execute Loki Range Query"
+  }
+]

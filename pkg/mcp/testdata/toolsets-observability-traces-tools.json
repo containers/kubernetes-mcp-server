@@ -1,0 +1,607 @@
+[
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempostacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempomonolithics"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get trace by ID"
+    },
+    "description": "Retrieve a single distributed trace by its trace ID from Tempo.\nReturns the full trace with all its spans, including service names, operation names, durations, and attributes.\nUse this tool when you already have a specific trace ID, e.g. from search results or logs.",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "Optional end of the time range in RFC 3339 format, e.g. \"2025-01-02T00:00:00Z\".\nNarrows the time range to improve query performance.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Optional start of the time range in RFC 3339 format, e.g. \"2025-01-01T00:00:00Z\".\nNarrows the time range to improve query performance.",
+          "type": "string"
+        },
+        "tempoName": {
+          "description": "The name of the Tempo instance to query. Use tempo_list_instances to discover available instance names.",
+          "type": "string"
+        },
+        "tempoNamespace": {
+          "description": "The Kubernetes namespace where the Tempo instance is deployed. Use tempo_list_instances to discover available namespaces.",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "The tenant to query. This parameter is required for multi-tenant instances. Use tempo_list_instances to discover available tenants for each instance.",
+          "type": "string"
+        },
+        "traceid": {
+          "description": "The trace ID to retrieve, e.g. \"26dad4a0e2b0dd9a440dd5ff203a24a4\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tempoNamespace",
+        "tempoName",
+        "traceid"
+      ],
+      "type": "object"
+    },
+    "name": "tempo_get_trace_by_id",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "trace": {
+          "description": "The trace data with services, scopes and spans"
+        }
+      },
+      "required": [
+        "trace"
+      ],
+      "type": "object"
+    },
+    "title": "Get trace by ID"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempostacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempomonolithics"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Tempo instances"
+    },
+    "description": "List all Tempo instances available in the Kubernetes cluster.\nCall this tool first to discover available Tempo instances before using other Tempo tools,\nas the returned namespace, name, and tenant values are required parameters for all other Tempo tools.\nAlways print the output of this tool in a table.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "tempo_list_instances",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instances": {
+          "description": "List of available Tempo instances",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "multitenancy": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "string"
+              },
+              "tempoName": {
+                "type": "string"
+              },
+              "tempoNamespace": {
+                "type": "string"
+              },
+              "tenants": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "tempoNamespace",
+              "tempoName",
+              "multitenancy",
+              "status"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "instances"
+      ],
+      "type": "object"
+    },
+    "title": "List Tempo instances"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempostacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempomonolithics"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Search tag values"
+    },
+    "description": "List the known values for a specific tag (attribute key) in Tempo.\nUse this tool to discover what values exist for a given tag, e.g. to find all service names (values of \"resource.service.name\") or all HTTP methods (values of \"span.http.request.method\").\nThis is useful for building accurate TraceQL queries with tempo_search_traces.",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "Optional end of the time range (in RFC 3339 format, e.g. \"2025-01-01T00:00:00Z\") to filter which traces are considered when listing values.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of tag values to return.",
+          "type": "integer"
+        },
+        "maxStaleValues": {
+          "description": "Maximum number of consecutive blocks without new values before the search stops early. Higher values are more thorough but slower.",
+          "type": "integer"
+        },
+        "query": {
+          "description": "Optional TraceQL query to filter which traces are considered when listing values,\ne.g. '{ resource.service.name=\"payment-service\" }' to only show tag values from the 'payment-service' service.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Optional start of the time range (in RFC 3339 format, e.g. \"2025-01-01T00:00:00Z\") to filter which traces are considered when listing values.",
+          "type": "string"
+        },
+        "tag": {
+          "description": "The fully qualified tag name to get values for, including its scope prefix, e.g. \"resource.service.name\" or \"span.http.response.status_code\".\nUse tempo_search_tags to discover available tag names.",
+          "type": "string"
+        },
+        "tempoName": {
+          "description": "The name of the Tempo instance to query. Use tempo_list_instances to discover available instance names.",
+          "type": "string"
+        },
+        "tempoNamespace": {
+          "description": "The Kubernetes namespace where the Tempo instance is deployed. Use tempo_list_instances to discover available namespaces.",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "The tenant to query. This parameter is required for multi-tenant instances. Use tempo_list_instances to discover available tenants for each instance.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tempoNamespace",
+        "tempoName",
+        "tag"
+      ],
+      "type": "object"
+    },
+    "name": "tempo_search_tag_values",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "tagValues": {
+          "description": "Known values for the specified tag, keyed by type"
+        }
+      },
+      "required": [
+        "tagValues"
+      ],
+      "type": "object"
+    },
+    "title": "Search tag values"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempostacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempomonolithics"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Search tags"
+    },
+    "description": "List available tag names (attribute keys) in Tempo, grouped by scope.\nUse this tool to discover which attributes are available for building TraceQL queries with tempo_search_traces.\nFor example, this tool may reveal tag names like \"service.name\" (in the \"resource\" scope) or \"http.response.status_code\" (in the \"span\" scope).\nTo use these in TraceQL queries, prefix them with their scope, e.g. \"resource.service.name\" or \"span.http.response.status_code\".",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "Optional end of the time range (in RFC 3339 format, e.g. \"2025-01-01T00:00:00Z\") to filter which traces are considered when listing tags.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of tag names to return per scope.",
+          "type": "integer"
+        },
+        "maxStaleValues": {
+          "description": "Maximum number of consecutive blocks without new tag names before the search stops early. Higher values are more thorough but slower.",
+          "type": "integer"
+        },
+        "query": {
+          "description": "Optional TraceQL query to filter which traces are considered when listing tags,\ne.g. '{ resource.service.name=\"payment-service\" }' to only show tags present in traces from the 'payment-service' service.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "Filter tags to a specific scope. One of:\n\"resource\" (service-level attributes like service.name),\n\"span\" (individual span attributes like http.response.status_code),\n\"intrinsic\" (built-in fields like duration, status, name).\nIf omitted, tags from all scopes are returned.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Optional start of the time range (in RFC 3339 format, e.g. \"2025-01-01T00:00:00Z\") to filter which traces are considered when listing tags.",
+          "type": "string"
+        },
+        "tempoName": {
+          "description": "The name of the Tempo instance to query. Use tempo_list_instances to discover available instance names.",
+          "type": "string"
+        },
+        "tempoNamespace": {
+          "description": "The Kubernetes namespace where the Tempo instance is deployed. Use tempo_list_instances to discover available namespaces.",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "The tenant to query. This parameter is required for multi-tenant instances. Use tempo_list_instances to discover available tenants for each instance.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tempoNamespace",
+        "tempoName"
+      ],
+      "type": "object"
+    },
+    "name": "tempo_search_tags",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "scopes": {
+          "description": "List of tag scopes with their tag names",
+          "items": true,
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "scopes"
+      ],
+      "type": "object"
+    },
+    "title": "Search tags"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempostacks"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "tempo.grafana.com",
+                  "resource": "tempomonolithics"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "route.openshift.io",
+                  "resource": "routes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Search traces"
+    },
+    "description": "Search for distributed traces in Tempo using TraceQL.\nUse this tool to find traces matching specific criteria such as service name, HTTP status code, duration, or other span or resource attributes.\n\nIMPORTANT — \"slow\" or \"long\" trace requests: Do NOT guess a duration threshold.\nFirst call this tool WITHOUT a duration filter to establish a latency baseline, then use that baseline to set a sensible threshold.\nBoth steps are required — do NOT skip the second search with the duration filter.\nSkip this two-step process only when the user provides an explicit duration (e.g. \"find traces slower than 2s\").\n",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "End of the time range in RFC 3339 format, e.g. \"2025-01-01T00:00:00Z\".\nUse \"NOW\" for current time.\nBoth start and end should be provided to search the full time range; if omitted, only a small window of recent data is searched.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of traces to return. Defaults to the server-side limit if not specified.",
+          "type": "integer"
+        },
+        "query": {
+          "description": "A TraceQL query expression. Format:\nquery: \"{ \u003cfilters joined by \u0026\u0026\u003e }\"\n\nFilters:\n- service name:     resource.service.name=\"\u003cvalue\u003e\" (string, use quotes)\n- HTTP status code: span.http.response.status_code=\u003ccode\u003e (number, no quotes)\n- duration:         duration\u003e\u003cvalue like 100ms, 2s, 5m\u003e (no quotes)\n- error status:     status=error (keyword, NO quotes — do NOT write status=\"error\")\n\nIMPORTANT: status values (error, ok, unset) are keywords, NOT strings. Write status=error, NEVER status=\"error\".\n\nOperators: =, !=, \u003e, \u003c, \u003e=, \u003c=\n\nCommon attributes:\n- resource.service.name (service name)\n- resource.k8s.namespace.name (Kubernetes namespace)\n- resource.k8s.deployment.name (Kubernetes deployment)\n- resource.k8s.statefulset.name (Kubernetes statefulset)\n- resource.k8s.daemonset.name (Kubernetes daemonset)\n- resource.k8s.replicaset.name (Kubernetes replicaset)\n- resource.k8s.pod.name (Kubernetes pod)\n- resource.k8s.container.name (Kubernetes container)\n- resource.k8s.job.name (Kubernetes job)\n- resource.k8s.cronjob.name (Kubernetes cronjob)\n- resource.k8s.node.name (Kubernetes node)\n- resource.k8s.cluster.name (Kubernetes cluster)\n- span.http.response.status_code (HTTP response code)\n- span.http.request.method (HTTP method like GET, POST)\n- span.url.full (request URL)\n- name (span name / operation name, e.g. \"GET /api/users\")\n- duration (trace duration, e.g. 100ms, 2s)\n- status (trace status: ok, error, unset)\n\nNote: older instrumentation may use legacy HTTP attribute names (e.g. span.http.status_code instead of span.http.response.status_code).\nIf a query returns no results, try tempo_search_tags to check which attributes exist.\n\nIMPORTANT:\n- Always wrap filters in curly braces { }.\n- Do NOT use SQL, PromQL, or Lucene syntax.\n- Do NOT omit the \"resource.\" or \"span.\" prefix from attribute names\n- When the user refers to a Kubernetes resource type (deployment, pod, namespace, etc.), use the matching resource.k8s.* attribute, NOT resource.service.name.\n\nExamples:\n- { resource.service.name=\"frontend\" }\n- { resource.k8s.deployment.name=\"checkout\" \u0026\u0026 span.http.response.status_code\u003e=500 }\n- { status=error \u0026\u0026 duration\u003e2s }\n\nIf unsure which attributes to filter on, use tempo_search_tags to discover available attributes before building a query.\n",
+          "type": "string"
+        },
+        "spss": {
+          "description": "Maximum number of matching spans to return per trace.",
+          "type": "integer"
+        },
+        "start": {
+          "description": "Start of the time range in RFC 3339 format, e.g. \"2025-01-01T00:00:00Z\".\nUse \"NOW\" for current time.\nBoth start and end should be provided to search the full time range; if omitted, only a small window of recent data is searched.",
+          "type": "string"
+        },
+        "tempoName": {
+          "description": "The name of the Tempo instance to query. Use tempo_list_instances to discover available instance names.",
+          "type": "string"
+        },
+        "tempoNamespace": {
+          "description": "The Kubernetes namespace where the Tempo instance is deployed. Use tempo_list_instances to discover available namespaces.",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "The tenant to query. This parameter is required for multi-tenant instances. Use tempo_list_instances to discover available tenants for each instance.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tempoNamespace",
+        "tempoName",
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "tempo_search_traces",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "description": "Query performance metrics"
+        },
+        "traces": {
+          "description": "List of matching traces with metadata",
+          "items": true,
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "traces"
+      ],
+      "type": "object"
+    },
+    "title": "Search traces"
+  }
+]
