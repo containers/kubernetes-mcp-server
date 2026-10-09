@@ -30,9 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     # Only fire when the review body contains the trigger command.
     # This is a routing signal only — the main workflow independently verifies.
-    # FORK CI (test/fork-mcpchecker-ci): see mcpchecker.yaml repository guard.
     if: >-
-      github.repository == 'josunect/kiali-mcp-server' &&
+      github.repository == 'containers/kubernetes-mcp-server' &&
       contains(github.event.review.body, '/run-mcpchecker')
     steps:
       - name: Signal
