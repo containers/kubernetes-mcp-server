@@ -136,7 +136,7 @@ mcplog.SendMCPLog(ctx, mcplog.LevelError, "Operation failed - check permissions"
 ## Security
 
 - Authentication failures send generic messages to clients (no security info leaked)
-- Sensitive data is automatically redacted before being sent to clients, covering:
+- MCP log notifications apply best-effort redaction for known patterns before being sent to clients. This does not sanitize tool results or guarantee removal of arbitrary sensitive data. Covered patterns include:
   - Generic fields (password, token, secret, api_key, etc.)
   - Authorization headers (Bearer, Basic)
   - Cloud credentials (AWS, GCP, Azure)
