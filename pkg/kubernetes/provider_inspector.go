@@ -38,6 +38,14 @@ func (p *providerInspector) Unstructured() api.AggregateUnstructured {
 	return p
 }
 
+func (p *providerInspector) DefaultBearerToken(ctx context.Context) string {
+	k8s, err := p.provider.GetDerivedKubernetes(ctx, p.provider.GetDefaultTarget())
+	if err != nil || k8s == nil || k8s.RESTConfig() == nil {
+		return ""
+	}
+	return k8s.RESTConfig().BearerToken
+}
+
 func (p *providerInspector) Resource(resource schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {
 	return &providerNamespaceableResource{
 		provider: p.provider,

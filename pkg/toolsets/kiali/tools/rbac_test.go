@@ -19,8 +19,9 @@ type stubInspector struct {
 	isOpenShift bool
 }
 
-func (m *stubInspector) Discovery() api.AggregateDiscovery       { return m }
-func (m *stubInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (m *stubInspector) Discovery() api.AggregateDiscovery         { return m }
+func (m *stubInspector) Unstructured() api.AggregateUnstructured   { return nil }
+func (m *stubInspector) DefaultBearerToken(context.Context) string { return "" }
 func (m *stubInspector) GetTargets(context.Context) ([]string, error) {
 	return []string{""}, nil
 }
