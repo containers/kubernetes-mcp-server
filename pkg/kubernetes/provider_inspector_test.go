@@ -1,8 +1,10 @@
 package kubernetes
 
 import (
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -71,6 +73,42 @@ func (s *ProviderInspectorTestSuite) TestDiscovery() {
 		s.Error(err)
 		s.Nil(resources)
 	})
+}
+
+func (s *ProviderInspectorTestSuite) TestGroupDiscoveryCancellation() {
+	s.mockServer.ResetHandlers()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	defer close(release)
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api" {
+			close(started)
+			select {
+			case <-r.Context().Done():
+			case <-release:
+			}
+		}
+	}))
+	ctx, cancel := context.WithCancel(s.T().Context())
+	defer cancel()
+	results := s.inspector.Discovery().(api.AggregateGroupDiscovery).ServerResourcesForGroup(ctx, "flows.netobserv.io")
+	finished := make(chan error, 1)
+	go func() {
+		_, err := results.Default()
+		finished <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		s.FailNow("group discovery did not start")
+	}
+	cancel()
+	select {
+	case err := <-finished:
+		s.ErrorIs(err, context.Canceled)
+	case <-time.After(time.Second):
+		s.Fail("group discovery ignored context cancellation")
+	}
 }
 
 func (s *ProviderInspectorTestSuite) TestUnstructured() {
