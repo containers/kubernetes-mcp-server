@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 
-	tracesdiscovery "github.com/rhobs/obs-mcp/pkg/traces/discovery"
+	tracesdiscovery "github.com/containers/kubernetes-mcp-server/pkg/obs/traces/discovery"
 )
 
 // RouteClient provides common OpenShift Route operations shared by

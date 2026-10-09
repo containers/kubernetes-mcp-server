@@ -9,7 +9,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/dynamic"
 
-	logsdiscovery "github.com/rhobs/obs-mcp/pkg/logs/discovery"
+	logsdiscovery "github.com/containers/kubernetes-mcp-server/pkg/obs/logs/discovery"
 )
 
 // LogsGatewayResolver implements logs/discovery.GatewayResolver using OpenShift Routes.

@@ -112,7 +112,7 @@ func TestBuildRoundTripper(t *testing.T) {
 
 			resp, err := rt.RoundTrip(req)
 			require.NoError(t, err)
-			resp.Body.Close()
+			require.NoError(t, resp.Body.Close())
 
 			require.Equal(t, tt.wantAuthHeader, resp.Header.Get("X-Received-Auth"))
 		})
@@ -171,7 +171,7 @@ func TestCreateHeaderAPIConfig(t *testing.T) {
 	resp, _ := rt.RoundTrip(testReq)
 	// We ignore the error from DialContext since we only care about the captured request
 	if resp != nil && resp.Body != nil {
-		resp.Body.Close() // Mainly to make the linter happy.
+		require.NoError(t, resp.Body.Close())
 	}
 
 	// Step 7: Verify the Authorization header was added to the captured request

@@ -2,6 +2,7 @@ package tempo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,7 +27,7 @@ func NewTempoClient(httpClient *http.Client, url string) *TempoClient {
 	}
 }
 
-func (c *TempoClient) doRequest(req *http.Request) (string, error) {
+func (c *TempoClient) doRequest(req *http.Request) (body string, err error) {
 	// Use LLM-friendly format
 	req.Header.Set("Accept", "application/vnd.grafana.llm")
 
@@ -34,7 +35,9 @@ func (c *TempoClient) doRequest(req *http.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err = errors.Join(err, resp.Body.Close())
+	}()
 
 	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
 	if err != nil {

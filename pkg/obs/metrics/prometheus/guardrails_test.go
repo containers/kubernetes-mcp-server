@@ -249,7 +249,9 @@ func TestGuardrails_IsSafeQuery(t *testing.T) {
 		`http_requests_total{job="api"}`:                          true,
 		`http_requests_total{pod="web-1"}`:                        true,
 		`sum by (job) (rate(http_requests_total{job="api"}[5m]))`: true,
+
 		`histogram_quantile(0.9, sum(rate(http_request_duration_seconds_bucket{job="api"}[5m])) by (le, job))`: true,
+
 		`up{job="prometheus"} == 0`:                true,
 		`rate(http_requests_total{job="api"}[5m])`: true,
 		`sum(http_requests_total{job="api"})`:      true,

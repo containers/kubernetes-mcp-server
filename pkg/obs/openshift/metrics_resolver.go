@@ -6,7 +6,7 @@ import (
 
 	"k8s.io/client-go/dynamic"
 
-	"github.com/rhobs/obs-mcp/pkg/metrics"
+	"github.com/containers/kubernetes-mcp-server/pkg/obs/metrics"
 )
 
 // MetricsRouteResolver implements metrics.BackendResolver using OpenShift Routes
