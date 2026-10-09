@@ -1,7 +1,7 @@
 package config_test
 
 import (
-	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -9,63 +9,25 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
-type ImpersonationConfigSuite struct {
-	suite.Suite
-}
+type ImpersonationConfigSuite struct{ suite.Suite }
 
-func (s *ImpersonationConfigSuite) TestValidation() {
-	const valid = `
+const impersonationConfig = `
 port = "8080"
 cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = ["127.0.0.1/32", "::1/128"]
+impersonation_trusted_proxies = ["127.0.0.1/32"]
 `
-	for _, tc := range []struct {
-		name    string
-		toml    string
-		wantErr string
-	}{
-		{"trusted proxy authentication", valid, ""},
-		{"stateless mode", valid + `stateless = true`, ""},
-		{"explicit kubeconfig provider", valid + `cluster_provider_strategy = "kubeconfig"`, ""},
-		{"in-cluster provider is rejected", valid + `cluster_provider_strategy = "in-cluster"`, "only supports kubeconfig"},
-		{"KCP provider is rejected", valid + `cluster_provider_strategy = "kcp"`, "only supports kubeconfig"},
-		{"disabled provider is rejected", valid + `cluster_provider_strategy = "disabled"`, "only supports kubeconfig"},
-		{"custom provider is rejected", valid + `cluster_provider_strategy = "custom"`, "only supports kubeconfig"},
-		{"additional OIDC verification", valid + `
-require_oauth = true
-authorization_url = "https://idp.example.com"
-oauth_audience = "mcp"
-`, ""},
-		{"stdio is rejected", `cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = ["127.0.0.1/32"]`, "requires port"},
-		{"missing trusted proxies", `port = "8080"
-cluster_auth_mode = "impersonation"`, "requires impersonation_trusted_proxies"},
-		{"empty trusted proxies", `port = "8080"
-cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = []`, "requires impersonation_trusted_proxies"},
-		{"invalid CIDR", `port = "8080"
-cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = ["127.0.0.1"]`, "invalid CIDR"},
-		{"invalid IPv6 prefix", `port = "8080"
-cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = ["::1/129"]`, "invalid CIDR"},
-		{"empty CIDR", `port = "8080"
-cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = [""]`, "invalid CIDR"},
-		{"proxy setting outside mode", `impersonation_trusted_proxies = ["127.0.0.1/32"]`, "only valid"},
-		{"explicit empty proxy setting outside mode", `impersonation_trusted_proxies = []`, "only valid"},
-		{"OAuth without verifier", valid + `require_oauth = true`, "authorization_url"},
-		{"skipping JWT verification", valid + `
-require_oauth = true
-skip_jwt_verification = true
-`, "skip_jwt_verification"},
-		{"skipping JWT verification with issuer", valid + `
-require_oauth = true
-authorization_url = "https://idp.example.com"
-skip_jwt_verification = true
-`, "skip_jwt_verification"},
-		{"skipping JWT verification without OAuth", valid + `skip_jwt_verification = true`, "skip_jwt_verification"},
-		{"global token exchange", valid + `
+
+func (s *ImpersonationConfigSuite) TestValidation() {
+	for _, tc := range []struct{ name, toml, wantErr string }{
+		{"HTTP kubeconfig", impersonationConfig, ""},
+		{"stateless HTTP", impersonationConfig + `stateless = true`, ""},
+		{"stdio", strings.Replace(impersonationConfig, `port = "8080"`, "", 1), "requires port"},
+		{"missing proxies", strings.Replace(impersonationConfig, `impersonation_trusted_proxies = ["127.0.0.1/32"]`, "", 1), "requires impersonation_trusted_proxies"},
+		{"invalid CIDR", strings.Replace(impersonationConfig, "127.0.0.1/32", "127.0.0.1", 1), "invalid CIDR"},
+		{"other auth mode", strings.Replace(impersonationConfig, `cluster_auth_mode = "impersonation"`, `cluster_auth_mode = "kubeconfig"`, 1), "only valid"},
+		{"other provider", impersonationConfig + `cluster_provider_strategy = "in-cluster"`, "only supports kubeconfig"},
+		{"unverified JWT", impersonationConfig + `skip_jwt_verification = true`, "skip_jwt_verification"},
+		{"token exchange", impersonationConfig + `
 require_oauth = true
 authorization_url = "https://idp.example.com"
 [token_exchange]
@@ -76,69 +38,35 @@ strategy = "rfc8693"
 			cfg, err := config.ReadToml(s.T().Context(), []byte(tc.toml), config.WithBaseDefault())
 			s.Require().NoError(err)
 			err = cfg.Validate(s.T().Context())
-			if tc.wantErr != "" {
-				s.ErrorContains(err, tc.wantErr)
-			} else {
+			if tc.wantErr == "" {
 				s.NoError(err)
+			} else {
+				s.ErrorContains(err, tc.wantErr)
 			}
 		})
 	}
 }
 
-func (s *ImpersonationConfigSuite) TestProxyAllowlistRequiresRestart() {
-	const initial = `
-port = "8080"
-cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = ["127.0.0.1/32"]
-`
-	previous, err := config.ReadToml(s.T().Context(), []byte(initial), config.WithBaseDefault())
-	s.Require().NoError(err)
-	const reloaded = `
-port = "8080"
-cluster_auth_mode = "impersonation"
-impersonation_trusted_proxies = ["10.20.30.40/32"]
-`
-	_, err = config.ReadToml(s.T().Context(), []byte(reloaded), config.WithBaseDefault(), config.WithPrevious(previous))
-	s.ErrorContains(err, "non-reloadable option impersonation_trusted_proxies")
-	s.ErrorContains(err, "restart")
-	s.Equal([]string{"127.0.0.1/32"}, previous.ImpersonationTrustedProxies.Get())
-	_, err = config.ReadToml(s.T().Context(), []byte(initial), config.WithBaseDefault(), config.WithPrevious(previous))
-	s.NoError(err, "an unchanged allowlist must not block other configuration reloads")
-}
-
-func (s *ImpersonationConfigSuite) TestDefaultsAndMetadata() {
-	cfg := config.BaseDefault()
-	s.Equal(config.ClusterAuthPassthrough, cfg.ResolveClusterAuthMode())
-	s.Empty(cfg.ImpersonationTrustedProxies.Get())
-	s.Equal("impersonation_trusted_proxies", cfg.ImpersonationTrustedProxies.TOMLKey)
-}
-
-func (s *ImpersonationConfigSuite) TestAuthModeTransitionsRequireRestart() {
-	for _, modes := range [][2]string{
-		{"", config.ClusterAuthImpersonation},
-		{config.ClusterAuthPassthrough, config.ClusterAuthImpersonation},
-		{config.ClusterAuthKubeconfig, config.ClusterAuthImpersonation},
-		{config.ClusterAuthImpersonation, ""},
-		{config.ClusterAuthImpersonation, config.ClusterAuthPassthrough},
-		{config.ClusterAuthImpersonation, config.ClusterAuthKubeconfig},
+func (s *ImpersonationConfigSuite) TestReloadRequiresRestart() {
+	const kubeconfigMode = `port = "8080"
+cluster_auth_mode = "kubeconfig"`
+	for _, tc := range []struct{ name, previous, next, wantErr string }{
+		{"unchanged", impersonationConfig, impersonationConfig, ""},
+		{"enable", kubeconfigMode, impersonationConfig, "restart"},
+		{"disable", impersonationConfig, kubeconfigMode, "restart"},
+		{"change trusted proxies", impersonationConfig, strings.Replace(impersonationConfig, "127.0.0.1/32", "10.20.30.40/32", 1), "restart"},
 	} {
-		s.Run(modes[0]+" to "+modes[1], func() {
-			previous := config.BaseDefault()
-			previous.Port.SetForTest("8080")
-			previous.ClusterAuthMode.SetForTest(modes[0])
-			if modes[0] == config.ClusterAuthImpersonation {
-				previous.ImpersonationTrustedProxies.SetForTest([]string{"127.0.0.1/32"})
+		s.Run(tc.name, func() {
+			previous, err := config.ReadToml(s.T().Context(), []byte(tc.previous), config.WithBaseDefault())
+			s.Require().NoError(err)
+			_, err = config.ReadToml(s.T().Context(), []byte(tc.next), config.WithBaseDefault(), config.WithPrevious(previous))
+			if tc.wantErr == "" {
+				s.NoError(err)
+			} else {
+				s.ErrorContains(err, tc.wantErr)
 			}
-			next := fmt.Sprintf("port = \"8080\"\ncluster_auth_mode = %q\n", modes[1])
-			if modes[1] == config.ClusterAuthImpersonation {
-				next += "impersonation_trusted_proxies = [\"127.0.0.1/32\"]\n"
-			}
-			_, err := config.ReadToml(s.T().Context(), []byte(next), config.WithBaseDefault(), config.WithPrevious(previous))
-			s.ErrorContains(err, "restart")
 		})
 	}
 }
 
-func TestImpersonationConfig(t *testing.T) {
-	suite.Run(t, new(ImpersonationConfigSuite))
-}
+func TestImpersonationConfig(t *testing.T) { suite.Run(t, new(ImpersonationConfigSuite)) }

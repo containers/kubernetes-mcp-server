@@ -49,6 +49,22 @@ func (s *KialiSuite) TestNewKiali_NilRestConfig() {
 	s.ErrorContains(err, "kubernetes rest config is required")
 }
 
+func (s *KialiSuite) TestNewKiali_RejectsImpersonation() {
+	for _, mode := range []string{config.ClusterAuthImpersonation, config.ClusterAuthPassthrough} {
+		s.Run(mode, func() {
+			cfg := config.BaseDefault()
+			cfg.ClusterAuthMode.SetForTest(mode)
+			s.MockServer.Config().Impersonate.UserName = ""
+			if mode == config.ClusterAuthPassthrough {
+				s.MockServer.Config().Impersonate.UserName = "alice"
+			}
+			client, err := NewKiali(cfg, s.MockServer.Config())
+			s.ErrorContains(err, "impersonation")
+			s.Nil(client)
+		})
+	}
+}
+
 func (s *KialiSuite) TestNewKiali_SetsFields() {
 	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]

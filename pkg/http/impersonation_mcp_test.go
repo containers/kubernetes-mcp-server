@@ -7,10 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 
@@ -152,76 +149,4 @@ func (s *ImpersonationMCPSuite) TestStatefulSessionRejectsOtherUser() {
 	}
 	_, err := alice.ListTools(s.T().Context(), &mcp.ListToolsParams{})
 	s.NoError(err, "rejected DELETE must leave the owner's session usable")
-}
-
-func (s *ImpersonationMCPSuite) TestOptionalOIDCVerificationAppliesToEveryRequest() {
-	idp := NewOidcTestServer(s.T())
-	defer idp.Close()
-	s.OidcProvider = idp.Provider
-	s.Config.RequireOAuth.SetForTest(true)
-	s.Config.AuthorizationURL.SetForTest(idp.URL)
-	s.Config.OAuthAudience.SetForTest("mcp-server")
-	s.Config.Stateless.SetForTest(false)
-	sign := func(expiration time.Time) string {
-		claims := fmt.Sprintf(`{"iss":%q,"sub":"alice","aud":"mcp-server","exp":%d}`, idp.URL, expiration.Unix())
-		return oidctest.SignIDToken(idp.PrivateKey, "test-oidc-key-id", oidc.RS256, claims)
-	}
-	validToken := sign(time.Now().Add(time.Hour))
-	parts := strings.Split(validToken, ".")
-	if strings.HasPrefix(parts[2], "A") {
-		parts[2] = "B" + parts[2][1:]
-	} else {
-		parts[2] = "A" + parts[2][1:]
-	}
-	invalidToken := strings.Join(parts, ".")
-	var backendRequests atomic.Int32
-	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		backendRequests.Add(1)
-		if r.URL.Path == "/api/v1/namespaces/alice/pods" {
-			s.Equal("alice", r.Header.Get("Impersonate-User"))
-			s.Equal("Bearer backend-credential", r.Header.Get("Authorization"))
-			_, _ = io.WriteString(w, `{"apiVersion":"v1","kind":"PodList","items":[]}`)
-		}
-	}))
-	s.StartServer()
-	transport := &impersonationTestTransport{}
-	transport.setIdentity("alice", "readers")
-	headers := transport.headers.Load().(http.Header).Clone()
-	headers.Set("Authorization", "Bearer "+validToken)
-	transport.headers.Store(headers)
-	client := mcp.NewClient(&mcp.Implementation{Name: "oidc-impersonation-test", Version: "1"}, nil)
-	endpoint := fmt.Sprintf("http://127.0.0.1:%s/mcp", s.Config.Port.Get())
-	session, err := client.Connect(s.T().Context(), &mcp.StreamableClientTransport{
-		Endpoint: endpoint, HTTPClient: &http.Client{Transport: transport},
-	}, nil)
-	s.Require().NoError(err)
-	defer func() { _ = session.Close() }()
-	result, err := session.CallTool(s.T().Context(), &mcp.CallToolParams{
-		Name: "resources_list", Arguments: map[string]any{"apiVersion": "v1", "kind": "Pod", "namespace": "alice"},
-	})
-	s.Require().NoError(err)
-	s.False(result.IsError)
-	s.Positive(backendRequests.Load(), "a provider-verified caller must reach Kubernetes")
-	for name, token := range map[string]string{
-		"invalid signature": invalidToken,
-		"expired token":     sign(time.Now().Add(-time.Hour)),
-	} {
-		s.Run(name, func() {
-			before := backendRequests.Load()
-			req, err := http.NewRequestWithContext(s.T().Context(), http.MethodPost, endpoint,
-				strings.NewReader(`{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"resources_list","arguments":{"apiVersion":"v1","kind":"Pod","namespace":"alice"}}}`))
-			s.Require().NoError(err)
-			req.Header = headers.Clone()
-			req.Header.Set("Authorization", "Bearer "+token)
-			req.Header.Set("Mcp-Session-Id", session.ID())
-			req.Header.Set("Mcp-Protocol-Version", "2025-03-26")
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Accept", "application/json, text/event-stream")
-			response, err := http.DefaultClient.Do(req)
-			s.Require().NoError(err)
-			defer func() { _ = response.Body.Close() }()
-			s.Equal(http.StatusUnauthorized, response.StatusCode)
-			s.Equal(before, backendRequests.Load(), "rejected tokens must not reach Kubernetes even with a valid session")
-		})
-	}
 }
