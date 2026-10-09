@@ -253,7 +253,12 @@ func (m *Manager) newDerived(ctx context.Context, derivedCfg *rest.Config) (*Kub
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
+	clientCmdApiConfig = *clientCmdApiConfig.DeepCopy()
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
+	// Minification requires contexts to stop referencing the stripped credentials.
+	for _, kubeContext := range clientCmdApiConfig.Contexts {
+		kubeContext.AuthInfo = ""
+	}
 	derived, err := newKubernetesFromLive(ctx, &m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create derived client: %w", err)
