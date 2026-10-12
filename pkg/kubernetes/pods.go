@@ -388,7 +388,9 @@ func (s execStream) Write(p []byte) (int, error) {
 func (o *execOutput) finish(err error) (string, string, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	if o.truncated && (err == nil || errors.Is(err, context.Canceled)) {
+	// StreamWithContext selects between ctx.Done() and the exec error stream.
+	// Once the cap has been hit, either result is this cut: keep the prefix.
+	if o.truncated {
 		if o.stdout.Len() > 0 {
 			_, _ = o.stdout.WriteString(backendExecTruncationNotice)
 		} else {

@@ -18,7 +18,7 @@ In [`newKubernetesFromLive`](../../pkg/kubernetes/kubernetes.go), wrap `resp.Bod
 
 Apply the same read limit in [`Kiali.ExecuteRequest`](../../pkg/kiali/kiali.go) and [`NetObserv.executeGetAbsolute`](../../pkg/netobserv/netobserv.go). Remove the existing hardcoded limits.
 
-In [`PodsExec`](../../pkg/kubernetes/pods.go), share one counter across stdout and stderr. At the cap, cancel the exec context, keep the bytes already stored, and append a truncation notice. Any other stream error still drops the buffers.
+In [`PodsExec`](../../pkg/kubernetes/pods.go), share one counter across stdout and stderr. At the cap, cancel the exec context, keep the bytes already stored, and append a truncation notice. The exec library may report that cancel as `context.Canceled` or as some other stream error; either way the capped bytes are kept. A stream error before the cap still drops the buffers.
 
 ## Result size
 

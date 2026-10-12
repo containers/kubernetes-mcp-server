@@ -146,12 +146,24 @@ func (s *ExecOutputSuite) TestOtherStreamErrorDropsBuffers() {
 	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	out := newExecOutput(4, cancel)
-	_, err := out.stdoutWriter().Write([]byte("abcdef"))
+	_, err := out.stdoutWriter().Write([]byte("ab"))
 	s.Require().NoError(err)
 	streamErr := errors.New("connection reset")
 	stdout, stderr, err := out.finish(streamErr)
 	s.ErrorIs(err, streamErr)
 	s.Empty(stdout)
+	s.Empty(stderr)
+}
+
+func (s *ExecOutputSuite) TestTruncationKeepsBytesWhenStreamErrors() {
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	out := newExecOutput(4, cancel)
+	_, err := out.stdoutWriter().Write([]byte("abcdef"))
+	s.Require().NoError(err)
+	stdout, stderr, err := out.finish(errors.New("connection reset"))
+	s.Require().NoError(err)
+	s.Equal("abcd"+backendExecTruncationNotice, stdout)
 	s.Empty(stderr)
 }
 
