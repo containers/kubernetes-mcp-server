@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app.kubernetes.io/name: minio
+  name: minio
+  namespace: obs-loki
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: obs-loki
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio
+    spec:
+      containers:
+        - command:
+            - /bin/sh
+            - -c
+            - |
+              mkdir -p /storage/loki-chunks /storage/loki-ruler /storage/loki-admin && \
+              minio server /storage
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: loki
+            - name: MINIO_SECRET_KEY
+              value: supersecret
+          # Official minio/minio on quay.io and docker.io is no longer publicly pullable.
+          image: quay.io/openshifttest/minio:latest@sha256:fc6bedc99355fbdf1982a734475b56d01f4bbc59a9ec6f9a7bc4e222f74f5326
+          name: minio
+          ports:
+            - containerPort: 9000
+          volumeMounts:
+            - mountPath: /storage
+              name: storage
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: minio
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: obs-loki
+spec:
+  ports:
+    - port: 9000
+      protocol: TCP
+      targetPort: 9000
+  selector:
+    app.kubernetes.io/name: minio
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loki-storage
+  namespace: obs-loki
+stringData:
+  endpoint: http://minio:9000
+  bucketnames: loki-chunks,loki-ruler,loki-admin
+  access_key_id: loki
+  access_key_secret: supersecret
+  region: us-east-1
+type: Opaque

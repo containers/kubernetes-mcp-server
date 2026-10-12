@@ -26,7 +26,7 @@ const (
 	testAMClientKey   contextKey = "testAMClient"
 )
 
-// getConfig retrieves the obs-mcp toolset configuration from params.
+// getConfig retrieves the observability metrics toolset configuration from params.
 func getConfig(params api.ToolHandlerParams) *Config {
 	if cfg, ok := toolcfg.From(params, ToolsetName); ok {
 		if obsCfg, ok := cfg.(*Config); ok {

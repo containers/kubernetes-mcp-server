@@ -2,7 +2,7 @@
 
 This server exposes tools that call the [NetObserv](https://github.com/netobserv-network-observability/netobserv-operator) console plugin backend API (flows, metrics, export). The toolset targets OpenShift clusters with the NetObserv operator installed; other Kubernetes distributions work when you set `[toolset_configs.netobserv].url` explicitly.
 
-Namespace and workload discovery use the **core** Kubernetes toolset; Prometheus rules and Alertmanager silences belong in **obs-mcp** / **prometheus-mcp-server**, not here.
+Namespace and workload discovery use the **core** Kubernetes toolset; Prometheus rules and Alertmanager silences belong in the **observability/metrics** toolset, not here.
 
 ## Prerequisites
 

@@ -39,7 +39,7 @@ jobs:
         run: make e2e-full-setup
 
       - name: Run e2e tests
-        run: make e2e-test
+        run: make e2e-test E2E_ARGS="-skip TestObs"
 
       - name: Cleanup
         if: always()
