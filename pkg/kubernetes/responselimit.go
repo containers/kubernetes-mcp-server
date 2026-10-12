@@ -123,7 +123,9 @@ func (b *limitedBody) Close() error {
 }
 
 // backendResponseRoundTripper caps resp.Body using the live limit. Status 101
-// and /openapi/ responses are left intact so upgrades and discovery stay unbounded.
+// responses stay streaming. /openapi/ responses are read whole so the aggregated
+// spec can be parsed; one parsed model is shared per manager.
+// See docs/specs/memory-bounds.md#retention.
 type backendResponseRoundTripper struct {
 	delegate http.RoundTripper
 	limit    func() (int64, error)

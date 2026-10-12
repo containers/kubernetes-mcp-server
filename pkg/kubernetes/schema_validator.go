@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/discovery"
 	openapierrors "k8s.io/kube-openapi/pkg/util/proto/validation"
@@ -22,16 +23,95 @@ const schemaCacheTTL = 15 * time.Minute
 // SchemaValidator validates resource manifests against the OpenAPI schema.
 type SchemaValidator struct {
 	discoveryClientProvider func() discovery.DiscoveryInterface
-	kubectlValidator        kubectlvalidation.Schema
-	validatorMu             sync.Mutex
-	validatorCachedAt       time.Time
+	cache                   *openAPISchemaCache
 }
 
-// NewSchemaValidator creates a new schema validator.
+// NewSchemaValidator creates a new schema validator with its own schema cache.
 func NewSchemaValidator(discoveryClientProvider func() discovery.DiscoveryInterface) *SchemaValidator {
+	return newSchemaValidator(discoveryClientProvider, nil)
+}
+
+func newSchemaValidator(discoveryClientProvider func() discovery.DiscoveryInterface, cache *openAPISchemaCache) *SchemaValidator {
+	if cache == nil {
+		cache = newOpenAPISchemaCache()
+	}
 	return &SchemaValidator{
 		discoveryClientProvider: discoveryClientProvider,
+		cache:                   cache,
 	}
+}
+
+// openAPISchemaCache is one parsed OpenAPI model for every client of a manager.
+// /openapi/v2 is the apiserver's aggregated spec, so derived clients share it.
+// Concurrent misses wait on one fetch. A failed fetch is not stored.
+// See docs/specs/memory-bounds.md#retention.
+type openAPISchemaCache struct {
+	ttl      time.Duration
+	mu       sync.Mutex
+	schema   kubectlvalidation.Schema
+	cachedAt time.Time
+	flight   singleflight.Group
+}
+
+func newOpenAPISchemaCache() *openAPISchemaCache {
+	return &openAPISchemaCache{ttl: schemaCacheTTL}
+}
+
+func (c *openAPISchemaCache) fresh() kubectlvalidation.Schema {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.schema == nil || c.ttl <= 0 || time.Since(c.cachedAt) > c.ttl {
+		return nil
+	}
+	return c.schema
+}
+
+func (c *openAPISchemaCache) get(ctx context.Context, disc discovery.DiscoveryInterface) (kubectlvalidation.Schema, error) {
+	if schema := c.fresh(); schema != nil {
+		return schema, nil
+	}
+	if disc == nil {
+		return nil, nil
+	}
+	openAPIClient, ok := disc.(discovery.OpenAPISchemaInterface)
+	if !ok {
+		klogutil.FromContext(ctx).V(4).Info("Discovery client does not support OpenAPI schema")
+		return nil, nil
+	}
+
+	v, err, _ := c.flight.Do("openapi", func() (any, error) {
+		if schema := c.fresh(); schema != nil {
+			return schema, nil
+		}
+		parser := kubectlopenapi.NewOpenAPIParser(openAPIClient)
+		resources, parseErr := parser.Parse()
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		schema := kubectlvalidation.NewSchemaValidation(&parsedOpenAPI{resources: resources})
+		c.mu.Lock()
+		c.schema = schema
+		c.cachedAt = time.Now()
+		c.mu.Unlock()
+		return schema, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	schema, _ := v.(kubectlvalidation.Schema)
+	return schema, nil
+}
+
+// parsedOpenAPI serves a model that has already been parsed, so holders of the
+// cached schema do not each keep a parser or a second copy of the document.
+type parsedOpenAPI struct {
+	resources kubectlopenapi.Resources
+}
+
+var _ kubectlopenapi.OpenAPIResourcesGetter = (*parsedOpenAPI)(nil)
+
+func (p *parsedOpenAPI) OpenAPISchema() (kubectlopenapi.Resources, error) {
+	return p.resources, nil
 }
 
 func (v *SchemaValidator) Name() string {
@@ -50,10 +130,10 @@ func (v *SchemaValidator) Validate(ctx context.Context, req *api.HTTPValidationR
 		return nil
 	}
 
-	validator, err := v.getValidator(ctx)
+	validator, err := v.cache.get(ctx, v.discoveryClientProvider())
 	if err != nil {
 		klogutil.LogInfo(logger.V(4), "Failed to get schema validator", klogutil.Err(err))
-		return nil
+		return convertKubectlValidationError(err)
 	}
 
 	if validator == nil {
@@ -73,43 +153,6 @@ func (v *SchemaValidator) Validate(ctx context.Context, req *api.HTTPValidationR
 	}
 
 	return nil
-}
-
-// openAPIResourcesAdapter adapts CachedOpenAPIParser to OpenAPIResourcesGetter interface.
-type openAPIResourcesAdapter struct {
-	parser *kubectlopenapi.CachedOpenAPIParser
-}
-
-func (a *openAPIResourcesAdapter) OpenAPISchema() (kubectlopenapi.Resources, error) {
-	return a.parser.Parse()
-}
-
-func (v *SchemaValidator) getValidator(ctx context.Context) (kubectlvalidation.Schema, error) {
-	v.validatorMu.Lock()
-	defer v.validatorMu.Unlock()
-
-	if v.kubectlValidator != nil && time.Since(v.validatorCachedAt) <= schemaCacheTTL {
-		return v.kubectlValidator, nil
-	}
-
-	discoveryClient := v.discoveryClientProvider()
-	if discoveryClient == nil {
-		return nil, nil
-	}
-
-	openAPIClient, ok := discoveryClient.(discovery.OpenAPISchemaInterface)
-	if !ok {
-		klogutil.FromContext(ctx).V(4).Info("Discovery client does not support OpenAPI schema")
-		return nil, nil
-	}
-
-	parser := kubectlopenapi.NewOpenAPIParser(openAPIClient)
-	adapter := &openAPIResourcesAdapter{parser: parser}
-
-	v.kubectlValidator = kubectlvalidation.NewSchemaValidation(adapter)
-	v.validatorCachedAt = time.Now()
-
-	return v.kubectlValidator, nil
 }
 
 func convertKubectlValidationError(err error) *api.ValidationError {

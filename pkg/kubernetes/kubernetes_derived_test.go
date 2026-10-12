@@ -78,6 +78,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
+			s.Same(testManager.schemaCache, derived.schemaCache)
 			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			s.Run("RestConfig is correctly copied and sensitive fields are omitted", func() {
@@ -306,6 +307,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
+			s.Same(testManager.schemaCache, derived.schemaCache)
 			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			derivedCfg := derived.RESTConfig()

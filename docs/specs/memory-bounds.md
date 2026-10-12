@@ -14,7 +14,7 @@ Three reloadable top-level options cap each backend response, each tool result, 
 
 Read `max_backend_response_bytes` from the live config on each call. Allow exactly that many bytes. The next byte closes the body and returns a typed error. `0` leaves the read uncapped.
 
-In [`newKubernetesFromLive`](../../pkg/kubernetes/kubernetes.go), wrap `resp.Body` on the existing round-tripper stack so client-go stops in `io.ReadAll` and does not decode. Skip `101` responses so exec and attach upgrades are left intact. Skip `/openapi/` responses.
+In [`newKubernetesFromLive`](../../pkg/kubernetes/kubernetes.go), wrap `resp.Body` on the existing round-tripper stack so client-go stops in `io.ReadAll` and does not decode. Skip `101` responses so exec and attach upgrades are left intact. Skip `/openapi/` responses. That document is the apiserver's aggregated spec and has to be parsed whole. Clients of one manager share one parsed model ([`openAPISchemaCache`](../../pkg/kubernetes/schema_validator.go)). Concurrent validations wait on one fetch. A failed fetch is not kept.
 
 Apply the same read limit in [`Kiali.ExecuteRequest`](../../pkg/kiali/kiali.go) and [`NetObserv.executeGetAbsolute`](../../pkg/netobserv/netobserv.go). Remove the existing hardcoded limits.
 
