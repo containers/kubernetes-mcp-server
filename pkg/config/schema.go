@@ -34,6 +34,13 @@ type RequireTLSValidator interface {
 	ValidateRequireTLS(requireTLS bool) error
 }
 
+// ClusterAuthValidator is implemented by extended configs that configure
+// token exchange, so the require_oauth and cluster_auth_mode rules that
+// govern the global [token_exchange] block apply to them as well.
+type ClusterAuthValidator interface {
+	ValidateClusterAuth(requireOAuth bool, clusterAuthMode string) error
+}
+
 type GroupVersionKind struct {
 	Group   string `json:"group" toml:"group"`
 	Version string `json:"version" toml:"version"`

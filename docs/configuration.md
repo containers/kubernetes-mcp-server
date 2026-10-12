@@ -937,6 +937,9 @@ cluster_auth_mode     = "passthrough"
 - **Security note:** Use this **ONLY** when the cluster (or a trusted upstream component such as a reverse proxy or OIDC sidecar) is configured to validate tokens. Without that, the MCP server is effectively unauthenticated
 - `oauth_audience`, `authorization_url`, and other JWT-related options are **ignored** in this mode
 
+To exchange tokens with a different audience or identity provider per kubeconfig context, see
+[Per-target token exchange](#per-target-token-exchange-kubeconfig-provider).
+
 For a complete OIDC setup guide, see [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) or [ENTRA_ID_SETUP.md](ENTRA_ID_SETUP.md).
 
 ### Telemetry
@@ -1103,6 +1106,95 @@ Configure cluster provider-specific settings via the `cluster_provider_configs` 
 ```toml
 [cluster_provider_configs.kcp]
 # kcp-specific configuration
+```
+
+#### Per-target token exchange (kubeconfig provider)
+
+With `cluster_provider_strategy = "kubeconfig"`, each kubeconfig context can carry its own
+token exchange configuration under `cluster_provider_configs.kubeconfig.targets.<context>`.
+This lets one server mint tokens with a different audience, or against a different identity
+provider, for each cluster it manages (for example an ACM hub and its spoke clusters).
+
+Every target is a complete, self-contained exchange configuration: nothing is inherited from
+the global [`[token_exchange]`](#oauth-and-authorization) block, so different contexts can
+exchange against different identity providers. A context without a target entry uses the
+global `[token_exchange]` configuration (if any) unchanged. `token_url` is required on every
+target, and `token_exchange_strategy` — shared by all targets — is required on the
+`[cluster_provider_configs.kubeconfig]` table whenever any target is configured. This mirrors
+how the downstream ACM hub provider configures per-cluster exchange
+(`token_exchange_strategy` + explicit `clusters` entries).
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `token_url` | yes | Token-exchange endpoint for this target. |
+| `audience` | no | Audience requested during exchange. |
+| `scopes` | no | Scopes requested during exchange. |
+| `subject_token_type` | no | RFC 8693 `subject_token_type` override. |
+| `requested_token_type` | no | RFC 8693 `requested_token_type` override. |
+| `subject_issuer` | no | Keycloak `subject_issuer` for cross-realm exchange. |
+| `certificate_authority` | no | CA bundle for this target's token endpoint; falls back to the top-level `certificate_authority`. |
+| `client_auth.*` | no | Same fields and rules as the global block (`method`, `client_id`, `client_secret`, `certificate_file`, `private_key_file`, `token_file`). |
+
+Targets are validated when the configuration loads (field syntax, including the required
+`token_url` and `token_exchange_strategy`) and when the server starts: each target must name
+a context that exists in the kubeconfig, so a mistyped name fails loudly instead of silently
+skipping the exchange it was meant to configure. Per-target exchange follows the same cluster
+auth rules as the global block — it requires `require_oauth = true` and is rejected with
+`cluster_auth_mode = "kubeconfig"` — and those rules run with config validation, so they are
+enforced at startup and on reload alike.
+
+`cluster_provider_configs` is not reloadable: target entries apply until the process restarts.
+Because targets are self-contained, reloading or removing the global `[token_exchange]` block
+never affects them.
+
+Context names containing dots must be quoted in the table header, otherwise TOML reads them as
+nested tables: `[cluster_provider_configs.kubeconfig.targets."prod.example"]`.
+
+**Example (hub and spoke sharing one Keycloak, different audiences):**
+```toml
+cluster_provider_strategy = "kubeconfig"
+cluster_auth_mode = "passthrough"
+require_oauth = true
+
+[token_exchange]
+strategy = "rfc8693"
+token_url = "https://keycloak.example.com/realms/hub/protocol/openid-connect/token"
+audience = "hub"
+
+[token_exchange.client_auth]
+method = "client_secret_basic"
+client_id = "mcp-server"
+client_secret = "your-client-secret"
+
+[cluster_provider_configs.kubeconfig]
+token_exchange_strategy = "rfc8693"
+
+[cluster_provider_configs.kubeconfig.targets.spoke]
+token_url = "https://keycloak.example.com/realms/hub/protocol/openid-connect/token"
+audience = "spoke"
+scopes = ["mcp:spoke"]
+
+[cluster_provider_configs.kubeconfig.targets.spoke.client_auth]
+method = "client_secret_basic"
+client_id = "mcp-server"
+client_secret = "your-client-secret"
+```
+
+**Example (target on a separate identity provider):**
+```toml
+[cluster_provider_configs.kubeconfig]
+token_exchange_strategy = "rfc8693"
+
+[cluster_provider_configs.kubeconfig.targets."partner.example"]
+token_url = "https://sts.partner.example/oauth/token"
+audience = "partner-cluster"
+certificate_authority = "/etc/partner-ca.crt"
+
+[cluster_provider_configs.kubeconfig.targets."partner.example".client_auth]
+method = "private_key_jwt"
+client_id = "mcp-server"
+certificate_file = "/etc/partner/client.crt"
+private_key_file = "/etc/partner/client.key"
 ```
 
 ## Environment Variables
