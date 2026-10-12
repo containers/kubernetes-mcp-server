@@ -127,6 +127,7 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 	// section that fills the remaining room exactly leaves the next
 	// non-empty section as the notice alone.
 	lim := api.ResultLimit(params.Context)
+	room := int64(0)
 	if lim > 0 {
 		skeleton := buildPipelineTroubleshootPrompt(data)
 		guideLim := lim - int64(len(pipelineTroubleshootAssistantText))
@@ -139,16 +140,24 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 			}
 			return pipelineTroubleshootResult(guide, true), nil
 		}
-		room := guideLim - int64(len(skeleton))
-		logs := fetchPipelineRunLogsForPrompt(params, namespace, taskRuns)
-		events := fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns)
-		fitted := api.FitSections(room, logs, events)
-		data.logsText = fitted[0]
-		data.eventsText = fitted[1]
-	} else {
-		data.logsText = fetchPipelineRunLogsForPrompt(params, namespace, taskRuns)
-		data.eventsText = fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns)
+		room = guideLim - int64(len(skeleton))
+		if room <= 0 {
+			data.logsText = api.ResultTruncationNotice
+			return pipelineTroubleshootResult(buildPipelineTroubleshootPrompt(data), true), nil
+		}
 	}
+	// If we get here with room == 0, it means we're uncapped. Otherwise,
+	// logs and events share room. The event scratch is what logs did not
+	// use, so the two sections together stay inside the result budget.
+	// See docs/specs/memory-bounds.md#retention.
+	logsB := api.NewBuilderWithBudget(room)
+	fetchPipelineRunLogsForPrompt(params, namespace, taskRuns, logsB)
+	// Uncapped if logsB was uncapped
+	eventsB := logsB.Scratch(0)
+	// Shorts out if eventsB.Truncated()
+	fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns, eventsB)
+	data.logsText = logsB.String()
+	data.eventsText = eventsB.String()
 	return pipelineTroubleshootResult(buildPipelineTroubleshootPrompt(data), true), nil
 }
 
@@ -246,13 +255,16 @@ func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace
 	return taskRuns, sb.String()
 }
 
-func fetchPipelineRunLogsForPrompt(params api.PromptHandlerParams, namespace string, taskRuns []tektonv1.TaskRun) string {
-	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
+func fetchPipelineRunLogsForPrompt(params api.PromptHandlerParams, namespace string, taskRuns []tektonv1.TaskRun, b *api.BuilderWithBudget) {
+	if b == nil || b.Truncated() {
+		return
+	}
 	if len(taskRuns) == 0 {
 		b.WriteString("*No TaskRuns found, so no failed or errored step logs are available*")
-		return b.String()
+		return
 	}
 
+	stopped := false
 	for _, taskRun := range taskRuns {
 		header := fmt.Sprintf("### TaskRun: %s\n\n", taskRun.Name)
 		if !appendTaskBlock(b, header, "\n", func(taskLogs *api.BuilderWithBudget) {
@@ -263,13 +275,18 @@ func fetchPipelineRunLogsForPrompt(params api.PromptHandlerParams, namespace str
 				collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, taskLogs, namespace, &taskRun, step.Name, kubernetes.DefaultTailLines)
 			}
 		}) {
+			stopped = true
 			break
 		}
 	}
-	if b.Len() == 0 {
+	if b.Len() == 0 && !stopped {
 		b.WriteString("*No failed or errored step logs available for this PipelineRun*")
 	}
-	return b.String()
+	// A scratch with no room left does not write the block, so the notice
+	// still has to land on the parent.
+	if stopped && !b.Truncated() {
+		b.WriteString(api.ResultTruncationNotice)
+	}
 }
 
 func failedOrErroredStep(step tektonv1.StepState) bool {
@@ -287,7 +304,13 @@ type pipelineEventTarget struct {
 	name string
 }
 
-func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun) string {
+// fetchPipelineRunEventsForPrompt writes warning events into b and does not
+// start the next List once b is truncated. Events are not accumulated into a
+// slice first. See docs/specs/memory-bounds.md#retention.
+func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun, b *api.BuilderWithBudget) {
+	if b == nil || b.Truncated() {
+		return
+	}
 	targets := []pipelineEventTarget{{kind: "PipelineRun", name: pipelineRunName}}
 	for _, taskRun := range taskRuns {
 		targets = append(targets, pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
@@ -296,9 +319,12 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 		}
 	}
 
-	matched := make([]corev1.Event, 0)
 	seen := make(map[string]struct{})
+	wrote := false
 	for _, target := range targets {
+		if b.Truncated() {
+			break
+		}
 		if target.name == "" {
 			continue
 		}
@@ -313,6 +339,9 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 			continue
 		}
 		for _, event := range events.Items {
+			if b.Truncated() {
+				break
+			}
 			if event.Type != corev1.EventTypeWarning {
 				continue
 			}
@@ -324,17 +353,31 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 				continue
 			}
 			seen[key] = struct{}{}
-			matched = append(matched, event)
+			yaml, err := output.MarshalYaml(event)
+			if err != nil {
+				klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to marshal event for PipelineRun troubleshoot",
+					klogutil.Field("kind", target.kind), klogutil.Field("name", target.name), klogutil.Err(err))
+				continue
+			}
+			if !wrote {
+				b.WriteString("```yaml\n")
+				wrote = true
+				if b.Truncated() {
+					break
+				}
+			}
+			b.WriteString(yaml)
+			// No-op if b.Truncated()
+			b.WriteString("\n")
 		}
 	}
-	if len(matched) == 0 {
-		return "*No related warning events found*"
+	if !wrote {
+		// No-op if b.Truncated()
+		b.WriteString("*No related warning events found*")
+		return
 	}
-	yaml, err := output.MarshalYaml(matched)
-	if err != nil {
-		return fmt.Sprintf("*Error formatting events: %v*", err)
-	}
-	return fmt.Sprintf("```yaml\n%s```", yaml)
+	// No-op if b.Truncated()
+	b.WriteString("```")
 }
 
 func fetchPipelineRunPACRepositoriesForPrompt(params api.PromptHandlerParams, namespace string) string {

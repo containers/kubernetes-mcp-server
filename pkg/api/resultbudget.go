@@ -90,6 +90,48 @@ func (b *BuilderWithBudget) Len() int { return b.b.Len() }
 // Truncated reports whether a write has already been cut.
 func (b *BuilderWithBudget) Truncated() bool { return b.truncated }
 
+// Remaining is the bytes this builder can still accept.
+// An uncapped builder returns -1. A builder that has already been cut returns 0.
+func (b *BuilderWithBudget) Remaining() int64 {
+	if b == nil || !b.capped {
+		return -1
+	}
+	if b.truncated {
+		return 0
+	}
+	rem := b.limit - int64(b.b.Len())
+	if rem < 0 {
+		return 0
+	}
+	return rem
+}
+
+// Scratch returns a builder capped at the bytes this parent can still accept
+// after reserve. reserve is the wrapper the parent will add when it commits
+// the scratch (a header, a suffix, a trailing newline). An uncapped parent
+// returns an uncapped scratch. No room left returns a builder that is already
+// truncated, so NewBuilderWithBudget(0) cannot be used to mean "unlimited"
+// for a nested collect.
+//
+// The scratch does not charge the parent. Callers stop fetching when the
+// scratch is truncated. See docs/specs/memory-bounds.md#retention.
+func (b *BuilderWithBudget) Scratch(reserve int) *BuilderWithBudget {
+	if b == nil || !b.capped {
+		return NewBuilderWithBudget(0)
+	}
+	if reserve < 0 {
+		reserve = 0
+	}
+	if b.truncated {
+		return &BuilderWithBudget{capped: true, truncated: true}
+	}
+	room := b.Remaining() - int64(reserve)
+	if room <= 0 {
+		return &BuilderWithBudget{capped: true, truncated: true}
+	}
+	return NewBuilderWithBudget(room)
+}
+
 // LimitString writes s under the limit stored on ctx.
 func LimitString(ctx context.Context, s string) string {
 	b := NewBuilderWithBudget(ResultLimit(ctx))

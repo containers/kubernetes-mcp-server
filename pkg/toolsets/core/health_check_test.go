@@ -1,10 +1,28 @@
 package core
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	fakeclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
+	clienttesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/clientcmd"
+	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
 
 type ClusterHealthCheckSuite struct {
@@ -109,6 +127,69 @@ func (s *ClusterHealthCheckSuite) TestPromptRBACMetadata() {
 	), prompt.RBAC)
 }
 
+func (s *ClusterHealthCheckSuite) TestEventLinesStopAtTwenty() {
+	var listed atomic.Int32
+	var namespaces []runtime.Object
+	namespaces = append(namespaces,
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "openshift-a"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "openshift-b"}},
+	)
+	now := metav1.NewTime(time.Now())
+	for i := range 25 {
+		namespaces = append(namespaces, &corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("e-%d", i), Namespace: "default"},
+			Type:       corev1.EventTypeWarning,
+			Reason:     "BackOff",
+			Message:    "boom",
+			Count:      1,
+			InvolvedObject: corev1.ObjectReference{
+				Kind: "Pod", Name: "p", Namespace: "default",
+			},
+			LastTimestamp: now,
+		})
+	}
+	cs := fakeclient.NewSimpleClientset(namespaces...)
+	cs.PrependReactor("list", "events", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		listed.Add(1)
+		s.Equal("default", action.GetNamespace())
+		return false, nil, nil
+	})
+	text, err := gatherEventDiagnostics(api.PromptHandlerParams{
+		Context:          context.Background(),
+		KubernetesClient: healthCoreClient{Interface: cs},
+	}, "")
+	s.Require().NoError(err)
+	s.Equal(int32(1), listed.Load())
+	s.Contains(text, "**Warnings:** 25")
+	s.Equal(healthCheckMaxEvents, strings.Count(text, "\n- **"))
+}
+
 func TestClusterHealthCheckSuite(t *testing.T) {
 	suite.Run(t, new(ClusterHealthCheckSuite))
 }
+
+// healthCoreClient exposes a clientset to the health-check event test.
+type healthCoreClient struct {
+	kubernetes.Interface
+}
+
+func (healthCoreClient) NamespaceOrDefault(ns string) string { return ns }
+func (healthCoreClient) ToRESTConfig() (*rest.Config, error) {
+	return nil, errHealthCoreUnused
+}
+func (healthCoreClient) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	return nil, errHealthCoreUnused
+}
+func (healthCoreClient) ToRESTMapper() (meta.RESTMapper, error) { return nil, errHealthCoreUnused }
+func (healthCoreClient) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	return nil
+}
+func (healthCoreClient) RESTConfig() *rest.Config                            { return nil }
+func (healthCoreClient) RESTMapper() meta.ResettableRESTMapper               { return nil }
+func (healthCoreClient) DiscoveryClient() discovery.CachedDiscoveryInterface { return nil }
+func (healthCoreClient) DynamicClient() dynamic.Interface                    { return nil }
+func (healthCoreClient) MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client {
+	return nil
+}
+
+var errHealthCoreUnused = errors.New("unused")

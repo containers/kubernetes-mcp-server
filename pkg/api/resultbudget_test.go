@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -71,6 +72,36 @@ func (s *ResultBudgetSuite) TestLimitStringUsesTheContextCap() {
 	//lint:ignore SA1012 we're testing the path where WithResultBudget subs an ephemeral context when it receives nil
 	s.Equal(int64(3), ResultLimit(WithResultBudget(nil, 3))) //nolint:staticcheck // we're testing the path where WithResultBudget subs an ephemeral context when it receives nil
 	s.Equal(int64(0), ResultLimit(WithResultBudget(context.Background(), 0)))
+}
+
+func (s *ResultBudgetSuite) TestScratchCapsTheNestedCollect() {
+	parent := NewBuilderWithBudget(20)
+	s.Equal(int64(20), parent.Remaining())
+
+	scratch := parent.Scratch(4)
+	s.Equal(int64(16), scratch.Remaining())
+	s.True(scratch.WriteString(strings.Repeat("a", 100)))
+	s.True(scratch.Truncated())
+	s.Equal(int64(20), parent.Remaining(), "a scratch does not charge the parent")
+
+	s.Run("no room left is already truncated", func() {
+		full := NewBuilderWithBudget(4)
+		s.False(full.WriteString("abcd"))
+		child := full.Scratch(1)
+		s.True(child.Truncated())
+		s.Empty(child.String())
+		s.True(child.WriteString("more"))
+		s.Empty(child.String())
+	})
+
+	s.Run("uncapped parent yields an uncapped scratch", func() {
+		open := NewBuilderWithBudget(0)
+		s.Equal(int64(-1), open.Remaining())
+		child := open.Scratch(8)
+		s.False(child.WriteString(strings.Repeat("b", 30)))
+		s.Equal(30, child.Len())
+		s.False(child.Truncated())
+	})
 }
 
 func (s *ResultBudgetSuite) TestFitSectionsStopsAfterTheFirstCut() {

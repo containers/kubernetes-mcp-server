@@ -24,11 +24,15 @@ In [`PodsExec`](../../pkg/kubernetes/pods.go), share one counter across stdout a
 
 For a [`ToolCallResult`](../../pkg/api/toolsets.go), the measured size is `len(Content)` plus the JSON size of `StructuredContent` when that field is set. When `ContentBlocks` is set, those block bytes replace `Content`, including image data. A tool error is sent as its error text alone, so that text is the measured size. Prompt text and resource text or blob are the whole result for those handlers.
 
-Handlers read the limit and write log and event text through a builder. A write that does not fit is cut, and a truncation notice is appended. The notice may extend the result past the cap by its own length. The adapter allows that excess and rejects a result that is still larger. These aggregators use the builder:
+Handlers read the limit and write retained text through [`BuilderWithBudget`](../../pkg/api/resultbudget.go). A write that does not fit is cut, and a truncation notice is appended. The notice may extend the result past the cap by its own length. The adapter allows that excess and rejects a result that is still larger.
 
-- [`collectContainerLogs`](../../pkg/toolsets/tekton/taskrun.go) and [`getPipelineRunLogs`](../../pkg/toolsets/tekton/pipelinerun.go)
-- [`fetchPipelineRunLogsForPrompt`](../../pkg/toolsets/tekton/pipeline_troubleshoot.go)
-- virt-launcher log and event assembly in [`pkg/toolsets/kubevirt/vm/troubleshoot/tool.go`](../../pkg/toolsets/kubevirt/vm/troubleshoot/tool.go) and [`pkg/toolsets/kubevirt/vm_troubleshoot.go`](../../pkg/toolsets/kubevirt/vm_troubleshoot.go)
+## Retention
+
+The purpose of these limits is to keep this process from retaining unbounded or very large amounts of memory. The three options are the controls for that. They are not a list of the only paths that matter.
+
+`max_backend_response_bytes` bounds one backend read. Code that keeps more than that read, or keeps a growing structure derived from several reads, retains those bytes through `BuilderWithBudget` and does not start another fetch after `Truncated()` is set. `NewBuilderWithBudget(0)` is uncapped and is not used to assemble a result. A nested collector takes a [`Scratch`](../../pkg/api/resultbudget.go) capped at the bytes the parent can still accept. The post-hoc result check rejects one blob that is still too big. It does not bound memory a handler has already accumulated.
+
+Stopping the next fetch leaves the prefix already retained and the truncation notice. The call is not failed after those bytes have been kept.
 
 ## In-flight calls
 
@@ -38,8 +42,8 @@ Add a middleware beside [`rateLimitingMiddleware`](../../pkg/mcp/middleware.go).
 
 `max_backend_response_bytes` is one backend response. `mcp_max_result_bytes` measures the result sent to the client. For tools that is `Content` plus the JSON form of `StructuredContent`, or the `ContentBlocks` bytes when those are set, including when text and structured content are the same data twice. (The limit exists to protect the server, which must hold both fields in memory regardless of what the client uses or cares about.)
 
-The client can see less than the backend cap because an over-cap list, get, log, Kiali call, or NetObserv call becomes an error, because exec returns one stream plus a notice, and because `limit` and `tail` still apply. The measured result can be larger than the backend cap because YAML can be larger than the JSON that was counted, because text and structured content are added together, and because several under-cap reads can be combined until the result cap. MCP JSON framing adds more on the wire. In-flight calls multiply memory by the number of slots.
+The client can see less than the backend cap because an over-cap list, get, log, Kiali call, or NetObserv call becomes an error, because exec returns one stream plus a notice, and because `limit` and `tail` still apply. The measured result can be larger than the backend cap because YAML can be larger than the JSON that was counted, because text and structured content are added together, and because several under-cap reads can be combined until the result cap. A collector stops the next fetch once that cap is reached. MCP JSON framing adds more on the wire. In-flight calls multiply memory by the number of slots.
 
 ## Tests
 
-Cover an under-cap body, an exact-cap body, a chunked over-cap body, a skipped upgrade, a disabled cap, the same over-cap error for Kiali and NetObserv, exec truncation, an append that stops at the result budget, a tool result rejected because `Content` plus `StructuredContent` exceeds the cap, and global slot exhaustion.
+Cover an under-cap body, an exact-cap body, a chunked over-cap body, a skipped upgrade, a disabled cap, the same over-cap error for Kiali and NetObserv, exec truncation, an append that stops at the result budget, a nested scratch that stops a second fetch, pipeline event listing that does not request the next target once the builder is full, health-check events that retain 20 lines, a tool result rejected because `Content` plus `StructuredContent` exceeds the cap, and global slot exhaustion.

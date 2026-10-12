@@ -235,6 +235,8 @@ func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClie
 }
 
 func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *api.BuilderWithBudget, podName, namespace, kind, name, container string, tailLines int64) {
+	// The result budget is spent. Do not open another log stream.
+	// See docs/specs/memory-bounds.md#retention.
 	if sb.Truncated() {
 		return
 	}
@@ -262,23 +264,42 @@ func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *
 	}
 }
 
-// appendTaskBlock collects one task into an uncapped builder, then writes that
-// block once. An empty collection drops the header. suffix follows the logs
-// (the prompt adds a blank line).
+// appendTaskBlock collects one task into a scratch capped at the bytes dst can
+// still accept, then writes that block once. An empty collection drops the
+// header. suffix follows the logs (the prompt adds a blank line).
+//
+// The scratch is how a TaskRun's steps stay inside mcp_max_result_bytes:
+// collect stops when the scratch is truncated, and the next container is not
+// read. See docs/specs/memory-bounds.md#retention.
 func appendTaskBlock(dst *api.BuilderWithBudget, header, suffix string, collect func(*api.BuilderWithBudget)) bool {
-	if dst.Truncated() {
+	if dst == nil || dst.Truncated() {
 		return false
 	}
-	inner := api.NewBuilderWithBudget(0)
+	// +1 reserves the newline this function inserts when the block has none.
+	inner := dst.Scratch(len(header) + len(suffix) + 1)
+	if inner.Truncated() {
+		return false
+	}
 	collect(inner)
 	body := inner.String()
+	cut := inner.Truncated()
+	if cut {
+		// dst appends the single notice after the block is committed.
+		body = strings.TrimSuffix(body, api.ResultTruncationNotice)
+	}
 	if strings.TrimSpace(body) == "" {
-		return true
+		return !cut
 	}
 	block := header + body
 	if !strings.HasSuffix(block, "\n") {
 		block += "\n"
 	}
 	block += suffix
-	return !dst.WriteString(block)
+	if dst.WriteString(block) {
+		return false
+	}
+	if cut {
+		dst.WriteString(api.ResultTruncationNotice)
+	}
+	return !dst.Truncated()
 }

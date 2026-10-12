@@ -591,7 +591,16 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 	return sb.String(), nil
 }
 
-// gatherEventDiagnostics collects recent warning and error events
+// healthCheckMaxEvents is how many warning and error lines the health-check
+// prompt keeps. The result budget is the memory bound; this is the display cap.
+// TODO: Config knob?
+const healthCheckMaxEvents = 20
+
+// gatherEventDiagnostics collects recent warning and error events.
+// Lines are written through the result budget, and the next namespace List
+// does not start once healthCheckMaxEvents lines are kept or the budget is
+// exhausted. Totals keep counting events already fetched. See
+// docs/specs/memory-bounds.md#retention.
 func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (string, error) {
 	var namespaces []string
 
@@ -615,9 +624,13 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 	oneHourAgo := time.Now().Add(-1 * time.Hour)
 	totalWarnings := 0
 	totalErrors := 0
-	var recentEvents []string
+	retained := 0
+	lines := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
 
 	for _, ns := range namespaces {
+		if retained >= healthCheckMaxEvents || lines.Truncated() {
+			break
+		}
 		eventList, err := params.CoreV1().Events(ns).List(params.Context, metav1.ListOptions{})
 		if err != nil {
 			continue
@@ -643,6 +656,9 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 			} else {
 				totalErrors++
 			}
+			if retained >= healthCheckMaxEvents || lines.Truncated() {
+				continue
+			}
 
 			// Limit message length
 			message := event.Message
@@ -650,20 +666,18 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 				message = message[:150] + "..."
 			}
 
-			recentEvents = append(recentEvents, fmt.Sprintf("- **%s/%s** in `%s` (%s, Count: %d)\n  - %s",
-				event.InvolvedObject.Kind, event.InvolvedObject.Name, ns, event.Reason, event.Count, message))
+			if lines.WriteString(fmt.Sprintf("- **%s/%s** in `%s` (%s, Count: %d)\n  - %s\n\n",
+				event.InvolvedObject.Kind, event.InvolvedObject.Name, ns, event.Reason, event.Count, message)) {
+				continue
+			}
+			retained++
 		}
-	}
-
-	// Limit to 20 most recent events
-	if len(recentEvents) > 20 {
-		recentEvents = recentEvents[:20]
 	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "**Warnings:** %d | **Errors:** %d\n\n", totalWarnings, totalErrors)
-	if len(recentEvents) > 0 {
-		sb.WriteString(strings.Join(recentEvents, "\n\n"))
+	if lines.Len() > 0 {
+		sb.WriteString(lines.String())
 	} else {
 		sb.WriteString("*No recent warning/error events*")
 	}
