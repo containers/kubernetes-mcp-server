@@ -47,7 +47,7 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 		return p.provider.GetDerivedKubernetes(ctx, target)
 	}
 	tokenExchangeConfig := p.getOrBuildTokenExchangeConfig(ctx, snap, cfg)
-	ctx, err := ExchangeTokenInContext(ctx, cfg, p.provider, target, tokenExchangeConfig)
+	ctx, err := ExchangeTokenInContext(ctx, cfg, p.provider, target, tokenExchangeConfig, discoveredTokenURL(snap))
 	if err != nil {
 		return nil, err
 	}
@@ -69,10 +69,8 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Cont
 	}
 
 	tokenURL := global.TokenURL.Get()
-	if tokenURL == "" && snap.OIDCProvider != nil {
-		if endpoint := snap.OIDCProvider.Endpoint(); endpoint.TokenURL != "" {
-			tokenURL = endpoint.TokenURL
-		}
+	if tokenURL == "" {
+		tokenURL = discoveredTokenURL(snap)
 	}
 	if tokenURL == "" {
 		p.tokenExchangeCache.clear()
@@ -99,28 +97,42 @@ func (p *tokenExchangingProvider) getOrBuildTokenExchangeConfig(ctx context.Cont
 	})
 }
 
+// discoveredTokenURL returns the token endpoint from OIDC discovery, or "".
+func discoveredTokenURL(snap *oauth.Snapshot) string {
+	if snap == nil || snap.OIDCProvider == nil {
+		return ""
+	}
+	return snap.OIDCProvider.Endpoint().TokenURL
+}
+
 func applyClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, auth *config.TokenExchangeClientAuth) {
 	if auth == nil {
 		return
 	}
-	cfg.ClientID = auth.ClientID.Get()
-	cfg.ClientSecret = auth.ClientSecret.Get()
-	switch config.TokenExchangeClientAuthMethod(auth.Method.Get()) {
+	setClientAuth(cfg, auth.Method.Get(), auth.ClientID.Get(), auth.ClientSecret.Get(),
+		auth.CertificateFile.Get(), auth.PrivateKeyFile.Get(), auth.TokenFile.Get())
+}
+
+// setClientAuth maps a client_auth method onto the exchanger's auth style.
+func setClientAuth(cfg *tokenexchange.TargetTokenExchangeConfig, method, clientID, clientSecret, certFile, keyFile, tokenFile string) {
+	cfg.ClientID = clientID
+	cfg.ClientSecret = clientSecret
+	switch config.TokenExchangeClientAuthMethod(method) {
 	case config.TokenExchangeClientAuthMethodSecretBasic:
 		cfg.AuthStyle = tokenexchange.AuthStyleHeader
 	case config.TokenExchangeClientAuthMethodSecretPost:
 		cfg.AuthStyle = tokenexchange.AuthStyleParams
 	case config.TokenExchangeClientAuthMethodPrivateKey:
 		cfg.AuthStyle = tokenexchange.AuthStyleAssertion
-		cfg.ClientCertFile = auth.CertificateFile.Get()
-		cfg.ClientKeyFile = auth.PrivateKeyFile.Get()
+		cfg.ClientCertFile = certFile
+		cfg.ClientKeyFile = keyFile
 	case config.TokenExchangeClientAuthMethodJWTFile:
 		cfg.AuthStyle = tokenexchange.AuthStyleFederated
-		cfg.FederatedTokenFile = auth.TokenFile.Get()
+		cfg.FederatedTokenFile = tokenFile
 	default:
 		// Preserve invalid methods so TargetTokenExchangeConfig.Validate rejects
 		// them instead of treating an empty style as form-body authentication.
-		cfg.AuthStyle = auth.Method.Get()
+		cfg.AuthStyle = method
 	}
 }
 
@@ -140,6 +152,7 @@ type tokenExchangeConfigCacheKey struct {
 	CAFile             string
 	TLSMinVersion      string
 	TLSCipherSuites    string
+	SubjectIssuer      string
 	RequireTLS         bool
 }
 

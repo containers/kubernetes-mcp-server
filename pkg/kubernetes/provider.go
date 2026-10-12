@@ -77,21 +77,26 @@ type Provider interface {
 	Close()
 }
 
-// TokenExchangeProvider is an optional interface that providers can implement to suport per-target token exchange.
-//
-// When a provider implements this interface and GetTokenExchangeConfig returns a non-nil config for a target, token
-// exchange will be performed before creating the derived Kubernetes client. The exchanged token replaces the original
-// in the Authorization header used by the derived client.
-//
-// If GetTokenExchangeConfig returns nil for a target, or the interface is not implemented for a provider, no per-target
-// token exchange is performed and the original token is used as-is.
-type TokenExchangeProvider interface {
-	// GetTokenExchangeConfig returns the token exchange configuration for the specified target.
-	// Returns nil if no per-target exchange is configured
-	GetTokenExchangeConfig(target string) *tokenexchange.TargetTokenExchangeConfig
+// TargetTokenExchange is a resolved per-target token exchange: the registered
+// strategy to run and the configuration to run it with.
+type TargetTokenExchange struct {
+	Strategy string
+	Config   *tokenexchange.TargetTokenExchangeConfig
+}
 
-	// GetTokenExchangeStrategy returns the token exchange strategy to use (e.g. "keycloak-v1" or "rfc8693").
-	GetTokenExchangeStrategy() string
+// TokenExchangeProvider is an optional interface that providers can implement
+// to support per-target token exchange. It is consulted only in passthrough
+// cluster auth mode. When GetTargetTokenExchange returns a non-nil exchange,
+// the token is exchanged with it before creating the derived Kubernetes
+// client; (nil, nil) means the target has no per-target exchange and the
+// global [token_exchange] configuration applies; (nil, error) means exchange
+// is configured for the target but cannot proceed.
+type TokenExchangeProvider interface {
+	// GetTargetTokenExchange resolves the exchange for target against the live
+	// config. discoveredTokenURL is the token endpoint discovered from
+	// authorization_url (empty when unavailable); it is the fallback when
+	// neither the target nor the global block sets a token URL.
+	GetTargetTokenExchange(target string, base *config.Config, discoveredTokenURL string) (*TargetTokenExchange, error)
 }
 
 type ProviderOption func(*providerOptions)

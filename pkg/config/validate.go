@@ -291,6 +291,26 @@ func (c *Config) ValidateClusterAuthMode() error {
 	if !c.RequireOAuth.Get() && hasTokenExchange {
 		errs = append(errs, fmt.Errorf("token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)"))
 	}
+	if err := validateExtendedClusterAuth(c.parsedClusterProviderConfigs, extensionProviderTable, c.RequireOAuth.Get(), c.ResolveClusterAuthMode()); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+// validateExtendedClusterAuth applies the cluster auth rules to extended
+// configs that configure token exchange (for example per-target exchange
+// under cluster_provider_configs.kubeconfig).
+func validateExtendedClusterAuth(cfgs map[string]ExtendedConfig, table string, requireOAuth bool, clusterAuthMode string) error {
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(cfgs)) {
+		v, ok := cfgs[name].(ClusterAuthValidator)
+		if !ok {
+			continue
+		}
+		if err := v.ValidateClusterAuth(requireOAuth, clusterAuthMode); err != nil {
+			errs = append(errs, fmt.Errorf("%s.%s: %w", table, name, err))
+		}
+	}
 	return errors.Join(errs...)
 }
 
