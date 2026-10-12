@@ -75,7 +75,7 @@ realm's `mcp-server-jwt` client — the private key is never committed.
 
 Tests **skip** (not fail) when an optional dependency is absent — e.g.
 `TestKeycloakOIDC` and every `TestOAuth*` test skip if the `keycloak/keycloak` service
-is missing, and `TestKuadrantGatewayTools` skips without the gateway service.
+is missing, and `TestKuadrantGateway` skips without the gateway service.
 
 ## Layout
 
@@ -89,8 +89,9 @@ is missing, and `TestKuadrantGatewayTools` skips without the gateway service.
 | `oauth_test.go` | OAuth toolkit: token/discovery/CA helpers, JWT minting, identity discriminator, `requireUnauthorized` |
 | `oauth_flows_test.go` | OAuth flow tests: rejection surface, server modes, forwarded identity, STS variants, groups→RBAC |
 | `smoke_test.go` | `TestSmoke` — baseline deploy + tool calls |
+| `prompts_test.go` | `TestPrompts` — built-in and configured prompts over MCP; shared prompt assertion helpers |
 | `keycloak_test.go` | `TestKeycloakOIDC` — OIDC + STS token-exchange chain |
-| `kuadrant_test.go` | `TestKuadrantGatewayTools` — server behind the Kuadrant MCP Gateway |
+| `kuadrant_test.go` | `TestKuadrantGateway` — server behind the Kuadrant MCP Gateway (tools and prompts) |
 
 `TestImageSpec` is a fast way to force a compile of every `e2e`-tagged file without a
 cluster: `go test -tags e2e -run TestImageSpec ./test/e2e/`.
@@ -103,6 +104,8 @@ cleanup. The generated namespace doubles as the Helm release name and `fullnameO
 so cluster-scoped resources (e.g. ClusterRoleBindings) are unique per run. Options:
 
 - `withConfig(toml)` — server config TOML, rendered into the chart's `config` value.
+  Because the chart renders `config` through `tpl`, prompt placeholders must be
+  escaped as `` {{`{{name}}`}} `` (see `configuredPromptsTOML` in `prompts_test.go`).
   (An `[http]` section is rejected — Helm's `toToml` mangles large ints, helm/helm#32040.)
 - `withValues(map)` — extra Helm values, shallow-merged over the defaults.
 - `withPreInstall(fn)` — hook run after namespace creation but **before** Helm install,
@@ -146,8 +149,9 @@ Value composition helpers: `mergeValues(...)` (shallow, top-level keys must be d
 | Test | What it exercises |
 |------|-------------------|
 | `TestSmoke` | Deploy → `ListTools` → `namespaces_list` / `pods_list_in_namespace`, cross-checked against the K8s API |
+| `TestPrompts` | Deploy with two configured prompts → `prompts/list` exposes built-in and configured prompts with titles and argument metadata → `prompts/get` matrix: no-argument prompt, required-only (optional placeholder dropped), required+optional, missing required rejected; built-in `cluster-health-check` with no arguments, namespace-scoped with `check_events` true/false, and unknown namespace fallback warning |
 | `TestKeycloakOIDC` | OIDC discovery; password-grant token issuance; full chain: user token → server → STS exchange (RFC 8693) → kube-apiserver OIDC → tool call. Includes a `missing_token` negative assertion |
-| `TestKuadrantGatewayTools` | Server behind the Kuadrant MCP Gateway: `MCPServerRegistration`, tool-name prefixing, tool call through the gateway |
+| `TestKuadrantGateway` | Server behind the Kuadrant MCP Gateway with two registrations on one deployment: `userSpecificList=Enabled` (`k8s_`) for tool-name prefixing and a tool call through the gateway; `userSpecificList=Disabled` (`k8sp_`, via a second HTTPRoute) for prompt-name prefixing, the same configured and `cluster-health-check` prompt matrix as `TestPrompts` through the gateway, and gateway/direct `prompts/get` parity. The gateway skips prompt discovery for user-specific registrations, so prompts are only asserted on the second one, and it drops prompt titles in transit, so titles are only asserted on the direct path |
 | `TestOAuthOIDCFlows` | OIDC-mode rejection surface (A1–A8) and unauthenticated well-known metadata (E1–E5, E7, E8), plus the scope-not-enforced guard (F1) |
 | `TestOAuthServerModes` | Unprotected anonymous tool call (C1); passthrough rejects a missing token and hides well-known (C4, E6) |
 | `TestOAuthForwardedIdentity` | Forwarded-token identity: `require_oauth=false` (C2) and passthrough (C3) act as the cluster-admin user, not the `view` SA (Secrets discriminator) |

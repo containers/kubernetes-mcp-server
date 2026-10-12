@@ -70,6 +70,10 @@ helm-validate: helm kubeconform ## Validate Helm chart manifests with kubeconfor
 	@echo "Validating with Gateway API HTTPRoute values..."
 	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/httproute-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""
+	@echo "Validating with configured prompts values..."
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/prompts-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/prompts-test-values.yaml | grep -q "Show me the logs for pod {{name}} in {{namespace}}" || { echo "error: prompt placeholders were not rendered as {{name}}/{{namespace}}"; exit 1; }'
+	@echo ""
 	@echo "Validating with TLS enabled..."
 	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tls-test-values.yaml | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@output=$$($(HELM) template test-release $(HELM_CHART_DIR) -f $(HELM_CHART_DIR)/ci/tls-test-values.yaml 2>&1); \

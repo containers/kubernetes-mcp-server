@@ -57,6 +57,23 @@ content = "I'll retrieve and analyze the logs for you."
 ### Argument Substitution
 Use `{{argument_name}}` placeholders in message content. The template engine replaces these with actual values when the prompt is called. If an optional argument is not provided, its placeholder is removed from the output.
 
+### Helm Chart
+
+When prompts are configured through the Helm chart's `config.prompts` value, the chart renders the configuration with Helm's `tpl`. Escape placeholders as `` {{`{{argument_name}}`}} `` so Helm passes them through unchanged:
+
+```yaml
+config:
+  prompts:
+    - name: check-pod-logs
+      description: Show the logs for a pod
+      arguments:
+        - name: name
+          required: true
+      messages:
+        - role: user
+          content: 'Show me the logs for pod {{`{{name}}`}}'
+```
+
 ## Built-in Prompts
 
 The Kubernetes MCP Server includes several built-in prompts that are always available:

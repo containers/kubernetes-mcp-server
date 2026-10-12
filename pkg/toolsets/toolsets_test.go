@@ -99,6 +99,27 @@ func (s *ToolsetsSuite) TestUniquePromptNames() {
 	}
 }
 
+func (s *ToolsetsSuite) TestPromptDefinitionsAreValid() {
+	for _, toolset := range s.originalToolsets {
+		for _, prompt := range toolset.GetPrompts(s.T().Context(), api.ToolsetContext{Inspector: &fakeProvider{}}) {
+			s.Run(toolset.GetName()+"/"+prompt.Prompt.Name, func() {
+				s.NotEmpty(prompt.Prompt.Name, "prompt name must not be empty")
+				s.NotEmpty(prompt.Prompt.Description, "prompt %s must have a description", prompt.Prompt.Name)
+				s.NotNil(prompt.Handler, "prompt %s must have a handler", prompt.Prompt.Name)
+				argNames := make(map[string]bool)
+				for _, arg := range prompt.Prompt.Arguments {
+					s.NotEmpty(arg.Name, "prompt %s has an argument with an empty name", prompt.Prompt.Name)
+					s.Falsef(argNames[arg.Name], "prompt %s has duplicate argument: %s", prompt.Prompt.Name, arg.Name)
+					argNames[arg.Name] = true
+				}
+				if prompt.RBAC != nil {
+					s.NoError(prompt.RBAC.Validate(), "prompt %s has invalid RBAC metadata", prompt.Prompt.Name)
+				}
+			})
+		}
+	}
+}
+
 func (s *ToolsetsSuite) TestUniqueResourceURIs() {
 	resourceURIs := make(map[string]bool)
 	for _, toolset := range s.originalToolsets {

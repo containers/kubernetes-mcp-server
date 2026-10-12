@@ -45,6 +45,7 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 	mcpPrompt := &mcp.Prompt{
 		Meta:        meta,
 		Name:        serverPrompt.Prompt.Name,
+		Title:       serverPrompt.Prompt.Title,
 		Description: serverPrompt.Prompt.Description,
 		Arguments:   args,
 	}

@@ -45,7 +45,7 @@ keycloak-install: minikube kubectl install-cert-manager keycloak-gen-sts-keypair
 		--extra-config=apiserver.oidc-groups-claim=groups \
 		--extra-config=apiserver.oidc-ca-file=/var/lib/minikube/certs/keycloak-ca.crt
 	@echo "Re-exporting kubeconfig..."
-	@$(MINIKUBE) kubectl --profile $(MINIKUBE_PROFILE) -- config view --flatten > _output/kubeconfig
+	@$(MINIKUBE) kubectl --profile $(MINIKUBE_PROFILE) -- config view --flatten --minify --context $(MINIKUBE_PROFILE) > _output/kubeconfig
 	@$(KUBECTL) apply -f dev/config/keycloak/rbac.yaml
 	@mkdir -p _output
 	@cp dev/config/keycloak/config.toml _output/config.toml
