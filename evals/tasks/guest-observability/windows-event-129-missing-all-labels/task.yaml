@@ -1,0 +1,77 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+
+metadata:
+  labels:
+    suite: guest-observability
+    project: kubevirt
+    requires: guest-observability
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "windows-event-129-missing-all-labels"
+  category: "Guest failure investigation"
+  description: "Handle an Event 129 stream missing every guest telemetry contract label."
+  difficulty: hard
+
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          GUEST_OBSERVABILITY_SCENARIO=event129-missing-all-labels \
+            "${REPO_ROOT}/evals/tasks/guest-observability/shared/setup-mock.sh"
+        timeout: 180s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          bash "${REPO_ROOT}/evals/tasks/guest-observability/windows-event-129-missing-all-labels/verify.sh"
+        timeout: 30s
+
+    - llmJudge:
+        contains: "Event 129"
+
+    - llmJudge:
+        contains: >-
+          An Event 129-like guest log exists, but the stream has none
+          of the required namespace, vm_name, os, or source contract
+          labels. It therefore cannot be reliably associated with a VM
+          or with guest-observability-eval, and no affected VM should
+          be claimed.
+
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          bash "${REPO_ROOT}/evals/tasks/guest-observability/shared/cleanup-mock.sh"
+        timeout: 180s
+
+  prompt:
+    inline: |
+      Check whether any Windows VM in the
+      guest-observability-eval namespace experienced a storage reset
+      during the last hour.
+
+      If the standard guest identity labels do not locate all relevant
+      evidence, also inspect orphan guest telemetry from
+      collector="guest-agent".
+
+      Identify an affected VM only when the telemetry contract supports
+      that correlation.
