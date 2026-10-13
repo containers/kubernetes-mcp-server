@@ -1,0 +1,24 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "pending-pods"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent can identify pods stuck in pending state by first discovering
+    the kube_pod_status_phase metric and then running an instant query to find
+    pods with phase=Pending.
+spec:
+  verify:
+    - llmJudge:
+        contains: "kube_pod_status_phase"
+  prompt:
+    inline: |
+      Which pods are stuck in pending state?
+      Use Prometheus metrics and include the metric name and PromQL query you used.

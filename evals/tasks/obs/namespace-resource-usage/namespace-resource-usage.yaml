@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "namespace-resource-usage"
+  difficulty: hard
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: multi-step
+  description: |
+    Tests multi-step reasoning: the agent must discover CPU and memory metrics,
+    then query them with namespace-level aggregation to identify the top
+    resource-consuming namespaces. Requires chaining list_metrics, label
+    exploration, and multiple instant queries.
+spec:
+  verify:
+    - llmJudge:
+        contains: "container_cpu_usage_seconds_total"
+    - llmJudge:
+        contains: "container_memory"
+  prompt:
+    inline: |
+      Which namespace is consuming the most CPU and memory?
+      Show me the top namespace for each.
+      Use Prometheus metrics and include the metric names and PromQL queries you used.

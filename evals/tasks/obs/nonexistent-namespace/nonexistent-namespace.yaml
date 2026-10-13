@@ -1,0 +1,23 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "nonexistent-namespace"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: error-handling
+  description: |
+    Tests agent behavior when querying for resources in a namespace that
+    does not exist. The agent should query and report empty results
+    gracefully rather than hallucinating data.
+spec:
+  verify:
+    - llmJudge:
+        contains: "no pods or no data found in the totally-fake-namespace-12345 namespace"
+  prompt:
+    inline: |
+      Show me the memory usage for all pods in the namespace called totally-fake-namespace-12345.

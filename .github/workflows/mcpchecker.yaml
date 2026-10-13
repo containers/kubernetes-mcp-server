@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, argocd, or all)'
+        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, argocd, obs, or all)'
         required: false
         default: 'core'
         type: choice
@@ -26,6 +26,7 @@ on:
           - tekton
           - netobserv
           - argocd
+          - obs
           - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
@@ -181,7 +182,7 @@ jobs:
 
               // Parse suite from the review body (trusted — fetched from API).
               const suiteMatch = triggerReview.body.match(
-                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|argocd|all)/i,
+                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|argocd|obs|all)/i,
               );
               const suite = suiteMatch ? suiteMatch[1].toLowerCase() : '';
 
@@ -259,6 +260,9 @@ jobs:
             argocd)
               MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "core,config")
               ;;
+            obs)
+              MATRIX=$(single_matrix obs "${EVAL_DIR}/eval-obs.yaml" "observability/metrics,observability/traces,observability/logs,observability/otelcol")
+              ;;
             all)
               MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")
               ;;
@@ -328,6 +332,16 @@ jobs:
         if: contains(matrix.toolsets, 'argocd')
         run: make argocd-install
 
+      - name: Install obs stacks (Prometheus, Tempo, Loki)
+        if: contains(matrix.toolsets, 'observability/')
+        run: make obs-setup
+        timeout-minutes: 40
+
+      # Host-local MCP server cannot reach ClusterIP/.svc URLs; port-forward like kiali/netobserv.
+      - name: Expose obs backends (port-forward)
+        if: contains(matrix.toolsets, 'observability/')
+        run: make expose-obs
+
       - name: Start MCP server
         run: make run-server
         env:
@@ -362,6 +376,7 @@ jobs:
         if: always()
         run: |
           make stop-server || true
+          make stop-obs || true
           make stop-netobserv || true
           make teardown-netobserv || true
           make minikube-delete-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE" || true
