@@ -116,6 +116,8 @@ type Server struct {
 	metrics                  *metrics.Metrics // Metrics collection system
 	rateLimitDone            chan struct{}    // Closed to stop the rate limiter reaper goroutine
 	closeOnce                sync.Once
+	// toolsetWatchStops end the api.ToolsetWatcher watches started by watchToolsets.
+	toolsetWatchStops []func()
 }
 
 func NewServer(ctx context.Context, configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
@@ -193,8 +195,24 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 		return nil, err
 	}
 	s.p.WatchTargets(ctx, s.mcpReloader())
+	s.watchToolsets(ctx)
 
 	return s, nil
+}
+
+// watchToolsets starts the optional watchers of the enabled toolsets whose
+// surface can change at runtime (api.ToolsetWatcher). Only the toolsets
+// enabled at construction are watched; toolsets enabled later by a
+// configuration reload are applied but not watched.
+func (s *Server) watchToolsets(ctx context.Context) {
+	cfg := s.configuration.Load()
+	for _, toolset := range cfg.Toolsets() {
+		watcher, ok := toolset.(api.ToolsetWatcher)
+		if !ok {
+			continue
+		}
+		s.toolsetWatchStops = append(s.toolsetWatchStops, watcher.WatchToolset(ctx, s.toolsetContext(cfg), s.reapplyToolsets))
+	}
 }
 
 // reapplyToolsets is the provider's WatchTargets callback (signature
@@ -710,6 +728,9 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 func (s *Server) Close() {
 	s.closeOnce.Do(func() {
 		close(s.rateLimitDone)
+		for _, stop := range s.toolsetWatchStops {
+			stop()
+		}
 		if s.p != nil {
 			s.p.Close()
 		}

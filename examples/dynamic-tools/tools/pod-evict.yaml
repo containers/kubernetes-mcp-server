@@ -1,0 +1,36 @@
+# A subresource create: an Eviction posted to pods/eviction, the same thing
+# `kubectl drain` does per Pod, which respects PodDisruptionBudgets.
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: pod-evict
+spec:
+  title: "Pod: Evict"
+  description: >-
+    Evict a Pod through the Eviction API, honoring PodDisruptionBudgets. Prefer this
+    over deleting a Pod when draining or rebalancing workloads.
+  destructive: true
+  inputSchema:
+    type: object
+    properties:
+      namespace:
+        type: string
+        description: Namespace of the Pod
+      name:
+        type: string
+        description: Name of the Pod
+    required: [namespace, name]
+  kubernetes:
+    verb: create
+    apiVersion: v1
+    kind: Pod
+    subresource: eviction
+    namespace:
+      argument: namespace
+    name:
+      argument: name
+    body:
+      expression: >-
+        {'apiVersion': 'policy/v1', 'kind': 'Eviction',
+         'metadata': {'name': args.name, 'namespace': args.namespace}}
+  output: "'evicted ' + args.name"

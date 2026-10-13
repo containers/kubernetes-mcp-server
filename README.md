@@ -280,6 +280,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 |-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
 | config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
 | core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| dynamic               | Tools defined declaratively as Tool custom resources (tools.kubernetes-mcp-server.io) installed in the cluster, see docs/specs/dynamic-tools.md                                                                                         |         |
 | helm                  | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
 | kcp                   | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
 | kiali                 | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
@@ -412,6 +413,12 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - Name of the resource
   - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
   - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
+
+</details>
+
+<details>
+
+<summary>dynamic</summary>
 
 </details>
 

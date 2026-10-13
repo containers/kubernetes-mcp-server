@@ -1,0 +1,30 @@
+{{- range .Values.tools }}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: {{ $.Values.toolPrefix }}-{{ .name | replace "_" "-" }}
+  labels:
+    app.kubernetes.io/name: {{ $.Chart.Name }}
+    app.kubernetes.io/version: {{ $.Chart.Version | quote }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+spec:
+  name: {{ $.Values.toolPrefix }}_{{ .name }}
+  title: {{ .title | quote }}
+  description: {{ .description | quote }}
+  readOnly: {{ .readOnly | default false }}
+  destructive: {{ .destructive | default false }}
+  {{- with .inputSchema }}
+  inputSchema:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  http:
+    method: POST
+    url: {{ $.Values.kiali.url | quote }}
+    path: /api/mcp/{{ .endpoint }}
+    headers:
+      X-Kubernetes-MCP-Server: "true"
+    insecureSkipTLSVerify: {{ $.Values.kiali.insecureSkipTLSVerify }}
+    body:
+      expression: {{ .body | quote }}
+{{- end }}

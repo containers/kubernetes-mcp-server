@@ -1,0 +1,138 @@
+# Tool custom resource definition for the kubernetes-mcp-server "dynamic" toolset.
+#
+# A Tool declares an MCP tool (name, description, input schema, annotations) and
+# exactly one action the server performs with the caller's own identity:
+# a single Kubernetes API request, or an HTTP request to a URL or an in-cluster
+# Service. See docs/specs/dynamic-tools.md.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tools.tools.kubernetes-mcp-server.io
+spec:
+  group: tools.kubernetes-mcp-server.io
+  scope: Cluster
+  names:
+    plural: tools
+    singular: tool
+    kind: Tool
+    shortNames: [mcptool]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Tool
+          type: string
+          jsonPath: .spec.name
+        - name: Read-only
+          type: boolean
+          jsonPath: .spec.readOnly
+        - name: Destructive
+          type: boolean
+          jsonPath: .spec.destructive
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [description]
+              x-kubernetes-validations:
+                - rule: "has(self.kubernetes) != has(self.http)"
+                  message: "exactly one of spec.kubernetes or spec.http must be set"
+              properties:
+                name:
+                  type: string
+                  description: MCP tool name. Defaults to metadata.name with '-' and '.' replaced by '_'.
+                  pattern: '^[a-z0-9][a-z0-9_]*$'
+                title:
+                  type: string
+                description:
+                  type: string
+                  description: Written for the model. First sentence what the tool does, second when to use it.
+                  minLength: 1
+                readOnly:
+                  type: boolean
+                destructive:
+                  type: boolean
+                idempotent:
+                  type: boolean
+                inputSchema:
+                  type: object
+                  description: JSON Schema (object) of the tool arguments.
+                  x-kubernetes-preserve-unknown-fields: true
+                output:
+                  type: string
+                  description: >-
+                    CEL expression over `response` (decoded action response) and `args`
+                    (tool arguments). Its result replaces the raw response.
+                kubernetes:
+                  type: object
+                  required: [verb, apiVersion, kind]
+                  properties:
+                    verb:
+                      type: string
+                      enum: [get, list, create, update, patch, delete]
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    subresource:
+                      type: string
+                    namespace:
+                      type: object
+                      properties:
+                        argument: {type: string}
+                        value: {type: string}
+                        all: {type: boolean}
+                    name: &ref
+                      type: object
+                      properties:
+                        argument: {type: string}
+                        value: {type: string}
+                    query:
+                      type: object
+                      additionalProperties: *ref
+                    body: &body
+                      type: object
+                      properties:
+                        argument: {type: string}
+                        expression: {type: string}
+                        value:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                http:
+                  type: object
+                  x-kubernetes-validations:
+                    - rule: "has(self.url) != has(self.service)"
+                      message: "exactly one of url or service must be set"
+                  properties:
+                    method:
+                      type: string
+                    url:
+                      type: string
+                      pattern: '^https?://'
+                    service:
+                      type: object
+                      required: [namespace, name]
+                      properties:
+                        namespace: {type: string}
+                        name: {type: string}
+                        port: {type: string}
+                        scheme: {type: string, enum: [http, https]}
+                    path:
+                      type: string
+                      description: Appended to the base URL; {argument} placeholders are URL-escaped tool arguments.
+                    query:
+                      type: object
+                      additionalProperties: *ref
+                    headers:
+                      type: object
+                      additionalProperties: {type: string}
+                    body: *body
+                    insecureSkipTLSVerify:
+                      type: boolean

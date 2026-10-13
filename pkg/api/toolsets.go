@@ -131,6 +131,16 @@ type Toolset interface {
 	GetResourceTemplates(ctx context.Context, toolsetContext ToolsetContext) []ServerResourceTemplate
 }
 
+// ToolsetWatcher is an optional interface a Toolset implements when the set
+// of capabilities it exposes can change at runtime (for example tools defined
+// by cluster resources). The server calls WatchToolset once for each enabled
+// toolset that implements it; onChange re-applies the installed configuration
+// the same way a cluster-state change does. The returned stop function ends
+// the watch and is called when the server closes.
+type ToolsetWatcher interface {
+	WatchToolset(ctx context.Context, toolsetContext ToolsetContext, onChange func() error) (stop func())
+}
+
 type ToolCallRequest interface {
 	GetArguments() map[string]any
 }
