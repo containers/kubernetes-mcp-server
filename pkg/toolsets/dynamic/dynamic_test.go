@@ -61,6 +61,16 @@ func (s *DynamicSuite) TestValidate() {
 		tool.Spec.Kubernetes = nil
 		s.ErrorContains(tool.Validate(), "one of spec.kubernetes or spec.http is required")
 	})
+	s.Run("accepts an explicit resource instead of a kind", func() {
+		tool := valid()
+		tool.Spec.Kubernetes = &KubernetesAction{Verb: "update", APIVersion: "subresources.kubevirt.io/v1", Resource: "virtualmachines", Subresource: &Ref{Argument: "action"}}
+		s.NoError(tool.Validate())
+	})
+	s.Run("rejects both kind and resource", func() {
+		tool := valid()
+		tool.Spec.Kubernetes.Resource = "pods"
+		s.ErrorContains(tool.Validate(), "exactly one of spec.kubernetes.kind or spec.kubernetes.resource")
+	})
 	s.Run("rejects an unknown verb", func() {
 		tool := valid()
 		tool.Spec.Kubernetes.Verb = "watch"
@@ -175,25 +185,96 @@ func (s *DynamicSuite) TestResolveBody() {
 }
 
 func (s *DynamicSuite) TestResolveNamespace() {
+	tool := &compiledTool{refExprs: map[string]*expression{}}
 	s.Run("argument wins over value", func() {
-		ns, all := resolveNamespace(&NamespaceRef{Ref: Ref{Argument: "namespace", Value: "fixed"}}, map[string]any{"namespace": "arg"})
+		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", Value: "fixed"}, map[string]any{"namespace": "arg"})
+		s.Require().NoError(err)
 		s.Equal("arg", ns)
 		s.False(all)
 	})
 	s.Run("falls back to the fixed value", func() {
-		ns, all := resolveNamespace(&NamespaceRef{Ref: Ref{Argument: "namespace", Value: "fixed"}}, nil)
+		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", Value: "fixed"}, nil)
+		s.Require().NoError(err)
 		s.Equal("fixed", ns)
 		s.False(all)
 	})
 	s.Run("falls back to all namespaces when requested", func() {
-		ns, all := resolveNamespace(&NamespaceRef{Ref: Ref{Argument: "namespace"}, All: true}, nil)
+		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", All: true}, nil)
+		s.Require().NoError(err)
 		s.Equal("", ns)
 		s.True(all)
 	})
 	s.Run("nil means the default namespace", func() {
-		ns, all := resolveNamespace(nil, nil)
+		ns, all, err := tool.resolveNamespace(nil, nil)
+		s.Require().NoError(err)
 		s.Equal("", ns)
 		s.False(all)
+	})
+}
+
+func (s *DynamicSuite) TestResolveRef() {
+	spec := ToolSpec{Kubernetes: &KubernetesAction{
+		Verb: "get", APIVersion: "v1", Kind: "Pod",
+		Subresource: &Ref{Expression: "{'os': 'guestosinfo', 'users': 'userlist'}[args.info_type]"},
+		Name:        &Ref{Value: "prefix-{name}"},
+	}}
+	tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "t"}, Spec: ToolSpec{Description: "d", Kubernetes: spec.Kubernetes}})
+	s.Require().NoError(err)
+	s.Run("expressions over the arguments", func() {
+		value, err := tool.resolveRef(spec.Kubernetes.Subresource, map[string]any{"info_type": "users"})
+		s.Require().NoError(err)
+		s.Equal("userlist", value)
+	})
+	s.Run("expression errors are reported", func() {
+		_, err := tool.resolveRef(spec.Kubernetes.Subresource, map[string]any{"info_type": "all"})
+		s.ErrorContains(err, "no such key")
+	})
+	s.Run("fixed values expand placeholders", func() {
+		value, err := tool.resolveRef(spec.Kubernetes.Name, map[string]any{"name": "x"})
+		s.Require().NoError(err)
+		s.Equal("prefix-x", value)
+	})
+	s.Run("a plain YAML string is a fixed value", func() {
+		var ref Ref
+		s.Require().NoError(json.Unmarshal([]byte(`"proxy/stats/summary"`), &ref))
+		s.Equal(Ref{Value: "proxy/stats/summary"}, ref)
+		out, err := json.Marshal(ref)
+		s.Require().NoError(err)
+		s.Equal(`"proxy/stats/summary"`, string(out))
+	})
+}
+
+func (s *DynamicSuite) TestCELExtensions() {
+	s.Run("merge overrides left with right", func() {
+		expr, err := compileExpression("merge(args, {'mcp_mode': 'true', 'b': 2})")
+		s.Require().NoError(err)
+		out, err := expr.eval(map[string]any{"a": "1", "b": float64(1)}, nil)
+		s.Require().NoError(err)
+		raw, _ := json.Marshal(out)
+		s.JSONEq(`{"a":"1","b":2,"mcp_mode":"true"}`, string(raw))
+	})
+	s.Run("transformMapEntry renames and drops keys", func() {
+		expr, err := compileExpression("args.transformMapEntry(k, v, k == 'meshCluster' ? {'clusterName': v} : (k == 'drop' ? {} : {k: v}))")
+		s.Require().NoError(err)
+		out, err := expr.eval(map[string]any{"meshCluster": "east", "drop": "x", "keep": "y"}, nil)
+		s.Require().NoError(err)
+		raw, _ := json.Marshal(out)
+		s.JSONEq(`{"clusterName":"east","keep":"y"}`, string(raw))
+	})
+	s.Run("now is the current time", func() {
+		expr, err := compileExpression("{'start': int(now) - 300, 'end': int(now)}")
+		s.Require().NoError(err)
+		out, err := expr.evalStringMap(nil)
+		s.Require().NoError(err)
+		s.Regexp(`^\d{10}$`, out["end"])
+		s.Regexp(`^\d{10}$`, out["start"])
+	})
+	s.Run("evalStringMap drops empty values and formats whole numbers", func() {
+		expr, err := compileExpression("{'a': 1.0, 'b': 'x', 'c': '', 'd': null, 'e': true, 'f': 1.5}")
+		s.Require().NoError(err)
+		out, err := expr.evalStringMap(nil)
+		s.Require().NoError(err)
+		s.Equal(map[string]string{"a": "1", "b": "x", "e": "true", "f": "1.5"}, out)
 	})
 }
 

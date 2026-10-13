@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -33,35 +34,51 @@ func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[stri
 	if err != nil {
 		return nil, fmt.Errorf("invalid apiVersion %q: %w", a.APIVersion, err)
 	}
-	mapping, err := params.RESTMapper().RESTMapping(schema.GroupKind{Group: gv.Group, Kind: a.Kind}, gv.Version)
+	resource, namespaced, err := a.resolveResource(params, gv)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve %s/%s: %w", a.APIVersion, a.Kind, err)
+		return nil, err
 	}
 	client, err := newRESTClient(params.RESTConfig(), gv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create REST client: %w", err)
 	}
 
-	req := client.Verb(verbToMethod[a.Verb]).Resource(mapping.Resource.Resource)
-	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-		if namespace, all := resolveNamespace(a.Namespace, args); !all {
+	req := client.Verb(verbToMethod[a.Verb]).Resource(resource)
+	if namespaced {
+		namespace, all, err := t.resolveNamespace(a.Namespace, args)
+		if err != nil {
+			return nil, err
+		}
+		if !all {
 			req = req.Namespace(params.NamespaceOrDefault(namespace))
 		}
 	}
-	name := resolveRef(a.Name, args)
+	name, err := t.resolveRef(a.Name, args)
+	if err != nil {
+		return nil, err
+	}
 	if name == "" && a.Verb != "list" && a.Verb != "create" {
 		return nil, fmt.Errorf("verb %q requires a resource name", a.Verb)
 	}
 	if name != "" {
 		req = req.Name(name)
 	}
-	if a.Subresource != "" {
-		req = req.SubResource(a.Subresource)
-	}
-	for key, ref := range a.Query {
-		if value := resolveRef(&ref, args); value != "" {
-			req = req.Param(key, value)
+	if a.Subresource != nil {
+		subresource, err := t.resolveRef(a.Subresource, args)
+		if err != nil {
+			return nil, err
 		}
+		if subresource == "" {
+			return nil, fmt.Errorf("subresource resolved to an empty value")
+		}
+		req = req.SubResource(strings.Split(strings.Trim(subresource, "/"), "/")...)
+	}
+	query, err := t.resolveQuery(a.Query, t.queryExpr, args)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range query {
+		req = req.Param(key, value)
 	}
 	if a.Body != nil || a.Verb == "create" || a.Verb == "update" || a.Verb == "patch" {
 		body, err := t.resolveBody(a.Body, args)
@@ -92,6 +109,42 @@ func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[stri
 // caller's rest.Config. dynamic.ConfigFor supplies the same JSON negotiation
 // the dynamic client uses, so API errors keep the server's own message
 // (e.g. `configmaps "x" not found`) instead of a generic one.
+// resolveResource returns the plural resource and whether it is namespaced,
+// either from the explicit declaration or through the RESTMapper.
+func (a *KubernetesAction) resolveResource(params api.ToolHandlerParams, gv schema.GroupVersion) (string, bool, error) {
+	if a.Resource != "" {
+		return a.Resource, a.Namespaced == nil || *a.Namespaced, nil
+	}
+	mapping, err := params.RESTMapper().RESTMapping(schema.GroupKind{Group: gv.Group, Kind: a.Kind}, gv.Version)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to resolve %s/%s: %w", a.APIVersion, a.Kind, err)
+	}
+	return mapping.Resource.Resource, mapping.Scope.Name() == meta.RESTScopeNameNamespace, nil
+}
+
+// resolveQuery merges the query produced by the expression (if any) with the
+// declared references; references win.
+func (t *compiledTool) resolveQuery(refs map[string]Ref, expr *expression, args map[string]any) (map[string]string, error) {
+	query := map[string]string{}
+	if expr != nil {
+		values, err := expr.evalStringMap(args)
+		if err != nil {
+			return nil, err
+		}
+		query = values
+	}
+	for key, ref := range refs {
+		value, err := t.resolveRef(&ref, args)
+		if err != nil {
+			return nil, err
+		}
+		if value != "" {
+			query[key] = value
+		}
+	}
+	return query, nil
+}
+
 func newRESTClient(restConfig *rest.Config, gv schema.GroupVersion) (rest.Interface, error) {
 	cfg := dynamic.ConfigFor(restConfig)
 	cfg.GroupVersion = &gv
@@ -102,28 +155,46 @@ func newRESTClient(restConfig *rest.Config, gv schema.GroupVersion) (rest.Interf
 	return rest.RESTClientFor(cfg)
 }
 
-func resolveRef(ref *Ref, args map[string]any) string {
+// resolveRef resolves a reference: argument, then expression, then the fixed
+// value with `{argument}` placeholders expanded.
+func (t *compiledTool) resolveRef(ref *Ref, args map[string]any) (string, error) {
 	if ref == nil {
-		return ""
+		return "", nil
 	}
 	if ref.Argument != "" {
 		if value := argString(args, ref.Argument); value != "" {
-			return value
+			return value, nil
 		}
 	}
-	return ref.Value
+	if ref.Expression != "" {
+		expr, ok := t.refExprs[ref.Expression]
+		if !ok {
+			return "", fmt.Errorf("expression %q was not compiled", ref.Expression)
+		}
+		value, err := expr.eval(args, nil)
+		if err != nil {
+			return "", err
+		}
+		if s := scalarString(value); s != "" {
+			return s, nil
+		}
+	}
+	if ref.Value != "" {
+		return expandPath(ref.Value, args)
+	}
+	return "", nil
 }
 
 // resolveNamespace returns the namespace to use and whether the request spans
 // all namespaces.
-func resolveNamespace(ref *NamespaceRef, args map[string]any) (namespace string, all bool) {
+func (t *compiledTool) resolveNamespace(ref *NamespaceRef, args map[string]any) (namespace string, all bool, err error) {
 	if ref == nil {
-		return "", false
+		return "", false, nil
 	}
-	if namespace = resolveRef(&ref.Ref, args); namespace != "" {
-		return namespace, false
+	if namespace, err = t.resolveRef(ref.ref(), args); err != nil || namespace != "" {
+		return namespace, false, err
 	}
-	return "", ref.All
+	return "", ref.All, nil
 }
 
 func argString(args map[string]any, key string) string {

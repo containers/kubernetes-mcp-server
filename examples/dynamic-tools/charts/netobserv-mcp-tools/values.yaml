@@ -1,0 +1,6 @@
+# Base URL of the NetObserv console plugin backend. The MCP server calls it
+# with the caller's bearer token ([toolset_configs.netobserv] url).
+url: https://netobserv-plugin.netobserv.svc:9001
+# PEM bundle used to verify the plugin certificate (empty: system roots).
+certificateAuthority: ""
+insecureSkipTLSVerify: false

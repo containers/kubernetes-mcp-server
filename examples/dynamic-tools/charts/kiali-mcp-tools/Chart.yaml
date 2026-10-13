@@ -1,9 +1,8 @@
 apiVersion: v2
 name: kiali-mcp-tools
 description: >-
-  Kiali tools for the kubernetes-mcp-server, delivered as Tool custom resources
-  instead of code compiled into the server. Versioned and released independently
-  of the server.
+  The kubernetes-mcp-server Kiali toolset delivered as Tool custom resources,
+  versioned and released independently of the server.
 type: application
 version: 0.1.0
 appVersion: "2.0"

@@ -21,19 +21,42 @@ type compiledTool struct {
 	spec       ToolSpec
 	outputExpr *expression
 	bodyExpr   *expression
+	queryExpr  *expression
+	// refExprs holds the compiled Ref expressions keyed by their source.
+	refExprs map[string]*expression
 }
 
 func newCompiledTool(tool Tool) (*compiledTool, error) {
 	if err := tool.Validate(); err != nil {
 		return nil, err
 	}
-	c := &compiledTool{name: tool.ToolName(), spec: tool.Spec}
+	c := &compiledTool{name: tool.ToolName(), spec: tool.Spec, refExprs: map[string]*expression{}}
+	for _, ref := range c.spec.refs() {
+		if ref == nil || ref.Expression == "" {
+			continue
+		}
+		if _, done := c.refExprs[ref.Expression]; done {
+			continue
+		}
+		expr, err := compileExpression(ref.Expression)
+		if err != nil {
+			return nil, err
+		}
+		c.refExprs[ref.Expression] = expr
+	}
 	if c.spec.Output != "" {
 		expr, err := compileExpression(c.spec.Output)
 		if err != nil {
 			return nil, fmt.Errorf("spec.output: %w", err)
 		}
 		c.outputExpr = expr
+	}
+	if source := c.queryExpression(); source != "" {
+		expr, err := compileExpression(source)
+		if err != nil {
+			return nil, fmt.Errorf("queryExpression: %w", err)
+		}
+		c.queryExpr = expr
 	}
 	if body := c.body(); body != nil && body.Expression != "" {
 		expr, err := compileExpression(body.Expression)
@@ -43,6 +66,16 @@ func newCompiledTool(tool Tool) (*compiledTool, error) {
 		c.bodyExpr = expr
 	}
 	return c, nil
+}
+
+func (c *compiledTool) queryExpression() string {
+	switch {
+	case c.spec.Kubernetes != nil:
+		return c.spec.Kubernetes.QueryExpression
+	case c.spec.HTTP != nil:
+		return c.spec.HTTP.QueryExpression
+	}
+	return ""
 }
 
 func (c *compiledTool) body() *Body {
@@ -116,6 +149,10 @@ func (c *compiledTool) handle(params api.ToolHandlerParams) (*api.ToolCallResult
 			return api.NewToolCallResult("", fmt.Errorf("%s failed: %w", c.name, err)), nil
 		}
 	}
+	// Plain text (logs, CSV exports, messages) is returned verbatim.
+	if text, ok := result.(string); ok {
+		return api.NewToolCallResult(text, nil), nil
+	}
 	text, err := output.MarshalYaml(result)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("%s failed to serialize result: %w", c.name, err)), nil
@@ -146,9 +183,12 @@ func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscover
 		}}
 	}
 	a := c.spec.Kubernetes
-	plural, err := resolvePlural(ctx, discovery, a.APIVersion, a.Kind)
-	if err != nil {
-		return api.RBACUnbounded(fmt.Sprintf("unable to resolve the resource for %s/%s: %v", a.APIVersion, a.Kind, err))
+	plural := a.Resource
+	if plural == "" {
+		var err error
+		if plural, err = resolvePlural(ctx, discovery, a.APIVersion, a.Kind); err != nil {
+			return api.RBACUnbounded(fmt.Sprintf("unable to resolve the resource for %s/%s: %v", a.APIVersion, a.Kind, err))
+		}
 	}
 	group := ""
 	if i := strings.Index(a.APIVersion, "/"); i >= 0 {
@@ -156,12 +196,17 @@ func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscover
 	}
 	requirement := api.RBACRequirement{
 		Verbs:  []string{a.Verb},
-		Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: group, Resource: plural, Subresource: a.Subresource}},
+		Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: group, Resource: plural, Subresource: rbacSubresource(a.Subresource)}},
+	}
+	if sub := a.Subresource; sub != nil && (sub.Argument != "" || sub.Expression != "" || strings.Contains(sub.Value, "{")) {
+		return api.RBACUnbounded("the subresource is derived from the tool arguments")
 	}
 	if ns := a.Namespace; ns != nil {
 		switch {
 		case ns.Argument != "":
 			requirement.Namespace = &api.RBACNamespace{Argument: ns.Argument}
+		case ns.Expression != "":
+			return api.RBACUnbounded("the namespace is derived from a CEL expression")
 		case ns.Value != "":
 			requirement.Namespace = &api.RBACNamespace{Name: ns.Value}
 		case ns.All:
@@ -172,6 +217,8 @@ func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscover
 		switch {
 		case name.Argument != "":
 			requirement.ResourceName = &api.RBACResourceName{Argument: name.Argument}
+		case name.Expression != "":
+			return api.RBACUnbounded("the resource name is derived from a CEL expression")
 		case name.Value != "":
 			requirement.ResourceName = &api.RBACResourceName{Name: name.Value}
 		}
@@ -196,4 +243,26 @@ func resolvePlural(ctx context.Context, discovery api.AggregateDiscovery, apiVer
 		}
 	}
 	return "", fmt.Errorf("kind %s not found in %s", kind, apiVersion)
+}
+
+// rbacSubresource reduces a fixed subresource path to what RBAC sees: its
+// first segment (`proxy/stats/summary` needs `nodes/proxy`).
+func rbacSubresource(subresource *Ref) string {
+	if subresource == nil {
+		return ""
+	}
+	first, _, _ := strings.Cut(strings.Trim(subresource.Value, "/"), "/")
+	return first
+}
+
+// Check validates a Tool definition the way the toolset does at registration
+// time: static validation plus compilation of every CEL expression. It is
+// meant for generators and tests that produce Tool manifests.
+func Check(tool Tool) error {
+	compiled, err := newCompiledTool(tool)
+	if err != nil {
+		return err
+	}
+	_, err = compiled.serverTool(context.Background(), nil)
+	return err
 }

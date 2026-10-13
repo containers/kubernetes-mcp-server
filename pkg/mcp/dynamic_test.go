@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,8 +44,10 @@ func (s *DynamicToolsSuite) TearDownTest() {
 	ctx := s.T().Context()
 	_ = dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.GVR).
 		DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
-	_ = kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().ConfigMaps("default").
-		DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: dynamicTestLabel})
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	_ = kc.CoreV1().ConfigMaps("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: dynamicTestLabel})
+	_ = kc.AppsV1().Deployments("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: dynamicTestLabel})
+	_ = kc.CoreV1().Events("default").Delete(ctx, "dyn-core-event", metav1.DeleteOptions{})
 }
 
 func (s *DynamicToolsSuite) createTool(manifest string) {
@@ -228,7 +233,7 @@ spec:
 			"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: dyn-cm-created\n  labels:\n    test: dynamic\ndata:\n  a: b\n"})
 		s.Require().NoError(err)
 		s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
-		s.Equal("dyn-cm-created\n", s.text(result))
+		s.Equal("dyn-cm-created", s.text(result), "string results are returned verbatim")
 		cm, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().ConfigMaps("default").Get(s.T().Context(), "dyn-cm-created", metav1.GetOptions{})
 		s.Require().NoError(err)
 		s.Equal("b", cm.Data["a"])
@@ -410,4 +415,218 @@ spec:
 
 func TestDynamicTools(t *testing.T) {
 	suite.Run(t, new(DynamicToolsSuite))
+}
+
+func (s *DynamicToolsSuite) TestSubresourceAndExpressions() {
+	s.createDeployment("dyn-deploy", 1)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: deployment-scale
+spec:
+  description: Scale a Deployment through the scale subresource
+  destructive: true
+  inputSchema:
+    type: object
+    properties:
+      namespace: {type: string}
+      name: {type: string}
+      replicas: {type: integer}
+    required: [name, replicas]
+  kubernetes:
+    verb: patch
+    apiVersion: apps/v1
+    kind: Deployment
+    subresource: scale
+    namespace: {argument: namespace}
+    name: {argument: name}
+    body: {expression: "{'spec': {'replicas': int(args.replicas)}}"}
+  output: "{'name': response.metadata.name, 'replicas': response.spec.replicas}"
+`)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: deployment-subresource
+spec:
+  description: Read a Deployment subresource chosen by argument
+  readOnly: true
+  kubernetes:
+    verb: get
+    apiVersion: apps/v1
+    resource: deployments
+    namespace: {value: default}
+    name: {argument: name}
+    subresource: {expression: "{'scale': 'scale', 'status': 'status'}[args.what]"}
+  output: response.kind
+`)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: namespaces-by-expression
+spec:
+  description: List namespaces with a query built by CEL
+  readOnly: true
+  kubernetes:
+    verb: list
+    apiVersion: v1
+    resource: namespaces
+    namespaced: false
+    queryExpression: "{'fieldSelector': 'metadata.name=' + args.name, 'limit': 1}"
+  output: response.items.map(n, n.metadata.name)
+`)
+	s.InitMcpClient()
+	s.Run("patch on a subresource with a CEL body", func() {
+		result, err := s.CallTool("deployment_scale", map[string]any{"name": "dyn-deploy", "replicas": 3})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
+		s.Contains(s.text(result), "replicas: 3\n")
+	})
+	s.Run("an argument-derived subresource is unbounded in the RBAC metadata", func() {
+		meta, _ := json.Marshal(s.findTool("deployment_subresource").Meta)
+		s.Contains(string(meta), `"unbounded"`)
+		result, err := s.CallTool("deployment_subresource", map[string]any{"name": "dyn-deploy", "what": "scale"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
+		s.Equal("Scale", s.text(result))
+	})
+	s.Run("a fixed multi-segment subresource advertises its first segment", func() {
+		s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: node-stats
+spec:
+  description: Kubelet stats summary
+  readOnly: true
+  kubernetes: {verb: get, apiVersion: v1, kind: Node, name: {argument: name}, subresource: proxy/stats/summary}
+`)
+		s.Eventually(func() bool { return s.findTool("node_stats") != nil }, 10*time.Second, 100*time.Millisecond)
+		meta, _ := json.Marshal(s.findTool("node_stats").Meta)
+		s.Contains(string(meta), `"subresource":"proxy"`)
+	})
+	s.Run("explicit resource and a CEL query expression", func() {
+		result, err := s.CallTool("namespaces_by_expression", map[string]any{"name": "default"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
+		s.Equal("- default\n", s.text(result))
+	})
+}
+
+func (s *DynamicToolsSuite) TestHTTPQueryExpression() {
+	var mu sync.Mutex
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests = append(requests, r.URL.RawQuery+" accept="+r.Header.Get("Accept"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/csv")
+		_, _ = w.Write([]byte("a,b\n1,2\n"))
+	}))
+	defer server.Close()
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: flows-export
+spec:
+  description: Export flows as CSV with a computed time window
+  readOnly: true
+  http:
+    url: ` + server.URL + `
+    path: /api/loki/export
+    headers: {Accept: "text/csv,*/*"}
+    queryExpression: "merge(args.transformMapEntry(k, v, k == 'timeRange' ? {} : {k: v}), {'startTime': int(now) - (has(args.timeRange) ? int(args.timeRange) : 300), 'endTime': int(now), 'format': has(args.format) ? args.format : 'csv'})"
+`)
+	s.InitMcpClient()
+	result, err := s.CallTool("flows_export", map[string]any{"timeRange": 60, "filters": "x"})
+	s.Require().NoError(err)
+	s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
+	s.Equal("a,b\n1,2\n", s.text(result), "non-JSON responses are returned verbatim")
+	mu.Lock()
+	defer mu.Unlock()
+	s.Require().Len(requests, 1)
+	s.Contains(requests[0], "filters=x")
+	s.Contains(requests[0], "format=csv")
+	s.NotContains(requests[0], "timeRange")
+	s.Regexp(`startTime=\d{10}`, requests[0])
+	s.Regexp(`endTime=\d{10}`, requests[0])
+	s.Contains(requests[0], "accept=text/csv,*/*")
+}
+
+// TestConvertedCoreTools loads the Tool manifests the exporter generated from
+// the core toolset and exercises them against envtest with only the dynamic
+// toolset enabled.
+func (s *DynamicToolsSuite) TestConvertedCoreTools() {
+	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
+	raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "dynamic-tools", "converted", "core.yaml"))
+	s.Require().NoError(err)
+	for _, doc := range strings.Split(string(raw), "\n---\n") {
+		if strings.TrimSpace(strings.TrimPrefix(doc, "---")) == "" || !strings.Contains(doc, "kind: Tool") {
+			continue
+		}
+		s.createTool(doc)
+	}
+	s.createConfigMap("dyn-cm-core", nil)
+	_, err = kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Events("default").Create(s.T().Context(), &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "dyn-core-event"},
+		InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: "dyn-cm-core", Namespace: "default"},
+		Type:           "Warning", Reason: "DynamicTest", Message: "  hello  ",
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	s.InitMcpClient()
+	s.Run("only the converted tools are exposed", func() {
+		tools, err := s.ListTools()
+		s.Require().NoError(err)
+		names := make([]string, 0, len(tools.Tools))
+		for _, tool := range tools.Tools {
+			names = append(names, tool.Name)
+		}
+		s.Contains(names, "events_list")
+		s.Contains(names, "pods_list")
+		s.NotContains(names, "resources_list")
+		s.NotContains(names, "pods_exec")
+	})
+	s.Run("namespaces_list", func() {
+		result, err := s.CallTool("namespaces_list", map[string]any{})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Contains(s.text(result), "name: default\n")
+		s.Contains(s.text(result), "status: Active\n")
+	})
+	s.Run("events_list projects events like the built-in tool", func() {
+		result, err := s.CallTool("events_list", map[string]any{"namespace": "default", "fieldSelector": "reason=DynamicTest"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Contains(s.text(result), "Reason: DynamicTest\n")
+		s.Contains(s.text(result), "Message: hello\n")
+		s.Contains(s.text(result), "Kind: ConfigMap\n")
+		s.Contains(s.text(result), "Type: Warning\n")
+	})
+	s.Run("pods_list and pods_get", func() {
+		result, err := s.CallTool("pods_list", map[string]any{})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		result, err = s.CallTool("pods_get", map[string]any{"namespace": "default", "name": "nope"})
+		s.Require().NoError(err)
+		s.True(result.IsError)
+		s.Contains(s.text(result), `pods "nope" not found`)
+	})
+}
+
+func (s *DynamicToolsSuite) createDeployment(name string, replicas int32) {
+	_, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).AppsV1().Deployments("default").Create(s.T().Context(), &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{"test": "dynamic"}},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": name}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": name}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c", Image: "busybox"}}},
+			},
+		},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create Deployment")
 }

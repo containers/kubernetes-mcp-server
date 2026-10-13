@@ -1,0 +1,9 @@
+apiVersion: v2
+name: tekton-mcp-tools
+description: >-
+  The single-request half of the kubernetes-mcp-server Tekton toolset
+  delivered as Tool custom resources.
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords: [tekton, pipelines, mcp, kubernetes-mcp-server]

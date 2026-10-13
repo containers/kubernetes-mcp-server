@@ -1,56 +1,6 @@
-kiali:
-  # Base URL of the Kiali API. The MCP server calls it with the caller's bearer
-  # token, exactly as the in-tree kiali toolset does.
-  url: https://kiali.istio-system.svc:20001/kiali
-  insecureSkipTLSVerify: false
-
-# Prefix of every generated tool name (kiali_get_mesh_status, ...).
-toolPrefix: kiali
-
-# Each entry becomes one Tool resource that POSTs its arguments to
-# {kiali.url}/api/mcp/{endpoint}. Kiali's MCP endpoints take the tool arguments
-# as a JSON body plus mcp_mode=true.
-tools:
-  - name: get_mesh_status
-    title: Get Mesh Status
-    endpoint: get_mesh_status
-    readOnly: true
-    description: >-
-      Retrieves the high-level health, topology, and environment details of the Istio
-      service mesh. Returns multi-cluster control plane status (istiod), data plane
-      namespace health, observability stack health, and component connectivity. Use
-      this tool as the first step to diagnose mesh-wide issues.
-    body: "{'mcp_mode': 'true'}"
-  - name: list_clusters
-    title: List Clusters
-    endpoint: list_clusters
-    readOnly: true
-    description: Lists the clusters that are part of the service mesh as known by Kiali.
-    body: "{'mcp_mode': 'true'}"
-  - name: get_mesh_traffic_graph
-    title: Get Mesh Traffic Graph
-    endpoint: get_mesh_traffic_graph
-    readOnly: true
-    description: >-
-      Returns the traffic graph (nodes and edges with request rates and health) for the
-      given namespaces. Use it to understand which workloads talk to each other and
-      where errors originate.
-    inputSchema:
-      type: object
-      required: [namespaces]
-      properties:
-        namespaces:
-          type: string
-          description: Comma-separated list of namespaces to map
-        graphType:
-          type: string
-          enum: [app, versionedApp, service, workload]
-          default: versionedApp
-          description: Granularity of the graph. Default versionedApp.
-        meshCluster:
-          type: string
-          description: Optional mesh cluster name in multi-cluster deployments.
-    body: >-
-      {'mcp_mode': 'true', 'namespaces': args.namespaces,
-       'graphType': has(args.graphType) ? args.graphType : 'versionedApp',
-       'meshCluster': has(args.meshCluster) ? args.meshCluster : ''}
+# Base URL of the Kiali API. The MCP server calls it with the caller's bearer
+# token, exactly as the in-tree kiali toolset does ([toolset_configs.kiali] url).
+url: https://kiali.istio-system.svc:20001/kiali
+# PEM bundle used to verify the Kiali server certificate (empty: system roots).
+certificateAuthority: ""
+insecureSkipTLSVerify: false

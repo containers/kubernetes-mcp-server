@@ -3,6 +3,7 @@ package dynamic
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,10 +44,18 @@ func (t *compiledTool) runHTTP(params api.ToolHandlerParams, args map[string]any
 		base = strings.TrimRight(host, "/") + "/api/v1/namespaces/" + url.PathEscape(a.Service.Namespace) +
 			"/services/" + url.PathEscape(proxyServiceName(a.Service)) + "/proxy"
 	} else {
-		client = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+		tlsConfig := &tls.Config{
 			MinVersion:         tls.VersionTLS12,
 			InsecureSkipVerify: a.InsecureSkipTLSVerify, //nolint:gosec // opt-in per Tool, mirrors the Kiali/NetObserv toolset configs
-		}}}
+		}
+		if a.CertificateAuthority != "" {
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM([]byte(a.CertificateAuthority)) {
+				return nil, fmt.Errorf("certificateAuthority does not contain a valid PEM certificate")
+			}
+			tlsConfig.RootCAs = pool
+		}
+		client = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 		base = strings.TrimRight(a.URL, "/")
 	}
 
@@ -59,10 +68,12 @@ func (t *compiledTool) runHTTP(params api.ToolHandlerParams, args map[string]any
 		return nil, fmt.Errorf("invalid request URL: %w", err)
 	}
 	query := u.Query()
-	for key, ref := range a.Query {
-		if value := resolveRef(&ref, args); value != "" {
-			query.Set(key, value)
-		}
+	values, err := t.resolveQuery(a.Query, t.queryExpr, args)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range values {
+		query.Set(key, value)
 	}
 	u.RawQuery = query.Encode()
 
@@ -121,8 +132,8 @@ func proxyServiceName(service *ServiceRef) string {
 	return name
 }
 
-// expandPath replaces {argument} placeholders with the URL-escaped argument
-// value. Every placeholder must be provided.
+// expandPath replaces {argument} placeholders with the argument value,
+// URL-escaped as a single path segment. Every placeholder must be provided.
 func expandPath(template string, args map[string]any) (string, error) {
 	var missing []string
 	expanded := pathPlaceholder.ReplaceAllStringFunc(template, func(match string) string {

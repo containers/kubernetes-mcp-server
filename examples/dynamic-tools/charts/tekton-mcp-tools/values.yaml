@@ -1,0 +1,2 @@
+# No values: the tools talk to the Kubernetes API with the caller's identity.
+{}

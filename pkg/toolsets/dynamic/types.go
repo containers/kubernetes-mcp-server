@@ -85,19 +85,49 @@ type ToolSpec struct {
 	Output string `json:"output,omitempty"`
 }
 
-// Ref resolves a string either from a tool argument or from a fixed value.
+// Ref resolves a string from a tool argument, a CEL expression over `args`,
+// or a fixed value, in that order of precedence (the first non-empty wins).
+// A fixed value may contain `{argument}` placeholders. In YAML a plain string
+// is shorthand for {value: string}.
 type Ref struct {
-	Argument string `json:"argument,omitempty"`
-	Value    string `json:"value,omitempty"`
+	Argument   string `json:"argument,omitempty"`
+	Expression string `json:"expression,omitempty"`
+	Value      string `json:"value,omitempty"`
+}
+
+// UnmarshalJSON accepts either a plain string (a fixed value) or an object.
+func (r *Ref) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		return json.Unmarshal(data, &r.Value)
+	}
+	type plain Ref
+	return json.Unmarshal(data, (*plain)(r))
+}
+
+// MarshalJSON writes a value-only Ref as a plain string.
+func (r Ref) MarshalJSON() ([]byte, error) {
+	if r.Argument == "" && r.Expression == "" {
+		return json.Marshal(r.Value)
+	}
+	type plain Ref
+	return json.Marshal(plain(r))
 }
 
 // NamespaceRef is a Ref that can additionally select all namespaces.
-// Resolution order: the argument (when provided and non-empty), the fixed
-// value, all namespaces (when All is set), otherwise the caller's default
-// namespace.
+// Resolution order: the argument, the expression, the fixed value, all
+// namespaces (when All is set), otherwise the caller's default namespace.
 type NamespaceRef struct {
-	Ref
-	All bool `json:"all,omitempty"`
+	Argument   string `json:"argument,omitempty"`
+	Expression string `json:"expression,omitempty"`
+	Value      string `json:"value,omitempty"`
+	All        bool   `json:"all,omitempty"`
+}
+
+func (n *NamespaceRef) ref() *Ref {
+	if n == nil {
+		return nil
+	}
+	return &Ref{Argument: n.Argument, Expression: n.Expression, Value: n.Value}
 }
 
 // Body describes where a request body comes from: a tool argument (a YAML or
@@ -113,14 +143,27 @@ type Body struct {
 type KubernetesAction struct {
 	// Verb is one of get, list, create, update, patch, delete. It maps to the
 	// HTTP method and is also what the RBAC metadata advertises.
-	Verb        string         `json:"verb"`
-	APIVersion  string         `json:"apiVersion"`
-	Kind        string         `json:"kind"`
-	Subresource string         `json:"subresource,omitempty"`
-	Namespace   *NamespaceRef  `json:"namespace,omitempty"`
-	Name        *Ref           `json:"name,omitempty"`
-	Query       map[string]Ref `json:"query,omitempty"`
-	Body        *Body          `json:"body,omitempty"`
+	Verb       string `json:"verb"`
+	APIVersion string `json:"apiVersion"`
+	// Kind is resolved to a resource through the target's RESTMapper.
+	// Alternatively set Resource (the plural) to skip discovery, which is
+	// needed for aggregated APIs that only serve subresources (for example
+	// subresources.kubevirt.io).
+	Kind     string `json:"kind,omitempty"`
+	Resource string `json:"resource,omitempty"`
+	// Namespaced only applies with Resource and defaults to true.
+	Namespaced *bool `json:"namespaced,omitempty"`
+	// Subresource may contain several segments (`proxy/stats/summary`),
+	// `{argument}` placeholders, or be a full Ref ({argument}/{expression}).
+	Subresource *Ref          `json:"subresource,omitempty"`
+	Namespace   *NamespaceRef `json:"namespace,omitempty"`
+	Name        *Ref          `json:"name,omitempty"`
+	// Query maps query parameters to references; QueryExpression is a CEL
+	// expression over `args` producing a map of additional parameters.
+	// References win over the expression.
+	Query           map[string]Ref `json:"query,omitempty"`
+	QueryExpression string         `json:"queryExpression,omitempty"`
+	Body            *Body          `json:"body,omitempty"`
 }
 
 // ServiceRef addresses an in-cluster Service reached through the API server's
@@ -140,11 +183,14 @@ type HTTPAction struct {
 	Service *ServiceRef `json:"service,omitempty"`
 	// Path is appended to the base URL. `{argument}` placeholders are replaced
 	// with the URL-escaped tool argument of that name.
-	Path                  string            `json:"path,omitempty"`
-	Query                 map[string]Ref    `json:"query,omitempty"`
-	Headers               map[string]string `json:"headers,omitempty"`
-	Body                  *Body             `json:"body,omitempty"`
-	InsecureSkipTLSVerify bool              `json:"insecureSkipTLSVerify,omitempty"`
+	Path            string            `json:"path,omitempty"`
+	Query           map[string]Ref    `json:"query,omitempty"`
+	QueryExpression string            `json:"queryExpression,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Body            *Body             `json:"body,omitempty"`
+	// CertificateAuthority is a PEM bundle used to verify the URL's server.
+	CertificateAuthority  string `json:"certificateAuthority,omitempty"`
+	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 // ToolName returns the MCP tool name for the resource.
@@ -182,8 +228,8 @@ func (a *KubernetesAction) validate() []error {
 	if _, ok := validVerbs[a.Verb]; !ok {
 		errs = append(errs, fmt.Errorf("spec.kubernetes.verb %q must be one of get, list, create, update, patch, delete", a.Verb))
 	}
-	if a.APIVersion == "" || a.Kind == "" {
-		errs = append(errs, errors.New("spec.kubernetes.apiVersion and spec.kubernetes.kind are required"))
+	if a.APIVersion == "" || (a.Kind == "") == (a.Resource == "") {
+		errs = append(errs, errors.New("spec.kubernetes.apiVersion and exactly one of spec.kubernetes.kind or spec.kubernetes.resource are required"))
 	}
 	if a.Body != nil {
 		errs = append(errs, a.Body.validate("spec.kubernetes.body")...)
@@ -223,4 +269,24 @@ func (b *Body) validate(path string) []error {
 		return []error{fmt.Errorf("%s requires exactly one of argument, value or expression", path)}
 	}
 	return nil
+}
+
+// refs returns every Ref of the action, so their expressions can be compiled
+// once at registration time.
+func (t *ToolSpec) refs() []*Ref {
+	var refs []*Ref
+	switch {
+	case t.Kubernetes != nil:
+		refs = append(refs, t.Kubernetes.Namespace.ref(), t.Kubernetes.Name, t.Kubernetes.Subresource)
+		for key := range t.Kubernetes.Query {
+			ref := t.Kubernetes.Query[key]
+			refs = append(refs, &ref)
+		}
+	case t.HTTP != nil:
+		for key := range t.HTTP.Query {
+			ref := t.HTTP.Query[key]
+			refs = append(refs, &ref)
+		}
+	}
+	return refs
 }

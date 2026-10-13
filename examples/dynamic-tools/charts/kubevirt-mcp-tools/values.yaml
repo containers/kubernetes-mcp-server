@@ -1,0 +1,2 @@
+# No values: the tools talk to the KubeVirt (sub)resource APIs with the caller's identity.
+{}

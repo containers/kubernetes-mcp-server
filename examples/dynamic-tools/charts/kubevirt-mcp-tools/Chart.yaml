@@ -1,0 +1,9 @@
+apiVersion: v2
+name: kubevirt-mcp-tools
+description: >-
+  The single-request half of the kubernetes-mcp-server KubeVirt toolset
+  delivered as Tool custom resources.
+type: application
+version: 0.1.0
+appVersion: "1.5"
+keywords: [kubevirt, virtualization, mcp, kubernetes-mcp-server]
