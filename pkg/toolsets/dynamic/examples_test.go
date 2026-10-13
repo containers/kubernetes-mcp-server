@@ -25,7 +25,7 @@ func (s *ExamplesSuite) SetupSuite() {
 
 func (s *ExamplesSuite) checkDocuments(name string, content []byte) int {
 	count := 0
-	for _, doc := range strings.Split(string(content), "\n---") {
+	for _, doc := range strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n---") {
 		var header map[string]any
 		if err := yaml.Unmarshal([]byte(doc), &header); err != nil || header == nil {
 			continue

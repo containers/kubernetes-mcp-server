@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,9 +18,22 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
-// PollInterval is how often the toolset checks the cluster for changed Tool
-// and Prompt resources. Exported so tests can shorten it.
-var PollInterval = 15 * time.Second
+// pollInterval is how often the toolset checks the cluster for changed Tool
+// and Prompt resources. Atomic so tests can shorten it while watchers from
+// earlier servers may still be running.
+var pollInterval atomic.Int64
+
+// DefaultPollInterval is the poll interval unless SetPollInterval was called.
+const DefaultPollInterval = 15 * time.Second
+
+func init() {
+	pollInterval.Store(int64(DefaultPollInterval))
+}
+
+// SetPollInterval changes how often Tool and Prompt resources are polled.
+func SetPollInterval(d time.Duration) {
+	pollInterval.Store(int64(d))
+}
 
 // Toolset exposes Tool and Prompt custom resources as MCP tools and prompts.
 type Toolset struct{}
@@ -100,7 +114,7 @@ func (t *Toolset) WatchToolset(ctx context.Context, toolsetContext api.ToolsetCo
 	logger := klogutil.FromContext(ctx)
 	last := fingerprint(ctx, toolsetContext.Inspector)
 	go func() {
-		ticker := time.NewTicker(PollInterval)
+		ticker := time.NewTicker(time.Duration(pollInterval.Load()))
 		defer ticker.Stop()
 		for {
 			select {

@@ -40,7 +40,7 @@ type DynamicToolsSuite struct {
 
 func (s *DynamicToolsSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	dynamic.PollInterval = 100 * time.Millisecond
+	dynamic.SetPollInterval(100 * time.Millisecond)
 	s.Cfg.Toolsets.SetForTest(append(s.Cfg.Toolsets.Get(), "dynamic"))
 }
 
@@ -571,16 +571,9 @@ spec:
 // toolset enabled.
 func (s *DynamicToolsSuite) TestConvertedCoreTools() {
 	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
-	raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "dynamic-tools", "converted", "core.yaml"))
-	s.Require().NoError(err)
-	for _, doc := range strings.Split(string(raw), "\n---\n") {
-		if strings.TrimSpace(strings.TrimPrefix(doc, "---")) == "" || !strings.Contains(doc, "kind: Tool") {
-			continue
-		}
-		s.createTool(doc)
-	}
+	s.loadToolManifests(filepath.Join("..", "..", "examples", "dynamic-tools", "converted", "core.yaml"))
 	s.createConfigMap("dyn-cm-core", nil)
-	_, err = kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Events("default").Create(s.T().Context(), &corev1.Event{
+	_, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Events("default").Create(s.T().Context(), &corev1.Event{
 		ObjectMeta:     metav1.ObjectMeta{Name: "dyn-core-event"},
 		InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: "dyn-cm-core", Namespace: "default"},
 		Type:           "Warning", Reason: "DynamicTest", Message: "  hello  ",
@@ -646,7 +639,8 @@ func (s *DynamicToolsSuite) createDeployment(name string, replicas int32) {
 func (s *DynamicToolsSuite) loadToolManifests(path string) {
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
-	for _, doc := range strings.Split(string(raw), "\n---") {
+	// Checkouts with CRLF line endings (Windows) must split the same way.
+	for _, doc := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n---") {
 		if strings.Contains(doc, "kind: Tool") {
 			s.createTool(doc)
 		}
@@ -1124,7 +1118,7 @@ func (s *DynamicToolsSuite) TestConvertedPrompts() {
 	for _, chart := range []string{"kubevirt-mcp-tools", "tekton-mcp-tools"} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "dynamic-tools", "charts", chart, "templates", "prompts.yaml"))
 		s.Require().NoError(err)
-		for _, doc := range strings.Split(string(raw), "\n---") {
+		for _, doc := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n---") {
 			if strings.Contains(doc, "kind: Prompt") {
 				s.createPrompt(doc)
 			}
