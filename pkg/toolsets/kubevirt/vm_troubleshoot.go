@@ -405,7 +405,8 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 		}
 		logs, err := core.PodsLog(ctx, namespace, podName, containerName, false, 50)
 		if err != nil {
-			return api.LimitString(ctx, fmt.Sprintf("### virt-launcher Pod Logs\n\n*Error fetching logs: %v*", err))
+			b.WriteString(fmt.Sprintf("#### Pod: %s\n\n*Error fetching logs: %v*\n\n", podName, err))
+			continue
 		}
 		b.WriteString(fmt.Sprintf("#### Pod: %s\n\n**Container: %s**\n\n```\n%s\n```\n\n", podName, containerName, logs))
 	}
@@ -413,28 +414,33 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 	return b.String()
 }
 
-// fetchEvents fetches events related to the VM and returns them formatted
+// fetchEvents fetches events related to the VM and returns them formatted.
+// A list error is recorded and the other list still runs, so events already
+// collected stay in the section.
 func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vmName string) string {
 	core := kubernetes.NewCore(client)
+	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
+
+	var relatedEvents []map[string]any
+	var problems []string
 
 	// Server-side filter: events whose involvedObject.name exactly matches the VM name
 	vmEvents, err := core.EventsList(ctx, namespace, api.ListOptions{
 		ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + vmName},
 	})
 	if err != nil {
-		return api.LimitString(ctx, fmt.Sprintf("### Events\n\n*Error listing events: %v*", err))
-	}
-
-	var relatedEvents []map[string]any
-	for _, event := range vmEvents {
-		involvedObj, ok := event["InvolvedObject"].(map[string]string)
-		if !ok {
-			continue
-		}
-		objKind := involvedObj["Kind"]
-		// Include events for VM, VMI
-		if objKind == "VirtualMachine" || objKind == "VirtualMachineInstance" {
-			relatedEvents = append(relatedEvents, event)
+		problems = append(problems, fmt.Sprintf("*Error listing events: %v*", err))
+	} else {
+		for _, event := range vmEvents {
+			involvedObj, ok := event["InvolvedObject"].(map[string]string)
+			if !ok {
+				continue
+			}
+			objKind := involvedObj["Kind"]
+			// Include events for VM, VMI
+			if objKind == "VirtualMachine" || objKind == "VirtualMachineInstance" {
+				relatedEvents = append(relatedEvents, event)
+			}
 		}
 	}
 
@@ -442,30 +448,49 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 	// as a field selector; list all events in the namespace and filter client-side.
 	allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
 	if err != nil {
-		return api.LimitString(ctx, fmt.Sprintf("### Events\n\n*Error listing events: %v*", err))
-	}
-	for _, event := range allEvents {
-		involvedObj, ok := event["InvolvedObject"].(map[string]string)
-		if !ok {
-			continue
+		problems = append(problems, fmt.Sprintf("*Error listing events: %v*", err))
+	} else {
+		for _, event := range allEvents {
+			involvedObj, ok := event["InvolvedObject"].(map[string]string)
+			if !ok {
+				continue
+			}
+			objName := involvedObj["Name"]
+			// Include events for pods with VM name prefix
+			if strings.HasPrefix(objName, vmName+"-") || strings.HasPrefix(objName, "virt-launcher-"+vmName) {
+				relatedEvents = append(relatedEvents, event)
+			}
 		}
-		objName := involvedObj["Name"]
-		// Include events for pods with VM name prefix
-		if strings.HasPrefix(objName, vmName+"-") || strings.HasPrefix(objName, "virt-launcher-"+vmName) {
-			relatedEvents = append(relatedEvents, event)
+	}
+
+	writeEventProblems := func() {
+		for _, problem := range problems {
+			if b.Truncated() {
+				return
+			}
+			b.WriteString("\n\n" + problem)
 		}
 	}
 
 	if len(relatedEvents) == 0 {
-		return api.LimitString(ctx, "### Events\n\n*No events found related to this VM*")
+		b.WriteString("### Events\n\n")
+		if len(problems) == 0 {
+			b.WriteString("*No events found related to this VM*")
+		} else {
+			b.WriteString(problems[0])
+			problems = problems[1:]
+			writeEventProblems()
+		}
+		return b.String()
 	}
 
 	yamlStr, err := output.MarshalYaml(relatedEvents)
 	if err != nil {
-		return api.LimitString(ctx, fmt.Sprintf("### Events\n\n*Error marshaling events: %v*", err))
+		b.WriteString(fmt.Sprintf("### Events\n\n*Error marshaling events: %v*", err))
+		writeEventProblems()
+		return b.String()
 	}
 
-	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
 	b.WriteString(fmt.Sprintf("### Events (related to %s)\n\n```yaml\n", vmName))
 	if !b.Truncated() {
 		b.WriteString(yamlStr)
@@ -473,5 +498,6 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 	if !b.Truncated() {
 		b.WriteString("```")
 	}
+	writeEventProblems()
 	return b.String()
 }

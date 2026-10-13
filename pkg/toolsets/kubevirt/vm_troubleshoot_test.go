@@ -2,18 +2,32 @@ package kubevirt
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	kubevirtdefaults "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes"
+	authv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
+	"k8s.io/client-go/rest"
+	clienttesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/clientcmd"
+	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
 
 // mockPromptCallRequest implements api.PromptCallRequest for testing
@@ -372,7 +386,152 @@ func (s *VMTroubleshootSuite) TestFetchVirtLauncherPodLogs() {
 
 		s.Contains(result, "*No virt-launcher pod found - no logs available*")
 	})
+
+	s.Run("keeps earlier logs when a later pod fails", func() {
+		var pods []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pods = append(pods, r.URL.Path)
+			if strings.Contains(r.URL.Path, "/pods/pod-b/") {
+				http.Error(w, "boom", http.StatusInternalServerError)
+				return
+			}
+			_, _ = io.WriteString(w, "log-from-"+r.URL.Path)
+		}))
+		s.T().Cleanup(srv.Close)
+		cs, err := kubernetes.NewForConfig(&rest.Config{Host: srv.URL})
+		s.Require().NoError(err)
+
+		result := fetchVirtLauncherPodLogs(context.Background(), promptKubeClient{Interface: cs}, "test-ns", []string{"pod-a", "pod-b", "pod-c"})
+
+		s.Contains(result, "log-from-")
+		s.Contains(result, "pod-a")
+		s.Contains(result, "*Error fetching logs:")
+		s.Contains(result, "boom")
+		s.Contains(result, "pod-c")
+		s.GreaterOrEqual(len(pods), 3)
+	})
 }
+
+func (s *VMTroubleshootSuite) TestFetchEvents() {
+	eventGVR := schema.GroupVersionResource{Version: "v1", Resource: "events"}
+	mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{{Version: "v1"}})
+	mapper.AddSpecific(
+		schema.GroupVersionKind{Version: "v1", Kind: "Event"},
+		eventGVR,
+		schema.GroupVersionResource{Version: "v1", Resource: "event"},
+		meta.RESTScopeNamespace,
+	)
+	newClient := func(reactor clienttesting.ReactionFunc) promptKubeClient {
+		dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+			eventGVR: "EventList",
+		})
+		dyn.PrependReactor("list", "events", reactor)
+		return promptKubeClient{dyn: dyn, mapper: promptResettingMapper{RESTMapper: mapper}}
+	}
+	vmEvent := func(name, message string) *unstructured.UnstructuredList {
+		return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{{Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Event",
+			"metadata":   map[string]any{"name": name, "namespace": "test-ns"},
+			"message":    message,
+			"reason":     "Failed",
+			"type":       "Warning",
+			"involvedObject": map[string]any{
+				"apiVersion": "kubevirt.io/v1",
+				"kind":       "VirtualMachine",
+				"name":       "test-vm",
+			},
+		}}}}
+	}
+
+	s.Run("keeps VM events when the namespace list fails", func() {
+		calls := 0
+		result := fetchEvents(context.Background(), newClient(func(clienttesting.Action) (bool, runtime.Object, error) {
+			calls++
+			if calls == 1 {
+				return true, vmEvent("vm-event", "disk missing"), nil
+			}
+			return true, nil, errors.New("namespace list failed")
+		}), "test-ns", "test-vm")
+
+		s.Contains(result, "disk missing")
+		s.Contains(result, "*Error listing events:")
+		s.Contains(result, "namespace list failed")
+		s.Equal(2, calls)
+	})
+
+	s.Run("keeps launcher events when the VM list fails", func() {
+		calls := 0
+		result := fetchEvents(context.Background(), newClient(func(clienttesting.Action) (bool, runtime.Object, error) {
+			calls++
+			if calls == 1 {
+				return true, nil, errors.New("selector failed")
+			}
+			list := vmEvent("pod-event", "launcher died")
+			list.Items[0].Object["involvedObject"] = map[string]any{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"name":       "virt-launcher-test-vm-abc",
+			}
+			return true, list, nil
+		}), "test-ns", "test-vm")
+
+		s.Contains(result, "launcher died")
+		s.Contains(result, "*Error listing events:")
+		s.Contains(result, "selector failed")
+		s.Equal(2, calls)
+	})
+}
+
+// promptKubeClient is a Kubernetes client for prompt retention tests.
+type promptKubeClient struct {
+	kubernetes.Interface
+	dyn    dynamic.Interface
+	mapper meta.ResettableRESTMapper
+}
+
+func (promptKubeClient) NamespaceOrDefault(ns string) string { return ns }
+func (promptKubeClient) ToRESTConfig() (*rest.Config, error) {
+	return nil, errPromptClientUnused
+}
+func (promptKubeClient) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	return nil, errPromptClientUnused
+}
+func (promptKubeClient) ToRESTMapper() (meta.RESTMapper, error) { return nil, errPromptClientUnused }
+func (promptKubeClient) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	return nil
+}
+func (promptKubeClient) RESTConfig() *rest.Config { return nil }
+func (c promptKubeClient) RESTMapper() meta.ResettableRESTMapper {
+	return c.mapper
+}
+func (promptKubeClient) DiscoveryClient() discovery.CachedDiscoveryInterface {
+	return promptEventDiscovery{}
+}
+func (c promptKubeClient) DynamicClient() dynamic.Interface { return c.dyn }
+func (promptKubeClient) AuthorizationV1() authv1client.AuthorizationV1Interface {
+	return nil
+}
+func (promptKubeClient) MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client {
+	return nil
+}
+
+type promptResettingMapper struct{ meta.RESTMapper }
+
+func (promptResettingMapper) Reset() {}
+
+type promptEventDiscovery struct{ discovery.DiscoveryInterface }
+
+func (promptEventDiscovery) ServerResourcesForGroupVersion(string) (*metav1.APIResourceList, error) {
+	return &metav1.APIResourceList{
+		GroupVersion: "v1",
+		APIResources: []metav1.APIResource{{Name: "events", Kind: "Event", Namespaced: true}},
+	}, nil
+}
+func (promptEventDiscovery) Fresh() bool { return true }
+func (promptEventDiscovery) Invalidate() {}
+
+var errPromptClientUnused = errors.New("unused")
 
 func TestVMTroubleshoot(t *testing.T) {
 	suite.Run(t, new(VMTroubleshootSuite))

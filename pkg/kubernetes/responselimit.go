@@ -36,6 +36,11 @@ func skipBackendResponseLimit(ctx context.Context) bool {
 	return skip
 }
 
+// maxZeroReads bounds retries when a body Read returns (0, nil). That result
+// means "nothing happened, call again," not EOF. Past this many empty reads
+// the body fails closed, so an over-cap response is not accepted as complete.
+const maxZeroReads = 8
+
 // BackendResponseTooLargeError is returned when a response body exceeds
 // max_backend_response_bytes. The body is closed.
 type BackendResponseTooLargeError struct {
@@ -99,27 +104,38 @@ func (b *limitedBody) Read(p []byte) (int, error) {
 	if b.read < b.limit || err != nil {
 		return n, err
 	}
-	var one [1]byte
-	extra, peekErr := b.rc.Read(one[:])
-	if extra > 0 {
+	extra, peekErr := b.readByte()
+	if extra > 0 || peekErr == nil {
 		return n, b.fail()
 	}
-	if peekErr != nil && peekErr != io.EOF {
+	if peekErr != io.EOF {
 		return n, peekErr
 	}
 	return n, nil
 }
 
 func (b *limitedBody) peek() (int, error) {
-	var one [1]byte
-	n, err := b.rc.Read(one[:])
-	if n > 0 {
+	n, err := b.readByte()
+	if n > 0 || err == nil {
 		return 0, b.fail()
 	}
-	if err == nil || err == io.EOF {
+	if err == io.EOF {
 		return 0, io.EOF
 	}
 	return 0, err
+}
+
+// readByte reads one byte, retrying a (0, nil) result. (0, nil) after
+// maxZeroReads means the reader made no progress.
+func (b *limitedBody) readByte() (int, error) {
+	var one [1]byte
+	for range maxZeroReads {
+		n, err := b.rc.Read(one[:])
+		if n > 0 || err != nil {
+			return n, err
+		}
+	}
+	return 0, nil
 }
 
 func (b *limitedBody) fail() error {

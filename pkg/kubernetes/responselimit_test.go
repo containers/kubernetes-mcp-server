@@ -71,6 +71,118 @@ func (s *BackendLimitSuite) TestExactCap() {
 	s.True(src.closed)
 }
 
+type readStep struct {
+	data []byte
+	err  error
+}
+
+type scriptedReader struct {
+	steps []readStep
+	i     int
+	reads int
+}
+
+func (s *scriptedReader) Read(p []byte) (int, error) {
+	s.reads++
+	if s.i >= len(s.steps) {
+		return 0, io.EOF
+	}
+	step := s.steps[s.i]
+	s.i++
+	return copy(p, step.data), step.err
+}
+
+func (s *BackendLimitSuite) TestZeroReadThenExtraByteIsTooLarge() {
+	src := &trackCloser{Reader: &scriptedReader{steps: []readStep{
+		{data: []byte("abcd")},
+		{},
+		{data: []byte("e")},
+	}}}
+	data, err := s.readAll(LimitResponseBody(src, 4))
+	var tooLarge *BackendResponseTooLargeError
+	s.Require().ErrorAs(err, &tooLarge)
+	s.Equal(int64(4), tooLarge.Limit)
+	s.Equal("abcd", string(data))
+	s.True(src.closed)
+}
+
+func (s *BackendLimitSuite) TestZeroReadThenEOFIsExactFit() {
+	src := &trackCloser{Reader: &scriptedReader{steps: []readStep{
+		{data: []byte("abcd")},
+		{},
+		{err: io.EOF},
+	}}}
+	data, err := s.readAll(LimitResponseBody(src, 4))
+	s.Require().NoError(err)
+	s.Equal("abcd", string(data))
+}
+
+func (s *BackendLimitSuite) TestPersistentZeroReadFailsClosed() {
+	src := &scriptedReader{}
+	src.steps = []readStep{{data: []byte("abcd")}}
+	// After the capped bytes, every read is (0, nil).
+	body := LimitResponseBody(&trackCloser{Reader: &zeroReader{scriptedReader: src}}, 4)
+	data, err := io.ReadAll(body)
+	var tooLarge *BackendResponseTooLargeError
+	s.Require().ErrorAs(err, &tooLarge)
+	s.Equal("abcd", string(data))
+	s.Equal(1+maxZeroReads, src.reads)
+}
+
+// zeroReader returns the scripted prefix, then (0, nil) forever.
+type zeroReader struct {
+	*scriptedReader
+	done bool
+}
+
+func (z *zeroReader) Read(p []byte) (int, error) {
+	if z.done {
+		z.reads++
+		return 0, nil
+	}
+	n, err := z.scriptedReader.Read(p)
+	if z.i >= len(z.steps) {
+		z.done = true
+	}
+	return n, err
+}
+
+func (s *BackendLimitSuite) TestPeekRetriesZeroReadThenFailsClosed() {
+	src := &trackCloser{Reader: &peekThenByte{}}
+	body := LimitResponseBody(src, 4)
+	buf := make([]byte, 8)
+	n, err := body.Read(buf)
+	s.Equal(4, n)
+	s.EqualError(err, "transient")
+	n, err = body.Read(buf)
+	var tooLarge *BackendResponseTooLargeError
+	s.Require().ErrorAs(err, &tooLarge)
+	s.Equal(0, n)
+	s.True(src.closed)
+}
+
+// peekThenByte fills the cap with a transient error so the inline peek is
+// skipped, then returns (0, nil) once and an extra byte.
+type peekThenByte struct {
+	reads int
+}
+
+func (p *peekThenByte) Read(buf []byte) (int, error) {
+	p.reads++
+	switch p.reads {
+	case 1:
+		return copy(buf, []byte("abcd")), errors.New("transient")
+	case 2:
+		return 0, nil
+	default:
+		if len(buf) == 0 {
+			return 0, nil
+		}
+		buf[0] = 'e'
+		return 1, nil
+	}
+}
+
 func (s *BackendLimitSuite) TestChunkedOverCap() {
 	src := &trackCloser{Reader: &chunkReader{data: []byte("abcdefghij"), size: 3}}
 	body := LimitResponseBody(src, 5)
