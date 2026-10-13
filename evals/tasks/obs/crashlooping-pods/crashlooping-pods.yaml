@@ -1,0 +1,25 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "crashlooping-pods"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: range-query
+  description: |
+    Tests if the agent can identify crashlooping pods using Prometheus metrics.
+    Valid approaches include querying kube_pod_container_status_restarts_total
+    (high restart counts) or kube_pod_container_status_waiting_reason with
+    reason=CrashLoopBackOff. The agent must name a metric and provide a PromQL query.
+spec:
+  verify:
+    - llmJudge:
+        contains: "the agent identifies crashlooping pods using a relevant Prometheus metric such as kube_pod_container_status_restarts_total or kube_pod_container_status_waiting_reason with CrashLoopBackOff, and includes a PromQL query"
+  prompt:
+    inline: |
+      Which pods were crashlooping in the last 5 minutes?
+      Use Prometheus metrics and include the metric name and PromQL query you used.

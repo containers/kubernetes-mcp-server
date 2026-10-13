@@ -1,0 +1,27 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: search-semconv
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: traces
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent can search for traces filtered by a Kubernetes
+    deployment name using the resource.k8s.deployment.name OpenTelemetry
+    semantic convention attribute.
+spec:
+  prompt:
+    inline: |
+      Show traces of the k6-tracing deployment. Use instance tempo1. Include the query you used.
+  verify:
+    - llmJudge:
+        contains: "resource.k8s.deployment.name"
+        reason: "Verify the agent used the resource.k8s.deployment.name attribute to filter traces by Kubernetes deployment"
+    - llmJudge:
+        contains: "k6-tracing"
+        reason: "Verify the agent filtered for the k6-tracing deployment"

@@ -1,0 +1,26 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: latency-baseline
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: traces
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent establishes a latency baseline by first searching
+    for recent traces (without a duration filter) to observe the typical
+    latency range, before searching for high latency traces with a
+    duration filter.
+spec:
+  prompt:
+    inline: |
+      Find slow traces of the shop-backend service. Use instance tempo1.
+  verify:
+    - llmJudge:
+        contains: "traces were first fetched without a duration filter to establish a baseline, then slow traces were identified using a duration threshold derived from that baseline"
+    - llmJudge:
+        contains: "article-to-cart"

@@ -1,0 +1,30 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "get-batch-processor-schema"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: otelcol
+    suite: obs
+    requires: obs
+    toolType: schema
+  description: |
+    Tests if the agent can retrieve the schema for the batch processor.
+spec:
+  verify:
+    - llmJudge:
+        contains: "metadata_cardinality_limit"
+    - llmJudge:
+        contains: "timeout"
+    - llmJudge:
+        contains: "metadata_keys"
+    - llmJudge:
+        contains: "send_batch_max_size"
+    - llmJudge:
+        contains: "send_batch_size"
+  prompt:
+    inline: |
+      What is the configuration schema for the OpenTelemetry Collector batch processor for version 0.144.0?
+      List all available configuration fields with their names and descriptions.
