@@ -38,7 +38,7 @@ var flowCollectorGVKPreference = []schema.GroupVersionKind{
 // A missing CR is a normal fallback to manual configuration; other errors are
 // reported so callers can fail open rather than hiding tools.
 func DetectConfig(ctx context.Context, inspector api.ClusterInspector) (EffectiveConfig, error) {
-	if inspector == nil {
+	if inspector == nil || inspector.Unstructured() == nil {
 		return EffectiveConfig{}, nil
 	}
 	for _, gvk := range flowCollectorGVKPreference {
