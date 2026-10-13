@@ -42,18 +42,17 @@ make run-netobserv-evals
 ```bash
 make minikube-create-cluster
 make setup-netobserv          # deploy mock + port-forward :9001
-make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
+make dynamic-tools-install DYNAMIC_TOOLS_CHARTS=netobserv-mcp-tools
+make run-server TOOLSETS=core,config,dynamic MCP_CONFIG_DIR=dev/config/mcp-configs
 make run-evals EVAL_LABEL_SELECTOR=suite=netobserv
 make stop-server stop-netobserv teardown-netobserv
 ```
 
-Ensure `dev/config/mcp-configs/netobserv.toml` points at the port-forward:
-
-```toml
-[toolset_configs.netobserv]
-url = "http://127.0.0.1:9001"
-insecure = true
-```
+The NetObserv tools are Tool resources installed from the `netobserv-mcp-tools`
+chart; `make dynamic-tools-install DYNAMIC_TOOLS_CHARTS=netobserv-mcp-tools`
+installs them pointing at the port-forward (`url=http://127.0.0.1:9001` by
+default, override with `DYNAMIC_TOOLS_VALUES_netobserv_mcp_tools`), and the
+server runs with `TOOLSETS=core,config,dynamic`.
 
 ### Pass rate target
 

@@ -119,16 +119,22 @@ diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
 .PHONY: run-server
 # Charts under examples/dynamic-tools/charts to install as Tool/Prompt resources
 # before starting the server with the "dynamic" toolset (space separated,
-# e.g. "kiali-mcp-tools netobserv-mcp-tools"). Per-chart values come from
-# DYNAMIC_TOOLS_VALUES_<chart> (e.g. DYNAMIC_TOOLS_VALUES_kiali-mcp-tools="url=https://...").
+# e.g. "kiali-mcp-tools netobserv-mcp-tools"). Per-chart --set values come from
+# DYNAMIC_TOOLS_VALUES_<chart with - replaced by _>, e.g.
+# DYNAMIC_TOOLS_VALUES_kiali_mcp_tools="url=http://localhost:20001/kiali/".
+# The defaults below match the local exposure done by setup-kiali / setup-netobserv.
 DYNAMIC_TOOLS_CHARTS ?=
+DYNAMIC_TOOLS_VALUES_kiali_mcp_tools ?= url=http://localhost:20001/kiali/
+DYNAMIC_TOOLS_VALUES_netobserv_mcp_tools ?= url=http://127.0.0.1:9001
+export DYNAMIC_TOOLS_VALUES_kiali_mcp_tools DYNAMIC_TOOLS_VALUES_netobserv_mcp_tools
 
 .PHONY: dynamic-tools-install
 dynamic-tools-install: kubectl helm ## Install the Tool/Prompt CRDs and the charts in DYNAMIC_TOOLS_CHARTS
 	$(KUBECTL) apply -f examples/dynamic-tools/crd.yaml
 	@for chart in $(DYNAMIC_TOOLS_CHARTS); do \
-		values="$$(eval echo \$$DYNAMIC_TOOLS_VALUES_$$chart)"; \
-		echo "Installing $$chart $${values:+(--set $$values)}"; \
+		key="DYNAMIC_TOOLS_VALUES_$$(printf '%s' "$$chart" | tr '-' '_')"; \
+		values="$$(eval printf '%s' \"\$$$$key\")"; \
+		echo "Installing $$chart$${values:+ --set $$values}"; \
 		$(HELM) upgrade --install "$$chart" "examples/dynamic-tools/charts/$$chart" $${values:+--set "$$values"}; \
 	done
 

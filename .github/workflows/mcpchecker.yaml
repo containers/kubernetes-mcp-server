@@ -328,6 +328,12 @@ jobs:
         if: contains(matrix.toolsets, 'argocd')
         run: make argocd-install
 
+      - name: Install Tool/Prompt resources for the suite
+        if: matrix.charts != ''
+        run: make dynamic-tools-install
+        env:
+          DYNAMIC_TOOLS_CHARTS: ${{ matrix.charts }}
+
       - name: Start MCP server
         run: make run-server
         env:
