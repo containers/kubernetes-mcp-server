@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	openapi_v2 "github.com/google/gnostic-models/openapiv2"
 	"golang.org/x/sync/singleflight"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/discovery"
@@ -83,7 +84,7 @@ func (c *openAPISchemaCache) get(ctx context.Context, disc discovery.DiscoveryIn
 		if schema := c.fresh(); schema != nil {
 			return schema, nil
 		}
-		parser := kubectlopenapi.NewOpenAPIParser(openAPIClient)
+		parser := kubectlopenapi.NewOpenAPIParser(schemaFetchClient(openAPIClient))
 		resources, parseErr := parser.Parse()
 		if parseErr != nil {
 			return nil, parseErr
@@ -101,6 +102,28 @@ func (c *openAPISchemaCache) get(ctx context.Context, disc discovery.DiscoveryIn
 	schema, _ := v.(kubectlvalidation.Schema)
 	return schema, nil
 }
+
+// schemaFetchOpenAPI is the client passed to the OpenAPI parser. The parser
+// calls OpenAPISchema, which uses a background context, so the wrapper sends
+// the skip mark on that call. The aggregated spec has to be read whole.
+// See docs/specs/memory-bounds.md#retention.
+type schemaFetchOpenAPI struct {
+	discovery.OpenAPISchemaInterfaceWithContext
+}
+
+func schemaFetchClient(client discovery.OpenAPISchemaInterface) discovery.OpenAPISchemaInterface {
+	withCtx, ok := client.(discovery.OpenAPISchemaInterfaceWithContext)
+	if !ok {
+		return client
+	}
+	return schemaFetchOpenAPI{OpenAPISchemaInterfaceWithContext: withCtx}
+}
+
+func (c schemaFetchOpenAPI) OpenAPISchema() (*openapi_v2.Document, error) {
+	return c.OpenAPISchemaWithContext(SkipBackendResponseLimit(context.Background()))
+}
+
+var _ discovery.OpenAPISchemaInterface = schemaFetchOpenAPI{}
 
 // parsedOpenAPI serves a model that has already been parsed, so holders of the
 // cached schema do not each keep a parser or a second copy of the document.

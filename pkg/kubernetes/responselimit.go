@@ -1,11 +1,11 @@
 package kubernetes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 )
 
@@ -16,6 +16,25 @@ var ErrBackendLimitUnavailable = errors.New("max_backend_response_bytes is unava
 // BackendTruncationNotice is appended when a read that keeps a partial result
 // hits max_backend_response_bytes.
 const BackendTruncationNotice = "\n[truncated: max_backend_response_bytes]\n"
+
+type skipBackendResponseLimitKey struct{}
+
+// SkipBackendResponseLimit returns a context whose requests are not subject to
+// max_backend_response_bytes. The caller has to read that response whole.
+func SkipBackendResponseLimit(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, skipBackendResponseLimitKey{}, true)
+}
+
+func skipBackendResponseLimit(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	skip, _ := ctx.Value(skipBackendResponseLimitKey{}).(bool)
+	return skip
+}
 
 // BackendResponseTooLargeError is returned when a response body exceeds
 // max_backend_response_bytes. The body is closed.
@@ -123,9 +142,8 @@ func (b *limitedBody) Close() error {
 }
 
 // backendResponseRoundTripper caps resp.Body using the live limit. Status 101
-// responses stay streaming. /openapi/ responses are read whole so the aggregated
-// spec can be parsed; one parsed model is shared per manager.
-// See docs/specs/memory-bounds.md#retention.
+// responses stay streaming. A request context from SkipBackendResponseLimit
+// is read whole. See docs/specs/memory-bounds.md#retention.
 type backendResponseRoundTripper struct {
 	delegate http.RoundTripper
 	limit    func() (int64, error)
@@ -148,7 +166,7 @@ func (rt *backendResponseRoundTripper) RoundTrip(req *http.Request) (*http.Respo
 	if resp.StatusCode == http.StatusSwitchingProtocols {
 		return resp, nil
 	}
-	if req != nil && req.URL != nil && strings.Contains(req.URL.Path, "/openapi/") {
+	if req != nil && skipBackendResponseLimit(req.Context()) {
 		return resp, nil
 	}
 	// Unreachable today: every constructor passes a limit func. The error is

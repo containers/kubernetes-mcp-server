@@ -110,6 +110,31 @@ func (s *SchemaCacheSuite) TestFailedFetchIsNotCached() {
 	s.Equal(int32(2), hits.Load())
 }
 
+func (s *SchemaCacheSuite) TestSchemaFetchSkipsTheBackendCap() {
+	doc := newOpenAPISchemaHandler()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/openapi/v2" {
+			http.NotFound(w, r)
+			return
+		}
+		doc.ServeHTTP(w, r)
+	}))
+	s.T().Cleanup(srv.Close)
+
+	cfg := &rest.Config{Host: srv.URL}
+	cfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
+		return newBackendResponseRoundTripper(rt, func() (int64, error) { return 1, nil })
+	})
+	cs, err := kubernetes.NewForConfig(cfg)
+	s.Require().NoError(err)
+	_, err = cs.Discovery().OpenAPISchema()
+	var tooLarge *BackendResponseTooLargeError
+	s.Require().ErrorAs(err, &tooLarge)
+
+	v := newSchemaValidator(func() discovery.DiscoveryInterface { return cs.Discovery() }, newOpenAPISchemaCache())
+	s.NoError(v.Validate(s.T().Context(), podCreateRequest()))
+}
+
 func (s *SchemaCacheSuite) TestExpiredEntryIsFetchedAgain() {
 	doc := newOpenAPISchemaHandler()
 	var hits atomic.Int32

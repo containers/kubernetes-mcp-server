@@ -133,32 +133,32 @@ func troubleshoot(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	vmYaml, vm := fetchVMStatus(ctx, dynamicClient, namespace, name)
 	vmiYaml, vmi := fetchVMIStatus(ctx, dynamicClient, namespace, name)
 	volumesYaml := fetchVolumes(namespace, name, vm, vmi)
-	dataVolumeYaml := fetchDataVolumeStatus(ctx, dynamicClient, namespace, vm)
 	cloudInitYaml := extractCloudInit(vm, vmi)
 	podYaml, podNames, podDiag := fetchVirtLauncherPod(ctx, dynamicClient, namespace, name)
 	issuesSection := analyzeIssues(ctx, dynamicClient, namespace, name, vm, vmi, podDiag)
 
-	podLogsText := fetchVirtLauncherPodLogs(ctx, params.KubernetesClient, namespace, podNames)
-	eventsYaml := fetchEvents(ctx, params.KubernetesClient, namespace, name, podNames)
-	// Skeleton is the report with the log and event holes empty. If that
-	// string is already over the cap, return it cut to the cap plus the
-	// truncation notice and leave the holes empty. If it fits, FitSections
-	// fills the holes in order. The first section that does not fit is cut
-	// and carries the notice; later sections are left empty. A section that
-	// fills the remaining room exactly leaves the next non-empty section as
-	// the notice alone.
+	// The prefix is one read per section. DataVolumes, logs, and events can
+	// fan out, so they share the bytes the prefix did not use and stop before
+	// the next fetch once that room is full.
+	// See docs/specs/memory-bounds.md#retention.
 	lim := api.ResultLimit(ctx)
-	if lim > 0 {
-		skeleton := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, dataVolumeYaml, cloudInitYaml, podYaml, "", "")
-		if int64(len(skeleton)) > lim {
-			b := api.NewBuilderWithBudget(lim)
-			b.WriteString(skeleton)
-			return api.NewToolCallResult(b.String(), nil), nil
-		}
-		fitted := api.FitSections(lim-int64(len(skeleton)), podLogsText, eventsYaml)
-		podLogsText, eventsYaml = fitted[0], fitted[1]
+	prefix := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, "", cloudInitYaml, podYaml, "", "")
+	if lim > 0 && int64(len(prefix)) >= lim {
+		b := api.NewBuilderWithBudget(lim)
+		b.WriteString(prefix)
+		return api.NewToolCallResult(b.String(), nil), nil
 	}
-	report := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, dataVolumeYaml, cloudInitYaml, podYaml, podLogsText, eventsYaml)
+	var room int64
+	if lim > 0 {
+		room = lim - int64(len(prefix))
+	}
+	dvB := api.NewBuilderWithBudget(room)
+	fetchDataVolumeStatus(ctx, dynamicClient, namespace, vm, dvB)
+	logsB := dvB.Scratch(0)
+	fetchVirtLauncherPodLogs(ctx, params.KubernetesClient, namespace, podNames, logsB)
+	eventsB := logsB.Scratch(0)
+	fetchEvents(ctx, params.KubernetesClient, namespace, name, podNames, eventsB)
+	report := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, dvB.String(), cloudInitYaml, podYaml, logsB.String(), eventsB.String())
 	return api.NewToolCallResult(report, nil), nil
 }
 
@@ -386,11 +386,13 @@ func extractPodDiagnostics(pod *unstructured.Unstructured) map[string]interface{
 	return diag
 }
 
-func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, namespace string, podNames []string) string {
-	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
+func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, namespace string, podNames []string, b *api.BuilderWithBudget) {
+	if b == nil || b.Truncated() {
+		return
+	}
 	if len(podNames) == 0 {
 		b.WriteString("## virt-launcher Pod Logs\n\n*No pod found — no logs available*")
-		return b.String()
+		return
 	}
 
 	core := kubernetes.NewCore(client)
@@ -408,72 +410,96 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 		}
 		b.WriteString(fmt.Sprintf("### %s (container: %s)\n\n```\n%s\n```\n\n", podName, containerName, redactLogSecrets(logs)))
 	}
-
-	return b.String()
 }
 
-func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vmName string, podNames []string) string {
+// fetchEvents lists warning-related events for the VM and its pods. Each list
+// is written as it returns, and the next List does not start once b is
+// truncated. See docs/specs/memory-bounds.md#retention.
+func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vmName string, podNames []string, b *api.BuilderWithBudget) {
+	if b == nil || b.Truncated() {
+		return
+	}
 	core := kubernetes.NewCore(client)
 
 	objectNames := []string{vmName}
 	objectNames = append(objectNames, podNames...)
 
-	var relatedEvents []map[string]any
-	var eventErrors []string
+	wrote := false
 	for _, objName := range objectNames {
+		if b.Truncated() {
+			break
+		}
+		if objName == "" {
+			continue
+		}
 		events, err := core.EventsList(ctx, namespace, api.ListOptions{
 			ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + objName},
 		})
 		if err != nil {
-			eventErrors = append(eventErrors, fmt.Sprintf("Error fetching events for %s: %v", objName, err))
+			if !wrote {
+				b.WriteString("## Events\n\n")
+				wrote = true
+			}
+			b.WriteString(fmt.Sprintf("*Error fetching events for %s: %v*\n", objName, err))
 			continue
 		}
-		relatedEvents = append(relatedEvents, events...)
-	}
-
-	b := api.NewBuilderWithBudget(api.ResultLimit(ctx))
-	if len(relatedEvents) == 0 && len(eventErrors) == 0 {
-		b.WriteString("## Events\n\n*No events found related to this VM*")
-		return b.String()
-	}
-
-	b.WriteString("## Events")
-	if len(eventErrors) > 0 {
-		b.WriteString("\n\n")
-		for _, e := range eventErrors {
+		if len(events) == 0 {
+			continue
+		}
+		yamlStr, err := output.MarshalYaml(events)
+		if err != nil {
+			if !wrote {
+				b.WriteString("## Events\n\n")
+				wrote = true
+			}
+			b.WriteString(fmt.Sprintf("*Error marshaling events for %s: %v*\n", objName, err))
+			continue
+		}
+		if !wrote {
+			b.WriteString("## Events\n\n```yaml\n")
+			wrote = true
 			if b.Truncated() {
 				break
 			}
-			b.WriteString(fmt.Sprintf("*%s*\n", e))
+		}
+		b.WriteString(yamlStr)
+		if !b.Truncated() {
+			b.WriteString("\n")
 		}
 	}
-
-	if len(relatedEvents) > 0 && !b.Truncated() {
-		yamlStr, err := output.MarshalYaml(relatedEvents)
-		if err != nil {
-			b.WriteString(fmt.Sprintf("\n\n*Error marshaling events: %v*", err))
-		} else {
-			b.WriteString(fmt.Sprintf("\n\n```yaml\n%s```", yamlStr))
-		}
+	if !wrote {
+		b.WriteString("## Events\n\n*No events found related to this VM*")
+		return
 	}
-
-	return b.String()
+	if !b.Truncated() {
+		b.WriteString("```")
+	}
 }
 
-func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace string, vm *unstructured.Unstructured) string {
+// fetchDataVolumeStatus writes one DataVolume or PVC at a time and does not
+// start the next Get once b is truncated.
+// See docs/specs/memory-bounds.md#retention.
+func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace string, vm *unstructured.Unstructured, b *api.BuilderWithBudget) {
+	if b == nil || b.Truncated() {
+		return
+	}
 	if vm == nil {
-		return "## DataVolume/PVC Status\n\n*No VM available to extract DataVolume references*"
+		b.WriteString("## DataVolume/PVC Status\n\n*No VM available to extract DataVolume references*")
+		return
 	}
 
 	dvTemplates, found, err := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
 	if err != nil || !found || len(dvTemplates) == 0 {
-		return "## DataVolume/PVC Status\n\n*No dataVolumeTemplates defined in VM spec*"
+		b.WriteString("## DataVolume/PVC Status\n\n*No dataVolumeTemplates defined in VM spec*")
+		return
 	}
 
-	var result strings.Builder
-	result.WriteString("## DataVolume/PVC Status\n\n")
+	b.WriteString("## DataVolume/PVC Status\n\n")
 
 	for _, dvTemplate := range dvTemplates {
+		if b.Truncated() {
+			break
+		}
 		dvMap, ok := dvTemplate.(map[string]interface{})
 		if !ok {
 			continue
@@ -487,21 +513,24 @@ func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface,
 		dv, err := dynamicClient.Resource(kubevirt.DataVolumeGVR).Namespace(namespace).Get(ctx, dvName, metav1.GetOptions{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				fmt.Fprintf(&result, "### %s\n\n*Error fetching DataVolume: %v*\n\n", dvName, err)
+				b.WriteString(fmt.Sprintf("### %s\n\n*Error fetching DataVolume: %v*\n\n", dvName, err))
 				continue
 			}
-			fmt.Fprintf(&result, "### %s\n\n*DataVolume not found*\n\n", dvName)
+			b.WriteString(fmt.Sprintf("### %s\n\n*DataVolume not found*\n\n", dvName))
+			if b.Truncated() {
+				break
+			}
 			pvc, pvcErr := dynamicClient.Resource(kubevirt.PersistentVolumeClaimGVR).Namespace(namespace).Get(ctx, dvName, metav1.GetOptions{})
 			if pvcErr != nil {
-				fmt.Fprintf(&result, "*PVC also not found: %v*\n\n", pvcErr)
+				b.WriteString(fmt.Sprintf("*PVC also not found: %v*\n\n", pvcErr))
 			} else {
 				pvcStatus, _, _ := unstructured.NestedMap(pvc.Object, "status")
 				if pvcStatus != nil {
 					yamlStr, marshalErr := output.MarshalYaml(pvcStatus)
 					if marshalErr != nil {
-						fmt.Fprintf(&result, "*Error marshaling PVC status: %v*\n\n", marshalErr)
+						b.WriteString(fmt.Sprintf("*Error marshaling PVC status: %v*\n\n", marshalErr))
 					} else {
-						fmt.Fprintf(&result, "PVC exists with status:\n```yaml\n%s```\n\n", yamlStr)
+						b.WriteString(fmt.Sprintf("PVC exists with status:\n```yaml\n%s```\n\n", yamlStr))
 					}
 				}
 			}
@@ -510,13 +539,13 @@ func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface,
 
 		dvStatus, found, _ := unstructured.NestedMap(dv.Object, "status")
 		if !found {
-			fmt.Fprintf(&result, "### %s\n\n*DataVolume exists but has no status*\n\n", dvName)
+			b.WriteString(fmt.Sprintf("### %s\n\n*DataVolume exists but has no status*\n\n", dvName))
 			continue
 		}
 
 		yamlStr, err := output.MarshalYaml(dvStatus)
 		if err != nil {
-			fmt.Fprintf(&result, "### %s\n\n*Error marshaling DataVolume status: %v*\n\n", dvName, err)
+			b.WriteString(fmt.Sprintf("### %s\n\n*Error marshaling DataVolume status: %v*\n\n", dvName, err))
 			continue
 		}
 
@@ -529,14 +558,12 @@ func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface,
 			}
 		}
 
-		fmt.Fprintf(&result, "### %s", dvName)
+		line := "### " + dvName
 		if storageClass != "" {
-			fmt.Fprintf(&result, " (storageClass: %s)", storageClass)
+			line += fmt.Sprintf(" (storageClass: %s)", storageClass)
 		}
-		fmt.Fprintf(&result, "\n\n```yaml\n%s```\n\n", yamlStr)
+		b.WriteString(fmt.Sprintf("%s\n\n```yaml\n%s```\n\n", line, yamlStr))
 	}
-
-	return result.String()
 }
 
 func extractCloudInit(vm, vmi *unstructured.Unstructured) string {

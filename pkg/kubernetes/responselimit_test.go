@@ -92,7 +92,7 @@ func (s *BackendLimitSuite) TestDisabledCap() {
 	s.Equal("abcdefghij", string(data))
 }
 
-func (s *BackendLimitSuite) TestRoundTripSkipsUpgradeAndOpenAPI() {
+func (s *BackendLimitSuite) TestRoundTripSkipsUpgradeAndMarkedCalls() {
 	const limit = int64(4)
 	payload := []byte("0123456789")
 	delegate := roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -117,13 +117,32 @@ func (s *BackendLimitSuite) TestRoundTripSkipsUpgradeAndOpenAPI() {
 		s.Require().NoError(err)
 		s.Equal(payload, data)
 	})
-	s.Run("/openapi/ is not capped", func() {
+	s.Run("/openapi/v2 is capped", func() {
 		req := httptest.NewRequest(http.MethodGet, "https://apiserver/openapi/v2", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Require().NoError(err)
+		data, err := io.ReadAll(resp.Body)
+		var tooLarge *BackendResponseTooLargeError
+		s.Require().ErrorAs(err, &tooLarge)
+		s.Equal(payload[:limit], data)
+	})
+	s.Run("a marked request is not capped", func() {
+		req := httptest.NewRequest(http.MethodGet, "https://apiserver/api/v1/pods", nil)
+		req = req.WithContext(SkipBackendResponseLimit(req.Context()))
 		resp, err := rt.RoundTrip(req)
 		s.Require().NoError(err)
 		data, err := s.readAll(resp.Body)
 		s.Require().NoError(err)
 		s.Equal(payload, data)
+	})
+	s.Run("namespace named openapi is capped", func() {
+		req := httptest.NewRequest(http.MethodGet, "https://apiserver/api/v1/namespaces/openapi/pods", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Require().NoError(err)
+		data, err := io.ReadAll(resp.Body)
+		var tooLarge *BackendResponseTooLargeError
+		s.Require().ErrorAs(err, &tooLarge)
+		s.Equal(payload[:limit], data)
 	})
 	s.Run("a normal response is capped", func() {
 		req := httptest.NewRequest(http.MethodGet, "https://apiserver/api/v1/pods", nil)
