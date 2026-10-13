@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/confirmation"
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog" //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -32,10 +34,13 @@ func (v *ConfirmationValidator) Validate(ctx context.Context, req *api.HTTPValid
 		group = req.GVK.Group
 		version = req.GVK.Version
 	}
-	err := confirmation.CheckKubeRules(
-		ctx, v.rules, v.fallback, &contextElicitor{},
-		req.Verb, kind, group, version, req.ResourceName, req.Namespace,
-	)
+	request := rulexpr.Request{Verb: req.Verb, Kind: kind, Group: group, Version: version, Name: req.ResourceName, Namespace: req.Namespace}
+	if len(req.Body) > 0 && confirmationRulesNeedObject(v.rules) {
+		// Only decode when a rule can look at it; a non-JSON body (e.g. a
+		// JSON patch array) simply leaves object unset.
+		_ = json.Unmarshal(req.Body, &request.Object)
+	}
+	err := confirmation.CheckKubeRequest(ctx, v.rules, v.fallback, &contextElicitor{}, request)
 	if errors.Is(err, confirmation.ErrConfirmationDenied) {
 		return &api.ValidationError{
 			Code:    api.ErrorCodePermissionDenied,
@@ -77,4 +82,13 @@ func (e *contextElicitor) Elicit(ctx context.Context, params *api.ElicitParams) 
 func isElicitationNotSupportedError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "does not support") && strings.Contains(msg, "elicitation")
+}
+
+func confirmationRulesNeedObject(rules []config.ConfirmationRule) bool {
+	for i := range rules {
+		if rules[i].Expression != "" {
+			return true
+		}
+	}
+	return false
 }

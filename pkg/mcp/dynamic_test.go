@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -27,6 +28,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/dynamic"
 )
 
@@ -932,5 +934,305 @@ spec:
 		_, err := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.GVR).Create(ctx, obj, metav1.CreateOptions{})
 		s.Require().Error(err)
 		s.Contains(err.Error(), "exactly one of spec.kubernetes, spec.http or spec.steps")
+	})
+}
+
+func (s *DynamicToolsSuite) TestBinaryTextAndRedactedResponses() {
+	png := []byte("\x89PNG\r\n\x1a\nfake-image-bytes")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/screenshot":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(png)
+		default:
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("starting\nAuthorization: Bearer secret-token\ndone\n"))
+		}
+	}))
+	defer server.Close()
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: console-screenshot
+spec:
+  description: Screenshot with an eligibility check
+  readOnly: true
+  steps:
+    - name: check
+      fail: "!has(args.name) || args.name == '' ? 'name parameter required' : ''"
+    - name: shot
+      http: {url: ` + server.URL + `, path: /screenshot, response: binary}
+  output: "'Screenshot of ' + args.name + ' (' + steps.shot.mimeType + ', ' + string(steps.shot.size) + ' bytes)'"
+`)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: redacted-log
+spec:
+  description: Text response with secrets removed
+  readOnly: true
+  http: {url: ` + server.URL + `, path: /log, response: text, redact: true}
+`)
+	s.InitMcpClient()
+	s.Run("binary responses become an image content block described by the output", func() {
+		result, err := s.CallTool("console_screenshot", map[string]any{"name": "vm-1"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Require().Len(result.Content, 2)
+		s.Equal("Screenshot of vm-1 (image/png, 24 bytes)", result.Content[0].(*mcp.TextContent).Text)
+		image, ok := result.Content[1].(*mcp.ImageContent)
+		s.Require().True(ok, "second block must be an image")
+		s.Equal("image/png", image.MIMEType)
+		s.Equal(png, image.Data)
+	})
+	s.Run("fail steps stop the tool with their message", func() {
+		result, err := s.CallTool("console_screenshot", map[string]any{})
+		s.Require().NoError(err)
+		s.True(result.IsError)
+		s.Contains(s.text(result), "name parameter required")
+	})
+	s.Run("redact removes secrets from text responses", func() {
+		result, err := s.CallTool("redacted_log", map[string]any{})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Equal("starting\nAuthorization: Bearer <REDACTED>\ndone\n", s.text(result))
+	})
+}
+
+func (s *DynamicToolsSuite) TestRequiresHidesToolsWithoutTheAPI() {
+	ctx := s.T().Context()
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: needs-virtualmachines
+spec:
+  description: Only meaningful with KubeVirt installed
+  readOnly: true
+  requires: [{apiVersion: kubevirt.io/v1, kind: VirtualMachine}]
+  kubernetes: {verb: list, apiVersion: kubevirt.io/v1, kind: VirtualMachine}
+`)
+	s.Require().NoError(EnvTestDisableCRD(ctx, "kubevirt.io", "v1", "virtualmachines"))
+	defer func() { s.Require().NoError(EnvTestEnableCRD(ctx, "kubevirt.io", "v1", "virtualmachines")) }()
+	s.InitMcpClient()
+	s.Nil(s.findTool("needs_virtualmachines"), "hidden while the API is not served")
+	s.Require().NoError(EnvTestEnableCRD(ctx, "kubevirt.io", "v1", "virtualmachines"))
+	s.Close()
+	s.mcpServer.Close()
+	s.provider.Close()
+	s.InitMcpClient()
+	s.NotNil(s.findTool("needs_virtualmachines"), "exposed once the API is served")
+}
+
+func (s *DynamicToolsSuite) createPrompt(manifest string) {
+	obj := &unstructured.Unstructured{}
+	s.Require().NoError(yaml.Unmarshal([]byte(manifest), &obj.Object))
+	_, err := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.PromptGVR).
+		Create(s.T().Context(), obj, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create Prompt resource")
+}
+
+func (s *DynamicToolsSuite) promptText(result *mcp.GetPromptResult) string {
+	var out []string
+	for _, message := range result.Messages {
+		out = append(out, string(message.Role)+": "+message.Content.(*mcp.TextContent).Text)
+	}
+	return strings.Join(out, "\n---\n")
+}
+
+func (s *DynamicToolsSuite) TestPromptResources() {
+	s.createConfigMap("dyn-prompt-cm", map[string]string{"k": "v"})
+	s.createPrompt(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  name: configmap-review
+spec:
+  title: ConfigMap Review
+  description: Review a ConfigMap with the user's consent
+  arguments:
+    - {name: namespace, required: true}
+    - {name: name, required: true}
+  steps:
+    - name: consent
+      elicit: {message: "Review ConfigMap ${args.namespace}/${args.name}?"}
+    - name: cm
+      when: steps.consent.action == 'accept'
+      kubernetes: {verb: get, apiVersion: v1, kind: ConfigMap, namespace: {argument: namespace}, name: {argument: name}}
+  messages:
+    - role: user
+      when: steps.consent.action == 'accept'
+      text: |
+        # ConfigMap ${args.name}
+        ${yaml(steps.cm.data)}
+    - role: assistant
+      when: steps.consent.action != 'accept'
+      text: The review was not approved (${steps.consent.action}).
+`)
+	var elicited []string
+	s.InitMcpClient(test.WithElicitationHandler(func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicited = append(elicited, req.Params.Message)
+		if strings.Contains(req.Params.Message, "decline-me") {
+			return &mcp.ElicitResult{Action: "decline"}, nil
+		}
+		return &mcp.ElicitResult{Action: "accept"}, nil
+	}))
+	s.Run("prompts/list exposes the Prompt resource with its arguments", func() {
+		prompts, err := s.ListPrompts()
+		s.Require().NoError(err)
+		var found *mcp.Prompt
+		for _, prompt := range prompts.Prompts {
+			if prompt.Name == "configmap-review" {
+				found = prompt
+			}
+		}
+		s.Require().NotNil(found)
+		s.Equal("Review a ConfigMap with the user's consent", found.Description)
+		s.Len(found.Arguments, 2)
+		s.True(found.Arguments[0].Required)
+	})
+	s.Run("prompts/get runs the steps, elicits and renders the templates", func() {
+		result, err := s.GetPrompt("configmap-review", map[string]string{"namespace": "default", "name": "dyn-prompt-cm"})
+		s.Require().NoError(err)
+		s.Equal([]string{"Review ConfigMap default/dyn-prompt-cm?"}, elicited)
+		s.Equal("user: # ConfigMap dyn-prompt-cm\nk: v\n\n", s.promptText(result), "YAML blocks end with a newline, then the template's own")
+	})
+	s.Run("when drops messages", func() {
+		result, err := s.GetPrompt("configmap-review", map[string]string{"namespace": "default", "name": "decline-me"})
+		s.Require().NoError(err)
+		s.Equal("assistant: The review was not approved (decline).", s.promptText(result))
+	})
+	s.Run("missing required arguments are rejected", func() {
+		_, err := s.GetPrompt("configmap-review", map[string]string{"namespace": "default"})
+		s.Require().Error(err)
+		s.Contains(err.Error(), "name argument is required")
+	})
+}
+
+func (s *DynamicToolsSuite) TestConvertedPrompts() {
+	ctx := s.T().Context()
+	for _, resource := range []string{"virtualmachines", "virtualmachineinstances"} {
+		s.Require().NoError(EnvTestEnableCRD(ctx, "kubevirt.io", "v1", resource))
+	}
+	for _, resource := range []string{"pipelineruns", "taskruns", "pipelines"} {
+		s.Require().NoError(EnvTestEnableCRD(ctx, "tekton.dev", "v1", resource))
+	}
+	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
+	for _, chart := range []string{"kubevirt-mcp-tools", "tekton-mcp-tools"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "dynamic-tools", "charts", chart, "templates", "prompts.yaml"))
+		s.Require().NoError(err)
+		for _, doc := range strings.Split(string(raw), "\n---") {
+			if strings.Contains(doc, "kind: Prompt") {
+				s.createPrompt(doc)
+			}
+		}
+	}
+	vms := schema.GroupVersionResource{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"}
+	pipelineRuns := schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
+	client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig())
+	defer func() {
+		_ = client.Resource(vms).Namespace("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+		_ = client.Resource(pipelineRuns).Namespace("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+	}()
+	s.createUnstructured(vms, "apiVersion: kubevirt.io/v1\nkind: VirtualMachine\nmetadata: {name: prompt-vm}\nspec: {runStrategy: Halted, template: {spec: {volumes: [{name: ci, cloudInitNoCloud: {userData: 'password: hunter2'}}]}}}\nstatus: {printableStatus: Stopped}\n")
+	s.createUnstructured(pipelineRuns, "apiVersion: tekton.dev/v1\nkind: PipelineRun\nmetadata: {name: prompt-pr}\nspec: {pipelineRef: {name: missing-pipeline}}\nstatus: {conditions: [{type: Succeeded, status: 'False', reason: CouldntGetPipeline}]}\n")
+	var eulaAnswer = "accept"
+	s.InitMcpClient(test.WithElicitationHandler(func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: eulaAnswer}, nil
+	}))
+	s.Run("vm-troubleshoot gathers the VM and redacts cloud-init", func() {
+		result, err := s.GetPrompt("vm-troubleshoot", map[string]string{"namespace": "default", "name": "prompt-vm"})
+		s.Require().NoError(err)
+		text := s.promptText(result)
+		s.Contains(text, "## Step 1: VirtualMachine Status")
+		s.Contains(text, "printableStatus: Stopped")
+		s.Contains(text, "cloudInitNoCloud: <redacted>")
+		s.NotContains(text, "hunter2")
+		s.Contains(text, "*Error fetching VirtualMachineInstance")
+		s.Contains(text, "assistant: I'll analyze")
+	})
+	s.Run("pipeline-troubleshoot gathers the PipelineRun and its status hint", func() {
+		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{"namespace": "default", "name": "prompt-pr"})
+		s.Require().NoError(err)
+		text := s.promptText(result)
+		s.Contains(text, "## PipelineRun: default/prompt-pr")
+		s.Contains(text, "**Current status hint:** CouldntGetPipeline")
+		s.Contains(text, "*No TaskRuns found for this PipelineRun*")
+		s.Contains(text, "missing-pipeline")
+	})
+	s.Run("windows-golden-image elicits the EULA and renders the PipelineRun", func() {
+		result, err := s.GetPrompt("windows-golden-image", map[string]string{"winImageDownloadURL": "https://example.com/win.iso", "namespace": "default", "windowsVersion": "11"})
+		s.Require().NoError(err)
+		text := s.promptText(result)
+		s.Contains(text, "The user has accepted the Microsoft EULA")
+		s.Contains(text, "windows11-installer-run-")
+		s.Contains(text, "windows.11.virtio")
+		s.Regexp(`acceptEula\n\s+value: "true"`, text)
+		eulaAnswer = "decline"
+		result, err = s.GetPrompt("windows-golden-image", map[string]string{"winImageDownloadURL": "https://example.com/win.iso", "namespace": "default"})
+		s.Require().NoError(err)
+		s.Contains(s.promptText(result), "The Microsoft EULA was not accepted")
+		_, err = s.GetPrompt("windows-golden-image", map[string]string{"winImageDownloadURL": "http://insecure/win.iso"})
+		s.Require().Error(err)
+		s.Contains(err.Error(), "https://")
+	})
+	s.Run("vm-create lists the candidates for the model to choose from", func() {
+		result, err := s.GetPrompt("vm-create", map[string]string{"namespace": "default", "name": "new-vm", "workload": "fedora"})
+		s.Require().NoError(err)
+		text := s.promptText(result)
+		s.Contains(text, "new-vm")
+		s.Contains(text, "vm_create_from_template")
+	})
+}
+
+func (s *DynamicToolsSuite) TestConfirmationRuleExpression() {
+	ctx := s.T().Context()
+	s.Require().NoError(EnvTestEnableCRD(ctx, "tekton.dev", "v1", "pipelineruns"))
+	s.Cfg.Toolsets.SetForTest([]string{"core"})
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+confirmation_fallback = "deny"
+[[confirmation_rules]]
+kind = "PipelineRun"
+group = "tekton.dev"
+expression = "verb in ['create', 'update', 'patch'] && has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) && object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') && !(has(object.spec.params) && object.spec.params.exists(p, p.name == 'acceptEula' && p.value == 'true'))"
+message = "Do you accept the Microsoft EULA?"
+`)
+	var elicited []string
+	s.InitMcpClient(test.WithElicitationHandler(func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicited = append(elicited, req.Params.Message)
+		return &mcp.ElicitResult{Action: "decline"}, nil
+	}))
+	client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig())
+	pipelineRuns := schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
+	defer func() {
+		_ = client.Resource(pipelineRuns).Namespace("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+	}()
+	windows := func(name, acceptEula string) string {
+		return "apiVersion: tekton.dev/v1\nkind: PipelineRun\nmetadata: {name: " + name + ", namespace: default}\nspec:\n  pipelineRef: {resolver: hub, params: [{name: name, value: windows-efi-installer}]}\n  params: [{name: acceptEula, value: \"" + acceptEula + "\"}]\n"
+	}
+	s.Run("the rule inspects the body and the user can refuse", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]any{"resource": windows("win-1", "false")})
+		s.Require().NoError(err)
+		s.True(result.IsError, "declined confirmation must fail the call")
+		s.Equal([]string{"Do you accept the Microsoft EULA?"}, elicited)
+		_, err = client.Resource(pipelineRuns).Namespace("default").Get(ctx, "win-1", metav1.GetOptions{})
+		s.True(apierrors.IsNotFound(err), "the PipelineRun must not have been created")
+	})
+	s.Run("an accepted EULA parameter needs no confirmation", func() {
+		elicited = nil
+		result, err := s.CallTool("resources_create_or_update", map[string]any{"resource": windows("win-2", "true")})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Empty(elicited)
+	})
+	s.Run("other PipelineRuns are untouched", func() {
+		elicited = nil
+		result, err := s.CallTool("resources_create_or_update", map[string]any{"resource": "apiVersion: tekton.dev/v1\nkind: PipelineRun\nmetadata: {name: plain, namespace: default}\nspec: {pipelineRef: {name: build}}\n"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Empty(elicited)
 	})
 }

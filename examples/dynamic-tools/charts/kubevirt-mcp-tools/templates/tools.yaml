@@ -50,6 +50,71 @@ metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
     tools.kubernetes-mcp-server.io/source-toolset: kubevirt
+  name: vm-console-screenshot
+spec:
+  description: 'Capture a screenshot of the graphical (VNC) console of a VirtualMachine
+    on KubeVirt as a PNG image. Use this to see what is currently displayed on the
+    VM''s screen (for example firmware, a bootloader, or a login prompt). Read-only:
+    it never sends input to the guest.'
+  idempotent: true
+  inputSchema:
+    properties:
+      name:
+        description: The name of the virtual machine
+        type: string
+      namespace:
+        description: The namespace of the virtual machine
+        type: string
+    required:
+    - namespace
+    - name
+    type: object
+  name: vm_console_screenshot
+  output: '''Screenshot of VirtualMachineInstance '' + args.namespace + ''/'' + args.name
+    + '' ('' + steps.screenshot.mimeType + '', '' + string(steps.screenshot.size)
+    + '' bytes)'''
+  readOnly: true
+  steps:
+  - kubernetes:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachineInstance
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      verb: get
+    name: vmi
+  - fail: '!(has(steps.vmi.status) && has(steps.vmi.status.phase) && steps.vmi.status.phase
+      == ''Running'') ? "VirtualMachineInstance ''" + args.name + "'' is in phase
+      ''" + (has(steps.vmi.status) && has(steps.vmi.status.phase) ? steps.vmi.status.phase
+      : ''Unknown'') + "'', not Running" : (has(steps.vmi.spec) && has(steps.vmi.spec.domain)
+      && has(steps.vmi.spec.domain.devices) && has(steps.vmi.spec.domain.devices.autoattachGraphicsDevice)
+      && steps.vmi.spec.domain.devices.autoattachGraphicsDevice == false ? "VirtualMachineInstance
+      ''" + args.name + "'' has no graphical console (autoattachGraphicsDevice is
+      false)" : '''')'
+    name: eligible
+  - kubernetes:
+      apiVersion: subresources.kubevirt.io/v1
+      mimeType: image/png
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      query:
+        moveCursor: "true"
+      resource: virtualmachineinstances
+      response: binary
+      subresource: vnc/screenshot
+      verb: get
+    name: screenshot
+  title: 'Virtual Machine: Console Screenshot'
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: kubevirt
   name: vm-guest-info
 spec:
   description: Get guest operating system information from a VirtualMachine's QEMU
@@ -372,7 +437,9 @@ spec:
     ? ev.message : '''', ''object'': ev.involvedObject.kind + ''/'' + ev.involvedObject.name})).flatten(),
     ''dataVolumes'': steps.datavolumes.map(dv, has(dv.error) ? dv : {''name'': dv.metadata.name,
     ''phase'': has(dv.status) && has(dv.status.phase) ? dv.status.phase : '''', ''progress'':
-    has(dv.status) && has(dv.status.progress) ? dv.status.progress : ''''})}'
+    has(dv.status) && has(dv.status.progress) ? dv.status.progress : ''''}), ''virtLauncherPodLogs'':
+    range(size(steps.pods.items)).map(i, {''pod'': steps.pods.items[i].metadata.name,
+    ''logs'': type(steps.logs[i]) == string ? steps.logs[i] : steps.logs[i].error})}'
   readOnly: true
   steps:
   - ignoreError: true
@@ -429,4 +496,20 @@ spec:
         argument: namespace
       verb: get
     name: datavolumes
+  - forEach: steps.pods.items
+    ignoreError: true
+    kubernetes:
+      apiVersion: v1
+      kind: Pod
+      name:
+        expression: item.metadata.name
+      namespace:
+        argument: namespace
+      query:
+        tailLines: "100"
+      redact: true
+      response: text
+      subresource: log
+      verb: get
+    name: logs
   title: 'Virtual Machine: Troubleshoot'

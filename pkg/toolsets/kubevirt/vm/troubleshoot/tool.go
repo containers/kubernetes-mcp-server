@@ -10,6 +10,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/redact"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt/internal/defaults"
 	"github.com/google/jsonschema-go/jsonschema"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -676,35 +677,8 @@ func isSensitiveValueLine(trimmed string) bool {
 	return false
 }
 
-var logSecretPatterns = []string{
-	"bearer ",
-	"authorization:",
-	"authorization=",
-	"-u ", "--user ",
-	"-----begin",
-	"ssh-rsa ", "ssh-ed25519 ", "ssh-dss ",
-	"password=", "passwd=", "token=",
-}
-
 func redactLogSecrets(logs string) string {
-	lines := strings.Split(logs, "\n")
-	var result []string
-	for _, line := range lines {
-		lower := strings.ToLower(line)
-		redacted := false
-		for _, pat := range logSecretPatterns {
-			if strings.Contains(lower, pat) {
-				idx := strings.Index(lower, pat)
-				result = append(result, line[:idx+len(pat)]+"<REDACTED>")
-				redacted = true
-				break
-			}
-		}
-		if !redacted {
-			result = append(result, line)
-		}
-	}
-	return strings.Join(result, "\n")
+	return redact.Secrets(logs)
 }
 
 func leadingSpaces(s string) int {

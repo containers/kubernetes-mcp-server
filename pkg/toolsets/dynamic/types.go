@@ -28,18 +28,72 @@ import (
 )
 
 const (
-	// Group is the API group of the Tool custom resource.
+	// Group is the API group of the Tool and Prompt custom resources.
 	Group = "tools.kubernetes-mcp-server.io"
-	// Version is the API version of the Tool custom resource.
+	// Version is the API version of the Tool and Prompt custom resources.
 	Version = "v1alpha1"
 	// Kind is the kind of the Tool custom resource.
 	Kind = "Tool"
 	// Resource is the plural resource name of the Tool custom resource.
 	Resource = "tools"
+	// PromptKind is the kind of the Prompt custom resource.
+	PromptKind = "Prompt"
+	// PromptResource is the plural resource name of the Prompt custom resource.
+	PromptResource = "prompts"
+
+	// ResponseJSON decodes the response body as JSON (falling back to text).
+	ResponseJSON = "json"
+	// ResponseText keeps the response body as text.
+	ResponseText = "text"
+	// ResponseBinary keeps the response body as bytes (e.g. an image).
+	ResponseBinary = "binary"
 )
 
 // GVR identifies the Tool custom resource.
 var GVR = schema.GroupVersionResource{Group: Group, Version: Version, Resource: Resource}
+
+// PromptGVR identifies the Prompt custom resource.
+var PromptGVR = schema.GroupVersionResource{Group: Group, Version: Version, Resource: PromptResource}
+
+// GVKRef names an API kind a Tool depends on.
+type GVKRef struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+}
+
+// Prompt mirrors the Prompt custom resource.
+type Prompt struct {
+	Metadata Metadata   `json:"metadata"`
+	Spec     PromptSpec `json:"spec"`
+}
+
+// PromptSpec is the declarative definition of an MCP prompt: optional
+// gathering steps, then messages rendered from text templates.
+type PromptSpec struct {
+	// Name is the MCP prompt name. Defaults to metadata.name.
+	Name        string           `json:"name,omitempty"`
+	Title       string           `json:"title,omitempty"`
+	Description string           `json:"description"`
+	Arguments   []PromptArgument `json:"arguments,omitempty"`
+	Steps       []Step           `json:"steps,omitempty"`
+	Messages    []PromptMessage  `json:"messages"`
+}
+
+// PromptArgument mirrors the MCP prompt argument.
+type PromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+// PromptMessage is one message of the rendered prompt. Text is a template
+// with `${expression}` placeholders evaluated over args and steps; When is an
+// optional CEL boolean that drops the message when false.
+type PromptMessage struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
+	When string `json:"when,omitempty"`
+}
 
 var (
 	validToolName = regexp.MustCompile(`^[a-z0-9][a-z0-9_]*$`)
@@ -86,10 +140,13 @@ type ToolSpec struct {
 	// `response` (decoded action response) and `args` (tool arguments). Its
 	// result replaces the raw response in the tool result.
 	Output string `json:"output,omitempty"`
+	// Requires lists API kinds the tool depends on. When target compatibility
+	// filters are enabled, the tool is hidden if no target serves them.
+	Requires []GVKRef `json:"requires,omitempty"`
 }
 
-// Step is one action of a composed Tool. Exactly one of Kubernetes, HTTP or
-// Expression must be set.
+// Step is one action of a composed Tool. Exactly one of Kubernetes, HTTP,
+// Expression, Fail or Elicit must be set.
 type Step struct {
 	// Name is how later expressions address the result: steps.<name>.
 	Name       string            `json:"name"`
@@ -97,6 +154,12 @@ type Step struct {
 	HTTP       *HTTPAction       `json:"http,omitempty"`
 	// Expression is a pure CEL step: no request, its value is the result.
 	Expression string `json:"expression,omitempty"`
+	// Fail is a CEL string; when it evaluates to a non-empty string the tool
+	// fails with that message. Use it for argument and state checks.
+	Fail string `json:"fail,omitempty"`
+	// Elicit asks the user a question through MCP elicitation. The result is
+	// {"action": "accept"|"decline"|"cancel"|"unsupported", "content": {...}}.
+	Elicit *ElicitStep `json:"elicit,omitempty"`
 	// When is a CEL boolean; when false the step is skipped and its result
 	// is null.
 	When string `json:"when,omitempty"`
@@ -107,6 +170,12 @@ type Step struct {
 	// IgnoreError records a failed request as {"error": message} instead of
 	// failing the whole tool.
 	IgnoreError bool `json:"ignoreError,omitempty"`
+}
+
+// ElicitStep asks the user for confirmation or input. Message is a text
+// template with `${expression}` placeholders.
+type ElicitStep struct {
+	Message string `json:"message"`
 }
 
 const (
@@ -197,6 +266,12 @@ type KubernetesAction struct {
 	Query           map[string]Ref `json:"query,omitempty"`
 	QueryExpression string         `json:"queryExpression,omitempty"`
 	Body            *Body          `json:"body,omitempty"`
+	// Response is json (default), text or binary. MIMEType labels a binary
+	// response (default image/png when the server does not say).
+	Response string `json:"response,omitempty"`
+	MIMEType string `json:"mimeType,omitempty"`
+	// Redact removes secrets from a text response (see pkg/redact).
+	Redact bool `json:"redact,omitempty"`
 }
 
 // ServiceRef addresses an in-cluster Service reached through the API server's
@@ -224,6 +299,11 @@ type HTTPAction struct {
 	// CertificateAuthority is a PEM bundle used to verify the URL's server.
 	CertificateAuthority  string `json:"certificateAuthority,omitempty"`
 	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify,omitempty"`
+	// Response is json (default), text or binary; MIMEType overrides the
+	// Content-Type of a binary response. Redact removes secrets from text.
+	Response string `json:"response,omitempty"`
+	MIMEType string `json:"mimeType,omitempty"`
+	Redact   bool   `json:"redact,omitempty"`
 }
 
 // ToolName returns the MCP tool name for the resource.
@@ -261,6 +341,50 @@ func (t *Tool) Validate() error {
 	default:
 		errs = append(errs, errors.New("one of spec.kubernetes, spec.http or spec.steps is required"))
 	}
+	for i, req := range t.Spec.Requires {
+		if req.APIVersion == "" || req.Kind == "" {
+			errs = append(errs, fmt.Errorf("spec.requires[%d] needs apiVersion and kind", i))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// PromptName returns the MCP prompt name for the resource.
+func (p *Prompt) PromptName() string {
+	if p.Spec.Name != "" {
+		return p.Spec.Name
+	}
+	return p.Metadata.Name
+}
+
+// Validate checks the static parts of a Prompt definition.
+func (p *Prompt) Validate() error {
+	var errs []error
+	if strings.TrimSpace(p.PromptName()) == "" {
+		errs = append(errs, errors.New("a prompt name is required"))
+	}
+	if strings.TrimSpace(p.Spec.Description) == "" {
+		errs = append(errs, errors.New("spec.description is required"))
+	}
+	if len(p.Spec.Messages) == 0 {
+		errs = append(errs, errors.New("spec.messages must have at least one message"))
+	}
+	for i, message := range p.Spec.Messages {
+		if message.Role != "user" && message.Role != "assistant" {
+			errs = append(errs, fmt.Errorf("spec.messages[%d].role %q must be user or assistant", i, message.Role))
+		}
+	}
+	seen := map[string]bool{}
+	for i, argument := range p.Spec.Arguments {
+		if argument.Name == "" {
+			errs = append(errs, fmt.Errorf("spec.arguments[%d].name is required", i))
+		}
+		if seen[argument.Name] {
+			errs = append(errs, fmt.Errorf("spec.arguments[%d].name %q is duplicated", i, argument.Name))
+		}
+		seen[argument.Name] = true
+	}
+	errs = append(errs, validateSteps(p.Spec.Steps)...)
 	return errors.Join(errs...)
 }
 
@@ -280,14 +404,16 @@ func validateSteps(steps []Step) []error {
 		}
 		seen[step.Name] = true
 		set := 0
-		for _, present := range []bool{step.Kubernetes != nil, step.HTTP != nil, step.Expression != ""} {
+		for _, present := range []bool{step.Kubernetes != nil, step.HTTP != nil, step.Expression != "", step.Fail != "", step.Elicit != nil} {
 			if present {
 				set++
 			}
 		}
 		switch {
 		case set != 1:
-			errs = append(errs, fmt.Errorf("%s requires exactly one of kubernetes, http or expression", path))
+			errs = append(errs, fmt.Errorf("%s requires exactly one of kubernetes, http, expression, fail or elicit", path))
+		case step.Elicit != nil && strings.TrimSpace(step.Elicit.Message) == "":
+			errs = append(errs, fmt.Errorf("%s.elicit.message is required", path))
 		case step.Kubernetes != nil:
 			errs = append(errs, step.Kubernetes.validate()...)
 		case step.HTTP != nil:
@@ -308,7 +434,16 @@ func (a *KubernetesAction) validate() []error {
 	if a.Body != nil {
 		errs = append(errs, a.Body.validate("spec.kubernetes.body")...)
 	}
+	errs = append(errs, validateResponse("spec.kubernetes", a.Response)...)
 	return errs
+}
+
+func validateResponse(path, response string) []error {
+	switch response {
+	case "", ResponseJSON, ResponseText, ResponseBinary:
+		return nil
+	}
+	return []error{fmt.Errorf("%s.response %q must be one of json, text, binary", path, response)}
 }
 
 func (a *HTTPAction) validate() []error {
@@ -325,6 +460,7 @@ func (a *HTTPAction) validate() []error {
 	if a.Body != nil {
 		errs = append(errs, a.Body.validate("spec.http.body")...)
 	}
+	errs = append(errs, validateResponse("spec.http", a.Response)...)
 	return errs
 }
 

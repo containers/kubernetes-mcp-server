@@ -1,8 +1,10 @@
 package dynamic
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/google/cel-go/cel"
@@ -11,6 +13,9 @@ import (
 	"github.com/google/cel-go/common/types/traits"
 	"github.com/google/cel-go/ext"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
+	"github.com/containers/kubernetes-mcp-server/pkg/redact"
 )
 
 // expression is a compiled CEL program over the variables `args`, `response`
@@ -54,6 +59,26 @@ func newEnv() (*cel.Env, error) {
 		cel.Function("merge",
 			cel.Overload("merge_map_map", []*cel.Type{stringDynMapType, stringDynMapType}, stringDynMapType,
 				cel.BinaryBinding(mergeMaps))),
+		cel.Function("yaml",
+			cel.Overload("yaml_dyn", []*cel.Type{cel.DynType}, cel.StringType,
+				cel.UnaryBinding(func(v ref.Val) ref.Val { return renderValue(v, output.MarshalYaml) }))),
+		cel.Function("json",
+			cel.Overload("json_dyn", []*cel.Type{cel.DynType}, cel.StringType,
+				cel.UnaryBinding(func(v ref.Val) ref.Val {
+					return renderValue(v, func(value any) (string, error) {
+						raw, err := json.Marshal(value)
+						return string(raw), err
+					})
+				}))),
+		cel.Function("redact",
+			cel.Overload("redact_string", []*cel.Type{cel.StringType}, cel.StringType,
+				cel.UnaryBinding(func(v ref.Val) ref.Val {
+					text, ok := v.(types.String)
+					if !ok {
+						return types.NewErr("redact: argument must be a string")
+					}
+					return types.String(redact.Secrets(string(text)))
+				}))),
 		cel.Function("range",
 			cel.Overload("range_int", []*cel.Type{cel.IntType}, cel.ListType(cel.IntType),
 				cel.UnaryBinding(rangeList)),
@@ -81,6 +106,20 @@ func mergeMaps(lhs, rhs ref.Val) ref.Val {
 		}
 	}
 	return types.NewRefValMap(types.DefaultTypeAdapter, out)
+}
+
+// renderValue converts a CEL value to its JSON-compatible form and renders
+// it with the given serializer.
+func renderValue(v ref.Val, render func(any) (string, error)) ref.Val {
+	native, err := v.ConvertToNative(structpbValueType)
+	if err != nil {
+		return types.NewErr("cannot render value: %v", err)
+	}
+	text, err := render(native.(*structpb.Value).AsInterface())
+	if err != nil {
+		return types.NewErr("cannot render value: %v", err)
+	}
+	return types.String(text)
 }
 
 func rangeList(n ref.Val) ref.Val {
@@ -178,4 +217,81 @@ func scalarString(value any) string {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+// template is a text with `${expression}` placeholders. Strings render as
+// they are, null as empty, numbers and booleans as scalars, and maps or
+// lists as YAML.
+type template struct {
+	source string
+	parts  []templatePart
+}
+
+type templatePart struct {
+	literal string
+	expr    *expression
+}
+
+func parseTemplate(source string) (*template, error) {
+	t := &template{source: source}
+	rest := source
+	for {
+		start := strings.Index(rest, "${")
+		if start < 0 {
+			t.parts = append(t.parts, templatePart{literal: rest})
+			return t, nil
+		}
+		t.parts = append(t.parts, templatePart{literal: rest[:start]})
+		depth, end := 0, -1
+	scan:
+		for i := start + 2; i < len(rest); i++ {
+			switch rest[i] {
+			case '{':
+				depth++
+			case '}':
+				if depth == 0 {
+					end = i
+					break scan
+				}
+				depth--
+			}
+		}
+		if end < 0 {
+			return nil, fmt.Errorf("template has an unterminated ${ placeholder: %q", source)
+		}
+		expr, err := compileExpression(rest[start+2 : end])
+		if err != nil {
+			return nil, err
+		}
+		t.parts = append(t.parts, templatePart{expr: expr})
+		rest = rest[end+1:]
+	}
+}
+
+func (t *template) render(vars evalVars) (string, error) {
+	var out strings.Builder
+	for _, part := range t.parts {
+		if part.expr == nil {
+			out.WriteString(part.literal)
+			continue
+		}
+		value, err := part.expr.eval(vars)
+		if err != nil {
+			return "", err
+		}
+		switch v := value.(type) {
+		case nil:
+		case string:
+			out.WriteString(v)
+		case map[string]any, []any:
+			text, err := output.MarshalYaml(v)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(text)
+		default:
+			out.WriteString(scalarString(v))
+		}
+	}
+	return out.String(), nil
 }

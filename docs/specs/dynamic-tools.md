@@ -2,8 +2,9 @@
 
 Status: **Proof of concept** (`dynamic` toolset, opt-in, not enabled by default)
 
-Tools defined declaratively as `Tool` custom resources in the cluster, picked
-up by the server at runtime, instead of being compiled into the server. The
+Tools and prompts defined declaratively as `Tool` and `Prompt` custom
+resources in the cluster, picked up by the server at runtime, instead of
+being compiled into the server. The
 goal is a small, rock-solid base server whose ecosystem integrations (Kiali,
 NetObserv, Tekton, KubeVirt, ...) are delivered and versioned independently,
 the way CRDs and operators extend Kubernetes itself.
@@ -109,11 +110,11 @@ One request against the Kubernetes API of the target cluster.
 | `query` | Map of query parameter to reference (`labelSelector`, `fieldSelector`, `tailLines`, ...). Empty values are omitted. |
 | `queryExpression` | CEL over `args` producing a map of query parameters, merged under `query`. |
 | `body` | `{argument: manifest}` (YAML/JSON string or object argument), `{value: {...}}` (fixed JSON) or `{expression: <CEL over args>}`. Defaults to `{}` for `create`/`update`/`patch`, which is what subresource endpoints such as KubeVirt's `pause` expect. `patch` sends a merge patch. |
+| `response` | `json` (default: decode, fall back to text), `text` (keep the body verbatim) or `binary` (keep the bytes; the tool result carries them as an image/blob content block, `mimeType` labels them when the server does not). |
+| `redact` | Remove secrets from a text response with the shared `pkg/redact` rules (bearer tokens, basic-auth flags, PEM blocks, SSH keys, `password=`/`token=`). |
 
 The request is issued through a REST client built from the caller's
 `rest.Config`, i.e. the very same transport chain as every built-in tool.
-A JSON response is decoded; anything else (e.g. `pods/log`) is returned as
-text, verbatim.
 
 ### `http` action
 
@@ -125,6 +126,7 @@ One HTTP request carrying the caller's identity.
 | `service` | `{namespace, name, port, scheme}`: reached through the API server's service proxy with the caller's `rest.Config`. No TLS or token plumbing, and `services/proxy` RBAC applies. Mutually exclusive with `url`. |
 | `method`, `path`, `query`, `queryExpression`, `headers`, `body` | `path` supports `{argument}` placeholders (URL-escaped, required). `query`/`queryExpression`/`body` as above; `{expression: args}` forwards all arguments. |
 | `certificateAuthority`, `insecureSkipTLSVerify` | TLS verification for `url`. |
+| `response`, `mimeType`, `redact` | As for `kubernetes`. |
 
 ### `steps` (composition)
 
@@ -153,7 +155,7 @@ spec:
 | Field | Meaning |
 |-------|---------|
 | `name` | Identifier the later expressions use (`steps.<name>`). |
-| `kubernetes` / `http` / `expression` | Exactly one. An expression step computes a value without a request. |
+| `kubernetes` / `http` / `expression` / `fail` / `elicit` | Exactly one. An expression step computes a value without a request; `fail` is a CEL string that, when non-empty, fails the tool with that message (argument and state checks); `elicit` asks the user through MCP elicitation and yields `{action: accept\|decline\|cancel\|unsupported, content}`. |
 | `when` | CEL boolean over `args` and `steps`. When false the step is skipped and its result is `null`. |
 | `forEach` | CEL list. The action runs once per element with `item` bound; the result is the list of results in order. |
 | `ignoreError` | Records a failed request as `{"error": "<message>"}` instead of failing the tool, for gather-style tools. |
@@ -167,6 +169,12 @@ This is deliberately a small composition model, not a workflow language.
 It is exactly enough for the three shapes the in-tree toolsets needed:
 fetch-then-act (restart, lifecycle), fan-out (logs per container, guest
 info per subresource) and gather (troubleshoot).
+
+### `requires`
+
+A list of `{apiVersion, kind}` the tool depends on. When the server's target
+compatibility filters are enabled, the tool is hidden while no target serves
+the kind, which is what the in-tree KubeVirt tools do with `HasVirtualMachine`.
 
 ### `output`
 
@@ -188,11 +196,53 @@ Every expression (output, body, query, references) sees the same environment:
 | `now` | the current time; `int(now)` is Unix seconds |
 | `merge(a, b)` | a map with the entries of `a` overridden by those of `b` |
 | `range(n)` | `[0, 1, ..., n-1]`, to walk a `forEach` result next to its input list |
+| `yaml(x)`, `json(x)` | render a value as YAML or JSON text (for embedding in prompts) |
+| `redact(s)` | remove secrets from a string |
 | cel-go extensions | strings, lists, math and two-variable comprehensions (`transformMapEntry` renames or drops keys) |
 
 Strings are returned verbatim (logs, CSV, messages); anything else is
 rendered as YAML text and, when it is an object, also returned as
 `structuredContent`.
+
+## Prompt resources
+
+Prompts follow the same pattern with a second kind:
+
+```yaml
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  name: vm-troubleshoot
+spec:
+  description: ...
+  arguments:
+    - {name: namespace, required: true}
+    - {name: name, required: true}
+  steps: [...]                      # the same engine as Tool steps
+  messages:
+    - role: user
+      text: |                       # template: ${expression} over args and steps
+        # VM ${args.name}
+        ${yaml(steps.vm.status)}
+    - role: assistant
+      when: has(steps.vm.status)    # optional CEL boolean
+      text: I'll analyze the collected data.
+```
+
+Templates render strings verbatim, scalars as text and maps or lists as
+YAML. This is the "server gathers, model reasons" pattern the design skill
+prescribes, now as data. The `elicit` step exists for prompts like the
+Windows golden image creator, which must ask for EULA consent before it
+renders a manifest with `acceptEula: "true"`.
+
+## Confirmation rules with expressions
+
+The Windows EULA check used to be a compiled-in validator because it
+inspects the request body. Kube-level confirmation rules now accept an
+`expression`: a CEL boolean over `verb`, `kind`, `group`, `version`, `name`,
+`namespace` and `object` (the decoded body). The KubeVirt chart ships the
+EULA rule as [`confirmation-rules.toml`](../../examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml);
+the in-tree validator is unchanged until the project decides to retire it.
 
 ## RBAC metadata
 
@@ -227,50 +277,52 @@ any toolset whose surface depends on cluster state can use it.
 ## What converts, measured
 
 [`examples/dynamic-tools/hack/export`](../../examples/dynamic-tools/hack/export)
-takes every registered in-tree tool, keeps its real contract (name,
-description, input schema, annotations) and pairs it with a declared action,
-or lists it as skipped with a reason. The output is a Helm chart per
-ecosystem toolset plus plain manifests for the rest, and
+takes every registered in-tree tool and prompt, keeps its real contract
+(name, description, input schema or arguments, annotations) and pairs it
+with a declared action, or lists it as skipped with a reason. The output is
+a Helm chart per ecosystem toolset plus plain manifests for the rest, and
 [`conversion-report.md`](../../examples/dynamic-tools/conversion-report.md).
 
-| Toolset | Single action | With `steps` | What is left and why |
-|---------|---------------|--------------|----------------------|
-| kiali | 11 / 11 | 11 / 11 | nothing: every tool is one POST to `/api/mcp/<tool>` |
-| netobserv | 3 / 3 | 3 / 3 | nothing: GET with a CEL-computed time window |
-| tekton | 2 / 6 | 6 / 6 | nothing |
-| kubevirt | 3 / 7 (+1 narrowed) | 5 / 7 | create (matching heuristics over instancetypes and preferences), screenshot (image) |
-| kcp | 1 / 2 | 1 / 2 | recursive workspace discovery |
-| core | 12 / 19 | 13 / 19 | exec (stream), the generic `resources_*` family |
-| config, helm | 0 / 6 | 0 / 6 | not Kubernetes API requests |
+| Toolset | Tools | Prompts | What is left and why |
+|---------|-------|---------|----------------------|
+| kiali | 11 / 11 | 11 / 11 | nothing |
+| netobserv | 3 / 3 | | nothing |
+| tekton | 6 / 6 | 1 / 1 | nothing |
+| kubevirt | 6 / 7 | 3 / 3 (+ `vm-create`) | `vm_create`, replaced by the `vm-create` prompt and `vm_create_from_template` |
+| kcp | 1 / 2 | | `kcp_workspaces_list`, redundant with the provider's `workspace_list` |
+| core | 13 / 19 | 0 / 1 | exec (stream), the generic `resources_*` family, `cluster-health-check` (base server) |
+| config, helm | 0 / 6 | | not Kubernetes API requests |
 
-Composition takes the count from 33 to 39 of 54 and, more importantly,
-restores the exact built-in contracts the single-action ports had to
-narrow (`vm_lifecycle`, `vm_guest_info`, `pods_log`). The ecosystem
-toolsets that motivated this (Kiali, NetObserv, Tekton) are now at 100 %;
-KubeVirt keeps two tools. The core conversions are a demonstration, not a
-proposal to move core out of the server. The generated Tekton, KubeVirt and
-core manifests are exercised against envtest in `pkg/mcp/dynamic_test.go`.
+55 of 70 tools and prompts. Every third-party toolset is now either fully
+converted (Kiali, NetObserv, Tekton) or converted except for one tool whose
+replacement is a prompt (KubeVirt). What remains is the base server, Helm,
+and a kcp tool the provider already covers. The core conversions are a
+demonstration, not a proposal to move core out of the server. The generated
+Tekton, KubeVirt and core tools and the KubeVirt and Tekton prompts are
+exercised against envtest in `pkg/mcp/dynamic_test.go`, which also installs
+the shipped CRD schemas on the API server and verifies the EULA confirmation
+rule.
 
-What composition could not express, and the built-in tools do:
+Four generic features closed the gaps found in the previous round, none of
+them KubeVirt-specific: `response: binary` (screenshots), `redact` (pod logs
+in troubleshoot tools and prompts), `requires` (tool hiding when an API is
+absent), and `elicit`/`fail` steps (the EULA consent flow and argument
+checks). What a Tool or Prompt still cannot express:
 
-- **Post-processing that is not a projection**: the built-in
-  `vm_troubleshoot` redacts secrets from pod logs and cloud-init with
-  regular expressions; CEL can match but not replace, so the port omits pod
-  logs and redacts cloud-init volumes wholesale. A `redact` library or a
-  server-side log sanitizer would close this.
-- **Heuristic matching** (`vm_create`): expressible in CEL in principle,
-  but the result would be a worse copy of Go code that belongs on the
-  KubeVirt side.
+- **Heuristic matching** (`vm_create`): handed to the model as a prompt that
+  lists the candidates, or to KubeVirt templates.
 - **Capability-dependent behavior**: `pods_run` creates an OpenShift Route
   when the Route API exists; a Tool cannot ask what the cluster serves.
-- **Unbounded recursion** (`kcp_workspaces_list`).
+- **Unbounded recursion** (`kcp_workspaces_list`), which the provider does.
+- **Pixel-level post-processing**: the screenshot description no longer
+  states the image dimensions.
 
 ## What stays in the server
 
-Streaming (`pods_exec`, `port-forward`), image results (`vm_console_screenshot`),
-multi-request workflows (`vm-troubleshoot`, `pipelinerun_troubleshoot`), Helm
-release storage, and the generic `resources_*` escape hatch. Everything that
-is "one request, shaped" is a candidate for a Tool resource.
+Streaming (`pods_exec`, `port-forward`), Helm release storage, the cluster
+providers, the generic `resources_*` escape hatch, and the base prompts.
+Everything else that the in-tree toolsets do is now expressible as a Tool or
+Prompt resource.
 
 ## Open questions
 
@@ -279,8 +331,10 @@ is "one request, shaped" is a candidate for a Tool resource.
   Options: per-target listing with target-aware filtering (the
   `TargetCompatibilityFilters` mechanism fits), or a `targets` field.
 - **Name collisions** with built-in tools: reject, prefix, or let the Tool win?
-- **Prompts and resources** as CRDs follow the same pattern (`spec.messages`
-  with CEL/argument substitution, mirroring the TOML prompt support).
+- **MCP resources** as CRDs would follow the same pattern as prompts.
+- **Retiring the in-tree EULA validator** once the confirmation rule ships
+  with the KubeVirt tooling, and whether policy like it should also be
+  deliverable as a cluster resource rather than server configuration.
 - **Watch mechanism**: informer instead of polling; watching toolsets enabled
   by a later configuration reload (today only toolsets enabled at startup are
   watched).

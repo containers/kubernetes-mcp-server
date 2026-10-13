@@ -24,12 +24,12 @@ kubectl get tools
 
 | Path | Shows |
 |------|-------|
-| `crd.yaml` | The `Tool` CRD with its schema and CEL validation rules |
+| `crd.yaml` | The `Tool` and `Prompt` CRDs with their schemas and CEL validation rules |
 | `tools/` | Hand-written examples: a CEL projection, a subresource patch, a subresource create |
-| `charts/kiali-mcp-tools` | The complete Kiali toolset (11 tools) as `http` Tools |
+| `charts/kiali-mcp-tools` | The complete Kiali toolset: 11 `http` Tools and 11 Prompts |
 | `charts/netobserv-mcp-tools` | The complete NetObserv toolset (3 tools) |
-| `charts/tekton-mcp-tools` | The complete Tekton toolset (6 tools), restart and logs as `steps` |
-| `charts/kubevirt-mcp-tools` | 5 of the 7 KubeVirt tools, lifecycle, guest info and troubleshoot as `steps` |
+| `charts/tekton-mcp-tools` | The complete Tekton toolset: 6 tools and the `pipeline-troubleshoot` prompt |
+| `charts/kubevirt-mcp-tools` | 6 of the 7 KubeVirt tools, its 3 prompts, a new `vm-create` prompt, and `confirmation-rules.toml` with the Windows EULA rule |
 | `converted/` | Generated manifests for the convertible `core` and `kcp` tools |
 | `conversion-report.md` | One row per in-tree tool: converted or why not |
 | `hack/export` | The generator that produces `charts/*/templates`, `converted/` and the report |
@@ -44,4 +44,10 @@ go run ./examples/dynamic-tools/hack/export
 ```
 
 `pkg/toolsets/dynamic` tests validate every file here, and
-`pkg/mcp/dynamic_test.go` runs the generated core manifests against envtest.
+`pkg/mcp/dynamic_test.go` runs the generated core, Tekton and KubeVirt tools,
+the KubeVirt and Tekton prompts, the CRD schemas and the EULA confirmation
+rule against envtest.
+
+Confirmation rules are server configuration rather than cluster resources:
+the KubeVirt chart's `confirmation-rules.toml` goes into the server's
+`--config-dir`.

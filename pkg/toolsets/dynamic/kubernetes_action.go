@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/redact"
 )
 
 var verbToMethod = map[string]string{
@@ -28,17 +29,17 @@ var verbToMethod = map[string]string{
 // from the caller's rest.Config, so the access-control round tripper, the
 // validators, confirmation rules and the caller's identity all apply exactly
 // as they do for built-in tools.
-func (t *compiledTool) runKubernetes(action *compiledAction, params api.ToolHandlerParams, vars evalVars) (any, error) {
+func (t *compiledTool) runKubernetes(action *compiledAction, env runEnv, vars evalVars) (any, error) {
 	a := action.kubernetes
 	gv, err := schema.ParseGroupVersion(a.APIVersion)
 	if err != nil {
 		return nil, fmt.Errorf("invalid apiVersion %q: %w", a.APIVersion, err)
 	}
-	resource, namespaced, err := a.resolveResource(params, gv)
+	resource, namespaced, err := a.resolveResource(env.client, gv)
 	if err != nil {
 		return nil, err
 	}
-	client, err := newRESTClient(params.RESTConfig(), gv)
+	client, err := newRESTClient(env.client.RESTConfig(), gv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create REST client: %w", err)
 	}
@@ -50,7 +51,7 @@ func (t *compiledTool) runKubernetes(action *compiledAction, params api.ToolHand
 			return nil, err
 		}
 		if !all {
-			req = req.Namespace(params.NamespaceOrDefault(namespace))
+			req = req.Namespace(env.client.NamespaceOrDefault(namespace))
 		}
 	}
 	name, err := t.resolveRef(a.Name, vars)
@@ -92,7 +93,7 @@ func (t *compiledTool) runKubernetes(action *compiledAction, params api.ToolHand
 		req = req.Body(body).SetHeader("Content-Type", contentType)
 	}
 
-	result := req.Do(params)
+	result := req.Do(env.ctx)
 	// Result.Error decodes the API server's Status (e.g. `configmaps "x" not
 	// found`); Raw alone would only yield client-go's generic message.
 	if err := result.Error(); err != nil {
@@ -102,7 +103,41 @@ func (t *compiledTool) runKubernetes(action *compiledAction, params api.ToolHand
 	if err != nil {
 		return nil, err
 	}
-	return decodeResponse(raw), nil
+	var contentType string
+	result.ContentType(&contentType)
+	return decodeResponseAs(raw, a.Response, contentType, a.MIMEType, a.Redact), nil
+}
+
+// decodeResponseAs applies the declared response mode: binary keeps the
+// bytes with their media type, text keeps the body as a string, json (the
+// default) decodes JSON and falls back to text. Redact removes secrets from
+// text results.
+func decodeResponseAs(raw []byte, mode, contentType, mimeType string, redactText bool) any {
+	switch mode {
+	case ResponseBinary:
+		mediaType := mimeType
+		if mediaType == "" {
+			mediaType = contentType
+		}
+		if mediaType == "" {
+			mediaType = "application/octet-stream"
+		}
+		return &binaryResult{mimeType: mediaType, data: raw}
+	case ResponseText:
+		return redactIf(string(raw), redactText)
+	}
+	decoded := decodeResponse(raw)
+	if text, ok := decoded.(string); ok {
+		return redactIf(text, redactText)
+	}
+	return decoded
+}
+
+func redactIf(text string, enabled bool) string {
+	if enabled {
+		return redact.Secrets(text)
+	}
+	return text
 }
 
 // newRESTClient builds a REST client for one group/version on top of the
@@ -111,11 +146,11 @@ func (t *compiledTool) runKubernetes(action *compiledAction, params api.ToolHand
 // (e.g. `configmaps "x" not found`) instead of a generic one.
 // resolveResource returns the plural resource and whether it is namespaced,
 // either from the explicit declaration or through the RESTMapper.
-func (a *KubernetesAction) resolveResource(params api.ToolHandlerParams, gv schema.GroupVersion) (string, bool, error) {
+func (a *KubernetesAction) resolveResource(client api.KubernetesClient, gv schema.GroupVersion) (string, bool, error) {
 	if a.Resource != "" {
 		return a.Resource, a.Namespaced == nil || *a.Namespaced, nil
 	}
-	mapping, err := params.RESTMapper().RESTMapping(schema.GroupKind{Group: gv.Group, Kind: a.Kind}, gv.Version)
+	mapping, err := client.RESTMapper().RESTMapping(schema.GroupKind{Group: gv.Group, Kind: a.Kind}, gv.Version)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to resolve %s/%s: %w", a.APIVersion, a.Kind, err)
 	}

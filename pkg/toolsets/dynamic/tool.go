@@ -3,15 +3,37 @@ package dynamic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
+
+// runEnv is what an action needs from the caller: a context, the derived
+// Kubernetes client and (optionally) an elicitor. Both tool and prompt
+// handler params provide it.
+type runEnv struct {
+	ctx      context.Context
+	client   api.KubernetesClient
+	elicitor api.Elicitor
+}
+
+// binaryResult is the result of an action declared with response: binary.
+type binaryResult struct {
+	mimeType string
+	data     []byte
+}
+
+// summary is how a binary result appears to CEL expressions.
+func (b *binaryResult) summary() map[string]any {
+	return map[string]any{"mimeType": b.mimeType, "size": len(b.data)}
+}
 
 // compiledAction is one kubernetes or http action with its expressions
 // compiled.
@@ -22,11 +44,13 @@ type compiledAction struct {
 	queryExpr  *expression
 }
 
-// compiledStep is one step of a composed Tool.
+// compiledStep is one step of a composed Tool or Prompt.
 type compiledStep struct {
 	spec    Step
 	action  *compiledAction
 	expr    *expression
+	fail    *expression
+	elicit  *template
 	when    *expression
 	forEach *expression
 }
@@ -49,18 +73,8 @@ func newCompiledTool(tool Tool) (*compiledTool, error) {
 		return nil, err
 	}
 	c := &compiledTool{name: tool.ToolName(), spec: tool.Spec, refExprs: map[string]*expression{}}
-	for _, ref := range c.spec.refs() {
-		if ref == nil || ref.Expression == "" {
-			continue
-		}
-		if _, done := c.refExprs[ref.Expression]; done {
-			continue
-		}
-		expr, err := compileExpression(ref.Expression)
-		if err != nil {
-			return nil, err
-		}
-		c.refExprs[ref.Expression] = expr
+	if err := c.compileRefs(c.spec.refs()); err != nil {
+		return nil, err
 	}
 	var err error
 	if c.spec.Output != "" {
@@ -74,14 +88,51 @@ func newCompiledTool(tool Tool) (*compiledTool, error) {
 		}
 		return c, nil
 	}
-	for i := range c.spec.Steps {
-		step, err := compileStep(c.spec.Steps[i])
-		if err != nil {
-			return nil, fmt.Errorf("spec.steps[%d] (%s): %w", i, c.spec.Steps[i].Name, err)
-		}
-		c.steps = append(c.steps, step)
+	if c.steps, err = compileSteps(c.spec.Steps); err != nil {
+		return nil, err
 	}
 	return c, nil
+}
+
+// compileStepsOnly builds the step runner for a definition that is not a
+// Tool (a Prompt). The caller has validated the steps.
+func compileStepsOnly(steps []Step) (*compiledTool, error) {
+	c := &compiledTool{spec: ToolSpec{Steps: steps}, refExprs: map[string]*expression{}}
+	if err := c.compileRefs(c.spec.refs()); err != nil {
+		return nil, err
+	}
+	var err error
+	c.steps, err = compileSteps(steps)
+	return c, err
+}
+
+func (c *compiledTool) compileRefs(refs []*Ref) error {
+	for _, ref := range refs {
+		if ref == nil || ref.Expression == "" {
+			continue
+		}
+		if _, done := c.refExprs[ref.Expression]; done {
+			continue
+		}
+		expr, err := compileExpression(ref.Expression)
+		if err != nil {
+			return err
+		}
+		c.refExprs[ref.Expression] = expr
+	}
+	return nil
+}
+
+func compileSteps(specs []Step) ([]*compiledStep, error) {
+	steps := make([]*compiledStep, 0, len(specs))
+	for i := range specs {
+		step, err := compileStep(specs[i])
+		if err != nil {
+			return nil, fmt.Errorf("spec.steps[%d] (%s): %w", i, specs[i].Name, err)
+		}
+		steps = append(steps, step)
+	}
+	return steps, nil
 }
 
 func compileAction(kubernetes *KubernetesAction, http *HTTPAction) (*compiledAction, error) {
@@ -111,12 +162,23 @@ func compileAction(kubernetes *KubernetesAction, http *HTTPAction) (*compiledAct
 func compileStep(spec Step) (*compiledStep, error) {
 	step := &compiledStep{spec: spec}
 	var err error
-	if spec.Expression != "" {
+	switch {
+	case spec.Expression != "":
 		if step.expr, err = compileExpression(spec.Expression); err != nil {
 			return nil, fmt.Errorf("expression: %w", err)
 		}
-	} else if step.action, err = compileAction(spec.Kubernetes, spec.HTTP); err != nil {
-		return nil, err
+	case spec.Fail != "":
+		if step.fail, err = compileExpression(spec.Fail); err != nil {
+			return nil, fmt.Errorf("fail: %w", err)
+		}
+	case spec.Elicit != nil:
+		if step.elicit, err = parseTemplate(spec.Elicit.Message); err != nil {
+			return nil, fmt.Errorf("elicit.message: %w", err)
+		}
+	default:
+		if step.action, err = compileAction(spec.Kubernetes, spec.HTTP); err != nil {
+			return nil, err
+		}
 	}
 	if spec.When != "" {
 		if step.when, err = compileExpression(spec.When); err != nil {
@@ -132,14 +194,18 @@ func compileStep(spec Step) (*compiledStep, error) {
 }
 
 // serverTool converts the definition into the SDK-neutral ServerTool the MCP
-// server registers. discovery is used to derive the RBAC metadata and may be
-// nil.
-func (c *compiledTool) serverTool(ctx context.Context, discovery api.AggregateDiscovery) (api.ServerTool, error) {
+// server registers. The inspector derives the RBAC metadata and the
+// `requires` compatibility filters, and may be nil.
+func (c *compiledTool) serverTool(ctx context.Context, inspector api.ClusterInspector) (api.ServerTool, error) {
 	schema, err := c.inputSchema()
 	if err != nil {
 		return api.ServerTool{}, err
 	}
-	return api.ServerTool{
+	var discovery api.AggregateDiscovery
+	if inspector != nil {
+		discovery = inspector.Discovery()
+	}
+	tool := api.ServerTool{
 		Tool: api.Tool{
 			Name:        c.name,
 			Description: c.spec.Description,
@@ -154,7 +220,21 @@ func (c *compiledTool) serverTool(ctx context.Context, discovery api.AggregateDi
 		},
 		RBAC:    c.rbac(ctx, discovery),
 		Handler: c.handle,
-	}, nil
+	}
+	if inspector != nil {
+		for _, req := range c.spec.Requires {
+			gvk := requiredGVK(req)
+			tool.TargetCompatibilityFilters = append(tool.TargetCompatibilityFilters, func() bool {
+				return api.AnyTargetHasGVK(ctx, inspector, gvk)
+			})
+		}
+	}
+	return tool, nil
+}
+
+func requiredGVK(req GVKRef) schema.GroupVersionKind {
+	gv, _ := schema.ParseGroupVersion(req.APIVersion)
+	return gv.WithKind(req.Kind)
 }
 
 func (c *compiledTool) inputSchema() (*jsonschema.Schema, error) {
@@ -171,27 +251,30 @@ func (c *compiledTool) inputSchema() (*jsonschema.Schema, error) {
 	return schema, nil
 }
 
+func toolEnv(params api.ToolHandlerParams) runEnv {
+	return runEnv{ctx: params, client: params.KubernetesClient, elicitor: params.Elicitor}
+}
+
 func (c *compiledTool) handle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	env := toolEnv(params)
 	vars := evalVars{args: params.GetArguments()}
 	if vars.args == nil {
 		vars.args = map[string]any{}
 	}
 	var response any
+	var binary *binaryResult
 	var err error
 	if c.action != nil {
-		response, err = c.run(c.action, params, vars)
-		if err != nil {
+		if response, err = c.run(c.action, env, vars); err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("%s failed: %w", c.name, err)), nil
+		}
+		if b, ok := response.(*binaryResult); ok {
+			binary, response = b, b.summary()
 		}
 	} else {
 		vars.steps = map[string]any{}
-		for _, step := range c.steps {
-			result, err := c.runStep(step, params, vars)
-			if err != nil {
-				return api.NewToolCallResult("", fmt.Errorf("%s failed at step %s: %w", c.name, step.spec.Name, err)), nil
-			}
-			vars.steps[step.spec.Name] = result
-			response = result
+		if response, binary, err = c.runSteps(env, &vars); err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("%s failed: %w", c.name, err)), nil
 		}
 	}
 	vars.response = response
@@ -202,6 +285,18 @@ func (c *compiledTool) handle(params api.ToolHandlerParams) (*api.ToolCallResult
 		}
 	} else if c.steps != nil {
 		result = vars.steps
+	}
+	if binary != nil {
+		// A binary result becomes an image/blob content block, described by
+		// the output text (or a default summary).
+		text, ok := result.(string)
+		if !ok {
+			text = fmt.Sprintf("%s (%d bytes)", binary.mimeType, len(binary.data))
+		}
+		return api.NewToolCallResultContentBlocks(
+			api.NewTextToolContent(text),
+			api.NewImageToolContent(binary.data, binary.mimeType),
+		), nil
 	}
 	// Plain text (logs, CSV exports, messages) is returned verbatim.
 	if text, ok := result.(string); ok {
@@ -218,15 +313,35 @@ func (c *compiledTool) handle(params api.ToolHandlerParams) (*api.ToolCallResult
 	return api.NewToolCallResult(text, nil), nil
 }
 
-func (c *compiledTool) run(action *compiledAction, params api.ToolHandlerParams, vars evalVars) (any, error) {
-	if action.kubernetes != nil {
-		return c.runKubernetes(action, params, vars)
+// runSteps runs every step in order, recording results in vars.steps. It
+// returns the last step's result and, when that result is binary, its bytes.
+func (c *compiledTool) runSteps(env runEnv, vars *evalVars) (any, *binaryResult, error) {
+	var last any
+	var binary *binaryResult
+	for _, step := range c.steps {
+		result, err := c.runStep(step, env, *vars)
+		if err != nil {
+			return nil, nil, fmt.Errorf("step %s: %w", step.spec.Name, err)
+		}
+		binary = nil
+		if b, ok := result.(*binaryResult); ok {
+			binary, result = b, b.summary()
+		}
+		vars.steps[step.spec.Name] = result
+		last = result
 	}
-	return c.runHTTP(action, params, vars)
+	return last, binary, nil
+}
+
+func (c *compiledTool) run(action *compiledAction, env runEnv, vars evalVars) (any, error) {
+	if action.kubernetes != nil {
+		return c.runKubernetes(action, env, vars)
+	}
+	return c.runHTTP(action, env, vars)
 }
 
 // runStep evaluates when, then runs the step once or once per forEach item.
-func (c *compiledTool) runStep(step *compiledStep, params api.ToolHandlerParams, vars evalVars) (any, error) {
+func (c *compiledTool) runStep(step *compiledStep, env runEnv, vars evalVars) (any, error) {
 	if step.when != nil {
 		value, err := step.when.eval(vars)
 		if err != nil {
@@ -241,7 +356,7 @@ func (c *compiledTool) runStep(step *compiledStep, params api.ToolHandlerParams,
 		}
 	}
 	if step.forEach == nil {
-		return c.runOnce(step, params, vars)
+		return c.runOnce(step, env, vars)
 	}
 	value, err := step.forEach.eval(vars)
 	if err != nil {
@@ -257,20 +372,35 @@ func (c *compiledTool) runStep(step *compiledStep, params api.ToolHandlerParams,
 	results := make([]any, 0, len(items))
 	for _, item := range items {
 		vars.item = item
-		result, err := c.runOnce(step, params, vars)
+		result, err := c.runOnce(step, env, vars)
 		if err != nil {
 			return nil, err
+		}
+		if b, ok := result.(*binaryResult); ok {
+			result = b.summary()
 		}
 		results = append(results, result)
 	}
 	return results, nil
 }
 
-func (c *compiledTool) runOnce(step *compiledStep, params api.ToolHandlerParams, vars evalVars) (any, error) {
-	if step.expr != nil {
+func (c *compiledTool) runOnce(step *compiledStep, env runEnv, vars evalVars) (any, error) {
+	switch {
+	case step.expr != nil:
 		return step.expr.eval(vars)
+	case step.fail != nil:
+		value, err := step.fail.eval(vars)
+		if err != nil {
+			return nil, err
+		}
+		if message := scalarString(value); message != "" {
+			return nil, errors.New(message)
+		}
+		return nil, nil
+	case step.elicit != nil:
+		return c.runElicit(step, env, vars)
 	}
-	result, err := c.run(step.action, params, vars)
+	result, err := c.run(step.action, env, vars)
 	if err != nil {
 		if step.spec.IgnoreError {
 			return map[string]any{"error": err.Error()}, nil
@@ -280,11 +410,36 @@ func (c *compiledTool) runOnce(step *compiledStep, params api.ToolHandlerParams,
 	return result, nil
 }
 
+// runElicit asks the user through MCP elicitation. Clients without
+// elicitation support yield action "unsupported" so the definition can
+// fall back (for example by asking in the prompt text instead).
+func (c *compiledTool) runElicit(step *compiledStep, env runEnv, vars evalVars) (any, error) {
+	message, err := step.elicit.render(vars)
+	if err != nil {
+		return nil, err
+	}
+	if env.elicitor == nil {
+		return map[string]any{"action": "unsupported"}, nil
+	}
+	result, err := env.elicitor.Elicit(env.ctx, &api.ElicitParams{Message: message})
+	if err != nil {
+		if errors.Is(err, api.ErrElicitationNotSupported) {
+			return map[string]any{"action": "unsupported"}, nil
+		}
+		return nil, err
+	}
+	content := map[string]any{}
+	for key, value := range result.Content {
+		content[key] = value
+	}
+	return map[string]any{"action": result.Action, "content": content}, nil
+}
+
 // rbac derives the RBAC metadata from the declaration: the union of the
 // requirements of every action. Kubernetes actions are bounded by
-// construction (one verb, one resource, argument-derived scope) unless a
-// value comes from a CEL expression; the resource plural is resolved through
-// discovery when only the kind is declared.
+// construction (one verb, one resource, argument-derived scope) unless the
+// subresource comes from the arguments; the resource plural is resolved
+// through discovery when only the kind is declared.
 func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscovery) *api.RBACMetadata {
 	actions := []*compiledAction{c.action}
 	if c.action == nil {
@@ -411,5 +566,12 @@ func Check(tool Tool) error {
 		return err
 	}
 	_, err = compiled.serverTool(context.Background(), nil)
+	return err
+}
+
+// CheckPrompt validates a Prompt definition the way the toolset does at
+// registration time.
+func CheckPrompt(prompt Prompt) error {
+	_, err := newCompiledPrompt(prompt)
 	return err
 }

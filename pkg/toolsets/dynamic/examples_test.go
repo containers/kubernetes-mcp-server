@@ -26,17 +26,24 @@ func (s *ExamplesSuite) SetupSuite() {
 func (s *ExamplesSuite) checkDocuments(name string, content []byte) int {
 	count := 0
 	for _, doc := range strings.Split(string(content), "\n---") {
-		if !strings.Contains(doc, "kind: Tool") {
+		var header map[string]any
+		if err := yaml.Unmarshal([]byte(doc), &header); err != nil || header == nil {
+			continue
+		}
+		switch header["kind"] {
+		case Kind:
+			var tool Tool
+			s.Require().NoError(yaml.Unmarshal([]byte(doc), &tool), "%s: invalid YAML", name)
+			s.Require().NoError(Check(tool), "%s: tool %s", name, tool.Metadata.Name)
+		case PromptKind:
+			var prompt Prompt
+			s.Require().NoError(yaml.Unmarshal([]byte(doc), &prompt), "%s: invalid YAML", name)
+			s.Require().NoError(CheckPrompt(prompt), "%s: prompt %s", name, prompt.Metadata.Name)
+		default:
 			continue
 		}
 		count++
-		var tool Tool
-		s.Require().NoError(yaml.Unmarshal([]byte(doc), &tool), "%s: invalid YAML", name)
-		s.Require().NoError(Check(tool), "%s: tool %s", name, tool.Metadata.Name)
-		s.NotEmpty(tool.Spec.Description, "%s: tool %s", name, tool.Metadata.Name)
-		var header map[string]any
-		s.Require().NoError(yaml.Unmarshal([]byte(doc), &header))
-		s.Equal(Group+"/"+Version, header["apiVersion"], "%s: tool %s", name, tool.Metadata.Name)
+		s.Equal(Group+"/"+Version, header["apiVersion"], "%s", name)
 	}
 	return count
 }

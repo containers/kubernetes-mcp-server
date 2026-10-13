@@ -13,8 +13,6 @@ import (
 	"strings"
 
 	"k8s.io/client-go/rest"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
 const maxResponseBytes = 8 << 20
@@ -26,10 +24,10 @@ var pathPlaceholder = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
 // config (so the access-control round tripper and the caller's identity
 // apply). Requests to a plain URL carry the caller's bearer token, exactly as
 // the Kiali and NetObserv toolsets do.
-func (t *compiledTool) runHTTP(action *compiledAction, params api.ToolHandlerParams, vars evalVars) (any, error) {
+func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars) (any, error) {
 	a := action.http
 	args := vars.args
-	restConfig := params.RESTConfig()
+	restConfig := env.client.RESTConfig()
 
 	var client *http.Client
 	var base string
@@ -90,7 +88,7 @@ func (t *compiledTool) runHTTP(action *compiledAction, params api.ToolHandlerPar
 		}
 		body = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(params, method, u.String(), body)
+	req, err := http.NewRequestWithContext(env.ctx, method, u.String(), body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request: %w", err)
 	}
@@ -119,7 +117,8 @@ func (t *compiledTool) runHTTP(action *compiledAction, params api.ToolHandlerPar
 	if resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("%s %s returned HTTP %d: %s", method, u.Redacted(), resp.StatusCode, truncate(string(raw), 512))
 	}
-	return decodeResponse(raw), nil
+	contentType, _, _ := strings.Cut(resp.Header.Get("Content-Type"), ";")
+	return decodeResponseAs(raw, a.Response, strings.TrimSpace(contentType), a.MIMEType, a.Redact), nil
 }
 
 func proxyServiceName(service *ServiceRef) string {

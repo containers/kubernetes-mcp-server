@@ -2,6 +2,7 @@ package confirmation
 
 import (
 	"fmt"
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -40,11 +41,24 @@ func MatchToolLevelRules(rules []config.ConfirmationRule, toolName string, destr
 //   - name: exact match on the resource name
 //   - namespace: exact match on the namespace
 func MatchKubeLevelRules(rules []config.ConfirmationRule, verb, kind, group, version, name, namespace string) []config.ConfirmationRule {
+	return MatchKubeLevelRequest(rules, rulexpr.Request{Verb: verb, Kind: kind, Group: group, Version: version, Name: name, Namespace: namespace})
+}
+
+// MatchKubeLevelRequest is MatchKubeLevelRules for a full request: rules with
+// an expression additionally evaluate it against the request, including the
+// decoded body (`object`) for create/update/patch.
+func MatchKubeLevelRequest(rules []config.ConfirmationRule, request rulexpr.Request) []config.ConfirmationRule {
+	verb, kind, group, version, name, namespace := request.Verb, request.Kind, request.Group, request.Version, request.Name, request.Namespace
 	var matched []config.ConfirmationRule
 	for i := range rules {
 		r := &rules[i]
 		if !r.IsKubeLevel() {
 			continue
+		}
+		if r.Expression != "" {
+			if ok, err := rulexpr.Matches(r.Expression, request); err != nil || !ok {
+				continue
+			}
 		}
 		if r.Verb != "" && r.Verb != verb {
 			continue

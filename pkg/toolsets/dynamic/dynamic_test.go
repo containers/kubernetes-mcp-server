@@ -1,6 +1,7 @@
 package dynamic
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -297,8 +298,8 @@ func (s *DynamicSuite) TestStepsValidation() {
 		s.ErrorContains(base(Step{Name: "not valid", Kubernetes: get}).Validate(), "must match")
 	})
 	s.Run("rejects a step without exactly one of kubernetes, http or expression", func() {
-		s.ErrorContains(base(Step{Name: "a"}).Validate(), "exactly one of kubernetes, http or expression")
-		s.ErrorContains(base(Step{Name: "a", Kubernetes: get, Expression: "1"}).Validate(), "exactly one of kubernetes, http or expression")
+		s.ErrorContains(base(Step{Name: "a"}).Validate(), "exactly one of kubernetes, http, expression, fail or elicit")
+		s.ErrorContains(base(Step{Name: "a", Kubernetes: get, Expression: "1"}).Validate(), "exactly one of kubernetes, http, expression, fail or elicit")
 	})
 	s.Run("rejects too many steps", func() {
 		steps := make([]Step, MaxSteps+1)
@@ -329,7 +330,7 @@ func (s *DynamicSuite) TestStepsExecution() {
 		vars := evalVars{args: args, steps: map[string]any{}}
 		var last any
 		for _, step := range tool.steps {
-			result, err := tool.runStep(step, api.ToolHandlerParams{}, vars)
+			result, err := tool.runStep(step, runEnv{}, vars)
 			if err != nil {
 				return nil, err
 			}
@@ -353,6 +354,130 @@ func (s *DynamicSuite) TestStepsExecution() {
 		_, err := run(map[string]any{"n": "explode"})
 		s.ErrorContains(err, "at most 64")
 	})
+}
+
+type fakeElicitor struct {
+	action   string
+	messages []string
+	err      error
+}
+
+func (f *fakeElicitor) Elicit(_ context.Context, params *api.ElicitParams) (*api.ElicitResult, error) {
+	f.messages = append(f.messages, params.Message)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &api.ElicitResult{Action: f.action, Content: map[string]any{"ok": true}}, nil
+}
+
+func (s *DynamicSuite) TestFailAndElicitSteps() {
+	tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "guarded"}, Spec: ToolSpec{
+		Description: "d",
+		Steps: []Step{
+			{Name: "check", Fail: "!has(args.url) || !args.url.startsWith('https://') ? 'url must be https' : ''"},
+			{Name: "consent", Elicit: &ElicitStep{Message: "Proceed with ${args.url}?"}},
+		},
+	}})
+	s.Require().NoError(err)
+	run := func(elicitor api.Elicitor, args map[string]any) (map[string]any, error) {
+		vars := evalVars{args: args, steps: map[string]any{}}
+		_, _, err := tool.runSteps(runEnv{ctx: context.Background(), elicitor: elicitor}, &vars)
+		return vars.steps, err
+	}
+	s.Run("fail stops the tool with the message", func() {
+		_, err := run(nil, map[string]any{"url": "http://x"})
+		s.EqualError(err, "step check: url must be https")
+	})
+	s.Run("elicit renders the message and records the answer", func() {
+		elicitor := &fakeElicitor{action: "accept"}
+		steps, err := run(elicitor, map[string]any{"url": "https://x"})
+		s.Require().NoError(err)
+		s.Equal([]string{"Proceed with https://x?"}, elicitor.messages)
+		s.Equal(map[string]any{"action": "accept", "content": map[string]any{"ok": true}}, steps["consent"])
+	})
+	s.Run("elicit reports unsupported clients instead of failing", func() {
+		steps, err := run(nil, map[string]any{"url": "https://x"})
+		s.Require().NoError(err)
+		s.Equal(map[string]any{"action": "unsupported"}, steps["consent"])
+		steps, err = run(&fakeElicitor{err: api.ErrElicitationNotSupported}, map[string]any{"url": "https://x"})
+		s.Require().NoError(err)
+		s.Equal(map[string]any{"action": "unsupported"}, steps["consent"])
+	})
+}
+
+func (s *DynamicSuite) TestTemplates() {
+	s.Run("renders strings, scalars, null and YAML for structures", func() {
+		t, err := parseTemplate("name=${args.name} n=${args.n} none=${args.missing}\n${yaml({'a': [1, 2]})}end")
+		s.Require().NoError(err)
+		out, err := t.render(evalVars{args: map[string]any{"name": "x", "n": float64(2), "missing": nil}})
+		s.Require().NoError(err)
+		s.Equal("name=x n=2 none=\na:\n- 1\n- 2\nend", out)
+	})
+	s.Run("placeholders may contain braces", func() {
+		t, err := parseTemplate("${{'k': args.v}.k}!")
+		s.Require().NoError(err)
+		out, err := t.render(evalVars{args: map[string]any{"v": "ok"}})
+		s.Require().NoError(err)
+		s.Equal("ok!", out)
+	})
+	s.Run("rejects unterminated placeholders and bad expressions", func() {
+		_, err := parseTemplate("${args.x")
+		s.ErrorContains(err, "unterminated")
+		_, err = parseTemplate("${args.x ==}")
+		s.ErrorContains(err, "invalid CEL expression")
+	})
+	s.Run("json and redact functions", func() {
+		expr, err := compileExpression("json({'a': 1}) + ' ' + redact('token=abc')")
+		s.Require().NoError(err)
+		out, err := expr.eval(evalVars{})
+		s.Require().NoError(err)
+		s.Equal(`{"a":1} token=<REDACTED>`, out)
+	})
+}
+
+func (s *DynamicSuite) TestPromptValidation() {
+	valid := func() *Prompt {
+		return &Prompt{Metadata: Metadata{Name: "vm-troubleshoot"}, Spec: PromptSpec{
+			Description: "d",
+			Arguments:   []PromptArgument{{Name: "name", Required: true}},
+			Steps:       []Step{{Name: "vm", Kubernetes: &KubernetesAction{Verb: "get", APIVersion: "kubevirt.io/v1", Kind: "VirtualMachine", Name: &Ref{Argument: "name"}}}},
+			Messages:    []PromptMessage{{Role: "user", Text: "VM: ${yaml(steps.vm)}"}, {Role: "assistant", Text: "ok", When: "has(steps.vm.status)"}},
+		}}
+	}
+	s.Run("accepts a prompt with steps and templates", func() {
+		s.NoError(CheckPrompt(*valid()))
+		s.Equal("vm-troubleshoot", valid().PromptName())
+	})
+	s.Run("rejects missing messages, bad roles and duplicate arguments", func() {
+		p := valid()
+		p.Spec.Messages = nil
+		s.ErrorContains(p.Validate(), "at least one message")
+		p = valid()
+		p.Spec.Messages[0].Role = "system"
+		s.ErrorContains(p.Validate(), "must be user or assistant")
+		p = valid()
+		p.Spec.Arguments = append(p.Spec.Arguments, PromptArgument{Name: "name"})
+		s.ErrorContains(p.Validate(), "duplicated")
+	})
+	s.Run("rejects bad templates at compile time", func() {
+		p := valid()
+		p.Spec.Messages[0].Text = "${steps.vm"
+		s.ErrorContains(CheckPrompt(*p), "spec.messages[0].text")
+	})
+}
+
+func (s *DynamicSuite) TestResponseAndRequiresValidation() {
+	tool := Tool{Metadata: Metadata{Name: "t"}, Spec: ToolSpec{Description: "d",
+		Kubernetes: &KubernetesAction{Verb: "get", APIVersion: "v1", Kind: "Pod", Name: &Ref{Argument: "n"}, Response: "bytes"}}}
+	s.ErrorContains(tool.Validate(), "response")
+	tool.Spec.Kubernetes.Response = ResponseBinary
+	tool.Spec.Requires = []GVKRef{{APIVersion: "v1"}}
+	s.ErrorContains(tool.Validate(), "spec.requires[0]")
+	tool.Spec.Requires = []GVKRef{{APIVersion: "kubevirt.io/v1", Kind: "VirtualMachine"}}
+	s.NoError(tool.Validate())
+	s.Equal(&binaryResult{mimeType: "image/png", data: []byte{1}}, decodeResponseAs([]byte{1}, ResponseBinary, "", "image/png", false))
+	s.Equal("secret token=<REDACTED>", decodeResponseAs([]byte("secret token=abc"), ResponseText, "text/plain", "", true))
+	s.Equal(map[string]any{"a": float64(1)}, decodeResponseAs([]byte(`{"a":1}`), "", "application/json", "", false))
 }
 
 func (s *DynamicSuite) TestToolset() {

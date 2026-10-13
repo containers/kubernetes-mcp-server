@@ -82,6 +82,7 @@ func EnvTest() *envtest.Environment {
 			CRDs: []*apiextensionsv1spec.CustomResourceDefinition{
 				// kubernetes-mcp-server dynamic tools
 				CRD("tools.kubernetes-mcp-server.io", "v1alpha1", "tools", "Tool", "tool", false),
+				CRD("tools.kubernetes-mcp-server.io", "v1alpha1", "prompts", "Prompt", "prompt", false),
 				// OpenShift
 				CRD("project.openshift.io", "v1", "projects", "Project", "project", false),
 				CRD("route.openshift.io", "v1", "routes", "Route", "route", true),
