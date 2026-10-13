@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
@@ -196,7 +197,7 @@ func pipelineSpecBlock(source string, pipelineSpec map[string]interface{}) strin
 }
 
 func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string) ([]tektonv1.TaskRun, string) {
-	taskRuns, _, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "", 0)
+	taskRuns, _, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "", metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Sprintf("*Error listing TaskRuns: %v*", err)
 	}
@@ -261,6 +262,19 @@ func failedOrErroredStep(step tektonv1.StepState) bool {
 type pipelineEventTarget struct {
 	kind string
 	name string
+	uid  types.UID
+}
+
+func (t pipelineEventTarget) fieldSelector() string {
+	selector := fields.Set{
+		"involvedObject.kind": t.kind,
+		"involvedObject.name": t.name,
+		"type":                corev1.EventTypeWarning,
+	}
+	if t.uid != "" {
+		selector["involvedObject.uid"] = string(t.uid)
+	}
+	return fields.SelectorFromSet(selector).String()
 }
 
 func pipelineRunEventTargets(pipelineRunName string, pipelineRun metav1.Object, taskRuns []tektonv1.TaskRun) []pipelineEventTarget {
@@ -277,12 +291,16 @@ func pipelineRunEventTargets(pipelineRunName string, pipelineRun metav1.Object, 
 		targets = append(targets, target)
 	}
 
-	add(pipelineEventTarget{kind: "PipelineRun", name: pipelineRunName})
+	if pipelineRun != nil && pipelineRun.GetUID() != "" {
+		add(pipelineEventTarget{kind: "PipelineRun", name: pipelineRunName, uid: pipelineRun.GetUID()})
+	}
 	for i := range taskRuns {
 		if pipelineRun != nil && !metav1.IsControlledBy(&taskRuns[i], pipelineRun) {
 			continue
 		}
-		add(pipelineEventTarget{kind: "TaskRun", name: taskRuns[i].Name})
+		if taskRuns[i].UID != "" {
+			add(pipelineEventTarget{kind: "TaskRun", name: taskRuns[i].Name, uid: taskRuns[i].UID})
+		}
 		add(pipelineEventTarget{kind: "Pod", name: taskRuns[i].Status.PodName})
 	}
 	return targets
@@ -294,11 +312,7 @@ func listPipelineRunWarningEvents(ctx context.Context, events corev1client.Event
 	seen := make(map[string]struct{})
 
 	for i, target := range targets {
-		options := metav1.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{
-			"involvedObject.kind": target.kind,
-			"involvedObject.name": target.name,
-			"type":                corev1.EventTypeWarning,
-		}).String()}
+		options := metav1.ListOptions{FieldSelector: target.fieldSelector()}
 		if limit > 0 {
 			options.Limit = int64(limit - len(matched))
 		}

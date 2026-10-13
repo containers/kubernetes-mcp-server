@@ -20,13 +20,16 @@ import (
 
 const (
 	pipelineRunDiagnosisSchemaVersion = "1"
-	maxDiagnosisTaskRuns              = 50
-	maxDiagnosisFailedStepsPerTask    = 20
-	maxDiagnosisWarningEvents         = 50
-	maxDiagnosisLogBytesPerStep       = int64(32 * 1024)
-	maxDiagnosisLogBytesTotal         = int64(128 * 1024)
-	maxDiagnosisLogTailLines          = int64(100)
-	maxDiagnosisMessageRunes          = 1024
+	// Diagnosis limits select useful evidence; they are not substitutes for
+	// server-wide transport and whole-result bounds.
+	maxDiagnosisTaskRuns           = 50
+	maxDiagnosisTaskRunPages       = 20
+	maxDiagnosisFailedStepsPerTask = 20
+	maxDiagnosisWarningEvents      = 50
+	maxDiagnosisLogBytesPerStep    = int64(32 * 1024)
+	maxDiagnosisLogBytesTotal      = int64(128 * 1024)
+	maxDiagnosisLogTailLines       = int64(100)
+	maxDiagnosisMessageRunes       = 1024
 )
 
 type pipelineRunDiagnosis struct {
@@ -191,20 +194,38 @@ func diagnosePipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, err
 }
 
 func failedPipelineRunTaskRuns(ctx context.Context, params api.ToolHandlerParams, namespace string, pipelineRun *tektonv1.PipelineRun, result *pipelineRunDiagnosis) []tektonv1.TaskRun {
-	taskRuns, truncated, err := pipelineRunTaskRuns(ctx, params.DynamicClient(), namespace, pipelineRun.Name, "", maxDiagnosisTaskRuns)
-	if err != nil {
-		result.addPartialError(ctx, "taskruns", err)
-		return nil
-	}
-	result.Truncated = result.Truncated || truncated
-	sort.SliceStable(taskRuns, func(i, j int) bool { return taskRuns[i].Name < taskRuns[j].Name })
-
-	failedTaskRuns := make([]tektonv1.TaskRun, 0, len(taskRuns))
-	for i := range taskRuns {
-		if metav1.IsControlledBy(&taskRuns[i], pipelineRun) && taskRunFailed(&taskRuns[i]) {
+	failedTaskRuns := make([]tektonv1.TaskRun, 0, maxDiagnosisTaskRuns)
+	continueToken := ""
+	for range maxDiagnosisTaskRunPages {
+		taskRuns, nextToken, err := pipelineRunTaskRuns(ctx, params.DynamicClient(), namespace, pipelineRun.Name, "", metav1.ListOptions{
+			Limit:    maxDiagnosisTaskRuns,
+			Continue: continueToken,
+		})
+		if err != nil {
+			result.addPartialError(ctx, "taskruns", err)
+			result.Truncated = continueToken != ""
+			break
+		}
+		for i := range taskRuns {
+			if !metav1.IsControlledBy(&taskRuns[i], pipelineRun) || !taskRunFailed(&taskRuns[i]) {
+				continue
+			}
+			if len(failedTaskRuns) == maxDiagnosisTaskRuns {
+				result.Truncated = true
+				sort.SliceStable(failedTaskRuns, func(i, j int) bool { return failedTaskRuns[i].Name < failedTaskRuns[j].Name })
+				return failedTaskRuns
+			}
 			failedTaskRuns = append(failedTaskRuns, taskRuns[i])
 		}
+		if nextToken == "" {
+			sort.SliceStable(failedTaskRuns, func(i, j int) bool { return failedTaskRuns[i].Name < failedTaskRuns[j].Name })
+			return failedTaskRuns
+		}
+		continueToken = nextToken
 	}
+
+	result.Truncated = true
+	sort.SliceStable(failedTaskRuns, func(i, j int) bool { return failedTaskRuns[i].Name < failedTaskRuns[j].Name })
 	return failedTaskRuns
 }
 

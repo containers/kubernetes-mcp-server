@@ -223,7 +223,7 @@ func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to get PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
 
-	taskRuns, _, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, name, pipelineTaskName, 0)
+	taskRuns, _, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, name, pipelineTaskName, metav1.ListOptions{})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list TaskRuns for PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
@@ -254,30 +254,28 @@ func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	return api.NewToolCallResult(sb.String(), nil), nil
 }
 
-func pipelineRunTaskRuns(ctx context.Context, dynamicClient dynamic.Interface, namespace, pipelineRunName, pipelineTaskName string, limit int64) ([]tektonv1.TaskRun, bool, error) {
+func pipelineRunTaskRuns(ctx context.Context, dynamicClient dynamic.Interface, namespace, pipelineRunName, pipelineTaskName string, options metav1.ListOptions) ([]tektonv1.TaskRun, string, error) {
 	matchLabels := labels.Set{pipeline.PipelineRunLabelKey: pipelineRunName}
 	if pipelineTaskName != "" {
 		matchLabels[pipeline.PipelineTaskLabelKey] = pipelineTaskName
 	}
 	selector, err := labels.ValidatedSelectorFromSet(matchLabels)
 	if err != nil {
-		return nil, false, fmt.Errorf("invalid TaskRun label filter: %w", err)
+		return nil, "", fmt.Errorf("invalid TaskRun label filter: %w", err)
 	}
-	list, err := dynamicClient.Resource(taskRunGVR).Namespace(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: selector.String(),
-		Limit:         limit,
-	})
+	options.LabelSelector = selector.String()
+	list, err := dynamicClient.Resource(taskRunGVR).Namespace(namespace).List(ctx, options)
 	if err != nil {
-		return nil, false, err
+		return nil, "", err
 	}
 
 	taskRuns := make([]tektonv1.TaskRun, 0, len(list.Items))
 	for _, item := range list.Items {
 		var taskRun tektonv1.TaskRun
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, &taskRun); err != nil {
-			return nil, false, err
+			return nil, "", err
 		}
 		taskRuns = append(taskRuns, taskRun)
 	}
-	return taskRuns, list.GetContinue() != "", nil
+	return taskRuns, list.GetContinue(), nil
 }

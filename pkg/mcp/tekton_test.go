@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
@@ -347,6 +348,79 @@ func (s *TektonMcpSuite) TestPipelineRunDiagnoseUsesTaskRunOwnership() {
 	failedTaskRuns := result.StructuredContent.(map[string]interface{})["failedTaskRuns"].([]interface{})
 	s.Require().Len(failedTaskRuns, 1)
 	s.Equal("owned", failedTaskRuns[0].(map[string]interface{})["name"])
+}
+
+func (s *TektonMcpSuite) TestPipelineRunDiagnoseScansTaskRunPages() {
+	s.createPipelineRun("paged-taskruns")
+	for i := range 50 {
+		s.createFailedTaskRun(fmt.Sprintf("a-label-only-%02d", i), "paged-taskruns", false)
+	}
+	s.createFailedTaskRun("z-owned", "paged-taskruns", true)
+
+	result, err := s.CallTool("tekton_pipelinerun_diagnose", map[string]interface{}{
+		"namespace": s.namespace,
+		"name":      "paged-taskruns",
+	})
+	s.Require().NoError(err)
+	structured := result.StructuredContent.(map[string]interface{})
+	failedTaskRuns := structured["failedTaskRuns"].([]interface{})
+	s.Require().Len(failedTaskRuns, 1)
+	s.Equal("z-owned", failedTaskRuns[0].(map[string]interface{})["name"])
+	s.False(structured["truncated"].(bool))
+}
+
+func (s *TektonMcpSuite) TestPipelineRunDiagnoseFiftyFailuresAreComplete() {
+	s.createPipelineRun("fifty-failures")
+	for i := range 50 {
+		s.createFailedTaskRun(fmt.Sprintf("failed-taskrun-%02d", i), "fifty-failures", true)
+	}
+
+	result, err := s.CallTool("tekton_pipelinerun_diagnose", map[string]interface{}{
+		"namespace": s.namespace,
+		"name":      "fifty-failures",
+	})
+	s.Require().NoError(err)
+	structured := result.StructuredContent.(map[string]interface{})
+	s.Len(structured["failedTaskRuns"], 50)
+	s.False(structured["truncated"].(bool))
+}
+
+func (s *TektonMcpSuite) TestPipelineRunEventsUseObjectUID() {
+	s.createPipelineRun("uid-run")
+	s.createFailedTaskRun("uid-taskrun", "uid-run", true)
+	pipelineRunUID := s.objectUID("PipelineRun", "uid-run")
+	taskRunUID := s.objectUID("TaskRun", "uid-taskrun")
+	s.createEventWithUID("current-pipelinerun", "PipelineRun", "uid-run", pipelineRunUID, "CurrentPipelineRun", corev1.EventTypeWarning)
+	s.createEventWithUID("stale-pipelinerun", "PipelineRun", "uid-run", types.UID("stale-pipelinerun"), "StalePipelineRun", corev1.EventTypeWarning)
+	s.createEventWithUID("current-taskrun", "TaskRun", "uid-taskrun", taskRunUID, "CurrentTaskRun", corev1.EventTypeWarning)
+	s.createEventWithUID("stale-taskrun", "TaskRun", "uid-taskrun", types.UID("stale-taskrun"), "StaleTaskRun", corev1.EventTypeWarning)
+
+	s.Run("diagnosis excludes events from recreated runs", func() {
+		result, err := s.CallTool("tekton_pipelinerun_diagnose", map[string]interface{}{
+			"namespace": s.namespace,
+			"name":      "uid-run",
+		})
+		s.Require().NoError(err)
+		events := result.StructuredContent.(map[string]interface{})["warningEvents"].([]interface{})
+		reasons := make([]string, 0, len(events))
+		for _, event := range events {
+			reasons = append(reasons, event.(map[string]interface{})["reason"].(string))
+		}
+		s.ElementsMatch([]string{"CurrentPipelineRun", "CurrentTaskRun"}, reasons)
+	})
+
+	s.Run("troubleshooting prompt excludes events from recreated runs", func() {
+		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{
+			"namespace": s.namespace,
+			"name":      "uid-run",
+		})
+		s.Require().NoError(err)
+		text := result.Messages[0].Content.(*mcp.TextContent).Text
+		s.Contains(text, "CurrentPipelineRun")
+		s.Contains(text, "CurrentTaskRun")
+		s.NotContains(text, "StalePipelineRun")
+		s.NotContains(text, "StaleTaskRun")
+	})
 }
 
 func (s *TektonMcpSuite) TestPipelineRunDiagnoseBoundsMessages() {
@@ -739,6 +813,10 @@ func (s *TektonMcpSuite) createEvent(name, involvedKind, involvedName, reason st
 }
 
 func (s *TektonMcpSuite) createEventWithType(name, involvedKind, involvedName, reason, eventType string) {
+	s.createEventWithUID(name, involvedKind, involvedName, s.objectUID(involvedKind, involvedName), reason, eventType)
+}
+
+func (s *TektonMcpSuite) createEventWithUID(name, involvedKind, involvedName string, involvedUID types.UID, reason, eventType string) {
 	now := metav1.Now()
 	_, err := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()).CoreV1().Events(s.namespace).Create(s.T().Context(), &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -749,6 +827,7 @@ func (s *TektonMcpSuite) createEventWithType(name, involvedKind, involvedName, r
 			Kind:      involvedKind,
 			Name:      involvedName,
 			Namespace: s.namespace,
+			UID:       involvedUID,
 		},
 		Type:           eventType,
 		Reason:         reason,
@@ -758,6 +837,28 @@ func (s *TektonMcpSuite) createEventWithType(name, involvedKind, involvedName, r
 		Source:         corev1.EventSource{Component: "tekton-test"},
 	}, metav1.CreateOptions{})
 	s.Require().NoError(err)
+}
+
+func (s *TektonMcpSuite) objectUID(kind, name string) types.UID {
+	var (
+		resource schema.GroupVersionResource
+		ok       bool
+	)
+	switch kind {
+	case "PipelineRun":
+		resource, ok = tektonTestPipelineRunGVR, true
+	case "TaskRun":
+		resource, ok = tektonTestTaskRunGVR, true
+	}
+	if !ok {
+		return ""
+	}
+	obj, err := s.dynamic.Resource(resource).Namespace(s.namespace).Get(s.T().Context(), name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return ""
+	}
+	s.Require().NoError(err)
+	return obj.GetUID()
 }
 
 func (s *TektonMcpSuite) createRepository(name string) {

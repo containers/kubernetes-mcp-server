@@ -18,8 +18,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-const maxLogBytesPerContainer = 1 << 20 // 1 MiB
-
 func taskRunTools() []api.ServerTool {
 	return []api.ServerTool{
 		{
@@ -234,16 +232,25 @@ func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClie
 }
 
 func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, podName, namespace, kind, name, container string, tailLines int64) {
-	logText, truncated, err := readContainerLog(ctx, client, namespace, podName, container, maxLogBytesPerContainer, tailLines)
+	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: container,
+		TailLines: &tailLines,
+	}).Stream(ctx)
 	if err != nil {
 		fmt.Fprintf(sb, "[%s: %s] error retrieving logs: %v\n", kind, name, err)
 		return
 	}
-	if logText != "" {
-		fmt.Fprintf(sb, "[%s: %s]\n%s\n", kind, name, logText)
-		if truncated {
-			fmt.Fprintln(sb, "[truncated]")
-		}
+	defer func() {
+		_ = stream.Close()
+	}()
+
+	logBytes, err := io.ReadAll(stream)
+	if err != nil {
+		fmt.Fprintf(sb, "[%s: %s] error reading logs: %v\n", kind, name, err)
+		return
+	}
+	if len(logBytes) > 0 {
+		fmt.Fprintf(sb, "[%s: %s]\n%s\n", kind, name, string(logBytes))
 	}
 }
 

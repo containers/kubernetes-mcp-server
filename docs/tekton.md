@@ -41,7 +41,7 @@ These tools are read-only except the start and lifecycle operations. Tekton tool
 
 `tekton_pipelinerun_diagnose` accepts `namespace` and `name`. Its versioned structured response is also serialized as JSON text for clients that do not support MCP structured content. Arrays and partial errors are sorted for repeatable output.
 
-Collection examines at most 50 TaskRuns and returns their failed steps, up to 20 failed steps per TaskRun, 50 warning Events, 100 tail lines and 32 KiB of the newest log data per failed step, and 128 KiB of logs in total. `truncated` is set when a bound is reached. These limits intentionally are not configurable or paginated: the tool returns one bounded diagnostic snapshot, while `tekton_pipelinerun_logs` and the generic resource tools support narrower follow-up queries. An unavailable TaskRun list, Event list, or failed-step log is reported in `partialErrors`; a missing PipelineRun is a tool error.
+Collection scans at most 20 pages of 50 labeled TaskRuns and returns at most 50 failed TaskRuns controlled by the requested PipelineRun. It also returns up to 20 failed steps per TaskRun, 50 warning Events, 100 tail lines and 32 KiB of the newest log data per failed step, and 128 KiB of logs in total. `truncated` is set when an additional failed TaskRun exists or the scan or output bounds are reached. These diagnosis-specific evidence limits are not configurable; server-wide response limits are handled separately. An unavailable TaskRun list, Event list, or failed-step log is reported in `partialErrors`; a missing PipelineRun is a tool error.
 
 ### Security considerations
 
