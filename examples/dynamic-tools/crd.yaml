@@ -42,8 +42,8 @@ spec:
               type: object
               required: [description]
               x-kubernetes-validations:
-                - rule: "has(self.kubernetes) != has(self.http)"
-                  message: "exactly one of spec.kubernetes or spec.http must be set"
+                - rule: "[has(self.kubernetes), has(self.http), has(self.steps)].filter(x, x).size() == 1"
+                  message: "exactly one of spec.kubernetes, spec.http or spec.steps must be set"
               properties:
                 name:
                   type: string
@@ -68,11 +68,15 @@ spec:
                 output:
                   type: string
                   description: >-
-                    CEL expression over `response` (decoded action response) and `args`
-                    (tool arguments). Its result replaces the raw response.
-                kubernetes:
+                    CEL expression over `response` (decoded action response), `args`
+                    (tool arguments) and `steps` (results of composed steps). Its result
+                    replaces the raw response.
+                kubernetes: &kubernetes
                   type: object
-                  required: [verb, apiVersion, kind]
+                  required: [verb, apiVersion]
+                  x-kubernetes-validations:
+                    - rule: "has(self.kind) != has(self.resource)"
+                      message: "exactly one of kind or resource must be set"
                   properties:
                     verb:
                       type: string
@@ -81,22 +85,32 @@ spec:
                       type: string
                     kind:
                       type: string
-                    subresource:
+                      description: Resolved to a resource through discovery.
+                    resource:
                       type: string
+                      description: The plural, bypassing discovery (aggregated APIs that only serve subresources).
+                    namespaced:
+                      type: boolean
+                      description: Only with resource; defaults to true.
+                    subresource:
+                      description: A reference (string shorthand, or {argument|expression|value}); may have several segments.
+                      x-kubernetes-preserve-unknown-fields: true
                     namespace:
                       type: object
                       properties:
                         argument: {type: string}
+                        expression: {type: string}
                         value: {type: string}
                         all: {type: boolean}
                     name: &ref
-                      type: object
-                      properties:
-                        argument: {type: string}
-                        value: {type: string}
+                      description: A reference (string shorthand, or {argument|expression|value}).
+                      x-kubernetes-preserve-unknown-fields: true
                     query:
                       type: object
                       additionalProperties: *ref
+                    queryExpression:
+                      type: string
+                      description: CEL over args producing a map of query parameters.
                     body: &body
                       type: object
                       properties:
@@ -105,7 +119,7 @@ spec:
                         value:
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
-                http:
+                http: &http
                   type: object
                   x-kubernetes-validations:
                     - rule: "has(self.url) != has(self.service)"
@@ -130,9 +144,40 @@ spec:
                     query:
                       type: object
                       additionalProperties: *ref
+                    queryExpression:
+                      type: string
                     headers:
                       type: object
                       additionalProperties: {type: string}
                     body: *body
+                    certificateAuthority:
+                      type: string
                     insecureSkipTLSVerify:
                       type: boolean
+                steps:
+                  type: array
+                  maxItems: 16
+                  description: Composed actions, run in order; each sees the previous results as steps.<name>.
+                  items:
+                    type: object
+                    required: [name]
+                    x-kubernetes-validations:
+                      - rule: "[has(self.kubernetes), has(self.http), has(self.expression)].filter(x, x).size() == 1"
+                        message: "exactly one of kubernetes, http or expression must be set"
+                    properties:
+                      name:
+                        type: string
+                        pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+                      kubernetes: *kubernetes
+                      http: *http
+                      expression:
+                        type: string
+                        description: A pure CEL step; its value is the result.
+                      when:
+                        type: string
+                        description: CEL boolean; false skips the step (result null).
+                      forEach:
+                        type: string
+                        description: CEL list; the action runs per element with `item` bound.
+                      ignoreError:
+                        type: boolean

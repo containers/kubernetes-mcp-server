@@ -126,6 +126,48 @@ One HTTP request carrying the caller's identity.
 | `method`, `path`, `query`, `queryExpression`, `headers`, `body` | `path` supports `{argument}` placeholders (URL-escaped, required). `query`/`queryExpression`/`body` as above; `{expression: args}` forwards all arguments. |
 | `certificateAuthority`, `insecureSkipTLSVerify` | TLS verification for `url`. |
 
+### `steps` (composition)
+
+Instead of one action, a Tool may declare a bounded sequence of steps:
+
+```yaml
+spec:
+  steps:
+    - name: existing                 # later expressions see steps.existing
+      when: args.action == 'restart' # CEL boolean; false skips the step (result null)
+      kubernetes: {verb: get, apiVersion: tekton.dev/v1, kind: PipelineRun, ...}
+    - name: restarted
+      when: args.action == 'restart'
+      kubernetes:
+        verb: create
+        body: {expression: "{'spec': steps.existing.spec.transformMapEntry(k, v, k == 'status' ? {} : {k: v}), ...}"}
+    - name: containers               # a pure expression step: no request
+      expression: steps.runs.map(tr, ...).flatten()
+    - name: logs
+      forEach: steps.containers      # CEL list; runs once per element with `item` bound
+      ignoreError: true              # a failed request becomes {"error": message}
+      kubernetes: {verb: get, kind: Pod, subresource: log, name: {expression: item.pod}, ...}
+  output: ...                        # sees steps.* and response (the last step's result)
+```
+
+| Field | Meaning |
+|-------|---------|
+| `name` | Identifier the later expressions use (`steps.<name>`). |
+| `kubernetes` / `http` / `expression` | Exactly one. An expression step computes a value without a request. |
+| `when` | CEL boolean over `args` and `steps`. When false the step is skipped and its result is `null`. |
+| `forEach` | CEL list. The action runs once per element with `item` bound; the result is the list of results in order. |
+| `ignoreError` | Records a failed request as `{"error": "<message>"}` instead of failing the tool, for gather-style tools. |
+
+Steps run sequentially; there is no looping other than `forEach`, no
+recursion and no branching other than `when`. Two limits bound a Tool: at
+most 16 steps and at most 64 `forEach` iterations per step. Without an
+`output`, the result is the map of all step results.
+
+This is deliberately a small composition model, not a workflow language.
+It is exactly enough for the three shapes the in-tree toolsets needed:
+fetch-then-act (restart, lifecycle), fan-out (logs per container, guest
+info per subresource) and gather (troubleshoot).
+
 ### `output`
 
 A [CEL](https://cel.dev) expression evaluated with `response` (the decoded
@@ -140,9 +182,12 @@ Every expression (output, body, query, references) sees the same environment:
 | Name | Meaning |
 |------|---------|
 | `args` | the tool arguments, `map<string, dyn>` |
-| `response` | the decoded response (`null` while building the request) |
+| `response` | the decoded response (`null` while building the request; the last step's result for composed tools) |
+| `steps` | results of the previous steps by name (composed tools) |
+| `item` | the current element of a `forEach` step |
 | `now` | the current time; `int(now)` is Unix seconds |
 | `merge(a, b)` | a map with the entries of `a` overridden by those of `b` |
+| `range(n)` | `[0, 1, ..., n-1]`, to walk a `forEach` result next to its input list |
 | cel-go extensions | strings, lists, math and two-variable comprehensions (`transformMapEntry` renames or drops keys) |
 
 Strings are returned verbatim (logs, CSV, messages); anything else is
@@ -160,6 +205,8 @@ The declaration is enough to derive the server's `_meta` RBAC advertisement
   segment (`proxy/stats/summary` advertises `nodes/proxy`). Falls back to
   **unbounded** when the kind cannot be resolved at registration time or when
   the subresource, namespace or name comes from a CEL expression.
+- `steps`: the **union** of every step's requirements; unbounded if any step
+  is.
 - `http` with `service`: **bounded** to `get`/`create` on `services/proxy`
   for that Service.
 - `http` with `url`: **none**, with a reason naming the URL.
@@ -186,20 +233,37 @@ or lists it as skipped with a reason. The output is a Helm chart per
 ecosystem toolset plus plain manifests for the rest, and
 [`conversion-report.md`](../../examples/dynamic-tools/conversion-report.md).
 
-| Toolset | Converted | What is left and why |
-|---------|-----------|----------------------|
-| kiali | 11 / 11 | nothing: every tool is one POST to `/api/mcp/<tool>` |
-| netobserv | 3 / 3 | nothing: GET with a CEL-computed time window |
-| tekton | 2 / 6 | restart (get + create), logs (several requests + pod log streams) |
-| kubevirt | 4 / 7 (+1 split out) | create (resolves instancetypes/preferences), screenshot (image), troubleshoot (workflow) |
-| kcp | 1 / 2 | recursive workspace discovery |
-| core | 12 / 19 | exec (stream), run (two creates), the generic `resources_*` family |
-| config, helm | 0 / 6 | not Kubernetes API requests |
+| Toolset | Single action | With `steps` | What is left and why |
+|---------|---------------|--------------|----------------------|
+| kiali | 11 / 11 | 11 / 11 | nothing: every tool is one POST to `/api/mcp/<tool>` |
+| netobserv | 3 / 3 | 3 / 3 | nothing: GET with a CEL-computed time window |
+| tekton | 2 / 6 | 6 / 6 | nothing |
+| kubevirt | 3 / 7 (+1 narrowed) | 5 / 7 | create (matching heuristics over instancetypes and preferences), screenshot (image) |
+| kcp | 1 / 2 | 1 / 2 | recursive workspace discovery |
+| core | 12 / 19 | 13 / 19 | exec (stream), the generic `resources_*` family |
+| config, helm | 0 / 6 | 0 / 6 | not Kubernetes API requests |
 
-33 of 54 tools, with the two toolsets that motivated this (Kiali, NetObserv)
-at 100 %. The core conversions are a demonstration, not a proposal to move
-core out of the server. The generated core manifests are exercised against
-envtest in `pkg/mcp/dynamic_test.go`.
+Composition takes the count from 33 to 39 of 54 and, more importantly,
+restores the exact built-in contracts the single-action ports had to
+narrow (`vm_lifecycle`, `vm_guest_info`, `pods_log`). The ecosystem
+toolsets that motivated this (Kiali, NetObserv, Tekton) are now at 100 %;
+KubeVirt keeps two tools. The core conversions are a demonstration, not a
+proposal to move core out of the server. The generated Tekton, KubeVirt and
+core manifests are exercised against envtest in `pkg/mcp/dynamic_test.go`.
+
+What composition could not express, and the built-in tools do:
+
+- **Post-processing that is not a projection**: the built-in
+  `vm_troubleshoot` redacts secrets from pod logs and cloud-init with
+  regular expressions; CEL can match but not replace, so the port omits pod
+  logs and redacts cloud-init volumes wholesale. A `redact` library or a
+  server-side log sanitizer would close this.
+- **Heuristic matching** (`vm_create`): expressible in CEL in principle,
+  but the result would be a worse copy of Go code that belongs on the
+  KubeVirt side.
+- **Capability-dependent behavior**: `pods_run` creates an OpenShift Route
+  when the Route API exists; a Tool cannot ask what the cluster serves.
+- **Unbounded recursion** (`kcp_workspaces_list`).
 
 ## What stays in the server
 
@@ -221,10 +285,12 @@ is "one request, shaped" is a candidate for a Tool resource.
   by a later configuration reload (today only toolsets enabled at startup are
   watched).
 - **Limits**: CEL cost limits, response size (8 MiB cap today), timeouts.
-- **Composition**: should a Tool be allowed to chain two requests (fetch then
-  act)? The current answer is no; that is what prompts and the model are for.
-  It is the single largest reason a tool is not convertible (Tekton restart,
-  KubeVirt `info_type: all`, pods_run).
+- **Composition** is now in (`steps`), bounded to 16 steps and 64 fan-out
+  iterations, sequential, no recursion. The open question is whether that
+  is the right ceiling: prompts (`vm-troubleshoot`, `pipeline-troubleshoot`,
+  `hco-status`) would need the same engine, and every added construct moves
+  the Tool resource closer to a workflow language the server then has to
+  own forever.
 - **Output formats**: built-in list tools honor `list_output` (table/yaml);
   dynamic tools render YAML or a CEL projection. A `format` option could
   expose the server's table printer.

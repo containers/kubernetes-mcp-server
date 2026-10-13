@@ -2,6 +2,7 @@ package dynamic
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -59,7 +60,7 @@ func (s *DynamicSuite) TestValidate() {
 	s.Run("rejects no action", func() {
 		tool := valid()
 		tool.Spec.Kubernetes = nil
-		s.ErrorContains(tool.Validate(), "one of spec.kubernetes or spec.http is required")
+		s.ErrorContains(tool.Validate(), "one of spec.kubernetes, spec.http or spec.steps is required")
 	})
 	s.Run("accepts an explicit resource instead of a kind", func() {
 		tool := valid()
@@ -110,7 +111,7 @@ func (s *DynamicSuite) TestCompileExpression() {
 		response := map[string]any{"items": []any{
 			map[string]any{"metadata": map[string]any{"name": "a"}, "spec": map[string]any{"replicas": float64(2)}},
 		}}
-		out, err := expr.eval(nil, response)
+		out, err := expr.eval(evalVars{response: response})
 		s.Require().NoError(err)
 		raw, _ := json.Marshal(out)
 		s.JSONEq(`[{"name":"a","replicas":2}]`, string(raw))
@@ -118,7 +119,7 @@ func (s *DynamicSuite) TestCompileExpression() {
 	s.Run("exposes the tool arguments", func() {
 		expr, err := compileExpression("{'ns': args.namespace, 'all': args}")
 		s.Require().NoError(err)
-		out, err := expr.eval(map[string]any{"namespace": "default"}, nil)
+		out, err := expr.eval(evalVars{args: map[string]any{"namespace": "default"}})
 		s.Require().NoError(err)
 		raw, _ := json.Marshal(out)
 		s.JSONEq(`{"ns":"default","all":{"namespace":"default"}}`, string(raw))
@@ -126,7 +127,7 @@ func (s *DynamicSuite) TestCompileExpression() {
 	s.Run("reports runtime errors", func() {
 		expr, err := compileExpression("response.missing.field")
 		s.Require().NoError(err)
-		_, err = expr.eval(nil, map[string]any{})
+		_, err = expr.eval(evalVars{response: map[string]any{}})
 		s.ErrorContains(err, "failed")
 	})
 }
@@ -151,34 +152,34 @@ func (s *DynamicSuite) TestExpandPath() {
 func (s *DynamicSuite) TestResolveBody() {
 	tool := &compiledTool{}
 	s.Run("nil body yields an empty object", func() {
-		body, err := tool.resolveBody(nil, nil)
+		body, err := tool.resolveBody(nil, nil, evalVars{})
 		s.Require().NoError(err)
 		s.Equal("{}", string(body))
 	})
 	s.Run("string arguments are parsed as YAML", func() {
-		body, err := tool.resolveBody(&Body{Argument: "manifest"}, map[string]any{"manifest": "apiVersion: v1\nkind: ConfigMap\n"})
+		body, err := tool.resolveBody(&Body{Argument: "manifest"}, nil, evalVars{args: map[string]any{"manifest": "apiVersion: v1\nkind: ConfigMap\n"}})
 		s.Require().NoError(err)
 		s.JSONEq(`{"apiVersion":"v1","kind":"ConfigMap"}`, string(body))
 	})
 	s.Run("object arguments are serialized", func() {
-		body, err := tool.resolveBody(&Body{Argument: "manifest"}, map[string]any{"manifest": map[string]any{"kind": "ConfigMap"}})
+		body, err := tool.resolveBody(&Body{Argument: "manifest"}, nil, evalVars{args: map[string]any{"manifest": map[string]any{"kind": "ConfigMap"}}})
 		s.Require().NoError(err)
 		s.JSONEq(`{"kind":"ConfigMap"}`, string(body))
 	})
 	s.Run("missing arguments are reported", func() {
-		_, err := tool.resolveBody(&Body{Argument: "manifest"}, nil)
+		_, err := tool.resolveBody(&Body{Argument: "manifest"}, nil, evalVars{})
 		s.ErrorContains(err, "manifest parameter required")
 	})
 	s.Run("fixed values are passed through", func() {
-		body, err := tool.resolveBody(&Body{Value: json.RawMessage(`{"spec":{"replicas":3}}`)}, nil)
+		body, err := tool.resolveBody(&Body{Value: json.RawMessage(`{"spec":{"replicas":3}}`)}, nil, evalVars{})
 		s.Require().NoError(err)
 		s.JSONEq(`{"spec":{"replicas":3}}`, string(body))
 	})
 	s.Run("expressions are evaluated over the arguments", func() {
 		expr, err := compileExpression("{'spec': {'replicas': int(args.replicas)}}")
 		s.Require().NoError(err)
-		tool := &compiledTool{bodyExpr: expr}
-		body, err := tool.resolveBody(&Body{Expression: expr.source}, map[string]any{"replicas": float64(3)})
+		tool := &compiledTool{}
+		body, err := tool.resolveBody(&Body{Expression: expr.source}, expr, evalVars{args: map[string]any{"replicas": float64(3)}})
 		s.Require().NoError(err)
 		s.JSONEq(`{"spec":{"replicas":3}}`, string(body))
 	})
@@ -187,25 +188,25 @@ func (s *DynamicSuite) TestResolveBody() {
 func (s *DynamicSuite) TestResolveNamespace() {
 	tool := &compiledTool{refExprs: map[string]*expression{}}
 	s.Run("argument wins over value", func() {
-		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", Value: "fixed"}, map[string]any{"namespace": "arg"})
+		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", Value: "fixed"}, evalVars{args: map[string]any{"namespace": "arg"}})
 		s.Require().NoError(err)
 		s.Equal("arg", ns)
 		s.False(all)
 	})
 	s.Run("falls back to the fixed value", func() {
-		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", Value: "fixed"}, nil)
+		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", Value: "fixed"}, evalVars{})
 		s.Require().NoError(err)
 		s.Equal("fixed", ns)
 		s.False(all)
 	})
 	s.Run("falls back to all namespaces when requested", func() {
-		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", All: true}, nil)
+		ns, all, err := tool.resolveNamespace(&NamespaceRef{Argument: "namespace", All: true}, evalVars{})
 		s.Require().NoError(err)
 		s.Equal("", ns)
 		s.True(all)
 	})
 	s.Run("nil means the default namespace", func() {
-		ns, all, err := tool.resolveNamespace(nil, nil)
+		ns, all, err := tool.resolveNamespace(nil, evalVars{})
 		s.Require().NoError(err)
 		s.Equal("", ns)
 		s.False(all)
@@ -221,16 +222,16 @@ func (s *DynamicSuite) TestResolveRef() {
 	tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "t"}, Spec: ToolSpec{Description: "d", Kubernetes: spec.Kubernetes}})
 	s.Require().NoError(err)
 	s.Run("expressions over the arguments", func() {
-		value, err := tool.resolveRef(spec.Kubernetes.Subresource, map[string]any{"info_type": "users"})
+		value, err := tool.resolveRef(spec.Kubernetes.Subresource, evalVars{args: map[string]any{"info_type": "users"}})
 		s.Require().NoError(err)
 		s.Equal("userlist", value)
 	})
 	s.Run("expression errors are reported", func() {
-		_, err := tool.resolveRef(spec.Kubernetes.Subresource, map[string]any{"info_type": "all"})
+		_, err := tool.resolveRef(spec.Kubernetes.Subresource, evalVars{args: map[string]any{"info_type": "all"}})
 		s.ErrorContains(err, "no such key")
 	})
 	s.Run("fixed values expand placeholders", func() {
-		value, err := tool.resolveRef(spec.Kubernetes.Name, map[string]any{"name": "x"})
+		value, err := tool.resolveRef(spec.Kubernetes.Name, evalVars{args: map[string]any{"name": "x"}})
 		s.Require().NoError(err)
 		s.Equal("prefix-x", value)
 	})
@@ -248,7 +249,7 @@ func (s *DynamicSuite) TestCELExtensions() {
 	s.Run("merge overrides left with right", func() {
 		expr, err := compileExpression("merge(args, {'mcp_mode': 'true', 'b': 2})")
 		s.Require().NoError(err)
-		out, err := expr.eval(map[string]any{"a": "1", "b": float64(1)}, nil)
+		out, err := expr.eval(evalVars{args: map[string]any{"a": "1", "b": float64(1)}})
 		s.Require().NoError(err)
 		raw, _ := json.Marshal(out)
 		s.JSONEq(`{"a":"1","b":2,"mcp_mode":"true"}`, string(raw))
@@ -256,7 +257,7 @@ func (s *DynamicSuite) TestCELExtensions() {
 	s.Run("transformMapEntry renames and drops keys", func() {
 		expr, err := compileExpression("args.transformMapEntry(k, v, k == 'meshCluster' ? {'clusterName': v} : (k == 'drop' ? {} : {k: v}))")
 		s.Require().NoError(err)
-		out, err := expr.eval(map[string]any{"meshCluster": "east", "drop": "x", "keep": "y"}, nil)
+		out, err := expr.eval(evalVars{args: map[string]any{"meshCluster": "east", "drop": "x", "keep": "y"}})
 		s.Require().NoError(err)
 		raw, _ := json.Marshal(out)
 		s.JSONEq(`{"clusterName":"east","keep":"y"}`, string(raw))
@@ -264,7 +265,7 @@ func (s *DynamicSuite) TestCELExtensions() {
 	s.Run("now is the current time", func() {
 		expr, err := compileExpression("{'start': int(now) - 300, 'end': int(now)}")
 		s.Require().NoError(err)
-		out, err := expr.evalStringMap(nil)
+		out, err := expr.evalStringMap(evalVars{})
 		s.Require().NoError(err)
 		s.Regexp(`^\d{10}$`, out["end"])
 		s.Regexp(`^\d{10}$`, out["start"])
@@ -272,9 +273,85 @@ func (s *DynamicSuite) TestCELExtensions() {
 	s.Run("evalStringMap drops empty values and formats whole numbers", func() {
 		expr, err := compileExpression("{'a': 1.0, 'b': 'x', 'c': '', 'd': null, 'e': true, 'f': 1.5}")
 		s.Require().NoError(err)
-		out, err := expr.evalStringMap(nil)
+		out, err := expr.evalStringMap(evalVars{})
 		s.Require().NoError(err)
 		s.Equal(map[string]string{"a": "1", "b": "x", "e": "true", "f": "1.5"}, out)
+	})
+}
+
+func (s *DynamicSuite) TestStepsValidation() {
+	base := func(steps ...Step) *Tool {
+		return &Tool{Metadata: Metadata{Name: "composed"}, Spec: ToolSpec{Description: "d", Steps: steps}}
+	}
+	get := &KubernetesAction{Verb: "get", APIVersion: "v1", Kind: "Pod", Name: &Ref{Argument: "name"}}
+	s.Run("accepts steps", func() {
+		s.NoError(base(Step{Name: "pod", Kubernetes: get}, Step{Name: "names", Expression: "[steps.pod.metadata.name]"}).Validate())
+	})
+	s.Run("rejects steps next to a single action", func() {
+		tool := base(Step{Name: "pod", Kubernetes: get})
+		tool.Spec.Kubernetes = get
+		s.ErrorContains(tool.Validate(), "mutually exclusive")
+	})
+	s.Run("rejects duplicate and invalid names", func() {
+		s.ErrorContains(base(Step{Name: "a", Kubernetes: get}, Step{Name: "a", Kubernetes: get}).Validate(), "duplicated")
+		s.ErrorContains(base(Step{Name: "not valid", Kubernetes: get}).Validate(), "must match")
+	})
+	s.Run("rejects a step without exactly one of kubernetes, http or expression", func() {
+		s.ErrorContains(base(Step{Name: "a"}).Validate(), "exactly one of kubernetes, http or expression")
+		s.ErrorContains(base(Step{Name: "a", Kubernetes: get, Expression: "1"}).Validate(), "exactly one of kubernetes, http or expression")
+	})
+	s.Run("rejects too many steps", func() {
+		steps := make([]Step, MaxSteps+1)
+		for i := range steps {
+			steps[i] = Step{Name: fmt.Sprintf("s%d", i), Expression: "1"}
+		}
+		s.ErrorContains(base(steps...).Validate(), "at most")
+	})
+	s.Run("compiles every step expression", func() {
+		_, err := newCompiledTool(*base(Step{Name: "a", Expression: "1", When: "args.x ==", ForEach: "[1]"}))
+		s.ErrorContains(err, "spec.steps[0] (a): when")
+	})
+}
+
+func (s *DynamicSuite) TestStepsExecution() {
+	tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "composed"}, Spec: ToolSpec{
+		Description: "d",
+		Steps: []Step{
+			{Name: "doubled", Expression: "args.n == 'explode' ? 0 : int(args.n) * 2"},
+			{Name: "skipped", Expression: "'never'", When: "steps.doubled > 100"},
+			{Name: "squares", Expression: "item * item", ForEach: "range(steps.doubled)"},
+			{Name: "tooMany", Expression: "item", ForEach: "range(1000)", When: "args.n == 'explode'"},
+		},
+		Output: "{'doubled': steps.doubled, 'skipped': steps.skipped, 'squares': steps.squares, 'last': response}",
+	}})
+	s.Require().NoError(err)
+	run := func(args map[string]any) (map[string]any, error) {
+		vars := evalVars{args: args, steps: map[string]any{}}
+		var last any
+		for _, step := range tool.steps {
+			result, err := tool.runStep(step, api.ToolHandlerParams{}, vars)
+			if err != nil {
+				return nil, err
+			}
+			vars.steps[step.spec.Name] = result
+			last = result
+		}
+		vars.response = last
+		out, err := tool.outputExpr.eval(vars)
+		if err != nil {
+			return nil, err
+		}
+		return out.(map[string]any), nil
+	}
+	s.Run("steps see previous results, when skips, forEach fans out", func() {
+		out, err := run(map[string]any{"n": float64(3)})
+		s.Require().NoError(err)
+		raw, _ := json.Marshal(out)
+		s.JSONEq(`{"doubled":6,"skipped":null,"squares":[0,1,4,9,16,25],"last":null}`, string(raw))
+	})
+	s.Run("forEach fan-out is bounded", func() {
+		_, err := run(map[string]any{"n": "explode"})
+		s.ErrorContains(err, "at most 64")
 	})
 }
 

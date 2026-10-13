@@ -28,8 +28,8 @@ kubectl get tools
 | `tools/` | Hand-written examples: a CEL projection, a subresource patch, a subresource create |
 | `charts/kiali-mcp-tools` | The complete Kiali toolset (11 tools) as `http` Tools |
 | `charts/netobserv-mcp-tools` | The complete NetObserv toolset (3 tools) |
-| `charts/tekton-mcp-tools` | The single-request half of the Tekton toolset |
-| `charts/kubevirt-mcp-tools` | The single-request half of the KubeVirt toolset |
+| `charts/tekton-mcp-tools` | The complete Tekton toolset (6 tools), restart and logs as `steps` |
+| `charts/kubevirt-mcp-tools` | 5 of the 7 KubeVirt tools, lifecycle, guest info and troubleshoot as `steps` |
 | `converted/` | Generated manifests for the convertible `core` and `kcp` tools |
 | `conversion-report.md` | One row per in-tree tool: converted or why not |
 | `hack/export` | The generator that produces `charts/*/templates`, `converted/` and the report |

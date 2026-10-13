@@ -76,14 +76,47 @@ type ToolSpec struct {
 	Idempotent  bool `json:"idempotent,omitempty"`
 	// InputSchema is a JSON Schema object describing the tool arguments.
 	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
-	// Exactly one action must be set.
+	// Exactly one of Kubernetes, HTTP or Steps must be set.
 	Kubernetes *KubernetesAction `json:"kubernetes,omitempty"`
 	HTTP       *HTTPAction       `json:"http,omitempty"`
+	// Steps composes several actions. Each step sees the results of the
+	// previous ones as `steps.<name>` in every expression.
+	Steps []Step `json:"steps,omitempty"`
 	// Output is an optional CEL expression evaluated with the variables
 	// `response` (decoded action response) and `args` (tool arguments). Its
 	// result replaces the raw response in the tool result.
 	Output string `json:"output,omitempty"`
 }
+
+// Step is one action of a composed Tool. Exactly one of Kubernetes, HTTP or
+// Expression must be set.
+type Step struct {
+	// Name is how later expressions address the result: steps.<name>.
+	Name       string            `json:"name"`
+	Kubernetes *KubernetesAction `json:"kubernetes,omitempty"`
+	HTTP       *HTTPAction       `json:"http,omitempty"`
+	// Expression is a pure CEL step: no request, its value is the result.
+	Expression string `json:"expression,omitempty"`
+	// When is a CEL boolean; when false the step is skipped and its result
+	// is null.
+	When string `json:"when,omitempty"`
+	// ForEach is a CEL expression producing a list. The action runs once per
+	// element with `item` bound to it, and the step result is the list of
+	// results in the same order.
+	ForEach string `json:"forEach,omitempty"`
+	// IgnoreError records a failed request as {"error": message} instead of
+	// failing the whole tool.
+	IgnoreError bool `json:"ignoreError,omitempty"`
+}
+
+const (
+	// MaxSteps bounds the number of steps of one Tool.
+	MaxSteps = 16
+	// MaxForEach bounds the fan-out of one forEach step.
+	MaxForEach = 64
+)
+
+var validStepName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // Ref resolves a string from a tool argument, a CEL expression over `args`,
 // or a fixed value, in that order of precedence (the first non-empty wins).
@@ -210,17 +243,58 @@ func (t *Tool) Validate() error {
 	if strings.TrimSpace(t.Spec.Description) == "" {
 		errs = append(errs, errors.New("spec.description is required"))
 	}
+	set := 0
+	for _, present := range []bool{t.Spec.Kubernetes != nil, t.Spec.HTTP != nil, len(t.Spec.Steps) > 0} {
+		if present {
+			set++
+		}
+	}
 	switch {
-	case t.Spec.Kubernetes != nil && t.Spec.HTTP != nil:
-		errs = append(errs, errors.New("spec.kubernetes and spec.http are mutually exclusive"))
+	case set > 1:
+		errs = append(errs, errors.New("spec.kubernetes, spec.http and spec.steps are mutually exclusive"))
 	case t.Spec.Kubernetes != nil:
 		errs = append(errs, t.Spec.Kubernetes.validate()...)
 	case t.Spec.HTTP != nil:
 		errs = append(errs, t.Spec.HTTP.validate()...)
+	case len(t.Spec.Steps) > 0:
+		errs = append(errs, validateSteps(t.Spec.Steps)...)
 	default:
-		errs = append(errs, errors.New("one of spec.kubernetes or spec.http is required"))
+		errs = append(errs, errors.New("one of spec.kubernetes, spec.http or spec.steps is required"))
 	}
 	return errors.Join(errs...)
+}
+
+func validateSteps(steps []Step) []error {
+	var errs []error
+	if len(steps) > MaxSteps {
+		errs = append(errs, fmt.Errorf("spec.steps has %d steps, at most %d are allowed", len(steps), MaxSteps))
+	}
+	seen := map[string]bool{}
+	for i, step := range steps {
+		path := fmt.Sprintf("spec.steps[%d]", i)
+		if !validStepName.MatchString(step.Name) {
+			errs = append(errs, fmt.Errorf("%s.name %q must match %s", path, step.Name, validStepName))
+		}
+		if seen[step.Name] {
+			errs = append(errs, fmt.Errorf("%s.name %q is duplicated", path, step.Name))
+		}
+		seen[step.Name] = true
+		set := 0
+		for _, present := range []bool{step.Kubernetes != nil, step.HTTP != nil, step.Expression != ""} {
+			if present {
+				set++
+			}
+		}
+		switch {
+		case set != 1:
+			errs = append(errs, fmt.Errorf("%s requires exactly one of kubernetes, http or expression", path))
+		case step.Kubernetes != nil:
+			errs = append(errs, step.Kubernetes.validate()...)
+		case step.HTTP != nil:
+			errs = append(errs, step.HTTP.validate()...)
+		}
+	}
+	return errs
 }
 
 func (a *KubernetesAction) validate() []error {
@@ -271,22 +345,39 @@ func (b *Body) validate(path string) []error {
 	return nil
 }
 
-// refs returns every Ref of the action, so their expressions can be compiled
+// refs returns every Ref of the spec, so their expressions can be compiled
 // once at registration time.
 func (t *ToolSpec) refs() []*Ref {
 	var refs []*Ref
-	switch {
-	case t.Kubernetes != nil:
-		refs = append(refs, t.Kubernetes.Namespace.ref(), t.Kubernetes.Name, t.Kubernetes.Subresource)
-		for key := range t.Kubernetes.Query {
-			ref := t.Kubernetes.Query[key]
-			refs = append(refs, &ref)
-		}
-	case t.HTTP != nil:
-		for key := range t.HTTP.Query {
-			ref := t.HTTP.Query[key]
-			refs = append(refs, &ref)
-		}
+	refs = append(refs, t.Kubernetes.refs()...)
+	refs = append(refs, t.HTTP.refs()...)
+	for _, step := range t.Steps {
+		refs = append(refs, step.Kubernetes.refs()...)
+		refs = append(refs, step.HTTP.refs()...)
+	}
+	return refs
+}
+
+func (a *KubernetesAction) refs() []*Ref {
+	if a == nil {
+		return nil
+	}
+	refs := []*Ref{a.Namespace.ref(), a.Name, a.Subresource}
+	for key := range a.Query {
+		ref := a.Query[key]
+		refs = append(refs, &ref)
+	}
+	return refs
+}
+
+func (a *HTTPAction) refs() []*Ref {
+	if a == nil {
+		return nil
+	}
+	var refs []*Ref
+	for key := range a.Query {
+		ref := a.Query[key]
+		refs = append(refs, &ref)
 	}
 	return refs
 }

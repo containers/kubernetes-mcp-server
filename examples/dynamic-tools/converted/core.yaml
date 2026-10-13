@@ -474,20 +474,105 @@ spec:
     required:
     - name
     type: object
-  kubernetes:
-    apiVersion: v1
-    kind: Pod
-    name:
-      argument: name
-    namespace:
-      argument: namespace
-    query:
-      container:
-        argument: container
-    queryExpression: '{''tailLines'': has(args.tail) && int(args.tail) > 0 ? int(args.tail)
-      : 100, ''previous'': has(args.previous) && args.previous ? ''true'' : ''''}'
-    subresource: log
-    verb: get
   name: pods_log
+  output: steps.log
   readOnly: true
+  steps:
+  - kubernetes:
+      apiVersion: v1
+      kind: Pod
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      verb: get
+    name: pod
+    when: '!has(args.container) || args.container == '''''
+  - kubernetes:
+      apiVersion: v1
+      kind: Pod
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      query:
+        container:
+          expression: 'has(args.container) && args.container != '''' ? args.container
+            : (has(steps.pod.metadata.annotations) && ''kubectl.kubernetes.io/default-container''
+            in steps.pod.metadata.annotations ? steps.pod.metadata.annotations[''kubectl.kubernetes.io/default-container'']
+            : steps.pod.spec.containers[0].name)'
+      queryExpression: '{''tailLines'': has(args.tail) && int(args.tail) > 0 ? int(args.tail)
+        : 100, ''previous'': has(args.previous) && args.previous ? ''true'' : ''''}'
+      subresource: log
+      verb: get
+    name: log
   title: 'Pods: Log'
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: core
+  name: pods-run
+spec:
+  description: Run a Kubernetes Pod in the current or provided namespace with the
+    provided container image and optional name
+  inputSchema:
+    properties:
+      image:
+        description: Container Image to run in the Pod
+        type: string
+      name:
+        description: Name of the Pod (Optional, random name if not provided)
+        type: string
+      namespace:
+        description: Namespace to run the Pod in
+        type: string
+      port:
+        description: TCP/IP port to expose from the Pod container (Optional, no port
+          exposed if not provided)
+        type: number
+    required:
+    - image
+    type: object
+  name: pods_run
+  output: '[{''kind'': ''Pod'', ''name'': steps.pod.metadata.name, ''namespace'':
+    steps.pod.metadata.namespace}] + (steps.service == null ? [] : [{''kind'': ''Service'',
+    ''name'': steps.service.metadata.name, ''namespace'': steps.service.metadata.namespace}])'
+  steps:
+  - expression: 'has(args.name) && args.name != '''' ? args.name : ''kubernetes-mcp-server-run-''
+      + string(int(now))'
+    name: name
+  - expression: '{''app.kubernetes.io/name'': steps.name, ''app.kubernetes.io/component'':
+      steps.name, ''app.kubernetes.io/managed-by'': ''kubernetes-mcp-server'', ''app.kubernetes.io/part-of'':
+      ''kubernetes-mcp-server-run-sandbox''}'
+    name: labels
+  - expression: 'has(args.port) && int(args.port) > 0 ? int(args.port) : 0'
+    name: port
+  - kubernetes:
+      apiVersion: v1
+      body:
+        expression: '{''apiVersion'': ''v1'', ''kind'': ''Pod'', ''metadata'': {''name'':
+          steps.name, ''labels'': steps.labels}, ''spec'': {''containers'': [merge({''name'':
+          steps.name, ''image'': args.image, ''imagePullPolicy'': ''Always''}, steps.port
+          > 0 ? {''ports'': [{''containerPort'': steps.port}]} : {})]}}'
+      kind: Pod
+      namespace:
+        argument: namespace
+      verb: create
+    name: pod
+  - kubernetes:
+      apiVersion: v1
+      body:
+        expression: '{''apiVersion'': ''v1'', ''kind'': ''Service'', ''metadata'':
+          {''name'': steps.name, ''labels'': steps.labels}, ''spec'': {''selector'':
+          steps.labels, ''type'': ''ClusterIP'', ''ports'': [{''port'': steps.port,
+          ''targetPort'': steps.port}]}}'
+      kind: Service
+      namespace:
+        argument: namespace
+      verb: create
+    name: service
+    when: steps.port > 0
+  title: 'Pods: Run'

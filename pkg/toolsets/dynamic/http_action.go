@@ -26,8 +26,9 @@ var pathPlaceholder = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
 // config (so the access-control round tripper and the caller's identity
 // apply). Requests to a plain URL carry the caller's bearer token, exactly as
 // the Kiali and NetObserv toolsets do.
-func (t *compiledTool) runHTTP(params api.ToolHandlerParams, args map[string]any) (any, error) {
-	a := t.spec.HTTP
+func (t *compiledTool) runHTTP(action *compiledAction, params api.ToolHandlerParams, vars evalVars) (any, error) {
+	a := action.http
+	args := vars.args
 	restConfig := params.RESTConfig()
 
 	var client *http.Client
@@ -68,7 +69,7 @@ func (t *compiledTool) runHTTP(params api.ToolHandlerParams, args map[string]any
 		return nil, fmt.Errorf("invalid request URL: %w", err)
 	}
 	query := u.Query()
-	values, err := t.resolveQuery(a.Query, t.queryExpr, args)
+	values, err := t.resolveQuery(a.Query, action.queryExpr, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +84,7 @@ func (t *compiledTool) runHTTP(params api.ToolHandlerParams, args map[string]any
 	}
 	var body io.Reader
 	if a.Body != nil {
-		raw, err := t.resolveBody(a.Body, args)
+		raw, err := t.resolveBody(a.Body, action.bodyExpr, vars)
 		if err != nil {
 			return nil, err
 		}

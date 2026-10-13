@@ -45,6 +45,7 @@ type conversion struct {
 	InputSchema any
 	Kubernetes  *dynamic.KubernetesAction
 	HTTP        *dynamic.HTTPAction
+	Steps       []dynamic.Step
 	Output      string
 	Note        string
 }
@@ -146,6 +147,7 @@ func convert(toolsetName string, tool api.ServerTool, c conversion) (manifest, e
 		Idempotent:  ptr.Deref(tool.Tool.Annotations.IdempotentHint, false),
 		Kubernetes:  c.Kubernetes,
 		HTTP:        c.HTTP,
+		Steps:       c.Steps,
 		Output:      c.Output,
 	}
 	if c.Name != "" {
@@ -249,9 +251,11 @@ func (i *documentationInspector) GetTargetParameterName() string { return "" }
 // Mappings
 // ---------------------------------------------------------------------------
 
-func ref(argument string) *dynamic.Ref { return &dynamic.Ref{Argument: argument} }
-func val(value string) *dynamic.Ref    { return &dynamic.Ref{Value: value} }
-func arg(argument string) dynamic.Ref  { return dynamic.Ref{Argument: argument} }
+func ref(argument string) *dynamic.Ref    { return &dynamic.Ref{Argument: argument} }
+func expr(expression string) *dynamic.Ref { return &dynamic.Ref{Expression: expression} }
+func nsArg() *dynamic.NamespaceRef        { return &dynamic.NamespaceRef{Argument: "namespace"} }
+func val(value string) *dynamic.Ref       { return &dynamic.Ref{Value: value} }
+func arg(argument string) dynamic.Ref     { return dynamic.Ref{Argument: argument} }
 
 func plans() []plan {
 	return []plan{kialiPlan(), netobservPlan(), tektonPlan(), kubevirtPlan(), kcpPlan(), corePlan(), configPlan(), helmPlan()}
@@ -336,79 +340,152 @@ func merged(a, b map[string]string) map[string]string {
 	return out
 }
 
-// Tekton: starting a Pipeline or Task is one create; everything else needs
-// several requests.
+// Tekton: starting a run is one create; restart is get + create, logs are
+// list + fan-out over containers, all expressed as steps.
 func tektonPlan() plan {
 	start := func(kind, refKey string) []conversion {
 		return []conversion{{
 			Kubernetes: &dynamic.KubernetesAction{
 				Verb: "create", APIVersion: "tekton.dev/v1", Kind: kind + "Run",
-				Namespace: &dynamic.NamespaceRef{Argument: "namespace"},
+				Namespace: nsArg(),
 				Body: &dynamic.Body{Expression: "{'apiVersion': 'tekton.dev/v1', 'kind': '" + kind + "Run', " +
 					"'metadata': {'generateName': args.name + '-'}, " +
 					"'spec': {'" + refKey + "': {'name': args.name}, " +
 					"'params': has(args.params) ? args.params.map(k, {'name': k, 'value': args.params[k]}) : []}}"},
 			},
-			Output: "'" + kind + " \\'' + args.name + '\\' started as " + kind + "Run \\'' + response.metadata.name + '\\' in namespace \\'' + response.metadata.namespace + '\\''",
+			Output: `"` + kind + ` '" + args.name + "' started as ` + kind + `Run '" + response.metadata.name + "' in namespace '" + response.metadata.namespace + "'"`,
 			Note:   "Does not check that the " + kind + " exists before creating the run.",
 		}}
 	}
+	// restart copies spec (minus spec.status) into a new run with the same generateName.
+	restartBody := func(kind string) string {
+		return "{'apiVersion': 'tekton.dev/v1', 'kind': '" + kind + "', " +
+			"'metadata': {'generateName': (has(steps.existing.metadata.generateName) && steps.existing.metadata.generateName != '') ? steps.existing.metadata.generateName : args.name + '-'}, " +
+			"'spec': steps.existing.spec.transformMapEntry(k, v, k == 'status' ? {} : {k: v})}"
+	}
+	getRun := func(kind, when string) dynamic.Step {
+		return dynamic.Step{Name: "existing", When: when, Kubernetes: &dynamic.KubernetesAction{
+			Verb: "get", APIVersion: "tekton.dev/v1", Kind: kind, Namespace: nsArg(), Name: ref("name")}}
+	}
+	createRun := func(kind, when string) dynamic.Step {
+		return dynamic.Step{Name: "restarted", When: when, Kubernetes: &dynamic.KubernetesAction{
+			Verb: "create", APIVersion: "tekton.dev/v1", Kind: kind, Namespace: nsArg(),
+			Body: &dynamic.Body{Expression: restartBody(kind)}}}
+	}
+	// containers lists every step (and sidecar) container of the TaskRuns in
+	// `runs`, honoring the optional step filter; notStarted lists runs without a pod.
+	containers := `steps.runs.map(tr, !(has(tr.status) && has(tr.status.podName) && tr.status.podName != '') ? [] : ` +
+		`(has(tr.status.steps) ? tr.status.steps : []).filter(st, !has(args.step) || args.step == '' || st.name == args.step)` +
+		`.map(st, {'taskRun': tr.metadata.name, 'pod': tr.status.podName, 'kind': 'step', 'name': st.name, 'container': st.container})` +
+		` + ((!has(args.step) || args.step == '') && has(tr.status.sidecars) ? tr.status.sidecars.map(sc, {'taskRun': tr.metadata.name, 'pod': tr.status.podName, 'kind': 'sidecar', 'name': sc.name, 'container': sc.container}) : [])).flatten()`
+	notStarted := `steps.runs.filter(tr, !(has(tr.status) && has(tr.status.podName) && tr.status.podName != '')).map(tr, tr.metadata.name)`
+	logs := dynamic.Step{Name: "logs", ForEach: "steps.containers", IgnoreError: true, Kubernetes: &dynamic.KubernetesAction{
+		Verb: "get", APIVersion: "v1", Kind: "Pod", Namespace: nsArg(), Name: expr("item.pod"), Subresource: val("log"),
+		Query: map[string]dynamic.Ref{
+			"container": {Expression: "item.container"},
+			"tailLines": {Expression: "has(args.tail) && int(args.tail) > 0 ? int(args.tail) : 100"},
+		}}}
+	logText := `(steps.notStarted.map(n, "TaskRun '" + n + "' in namespace '" + args.namespace + "' has not started a pod yet") + ` +
+		`range(size(steps.containers)).map(i, "# TaskRun: " + steps.containers[i].taskRun + " [" + steps.containers[i].kind + ": " + steps.containers[i].name + "]\n" + ` +
+		`(type(steps.logs[i]) == string ? steps.logs[i] : "error retrieving logs: " + steps.logs[i].error))).join("\n")`
 	return plan{toolset: "tekton", chart: "tekton-mcp-tools",
 		tools: map[string][]conversion{
 			"tekton_pipeline_start": start("Pipeline", "pipelineRef"),
 			"tekton_task_start":     start("Task", "taskRef"),
-		},
-		skipped: map[string]string{
-			"tekton_pipelinerun_lifecycle": "restart copies the existing spec (get + create); cancel alone is a single patch and could be split out",
-			"tekton_taskrun_restart":       "copies the existing spec (get + create)",
-			"tekton_pipelinerun_logs":      "resolves TaskRuns, then streams pod logs across several requests",
-			"tekton_taskrun_logs":          "resolves the pod, then streams container logs across several requests",
+			"tekton_pipelinerun_lifecycle": {{
+				Steps: []dynamic.Step{
+					getRun("PipelineRun", "args.action == 'restart'"),
+					createRun("PipelineRun", "args.action == 'restart'"),
+					{Name: "cancelled", When: "args.action == 'cancel'", Kubernetes: &dynamic.KubernetesAction{
+						Verb: "patch", APIVersion: "tekton.dev/v1", Kind: "PipelineRun", Namespace: nsArg(), Name: ref("name"),
+						Body: &dynamic.Body{Value: json.RawMessage(`{"spec":{"status":"Cancelled"}}`)}}},
+				},
+				Output: `args.action == 'restart' ? "PipelineRun '" + args.name + "' restarted as '" + steps.restarted.metadata.name + "' in namespace '" + steps.restarted.metadata.namespace + "'" : ` +
+					`"PipelineRun '" + args.name + "' cancelled in namespace '" + steps.cancelled.metadata.namespace + "'"`,
+				Note: "Restart uses the same get + create as the built-in tool, expressed as two steps.",
+			}},
+			"tekton_taskrun_restart": {{
+				Steps:  []dynamic.Step{getRun("TaskRun", ""), createRun("TaskRun", "")},
+				Output: `"TaskRun '" + args.name + "' restarted as '" + steps.restarted.metadata.name + "' in namespace '" + steps.restarted.metadata.namespace + "'"`,
+			}},
+			"tekton_pipelinerun_logs": {{
+				Steps: []dynamic.Step{
+					{Name: "pipelinerun", Kubernetes: &dynamic.KubernetesAction{Verb: "get", APIVersion: "tekton.dev/v1", Kind: "PipelineRun", Namespace: nsArg(), Name: ref("name")}},
+					{Name: "taskruns", Kubernetes: &dynamic.KubernetesAction{Verb: "list", APIVersion: "tekton.dev/v1", Kind: "TaskRun", Namespace: nsArg(),
+						QueryExpression: "{'labelSelector': 'tekton.dev/pipelineRun=' + args.name + ((has(args.task) && args.task != '') ? ',tekton.dev/pipelineTask=' + args.task : '')}"}},
+					{Name: "runs", Expression: "steps.taskruns.items"},
+					{Name: "containers", Expression: containers},
+					{Name: "notStarted", Expression: notStarted},
+					logs,
+				},
+				Output: `size(steps.runs) == 0 ? ("No TaskRuns found for PipelineRun '" + args.name + "' in namespace '" + steps.pipelinerun.metadata.namespace + "'" + ((has(args.task) && args.task != '') ? " matching pipeline task '" + args.task + "'" : "")) : ` +
+					`(size(steps.containers) == 0 && size(steps.notStarted) == 0 ? "No logs available for PipelineRun '" + args.name + "' in namespace '" + steps.pipelinerun.metadata.namespace + "'" : ` + logText + `)`,
+				Note: "Each container's logs are one fan-out request instead of a stream; empty logs are not skipped and the per-TaskRun grouping is flattened into one header per container.",
+			}},
+			"tekton_taskrun_logs": {{
+				Steps: []dynamic.Step{
+					{Name: "taskrun", Kubernetes: &dynamic.KubernetesAction{Verb: "get", APIVersion: "tekton.dev/v1", Kind: "TaskRun", Namespace: nsArg(), Name: ref("name")}},
+					{Name: "runs", Expression: "[steps.taskrun]"},
+					{Name: "containers", Expression: containers},
+					{Name: "notStarted", Expression: notStarted},
+					logs,
+				},
+				Output: `size(steps.containers) == 0 && size(steps.notStarted) == 0 ? "No logs available for TaskRun '" + args.name + "' in namespace '" + steps.taskrun.metadata.namespace + "'" : ` + logText,
+				Note:   "Same differences as tekton_pipelinerun_logs.",
+			}},
 		}}
 }
 
 // KubeVirt: lifecycle, clone, template instantiation and guest info are
-// single requests against the KubeVirt (sub)resource APIs.
+// single requests or short step sequences against the KubeVirt APIs;
+// troubleshoot is a fan-out gather.
 func kubevirtPlan() plan {
-	lifecycle := func(name, description, resource, enum string) conversion {
-		return conversion{
-			Name:        name,
-			Description: description,
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"namespace": map[string]any{"type": "string", "description": "Namespace of the VirtualMachine"},
-					"name":      map[string]any{"type": "string", "description": "Name of the VirtualMachine"},
-					"action":    map[string]any{"type": "string", "enum": strings.Split(enum, ","), "description": "Lifecycle action to perform"},
-				},
-				"required": []string{"namespace", "name", "action"},
-			},
-			Kubernetes: &dynamic.KubernetesAction{
-				Verb: "update", APIVersion: "subresources.kubevirt.io/v1", Resource: resource,
-				Namespace:   &dynamic.NamespaceRef{Argument: "namespace"},
-				Name:        ref("name"),
-				Subresource: ref("action"),
-			},
-			Output: "'VirtualMachine ' + args.name + ': ' + args.action + ' requested'",
-		}
+	vmGet := func(name, when string) dynamic.Step {
+		return dynamic.Step{Name: name, When: when, Kubernetes: &dynamic.KubernetesAction{
+			Verb: "get", APIVersion: "kubevirt.io/v1", Kind: "VirtualMachine", Namespace: nsArg(), Name: ref("name")}}
 	}
+	runStrategy := func(name, when, strategy string) dynamic.Step {
+		return dynamic.Step{Name: name, When: when, Kubernetes: &dynamic.KubernetesAction{
+			Verb: "patch", APIVersion: "kubevirt.io/v1", Kind: "VirtualMachine", Namespace: nsArg(), Name: ref("name"),
+			Body: &dynamic.Body{Value: json.RawMessage(`{"spec":{"runStrategy":"` + strategy + `"}}`)}}}
+	}
+	vmiSubresource := func(name, when, subresource string) dynamic.Step {
+		return dynamic.Step{Name: name, When: when, Kubernetes: &dynamic.KubernetesAction{
+			Verb: "update", APIVersion: "subresources.kubevirt.io/v1", Resource: "virtualmachineinstances",
+			Namespace: nsArg(), Name: ref("name"), Subresource: val(subresource)}}
+	}
+	guestInfo := func(name, when string, subresource *dynamic.Ref, forEach string, ignore bool) dynamic.Step {
+		return dynamic.Step{Name: name, When: when, ForEach: forEach, IgnoreError: ignore, Kubernetes: &dynamic.KubernetesAction{
+			Verb: "get", APIVersion: "subresources.kubevirt.io/v1", Resource: "virtualmachineinstances",
+			Namespace: nsArg(), Name: ref("name"), Subresource: subresource}}
+	}
+	guestPart := func(index int, key string) string {
+		i := fmt.Sprint(index)
+		return "(has(steps.all[" + i + "].error) ? {'" + key + "Error': steps.all[" + i + "].error} : {'" + key + "': steps.all[" + i + "]})"
+	}
+	vmVolumes := "(has(steps.vm.spec) && has(steps.vm.spec.template) && has(steps.vm.spec.template.spec) && has(steps.vm.spec.template.spec.volumes) ? steps.vm.spec.template.spec.volumes : [])"
 	return plan{toolset: "kubevirt", chart: "kubevirt-mcp-tools",
 		tools: map[string][]conversion{
-			"vm_lifecycle": {
-				func() conversion {
-					c := lifecycle("vm_lifecycle", "Manage VirtualMachine lifecycle: start, stop or restart a VM through the KubeVirt subresource API.", "virtualmachines", "start,stop,restart")
-					c.Note = "Split in two: start/stop/restart use the virtualmachines/{action} subresource instead of patching runStrategy, pause/unpause moved to `vmi_pause`."
-					return c
-				}(),
-				func() conversion {
-					c := lifecycle("vmi_pause", "Pause or unpause a running VirtualMachineInstance in place.", "virtualmachineinstances", "pause,unpause")
-					c.Note = "The pause/unpause half of `vm_lifecycle`."
-					return c
-				}(),
-			},
+			"vm_lifecycle": {{
+				Steps: []dynamic.Step{
+					vmGet("vm", "args.action in ['start', 'stop', 'restart']"),
+					runStrategy("start", "args.action == 'start' && !(has(steps.vm.spec.runStrategy) && steps.vm.spec.runStrategy == 'Always')", "Always"),
+					runStrategy("stop", "args.action == 'stop' && !(has(steps.vm.spec.runStrategy) && steps.vm.spec.runStrategy == 'Halted')", "Halted"),
+					runStrategy("halt", "args.action == 'restart'", "Halted"),
+					runStrategy("resume", "args.action == 'restart'", "Always"),
+					vmiSubresource("pause", "args.action == 'pause'", "pause"),
+					vmiSubresource("unpause", "args.action == 'unpause'", "unpause"),
+					vmGet("final", ""),
+				},
+				Output: `{'message': args.action == 'start' ? (steps.start == null ? "VirtualMachine '" + args.name + "' in namespace '" + args.namespace + "' is already running" : "VirtualMachine started successfully") : ` +
+					`args.action == 'stop' ? (steps.stop == null ? "VirtualMachine '" + args.name + "' in namespace '" + args.namespace + "' is already stopped" : "VirtualMachine stopped successfully") : ` +
+					`args.action == 'restart' ? "VirtualMachine restarted successfully" : args.action == 'pause' ? "VirtualMachine paused successfully" : "VirtualMachine unpaused successfully", 'vm': steps.final}`,
+				Note: "Same contract as the built-in tool. runStrategy changes are merge patches instead of full-object updates.",
+			}},
 			"vm_clone": {{
 				Kubernetes: &dynamic.KubernetesAction{
 					Verb: "create", APIVersion: "clone.kubevirt.io/v1beta1", Kind: "VirtualMachineClone",
-					Namespace: &dynamic.NamespaceRef{Argument: "namespace"},
+					Namespace: nsArg(),
 					Body: &dynamic.Body{Expression: "{'apiVersion': 'clone.kubevirt.io/v1beta1', 'kind': 'VirtualMachineClone', " +
 						"'metadata': {'generateName': args.name + '-clone-'}, " +
 						"'spec': {'source': {'apiGroup': 'kubevirt.io', 'kind': 'VirtualMachine', 'name': args.name}, " +
@@ -418,7 +495,7 @@ func kubevirtPlan() plan {
 			"vm_create_from_template": {{
 				Kubernetes: &dynamic.KubernetesAction{
 					Verb: "create", APIVersion: "subresources.template.kubevirt.io/v1beta1", Resource: "virtualmachinetemplates",
-					Namespace:   &dynamic.NamespaceRef{Argument: "namespace"},
+					Namespace:   nsArg(),
 					Name:        ref("template_name"),
 					Subresource: val("create"),
 					Body: &dynamic.Body{Expression: "{'apiVersion': 'subresources.template.kubevirt.io/v1beta1', 'kind': 'CreateOptions', " +
@@ -426,29 +503,41 @@ func kubevirtPlan() plan {
 				},
 			}},
 			"vm_guest_info": {{
-				Description: "Get guest agent information from a running VirtualMachineInstance: OS details, filesystems, users or network interfaces.",
-				InputSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"namespace": map[string]any{"type": "string", "description": "Namespace of the VirtualMachineInstance"},
-						"name":      map[string]any{"type": "string", "description": "Name of the VirtualMachineInstance"},
-						"info_type": map[string]any{"type": "string", "enum": []string{"os", "filesystem", "users", "network"}, "description": "Which guest information to retrieve"},
-					},
-					"required": []string{"namespace", "name", "info_type"},
+				Steps: []dynamic.Step{
+					guestInfo("single", "args.info_type != 'all'", expr("{'os': 'guestosinfo', 'filesystem': 'filesystemlist', 'users': 'userlist', 'network': 'interfacelist'}[args.info_type]"), "", false),
+					guestInfo("all", "args.info_type == 'all'", expr("item"), "['guestosinfo', 'filesystemlist', 'userlist', 'interfacelist']", true),
 				},
-				Kubernetes: &dynamic.KubernetesAction{
-					Verb: "get", APIVersion: "subresources.kubevirt.io/v1", Resource: "virtualmachineinstances",
-					Namespace:   &dynamic.NamespaceRef{Argument: "namespace"},
-					Name:        ref("name"),
-					Subresource: &dynamic.Ref{Expression: "{'os': 'guestosinfo', 'filesystem': 'filesystemlist', 'users': 'userlist', 'network': 'interfacelist'}[args.info_type]"},
+				Output: "args.info_type == 'os' ? {'guestOSInfo': steps.single} : args.info_type == 'filesystem' ? {'filesystems': steps.single} : " +
+					"args.info_type == 'users' ? {'users': steps.single} : args.info_type == 'network' ? {'networkInterfaces': steps.single} : " +
+					"(steps.all.all(r, has(r.error)) ? {'error': 'guest agent is not responding - all queries failed - ensure QEMU guest agent is installed and running in the VM'} : " +
+					"merge(merge(" + guestPart(0, "guestOSInfo") + ", " + guestPart(1, "filesystems") + "), merge(" + guestPart(2, "users") + ", " + guestPart(3, "networkInterfaces") + ")))",
+				Note: "Same contract as the built-in tool; `all` fans out over the four subresources and tolerates individual failures.",
+			}},
+			"vm_troubleshoot": {{
+				Steps: []dynamic.Step{
+					{Name: "vm", IgnoreError: true, Kubernetes: &dynamic.KubernetesAction{Verb: "get", APIVersion: "kubevirt.io/v1", Kind: "VirtualMachine", Namespace: nsArg(), Name: ref("name")}},
+					{Name: "vmi", IgnoreError: true, Kubernetes: &dynamic.KubernetesAction{Verb: "get", APIVersion: "kubevirt.io/v1", Kind: "VirtualMachineInstance", Namespace: nsArg(), Name: ref("name")}},
+					{Name: "pods", Kubernetes: &dynamic.KubernetesAction{Verb: "list", APIVersion: "v1", Kind: "Pod", Namespace: nsArg(),
+						Query: map[string]dynamic.Ref{"labelSelector": {Value: "kubevirt.io=virt-launcher,vm.kubevirt.io/name={name}"}}}},
+					{Name: "events", ForEach: "[args.name] + steps.pods.items.map(p, p.metadata.name)", IgnoreError: true,
+						Kubernetes: &dynamic.KubernetesAction{Verb: "list", APIVersion: "v1", Kind: "Event", Namespace: nsArg(),
+							Query: map[string]dynamic.Ref{"fieldSelector": {Expression: "'involvedObject.name=' + item"}}}},
+					{Name: "datavolumes", ForEach: vmVolumes + ".filter(v, has(v.dataVolume)).map(v, v.dataVolume.name)", IgnoreError: true,
+						Kubernetes: &dynamic.KubernetesAction{Verb: "get", APIVersion: "cdi.kubevirt.io/v1beta1", Kind: "DataVolume", Namespace: nsArg(), Name: expr("item")}},
 				},
-				Note: "`info_type: all` (four requests) is not supported.",
+				Output: "{'virtualMachine': has(steps.vm.error) ? steps.vm : {'runStrategy': has(steps.vm.spec.runStrategy) ? steps.vm.spec.runStrategy : '', 'status': has(steps.vm.status) ? steps.vm.status : {}, " +
+					"'volumes': " + vmVolumes + ".map(v, v.transformMapEntry(k, val, k.startsWith('cloudInit') ? {k: '<redacted>'} : {k: val}))}, " +
+					"'virtualMachineInstance': has(steps.vmi.error) ? steps.vmi : {'status': has(steps.vmi.status) ? steps.vmi.status : {}}, " +
+					"'virtLauncherPods': steps.pods.items.map(p, {'name': p.metadata.name, 'phase': has(p.status) && has(p.status.phase) ? p.status.phase : '', " +
+					"'conditions': has(p.status) && has(p.status.conditions) ? p.status.conditions : [], 'containerStatuses': has(p.status) && has(p.status.containerStatuses) ? p.status.containerStatuses : []}), " +
+					"'events': steps.events.map(e, has(e.error) ? [] : e.items.map(ev, {'type': ev.type, 'reason': has(ev.reason) ? ev.reason : '', 'message': has(ev.message) ? ev.message : '', 'object': ev.involvedObject.kind + '/' + ev.involvedObject.name})).flatten(), " +
+					"'dataVolumes': steps.datavolumes.map(dv, has(dv.error) ? dv : {'name': dv.metadata.name, 'phase': has(dv.status) && has(dv.status.phase) ? dv.status.phase : '', 'progress': has(dv.status) && has(dv.status.progress) ? dv.status.progress : ''})}",
+				Note: "Gathers VM, VMI, virt-launcher pods, events and DataVolumes. Omits pod logs (the built-in redacts secrets from them, which CEL cannot express), the PVC fallback and the cloud-init analysis; cloud-init volumes are redacted wholesale.",
 			}},
 		},
 		skipped: map[string]string{
-			"vm_create":             "resolves DataSources, preferences and instancetypes before creating the VM",
+			"vm_create":             "resolves DataSources, preferences and instancetypes with matching heuristics before creating the VM",
 			"vm_console_screenshot": "returns an image content block",
-			"vm_troubleshoot":       "gathers VM, VMI, pods, logs and events in one workflow",
 		}}
 }
 
@@ -532,13 +621,33 @@ func corePlan() plan {
 				Note: metricsNote + " Omitting namespace lists all namespaces regardless of all_namespaces.",
 			}},
 			"pods_log": {{
-				Kubernetes: &dynamic.KubernetesAction{
-					Verb: "get", APIVersion: "v1", Kind: "Pod", Name: ref("name"), Subresource: val("log"),
-					Namespace:       &dynamic.NamespaceRef{Argument: "namespace"},
-					Query:           map[string]dynamic.Ref{"container": arg("container")},
-					QueryExpression: "{'tailLines': has(args.tail) && int(args.tail) > 0 ? int(args.tail) : 100, 'previous': has(args.previous) && args.previous ? 'true' : ''}",
+				Steps: []dynamic.Step{
+					{Name: "pod", When: "!has(args.container) || args.container == ''", Kubernetes: &dynamic.KubernetesAction{
+						Verb: "get", APIVersion: "v1", Kind: "Pod", Namespace: nsArg(), Name: ref("name")}},
+					{Name: "log", Kubernetes: &dynamic.KubernetesAction{
+						Verb: "get", APIVersion: "v1", Kind: "Pod", Namespace: nsArg(), Name: ref("name"), Subresource: val("log"),
+						Query: map[string]dynamic.Ref{"container": {Expression: "has(args.container) && args.container != '' ? args.container : " +
+							"(has(steps.pod.metadata.annotations) && 'kubectl.kubernetes.io/default-container' in steps.pod.metadata.annotations ? steps.pod.metadata.annotations['kubectl.kubernetes.io/default-container'] : steps.pod.spec.containers[0].name)"}},
+						QueryExpression: "{'tailLines': has(args.tail) && int(args.tail) > 0 ? int(args.tail) : 100, 'previous': has(args.previous) && args.previous ? 'true' : ''}",
+					}},
 				},
-				Note: "Without a container argument the API server picks the container; multi-container pods must name one.",
+				Output: "steps.log",
+				Note:   "Same contract as the built-in tool: without a container argument the Pod is fetched and its default-container annotation or first container used.",
+			}},
+			"pods_run": {{
+				Steps: []dynamic.Step{
+					{Name: "name", Expression: "has(args.name) && args.name != '' ? args.name : 'kubernetes-mcp-server-run-' + string(int(now))"},
+					{Name: "labels", Expression: "{'app.kubernetes.io/name': steps.name, 'app.kubernetes.io/component': steps.name, 'app.kubernetes.io/managed-by': 'kubernetes-mcp-server', 'app.kubernetes.io/part-of': 'kubernetes-mcp-server-run-sandbox'}"},
+					{Name: "port", Expression: "has(args.port) && int(args.port) > 0 ? int(args.port) : 0"},
+					{Name: "pod", Kubernetes: &dynamic.KubernetesAction{Verb: "create", APIVersion: "v1", Kind: "Pod", Namespace: nsArg(),
+						Body: &dynamic.Body{Expression: "{'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': steps.name, 'labels': steps.labels}, " +
+							"'spec': {'containers': [merge({'name': steps.name, 'image': args.image, 'imagePullPolicy': 'Always'}, steps.port > 0 ? {'ports': [{'containerPort': steps.port}]} : {})]}}"}}},
+					{Name: "service", When: "steps.port > 0", Kubernetes: &dynamic.KubernetesAction{Verb: "create", APIVersion: "v1", Kind: "Service", Namespace: nsArg(),
+						Body: &dynamic.Body{Expression: "{'apiVersion': 'v1', 'kind': 'Service', 'metadata': {'name': steps.name, 'labels': steps.labels}, " +
+							"'spec': {'selector': steps.labels, 'type': 'ClusterIP', 'ports': [{'port': steps.port, 'targetPort': steps.port}]}}"}}},
+				},
+				Output: "[{'kind': 'Pod', 'name': steps.pod.metadata.name, 'namespace': steps.pod.metadata.namespace}] + (steps.service == null ? [] : [{'kind': 'Service', 'name': steps.service.metadata.name, 'namespace': steps.service.metadata.namespace}])",
+				Note:   "Does not create the OpenShift Route the built-in tool adds when the Route API is available; the generated name uses a timestamp instead of a random suffix.",
 			}},
 			"pods_list": {{
 				Kubernetes: &dynamic.KubernetesAction{
@@ -571,7 +680,6 @@ func corePlan() plan {
 		},
 		skipped: map[string]string{
 			"pods_exec":                  "SPDY/WebSocket stream",
-			"pods_run":                   "creates a Pod and optionally a Service (two creates)",
 			"resources_list":             "generic by design: the GVK is an argument; this is the base every dynamic tool builds on",
 			"resources_get":              "generic by design",
 			"resources_create_or_update": "generic by design, multi-document manifests",

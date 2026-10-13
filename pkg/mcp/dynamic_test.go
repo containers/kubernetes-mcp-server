@@ -16,9 +16,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicclient "k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
@@ -301,7 +304,7 @@ spec:
 	s.InitMcpClient()
 	s.Run("declares no Kubernetes RBAC", func() {
 		meta, _ := json.Marshal(s.findTool("mesh_namespace_health").Meta)
-		s.Contains(string(meta), `"none":{"reason":"performs an HTTP request to `+server.URL)
+		s.Contains(string(meta), `"none":{"reason":"performs HTTP requests to `+server.URL)
 	})
 	s.Run("expands the path, query and body from the arguments", func() {
 		result, err := s.CallTool("mesh_namespace_health", map[string]any{"namespace": "istio-system", "extra": "value"})
@@ -353,13 +356,18 @@ spec:
 }
 
 func (s *DynamicToolsSuite) TestInvalidToolIsSkipped() {
+	// Passes the CRD schema (the shipped CRD does not cross-check body sources)
+	// but fails the toolset's own validation.
 	s.createTool(`
 apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
 kind: Tool
 metadata:
-  name: broken-no-action
+  name: broken-body
 spec:
-  description: Has no action
+  description: Has a body with two sources
+  http:
+    url: https://example.invalid
+    body: {argument: a, expression: args}
 `)
 	s.createTool(`
 apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
@@ -382,7 +390,7 @@ spec:
   kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
 `)
 	s.InitMcpClient()
-	s.Nil(s.findTool("broken_no_action"))
+	s.Nil(s.findTool("broken_body"))
 	s.Nil(s.findTool("broken_cel"))
 	s.NotNil(s.findTool("still_fine"))
 }
@@ -629,4 +637,300 @@ func (s *DynamicToolsSuite) createDeployment(name string, replicas int32) {
 		},
 	}, metav1.CreateOptions{})
 	s.Require().NoError(err, "failed to create Deployment")
+}
+
+// loadToolManifests creates every Tool document of a generated file. Chart
+// templates without Helm values (tekton, kubevirt) are plain YAML.
+func (s *DynamicToolsSuite) loadToolManifests(path string) {
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	for _, doc := range strings.Split(string(raw), "\n---") {
+		if strings.Contains(doc, "kind: Tool") {
+			s.createTool(doc)
+		}
+	}
+}
+
+func (s *DynamicToolsSuite) createUnstructured(gvr schema.GroupVersionResource, manifest string) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	s.Require().NoError(yaml.Unmarshal([]byte(manifest), &obj.Object))
+	created, err := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(gvr).Namespace("default").Create(s.T().Context(), obj, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	return created
+}
+
+func (s *DynamicToolsSuite) TestStepsAgainstTheAPI() {
+	s.createConfigMap("dyn-step-a", map[string]string{"k": "a"})
+	s.createConfigMap("dyn-step-b", map[string]string{"k": "b"})
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: configmap-values
+spec:
+  description: List ConfigMaps then fetch each one (fan-out) and read a key
+  readOnly: true
+  steps:
+    - name: list
+      kubernetes: {verb: list, apiVersion: v1, kind: ConfigMap, namespace: {value: default}, query: {labelSelector: {value: "test=dynamic"}}}
+    - name: names
+      expression: steps.list.items.map(i, i.metadata.name) + ['does-not-exist']
+    - name: each
+      forEach: steps.names
+      ignoreError: true
+      kubernetes: {verb: get, apiVersion: v1, kind: ConfigMap, namespace: {value: default}, name: {expression: item}}
+    - name: skipped
+      when: size(steps.names) > 100
+      kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
+  output: "{'values': steps.each.map(c, has(c.error) ? 'ERR' : c.data.k), 'skipped': steps.skipped}"
+`)
+	s.InitMcpClient()
+	s.Run("advertises the union of every step's RBAC", func() {
+		meta, _ := json.Marshal(s.findTool("configmap_values").Meta)
+		s.Contains(string(meta), `"bounded"`)
+		s.Contains(string(meta), `"verbs":["list"]`)
+		s.Contains(string(meta), `{"namespace":{"name":"default"},"target":{"resource":{"resource":"configmaps"}},"verbs":["get"]}`, "a CEL-derived name advertises the verb and resource for any name")
+		s.Contains(string(meta), `"resource":"namespaces"`)
+	})
+	s.Run("runs the steps in order with fan-out, ignoreError and when", func() {
+		result, err := s.CallTool("configmap_values", map[string]any{})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Equal(map[string]any{"values": []any{"a", "b", "ERR"}, "skipped": nil}, result.StructuredContent)
+	})
+}
+
+func (s *DynamicToolsSuite) TestConvertedTektonTools() {
+	ctx := s.T().Context()
+	for _, resource := range []string{"pipelineruns", "taskruns"} {
+		s.Require().NoError(EnvTestEnableCRD(ctx, "tekton.dev", "v1", resource))
+	}
+	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
+	s.loadToolManifests(filepath.Join("..", "..", "examples", "dynamic-tools", "charts", "tekton-mcp-tools", "templates", "tools.yaml"))
+	pipelineRuns := schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
+	taskRuns := schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
+	client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig())
+	defer func() {
+		_ = client.Resource(pipelineRuns).Namespace("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+		_ = client.Resource(taskRuns).Namespace("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+	}()
+	s.createUnstructured(pipelineRuns, `
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build-1
+  generateName: build-
+spec:
+  pipelineRef: {name: build}
+  params: [{name: tag, value: v1}]
+  status: Cancelled
+`)
+	s.createUnstructured(taskRuns, `
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: build-1-compile
+  labels: {tekton.dev/pipelineRun: build-1, tekton.dev/pipelineTask: compile}
+spec:
+  taskRef: {name: compile}
+status: {}
+`)
+	s.InitMcpClient()
+	s.Run("pipelinerun restart copies the spec minus status into a generated run", func() {
+		result, err := s.CallTool("tekton_pipelinerun_lifecycle", map[string]any{"name": "build-1", "namespace": "default", "action": "restart"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Regexp(`^PipelineRun 'build-1' restarted as 'build-[a-z0-9]+' in namespace 'default'$`, s.text(result))
+		list, err := client.Resource(pipelineRuns).Namespace("default").List(ctx, metav1.ListOptions{})
+		s.Require().NoError(err)
+		s.Len(list.Items, 2)
+		for _, item := range list.Items {
+			if item.GetName() == "build-1" {
+				continue
+			}
+			spec := item.Object["spec"].(map[string]any)
+			s.Equal("build", spec["pipelineRef"].(map[string]any)["name"])
+			s.NotContains(spec, "status", "spec.status must be cleared on restart")
+			s.Equal([]any{map[string]any{"name": "tag", "value": "v1"}}, spec["params"])
+		}
+	})
+	s.Run("pipelinerun cancel patches spec.status", func() {
+		s.createUnstructured(pipelineRuns, "apiVersion: tekton.dev/v1\nkind: PipelineRun\nmetadata: {name: build-2}\nspec: {pipelineRef: {name: build}}\n")
+		result, err := s.CallTool("tekton_pipelinerun_lifecycle", map[string]any{"name": "build-2", "namespace": "default", "action": "cancel"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Equal("PipelineRun 'build-2' cancelled in namespace 'default'", s.text(result))
+		pr, err := client.Resource(pipelineRuns).Namespace("default").Get(ctx, "build-2", metav1.GetOptions{})
+		s.Require().NoError(err)
+		s.Equal("Cancelled", pr.Object["spec"].(map[string]any)["status"])
+	})
+	s.Run("taskrun restart", func() {
+		result, err := s.CallTool("tekton_taskrun_restart", map[string]any{"name": "build-1-compile", "namespace": "default"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Regexp(`^TaskRun 'build-1-compile' restarted as 'build-1-compile-[a-z0-9]+' in namespace 'default'$`, s.text(result))
+	})
+	s.Run("pipelinerun logs reports runs without a pod and missing runs", func() {
+		result, err := s.CallTool("tekton_pipelinerun_logs", map[string]any{"name": "build-1", "namespace": "default"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Equal("TaskRun 'build-1-compile' in namespace 'default' has not started a pod yet", s.text(result))
+		result, err = s.CallTool("tekton_pipelinerun_logs", map[string]any{"name": "build-1", "namespace": "default", "task": "nope"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Equal("No TaskRuns found for PipelineRun 'build-1' in namespace 'default' matching pipeline task 'nope'", s.text(result))
+	})
+	s.Run("taskrun logs fans out over step containers", func() {
+		s.createUnstructured(taskRuns, `
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata: {name: with-pod}
+spec: {taskRef: {name: compile}}
+status:
+  podName: no-such-pod
+  steps: [{name: compile, container: step-compile}, {name: test, container: step-test}]
+  sidecars: [{name: db, container: sidecar-db}]
+`)
+		result, err := s.CallTool("tekton_taskrun_logs", map[string]any{"name": "with-pod", "namespace": "default", "step": "test"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		s.Contains(s.text(result), "# TaskRun: with-pod [step: test]\nerror retrieving logs: ")
+		s.NotContains(s.text(result), "step: compile")
+		s.NotContains(s.text(result), "sidecar", "a step filter excludes sidecars")
+	})
+}
+
+func (s *DynamicToolsSuite) TestConvertedKubevirtTools() {
+	ctx := s.T().Context()
+	for _, resource := range []string{"virtualmachines", "virtualmachineinstances"} {
+		s.Require().NoError(EnvTestEnableCRD(ctx, "kubevirt.io", "v1", resource))
+	}
+	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
+	s.loadToolManifests(filepath.Join("..", "..", "examples", "dynamic-tools", "charts", "kubevirt-mcp-tools", "templates", "tools.yaml"))
+	vms := schema.GroupVersionResource{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"}
+	client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig())
+	defer func() {
+		_ = client.Resource(vms).Namespace("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+	}()
+	s.createUnstructured(vms, `
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata: {name: dyn-vm}
+spec:
+  runStrategy: Halted
+  template:
+    spec:
+      volumes:
+        - {name: root, dataVolume: {name: dyn-vm-root}}
+        - {name: cloudinit, cloudInitNoCloud: {userData: "#cloud-config\npassword: secret"}}
+`)
+	s.InitMcpClient()
+	runStrategy := func() string {
+		vm, err := client.Resource(vms).Namespace("default").Get(ctx, "dyn-vm", metav1.GetOptions{})
+		s.Require().NoError(err)
+		return vm.Object["spec"].(map[string]any)["runStrategy"].(string)
+	}
+	lifecycle := func(action string) *mcp.CallToolResult {
+		result, err := s.CallTool("vm_lifecycle", map[string]any{"namespace": "default", "name": "dyn-vm", "action": action})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		return result
+	}
+	s.Run("vm_lifecycle keeps the built-in contract", func() {
+		s.Equal("VirtualMachine started successfully", lifecycle("start").StructuredContent.(map[string]any)["message"])
+		s.Equal("Always", runStrategy())
+		s.Equal("VirtualMachine 'dyn-vm' in namespace 'default' is already running", lifecycle("start").StructuredContent.(map[string]any)["message"])
+		s.Equal("VirtualMachine stopped successfully", lifecycle("stop").StructuredContent.(map[string]any)["message"])
+		s.Equal("Halted", runStrategy())
+		s.Equal("VirtualMachine restarted successfully", lifecycle("restart").StructuredContent.(map[string]any)["message"])
+		s.Equal("Always", runStrategy())
+		s.Contains(s.text(lifecycle("stop")), "runStrategy: Halted", "the final VM is returned")
+	})
+	s.Run("vm_troubleshoot gathers what exists and tolerates what does not", func() {
+		result, err := s.CallTool("vm_troubleshoot", map[string]any{"namespace": "default", "name": "dyn-vm"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "%s", s.text(result))
+		out := result.StructuredContent.(map[string]any)
+		s.Equal("Halted", out["virtualMachine"].(map[string]any)["runStrategy"])
+		s.Contains(out["virtualMachineInstance"].(map[string]any)["error"], "not found")
+		s.Empty(out["virtLauncherPods"])
+		s.Contains(s.text(result), "cloudInitNoCloud: <redacted>")
+		s.NotContains(s.text(result), "password: secret")
+		dvs := out["dataVolumes"].([]any)
+		s.Require().Len(dvs, 1, "one DataVolume lookup per dataVolume volume")
+		s.Contains(dvs[0].(map[string]any)["error"], "DataVolume", "envtest serves no CDI API; the failure is recorded, not fatal")
+	})
+}
+
+func (s *DynamicToolsSuite) TestConvertedPodsRun() {
+	ctx := s.T().Context()
+	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
+	s.loadToolManifests(filepath.Join("..", "..", "examples", "dynamic-tools", "converted", "core.yaml"))
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	defer func() {
+		_ = kc.CoreV1().Pods("default").Delete(ctx, "dyn-run", metav1.DeleteOptions{})
+		_ = kc.CoreV1().Services("default").Delete(ctx, "dyn-run", metav1.DeleteOptions{})
+	}()
+	s.InitMcpClient()
+	result, err := s.CallTool("pods_run", map[string]any{"namespace": "default", "name": "dyn-run", "image": "busybox", "port": 8080})
+	s.Require().NoError(err)
+	s.Falsef(result.IsError, "%s", s.text(result))
+	s.Contains(s.text(result), "kind: Pod\n")
+	s.Contains(s.text(result), "kind: Service\n")
+	pod, err := kc.CoreV1().Pods("default").Get(ctx, "dyn-run", metav1.GetOptions{})
+	s.Require().NoError(err)
+	s.Equal("busybox", pod.Spec.Containers[0].Image)
+	s.Equal(int32(8080), pod.Spec.Containers[0].Ports[0].ContainerPort)
+	s.Equal("kubernetes-mcp-server-run-sandbox", pod.Labels["app.kubernetes.io/part-of"])
+	svc, err := kc.CoreV1().Services("default").Get(ctx, "dyn-run", metav1.GetOptions{})
+	s.Require().NoError(err)
+	s.Equal("dyn-run", svc.Spec.Selector["app.kubernetes.io/name"])
+	s.Equal(int32(8080), svc.Spec.Ports[0].Port)
+}
+
+// TestExampleCRDAcceptsGeneratedTools installs the schema of the shipped CRD
+// (examples/dynamic-tools/crd.yaml) on the envtest Tool CRD and checks that
+// every generated manifest passes structural validation and the CEL rules,
+// and that an invalid Tool is rejected.
+func (s *DynamicToolsSuite) TestExampleCRDAcceptsGeneratedTools() {
+	ctx := s.T().Context()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "dynamic-tools", "crd.yaml"))
+	s.Require().NoError(err)
+	var example apiextensionsv1.CustomResourceDefinition
+	s.Require().NoError(yaml.Unmarshal(raw, &example))
+	crds := apiextensionsclient.NewForConfigOrDie(test.EnvTestRestConfig()).CustomResourceDefinitions()
+	current, err := crds.Get(ctx, example.Name, metav1.GetOptions{})
+	s.Require().NoError(err, "the envtest Tool CRD must have the same name as the shipped one")
+	current.Spec.Versions[0].Schema = example.Spec.Versions[0].Schema
+	current.Spec.Versions[0].AdditionalPrinterColumns = example.Spec.Versions[0].AdditionalPrinterColumns
+	_, err = crds.Update(ctx, current, metav1.UpdateOptions{})
+	s.Require().NoError(err, "the shipped CRD schema must be a valid structural schema with valid CEL rules")
+	s.Require().NoError(EnvTestWaitForAPIResourceCondition(ctx, dynamic.Group, dynamic.Version, dynamic.Resource, true))
+
+	for _, file := range []string{
+		filepath.Join("..", "..", "examples", "dynamic-tools", "converted", "core.yaml"),
+		filepath.Join("..", "..", "examples", "dynamic-tools", "converted", "kcp.yaml"),
+		filepath.Join("..", "..", "examples", "dynamic-tools", "charts", "tekton-mcp-tools", "templates", "tools.yaml"),
+		filepath.Join("..", "..", "examples", "dynamic-tools", "charts", "kubevirt-mcp-tools", "templates", "tools.yaml"),
+	} {
+		s.Run(filepath.Base(filepath.Dir(filepath.Dir(file)))+"/"+filepath.Base(file), func() {
+			// Fails inside createTool if the API server rejects a manifest.
+			s.loadToolManifests(file)
+		})
+	}
+	s.Run("the CEL rules reject a Tool with two kinds of action", func() {
+		obj := &unstructured.Unstructured{}
+		s.Require().NoError(yaml.Unmarshal([]byte(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata: {name: invalid-two-actions}
+spec:
+  description: invalid
+  kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
+  steps: [{name: a, expression: "1"}]
+`), &obj.Object))
+		_, err := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.GVR).Create(ctx, obj, metav1.CreateOptions{})
+		s.Require().Error(err)
+		s.Contains(err.Error(), "exactly one of spec.kubernetes, spec.http or spec.steps")
+	})
 }

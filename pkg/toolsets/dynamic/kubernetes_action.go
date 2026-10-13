@@ -28,8 +28,8 @@ var verbToMethod = map[string]string{
 // from the caller's rest.Config, so the access-control round tripper, the
 // validators, confirmation rules and the caller's identity all apply exactly
 // as they do for built-in tools.
-func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[string]any) (any, error) {
-	a := t.spec.Kubernetes
+func (t *compiledTool) runKubernetes(action *compiledAction, params api.ToolHandlerParams, vars evalVars) (any, error) {
+	a := action.kubernetes
 	gv, err := schema.ParseGroupVersion(a.APIVersion)
 	if err != nil {
 		return nil, fmt.Errorf("invalid apiVersion %q: %w", a.APIVersion, err)
@@ -45,7 +45,7 @@ func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[stri
 
 	req := client.Verb(verbToMethod[a.Verb]).Resource(resource)
 	if namespaced {
-		namespace, all, err := t.resolveNamespace(a.Namespace, args)
+		namespace, all, err := t.resolveNamespace(a.Namespace, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -53,7 +53,7 @@ func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[stri
 			req = req.Namespace(params.NamespaceOrDefault(namespace))
 		}
 	}
-	name, err := t.resolveRef(a.Name, args)
+	name, err := t.resolveRef(a.Name, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[stri
 		req = req.Name(name)
 	}
 	if a.Subresource != nil {
-		subresource, err := t.resolveRef(a.Subresource, args)
+		subresource, err := t.resolveRef(a.Subresource, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[stri
 		}
 		req = req.SubResource(strings.Split(strings.Trim(subresource, "/"), "/")...)
 	}
-	query, err := t.resolveQuery(a.Query, t.queryExpr, args)
+	query, err := t.resolveQuery(a.Query, action.queryExpr, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (t *compiledTool) runKubernetes(params api.ToolHandlerParams, args map[stri
 		req = req.Param(key, value)
 	}
 	if a.Body != nil || a.Verb == "create" || a.Verb == "update" || a.Verb == "patch" {
-		body, err := t.resolveBody(a.Body, args)
+		body, err := t.resolveBody(a.Body, action.bodyExpr, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -124,17 +124,17 @@ func (a *KubernetesAction) resolveResource(params api.ToolHandlerParams, gv sche
 
 // resolveQuery merges the query produced by the expression (if any) with the
 // declared references; references win.
-func (t *compiledTool) resolveQuery(refs map[string]Ref, expr *expression, args map[string]any) (map[string]string, error) {
+func (t *compiledTool) resolveQuery(refs map[string]Ref, expr *expression, vars evalVars) (map[string]string, error) {
 	query := map[string]string{}
 	if expr != nil {
-		values, err := expr.evalStringMap(args)
+		values, err := expr.evalStringMap(vars)
 		if err != nil {
 			return nil, err
 		}
 		query = values
 	}
 	for key, ref := range refs {
-		value, err := t.resolveRef(&ref, args)
+		value, err := t.resolveRef(&ref, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -157,12 +157,12 @@ func newRESTClient(restConfig *rest.Config, gv schema.GroupVersion) (rest.Interf
 
 // resolveRef resolves a reference: argument, then expression, then the fixed
 // value with `{argument}` placeholders expanded.
-func (t *compiledTool) resolveRef(ref *Ref, args map[string]any) (string, error) {
+func (t *compiledTool) resolveRef(ref *Ref, vars evalVars) (string, error) {
 	if ref == nil {
 		return "", nil
 	}
 	if ref.Argument != "" {
-		if value := argString(args, ref.Argument); value != "" {
+		if value := argString(vars.args, ref.Argument); value != "" {
 			return value, nil
 		}
 	}
@@ -171,7 +171,7 @@ func (t *compiledTool) resolveRef(ref *Ref, args map[string]any) (string, error)
 		if !ok {
 			return "", fmt.Errorf("expression %q was not compiled", ref.Expression)
 		}
-		value, err := expr.eval(args, nil)
+		value, err := expr.eval(vars)
 		if err != nil {
 			return "", err
 		}
@@ -180,18 +180,18 @@ func (t *compiledTool) resolveRef(ref *Ref, args map[string]any) (string, error)
 		}
 	}
 	if ref.Value != "" {
-		return expandPath(ref.Value, args)
+		return expandPath(ref.Value, vars.args)
 	}
 	return "", nil
 }
 
 // resolveNamespace returns the namespace to use and whether the request spans
 // all namespaces.
-func (t *compiledTool) resolveNamespace(ref *NamespaceRef, args map[string]any) (namespace string, all bool, err error) {
+func (t *compiledTool) resolveNamespace(ref *NamespaceRef, vars evalVars) (namespace string, all bool, err error) {
 	if ref == nil {
 		return "", false, nil
 	}
-	if namespace, err = t.resolveRef(ref.ref(), args); err != nil || namespace != "" {
+	if namespace, err = t.resolveRef(ref.ref(), vars); err != nil || namespace != "" {
 		return namespace, false, err
 	}
 	return "", ref.All, nil
@@ -211,12 +211,12 @@ func argString(args map[string]any, key string) string {
 // resolveBody returns the JSON request body. A nil Body yields an empty JSON
 // object, which is what subresource endpoints such as KubeVirt's
 // virtualmachineinstances/pause expect.
-func (t *compiledTool) resolveBody(body *Body, args map[string]any) ([]byte, error) {
+func (t *compiledTool) resolveBody(body *Body, bodyExpr *expression, vars evalVars) ([]byte, error) {
 	switch {
 	case body == nil:
 		return []byte("{}"), nil
 	case body.Argument != "":
-		value, ok := args[body.Argument]
+		value, ok := vars.args[body.Argument]
 		if !ok || value == nil {
 			return nil, fmt.Errorf("%s parameter required", body.Argument)
 		}
@@ -231,7 +231,7 @@ func (t *compiledTool) resolveBody(body *Body, args map[string]any) ([]byte, err
 	case len(body.Value) > 0:
 		return body.Value, nil
 	default:
-		value, err := t.bodyExpr.eval(args, nil)
+		value, err := bodyExpr.eval(vars)
 		if err != nil {
 			return nil, err
 		}

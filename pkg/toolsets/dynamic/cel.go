@@ -25,22 +25,41 @@ var (
 	stringDynMapType  = cel.MapType(cel.StringType, cel.DynType)
 )
 
+// evalVars are the values bound to the CEL variables of one evaluation.
+type evalVars struct {
+	args     map[string]any
+	response any
+	steps    map[string]any
+	item     any
+}
+
 // newEnv builds the CEL environment shared by every expression:
 //
 //   - args: the tool arguments (map<string, dyn>)
 //   - response: the decoded action response (dyn), null while building a request
+//   - steps: results of the previous steps by name (map<string, dyn>)
+//   - item: the current element of a forEach step (dyn)
 //   - now: the current time (timestamp), e.g. int(now) for Unix seconds
 //   - merge(a, b): a map with the entries of a overridden by those of b
+//   - range(n): the list [0, 1, ..., n-1], to walk two lists in parallel
 //   - the cel-go strings, lists, math and two-variable comprehension
-//     extensions (transformMapEntry, transformList, ...)
+//     extensions (transformMapEntry, transformList, flatten, join, ...)
 func newEnv() (*cel.Env, error) {
 	return cel.NewEnv(
 		cel.Variable("args", stringDynMapType),
 		cel.Variable("response", cel.DynType),
+		cel.Variable("steps", stringDynMapType),
+		cel.Variable("item", cel.DynType),
 		cel.Variable("now", cel.TimestampType),
 		cel.Function("merge",
 			cel.Overload("merge_map_map", []*cel.Type{stringDynMapType, stringDynMapType}, stringDynMapType,
 				cel.BinaryBinding(mergeMaps))),
+		cel.Function("range",
+			cel.Overload("range_int", []*cel.Type{cel.IntType}, cel.ListType(cel.IntType),
+				cel.UnaryBinding(rangeList)),
+			// Step results travel through JSON, so their numbers are doubles.
+			cel.Overload("range_double", []*cel.Type{cel.DoubleType}, cel.ListType(cel.IntType),
+				cel.UnaryBinding(rangeList))),
 		ext.Strings(),
 		ext.Lists(),
 		ext.Math(),
@@ -64,6 +83,26 @@ func mergeMaps(lhs, rhs ref.Val) ref.Val {
 	return types.NewRefValMap(types.DefaultTypeAdapter, out)
 }
 
+func rangeList(n ref.Val) ref.Val {
+	var count types.Int
+	switch v := n.(type) {
+	case types.Int:
+		count = v
+	case types.Double:
+		count = types.Int(v)
+	default:
+		return types.NewErr("range: argument must be a number")
+	}
+	if count < 0 {
+		return types.NewErr("range: argument must be non-negative")
+	}
+	items := make([]any, 0, count)
+	for i := int64(0); i < int64(count); i++ {
+		items = append(items, i)
+	}
+	return types.DefaultTypeAdapter.NativeToValue(items)
+}
+
 func compileExpression(source string) (*expression, error) {
 	env, err := newEnv()
 	if err != nil {
@@ -82,11 +121,16 @@ func compileExpression(source string) (*expression, error) {
 
 // eval runs the expression and returns a plain JSON-compatible Go value
 // (map[string]any, []any, string, float64, bool or nil).
-func (e *expression) eval(args map[string]any, response any) (any, error) {
-	if args == nil {
-		args = map[string]any{}
+func (e *expression) eval(vars evalVars) (any, error) {
+	if vars.args == nil {
+		vars.args = map[string]any{}
 	}
-	out, _, err := e.program.Eval(map[string]any{"args": args, "response": response, "now": time.Now()})
+	if vars.steps == nil {
+		vars.steps = map[string]any{}
+	}
+	out, _, err := e.program.Eval(map[string]any{
+		"args": vars.args, "response": vars.response, "steps": vars.steps, "item": vars.item, "now": time.Now(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("CEL expression %q failed: %w", e.source, err)
 	}
@@ -100,8 +144,8 @@ func (e *expression) eval(args map[string]any, response any) (any, error) {
 // evalStringMap evaluates an expression that must produce a map and returns
 // its entries as query-parameter strings. Null and empty values are dropped;
 // whole numbers print without a fractional part.
-func (e *expression) evalStringMap(args map[string]any) (map[string]string, error) {
-	value, err := e.eval(args, nil)
+func (e *expression) evalStringMap(vars evalVars) (map[string]string, error) {
+	value, err := e.eval(vars)
 	if err != nil {
 		return nil, err
 	}
