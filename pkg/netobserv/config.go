@@ -30,6 +30,53 @@ type Config struct {
 	PrometheusMode    string `toml:"prometheus_mode,omitempty"`
 }
 
+// MergeEffectiveConfig applies explicit backend settings over detected FlowCollector values.
+// Explicit settings take precedence while unspecified fields retain detection results.
+func MergeEffectiveConfig(detected EffectiveConfig, manual *Config) EffectiveConfig {
+	if manual == nil {
+		return detected
+	}
+	if manual.LokiEnabled != nil {
+		detected.Found = true
+		detected.LokiEnabled = *manual.LokiEnabled
+	}
+	if manual.LokiMode != "" {
+		detected.Found = true
+		detected.LokiMode = manual.LokiMode
+		if manual.LokiEnabled == nil {
+			detected.LokiEnabled = true
+		}
+	}
+	if manual.PrometheusEnabled != nil {
+		detected.Found = true
+		detected.PrometheusEnabled = *manual.PrometheusEnabled
+	}
+	if manual.PrometheusMode != "" {
+		detected.Found = true
+		detected.PrometheusMode = manual.PrometheusMode
+		if manual.PrometheusEnabled == nil {
+			detected.PrometheusEnabled = true
+		}
+	}
+	return detected
+}
+
+// ApplyDetectedEndpoint applies detected endpoint fields only when they were not explicitly configured.
+func (c *Config) ApplyDetectedEndpoint(detected EffectiveConfig) {
+	if c == nil || !detected.Found {
+		return
+	}
+	if c.Namespace == "" {
+		c.Namespace = detected.Namespace
+	}
+	if c.Service == "" {
+		c.Service = detected.Service
+	}
+	if c.Port == 0 {
+		c.Port = detected.Port
+	}
+}
+
 var (
 	_ config.ExtendedConfig      = (*Config)(nil)
 	_ config.RequireTLSValidator = (*Config)(nil)

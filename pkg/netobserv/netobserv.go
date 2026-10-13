@@ -56,15 +56,7 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 		resolved = *shared
 	}
 	if len(detected) > 0 && detected[0].Found {
-		if resolved.Namespace == "" {
-			resolved.Namespace = detected[0].Namespace
-		}
-		if resolved.Service == "" {
-			resolved.Service = detected[0].Service
-		}
-		if resolved.Port == 0 {
-			resolved.Port = detected[0].Port
-		}
+		resolved.ApplyDetectedEndpoint(detected[0])
 	}
 	isOpenShift := clusterIsOpenShiftFromDiscovery(discoveryClient)
 	resolved.applyDefaults(ctx, isOpenShift)

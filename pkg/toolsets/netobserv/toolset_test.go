@@ -9,7 +9,7 @@ import (
 
 func TestMergeManualConfigOverridesOnlyConfiguredBackends(t *testing.T) {
 	lokiEnabled := false
-	cfg := mergeManualConfig(netobservclient.EffectiveConfig{
+	cfg := netobservclient.MergeEffectiveConfig(netobservclient.EffectiveConfig{
 		Found:             true,
 		LokiEnabled:       true,
 		LokiMode:          "LokiStack",

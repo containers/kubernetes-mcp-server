@@ -40,6 +40,18 @@ func AnyTargetHasGVK(ctx context.Context, inspector ClusterInspector, gvk schema
 	return hasGVK || (err != nil && !IsNotFound(err))
 }
 
+// GetDefaultObject gets a cluster-scoped object from the default target.
+// It is intended for resources whose configuration is represented once per cluster.
+func GetDefaultObject(
+	ctx context.Context,
+	inspector ClusterInspector,
+	resource schema.GroupVersionResource,
+	name string,
+	options metav1.GetOptions,
+) (*unstructured.Unstructured, error) {
+	return inspector.Unstructured().Resource(resource).Get(ctx, name, options).Default()
+}
+
 type AggregateUnstructured interface {
 	Resource(resource schema.GroupVersionResource) AggregateNamespaceableResourceInterface
 }

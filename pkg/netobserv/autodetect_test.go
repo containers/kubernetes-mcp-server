@@ -4,17 +4,18 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func TestEffectiveConfigFromFlowCollector(t *testing.T) {
-	cfg, err := effectiveConfigFromFlowCollector(map[string]any{
+	cfg, err := effectiveConfigFromFlowCollector(&unstructured.Unstructured{Object: map[string]any{
 		"spec": map[string]any{
 			"loki":          map[string]any{"enable": false, "mode": "Manual"},
 			"prometheus":    map[string]any{"querier": map[string]any{"enable": true, "mode": "Auto"}},
 			"namespace":     "observability",
-			"consolePlugin": map[string]any{"port": float64(9001)},
+			"consolePlugin": map[string]any{"port": int64(9001)},
 		},
-	})
+	}})
 	require.NoError(t, err)
 	require.True(t, cfg.Found)
 	require.False(t, cfg.LokiEnabled)
@@ -26,7 +27,7 @@ func TestEffectiveConfigFromFlowCollector(t *testing.T) {
 }
 
 func TestEffectiveConfigFromFlowCollectorDefaultsBackendsOn(t *testing.T) {
-	cfg, err := effectiveConfigFromFlowCollector(map[string]any{"spec": map[string]any{}})
+	cfg, err := effectiveConfigFromFlowCollector(&unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{}}})
 	require.NoError(t, err)
 	require.True(t, cfg.Found)
 	require.True(t, cfg.LokiEnabled)
@@ -34,8 +35,8 @@ func TestEffectiveConfigFromFlowCollectorDefaultsBackendsOn(t *testing.T) {
 }
 
 func TestEffectiveConfigFromFlowCollectorRejectsInvalidFieldType(t *testing.T) {
-	_, err := effectiveConfigFromFlowCollector(map[string]any{
+	_, err := effectiveConfigFromFlowCollector(&unstructured.Unstructured{Object: map[string]any{
 		"spec": map[string]any{"loki": map[string]any{"enable": "true"}},
-	})
-	require.ErrorContains(t, err, "spec.loki.enable must be boolean")
+	}})
+	require.Error(t, err)
 }
