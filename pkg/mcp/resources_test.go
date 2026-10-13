@@ -215,9 +215,7 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 func (s *ResourcesSuite) TestResourcesListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("resources_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -700,9 +698,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("resources_create_or_update (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
