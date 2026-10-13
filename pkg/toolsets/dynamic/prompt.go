@@ -80,7 +80,7 @@ func (c *compiledPrompt) handle(params api.PromptHandlerParams) (*api.PromptCall
 			}
 		}
 	}
-	env := runEnv{ctx: params, client: params.KubernetesClient, elicitor: params.Elicitor}
+	env := runEnv{ctx: params, client: params.KubernetesClient, elicitor: params.Elicitor, requireTLS: requireTLS(params.Config)}
 	if _, _, err := c.runner.runSteps(env, &vars); err != nil {
 		return nil, fmt.Errorf("%s failed: %w", c.name, err)
 	}

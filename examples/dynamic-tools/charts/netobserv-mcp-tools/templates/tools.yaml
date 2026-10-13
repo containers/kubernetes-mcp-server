@@ -21,6 +21,7 @@ spec:
       {k: v}), {''startTime'': has(args.startTime) ? int(args.startTime) : (has(args.endTime)
       ? int(args.endTime) : int(now)) - (has(args.timeRange) ? int(args.timeRange)
       : 300), ''endTime'': has(args.endTime) ? int(args.endTime) : int(now)})'
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -127,6 +128,7 @@ spec:
       {k: v}), {''startTime'': has(args.startTime) ? int(args.startTime) : (has(args.endTime)
       ? int(args.endTime) : int(now)) - (has(args.timeRange) ? int(args.timeRange)
       : 300), ''endTime'': has(args.endTime) ? int(args.endTime) : int(now)})'
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -351,6 +353,7 @@ spec:
       (has(args.endTime) ? int(args.endTime) : int(now)) - (has(args.timeRange) ?
       int(args.timeRange) : 300), ''endTime'': has(args.endTime) ? int(args.endTime)
       : int(now)}), {''format'': has(args.format) ? args.format : ''csv''})'
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:

@@ -21,6 +21,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/get_mesh_traffic_graph
+    response: text
     url: {{ .Values.url | quote }}
   inputSchema:
     properties:
@@ -73,6 +74,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/get_mesh_status
+    response: text
     url: {{ .Values.url | quote }}
   inputSchema:
     type: object
@@ -104,6 +106,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/manage_istio_config_read
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -204,6 +207,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/manage_istio_config
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -298,6 +302,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/list_clusters
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -327,6 +332,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/list_or_get_resources
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -389,6 +395,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/list_traces
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -445,6 +452,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/get_trace_details
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -481,6 +489,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/get_pod_performance
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:
@@ -539,6 +548,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/get_logs
+    response: text
     url: {{ .Values.url | quote }}
   inputSchema:
     properties:
@@ -607,6 +617,7 @@ spec:
     insecureSkipTLSVerify: {{ .Values.insecureSkipTLSVerify }}
     method: POST
     path: /api/mcp/get_metrics
+    response: text
     url: {{ .Values.url | quote }}
   idempotent: true
   inputSchema:

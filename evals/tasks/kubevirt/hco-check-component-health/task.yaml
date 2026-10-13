@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-check-component-health"
   difficulty: medium
   description: "Check health of individual components managed by HCO (KubeVirt, CDI, Network Addons)"

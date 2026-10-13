@@ -31,17 +31,13 @@ kubectl get tools
 | `charts/tekton-mcp-tools` | The complete Tekton toolset: 6 tools and the `pipeline-troubleshoot` prompt |
 | `charts/kubevirt-mcp-tools` | 6 of the 7 KubeVirt tools, its 3 prompts, a new `vm-create` prompt, and `confirmation-rules.toml` with the Windows EULA rule |
 | `converted/` | Generated manifests for the convertible `core` and `kcp` tools |
-| `conversion-report.md` | One row per in-tree tool: converted or why not |
-| `hack/export` | The generator that produces `charts/*/templates`, `converted/` and the report |
+| `conversion-report.md` | Final report of the migration: one row per former in-tree tool or prompt |
 
-The charts and `converted/` are **generated**: the exporter takes each
-in-tree tool's real contract from the registered Go definition and pairs it
-with a declared action, then validates the result with the toolset's own
-compiler. Regenerate after changing a toolset or the mapping:
-
-```bash
-go run ./examples/dynamic-tools/hack/export
-```
+The charts and `converted/` were originally generated from the in-tree Go
+toolsets by an exporter that paired each tool's real contract with a declared
+action; `conversion-report.md` is its final report. The Go toolsets have
+since been removed, so the charts are now the source of truth and are
+maintained by hand.
 
 `pkg/toolsets/dynamic` tests validate every file here, and
 `pkg/mcp/dynamic_test.go` runs the generated core, Tekton and KubeVirt tools,

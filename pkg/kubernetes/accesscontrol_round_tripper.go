@@ -112,8 +112,6 @@ func validatorsFromAccessControlConfig(cfg AccessControlRoundTripperConfig) []ap
 			fallback: cfg.ConfirmationFallback,
 		})
 	}
-	// Always enable Windows EULA validator for windows-efi-installer PipelineRuns
-	validators = append(validators, &WindowsEULAValidator{})
 	return validators
 }
 

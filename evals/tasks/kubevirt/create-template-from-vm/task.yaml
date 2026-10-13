@@ -4,7 +4,7 @@ metadata:
   labels:
     suite: kubevirt
     project: kubevirt
-    requires: kubevirt
+    requires: dynamic
   annotations:
     project-name: "KubeVirt"
     project-url: "https://kubevirt.io"

@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-get-feature-gates"
   difficulty: easy
   description: "List the feature gates configured in the HyperConverged CR"

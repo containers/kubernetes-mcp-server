@@ -1,6 +1,9 @@
 # Dynamic Tools (Tool custom resources)
 
-Status: **Proof of concept** (`dynamic` toolset, opt-in, not enabled by default)
+Status: **Implemented** for the ecosystem toolsets. The `dynamic` toolset is
+opt-in (not enabled by default); the former in-tree Kiali, NetObserv, Tekton,
+KubeVirt and kcp toolsets have been removed and live on as the Helm charts
+under `examples/dynamic-tools/charts`.
 
 Tools and prompts defined declaratively as `Tool` and `Prompt` custom
 resources in the cluster, picked up by the server at runtime, instead of

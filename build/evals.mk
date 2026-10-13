@@ -117,6 +117,21 @@ diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
 	$(MCPCHECKER) diff --base "$$BASELINE" --current "$$RESULTS_FILE" --output markdown
 
 .PHONY: run-server
+# Charts under examples/dynamic-tools/charts to install as Tool/Prompt resources
+# before starting the server with the "dynamic" toolset (space separated,
+# e.g. "kiali-mcp-tools netobserv-mcp-tools"). Per-chart values come from
+# DYNAMIC_TOOLS_VALUES_<chart> (e.g. DYNAMIC_TOOLS_VALUES_kiali-mcp-tools="url=https://...").
+DYNAMIC_TOOLS_CHARTS ?=
+
+.PHONY: dynamic-tools-install
+dynamic-tools-install: kubectl helm ## Install the Tool/Prompt CRDs and the charts in DYNAMIC_TOOLS_CHARTS
+	$(KUBECTL) apply -f examples/dynamic-tools/crd.yaml
+	@for chart in $(DYNAMIC_TOOLS_CHARTS); do \
+		values="$$(eval echo \$$DYNAMIC_TOOLS_VALUES_$$chart)"; \
+		echo "Installing $$chart $${values:+(--set $$values)}"; \
+		$(HELM) upgrade --install "$$chart" "examples/dynamic-tools/charts/$$chart" $${values:+--set "$$values"}; \
+	done
+
 run-server: build ## Start MCP server in background and wait for health check (knobs: TOOLSETS, READ_ONLY, SUITE)
 	@case "$(READ_ONLY)" in true|false) ;; *) echo "ERROR: READ_ONLY must be true or false, got '$(READ_ONLY)'"; exit 1;; esac
 	@echo "Starting MCP server on port $(MCP_PORT) (read_only = $(READ_ONLY))..."

@@ -17,13 +17,9 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kcp"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/logs"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/otelcol"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/traces"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
@@ -166,27 +162,6 @@ func (s *ToolsetsSuite) TestMetricsToolsPresentWithFilteringEnabled() {
 	})
 }
 
-func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
-	s.Run("Kubevirt tools are filtered out when VirtualMachine GVK is not present", func() {
-		s.Cfg.Toolsets.SetForTest([]string{"kubevirt"})
-		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
-		s.InitMcpClient()
-		tools, err := s.ListTools()
-		s.Run("ListTools returns tools", func() {
-			s.NotNil(tools, "Expected tools from ListTools")
-			s.NoError(err, "Expected no error from ListTools")
-		})
-		s.Run("kubevirt tools are not present", func() {
-			kubevirtTools := []string{"vm_create", "vm_create_from_template", "vm_lifecycle", "vm_clone", "vm_guest_info"}
-			for _, tool := range tools.Tools {
-				for _, kvTool := range kubevirtTools {
-					s.Require().NotEqual(kvTool, tool.Name, "Expected %s to not be present when filtering enabled on cluster without KubeVirt", kvTool)
-				}
-			}
-		})
-	})
-}
-
 func (s *ToolsetsSuite) TestDefaultToolsetsToolsInMultiCluster() {
 	s.Run("Default configuration toolsets in multi-cluster (with 11 clusters)", func() {
 		kubeconfig := s.Kubeconfig()
@@ -257,12 +232,9 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&core.Toolset{},
 		&config.Toolset{},
 		&helm.Toolset{},
-		&kiali.Toolset{},
-		&kubevirt.Toolset{},
 		&logs.Toolset{},
 		&metrics.Toolset{},
 		&otelcol.Toolset{},
-		&tekton.Toolset{},
 		&traces.Toolset{},
 	}
 	for _, testCase := range testCases {
@@ -312,13 +284,11 @@ func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
 	// Verifies ALL tools have Properties initialized (not just cluster-aware ones)
 	// OpenAI API requires properties field even if empty
 	s.Run("InputSchema has properties for all tools regardless of cluster-awareness", func() {
-		// Register all toolsets including kcp to catch kcp_workspaces_list
 		toolsets.Clear()
 		toolsets.Register(&core.Toolset{})
 		toolsets.Register(&config.Toolset{})
 		toolsets.Register(&helm.Toolset{})
-		toolsets.Register(&kcp.Toolset{})
-		s.Cfg.Toolsets.SetForTest([]string{"core", "config", "helm", "kcp"})
+		s.Cfg.Toolsets.SetForTest([]string{"core", "config", "helm"})
 		// Enable multi-cluster mode to include configuration_contexts_list tool
 		kubeconfig := s.Kubeconfig()
 		kubeconfig.Contexts["extra-cluster"] = clientcmdapi.NewContext()

@@ -35,6 +35,7 @@ The project uses a toolset-based architecture for organizing MCP tools:
 - **Toolsets** group related tools together (e.g., config tools, core Kubernetes tools, Helm tools).
 - **Registration** happens in `pkg/toolsets/` where toolsets are registered at initialization.
 - Each toolset lives in its own subdirectory under `pkg/toolsets/` (e.g., `pkg/toolsets/config/`, `pkg/toolsets/core/`, `pkg/toolsets/helm/`).
+- Ecosystem tools (Kiali, NetObserv, Tekton, KubeVirt) are **not** Go toolsets: they are `Tool`/`Prompt` custom resources served by the `dynamic` toolset (`pkg/toolsets/dynamic/`), delivered as Helm charts under `examples/dynamic-tools/charts/`. See `docs/specs/dynamic-tools.md` before adding a tool there.
 
 **Important:** When creating a new toolset, adding tools to an existing toolset, or modifying tool definitions, **always use the `/toolset-design` skill first**. This skill validates the design (naming, grouping, input schema, eval coverage) before implementation begins.
 

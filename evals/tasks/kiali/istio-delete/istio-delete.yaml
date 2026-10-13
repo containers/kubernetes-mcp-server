@@ -4,7 +4,7 @@ metadata:
   labels:
     suite: kiali
     project: istio
-    requires: kiali
+    requires: dynamic
   annotations:
     project-name: "Istio"
     project-url: "https://istio.io"

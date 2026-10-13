@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"k8s.io/client-go/rest"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 const maxResponseBytes = 8 << 20
@@ -55,6 +57,11 @@ func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars
 			tlsConfig.RootCAs = pool
 		}
 		client = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+		if env.requireTLS != nil {
+			// Layer 2 of require_tls: refuse plain HTTP at request time, as the
+			// in-tree HTTP toolsets did.
+			client = config.NewTLSEnforcingClient(client, env.requireTLS)
+		}
 		base = strings.TrimRight(a.URL, "/")
 	}
 

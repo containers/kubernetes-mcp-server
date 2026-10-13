@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-status-prompt"
   difficulty: medium
   description: "Generate a full HCO status report and interpret the results"

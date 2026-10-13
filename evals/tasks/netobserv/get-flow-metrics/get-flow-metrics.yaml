@@ -4,7 +4,7 @@ metadata:
   labels:
     suite: netobserv
     project: netobserv
-    requires: netobserv
+    requires: dynamic
   annotations:
     project-name: "NetObserv"
     project-url: "https://netobserv.io"

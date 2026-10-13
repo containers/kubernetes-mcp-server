@@ -12,6 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -22,6 +23,9 @@ type runEnv struct {
 	ctx      context.Context
 	client   api.KubernetesClient
 	elicitor api.Elicitor
+	// requireTLS reports the server's require_tls setting; plain-HTTP
+	// requests of http actions are refused while it is true.
+	requireTLS func() bool
 }
 
 // binaryResult is the result of an action declared with response: binary.
@@ -252,7 +256,14 @@ func (c *compiledTool) inputSchema() (*jsonschema.Schema, error) {
 }
 
 func toolEnv(params api.ToolHandlerParams) runEnv {
-	return runEnv{ctx: params, client: params.KubernetesClient, elicitor: params.Elicitor}
+	return runEnv{ctx: params, client: params.KubernetesClient, elicitor: params.Elicitor, requireTLS: requireTLS(params.Config)}
+}
+
+func requireTLS(cfg *config.Config) func() bool {
+	if cfg == nil {
+		return nil
+	}
+	return func() bool { return cfg.RequireTLS.Get() }
 }
 
 func (c *compiledTool) handle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
