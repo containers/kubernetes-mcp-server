@@ -267,7 +267,7 @@ Configure HTTP server settings to protect against denial-of-service attacks.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `http.read_header_timeout` | duration | `"10s"` | Maximum duration for reading request headers. Primary defense against Slowloris attacks. |
-| `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). |
+| `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). One term in the [pod memory floor](scaling.md). Stdio frames use the same number. |
 | `http.rate_limit_rps` | float | `0` | Maximum requests per second per session. When `0` (default), rate limiting is disabled. |
 | `http.rate_limit_burst` | integer | `0` (effective `10`) | Maximum burst size for rate limiting. Allows short bursts above the rate limit. Only effective when `rate_limit_rps > 0`. `0` uses the built-in burst of 10. |
 
@@ -289,7 +289,7 @@ rate_limit_burst = 10        # allow bursts of up to 10 requests
 
 ### Memory Bounds
 
-Process-wide caps on work this server holds in memory. They apply to stdio and HTTP. `0` disables a limit. Each option is reloadable.
+Process-wide caps on work this server holds in memory. They apply to stdio and HTTP. `0` disables a limit. Each option is reloadable. [Scaling](scaling.md) turns these caps into a pod memory floor.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
