@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sync"
 
+	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -52,11 +53,15 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 }
 
 func kialiAvailable(ctx context.Context, toolsetContext api.ToolsetContext) bool {
-	token := ""
+	restConfig := &rest.Config{}
 	if toolsetContext.Inspector != nil {
-		token, _ = toolsetContext.Inspector.BearerToken(ctx).Default()
+		restConfig.BearerToken, _ = toolsetContext.Inspector.BearerToken(ctx).Default()
 	}
-	return kialiclient.HasKiali(ctx, toolsetContext.Config, token)
+	kiali, err := kialiclient.NewKiali(toolsetContext.Config, restConfig)
+	if err != nil {
+		return false
+	}
+	return kiali.Available(ctx)
 }
 
 func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerPrompt {
