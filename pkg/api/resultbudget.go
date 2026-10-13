@@ -8,7 +8,7 @@ import (
 
 // ResultTruncationNotice is appended when a write does not fit in the budget.
 // The notice itself may extend the result past the limit by its own length.
-const ResultTruncationNotice = "\n[truncated: mcp_max_result_bytes]\n"
+const ResultTruncationNotice = "\n[truncated: max_result_bytes]\n"
 
 type resultLimitKey struct{}
 

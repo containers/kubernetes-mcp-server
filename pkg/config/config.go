@@ -31,9 +31,9 @@ const (
 	// 0 disables the limit.
 	DefaultMaxInFlight = 64
 
-	// DefaultMcpMaxResultBytes is the default cap on one tool, prompt, or
+	// DefaultMaxResultBytes is the default cap on one tool, prompt, or
 	// resource result. 0 disables the limit.
-	DefaultMcpMaxResultBytes = 16 << 20
+	DefaultMaxResultBytes = 16 << 20
 
 	// DefaultMaxBackendResponseBytes is the default cap on one Kubernetes,
 	// Kiali, or NetObserv response, and on the combined stdout and stderr
@@ -249,10 +249,10 @@ type Config struct {
 	// MaxInFlight is the maximum number of tools/call, prompts/get, and
 	// resources/read handlers running in this process. 0 disables the limit.
 	MaxInFlight Option[int]
-	// McpMaxResultBytes is the maximum size of one tool, prompt, or resource
+	// MaxResultBytes is the maximum size of one tool, prompt, or resource
 	// result. For a tool, the size is len(Content) plus the JSON size of
 	// StructuredContent when that field is set. 0 disables the limit.
-	McpMaxResultBytes Option[int64]
+	MaxResultBytes Option[int64]
 	// AppsEnabled enables MCP Apps UI resources for tools that declare an app.
 	// Defaults to false so existing MCP clients retain their current behavior.
 	AppsEnabled Option[bool]
@@ -435,9 +435,9 @@ func newConfig() *Config {
 			}
 			return nil
 		}).desc("Max concurrent tools/call, prompts/get, and resources/read (0 disables)"),
-		McpMaxResultBytes: opt("mcp_max_result_bytes", int64(DefaultMcpMaxResultBytes)).reload().validate(func(v int64) error {
+		MaxResultBytes: opt("max_result_bytes", int64(DefaultMaxResultBytes)).reload().validate(func(v int64) error {
 			if v < 0 {
-				return fmt.Errorf("mcp_max_result_bytes must not be negative (got %d)", v)
+				return fmt.Errorf("max_result_bytes must not be negative (got %d)", v)
 			}
 			return nil
 		}).desc("Max bytes of one tool, prompt, or resource result (0 disables)"),

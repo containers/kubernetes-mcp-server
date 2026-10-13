@@ -8,7 +8,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
 
-// withResultBudget reads mcp_max_result_bytes from the live server config.
+// withResultBudget reads max_result_bytes from the live server config.
 // A nil server, or a server with no config stored, disables the limit.
 func withResultBudget(s *Server, ctx context.Context) (context.Context, int64) {
 	if s == nil {
@@ -18,7 +18,7 @@ func withResultBudget(s *Server, ctx context.Context) (context.Context, int64) {
 	if cfg == nil {
 		return ctx, 0
 	}
-	limit := cfg.McpMaxResultBytes.Get()
+	limit := cfg.MaxResultBytes.Get()
 	return api.WithResultBudget(ctx, limit), limit
 }
 
@@ -100,5 +100,5 @@ func overResultLimit(limit int64, size int) error {
 	if int64(size) <= limit+int64(len(api.ResultTruncationNotice)) {
 		return nil
 	}
-	return fmt.Errorf("result exceeds mcp_max_result_bytes (%d > %d)", size, limit)
+	return fmt.Errorf("result exceeds max_result_bytes (%d > %d)", size, limit)
 }

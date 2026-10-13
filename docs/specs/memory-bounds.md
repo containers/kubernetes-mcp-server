@@ -7,7 +7,7 @@ Three reloadable top-level options cap each backend response, each tool result, 
 | TOML field | Default | What it limits |
 |------------|---------|----------------|
 | `max_backend_response_bytes` | `4194304` | Bytes read from one Kubernetes API, Kiali, or NetObserv response, and combined stdout+stderr retained by one `pods_exec` |
-| `mcp_max_result_bytes` | `16777216` | Bytes of one tool, prompt, or resource result |
+| `max_result_bytes` | `16777216` | Bytes of one tool, prompt, or resource result |
 | `max_in_flight` | `64` | `tools/call`, `prompts/get`, and `resources/read` running in this process |
 
 ## Backend response
@@ -42,7 +42,7 @@ Add a middleware beside [`rateLimitingMiddleware`](../../pkg/mcp/middleware.go).
 
 ## What the client sees
 
-`max_backend_response_bytes` is one backend response. `mcp_max_result_bytes` measures the result sent to the client. For tools that is `Content` plus the JSON form of `StructuredContent`, or the `ContentBlocks` bytes when those are set, including when text and structured content are the same data twice. (The limit exists to protect the server, which must hold both fields in memory regardless of what the client uses or cares about.)
+`max_backend_response_bytes` is one backend response. `max_result_bytes` measures the result sent to the client. For tools that is `Content` plus the JSON form of `StructuredContent`, or the `ContentBlocks` bytes when those are set, including when text and structured content are the same data twice. (The limit exists to protect the server, which must hold both fields in memory regardless of what the client uses or cares about.)
 
 The client can see less than the backend cap because an over-cap list, get, log, Kiali call, or NetObserv JSON call becomes an error, because NetObserv flow export and exec return one prefix plus a notice, and because `limit` and `tail` still apply. The measured result can be larger than the backend cap because YAML can be larger than the JSON that was counted, because text and structured content are added together, and because several under-cap reads can be combined until the result cap. A collector stops the next fetch once that cap is reached. MCP JSON framing adds more on the wire. In-flight calls multiply memory by the number of slots.
 

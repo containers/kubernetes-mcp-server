@@ -32,9 +32,9 @@ func (s *ResultLimitSuite) TestToolResultRejectedWhenContentPlusStructuredConten
 	s.NoError(toolResultWithinLimit(limit, content, nil))
 	s.NoError(toolResultWithinLimit(limit, "", structured))
 	s.NoError(toolResultWithinLimit(int64(total), content, structured))
-	s.ErrorContains(toolResultWithinLimit(limit, content, structured), "mcp_max_result_bytes")
+	s.ErrorContains(toolResultWithinLimit(limit, content, structured), "max_result_bytes")
 	s.NoError(toolResultWithinLimit(10, strings.Repeat("a", 10+len(api.ResultTruncationNotice)), nil))
-	s.ErrorContains(toolResultWithinLimit(10, strings.Repeat("a", 11+len(api.ResultTruncationNotice)), nil), "mcp_max_result_bytes")
+	s.ErrorContains(toolResultWithinLimit(10, strings.Repeat("a", 11+len(api.ResultTruncationNotice)), nil), "max_result_bytes")
 	s.NoError(toolResultWithinLimit(0, strings.Repeat("a", total), structured))
 
 	var nilSlice []string
@@ -46,7 +46,7 @@ func (s *ResultLimitSuite) TestToolResultRejectedWhenContentPlusStructuredConten
 	}))
 	s.ErrorContains(rejectOversizedToolResult(1, &api.ToolCallResult{
 		Error: errors.New(strings.Repeat("e", len(api.ResultTruncationNotice)+8)),
-	}), "mcp_max_result_bytes")
+	}), "max_result_bytes")
 
 	image := api.NewImageToolContent(bytesOf(len(api.ResultTruncationNotice)+8), "image/png")
 	s.NoError(rejectOversizedToolResult(80, &api.ToolCallResult{
@@ -56,7 +56,7 @@ func (s *ResultLimitSuite) TestToolResultRejectedWhenContentPlusStructuredConten
 	s.ErrorContains(rejectOversizedToolResult(1, &api.ToolCallResult{
 		Content:       strings.Repeat("a", 10_000),
 		ContentBlocks: []*api.ToolContent{image},
-	}), "mcp_max_result_bytes")
+	}), "max_result_bytes")
 }
 
 func (s *ResultLimitSuite) TestPromptAndResourceMeasuredSizes() {
@@ -65,11 +65,11 @@ func (s *ResultLimitSuite) TestPromptAndResourceMeasuredSizes() {
 		{Content: api.PromptContent{Text: strings.Repeat("b", 40)}},
 	}
 	s.NoError(promptWithinLimit(80, messages))
-	s.ErrorContains(promptWithinLimit(int64(80-len(api.ResultTruncationNotice)-1), messages), "mcp_max_result_bytes")
+	s.ErrorContains(promptWithinLimit(int64(80-len(api.ResultTruncationNotice)-1), messages), "max_result_bytes")
 	s.NoError(promptWithinLimit(0, messages))
 
 	s.NoError(resourceWithinLimit(80, &api.ResourceContent{Text: strings.Repeat("a", 80)}))
-	s.ErrorContains(resourceWithinLimit(int64(80-len(api.ResultTruncationNotice)-1), &api.ResourceContent{Blob: bytesOf(80)}), "mcp_max_result_bytes")
+	s.ErrorContains(resourceWithinLimit(int64(80-len(api.ResultTruncationNotice)-1), &api.ResourceContent{Blob: bytesOf(80)}), "max_result_bytes")
 	s.NoError(resourceWithinLimit(0, &api.ResourceContent{Text: "abcdefgh"}))
 }
 

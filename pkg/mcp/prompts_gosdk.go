@@ -61,7 +61,7 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 		}
 
 		cfg := s.configuration.Load()
-		limit := cfg.McpMaxResultBytes.Get()
+		limit := cfg.MaxResultBytes.Get()
 		ctx = api.WithResultBudget(ctx, limit)
 		params, err := newHandlerParams(s, ctx, cfg, api.PromptCallRequest(&promptCallRequestAdapter{request: request}), cluster)
 		if err != nil {

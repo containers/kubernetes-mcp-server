@@ -268,7 +268,7 @@ func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *
 // still accept, then writes that block once. An empty collection drops the
 // header. suffix follows the logs (the prompt adds a blank line).
 //
-// The scratch is how a TaskRun's steps stay inside mcp_max_result_bytes:
+// The scratch is how a TaskRun's steps stay inside max_result_bytes:
 // collect stops when the scratch is truncated, and the next container is not
 // read. See docs/specs/memory-bounds.md#retention.
 func appendTaskBlock(dst *api.BuilderWithBudget, header, suffix string, collect func(*api.BuilderWithBudget)) bool {

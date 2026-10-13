@@ -94,7 +94,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 			return NewTextResult("", confirmErr), nil
 		}
 
-		limit := cfg.McpMaxResultBytes.Get()
+		limit := cfg.MaxResultBytes.Get()
 		ctx = api.WithResultBudget(ctx, limit)
 
 		// get the correct derived Kubernetes client for the target specified in the request
