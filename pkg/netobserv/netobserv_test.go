@@ -210,10 +210,8 @@ func (s *NetObservSuite) TestExecuteGetAccept_overCap() {
 	client := s.mustNewClient()
 
 	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*")
-	var tooLarge *kubernetes.BackendResponseTooLargeError
-	s.Require().ErrorAs(err, &tooLarge)
-	s.Equal(int64(16), tooLarge.Limit)
-	s.Empty(response.Body)
+	s.Require().NoError(err)
+	s.Equal(strings.Repeat("x", 16)+kubernetes.BackendTruncationNotice, response.Body)
 }
 
 func (s *NetObservSuite) TestNewNetObserv_usesSafeDefaultURLWithoutDiscovery() {

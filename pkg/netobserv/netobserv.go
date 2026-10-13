@@ -188,22 +188,22 @@ func (n *NetObserv) backendLimit() (int64, error) {
 
 // ExecuteGet performs a GET request against the plugin API with query parameters derived from arguments.
 func (n *NetObserv) ExecuteGet(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
-	response, err := n.executeGet(ctx, endpoint, arguments, "application/json")
+	response, err := n.executeGet(ctx, endpoint, arguments, "application/json", false)
 	if err != nil {
 		return "", err
 	}
 	return response.Body, nil
 }
 
-func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string) (GetResponse, error) {
+func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string, truncate bool) (GetResponse, error) {
 	requestURL, err := n.validateAndGetURL(endpoint)
 	if err != nil {
 		return GetResponse{}, err
 	}
-	return n.executeGetAbsolute(ctx, requestURL, arguments, accept)
+	return n.executeGetAbsolute(ctx, requestURL, arguments, accept, truncate)
 }
 
-func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string) (GetResponse, error) {
+func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string, truncate bool) (GetResponse, error) {
 	limit, err := n.backendLimit()
 	if err != nil {
 		return GetResponse{}, err
@@ -238,19 +238,24 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		return GetResponse{}, fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(kubernetes.LimitResponseBody(resp.Body, limit))
-	if err != nil {
-		var tooLarge *kubernetes.BackendResponseTooLargeError
-		if errors.As(err, &tooLarge) {
-			return GetResponse{}, tooLarge
-		}
-		return GetResponse{}, fmt.Errorf("failed to read response body: %w", err)
+	respBody, readErr := io.ReadAll(kubernetes.LimitResponseBody(resp.Body, limit))
+	var tooLarge *kubernetes.BackendResponseTooLargeError
+	if readErr != nil && !errors.As(readErr, &tooLarge) {
+		return GetResponse{}, fmt.Errorf("failed to read response body: %w", readErr)
+	}
+	// Flow export keeps the prefix. JSON calls still fail closed.
+	if tooLarge != nil && !truncate {
+		return GetResponse{}, tooLarge
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {
 			return GetResponse{}, fmt.Errorf("netobserv API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		}
 		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
+	}
+	if tooLarge != nil {
+		text, _, err := kubernetes.AcceptTruncated(respBody, tooLarge)
+		return GetResponse{Body: text}, err
 	}
 	return GetResponse{Body: string(respBody)}, nil
 }
