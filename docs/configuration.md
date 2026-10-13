@@ -297,7 +297,19 @@ Process-wide caps on work this server holds in memory. They apply to stdio and H
 | `mcp_max_result_bytes` | integer | `16777216` | Maximum bytes of one tool, prompt, or resource result. A tool counts `Content` plus the JSON size of `StructuredContent` when that field is set. When `ContentBlocks` is set, those block bytes replace `Content`, including image data. A tool error counts the error text. A prompt counts message text. A resource counts its text or blob. Log and event assembly stops at the cap and appends a truncation notice. The notice may make the result longer than the cap by the length of that notice. A result larger than the cap plus that notice is rejected and is not sent. |
 | `max_in_flight` | integer | `64` | Maximum number of `tools/call`, `prompts/get`, and `resources/read` requests running at once in this process. When every slot is in use, another of those requests is rejected with JSON-RPC error `-32030` (`max_in_flight limit exceeded`). Other methods are not counted. Every session shares one pool. |
 
-`max_backend_response_bytes` is read from the live config on each backend call. An exact fit is allowed. The next byte closes the body and returns an error, so client-go does not decode the rest. NetObserv flow export is the exception: it keeps the bytes already read and appends a truncation notice. `0` leaves that read uncapped. Switching-protocol (`101`) responses are skipped. The schema fetch skips the cap so the aggregated spec can be parsed whole. Every other request stays capped. Clients of one cluster share one parsed OpenAPI model, including when several calls fetch it at once. A failed fetch is not kept. `pods_exec` shares one counter across stdout and stderr; at the cap it cancels the exec, keeps the bytes already stored, and appends a truncation notice, including when the exec library reports a stream error instead of `context.Canceled`. A stream error before the cap drops those buffers.
+`max_backend_response_bytes` is read from the live config on each backend call.
+An exact fit is allowed.
+The next byte closes the body and returns an error, so client-go does not decode the rest.
+A list over that cap is the same error, with no partial page.
+Pagination is deferred to [kubernetes-mcp-server#1473](https://github.com/containers/kubernetes-mcp-server/issues/1473).
+NetObserv flow export is the exception: it keeps the bytes already read and appends a truncation notice.
+`0` leaves that read uncapped.
+Switching-protocol (`101`) responses and the (internal-only) openapi schema retrieval are skipped.
+Every other request, including a namespace or object named `openapi`, stays capped.
+Clients of one cluster share one parsed OpenAPI model, including when several calls fetch it at once.
+A failed fetch is not kept.
+`pods_exec` shares one counter across stdout and stderr; at the cap it cancels the exec, keeps the bytes already stored, and appends a truncation notice, including when the exec library reports a stream error instead of `context.Canceled`.
+A stream error before the cap drops those buffers.
 
 `mcp_max_result_bytes` is read on each call. An exact fit is allowed. `0` disables the check. Lowering it does not change a call already running. A write that does not fit is cut and a truncation notice is appended; that notice may exceed the cap by its own length. A collector that keeps several backend reads stops before the next read once that budget is exhausted.
 
