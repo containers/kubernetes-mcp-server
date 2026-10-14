@@ -531,14 +531,6 @@ func (s *DynamicSuite) TestResponseAndRequiresValidation() {
 	s.Equal(map[string]any{"a": float64(1)}, decodeResponseAs([]byte(`{"a":1}`), "", "application/json", "", false))
 }
 
-func (s *DynamicSuite) TestToolset() {
-	toolset := &Toolset{}
-	s.Equal("dynamic", toolset.GetName())
-	s.Run("exposes no tools without a cluster inspector", func() {
-		s.Empty(toolset.GetTools(s.T().Context(), api.ToolsetContext{}))
-	})
-}
-
 func (s *DynamicSuite) TestRBACOfMixedSteps() {
 	tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "mixed"}, Spec: ToolSpec{
 		Description: "d",
@@ -613,6 +605,9 @@ func (s *DynamicSuite) TestReadResponseBody() {
 }
 
 func (s *DynamicSuite) TestListFailuresAreLoggedAtDefaultVerbosity() {
+	s.Equal("dynamic", (&Toolset{}).GetName())
+	s.Empty((&Toolset{}).GetTools(s.T().Context(), api.ToolsetContext{}), "no tools without a cluster inspector")
+
 	// An operator who forgot the ClusterRole for Tool/Prompt resources must
 	// see why no dynamic tools appear without raising the log verbosity.
 	var lines []string
@@ -659,59 +654,7 @@ func (s *DynamicSuite) TestListFailuresKeepTheLastKnownResources() {
 	})
 }
 
-func (s *DynamicSuite) TestWatchToolsetSkipsFailedPolls() {
-	previous := time.Duration(pollInterval.Load())
-	SetPollInterval(10 * time.Millisecond)
-	defer SetPollInterval(previous)
-
-	inspector := &fakeInspector{names: map[string]string{"a": "1"}}
-	s.Run("fingerprint reports a failed list instead of an empty set", func() {
-		fp, err := fingerprint(s.T().Context(), inspector)
-		s.Require().NoError(err)
-		s.Equal("tool/a=1", fp)
-		inspector.setErr(errors.New("the server is currently unable to handle the request"))
-		_, err = fingerprint(s.T().Context(), inspector)
-		s.ErrorContains(err, "unable to handle")
-		inspector.setErr(nil)
-	})
-
-	var changes atomic.Int32
-	var applyFails atomic.Bool
-	stop := (&Toolset{}).WatchToolset(s.T().Context(), api.ToolsetContext{Inspector: inspector}, func() error {
-		changes.Add(1)
-		if applyFails.Load() {
-			return errors.New("convert failed")
-		}
-		return nil
-	})
-	defer stop()
-	s.Run("a transient list error does not re-apply the toolsets", func() {
-		inspector.setErr(errors.New("the server is currently unable to handle the request"))
-		s.Never(func() bool { return changes.Load() > 0 }, 200*time.Millisecond, 10*time.Millisecond)
-	})
-	s.Run("recovering with the same resources does not re-apply either", func() {
-		inspector.setErr(nil)
-		s.Never(func() bool { return changes.Load() > 0 }, 200*time.Millisecond, 10*time.Millisecond)
-	})
-	s.Run("a real change still re-applies once", func() {
-		inspector.set(map[string]string{"a": "1", "b": "1"})
-		s.Eventually(func() bool { return changes.Load() == 1 }, 2*time.Second, 10*time.Millisecond)
-		s.Never(func() bool { return changes.Load() > 1 }, 100*time.Millisecond, 10*time.Millisecond)
-	})
-	s.Run("a failed re-apply is retried on the next poll, not forgotten", func() {
-		applyFails.Store(true)
-		inspector.set(map[string]string{"a": "2", "b": "1"})
-		s.Eventually(func() bool { return changes.Load() >= 3 }, 2*time.Second, 10*time.Millisecond, "the change must be retried while the re-apply fails")
-		applyFails.Store(false)
-		s.Eventually(func() bool {
-			before := changes.Load()
-			time.Sleep(50 * time.Millisecond)
-			return changes.Load() == before
-		}, 2*time.Second, 10*time.Millisecond, "once the re-apply succeeds the change is consumed")
-	})
-}
-
-func (s *DynamicSuite) TestWatchToolsetLogsFailuresOnce() {
+func (s *DynamicSuite) TestWatchToolset() {
 	previous := time.Duration(pollInterval.Load())
 	SetPollInterval(10 * time.Millisecond)
 	defer SetPollInterval(previous)
@@ -723,7 +666,7 @@ func (s *DynamicSuite) TestWatchToolsetLogsFailuresOnce() {
 		defer mu.Unlock()
 		lines = append(lines, args)
 	}, funcr.Options{Verbosity: 0})
-	matching := func(substr string) int {
+	logged := func(substr string) int {
 		mu.Lock()
 		defer mu.Unlock()
 		n := 0
@@ -736,29 +679,74 @@ func (s *DynamicSuite) TestWatchToolsetLogsFailuresOnce() {
 	}
 	ctx := klog.NewContext(s.T().Context(), logger)
 	inspector := &fakeInspector{names: map[string]string{"a": "1"}}
-	stop := (&Toolset{}).WatchToolset(ctx, api.ToolsetContext{Inspector: inspector}, func() error { return nil })
-	defer stop()
+	listErr := errors.New(`tools.tools.kubernetes-mcp-server.io is forbidden`)
 
-	s.Run("a persistent list failure is logged once at default verbosity", func() {
-		// A missing ClusterRole must not produce one error line per poll
-		// (four a minute, forever).
-		listsBefore := inspector.lists.Load()
-		inspector.setErr(errors.New(`tools.tools.kubernetes-mcp-server.io is forbidden`))
-		s.Eventually(func() bool { return inspector.lists.Load() >= listsBefore+10 }, 5*time.Second, 10*time.Millisecond)
-		s.Equal(1, matching("unable to list"), "%v", lines)
-		s.Equal(1, matching("is forbidden"), "%v", lines)
-	})
-	s.Run("recovery is logged once", func() {
+	s.Run("fingerprint reports a failed list instead of an empty set", func() {
+		fp, err := fingerprint(ctx, inspector)
+		s.Require().NoError(err)
+		s.Equal("tool/a=1", fp)
+		inspector.setErr(listErr)
+		_, err = fingerprint(ctx, inspector)
+		s.ErrorContains(err, "is forbidden")
 		inspector.setErr(nil)
-		s.Eventually(func() bool { return matching("can be listed again") == 1 }, 5*time.Second, 10*time.Millisecond)
-		listsBefore := inspector.lists.Load()
-		s.Eventually(func() bool { return inspector.lists.Load() >= listsBefore+10 }, 5*time.Second, 10*time.Millisecond)
-		s.Equal(1, matching("can be listed again"), "%v", lines)
-		s.Equal(1, matching("unable to list"), "%v", lines)
+	})
+
+	var changes atomic.Int32
+	var applyFails atomic.Bool
+	stop := (&Toolset{}).WatchToolset(ctx, api.ToolsetContext{Inspector: inspector}, func() error {
+		changes.Add(1)
+		if applyFails.Load() {
+			return errors.New("convert failed")
+		}
+		return nil
+	})
+	defer stop()
+	// polls waits for n more list calls from the watcher.
+	polls := func(n int32) {
+		before := inspector.lists.Load()
+		s.Eventually(func() bool { return inspector.lists.Load() >= before+n }, 5*time.Second, 10*time.Millisecond)
+	}
+
+	s.Run("a list failure neither re-applies the toolsets nor logs every poll", func() {
+		// A failed poll says nothing about the resources: treating it as
+		// "every Tool was deleted" would drop all dynamic tools and flap them
+		// back on the next success. And a missing ClusterRole must not
+		// produce one error line per poll (four a minute, forever).
+		inspector.setErr(listErr)
+		polls(10)
+		s.Zero(changes.Load())
+		s.Equal(1, logged("unable to list"), "%v", lines)
+		s.Equal(1, logged("is forbidden"), "%v", lines)
+	})
+	s.Run("recovering with the same resources does not re-apply either, and is logged once", func() {
+		inspector.setErr(nil)
+		polls(10)
+		s.Zero(changes.Load())
+		s.Equal(1, logged("can be listed again"), "%v", lines)
+		s.Equal(1, logged("unable to list"), "%v", lines)
 	})
 	s.Run("a new failure is logged again", func() {
-		inspector.setErr(errors.New(`tools.tools.kubernetes-mcp-server.io is forbidden`))
-		s.Eventually(func() bool { return matching("unable to list") == 2 }, 5*time.Second, 10*time.Millisecond)
+		inspector.setErr(listErr)
+		polls(2)
+		s.Equal(2, logged("unable to list"), "%v", lines)
+		inspector.setErr(nil)
+	})
+	s.Run("a real change re-applies once", func() {
+		inspector.set(map[string]string{"a": "1", "b": "1"})
+		s.Eventually(func() bool { return changes.Load() == 1 }, 2*time.Second, 10*time.Millisecond)
+		polls(5)
+		s.Equal(int32(1), changes.Load())
+	})
+	s.Run("a failed re-apply is retried on the next poll, not forgotten", func() {
+		applyFails.Store(true)
+		inspector.set(map[string]string{"a": "2", "b": "1"})
+		s.Eventually(func() bool { return changes.Load() >= 3 }, 2*time.Second, 10*time.Millisecond, "the change must be retried while the re-apply fails")
+		applyFails.Store(false)
+		s.Eventually(func() bool {
+			before := changes.Load()
+			time.Sleep(50 * time.Millisecond)
+			return changes.Load() == before
+		}, 2*time.Second, 10*time.Millisecond, "once the re-apply succeeds the change is consumed")
 	})
 }
 
