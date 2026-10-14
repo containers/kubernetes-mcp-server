@@ -33,6 +33,14 @@ migration record is
 
 The `core`, `config` and `helm` toolsets are unchanged.
 
+> **Upgrade note.** Two things change silently for an existing deployment
+> that enabled one of these toolsets: the tools disappear until the
+> matching chart is installed and `dynamic` is enabled (an unknown toolset
+> name fails the configuration load, so the server does say so), and the
+> Windows EULA check is **no longer on by default**; see
+> [Windows EULA confirmation](#windows-eula-confirmation) for the rule that
+> has to be added to the server's configuration.
+
 ### Removed toolsets and configuration keys
 
 | Removed | Replacement |
@@ -134,8 +142,8 @@ behavioral differences:
 Tool and Prompt resources are read from the default target only; in
 multi-cluster mode they are exposed for every target. Changes to the
 resources are picked up within the toolset's poll interval (15 seconds) and
-announced through `tools/list_changed`; the `dynamic` toolset must be enabled
-at startup to be watched.
+announced through `tools/list_changed`, whether the `dynamic` toolset was
+enabled at startup or by a later configuration reload.
 
 ## Unified configuration surface
 

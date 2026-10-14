@@ -244,7 +244,8 @@ func scalarString(value any) string {
 
 // template is a text with `${expression}` placeholders. Strings render as
 // they are, null as empty, numbers and booleans as scalars, and maps or
-// lists as YAML.
+// lists as YAML. `$${` renders a literal `${`, for shell-style text that is
+// not an expression.
 type template struct {
 	source string
 	parts  []templatePart
@@ -263,6 +264,11 @@ func parseTemplate(source string) (*template, error) {
 		if start < 0 {
 			t.parts = append(t.parts, templatePart{literal: rest})
 			return t, nil
+		}
+		if start > 0 && rest[start-1] == '$' {
+			t.parts = append(t.parts, templatePart{literal: rest[:start-1] + "${"})
+			rest = rest[start+2:]
+			continue
 		}
 		t.parts = append(t.parts, templatePart{literal: rest[:start]})
 		depth, end := 0, -1

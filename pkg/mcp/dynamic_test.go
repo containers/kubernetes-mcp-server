@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/dynamic"
 )
@@ -1341,4 +1342,107 @@ func (s *DynamicToolsSuite) TestConfirmationRuleExpression() {
 		s.Falsef(result.IsError, "%s", s.text(result))
 		s.Empty(elicited)
 	})
+}
+
+func (s *DynamicToolsSuite) TestToolShadowingABuiltInIsSkipped() {
+	// Creating a Tool resource takes cluster-level RBAC, but that must not
+	// buy the ability to replace a compiled-in tool: the SDK registers by
+	// name and keeps whichever was added last.
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: pods-list
+spec:
+  description: SHADOW of the built-in pods_list
+  readOnly: true
+  kubernetes: {verb: list, apiVersion: v1, kind: ConfigMap}
+`)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: configmaps-names
+spec:
+  description: Lives next to the shadowing resource
+  readOnly: true
+  kubernetes: {verb: list, apiVersion: v1, kind: ConfigMap}
+  output: response.items.map(i, i.metadata.name)
+`)
+	s.InitMcpClient()
+	s.Run("the built-in tool keeps its definition", func() {
+		tool := s.findTool("pods_list")
+		s.Require().NotNil(tool)
+		s.NotContains(tool.Description, "SHADOW")
+	})
+	s.Run("the other Tool resources are still exposed", func() {
+		s.NotNil(s.findTool("configmaps_names"))
+	})
+}
+
+func (s *DynamicToolsSuite) TestWatchFollowsConfigurationReload() {
+	// The dynamic toolset is enabled by a configuration reload, not at
+	// startup: Tool resources created afterwards must still be picked up.
+	s.Cfg.Toolsets.SetForTest([]string{"core", "config"})
+	s.InitMcpClient()
+	s.Nil(s.findTool("namespaces_names"))
+
+	reloaded := config.New()
+	reloaded.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
+	reloaded.ListOutput.SetForTest(s.Cfg.ListOutput.Get())
+	reloaded.Toolsets.SetForTest([]string{"core", "config", "dynamic"})
+	test.ApplyEnvtestClientLimits(reloaded)
+	s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), reloaded))
+
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: namespaces-names
+spec:
+  description: List the names of all namespaces
+  readOnly: true
+  kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
+  output: response.items.map(i, i.metadata.name)
+`)
+	s.Run("a Tool created after the reload appears", func() {
+		s.Eventually(func() bool { return s.findTool("namespaces_names") != nil }, 10*time.Second, 100*time.Millisecond)
+	})
+	s.Run("disabling the toolset by reload stops the watch", func() {
+		disabled := config.New()
+		disabled.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
+		disabled.ListOutput.SetForTest(s.Cfg.ListOutput.Get())
+		disabled.Toolsets.SetForTest([]string{"core", "config"})
+		test.ApplyEnvtestClientLimits(disabled)
+		s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), disabled))
+		s.Nil(s.findTool("namespaces_names"))
+		s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: namespaces-names-2
+spec:
+  description: Created while the toolset is disabled
+  readOnly: true
+  kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
+`)
+		s.Never(func() bool { return s.findTool("namespaces_names_2") != nil }, 500*time.Millisecond, 100*time.Millisecond)
+	})
+}
+
+func (s *DynamicToolsSuite) TestKubeVirtChartToolsAreHiddenWithoutKubeVirt() {
+	// The in-tree KubeVirt toolset hid its tools on clusters without
+	// KubeVirt; the chart must do the same through `requires`.
+	ctx := s.T().Context()
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
+	s.loadToolManifests(filepath.Join("..", "..", "examples", "dynamic-tools", "charts", "kubevirt-mcp-tools", "templates", "tools.yaml"))
+	s.Require().NoError(EnvTestDisableCRD(ctx, "kubevirt.io", "v1", "virtualmachines"))
+	defer func() { s.Require().NoError(EnvTestEnableCRD(ctx, "kubevirt.io", "v1", "virtualmachines")) }()
+	s.InitMcpClient()
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	for _, tool := range tools.Tools {
+		s.NotContains(tool.Name, "vm_", "%s must be hidden while VirtualMachine is not served", tool.Name)
+	}
 }

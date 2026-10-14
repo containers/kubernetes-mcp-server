@@ -1,8 +1,10 @@
 package config
 
-import "github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
+import (
+	"fmt"
 
-import "fmt"
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
+)
 
 const (
 	ClusterProviderKubeConfig = "kubeconfig"

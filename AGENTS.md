@@ -185,6 +185,7 @@ The `docs/` directory contains user-facing documentation:
 The `docs/specs/` directory contains feature specifications (living documentation for coding agents):
 
 - `docs/specs/validation.md` – Pre-execution validation layer specification (resource existence, schema, RBAC)
+- `docs/specs/dynamic-tools.md` – `Tool` and `Prompt` custom resources served by the `dynamic` toolset (actions, steps, CEL, RBAC metadata, trust model)
 
 ### Documentation conventions
 

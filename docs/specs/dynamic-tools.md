@@ -58,10 +58,18 @@ the same trust level as installing an admission webhook or a CRD, so:
   read-only is an operator trust problem, not a server one, and it is one
   reason the resource is cluster-scoped.
 
+A Tool or Prompt whose name is exposed by another enabled toolset is skipped
+and logged at error level, so a resource cannot replace a built-in tool (for
+example by declaring `pods_delete` read-only); the other resources are
+unaffected. With the owning toolset disabled the name is free (the converted
+core manifests rely on this), and enabling it again by reload skips the
+resource from then on. Two enabled toolsets exposing the same name is a
+server bug and fails the reload, leaving the previous configuration
+installed.
+
 Open hardening items (not implemented): restricting the listed Tools by label
-selector or allowed names in server configuration, an allowlist of `http`
-hosts, and refusing a Tool whose name shadows a built-in tool (today a
-duplicate name fails the whole reload, which is safe but unfriendly).
+selector or allowed names in server configuration, and an allowlist of
+`http` hosts.
 
 ## Resource
 
@@ -166,7 +174,9 @@ spec:
 Steps run sequentially; there is no looping other than `forEach`, no
 recursion and no branching other than `when`. Two limits bound a Tool: at
 most 16 steps and at most 64 `forEach` iterations per step. Without an
-`output`, the result is the map of all step results.
+`output`, the result is the map of all step results. Only the last step can
+return bytes: a `response: binary` result of an earlier step, or of any
+`forEach` iteration, is reduced to its summary (`{mimeType, size}`).
 
 This is deliberately a small composition model, not a workflow language.
 It is exactly enough for the three shapes the in-tree toolsets needed:
@@ -177,7 +187,8 @@ info per subresource) and gather (troubleshoot).
 
 A list of `{apiVersion, kind}` the tool depends on. When the server's target
 compatibility filters are enabled, the tool is hidden while no target serves
-the kind, which is what the in-tree KubeVirt tools do with `HasVirtualMachine`.
+the kind. The KubeVirt chart declares `kubevirt.io/v1` `VirtualMachine` on
+every tool, which is what the in-tree toolset did with `HasVirtualMachine`.
 
 ### `output`
 
@@ -233,7 +244,8 @@ spec:
 ```
 
 Templates render strings verbatim, scalars as text and maps or lists as
-YAML. This is the "server gathers, model reasons" pattern the design skill
+YAML; `$${` renders a literal `${` for shell-style text that is not an
+expression. This is the "server gathers, model reasons" pattern the design skill
 prescribes, now as data. The `elicit` step exists for prompts like the
 Windows golden image creator, which must ask for EULA consent before it
 renders a manifest with `acceptEula: "true"`.
@@ -243,7 +255,10 @@ renders a manifest with `acceptEula: "true"`.
 The Windows EULA check used to be a compiled-in validator because it
 inspects the request body. Kube-level confirmation rules now accept an
 `expression`: a CEL boolean over `verb`, `kind`, `group`, `version`, `name`,
-`namespace` and `object` (the decoded body). The KubeVirt chart ships the
+`namespace` and `object` (the decoded body; an empty map when there is no
+body or it is not a JSON object, such as a JSON-patch array, so `has()`
+guards evaluate to false instead of erroring; note that `has(a.b.c)` only
+tests `c`, so every level is guarded). The KubeVirt chart ships the
 EULA rule as [`confirmation-rules.toml`](../../examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml)
 and the in-tree validator is gone: the rule is server configuration that
 must be added to `--config-dir` wherever the KubeVirt tools are installed
@@ -276,22 +291,29 @@ The declaration is enough to derive the server's `_meta` RBAC advertisement
 Tool resources are read from the **default target** when toolsets are applied
 (startup, SIGHUP, kubeconfig or cluster-state change). The toolset also
 implements the new optional `api.ToolsetWatcher` interface: the server calls
-`WatchToolset` for each enabled toolset that implements it and the toolset
-asks for a re-apply when the set of Tools or their `resourceVersion`s change.
-The PoC polls (`dynamic.PollInterval`, 15s) to mirror the cluster-state
-watcher; an informer is the production choice.
+`WatchToolset` for each enabled toolset that implements it, restarts the
+watches after every configuration reload (so a toolset enabled by SIGHUP or
+a drop-in change is watched too), and the toolset asks for a re-apply when
+the set of Tools or their `resourceVersion`s change. The PoC polls
+(`dynamic.DefaultPollInterval`, 15s) to mirror the cluster-state watcher; an
+informer is the production choice. A list failure (typically a missing
+ClusterRole) is logged once when it starts and once when it ends, with the
+repeats at verbosity 1.
 
 `ToolsetWatcher` is the one change to the server proper, and it is generic:
 any toolset whose surface depends on cluster state can use it.
 
-## What converts, measured
+## What converted
 
-[`examples/dynamic-tools/hack/export`](../../examples/dynamic-tools/hack/export)
-takes every registered in-tree tool and prompt, keeps its real contract
-(name, description, input schema or arguments, annotations) and pairs it
-with a declared action, or lists it as skipped with a reason. The output is
-a Helm chart per ecosystem toolset plus plain manifests for the rest, and
-[`conversion-report.md`](../../examples/dynamic-tools/conversion-report.md).
+The charts were produced by a one-off exporter that took every registered
+in-tree tool and prompt, kept its real contract (name, description, input
+schema or arguments, annotations) and paired it with a declared action, or
+listed it as skipped with a reason. The exporter was removed together with
+the in-tree toolsets it read from; the charts, the plain manifests under
+`converted/` and
+[`conversion-report.md`](../../examples/dynamic-tools/conversion-report.md)
+are maintained by hand since (`pkg/toolsets/dynamic/examples_test.go` keeps
+them valid). The figures below are the state at conversion time.
 
 | Toolset | Tools | Prompts | What is left and why |
 |---------|-------|---------|----------------------|
@@ -340,14 +362,11 @@ Prompt resource.
   multi-cluster mode a Tool defined in cluster A is exposed for cluster B too.
   Options: per-target listing with target-aware filtering (the
   `TargetCompatibilityFilters` mechanism fits), or a `targets` field.
-- **Name collisions** with built-in tools: reject, prefix, or let the Tool win?
 - **MCP resources** as CRDs would follow the same pattern as prompts.
 - **Policy as a cluster resource**: the EULA confirmation rule is server
   configuration that has to travel next to the KubeVirt chart; whether rules
   like it should also be deliverable as a cluster resource.
-- **Watch mechanism**: informer instead of polling; watching toolsets enabled
-  by a later configuration reload (today only toolsets enabled at startup are
-  watched).
+- **Watch mechanism**: informer instead of polling.
 - **Limits**: response size (8 MiB today, larger responses are rejected), timeouts. CEL evaluations
   are bounded by a per-call cost limit and `range(n)` by `MaxRange`.
 - **Composition** is now in (`steps`), bounded to 16 steps and 64 fan-out

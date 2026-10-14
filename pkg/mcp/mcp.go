@@ -116,7 +116,11 @@ type Server struct {
 	metrics                  *metrics.Metrics // Metrics collection system
 	rateLimitDone            chan struct{}    // Closed to stop the rate limiter reaper goroutine
 	closeOnce                sync.Once
-	// toolsetWatchStops end the api.ToolsetWatcher watches started by watchToolsets.
+	// toolsetWatchCtx is the server's lifetime context, the parent of the
+	// api.ToolsetWatcher watches; they are restarted on configuration reload
+	// (which has a request-scoped context of its own) and end with Close.
+	toolsetWatchCtx   context.Context
+	toolsetWatchMu    sync.Mutex
 	toolsetWatchStops []func()
 }
 
@@ -195,24 +199,40 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 		return nil, err
 	}
 	s.p.WatchTargets(ctx, s.mcpReloader())
-	s.watchToolsets(ctx)
+	s.toolsetWatchCtx = ctx
+	s.watchToolsets(s.configuration.Load())
 
 	return s, nil
 }
 
-// watchToolsets starts the optional watchers of the enabled toolsets whose
-// surface can change at runtime (api.ToolsetWatcher). Only the toolsets
-// enabled at construction are watched; toolsets enabled later by a
-// configuration reload are applied but not watched.
-func (s *Server) watchToolsets(ctx context.Context) {
-	cfg := s.configuration.Load()
+// watchToolsets (re)starts the optional watchers of the toolsets enabled by
+// cfg whose surface can change at runtime (api.ToolsetWatcher). Watches of a
+// previous configuration are stopped first, so a reload that enables or
+// disables such a toolset is followed.
+func (s *Server) watchToolsets(cfg *Configuration) {
+	s.toolsetWatchMu.Lock()
+	defer s.toolsetWatchMu.Unlock()
+	s.stopToolsetWatchesLocked()
 	for _, toolset := range cfg.Toolsets() {
 		watcher, ok := toolset.(api.ToolsetWatcher)
 		if !ok {
 			continue
 		}
-		s.toolsetWatchStops = append(s.toolsetWatchStops, watcher.WatchToolset(ctx, s.toolsetContext(cfg), s.reapplyToolsets))
+		s.toolsetWatchStops = append(s.toolsetWatchStops, watcher.WatchToolset(s.toolsetWatchCtx, s.toolsetContext(cfg), s.reapplyToolsets))
 	}
+}
+
+func (s *Server) stopToolsetWatches() {
+	s.toolsetWatchMu.Lock()
+	defer s.toolsetWatchMu.Unlock()
+	s.stopToolsetWatchesLocked()
+}
+
+func (s *Server) stopToolsetWatchesLocked() {
+	for _, stop := range s.toolsetWatchStops {
+		stop()
+	}
+	s.toolsetWatchStops = nil
 }
 
 // reapplyToolsets is the provider's WatchTargets callback (signature
@@ -404,12 +424,22 @@ func convertItems[T, M, H any](
 	kind string,
 ) ([]convertedItem[M, H], error) {
 	out := make([]convertedItem[M, H], 0, len(items))
+	// The SDK registers by name and silently keeps the last item added, so
+	// two toolsets exposing the same name would leave one of them replaced
+	// without a trace. Refuse the reload instead; the previous configuration
+	// stays installed.
+	seen := make(map[string]bool, len(items))
 	for _, item := range items {
+		name := getName(item)
+		if seen[name] {
+			return nil, fmt.Errorf("duplicate %s name %q: two enabled toolsets expose it", kind, name)
+		}
+		seen[name] = true
 		m, h, err := convert(item)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert %s %s: %w", kind, getName(item), err)
+			return nil, fmt.Errorf("failed to convert %s %s: %w", kind, name, err)
 		}
-		out = append(out, convertedItem[M, H]{name: getName(item), item: m, handler: h})
+		out = append(out, convertedItem[M, H]{name: name, item: m, handler: h})
 	}
 	return out, nil
 }
@@ -475,6 +505,7 @@ func (s *Server) toolsetContext(cfg *Configuration) api.ToolsetContext {
 	return api.ToolsetContext{
 		Inspector:                         internalk8s.NewClusterInspector(s.p),
 		TargetCompatibilityFiltersEnabled: cfg.EnableTargetCompatibilityToolFilters.Get(),
+		Toolsets:                          cfg.Toolsets(),
 	}
 }
 
@@ -716,6 +747,8 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 			}
 			return fmt.Errorf("failed to reload toolsets: %w", err)
 		}
+		// The watched toolsets follow the installed configuration.
+		s.watchToolsets(s.configuration.Load())
 		return nil
 	}); err != nil {
 		return err
@@ -728,9 +761,7 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 func (s *Server) Close() {
 	s.closeOnce.Do(func() {
 		close(s.rateLimitDone)
-		for _, stop := range s.toolsetWatchStops {
-			stop()
-		}
+		s.stopToolsetWatches()
 		if s.p != nil {
 			s.p.Close()
 		}

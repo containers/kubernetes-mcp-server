@@ -58,12 +58,21 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 		logger.Error(err, "dynamic toolset: unable to list Tool resources, exposing no dynamic tools")
 		return nil
 	}
+	builtIn := builtInNames(ctx, toolsetContext)
 	tools := make([]api.ServerTool, 0, len(definitions))
 	for _, definition := range definitions {
 		// One broken definition must not take the others down: skip it and say why.
 		compiled, err := newCompiledTool(definition)
 		if err != nil {
 			logger.Info("dynamic toolset: skipping invalid Tool resource", "tool", definition.Metadata.Name, "error", err.Error())
+			continue
+		}
+		// A Tool must not replace a compiled-in tool (it could, for example,
+		// declare a destructive operation read-only). The server would
+		// otherwise register whichever came last.
+		if owner, taken := builtIn.tools[compiled.name]; taken {
+			logger.Error(nil, "dynamic toolset: skipping Tool resource whose name shadows a built-in tool",
+				"tool", definition.Metadata.Name, "name", compiled.name, "toolset", owner)
 			continue
 		}
 		serverTool, err := compiled.serverTool(ctx, toolsetContext.Inspector)
@@ -87,11 +96,17 @@ func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetCont
 	if toolsetContext.Inspector != nil {
 		discovery = toolsetContext.Inspector.Discovery()
 	}
+	builtIn := builtInNames(ctx, toolsetContext)
 	prompts := make([]api.ServerPrompt, 0, len(definitions))
 	for _, definition := range definitions {
 		compiled, err := newCompiledPrompt(definition)
 		if err != nil {
 			logger.Info("dynamic toolset: skipping invalid Prompt resource", "prompt", definition.Metadata.Name, "error", err.Error())
+			continue
+		}
+		if owner, taken := builtIn.prompts[compiled.name]; taken {
+			logger.Error(nil, "dynamic toolset: skipping Prompt resource whose name shadows a built-in prompt",
+				"prompt", definition.Metadata.Name, "name", compiled.name, "toolset", owner)
 			continue
 		}
 		prompts = append(prompts, compiled.serverPrompt(ctx, discovery))
@@ -107,16 +122,49 @@ func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) 
 	return nil
 }
 
+// builtIns indexes the tool and prompt names of the compiled-in toolsets by
+// the toolset that owns them.
+type builtIns struct {
+	tools   map[string]string
+	prompts map[string]string
+}
+
+// builtInNames collects the names every other enabled toolset exposes, so
+// that a Tool or Prompt resource cannot take one over. Only enabled toolsets
+// count: with the core toolset disabled, a Tool may legitimately provide a
+// pods_list of its own (examples/dynamic-tools/converted does), and once
+// core is enabled again that Tool is skipped on the re-apply.
+func builtInNames(ctx context.Context, toolsetContext api.ToolsetContext) builtIns {
+	names := builtIns{tools: map[string]string{}, prompts: map[string]string{}}
+	for _, toolset := range toolsetContext.Toolsets {
+		if _, self := toolset.(*Toolset); self {
+			continue
+		}
+		for _, tool := range toolset.GetTools(ctx, toolsetContext) {
+			names.tools[tool.Tool.Name] = toolset.GetName()
+		}
+		for _, prompt := range toolset.GetPrompts(ctx, toolsetContext) {
+			names.prompts[prompt.Prompt.Name] = toolset.GetName()
+		}
+	}
+	return names
+}
+
 // WatchToolset polls the Tool and Prompt resources and asks the server to
 // re-apply the toolsets whenever their set or resourceVersions change.
 // Polling mirrors the cluster-state watcher; an informer would be the
 // production choice.
+//
+// A list failure is logged once at default verbosity when it starts and once
+// when it ends; the failures in between are logged at verbosity 1. A missing
+// ClusterRole would otherwise produce one error line per poll, forever.
 func (t *Toolset) WatchToolset(ctx context.Context, toolsetContext api.ToolsetContext, onChange func() error) (stop func()) {
 	ctx, cancel := context.WithCancel(ctx)
 	logger := klogutil.FromContext(ctx)
 	last, err := fingerprint(ctx, toolsetContext.Inspector)
-	if err != nil {
-		logger.Error(err, "dynamic toolset: unable to list Tool or Prompt resources, will keep polling")
+	failing := err != nil
+	if failing {
+		logger.Error(err, "dynamic toolset: unable to list Tool or Prompt resources, will keep polling (further failures are logged at verbosity 1)")
 	}
 	go func() {
 		ticker := time.NewTicker(time.Duration(pollInterval.Load()))
@@ -132,8 +180,17 @@ func (t *Toolset) WatchToolset(ctx context.Context, toolsetContext api.ToolsetCo
 			// all dynamic tools and flap them back on the next success.
 			current, err := fingerprint(ctx, toolsetContext.Inspector)
 			if err != nil {
-				logger.Error(err, "dynamic toolset: unable to list Tool or Prompt resources, keeping the current tools")
+				if failing {
+					logger.V(1).Info("dynamic toolset: unable to list Tool or Prompt resources, keeping the current tools", "error", err.Error())
+				} else {
+					logger.Error(err, "dynamic toolset: unable to list Tool or Prompt resources, keeping the current tools (further failures are logged at verbosity 1)")
+				}
+				failing = true
 				continue
+			}
+			if failing {
+				logger.Info("dynamic toolset: Tool and Prompt resources can be listed again")
+				failing = false
 			}
 			if current == last {
 				continue

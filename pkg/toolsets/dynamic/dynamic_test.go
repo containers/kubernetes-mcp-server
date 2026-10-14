@@ -19,6 +19,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 type DynamicSuite struct {
@@ -460,6 +461,14 @@ func (s *DynamicSuite) TestTemplates() {
 		s.Require().NoError(err)
 		s.Equal("ok!", out)
 	})
+	s.Run("$${ renders a literal ${", func() {
+		// Shell-style text in a prompt must not be compiled as CEL.
+		t, err := parseTemplate("export HOME=$${HOME} user=${args.user} $$done")
+		s.Require().NoError(err)
+		out, err := t.render(evalVars{args: map[string]any{"user": "x"}})
+		s.Require().NoError(err)
+		s.Equal("export HOME=${HOME} user=x $$done", out)
+	})
 	s.Run("rejects unterminated placeholders and bad expressions", func() {
 		_, err := parseTemplate("${args.x")
 		s.ErrorContains(err, "unterminated")
@@ -516,6 +525,8 @@ func (s *DynamicSuite) TestResponseAndRequiresValidation() {
 	tool.Spec.Requires = []GVKRef{{APIVersion: "kubevirt.io/v1", Kind: "VirtualMachine"}}
 	s.NoError(tool.Validate())
 	s.Equal(&binaryResult{mimeType: "image/png", data: []byte{1}}, decodeResponseAs([]byte{1}, ResponseBinary, "", "image/png", false))
+	s.Equal(&binaryResult{mimeType: "image/jpeg", data: []byte{1}}, decodeResponseAs([]byte{1}, ResponseBinary, "image/jpeg", "", false), "the Content-Type labels the bytes when the Tool does not")
+	s.Equal(&binaryResult{mimeType: "application/octet-stream", data: []byte{1}}, decodeResponseAs([]byte{1}, ResponseBinary, "", "", false), "unlabeled bytes default to application/octet-stream")
 	s.Equal("secret token=<REDACTED>", decodeResponseAs([]byte("secret token=abc"), ResponseText, "text/plain", "", true))
 	s.Equal(map[string]any{"a": float64(1)}, decodeResponseAs([]byte(`{"a":1}`), "", "application/json", "", false))
 }
@@ -641,12 +652,117 @@ func (s *DynamicSuite) TestWatchToolsetSkipsFailedPolls() {
 	})
 }
 
-// fakeInspector serves Tool resources (name -> resourceVersion) from memory
-// and can be switched to fail every list.
+func (s *DynamicSuite) TestWatchToolsetLogsFailuresOnce() {
+	previous := time.Duration(pollInterval.Load())
+	SetPollInterval(10 * time.Millisecond)
+	defer SetPollInterval(previous)
+
+	var mu sync.Mutex
+	var lines []string
+	logger := funcr.New(func(_, args string) {
+		mu.Lock()
+		defer mu.Unlock()
+		lines = append(lines, args)
+	}, funcr.Options{Verbosity: 0})
+	matching := func(substr string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, line := range lines {
+			if strings.Contains(line, substr) {
+				n++
+			}
+		}
+		return n
+	}
+	ctx := klog.NewContext(s.T().Context(), logger)
+	inspector := &fakeInspector{names: map[string]string{"a": "1"}}
+	stop := (&Toolset{}).WatchToolset(ctx, api.ToolsetContext{Inspector: inspector}, func() error { return nil })
+	defer stop()
+
+	s.Run("a persistent list failure is logged once at default verbosity", func() {
+		// A missing ClusterRole must not produce one error line per poll
+		// (four a minute, forever).
+		listsBefore := inspector.lists.Load()
+		inspector.setErr(errors.New(`tools.tools.kubernetes-mcp-server.io is forbidden`))
+		s.Eventually(func() bool { return inspector.lists.Load() >= listsBefore+10 }, 5*time.Second, 10*time.Millisecond)
+		s.Equal(1, matching("unable to list"), "%v", lines)
+		s.Equal(1, matching("is forbidden"), "%v", lines)
+	})
+	s.Run("recovery is logged once", func() {
+		inspector.setErr(nil)
+		s.Eventually(func() bool { return matching("can be listed again") == 1 }, 5*time.Second, 10*time.Millisecond)
+		listsBefore := inspector.lists.Load()
+		s.Eventually(func() bool { return inspector.lists.Load() >= listsBefore+10 }, 5*time.Second, 10*time.Millisecond)
+		s.Equal(1, matching("can be listed again"), "%v", lines)
+		s.Equal(1, matching("unable to list"), "%v", lines)
+	})
+	s.Run("a new failure is logged again", func() {
+		inspector.setErr(errors.New(`tools.tools.kubernetes-mcp-server.io is forbidden`))
+		s.Eventually(func() bool { return matching("unable to list") == 2 }, 5*time.Second, 10*time.Millisecond)
+	})
+}
+
+// builtInToolset stands in for a compiled-in toolset (core, helm, ...) whose
+// tool and prompt names a Tool or Prompt resource must not take over.
+type builtInToolset struct{}
+
+func (b *builtInToolset) GetName() string        { return "built-in-test" }
+func (b *builtInToolset) GetDescription() string { return "built-in toolset of the dynamic tests" }
+func (b *builtInToolset) GetTools(_ context.Context, _ api.ToolsetContext) []api.ServerTool {
+	return []api.ServerTool{{Tool: api.Tool{Name: "builtin_tool", Description: "the real one"}}}
+}
+func (b *builtInToolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
+	return []api.ServerPrompt{{Prompt: config.Prompt{Name: "builtin-prompt", Description: "the real one"}}}
+}
+func (b *builtInToolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
+	return nil
+}
+func (b *builtInToolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
+	return nil
+}
+
+func (s *DynamicSuite) TestResourcesShadowingBuiltInsAreSkipped() {
+	// A cluster-level actor must not be able to replace a compiled-in tool
+	// (say, make pods_delete look read-only) by creating a Tool of that name.
+	var lines []string
+	logger := funcr.New(func(_, args string) { lines = append(lines, args) }, funcr.Options{Verbosity: 0})
+	ctx := klog.NewContext(s.T().Context(), logger)
+	inspector := &fakeInspector{
+		names:   map[string]string{"builtin-tool": "1", "other-tool": "1"},
+		prompts: map[string]string{"builtin-prompt": "1", "other-prompt": "1"},
+	}
+	toolsetContext := api.ToolsetContext{Inspector: inspector, Toolsets: []api.Toolset{&builtInToolset{}, &Toolset{}}}
+
+	var toolNames []string
+	for _, tool := range (&Toolset{}).GetTools(ctx, toolsetContext) {
+		toolNames = append(toolNames, tool.Tool.Name)
+	}
+	s.Equal([]string{"other_tool"}, toolNames)
+	var promptNames []string
+	for _, prompt := range (&Toolset{}).GetPrompts(ctx, toolsetContext) {
+		promptNames = append(promptNames, prompt.Prompt.Name)
+	}
+	s.Equal([]string{"other-prompt"}, promptNames)
+
+	s.Require().Len(lines, 2, "one line per skipped resource: %v", lines)
+	s.Contains(lines[0], "shadows")
+	s.Contains(lines[0], "builtin_tool")
+	s.Contains(lines[0], "built-in-test")
+	s.Contains(lines[1], "shadows")
+	s.Contains(lines[1], "builtin-prompt")
+	s.Contains(lines[1], "built-in-test")
+}
+
+// fakeInspector serves Tool and Prompt resources (name -> resourceVersion)
+// from memory and can be switched to fail every list.
 type fakeInspector struct {
-	mu    sync.Mutex
-	names map[string]string
-	err   error
+	mu      sync.Mutex
+	names   map[string]string
+	prompts map[string]string
+	err     error
+	// lists counts the list calls, so tests can wait for a number of polls.
+	lists atomic.Int32
 }
 
 func (f *fakeInspector) set(names map[string]string) {
@@ -684,12 +800,23 @@ func (r *fakeResource) Get(ctx context.Context, _ string, _ metav1.GetOptions, _
 
 func (r *fakeResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
 	return api.NewResults(ctx, singleTarget{}, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+		r.inspector.lists.Add(1)
 		r.inspector.mu.Lock()
 		defer r.inspector.mu.Unlock()
 		if r.inspector.err != nil {
 			return nil, r.inspector.err
 		}
 		list := &unstructured.UnstructuredList{}
+		if r.gvr == PromptGVR {
+			for name, version := range r.inspector.prompts {
+				list.Items = append(list.Items, unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": Group + "/" + Version, "kind": "Prompt",
+					"metadata": map[string]any{"name": name, "resourceVersion": version},
+					"spec":     map[string]any{"description": "d", "messages": []any{map[string]any{"role": "user", "text": "hi"}}},
+				}})
+			}
+			return list, nil
+		}
 		if r.gvr != GVR {
 			return list, nil
 		}

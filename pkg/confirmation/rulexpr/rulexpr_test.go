@@ -11,7 +11,7 @@ type RuleExprSuite struct {
 }
 
 const eula = "verb in ['create', 'update', 'patch'] && kind == 'PipelineRun' && " +
-	"has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) && object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') && " +
+	"has(object.spec) && has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) && object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') && " +
 	"!(has(object.spec.params) && object.spec.params.exists(p, p.name == 'acceptEula' && p.value == 'true'))"
 
 func (s *RuleExprSuite) TestCompile() {
@@ -63,6 +63,17 @@ func (s *RuleExprSuite) TestMatches() {
 		s.False(matched)
 		s.ErrorContains(err, "object.spec.replicas > 3")
 		matched, err = Matches("object.spec.replicas > 3", Request{Object: map[string]any{"spec": map[string]any{"replicas": 5.0}}})
+		s.Require().NoError(err)
+		s.True(matched)
+	})
+	s.Run("a request without an object body sees an empty object", func() {
+		// A JSON-patch array, or no body at all, leaves Object nil. has()
+		// guards must then evaluate to false rather than error (which would
+		// make every such request fail closed and ask for confirmation).
+		matched, err := Matches(eula, Request{Verb: "patch", Kind: "PipelineRun"})
+		s.Require().NoError(err)
+		s.False(matched)
+		matched, err = Matches("object == {}", Request{Verb: "delete", Kind: "PipelineRun"})
 		s.Require().NoError(err)
 		s.True(matched)
 	})

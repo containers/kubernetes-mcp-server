@@ -10,7 +10,7 @@
 kind = "PipelineRun"
 group = "tekton.dev"
 expression = """verb in ['create', 'update', 'patch'] &&
-  has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) &&
+  has(object.spec) && has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) &&
   object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') &&
   !(has(object.spec.params) && object.spec.params.exists(p, p.name == 'acceptEula' && p.value == 'true'))"""
 message = "Microsoft EULA Notice: This PipelineRun will create a Windows golden image. By proceeding, you agree to the Microsoft Software License Terms for the Windows operating system. Do you accept the Microsoft End User License Agreement (EULA)?"

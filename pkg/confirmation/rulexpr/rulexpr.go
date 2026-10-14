@@ -18,7 +18,10 @@ type Request struct {
 	Version   string
 	Name      string
 	Namespace string
-	// Object is the decoded request body for create/update/patch, or nil.
+	// Object is the decoded request body for create/update/patch. A nil
+	// Object (no body, or a body that is not a JSON object such as a
+	// JSON-patch array) is presented to the expression as an empty map, so
+	// has() guards evaluate to false instead of erroring.
 	Object map[string]any
 }
 
@@ -78,9 +81,9 @@ func Matches(source string, request Request) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	var object any
-	if request.Object != nil {
-		object = request.Object
+	object := request.Object
+	if object == nil {
+		object = map[string]any{}
 	}
 	out, _, err := program.Eval(map[string]any{
 		"verb": request.Verb, "kind": request.Kind, "group": request.Group, "version": request.Version,

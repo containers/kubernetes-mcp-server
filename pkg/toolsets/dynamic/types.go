@@ -272,7 +272,8 @@ type KubernetesAction struct {
 	QueryExpression string         `json:"queryExpression,omitempty"`
 	Body            *Body          `json:"body,omitempty"`
 	// Response is json (default), text or binary. MIMEType labels a binary
-	// response (default image/png when the server does not say).
+	// response; without it the response Content-Type is used, and
+	// application/octet-stream when the server does not say either.
 	Response string `json:"response,omitempty"`
 	MIMEType string `json:"mimeType,omitempty"`
 	// Redact removes secrets from a text response (see pkg/redact).

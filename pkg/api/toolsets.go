@@ -109,6 +109,10 @@ func (s *ServerTool) IsTargetListProvider() bool {
 type ToolsetContext struct {
 	Inspector                         ClusterInspector
 	TargetCompatibilityFiltersEnabled bool
+	// Toolsets are the toolsets enabled by the configuration being applied,
+	// so that a toolset whose surface comes from outside the binary can
+	// avoid exposing names another enabled toolset already owns.
+	Toolsets []Toolset
 }
 
 type Toolset interface {
