@@ -2,7 +2,9 @@
   {
     "_meta": {
       "io.kubernetes-mcp-server/rbac": {
-        "none": {},
+        "unbounded": {
+          "reason": "requires Kubernetes API discovery non-resource URL access across all API groups; current RBAC metadata cannot express non-resource URLs"
+        },
         "version": "v1alpha1"
       }
     },
@@ -22,6 +24,7 @@
         },
         "kind": {
           "description": "Required case-insensitive substring filter on kind (e.g. 'deployment', 'route'). Matches across every API group, so a broad term can match more than one kind (e.g. 'networkpolicy' also matches CiliumNetworkPolicy) -- use the most specific substring you can.",
+          "minLength": 1,
           "type": "string"
         }
       },
@@ -34,6 +37,12 @@
     "title": "API Resources: List by Kind"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,

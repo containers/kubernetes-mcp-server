@@ -235,7 +235,7 @@ type APIResourceInfo struct {
 // were discovered together with that error rather than discarding them, so
 // callers can decide whether partial results are still useful.
 func (c *Core) APIResourcesList(kindFilter string) ([]APIResourceInfo, error) {
-	lists, err := c.DiscoveryClient().ServerPreferredResources()
+	lists, err := c.RawDiscoveryClient().ServerPreferredResources()
 	resources := make([]APIResourceInfo, 0, len(lists))
 	for _, list := range lists {
 		if list == nil {
