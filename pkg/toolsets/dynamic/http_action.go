@@ -139,9 +139,15 @@ func proxyServiceName(service *ServiceRef) string {
 	return name
 }
 
-// expandPath replaces {argument} placeholders with the argument value,
-// URL-escaped as a single path segment. Every placeholder must be provided.
+// expandPath replaces {argument} placeholders with the URL-escaped argument
+// value, for HTTP paths that are sent verbatim.
 func expandPath(template string, args map[string]any) (string, error) {
+	return expandPlaceholders(template, args, url.PathEscape)
+}
+
+// expandPlaceholders replaces {argument} placeholders with the argument
+// value passed through escape, and reports the arguments that are missing.
+func expandPlaceholders(template string, args map[string]any, escape func(string) string) (string, error) {
 	var missing []string
 	expanded := pathPlaceholder.ReplaceAllStringFunc(template, func(match string) string {
 		key := match[1 : len(match)-1]
@@ -149,7 +155,7 @@ func expandPath(template string, args map[string]any) (string, error) {
 		if value == "" {
 			missing = append(missing, key)
 		}
-		return url.PathEscape(value)
+		return escape(value)
 	})
 	if len(missing) > 0 {
 		return "", fmt.Errorf("%s parameter required", strings.Join(missing, ", "))

@@ -3,10 +3,17 @@ package dynamic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
@@ -236,6 +243,17 @@ func (s *DynamicSuite) TestResolveRef() {
 		s.Require().NoError(err)
 		s.Equal("prefix-x", value)
 	})
+	s.Run("fixed values substitute placeholders verbatim, not URL-escaped", func() {
+		// client-go validates and escapes path segments itself (and rejects
+		// '%'), and rest.Request.Param encodes query values, so Kubernetes
+		// references must carry the raw argument.
+		value, err := tool.resolveRef(&Ref{Value: "proxy/{path}"}, evalVars{args: map[string]any{"path": "stats/summary"}})
+		s.Require().NoError(err)
+		s.Equal("proxy/stats/summary", value)
+		query, err := tool.resolveQuery(map[string]Ref{"labelSelector": {Value: "app in ({apps})"}}, nil, evalVars{args: map[string]any{"apps": "a, b"}})
+		s.Require().NoError(err)
+		s.Equal("app in (a, b)", query["labelSelector"])
+	})
 	s.Run("a plain YAML string is a fixed value", func() {
 		var ref Ref
 		s.Require().NoError(json.Unmarshal([]byte(`"proxy/stats/summary"`), &ref))
@@ -270,6 +288,25 @@ func (s *DynamicSuite) TestCELExtensions() {
 		s.Require().NoError(err)
 		s.Regexp(`^\d{10}$`, out["end"])
 		s.Regexp(`^\d{10}$`, out["start"])
+	})
+	s.Run("range refuses to allocate unbounded lists", func() {
+		expr, err := compileExpression("size(range(args.n))")
+		s.Require().NoError(err)
+		out, err := expr.eval(evalVars{args: map[string]any{"n": float64(MaxRange)}})
+		s.Require().NoError(err)
+		s.Equal(float64(MaxRange), out)
+		_, err = expr.eval(evalVars{args: map[string]any{"n": float64(10_000_000_000)}})
+		s.ErrorContains(err, "range: at most")
+		_, err = expr.eval(evalVars{args: map[string]any{"n": int64(MaxRange) + 1}})
+		s.ErrorContains(err, "range: at most")
+	})
+	s.Run("evaluation cost is bounded", func() {
+		// Each range stays within MaxRange, but the nested comprehension costs
+		// MaxRange² steps: the program must give up instead of running them.
+		expr, err := compileExpression("range(args.n).map(i, range(args.n).map(j, i * j)).size()")
+		s.Require().NoError(err)
+		_, err = expr.eval(evalVars{args: map[string]any{"n": float64(MaxRange)}})
+		s.ErrorContains(err, "cost limit")
 	})
 	s.Run("evalStringMap drops empty values and formats whole numbers", func() {
 		expr, err := compileExpression("{'a': 1.0, 'b': 'x', 'c': '', 'd': null, 'e': true, 'f': 1.5}")
@@ -487,6 +524,113 @@ func (s *DynamicSuite) TestToolset() {
 		s.Empty(toolset.GetTools(s.T().Context(), api.ToolsetContext{}))
 	})
 }
+
+func (s *DynamicSuite) TestWatchToolsetSkipsFailedPolls() {
+	previous := time.Duration(pollInterval.Load())
+	SetPollInterval(10 * time.Millisecond)
+	defer SetPollInterval(previous)
+
+	inspector := &fakeInspector{names: map[string]string{"a": "1"}}
+	s.Run("fingerprint reports a failed list instead of an empty set", func() {
+		fp, err := fingerprint(s.T().Context(), inspector)
+		s.Require().NoError(err)
+		s.Equal("tool/a=1", fp)
+		inspector.setErr(errors.New("the server is currently unable to handle the request"))
+		_, err = fingerprint(s.T().Context(), inspector)
+		s.ErrorContains(err, "unable to handle")
+		inspector.setErr(nil)
+	})
+
+	var changes atomic.Int32
+	stop := (&Toolset{}).WatchToolset(s.T().Context(), api.ToolsetContext{Inspector: inspector}, func() error {
+		changes.Add(1)
+		return nil
+	})
+	defer stop()
+	s.Run("a transient list error does not re-apply the toolsets", func() {
+		inspector.setErr(errors.New("the server is currently unable to handle the request"))
+		s.Never(func() bool { return changes.Load() > 0 }, 200*time.Millisecond, 10*time.Millisecond)
+	})
+	s.Run("recovering with the same resources does not re-apply either", func() {
+		inspector.setErr(nil)
+		s.Never(func() bool { return changes.Load() > 0 }, 200*time.Millisecond, 10*time.Millisecond)
+	})
+	s.Run("a real change still re-applies once", func() {
+		inspector.set(map[string]string{"a": "1", "b": "1"})
+		s.Eventually(func() bool { return changes.Load() == 1 }, 2*time.Second, 10*time.Millisecond)
+		s.Never(func() bool { return changes.Load() > 1 }, 100*time.Millisecond, 10*time.Millisecond)
+	})
+}
+
+// fakeInspector serves Tool resources (name -> resourceVersion) from memory
+// and can be switched to fail every list.
+type fakeInspector struct {
+	mu    sync.Mutex
+	names map[string]string
+	err   error
+}
+
+func (f *fakeInspector) set(names map[string]string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.names = names
+}
+
+func (f *fakeInspector) setErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.err = err
+}
+
+func (f *fakeInspector) Discovery() api.AggregateDiscovery { return nil }
+
+func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return f }
+
+func (f *fakeInspector) Resource(gvr schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {
+	return &fakeResource{inspector: f, gvr: gvr}
+}
+
+type fakeResource struct {
+	inspector *fakeInspector
+	gvr       schema.GroupVersionResource
+}
+
+func (r *fakeResource) Namespace(string) api.AggregateResourceInterface { return r }
+
+func (r *fakeResource) Get(ctx context.Context, _ string, _ metav1.GetOptions, _ ...string) api.Results[*unstructured.Unstructured] {
+	return api.NewResults(ctx, singleTarget{}, func(context.Context, string) (*unstructured.Unstructured, error) {
+		return nil, errors.New("not implemented")
+	})
+}
+
+func (r *fakeResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
+	return api.NewResults(ctx, singleTarget{}, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+		r.inspector.mu.Lock()
+		defer r.inspector.mu.Unlock()
+		if r.inspector.err != nil {
+			return nil, r.inspector.err
+		}
+		list := &unstructured.UnstructuredList{}
+		if r.gvr != GVR {
+			return list, nil
+		}
+		for name, version := range r.inspector.names {
+			list.Items = append(list.Items, unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": Group + "/" + Version, "kind": "Tool",
+				"metadata": map[string]any{"name": name, "resourceVersion": version},
+				"spec":     map[string]any{"description": "d", "kubernetes": map[string]any{"verb": "get", "apiVersion": "v1", "kind": "Pod"}},
+			}})
+		}
+		return list, nil
+	})
+}
+
+type singleTarget struct{}
+
+func (singleTarget) IsMultiTarget() bool                          { return false }
+func (singleTarget) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
+func (singleTarget) GetDefaultTarget() string                     { return "" }
+func (singleTarget) GetTargetParameterName() string               { return "" }
 
 func TestDynamic(t *testing.T) {
 	suite.Run(t, new(DynamicSuite))

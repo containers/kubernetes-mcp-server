@@ -2,9 +2,10 @@
 # server configuration, not cluster resources: add this file to the server's
 # config drop-in directory (--config-dir) or merge it into its TOML.
 #
-# The Microsoft EULA check. The in-tree server enforces the same rule with a
-# compiled-in validator (WindowsEULAValidator); this rule expresses it as
-# data so the KubeVirt tooling can ship it.
+# The Microsoft EULA check. It replaces the validator that used to be compiled
+# into the server: without this rule in the server's configuration, Windows
+# golden-image PipelineRuns are created without asking for EULA acceptance.
+# pkg/mcp/dynamic_test.go exercises this file against envtest.
 [[confirmation_rules]]
 kind = "PipelineRun"
 group = "tekton.dev"

@@ -46,7 +46,8 @@ type evalVars struct {
 //   - item: the current element of a forEach step (dyn)
 //   - now: the current time (timestamp), e.g. int(now) for Unix seconds
 //   - merge(a, b): a map with the entries of a overridden by those of b
-//   - range(n): the list [0, 1, ..., n-1], to walk two lists in parallel
+//   - range(n): the list [0, 1, ..., n-1] (n <= MaxRange), to walk two lists
+//     in parallel
 //   - the cel-go strings, lists, math and two-variable comprehension
 //     extensions (transformMapEntry, transformList, flatten, join, ...)
 func newEnv() (*cel.Env, error) {
@@ -135,6 +136,9 @@ func rangeList(n ref.Val) ref.Val {
 	if count < 0 {
 		return types.NewErr("range: argument must be non-negative")
 	}
+	if count > MaxRange {
+		return types.NewErr("range: at most %d items are allowed, got %d", MaxRange, int64(count))
+	}
 	items := make([]any, 0, count)
 	for i := int64(0); i < int64(count); i++ {
 		items = append(items, i)
@@ -151,7 +155,10 @@ func compileExpression(source string) (*expression, error) {
 	if issues != nil && issues.Err() != nil {
 		return nil, fmt.Errorf("invalid CEL expression %q: %w", source, issues.Err())
 	}
-	program, err := env.Program(ast)
+	// Tool arguments and responses are attacker-influenced, so every
+	// evaluation is bounded: cel-go aborts once the tracked cost exceeds the
+	// limit instead of letting a comprehension run unbounded.
+	program, err := env.Program(ast, cel.CostLimit(CELCostLimit))
 	if err != nil {
 		return nil, fmt.Errorf("invalid CEL expression %q: %w", source, err)
 	}

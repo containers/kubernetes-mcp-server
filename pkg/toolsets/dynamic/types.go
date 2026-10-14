@@ -181,6 +181,11 @@ type ElicitStep struct {
 const (
 	// MaxSteps bounds the number of steps of one Tool.
 	MaxSteps = 16
+	// MaxRange bounds the list produced by the range(n) CEL function.
+	MaxRange = 10_000
+	// CELCostLimit bounds the runtime cost of one expression evaluation (the
+	// same per-call limit the Kubernetes API server applies to CEL rules).
+	CELCostLimit = 1_000_000
 	// MaxForEach bounds the fan-out of one forEach step.
 	MaxForEach = 64
 )

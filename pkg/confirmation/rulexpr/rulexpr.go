@@ -69,8 +69,10 @@ func Compile(source string) (cel.Program, error) {
 	return program, nil
 }
 
-// Matches evaluates the expression against the request. Evaluation errors
-// (for example a missing field) count as no match.
+// Matches evaluates the expression against the request. An evaluation error
+// (for example a field access on a null object outside a has() guard) is
+// returned rather than treated as no match, so that callers guarding an
+// action can fail closed.
 func Matches(source string, request Request) (bool, error) {
 	program, err := Compile(source)
 	if err != nil {
@@ -85,8 +87,11 @@ func Matches(source string, request Request) (bool, error) {
 		"name": request.Name, "namespace": request.Namespace, "object": object,
 	})
 	if err != nil {
-		return false, nil
+		return false, fmt.Errorf("expression %q failed: %w", source, err)
 	}
 	matched, ok := out.Value().(bool)
-	return ok && matched, nil
+	if !ok {
+		return false, fmt.Errorf("expression %q produced %T, expected a boolean", source, out.Value())
+	}
+	return matched, nil
 }

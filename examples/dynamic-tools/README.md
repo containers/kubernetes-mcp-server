@@ -46,4 +46,6 @@ rule against envtest.
 
 Confirmation rules are server configuration rather than cluster resources:
 the KubeVirt chart's `confirmation-rules.toml` goes into the server's
-`--config-dir`.
+`--config-dir`, or the Windows EULA check is not enforced.
+`make dynamic-tools-install` collects the rules of the charts it installs
+into `_output/dynamic-tools-config.d/` for `make run-server`.

@@ -3,8 +3,8 @@ package confirmation
 import (
 	"context"
 	"errors"
-	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -42,7 +42,7 @@ func CheckKubeRules(ctx context.Context, rules []config.ConfirmationRule, fallba
 // can inspect the request body.
 func CheckKubeRequest(ctx context.Context, rules []config.ConfirmationRule, fallback string, elicitor api.Elicitor,
 	request rulexpr.Request) error {
-	matched := MatchKubeLevelRequest(rules, request)
+	matched := MatchKubeLevelRequest(ctx, rules, request)
 	if len(matched) == 0 {
 		return nil
 	}

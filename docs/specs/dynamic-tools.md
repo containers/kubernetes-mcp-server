@@ -244,8 +244,14 @@ The Windows EULA check used to be a compiled-in validator because it
 inspects the request body. Kube-level confirmation rules now accept an
 `expression`: a CEL boolean over `verb`, `kind`, `group`, `version`, `name`,
 `namespace` and `object` (the decoded body). The KubeVirt chart ships the
-EULA rule as [`confirmation-rules.toml`](../../examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml);
-the in-tree validator is unchanged until the project decides to retire it.
+EULA rule as [`confirmation-rules.toml`](../../examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml)
+and the in-tree validator is gone: the rule is server configuration that
+must be added to `--config-dir` wherever the KubeVirt tools are installed
+(`make dynamic-tools-install` collects the rules of the installed charts for
+`make run-server`; see [configuration-changes.md](../configuration-changes.md#windows-eula-confirmation)).
+An expression that cannot be evaluated fails closed (confirmation is
+required and the error is logged), so a rule guards even the requests its
+author did not anticipate.
 
 ## RBAC metadata
 
@@ -335,13 +341,14 @@ Prompt resource.
   `TargetCompatibilityFilters` mechanism fits), or a `targets` field.
 - **Name collisions** with built-in tools: reject, prefix, or let the Tool win?
 - **MCP resources** as CRDs would follow the same pattern as prompts.
-- **Retiring the in-tree EULA validator** once the confirmation rule ships
-  with the KubeVirt tooling, and whether policy like it should also be
-  deliverable as a cluster resource rather than server configuration.
+- **Policy as a cluster resource**: the EULA confirmation rule is server
+  configuration that has to travel next to the KubeVirt chart; whether rules
+  like it should also be deliverable as a cluster resource.
 - **Watch mechanism**: informer instead of polling; watching toolsets enabled
   by a later configuration reload (today only toolsets enabled at startup are
   watched).
-- **Limits**: CEL cost limits, response size (8 MiB cap today), timeouts.
+- **Limits**: response size (8 MiB cap today), timeouts. CEL evaluations
+  are bounded by a per-call cost limit and `range(n)` by `MaxRange`.
 - **Composition** is now in (`steps`), bounded to 16 steps and 64 fan-out
   iterations, sequential, no recursion. The open question is whether that
   is the right ceiling: prompts (`vm-troubleshoot`, `pipeline-troubleshoot`,

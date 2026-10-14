@@ -191,7 +191,9 @@ func newRESTClient(restConfig *rest.Config, gv schema.GroupVersion) (rest.Interf
 }
 
 // resolveRef resolves a reference: argument, then expression, then the fixed
-// value with `{argument}` placeholders expanded.
+// value with `{argument}` placeholders expanded. Placeholders are substituted
+// verbatim: client-go validates and escapes path segments itself (and
+// rejects a '%' in a name or subresource) and encodes query parameters.
 func (t *compiledTool) resolveRef(ref *Ref, vars evalVars) (string, error) {
 	if ref == nil {
 		return "", nil
@@ -215,7 +217,7 @@ func (t *compiledTool) resolveRef(ref *Ref, vars evalVars) (string, error) {
 		}
 	}
 	if ref.Value != "" {
-		return expandPath(ref.Value, vars.args)
+		return expandPlaceholders(ref.Value, vars.args, func(value string) string { return value })
 	}
 	return "", nil
 }

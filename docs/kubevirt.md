@@ -6,7 +6,7 @@ as `Tool` and `Prompt` custom resources by the `kubevirt-mcp-tools` Helm chart i
 picked up by the `dynamic` toolset at runtime. See
 [`docs/specs/dynamic-tools.md`](specs/dynamic-tools.md) for the model.
 
-6 tools (lifecycle, clone, template instantiation, guest info, troubleshoot, console screenshot) and 4 prompts (`vm-troubleshoot`, `hco-status`, `windows-golden-image`, `vm-create`). The chart also ships `confirmation-rules.toml` with the Microsoft EULA rule for Windows golden-image PipelineRuns; add it to the server's `--config-dir`.
+6 tools (lifecycle, clone, template instantiation, guest info, troubleshoot, console screenshot) and 4 prompts (`vm-troubleshoot`, `hco-status`, `windows-golden-image`, `vm-create`). The chart also ships `confirmation-rules.toml` with the Microsoft EULA rule for Windows golden-image PipelineRuns; add it to the server's `--config-dir` (the server does not enforce the EULA check without it; `make dynamic-tools-install DYNAMIC_TOOLS_CHARTS=kubevirt-mcp-tools` collects it for `make run-server`).
 
 ```bash
 # Install the Tool and Prompt CRDs once per cluster

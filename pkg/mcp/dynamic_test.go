@@ -523,6 +523,32 @@ spec:
 		s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
 		s.Equal("- default\n", s.text(result))
 	})
+	s.Run("query placeholders reach the API server unescaped", func() {
+		// client-go encodes query parameters itself: a value escaped by the
+		// tool would arrive double-encoded and be rejected as a selector.
+		s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: deployments-by-label-set
+spec:
+  description: List Deployments whose test label is in a set
+  readOnly: true
+  kubernetes:
+    verb: list
+    apiVersion: apps/v1
+    kind: Deployment
+    namespace: {value: default}
+    query:
+      labelSelector: {value: "test in ({labels})"}
+  output: response.items.map(d, d.metadata.name)
+`)
+		s.Eventually(func() bool { return s.findTool("deployments_by_label_set") != nil }, 10*time.Second, 100*time.Millisecond)
+		result, err := s.CallTool("deployments_by_label_set", map[string]any{"labels": "dynamic, other"})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
+		s.Equal("- dyn-deploy\n", s.text(result))
+	})
 }
 
 func (s *DynamicToolsSuite) TestHTTPQueryExpression() {
@@ -1182,18 +1208,60 @@ func (s *DynamicToolsSuite) TestConvertedPrompts() {
 	})
 }
 
-func (s *DynamicToolsSuite) TestConfirmationRuleExpression() {
+func (s *DynamicToolsSuite) TestConfirmationRuleExpressionFailsClosed() {
 	ctx := s.T().Context()
 	s.Require().NoError(EnvTestEnableCRD(ctx, "tekton.dev", "v1", "pipelineruns"))
 	s.Cfg.Toolsets.SetForTest([]string{"core"})
+	// pipelinRef is a typo outside any has() guard: the expression compiles
+	// but errors on every real PipelineRun. The guard must then ask, not
+	// silently let the request through.
 	configtest.OverlayTOML(s.T(), &s.Cfg, `
 confirmation_fallback = "deny"
 [[confirmation_rules]]
 kind = "PipelineRun"
 group = "tekton.dev"
-expression = "verb in ['create', 'update', 'patch'] && has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) && object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') && !(has(object.spec.params) && object.spec.params.exists(p, p.name == 'acceptEula' && p.value == 'true'))"
-message = "Do you accept the Microsoft EULA?"
+expression = "verb in ['create', 'update', 'patch'] && object.spec.pipelinRef.name == 'windows-efi-installer'"
+message = "Windows golden image?"
 `)
+	var elicited []string
+	s.InitMcpClient(test.WithElicitationHandler(func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicited = append(elicited, req.Params.Message)
+		return &mcp.ElicitResult{Action: "decline"}, nil
+	}))
+	client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig())
+	pipelineRuns := schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
+	defer func() {
+		_ = client.Resource(pipelineRuns).Namespace("default").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
+	}()
+	s.Run("a rule that cannot be evaluated still requires confirmation", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]any{"resource": "apiVersion: tekton.dev/v1\nkind: PipelineRun\nmetadata: {name: fail-closed, namespace: default}\nspec: {pipelineRef: {name: windows-efi-installer}}\n"})
+		s.Require().NoError(err)
+		s.True(result.IsError, "declined confirmation must fail the call")
+		s.Require().Len(elicited, 1)
+		s.Contains(elicited[0], "Windows golden image?")
+		s.Contains(elicited[0], "could not be evaluated")
+		s.Contains(elicited[0], "pipelinRef")
+		_, err = client.Resource(pipelineRuns).Namespace("default").Get(ctx, "fail-closed", metav1.GetOptions{})
+		s.True(apierrors.IsNotFound(err), "the PipelineRun must not have been created")
+	})
+	s.Run("requests the rule's fixed fields exclude are not evaluated", func() {
+		elicited = nil
+		result, err := s.CallTool("resources_create_or_update", map[string]any{"resource": "apiVersion: tekton.dev/v1\nkind: TaskRun\nmetadata: {name: fail-closed-tr, namespace: default}\nspec: {taskRef: {name: build}}\n"})
+		s.Require().NoError(err)
+		s.Empty(elicited)
+		s.Contains(s.text(result), "fail-closed-tr", "a TaskRun is outside the rule even if the CRD is missing: %s", s.text(result))
+	})
+}
+
+func (s *DynamicToolsSuite) TestConfirmationRuleExpression() {
+	ctx := s.T().Context()
+	s.Require().NoError(EnvTestEnableCRD(ctx, "tekton.dev", "v1", "pipelineruns"))
+	s.Cfg.Toolsets.SetForTest([]string{"core"})
+	// The rule under test is the one the KubeVirt chart ships for the
+	// server's --config-dir, so a drift in that file fails here.
+	shipped, err := os.ReadFile(filepath.Join("..", "..", "examples", "dynamic-tools", "charts", "kubevirt-mcp-tools", "confirmation-rules.toml"))
+	s.Require().NoError(err)
+	configtest.OverlayTOML(s.T(), &s.Cfg, "confirmation_fallback = \"deny\"\n"+string(shipped))
 	var elicited []string
 	s.InitMcpClient(test.WithElicitationHandler(func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 		elicited = append(elicited, req.Params.Message)
@@ -1211,7 +1279,8 @@ message = "Do you accept the Microsoft EULA?"
 		result, err := s.CallTool("resources_create_or_update", map[string]any{"resource": windows("win-1", "false")})
 		s.Require().NoError(err)
 		s.True(result.IsError, "declined confirmation must fail the call")
-		s.Equal([]string{"Do you accept the Microsoft EULA?"}, elicited)
+		s.Require().Len(elicited, 1)
+		s.Contains(elicited[0], "Do you accept the Microsoft End User License Agreement (EULA)?")
 		_, err = client.Resource(pipelineRuns).Namespace("default").Get(ctx, "win-1", metav1.GetOptions{})
 		s.True(apierrors.IsNotFound(err), "the PipelineRun must not have been created")
 	})

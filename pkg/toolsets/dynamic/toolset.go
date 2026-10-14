@@ -112,7 +112,10 @@ func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) 
 func (t *Toolset) WatchToolset(ctx context.Context, toolsetContext api.ToolsetContext, onChange func() error) (stop func()) {
 	ctx, cancel := context.WithCancel(ctx)
 	logger := klogutil.FromContext(ctx)
-	last := fingerprint(ctx, toolsetContext.Inspector)
+	last, err := fingerprint(ctx, toolsetContext.Inspector)
+	if err != nil {
+		logger.Error(err, "dynamic toolset: unable to list Tool or Prompt resources, will keep polling")
+	}
 	go func() {
 		ticker := time.NewTicker(time.Duration(pollInterval.Load()))
 		defer ticker.Stop()
@@ -122,7 +125,14 @@ func (t *Toolset) WatchToolset(ctx context.Context, toolsetContext api.ToolsetCo
 				return
 			case <-ticker.C:
 			}
-			current := fingerprint(ctx, toolsetContext.Inspector)
+			// A failed poll says nothing about the resources: skip it rather
+			// than mistake it for "every Tool was deleted", which would drop
+			// all dynamic tools and flap them back on the next success.
+			current, err := fingerprint(ctx, toolsetContext.Inspector)
+			if err != nil {
+				logger.Error(err, "dynamic toolset: unable to list Tool or Prompt resources, keeping the current tools")
+				continue
+			}
 			if current == last {
 				continue
 			}
@@ -180,23 +190,26 @@ func metadataOf[T named](item T) Metadata {
 	return Metadata{}
 }
 
-func fingerprint(ctx context.Context, inspector api.ClusterInspector) string {
+// fingerprint summarizes the names and resourceVersions of the Tool and
+// Prompt resources. A list failure is returned as such: an empty fingerprint
+// means there are no resources, never that the cluster could not be asked.
+func fingerprint(ctx context.Context, inspector api.ClusterInspector) (string, error) {
 	var parts []string
 	tools, err := listResources[Tool](ctx, inspector, GVR)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	for _, tool := range tools {
 		parts = append(parts, "tool/"+tool.Metadata.Name+"="+tool.Metadata.ResourceVersion)
 	}
 	prompts, err := listResources[Prompt](ctx, inspector, PromptGVR)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	for _, prompt := range prompts {
 		parts = append(parts, "prompt/"+prompt.Metadata.Name+"="+prompt.Metadata.ResourceVersion)
 	}
-	return strings.Join(parts, "\n")
+	return strings.Join(parts, "\n"), nil
 }
 
 func init() {

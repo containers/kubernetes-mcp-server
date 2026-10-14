@@ -813,7 +813,7 @@ If multiple rules match at the same level, their messages are merged into a sing
 | `version` | string | kube | API version (`"v1"`, `"v1beta1"`, etc.) |
 | `name` | string | kube | Resource name to match |
 | `namespace` | string | kube | Namespace to match |
-| `expression` | string | kube | [CEL](https://cel.dev) boolean over `verb`, `kind`, `group`, `version`, `name`, `namespace` and `object` (the decoded request body for create/update/patch, otherwise `null`). Evaluated after the other fields match; an evaluation error (e.g. a missing field) counts as no match. Validated at startup. |
+| `expression` | string | kube | [CEL](https://cel.dev) boolean over `verb`, `kind`, `group`, `version`, `name`, `namespace` and `object` (the decoded request body for create/update/patch, otherwise `null`). Evaluated after the other fields match. An expression that cannot be evaluated (e.g. a field access on a body that lacks it, outside a `has()` guard) fails closed: the rule matches, the failure is appended to its message and logged. Validated at startup. |
 | `message` | string | both | Message shown in the confirmation prompt |
 
 A rule must be either tool-level or kube-level. It must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`, `name`, `namespace`, `expression`), and must set at least one of these fields.

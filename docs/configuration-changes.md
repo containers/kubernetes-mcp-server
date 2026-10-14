@@ -101,9 +101,16 @@ using the new `expression` field of `confirmation_rules` (see
 [configuration.md](configuration.md#confirmation-rules)). It is **no longer
 on by default**: add
 [`examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml`](../examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml)
-to the server's `--config-dir` wherever the KubeVirt tools are used. The
+to the server's `--config-dir` wherever the KubeVirt tools are used
+(`make dynamic-tools-install` does this for the eval and development server
+started by `make run-server`). Without it, a `windows-efi-installer`
+PipelineRun created without `acceptEula: "true"` is **not** challenged. The
 `windows-golden-image` prompt still asks for consent through elicitation
 before it renders a PipelineRun with `acceptEula: "true"`.
+
+A rule expression that cannot be evaluated against a request now fails
+closed: confirmation is required, the error is logged and appended to the
+prompt. Guard optional fields with `has()` to keep such requests silent.
 
 ### Tool and prompt differences
 

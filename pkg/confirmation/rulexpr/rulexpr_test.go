@@ -56,13 +56,23 @@ func (s *RuleExprSuite) TestMatches() {
 		matched, _ = Matches(eula, Request{Verb: "create", Kind: "TaskRun", Object: windows("")})
 		s.False(matched)
 	})
-	s.Run("a missing object or field is not a match rather than an error", func() {
+	s.Run("an evaluation error is reported rather than swallowed", func() {
+		// A rule that cannot be evaluated must not silently become "no match":
+		// the caller decides what to do, and a confirmation gate fails closed.
 		matched, err := Matches("object.spec.replicas > 3", Request{Verb: "create", Kind: "Deployment"})
-		s.Require().NoError(err)
 		s.False(matched)
+		s.ErrorContains(err, "object.spec.replicas > 3")
 		matched, err = Matches("object.spec.replicas > 3", Request{Object: map[string]any{"spec": map[string]any{"replicas": 5.0}}})
 		s.Require().NoError(err)
 		s.True(matched)
+	})
+	s.Run("guarded expressions short-circuit instead of erroring", func() {
+		matched, err := Matches(eula, Request{Verb: "delete", Kind: "PipelineRun"})
+		s.Require().NoError(err)
+		s.False(matched)
+		matched, err = Matches("has(object.spec) && object.spec.replicas > 3", Request{Object: map[string]any{"metadata": map[string]any{}}})
+		s.Require().NoError(err)
+		s.False(matched)
 	})
 }
 
