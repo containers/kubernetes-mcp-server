@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -238,6 +239,7 @@ func initResources(p api.FilteringProvider) []api.ServerTool {
 				Properties: map[string]*jsonschema.Schema{
 					"kind": {
 						Type:        "string",
+						MinLength:   ptr.To(1),
 						Description: "Required case-insensitive substring filter on kind (e.g. 'deployment', 'route'). Matches across every API group, so a broad term can match more than one kind (e.g. 'networkpolicy' also matches CiliumNetworkPolicy) -- use the most specific substring you can.",
 					},
 				},
@@ -250,7 +252,9 @@ func initResources(p api.FilteringProvider) []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: apiResourcesList},
+		}, RBAC: api.RBACUnbounded(
+			"requires Kubernetes API discovery non-resource URL access across all API groups; current RBAC metadata cannot express non-resource URLs",
+		), Handler: apiResourcesList},
 	}
 }
 
@@ -265,15 +269,19 @@ type apiResourcesListResult struct {
 
 func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
-	kindFilter := p.RequiredString("kind")
+	kindFilter := strings.TrimSpace(p.RequiredString("kind"))
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
+	}
+	if kindFilter == "" {
+		return api.NewToolCallResultStructured(nil, errors.New("failed to list API resources: kind parameter must not be empty")), nil
 	}
 
 	resources, err := kubernetes.NewCore(params).APIResourcesList(kindFilter)
 	if err != nil && len(resources) == 0 {
 		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
 	}
+	resources = filterDeniedAPIResources(resources, params.GetDeniedResources())
 
 	result := apiResourcesListResult{Resources: resources}
 	if err != nil {
@@ -283,6 +291,37 @@ func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 		result.Warning = fmt.Sprintf("some API groups could not be queried and are omitted from this list: %v", err)
 	}
 	return api.NewToolCallResultStructured(result, nil), nil
+}
+
+func filterDeniedAPIResources(resources []kubernetes.APIResourceInfo, denied []api.GroupVersionKind) []kubernetes.APIResourceInfo {
+	if len(denied) == 0 {
+		return resources
+	}
+
+	filtered := make([]kubernetes.APIResourceInfo, 0, len(resources))
+	for _, resource := range resources {
+		if isDeniedAPIResource(resource, denied) {
+			continue
+		}
+		filtered = append(filtered, resource)
+	}
+	return filtered
+}
+
+func isDeniedAPIResource(resource kubernetes.APIResourceInfo, denied []api.GroupVersionKind) bool {
+	for _, deniedResource := range denied {
+		groupVersion := deniedResource.Version
+		if deniedResource.Group != "" {
+			groupVersion = deniedResource.Group + "/" + deniedResource.Version
+		}
+		if resource.APIVersion != groupVersion {
+			continue
+		}
+		if deniedResource.Kind == "" || deniedResource.Kind == resource.Kind {
+			return true
+		}
+	}
+	return false
 }
 
 func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

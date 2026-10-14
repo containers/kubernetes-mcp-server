@@ -50,6 +50,8 @@ type KubernetesClient interface {
 	RESTMapper() meta.ResettableRESTMapper
 	// DiscoveryClient returns the cached discovery client
 	DiscoveryClient() discovery.CachedDiscoveryInterface
+	// RawDiscoveryClient returns the non-cached discovery client
+	RawDiscoveryClient() discovery.DiscoveryInterface
 	// DynamicClient returns the dynamic client
 	DynamicClient() dynamic.Interface
 	// MetricsV1beta1Client returns the metrics v1beta1 client

@@ -658,6 +658,18 @@ func (s *ResourcesSuite) TestResourcesGetSelfHealsStaleRESTMapperForExternallyCr
 	})
 	s.Require().NoError(EnvTestWaitForAPIResourceCondition(s.T().Context(), "freshgroup.example.com", "v1", "freshwidgets", true))
 
+	apiResourcesResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "FreshWidget"})
+	s.Require().NoError(err)
+	s.Require().False(apiResourcesResult.IsError,
+		"api_resources_list must see a CRD installed directly against the cluster after cached discovery was warmed -- got: %v",
+		apiResourcesResult.Content)
+	var discoveredResources apiResourcesListToolResult
+	s.Require().NoError(json.Unmarshal([]byte(apiResourcesResult.Content[0].(*mcp.TextContent).Text), &discoveredResources))
+	discoveredFreshWidget := findAPIResourceByKind(discoveredResources.Resources, "FreshWidget")
+	s.Require().NotNil(discoveredFreshWidget, "api_resources_list should return the externally created FreshWidget CRD")
+	s.Equal("freshgroup.example.com/v1", discoveredFreshWidget.APIVersion)
+	s.Equal("freshwidgets", discoveredFreshWidget.Name)
+
 	dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err = dynamicClient.Resource(schema.GroupVersionResource{Group: "freshgroup.example.com", Version: "v1", Resource: "freshwidgets"}).
 		Namespace("default").
@@ -1174,6 +1186,20 @@ func (s *ResourcesSuite) TestAPIResourcesList() {
 		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "kind",
 			"error message should mention the missing kind parameter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
+	s.Run("api_resources_list with an empty kind filter returns an error", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": ""})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected an error for an empty kind filter, got: %v", toolResult.Content)
+		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "must not be empty",
+			"error message should reject an empty kind filter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("api_resources_list with a whitespace-only kind filter returns an error", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "   "})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected an error for a whitespace-only kind filter, got: %v", toolResult.Content)
+		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "must not be empty",
+			"error message should reject a whitespace-only kind filter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
 	s.Run("api_resources_list with a kind filter returns known core and builtin kinds", func() {
 		s.Run("includes the core Pod resource with its apiVersion and namespaced flag", func() {
 			toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "pod"})
@@ -1225,6 +1251,35 @@ func (s *ResourcesSuite) TestAPIResourcesList() {
 		var decoded apiResourcesListToolResult
 		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
 		s.Empty(decoded.Resources, "expected no resources to match a nonexistent kind filter")
+	})
+}
+
+func (s *ResourcesSuite) TestAPIResourcesListDenied() {
+	s.Require().NoError(toml.Unmarshal([]byte(`
+		denied_resources = [
+			{ version = "v1", kind = "Secret" },
+			{ group = "rbac.authorization.k8s.io", version = "v1" }
+		]
+	`), s.Cfg), "Expected to parse denied resources config")
+	s.InitMcpClient()
+
+	s.Run("api_resources_list excludes a resource denied by kind", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "Secret"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should return an empty filtered result: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Empty(decoded.Resources, "a kind-denied resource must not be exposed by discovery")
+	})
+	s.Run("api_resources_list excludes resources denied by group and version", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "Role"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should return an empty filtered result: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Empty(decoded.Resources, "a group/version-denied resource must not be exposed by discovery")
 	})
 }
 
