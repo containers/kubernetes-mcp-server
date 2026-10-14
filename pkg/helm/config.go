@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
@@ -17,7 +16,7 @@ type Config struct {
 	StorageDriver     string   `toml:"storage_driver,omitempty"`
 }
 
-var _ api.ExtendedConfig = (*Config)(nil)
+var _ config.ExtendedConfig = (*Config)(nil)
 
 func (c *Config) Validate() error {
 	if c == nil {
@@ -50,7 +49,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func helmToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func helmToolsetParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (config.ExtendedConfig, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err

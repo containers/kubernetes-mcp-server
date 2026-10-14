@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -14,19 +15,19 @@ type PromptsTestSuite struct {
 
 func (s *PromptsTestSuite) TestToServerPrompts() {
 	s.Run("handles empty prompt list", func() {
-		var prompts []api.Prompt
+		var prompts []config.Prompt
 		serverPrompts := ToServerPrompts(prompts)
 		s.Empty(serverPrompts)
 	})
 
 	s.Run("converts Prompt to ServerPrompt correctly", func() {
-		prompts := []api.Prompt{{
+		prompts := []config.Prompt{{
 			Name:        "test-prompt",
 			Description: "A test prompt",
-			Arguments: []api.PromptArgument{
+			Arguments: []config.PromptArgument{
 				{Name: "arg1", Required: true},
 			},
-			Templates: []api.PromptTemplate{
+			Templates: []config.PromptTemplate{
 				{Role: "user", Content: "Hello {{arg1}}"},
 			},
 		}}
@@ -46,14 +47,14 @@ func (s *PromptsTestSuite) TestToServerPrompts() {
 }
 
 func (s *PromptsTestSuite) TestPromptHandler() {
-	prompts := []api.Prompt{{
+	prompts := []config.Prompt{{
 		Name:        "test",
 		Description: "Test",
-		Arguments: []api.PromptArgument{
+		Arguments: []config.PromptArgument{
 			{Name: "required_arg", Required: true},
 			{Name: "optional_arg", Required: false},
 		},
-		Templates: []api.PromptTemplate{
+		Templates: []config.PromptTemplate{
 			{Role: "user", Content: "Hello {{required_arg}}{{optional_arg}}!"},
 		},
 	}}
@@ -64,7 +65,7 @@ func (s *PromptsTestSuite) TestPromptHandler() {
 			"required_arg": "World",
 			"optional_arg": " of Go",
 		}}
-		result, err := handler(api.PromptHandlerParams{PromptCallRequest: params})
+		result, err := handler(api.PromptHandlerParams{Request: params})
 		s.NoError(err)
 		s.NotNil(result)
 		s.Len(result.Messages, 1)
@@ -74,7 +75,7 @@ func (s *PromptsTestSuite) TestPromptHandler() {
 		params := &testPromptRequest{args: map[string]string{
 			"required_arg": "Universe",
 		}}
-		result, err := handler(api.PromptHandlerParams{PromptCallRequest: params})
+		result, err := handler(api.PromptHandlerParams{Request: params})
 		s.NoError(err)
 		s.NotNil(result)
 		s.Len(result.Messages, 1)
@@ -84,7 +85,7 @@ func (s *PromptsTestSuite) TestPromptHandler() {
 		params := &testPromptRequest{args: map[string]string{
 			"optional_arg": " of Go",
 		}}
-		result, err := handler(api.PromptHandlerParams{PromptCallRequest: params})
+		result, err := handler(api.PromptHandlerParams{Request: params})
 		s.Error(err)
 		s.Contains(err.Error(), "required argument 'required_arg' is missing")
 		s.Nil(result)

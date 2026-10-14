@@ -8,6 +8,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/client-go/rest"
 )
 
 type ConfigSuite struct {
@@ -29,7 +30,7 @@ func (s *ConfigSuite) TestResolvedURL_namespaceOverride() {
 }
 
 func (s *ConfigSuite) TestReadToml_emptySectionUsesDefaults() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		toolsets = ["netobserv"]
 		[toolset_configs.netobserv]
 	`))
@@ -42,7 +43,7 @@ func (s *ConfigSuite) TestReadToml_emptySectionUsesDefaults() {
 }
 
 func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		toolsets = ["netobserv"]
 		[toolset_configs.netobserv]
 	`))
@@ -68,9 +69,10 @@ func (s *ConfigSuite) TestNewNetObserv_doesNotMutateSharedConfig() {
 
 func (s *ConfigSuite) TestNewNetObserv_withoutToolsetConfigSection() {
 	base := config.BaseDefault()
-	base.Toolsets = append(base.Toolsets, "netobserv")
-	client := NewNetObserv(context.Background(), base, nil, nil)
-	s.Equal(DefaultPluginURL(false), client.pluginURL)
+	base.Toolsets.SetForTest(append(base.Toolsets.Get(), "netobserv"))
+	client, err := NewNetObserv(context.Background(), base, &rest.Config{}, nil)
+	s.Require().NoError(err)
+	s.Equal(DefaultPluginURL(true), client.pluginURL)
 	s.False(client.insecure)
 }
 

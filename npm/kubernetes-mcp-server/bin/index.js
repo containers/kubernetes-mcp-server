@@ -30,9 +30,9 @@ const handleSignal = () => (signal) => {
   // without), but still forward it so `kill -HUP` on this parent can trigger a
   // reload. Just don't log it as a termination.
   if (signal === 'SIGHUP') {
-    console.log(`Received ${signal}, forwarding to child process...`);
+    console.error(`Received ${signal}, forwarding to child process...`);
   } else {
-    console.log(`Received ${signal}, terminating child process...`);
+    console.error(`Received ${signal}, terminating child process...`);
   }
   if (child && !child.killed) {
     child.kill(signal);
@@ -45,7 +45,7 @@ const handleSignal = () => (signal) => {
 
 child.on('close', (code, signal) => {
   if (signal) {
-    console.log(`Child process terminated by signal: ${signal}`);
+    console.error(`Child process terminated by signal: ${signal}`);
     process.exit(128 + (signal === 'SIGTERM' ? 15 : signal === 'SIGINT' ? 2 : 1));
   } else {
     process.exit(code || 0);

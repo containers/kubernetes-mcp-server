@@ -4,12 +4,15 @@ package cmd
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -30,10 +33,11 @@ import (
 
 // baseSIGHUPSetup contains common setup for SIGHUP tests
 type baseSIGHUPSetup struct {
-	mockServer *test.MockServer
-	tempDir    string
-	logBuffer  *test.SyncBuffer
-	klogState  klog.State
+	mockServer     *test.MockServer
+	kubeconfigPath string
+	tempDir        string
+	logBuffer      *test.SyncBuffer
+	klogState      klog.State
 }
 
 // setupSIGHUPTest performs common SIGHUP test setup
@@ -41,6 +45,7 @@ func setupSIGHUPTest(t *testing.T) *baseSIGHUPSetup {
 	s := &baseSIGHUPSetup{}
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
+	s.kubeconfigPath = s.mockServer.KubeconfigFile(t)
 	s.tempDir = t.TempDir()
 
 	// Capture klog state
@@ -61,6 +66,10 @@ func (s *baseSIGHUPSetup) teardown() {
 	s.klogState.Restore()
 }
 
+func (s *baseSIGHUPSetup) withKube(body string) string {
+	return fmt.Sprintf("kubeconfig = %q\n%s", s.kubeconfigPath, body)
+}
+
 // SIGHUPSuite tests the SIGHUP configuration reload behavior for STDIO mode
 type SIGHUPSuite struct {
 	suite.Suite
@@ -68,13 +77,18 @@ type SIGHUPSuite struct {
 	dropInConfigDir string
 	server          *mcp.Server
 	stopSIGHUP      func()
-	cfgState        *config.StaticConfigState
+	cfgState        *config.ConfigState
+	oauthState      *oauth.State
+	reloadExited    atomic.Bool
+	reloadExitCode  atomic.Int32
 }
 
 func (s *SIGHUPSuite) SetupTest() {
 	s.baseSIGHUPSetup = setupSIGHUPTest(s.T())
 	s.dropInConfigDir = filepath.Join(s.tempDir, "conf.d")
 	s.Require().NoError(os.Mkdir(s.dropInConfigDir, 0o755))
+	s.reloadExited.Store(false)
+	s.reloadExitCode.Store(0)
 }
 
 func (s *SIGHUPSuite) TearDownTest() {
@@ -91,37 +105,40 @@ func (s *SIGHUPSuite) TearDownTest() {
 func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions {
 	cfg, err := config.Read(s.T().Context(), configPath, configDir)
 	s.Require().NoError(err)
-	cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 
 	provider, err := kubernetes.NewProvider(s.T().Context(), cfg)
 	s.Require().NoError(err)
 	s.server, err = mcp.NewServer(s.T().Context(), mcp.Configuration{
-		StaticConfig: cfg,
+		Config: cfg,
 	}, provider)
 	s.Require().NoError(err)
 
 	opts := &MCPServerOptions{
-		ConfigPath:   configPath,
-		ConfigDir:    configDir,
-		StaticConfig: cfg,
+		ConfigPath: configPath,
+		ConfigDir:  configDir,
+		Config:     cfg,
 		IOStreams: genericiooptions.IOStreams{
 			Out:    s.logBuffer,
 			ErrOut: s.logBuffer,
 		},
+		exit: func(code int) {
+			s.reloadExitCode.Store(int32(code))
+			s.reloadExited.Store(true)
+		},
 	}
-	oauthState := oauth.NewState(&oauth.Snapshot{})
+	s.oauthState = oauth.NewState(&oauth.Snapshot{})
 
-	s.cfgState = config.NewStaticConfigState(cfg)
-	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, oauthState, s.cfgState)
+	s.cfgState = config.NewConfigState(cfg)
+	s.stopSIGHUP = opts.setupSIGHUPHandler(s.T().Context(), s.server, s.oauthState, s.cfgState)
 	return opts
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 	// Create initial config file - start with only core toolset (no helm)
 	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		toolsets = ["core", "config"]
-	`), 0o644))
+	`)), 0o644))
 	_ = s.InitServer(configPath, "")
 
 	s.Run("helm tools are not initially available", func() {
@@ -129,9 +146,9 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 	})
 
 	// Modify the config file to add helm toolset
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		toolsets = ["core", "config", "helm"]
-	`), 0o644))
+	`)), 0o644))
 
 	// Send SIGHUP to current process
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -146,26 +163,26 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 func (s *SIGHUPSuite) TestSIGHUPReloadsFromDropInDirectory() {
 	// Create initial config file - with helm enabled
 	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		toolsets = ["core", "config", "helm"]
-	`), 0o644))
+	`)), 0o644))
 
 	// Create initial drop-in file that removes helm
 	dropInPath := filepath.Join(s.dropInConfigDir, "10-override.toml")
-	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
+	s.Require().NoError(os.WriteFile(dropInPath, []byte(s.withKube(`
 		toolsets = ["core", "config"]
-	`), 0o644))
+	`)), 0o644))
 
-	_ = s.InitServer(configPath, "")
+	_ = s.InitServer(configPath, s.dropInConfigDir)
 
 	s.Run("drop-in override removes helm from initial config", func() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 	})
 
 	// Update drop-in file to add helm back
-	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
+	s.Require().NoError(os.WriteFile(dropInPath, []byte(s.withKube(`
 		toolsets = ["core", "config", "helm"]
-	`), 0o644))
+	`)), 0o644))
 
 	// Send SIGHUP
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -177,58 +194,172 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsFromDropInDirectory() {
 	})
 }
 
-func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigContinues() {
-	// Create initial config file - start with only core toolset (no helm)
+func (s *SIGHUPSuite) TestSIGHUPWithInvalidConfigExits() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		toolsets = ["core", "config"]
-	`), 0o644))
+	`)), 0o644))
 	_ = s.InitServer(configPath, "")
 
 	s.Run("helm tools are not initially available", func() {
 		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 	})
 
-	// Write invalid TOML to config file
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		toolsets = "not a valid array
-	`), 0o644))
-
-	// Send SIGHUP - should not panic, should continue with old config
+	`)), 0o644))
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
 
-	s.Run("logs error when config is invalid", func() {
-		s.Require().Eventually(func() bool {
-			return strings.Contains(s.logBuffer.String(), "Failed to reload configuration")
-		}, 2*time.Second, 50*time.Millisecond)
-	})
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return s.reloadExited.Load()
+	}, 2*time.Second, 50*time.Millisecond)
+	s.Equal(int32(1), s.reloadExitCode.Load())
+	s.Contains(s.logBuffer.String(), "Failed to reload configuration")
+	s.True(slices.Contains(s.server.GetEnabledTools(), "events_list"))
+	s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
+}
 
-	s.Run("tools remain unchanged after failed reload", func() {
-		s.True(slices.Contains(s.server.GetEnabledTools(), "events_list"))
-		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
-	})
+func (s *SIGHUPSuite) TestSIGHUPOIDCDiscoveryFailureKeepsPreviousConfig() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		port = "18080"
+		toolsets = ["core", "config"]
+		require_oauth = true
+		skip_jwt_verification = true
+	`)), 0o644))
+	_ = s.InitServer(configPath, "")
 
-	// Now fix the config and add helm
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	issuer := httptest.NewServer(http.NotFoundHandler())
+	issuer.Close()
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		port = "18080"
 		toolsets = ["core", "config", "helm"]
-	`), 0o644))
-
-	// Send another SIGHUP
+		require_oauth = true
+		authorization_url = %q
+	`, issuer.URL))), 0o644))
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
 
-	s.Run("helm tools become available after fixing config and sending SIGHUP", func() {
-		s.Require().Eventually(func() bool {
-			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
-		}, 2*time.Second, 50*time.Millisecond)
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return strings.Contains(s.logBuffer.String(), "Failed to recreate OIDC provider during reload")
+	}, 2*time.Second, 50*time.Millisecond)
+
+	s.Run("does not apply the candidate MCP config", func() {
+		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
+		s.Equal([]string{"core", "config"}, s.cfgState.Load().Toolsets.Get())
 	})
+	s.Run("does not publish a new OAuth snapshot", func() {
+		s.Empty(s.oauthState.Load().AuthorizationURL)
+		s.Nil(s.oauthState.Load().OIDCProvider)
+	})
+	s.Run("does not exit", func() {
+		s.False(s.reloadExited.Load())
+	})
+}
+
+func (s *SIGHUPSuite) TestSIGHUPValidatesBeforeOAuthDiscovery() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		toolsets = ["core", "config"]
+	`)), 0o644))
+	_ = s.InitServer(configPath, "")
+
+	var discoveryRequests atomic.Int32
+	issuer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		discoveryRequests.Add(1)
+		http.NotFound(w, nil)
+	}))
+	s.T().Cleanup(issuer.Close)
+
+	// authorization_url without require_oauth is invalid and must be rejected
+	// before OIDC discovery or either live state is published.
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		toolsets = ["core", "config", "helm"]
+		authorization_url = %q
+	`, issuer.URL))), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return s.reloadExited.Load()
+	}, 2*time.Second, 50*time.Millisecond)
+
+	s.Run("does not attempt discovery", func() {
+		s.Equal(int32(0), discoveryRequests.Load())
+	})
+	s.Run("does not publish candidate state", func() {
+		s.Equal([]string{"core", "config"}, s.cfgState.Load().Toolsets.Get())
+		s.Empty(s.oauthState.Load().AuthorizationURL)
+	})
+}
+
+func (s *SIGHUPSuite) enableVerboseKlog() {
+	fs := flag.NewFlagSet("klog", flag.ContinueOnError)
+	klog.InitFlags(fs)
+	s.Require().NoError(fs.Set("v", "1"))
+}
+
+func (s *SIGHUPSuite) TestSIGHUPDumpAfterSuccessfulReload() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		list_output = "table"
+		toolsets = ["core", "config"]
+	`)), 0o644))
+	_ = s.InitServer(configPath, "")
+	s.enableVerboseKlog()
+	s.logBuffer.Reset()
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		list_output = "yaml"
+		toolsets = ["core", "config"]
+	`)), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return strings.Contains(s.logBuffer.String(), "Configuration reloaded successfully via SIGHUP")
+	}, 2*time.Second, 50*time.Millisecond)
+	logs := s.logBuffer.String()
+	s.Contains(logs, `option="list_output"`)
+	s.Contains(logs, "changed=true")
+	s.Contains(logs, "yaml")
+}
+
+func (s *SIGHUPSuite) TestSIGHUPRejectedReloadExits() {
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		toolsets = ["core", "config"]
+	`)), 0o644))
+	_ = s.InitServer(configPath, "")
+	s.enableVerboseKlog()
+	s.logBuffer.Reset()
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
+		toolsets = ["not-a-real-toolset"]
+	`)), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return s.reloadExited.Load()
+	}, 2*time.Second, 50*time.Millisecond)
+	s.Equal(int32(1), s.reloadExitCode.Load())
+	logs := s.logBuffer.String()
+	s.Contains(logs, "Failed to apply reloaded configuration")
+	s.Contains(logs, "config option")
+	s.Contains(logs, `option="toolsets"`)
+	s.Contains(logs, "changed=true")
+	s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
 }
 
 func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 	// Create initial drop-in file without helm
 	dropInPath := filepath.Join(s.dropInConfigDir, "10-settings.toml")
-	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
+	s.Require().NoError(os.WriteFile(dropInPath, []byte(s.withKube(`
 		toolsets = ["core", "config"]
-	`), 0o644))
+	`)), 0o644))
 
 	_ = s.InitServer("", s.dropInConfigDir)
 
@@ -237,9 +368,9 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 	})
 
 	// Update drop-in file to add helm
-	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
+	s.Require().NoError(os.WriteFile(dropInPath, []byte(s.withKube(`
 		toolsets = ["core", "config", "helm"]
-	`), 0o644))
+	`)), 0o644))
 
 	// Send SIGHUP
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -253,97 +384,97 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 
 func (s *SIGHUPSuite) TestSIGHUPPreservesMetricsPort() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		port = "18080"
 		metrics_port = "9090"
 		toolsets = ["core", "config"]
-	`), 0o644))
+	`)), 0o644))
 	_ = s.InitServer(configPath, "")
 
 	s.Run("metrics_port is set at startup", func() {
-		s.Equal("9090", s.cfgState.Load().MetricsPort)
+		s.Equal("9090", s.cfgState.Load().MetricsPort.Get())
 	})
 
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		port = "18080"
 		metrics_port = "9090"
 		toolsets = ["core", "config", "helm"]
-	`), 0o644))
+	`)), 0o644))
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
 
-	s.Run("unchanged metrics_port reloads other fields without warning", func() {
+	s.Run("unchanged metrics_port reloads other fields", func() {
 		s.Require().Eventually(func() bool {
 			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
 		}, 2*time.Second, 50*time.Millisecond)
-		s.Equal("9090", s.cfgState.Load().MetricsPort)
-		s.NotContains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
-	})
-
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		port = "18080"
-		metrics_port = "9091"
-		toolsets = ["core", "config", "helm"]
-	`), 0o644))
-	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
-
-	s.Run("changed metrics_port is kept at the original value and warned", func() {
-		s.Require().Eventually(func() bool {
-			klog.Flush()
-			return strings.Contains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
-		}, 2*time.Second, 50*time.Millisecond)
-		s.Equal("9090", s.cfgState.Load().MetricsPort, "SIGHUP must not change MetricsPort used for OAuth skip paths")
-	})
-
-	s.logBuffer.Reset()
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
-		port = "18080"
-		toolsets = ["core", "config", "helm"]
-	`), 0o644))
-	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
-
-	s.Run("cleared metrics_port is kept at the original value and warned", func() {
-		s.Require().Eventually(func() bool {
-			klog.Flush()
-			return strings.Contains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
-		}, 2*time.Second, 50*time.Millisecond)
-		s.Equal("9090", s.cfgState.Load().MetricsPort)
+		s.Equal("9090", s.cfgState.Load().MetricsPort.Get())
+		s.False(s.reloadExited.Load())
 	})
 }
 
-func (s *SIGHUPSuite) TestSIGHUPPreservesCLIMetricsPort() {
+func (s *SIGHUPSuite) TestSIGHUPRejectsNonReloadableMetricsPort() {
 	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		port = "18080"
 		metrics_port = "9090"
 		toolsets = ["core", "config"]
-	`), 0o644))
-	opts := s.InitServer(configPath, "")
-	// Simulate --metrics-port winning over TOML at startup. StaticConfig is
-	// the same pointer stored in cfgState until the first successful reload.
-	opts.StaticConfig.MetricsPort = "9092"
-	s.Equal("9092", s.cfgState.Load().MetricsPort)
+	`)), 0o644))
+	_ = s.InitServer(configPath, "")
 
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
 		port = "18080"
-		metrics_port = "9090"
-		toolsets = ["core", "config", "helm"]
-	`), 0o644))
+		metrics_port = "9091"
+		toolsets = ["core", "config"]
+	`)), 0o644))
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
 
-	s.Run("CLI-overlaid metrics_port is kept when TOML would revert it", func() {
+	s.Require().Eventually(func() bool {
+		klog.Flush()
+		return s.reloadExited.Load()
+	}, 2*time.Second, 50*time.Millisecond)
+	s.Equal(int32(1), s.reloadExitCode.Load())
+	s.Contains(s.logBuffer.String(), "non-reloadable option metrics_port changed")
+	s.Equal("9090", s.cfgState.Load().MetricsPort.Get())
+}
+
+func (s *SIGHUPSuite) TestSIGHUPIgnoresWhitespaceOnNonReloadableTLSPaths() {
+	certPath := filepath.Join(s.tempDir, "tls.crt")
+	keyPath := filepath.Join(s.tempDir, "tls.key")
+	s.Require().NoError(os.WriteFile(certPath, []byte("cert"), 0o644))
+	s.Require().NoError(os.WriteFile(keyPath, []byte("key"), 0o644))
+
+	configPath := filepath.Join(s.tempDir, "config.toml")
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		port = "18080"
+		tls_cert = %q
+		tls_key = %q
+		toolsets = ["core", "config"]
+	`, certPath, keyPath))), 0o644))
+	_ = s.InitServer(configPath, "")
+
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(fmt.Sprintf(`
+		port = "18080"
+		tls_cert = " %s "
+		tls_key = " %s "
+		toolsets = ["core", "config", "helm"]
+	`, certPath, keyPath))), 0o644))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Run("reloadable change is applied", func() {
 		s.Require().Eventually(func() bool {
 			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
 		}, 2*time.Second, 50*time.Millisecond)
-		s.Equal("9092", s.cfgState.Load().MetricsPort)
-		klog.Flush()
-		s.Contains(s.logBuffer.String(), "Ignoring metrics_port change on config reload")
+	})
+	s.Run("does not exit or rewrite the TLS paths", func() {
+		s.False(s.reloadExited.Load())
+		s.Equal(certPath, s.cfgState.Load().TLSCert.Get())
+		s.Equal(keyPath, s.cfgState.Load().TLSKey.Get())
 	})
 }
 
 func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
 	// Create initial config with one prompt
 	configPath := filepath.Join(s.tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
         [[prompts]]
         name = "initial-prompt"
         description = "Initial prompt"
@@ -351,7 +482,7 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
         [[prompts.messages]]
         role = "user"
         content = "Initial message"
-    `), 0o644))
+    `)), 0o644))
 	_ = s.InitServer(configPath, "")
 
 	enabledPrompts := s.server.GetEnabledPrompts()
@@ -359,7 +490,7 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
 	s.Contains(enabledPrompts, "initial-prompt")
 
 	// Update config with new prompt
-	s.Require().NoError(os.WriteFile(configPath, []byte(`
+	s.Require().NoError(os.WriteFile(configPath, []byte(s.withKube(`
         [[prompts]]
         name = "updated-prompt"
         description = "Updated prompt"
@@ -367,7 +498,7 @@ func (s *SIGHUPSuite) TestSIGHUPReloadsPrompts() {
         [[prompts.messages]]
         role = "user"
         content = "Updated message"
-    `), 0o644))
+    `)), 0o644))
 
 	// Send SIGHUP
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -399,20 +530,22 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	pathA := filepath.Join(tempDir, "a.log")
 	pathB := filepath.Join(tempDir, "b.log")
 	configPath := filepath.Join(tempDir, "config.toml")
-	if err := os.WriteFile(configPath, []byte(
-		`log_file = "`+pathA+`"`+"\n"+`log_level = 1`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	mockServer := test.NewMockServer()
 	mockServer.Handle(test.NewDiscoveryClientHandler())
 	t.Cleanup(mockServer.Close)
+	kubeconfigPath := mockServer.KubeconfigFile(t)
+	write := func(logFile string) error {
+		return os.WriteFile(configPath, []byte(fmt.Sprintf(
+			"kubeconfig = %q\nlog_file = %q\nlog_level = 1\n", kubeconfigPath, logFile)), 0o644)
+	}
+	if err := write(pathA); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := config.Read(t.Context(), configPath, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.KubeConfig = mockServer.KubeconfigFile(t)
 
 	// Install Sink BEFORE any goroutine that will read klog state
 	// (kubernetes watchers spawned by mcp.NewServer, the SIGHUP handler).
@@ -429,27 +562,27 @@ func TestSIGHUPInvokesLogSinkReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mcpServer, err := mcp.NewServer(t.Context(), mcp.Configuration{StaticConfig: cfg, SDKLogger: sink.SDKLogger()}, provider)
+	mcpServer, err := mcp.NewServer(t.Context(), mcp.Configuration{Config: cfg, SDKLogger: sink.SDKLogger()}, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(mcpServer.Close)
 
 	opts := &MCPServerOptions{
-		ConfigPath:   configPath,
-		StaticConfig: cfg,
+		ConfigPath: configPath,
+		Config:     cfg,
 		IOStreams: genericiooptions.IOStreams{
 			Out:    logBuffer,
 			ErrOut: logBuffer,
 		},
 		logSink: sink,
+		exit:    func(int) {},
 	}
-	cfgState := config.NewStaticConfigState(cfg)
+	cfgState := config.NewConfigState(cfg)
 	stop := opts.setupSIGHUPHandler(t.Context(), mcpServer, oauth.NewState(&oauth.Snapshot{}), cfgState)
 	t.Cleanup(stop)
 
-	if err := os.WriteFile(configPath, []byte(
-		`log_file = "`+pathB+`"`+"\n"+`log_level = 1`+"\n"), 0o644); err != nil {
+	if err := write(pathB); err != nil {
 		t.Fatal(err)
 	}
 	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
@@ -562,7 +695,7 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 		port = "%d"
 		kubeconfig = "%s"
 		toolsets = ["core", "config"]
-	`, tcpAddr.Port, s.mockServer.KubeconfigFile(s.T()))), 0o644))
+	`, tcpAddr.Port, s.kubeconfigPath)), 0o644))
 
 	// Create MCPServerOptions with config file set to trigger HTTP mode
 	opts := &MCPServerOptions{
@@ -571,6 +704,7 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 			Out:    s.logBuffer,
 			ErrOut: s.logBuffer,
 		},
+		exit: func(int) {},
 	}
 
 	// Run via root.go in a goroutine. A cancelable context (like http_test.go)
@@ -606,7 +740,7 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 		port = "%d"
 		kubeconfig = "%s"
 		toolsets = ["core", "config", "helm"]
-	`, tcpAddr.Port, s.mockServer.KubeconfigFile(s.T()))), 0o644))
+	`, tcpAddr.Port, s.kubeconfigPath)), 0o644))
 
 	// Send SIGHUP to current process
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
@@ -645,8 +779,11 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 	s.Run("no shutdown messages in logs", func() {
 		// Poll the negative over a window (not a fixed sleep + single sample):
 		// Never fails the moment a shutdown line appears.
+		// Capture the buffer so Never's leftover ticker goroutine does not
+		// race SetupTest replacing s.baseSIGHUPSetup.
+		logBuffer := s.logBuffer
 		s.Never(func() bool {
-			logOutput := s.logBuffer.String()
+			logOutput := logBuffer.String()
 			return strings.Contains(logOutput, "initiating graceful shutdown") ||
 				strings.Contains(logOutput, "Shutting down HTTP server")
 		}, 500*time.Millisecond, 50*time.Millisecond, "SIGHUP must not trigger shutdown of the HTTP server")
@@ -654,22 +791,16 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPReloadsConfigFromFile() {
 }
 
 // TestSIGHUPIgnoredWithoutConfig drives the no-config HTTP path end-to-end:
-// with a port but no config file, root.go registers no reload handler, so
-// Serve's SIGHUP registration alone must keep the process alive. If that
-// regresses, this SIGHUP kills the test binary ("signal: hangup").
+// Complete always loads defaults/env (no --config), then we set port for the
+// test. root.go registers no reload handler unless ConfigPath/ConfigDir is
+// set, so Serve's SIGHUP registration alone must keep the process alive.
 func (s *HTTPSIGHUPSuite) TestSIGHUPIgnoredWithoutConfig() {
 	tcpAddr, err := test.RandomPortAddress()
 	s.Require().NoError(err)
 	s.httpAddress = fmt.Sprintf("127.0.0.1:%d", tcpAddr.Port)
 
-	// config.Default() mirrors NewMCPServerOptions; Complete keeps it as-is when
-	// no --config/--config-dir is set.
-	cfg := config.Default()
-	cfg.Port = fmt.Sprintf("%d", tcpAddr.Port)
-	cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
 	opts := &MCPServerOptions{
-		StaticConfig: cfg,
-		IOStreams:    genericiooptions.IOStreams{Out: s.logBuffer, ErrOut: s.logBuffer},
+		IOStreams: genericiooptions.IOStreams{Out: s.logBuffer, ErrOut: s.logBuffer},
 	}
 
 	var timeoutCtx, cancelCtx context.Context
@@ -681,6 +812,8 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPIgnoredWithoutConfig() {
 		if err := opts.Complete(cancelCtx, rootCmd); err != nil {
 			return err
 		}
+		opts.Config.Port.SetForTest(fmt.Sprintf("%d", tcpAddr.Port))
+		opts.Config.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 		return opts.Run(cancelCtx)
 	})
 	s.waitForShutdown = group.Wait
@@ -691,8 +824,9 @@ func (s *HTTPSIGHUPSuite) TestSIGHUPIgnoredWithoutConfig() {
 	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
 
 	s.Run("no-config server keeps serving after SIGHUP", func() {
+		logBuffer := s.logBuffer
 		s.Never(func() bool {
-			logOutput := s.logBuffer.String()
+			logOutput := logBuffer.String()
 			return strings.Contains(logOutput, "initiating graceful shutdown") ||
 				strings.Contains(logOutput, "Shutting down HTTP server")
 		}, 500*time.Millisecond, 50*time.Millisecond, "SIGHUP must not shut down the no-config HTTP server")

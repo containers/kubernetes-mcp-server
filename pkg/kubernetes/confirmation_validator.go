@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/confirmation"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog" //nolint:staticcheck // MCP logging deprecated (SEP-2577)
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -14,7 +15,8 @@ import (
 
 // ConfirmationValidator validates Kubernetes API requests against confirmation rules.
 type ConfirmationValidator struct {
-	rulesProvider api.ConfirmationRulesProvider
+	rules    []config.ConfirmationRule
+	fallback string
 }
 
 func (v *ConfirmationValidator) Name() string {
@@ -31,7 +33,7 @@ func (v *ConfirmationValidator) Validate(ctx context.Context, req *api.HTTPValid
 		version = req.GVK.Version
 	}
 	err := confirmation.CheckKubeRules(
-		ctx, v.rulesProvider, &contextElicitor{},
+		ctx, v.rules, v.fallback, &contextElicitor{},
 		req.Verb, kind, group, version, req.ResourceName, req.Namespace,
 	)
 	if errors.Is(err, confirmation.ErrConfirmationDenied) {

@@ -1,0 +1,328 @@
+[
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Uses embedded OpenTelemetry Collector schemas; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get OpenTelemetry Collector Component Schema"
+    },
+    "description": "Get the JSON schema for an OpenTelemetry Collector component's configuration options.",
+    "inputSchema": {
+      "properties": {
+        "component_name": {
+          "description": "Component name from otelcol_list_components (e.g., 'otlp', 'batch', 'debug')",
+          "type": "string"
+        },
+        "component_type": {
+          "description": "Component type: receiver, processor, exporter, extension, connector",
+          "type": "string"
+        },
+        "version": {
+          "description": "Collector version (e.g., 'v0.100.0'). Defaults to latest available.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component_type",
+        "component_name"
+      ],
+      "type": "object"
+    },
+    "name": "otelcol_get_component_schema",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The component name",
+          "type": "string"
+        },
+        "schema": {
+          "additionalProperties": true,
+          "description": "The JSON schema for the component configuration",
+          "type": "object"
+        },
+        "type": {
+          "description": "The component type (receiver, processor, exporter, extension, connector)",
+          "type": "string"
+        },
+        "version": {
+          "description": "The OpenTelemetry Collector version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "version",
+        "schema"
+      ],
+      "type": "object"
+    },
+    "title": "Get OpenTelemetry Collector Component Schema"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Uses embedded OpenTelemetry Collector schemas; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Available OpenTelemetry Collector Versions"
+    },
+    "description": "List available OpenTelemetry Collector versions and identify the latest.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "otelcol_get_versions",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "latest_version": {
+          "description": "The latest available version",
+          "type": "string"
+        },
+        "versions": {
+          "description": "List of available OpenTelemetry Collector versions",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "versions",
+        "latest_version"
+      ],
+      "type": "object"
+    },
+    "title": "Get Available OpenTelemetry Collector Versions"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Uses embedded OpenTelemetry Collector schemas; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List OpenTelemetry Collector Components"
+    },
+    "description": "List available OpenTelemetry Collector components (receivers, processors, exporters, extensions, connectors) for a given version.",
+    "inputSchema": {
+      "properties": {
+        "version": {
+          "description": "Collector version (e.g., 'v0.100.0'). Defaults to latest available.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "otelcol_list_components",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "description": "Map of component type to component names",
+          "type": "object"
+        },
+        "connectors": {
+          "description": "List of available connector component names",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "exporters": {
+          "description": "List of available exporter component names",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "extensions": {
+          "description": "List of available extension component names",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "processors": {
+          "description": "List of available processor component names",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "receivers": {
+          "description": "List of available receiver component names",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "version": {
+          "description": "The OpenTelemetry Collector version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "receivers",
+        "processors",
+        "exporters",
+        "extensions",
+        "connectors",
+        "components"
+      ],
+      "type": "object"
+    },
+    "title": "List OpenTelemetry Collector Components"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Uses embedded OpenTelemetry Collector schemas; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Validate OpenTelemetry Collector Component Configuration"
+    },
+    "description": "Validate an OpenTelemetry Collector component configuration against its JSON schema.",
+    "inputSchema": {
+      "properties": {
+        "component_name": {
+          "description": "Component name from otelcol_list_components (e.g., 'otlp', 'batch', 'debug')",
+          "type": "string"
+        },
+        "component_type": {
+          "description": "Component type: receiver, processor, exporter, extension, connector",
+          "type": "string"
+        },
+        "config": {
+          "description": "Configuration to validate as YAML or JSON string",
+          "type": "string"
+        },
+        "format": {
+          "description": "Config format: 'yaml' (default) or 'json'",
+          "type": "string"
+        },
+        "version": {
+          "description": "Collector version (e.g., 'v0.100.0'). Defaults to latest available.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component_type",
+        "component_name",
+        "config"
+      ],
+      "type": "object"
+    },
+    "name": "otelcol_validate_config",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "errors": {
+          "description": "List of validation errors if invalid",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "description": "Description of the validation error",
+                "type": "string"
+              },
+              "field": {
+                "description": "The field path that has the error",
+                "type": "string"
+              },
+              "type": {
+                "description": "The error type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "description"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "valid": {
+          "description": "Whether the configuration is valid",
+          "type": "boolean"
+        },
+        "version": {
+          "description": "The OpenTelemetry Collector version used for validation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "valid",
+        "version"
+      ],
+      "type": "object"
+    },
+    "title": "Validate OpenTelemetry Collector Component Configuration"
+  }
+]

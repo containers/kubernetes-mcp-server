@@ -84,6 +84,24 @@ func (s *ToolFilterSuite) TestShouldIncludeTargetListTool() {
 	})
 }
 
+func (s *ToolFilterSuite) TestShouldIncludeConfigurationViewTool() {
+	tool := api.ServerTool{Tool: api.Tool{Name: "configuration_view"}}
+
+	s.Run("hides configuration view over HTTP by default", func() {
+		s.False(ShouldIncludeConfigurationViewTool(true, nil)(tool))
+	})
+	s.Run("includes explicitly enabled configuration view over HTTP", func() {
+		s.True(ShouldIncludeConfigurationViewTool(true, []string{"configuration_view"})(tool))
+	})
+	s.Run("includes configuration view over stdio", func() {
+		s.True(ShouldIncludeConfigurationViewTool(false, nil)(tool))
+	})
+	s.Run("includes other tools over HTTP", func() {
+		otherTool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}}
+		s.True(ShouldIncludeConfigurationViewTool(true, nil)(otherTool))
+	})
+}
+
 func TestToolFilter(t *testing.T) {
 	suite.Run(t, new(ToolFilterSuite))
 }

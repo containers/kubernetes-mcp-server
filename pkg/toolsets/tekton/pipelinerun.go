@@ -41,6 +41,19 @@ func pipelineRunTools() []api.ServerTool {
 					OpenWorldHint:   ptr.To(true),
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get", "patch"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelineruns"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"create"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelineruns"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+			),
 			Handler: pipelineRunLifecycle,
 		},
 		{
@@ -83,6 +96,24 @@ func pipelineRunTools() []api.ServerTool {
 					OpenWorldHint:   ptr.To(true),
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelineruns"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "taskruns"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"get"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods", Subresource: "log"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+			),
 			Handler: getPipelineRunLogs,
 		},
 	}

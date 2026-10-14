@@ -2,9 +2,7 @@ package kcp
 
 import (
 	"context"
-	"os"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -44,25 +42,16 @@ var _ watcher.Watcher = (*WorkspaceWatcher)(nil)
 
 // NewWorkspaceWatcher creates a new workspace watcher that polls the kcp tenancy API
 // for workspace changes.
-func NewWorkspaceWatcher(ctx context.Context, dynamicClient dynamic.Interface, rootWorkspace string) *WorkspaceWatcher {
-	pollInterval := DefaultWorkspacePollInterval
-	debounceWindow := DefaultWorkspaceDebounceWindow
+func NewWorkspaceWatcher(ctx context.Context, dynamicClient dynamic.Interface, rootWorkspace string, pollInterval, debounceWindow time.Duration) *WorkspaceWatcher {
+	if pollInterval <= 0 {
+		pollInterval = DefaultWorkspacePollInterval
+	}
+	if debounceWindow <= 0 {
+		debounceWindow = DefaultWorkspaceDebounceWindow
+	}
 
 	logger := klogutil.FromContext(ctx)
-
-	// Allow override via environment variable for testing
-	if envInterval := os.Getenv("WORKSPACE_POLL_INTERVAL_MS"); envInterval != "" {
-		if ms, err := strconv.Atoi(envInterval); err == nil && ms > 0 {
-			pollInterval = time.Duration(ms) * time.Millisecond
-			logger.V(2).Info("Using custom workspace poll interval", "poll_interval", pollInterval)
-		}
-	}
-	if envDebounce := os.Getenv("WORKSPACE_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
-		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
-			debounceWindow = time.Duration(ms) * time.Millisecond
-			logger.V(2).Info("Using custom workspace debounce window", "debounce_window", debounceWindow)
-		}
-	}
+	logger.V(2).Info("Using workspace watcher timings", "poll_interval", pollInterval, "debounce_window", debounceWindow)
 
 	return &WorkspaceWatcher{
 		dynamicClient:  dynamicClient,
@@ -83,12 +72,18 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 		w.mu.Unlock()
 		return
 	}
-	w.started = true
-	w.lastKnownState = w.captureState(ctx)
 	w.mu.Unlock()
 
 	logger := klogutil.FromContext(ctx)
+	initial := w.captureState(ctx)
 
+	w.mu.Lock()
+	if w.started {
+		w.mu.Unlock()
+		return
+	}
+	w.started = true
+	w.lastKnownState = initial
 	go func() {
 		defer close(w.stoppedCh)
 		ticker := time.NewTicker(w.pollInterval)
@@ -105,8 +100,8 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 				logger.V(2).Info("Stopping workspace watcher")
 				return
 			case <-ticker.C:
-				w.mu.Lock()
 				current := w.captureState(ctx)
+				w.mu.Lock()
 				logger.V(3).Info("Polled workspaces", "cluster.workspaces.count", len(current.workspaces))
 
 				changed := len(current.workspaces) != len(w.lastKnownState.workspaces)
@@ -129,8 +124,9 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 						if err := onChange(); err != nil {
 							logger.Error(err, "Failed to reload")
 						} else {
+							next := w.captureState(ctx)
 							w.mu.Lock()
-							w.lastKnownState = w.captureState(ctx)
+							w.lastKnownState = next
 							w.mu.Unlock()
 							logger.V(2).Info("Reload completed")
 						}
@@ -140,6 +136,7 @@ func (w *WorkspaceWatcher) Watch(ctx context.Context, onChange func() error) {
 			}
 		}
 	}()
+	w.mu.Unlock()
 }
 
 // Close stops the workspace watcher and cleans up resources.

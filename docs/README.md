@@ -36,16 +36,18 @@ Living documentation for implemented and planned features:
 |------|-------------|--------|
 | **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 | **[Structured Tool Output](specs/structured-output.md)** | Conventions for tools that emit `structuredContent` | Implemented |
+| **[Config Option Framework](specs/config.md)** | Unified `Option[T]` config: vectors, precedence, provenance | Implemented |
+| **[MCP Apps](mcp-apps.md)** | Interactive UI resources associated with MCP tools | Implemented |
 
 ## Advanced Topics
 
 - **[MCP Logging](logging.md)** - Structured logging to MCP clients with automatic K8s error categorization and secret redaction
 - **[OpenTelemetry Observability](OTEL.md)** - Distributed tracing and metrics configuration
 - **[MCP Prompts](prompts.md)** - Custom workflow templates for AI assistants
+- **[Tool RBAC Metadata](tool-rbac-metadata.md)** - Permission metadata for scoped authorization and sandboxing
 - **[Keycloak OIDC Setup](KEYCLOAK_OIDC_SETUP.md)** - Developer guide for local Keycloak environment and testing with MCP Inspector
 
 ## Reference
 
 - **[Main README](../README.md)** - Project overview and general information
-
 

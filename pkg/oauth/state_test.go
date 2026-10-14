@@ -1,6 +1,8 @@
 package oauth
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 
@@ -148,9 +150,40 @@ func (s *OAuthStateSuite) TestStateLoadStore() {
 	})
 }
 
+func (s *OAuthStateSuite) TestSnapshotForReload() {
+	s.Run("provider fields unchanged keeps previous provider and updates well-known fields", func() {
+		prev := &Snapshot{OAuthScopes: []string{"openid"}}
+		cfg := config.New()
+		cfg.OAuthScopes.SetForTest([]string{"openid", "profile"})
+		next, err := SnapshotForReload(prev, cfg)
+		s.Require().NoError(err)
+		s.Equal([]string{"openid", "profile"}, next.OAuthScopes)
+		s.Nil(next.OIDCProvider)
+		s.Empty(next.AuthorizationURL)
+	})
+
+	s.Run("clearing authorization URL drops the provider without discovery", func() {
+		prev := &Snapshot{AuthorizationURL: "https://old.example.com"}
+		next, err := SnapshotForReload(prev, config.New())
+		s.Require().NoError(err)
+		s.Empty(next.AuthorizationURL)
+		s.Nil(next.OIDCProvider)
+	})
+
+	s.Run("unreachable issuer fails without returning a snapshot", func() {
+		issuer := httptest.NewServer(http.NotFoundHandler())
+		issuer.Close()
+		cfg := config.New()
+		cfg.AuthorizationURL.SetForTest(issuer.URL)
+		next, err := SnapshotForReload(&Snapshot{}, cfg)
+		s.Error(err)
+		s.Nil(next)
+	})
+}
+
 func (s *OAuthStateSuite) TestCreateOIDCProviderAndClient() {
 	s.Run("empty authorization URL returns nil", func() {
-		cfg := config.Default()
+		cfg := config.New()
 		provider, client, err := CreateOIDCProviderAndClient(cfg)
 		s.NoError(err)
 		s.Nil(provider)

@@ -1,0 +1,8 @@
+{
+  "name": "kubernetes-mcp-server-browser-tests",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "1.57.0"
+  }
+}

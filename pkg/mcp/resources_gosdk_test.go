@@ -44,7 +44,7 @@ func (s *ResourceSuite) TestResources() {
 					Description: "First",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: txt1}, nil
 				},
 			},
@@ -55,7 +55,7 @@ func (s *ResourceSuite) TestResources() {
 					Description: "Second",
 					MIMEType:    "application/json",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: json2}, nil
 				},
 			},
@@ -64,7 +64,7 @@ func (s *ResourceSuite) TestResources() {
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	s.Run("all resources appear in list with correct metadata", func() {
@@ -118,8 +118,8 @@ func (s *ResourceSuite) TestResourceTemplates() {
 					Description: txtFoo,
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
-					return &api.ResourceContent{Text: "content for: " + uri}, nil
+				Handler: func(params api.ResourceHandlerParams) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "content for: " + params.Request.GetURI()}, nil
 				},
 			},
 		},
@@ -127,7 +127,7 @@ func (s *ResourceSuite) TestResourceTemplates() {
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	s.Run("template appears in list", func() {
@@ -206,7 +206,7 @@ func (s *ResourceSuite) TestHandlerErrors() {
 					Name:     "Error Resource",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return nil, errors.New("permission denied")
 				},
 			},
@@ -218,7 +218,7 @@ func (s *ResourceSuite) TestHandlerErrors() {
 					Name:        "Template with Error",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return nil, errors.New("permission denied")
 				},
 			},
@@ -227,7 +227,7 @@ func (s *ResourceSuite) TestHandlerErrors() {
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	s.Run("static resource handler error propagates", func() {
@@ -252,7 +252,7 @@ func (s *ResourceSuite) TestNilContentReturnsError() {
 					Name:     "Nil Content Resource",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return nil, nil
 				},
 			},
@@ -264,7 +264,7 @@ func (s *ResourceSuite) TestNilContentReturnsError() {
 					Name:        "Nil Content Template",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return nil, nil
 				},
 			},
@@ -273,7 +273,7 @@ func (s *ResourceSuite) TestNilContentReturnsError() {
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	s.Run("static resource nil content returns error", func() {
@@ -298,7 +298,7 @@ func (s *ResourceSuite) TestReloadRemovesResources() {
 					Name:     "Removable",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "will be removed"}, nil
 				},
 			},
@@ -310,8 +310,8 @@ func (s *ResourceSuite) TestReloadRemovesResources() {
 					Name:        "Removable Template",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
-					return &api.ResourceContent{Text: "template: " + uri}, nil
+				Handler: func(params api.ResourceHandlerParams) (*api.ResourceContent, error) {
+					return &api.ResourceContent{Text: "template: " + params.Request.GetURI()}, nil
 				},
 			},
 		},
@@ -322,7 +322,7 @@ func (s *ResourceSuite) TestReloadRemovesResources() {
 	toolsets.Clear()
 	toolsets.Register(testToolset)
 	toolsets.Register(emptyToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	s.Run("resources present before reload", func() {
@@ -337,9 +337,9 @@ func (s *ResourceSuite) TestReloadRemovesResources() {
 	})
 
 	s.Run("resources removed after reload", func() {
-		newConfig := config.Default()
-		newConfig.Toolsets = []string{"resource-test-empty"}
-		newConfig.KubeConfig = s.Cfg.KubeConfig
+		newConfig := config.New()
+		newConfig.Toolsets.SetForTest([]string{"resource-test-empty"})
+		newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
 
 		err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
 		s.Require().NoError(err)
@@ -363,7 +363,7 @@ func (s *ResourceSuite) TestReloadNotifiesResourceListChanged() {
 					Name:     "Notify Resource",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "notify"}, nil
 				},
 			},
@@ -375,14 +375,14 @@ func (s *ResourceSuite) TestReloadNotifiesResourceListChanged() {
 	toolsets.Clear()
 	toolsets.Register(testToolset)
 	toolsets.Register(emptyToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	capture := s.StartCapturingNotifications()
 
-	newConfig := config.Default()
-	newConfig.Toolsets = []string{"resource-test-empty"}
-	newConfig.KubeConfig = s.Cfg.KubeConfig
+	newConfig := config.New()
+	newConfig.Toolsets.SetForTest([]string{"resource-test-empty"})
+	newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
 
 	err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
 	s.Require().NoError(err)
@@ -402,7 +402,7 @@ func (s *ResourceSuite) TestBlobResource() {
 					Name:     "Image Resource",
 					MIMEType: "image/png",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Blob: blobData}, nil
 				},
 			},
@@ -411,7 +411,7 @@ func (s *ResourceSuite) TestBlobResource() {
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	s.Run("blob content is returned correctly", func() {
@@ -433,7 +433,7 @@ func (s *ResourceSuite) TestMIMETypeOverride() {
 					Name:     "Override Resource",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{
 						Text:     `{"overridden": true}`,
 						MIMEType: "application/json",
@@ -448,9 +448,9 @@ func (s *ResourceSuite) TestMIMETypeOverride() {
 					Name:        "Override Template",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, uri string) (*api.ResourceContent, error) {
+				Handler: func(params api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{
-						Text:     `{"uri": "` + uri + `"}`,
+						Text:     `{"uri": "` + params.Request.GetURI() + `"}`,
 						MIMEType: "application/json",
 					}, nil
 				},
@@ -460,7 +460,7 @@ func (s *ResourceSuite) TestMIMETypeOverride() {
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"resource-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test"})
 	s.InitMcpClient()
 
 	s.Run("handler MIMEType overrides resource-level MIMEType", func() {
@@ -489,7 +489,7 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 					Name:     "Good Resource",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "still up"}, nil
 				},
 			},
@@ -505,7 +505,7 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 					Name:        "Bad Template",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "unreachable"}, nil
 				},
 			},
@@ -515,13 +515,13 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 	toolsets.Clear()
 	toolsets.Register(goodToolset)
 	toolsets.Register(badTemplateToolset)
-	s.Cfg.Toolsets = []string{"resource-test-good"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test-good"})
 	s.InitMcpClient()
 
 	s.Run("invalid resource template URI returns error without panic", func() {
-		newConfig := config.Default()
-		newConfig.Toolsets = []string{"resource-test-bad"}
-		newConfig.KubeConfig = s.Cfg.KubeConfig
+		newConfig := config.New()
+		newConfig.Toolsets.SetForTest([]string{"resource-test-bad"})
+		newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
 
 		s.NotPanics(func() {
 			err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
@@ -544,13 +544,13 @@ func (s *ResourceSuite) TestInvalidURITemplateReturnsError() {
 		// must mirror that — otherwise downstream reads (rate limit, list
 		// output, confirmation rules, ...) would see a config that disagrees
 		// with what the SDK is actually serving.
-		s.Equal([]string{"resource-test-good"}, s.mcpServer.configuration.Load().StaticConfig.Toolsets)
+		s.Equal([]string{"resource-test-good"}, s.mcpServer.configuration.Load().Config.Toolsets.Get())
 	})
 
 	s.Run("server accepts a subsequent valid reload", func() {
-		recoveryConfig := config.Default()
-		recoveryConfig.Toolsets = []string{"resource-test-good"}
-		recoveryConfig.KubeConfig = s.Cfg.KubeConfig
+		recoveryConfig := config.New()
+		recoveryConfig.Toolsets.SetForTest([]string{"resource-test-good"})
+		recoveryConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
 
 		s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), recoveryConfig))
 
@@ -571,7 +571,7 @@ func (s *ResourceSuite) TestInvalidResourceURIReturnsError() {
 					Name:     "Good Resource",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "still up"}, nil
 				},
 			},
@@ -588,7 +588,7 @@ func (s *ResourceSuite) TestInvalidResourceURIReturnsError() {
 					Name:     "Bad URI Resource",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "unreachable"}, nil
 				},
 			},
@@ -598,13 +598,13 @@ func (s *ResourceSuite) TestInvalidResourceURIReturnsError() {
 	toolsets.Clear()
 	toolsets.Register(goodToolset)
 	toolsets.Register(badURIToolset)
-	s.Cfg.Toolsets = []string{"resource-test-good"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test-good"})
 	s.InitMcpClient()
 
 	s.Run("invalid resource URI returns error without panic", func() {
-		newConfig := config.Default()
-		newConfig.Toolsets = []string{"resource-test-bad-uri"}
-		newConfig.KubeConfig = s.Cfg.KubeConfig
+		newConfig := config.New()
+		newConfig.Toolsets.SetForTest([]string{"resource-test-bad-uri"})
+		newConfig.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
 
 		s.NotPanics(func() {
 			err := s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig)
@@ -633,7 +633,7 @@ func (s *ResourceSuite) TestResourceContentInvariant() {
 					Name:     "Both Empty",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{}, nil
 				},
 			},
@@ -645,7 +645,7 @@ func (s *ResourceSuite) TestResourceContentInvariant() {
 					Name:        "Tmpl Both Empty",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{}, nil
 				},
 			},
@@ -661,7 +661,7 @@ func (s *ResourceSuite) TestResourceContentInvariant() {
 					Name:     "Both Set",
 					MIMEType: "text/plain",
 				},
-				Handler: func(_ context.Context) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "x", Blob: []byte{0x01}}, nil
 				},
 			},
@@ -673,7 +673,7 @@ func (s *ResourceSuite) TestResourceContentInvariant() {
 					Name:        "Tmpl Both Set",
 					MIMEType:    "text/plain",
 				},
-				Handler: func(_ context.Context, _ string) (*api.ResourceContent, error) {
+				Handler: func(_ api.ResourceHandlerParams) (*api.ResourceContent, error) {
 					return &api.ResourceContent{Text: "x", Blob: []byte{0x01}}, nil
 				},
 			},
@@ -683,7 +683,7 @@ func (s *ResourceSuite) TestResourceContentInvariant() {
 	toolsets.Clear()
 	toolsets.Register(bothEmptyToolset)
 	toolsets.Register(bothSetToolset)
-	s.Cfg.Toolsets = []string{"resource-test-both-empty", "resource-test-both-set"}
+	s.Cfg.Toolsets.SetForTest([]string{"resource-test-both-empty", "resource-test-both-set"})
 	s.InitMcpClient()
 
 	s.Run("static resource with both Text and Blob empty returns error", func() {
@@ -723,11 +723,17 @@ func (m *mockResourceToolset) GetName() string {
 	}
 	return "resource-test"
 }
-func (m *mockResourceToolset) GetDescription() string                            { return "Test toolset for resources" }
-func (m *mockResourceToolset) GetTools(_ api.FilteringProvider) []api.ServerTool { return nil }
-func (m *mockResourceToolset) GetPrompts() []api.ServerPrompt                    { return nil }
-func (m *mockResourceToolset) GetResources() []api.ServerResource                { return m.resources }
-func (m *mockResourceToolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (m *mockResourceToolset) GetDescription() string { return "Test toolset for resources" }
+func (m *mockResourceToolset) GetTools(context.Context, api.ToolsetContext) []api.ServerTool {
+	return nil
+}
+func (m *mockResourceToolset) GetPrompts(context.Context, api.ToolsetContext) []api.ServerPrompt {
+	return nil
+}
+func (m *mockResourceToolset) GetResources(context.Context, api.ToolsetContext) []api.ServerResource {
+	return m.resources
+}
+func (m *mockResourceToolset) GetResourceTemplates(context.Context, api.ToolsetContext) []api.ServerResourceTemplate {
 	return m.resourceTemplates
 }
 

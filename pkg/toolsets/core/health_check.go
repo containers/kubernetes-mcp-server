@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
@@ -22,11 +23,11 @@ const podHighRestartThreshold = 5
 func initHealthChecks() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "cluster-health-check",
 				Title:       "Cluster Health Check",
 				Description: "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Optional namespace to limit health check scope (default: all namespaces)",

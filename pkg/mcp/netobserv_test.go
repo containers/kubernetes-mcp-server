@@ -25,19 +25,19 @@ func (s *NetObservSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Config().BearerToken = "token-xyz"
 	s.toolsetName = (&netobservToolset.Toolset{}).GetName()
-	kubeConfig := s.Cfg.KubeConfig
-	listOutput := s.Cfg.ListOutput
-	readOnly := s.Cfg.ReadOnly
-	cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+	kubeConfig := s.Cfg.KubeConfig.Get()
+	listOutput := s.Cfg.ListOutput.Get()
+	readOnly := s.Cfg.ReadOnly.Get()
+	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.toolsetName, s.mockServer.Config().Host)))
 	s.Require().NoError(err)
 	s.Cfg = cfg
-	s.Cfg.KubeConfig = kubeConfig
-	s.Cfg.ListOutput = listOutput
-	s.Cfg.ReadOnly = readOnly
+	s.Cfg.KubeConfig.SetForTest(kubeConfig)
+	s.Cfg.ListOutput.SetForTest(listOutput)
+	s.Cfg.ReadOnly.SetForTest(readOnly)
 }
 
 func (s *NetObservSuite) TearDownTest() {

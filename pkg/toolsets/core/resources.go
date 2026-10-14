@@ -11,26 +11,23 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initResources(p api.FilteringProvider) []api.ServerTool {
+func initResources(ctx context.Context, inspector api.ClusterInspector, targetCompatibilityFiltersEnabled bool) []api.ServerTool {
 	// commonApiVersion lists example apiVersion/kind pairs that are appended to the
 	// resources_* tool descriptions as hints for the model. It is extended with
 	// target-specific kinds (e.g. OpenShift Route) when a target cluster exposes them,
 	// so the examples the model sees match the cluster it is talking to.
 	commonApiVersion := "v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress"
-	// Only check GVKs when target compatibility filtering is enabled
-	if p.IsTargetCompatibilityToolFiltersEnabled() {
-		if p.AnyTargetHasGVKs(context.TODO(), []schema.GroupVersionKind{
-			{Group: "route.openshift.io", Version: "v1", Kind: "Route"},
-		}) {
+	if !targetCompatibilityFiltersEnabled {
+		commonApiVersion += ", route.openshift.io/v1 Route"
+	} else {
+		if api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "route.openshift.io", Version: "v1", Kind: "Route"}) {
 			commonApiVersion += ", route.openshift.io/v1 Route"
 		}
-	} else {
-		// When filtering disabled, optimistically include OpenShift resources in description
-		commonApiVersion += ", route.openshift.io/v1 Route"
 	}
 	commonApiVersion = fmt.Sprintf("(common apiVersion and kind include: %s)", commonApiVersion)
 	return []api.ServerTool{
@@ -281,7 +278,11 @@ func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 	if err != nil && len(resources) == 0 {
 		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
 	}
-	resources = filterDeniedAPIResources(resources, params.GetDeniedResources())
+	var deniedResources []config.GroupVersionKind
+	if params.Config != nil {
+		deniedResources = params.Config.DeniedResources.Get()
+	}
+	resources = filterDeniedAPIResources(resources, deniedResources)
 
 	result := apiResourcesListResult{Resources: resources}
 	if err != nil {
@@ -293,7 +294,7 @@ func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 	return api.NewToolCallResultStructured(result, nil), nil
 }
 
-func filterDeniedAPIResources(resources []kubernetes.APIResourceInfo, denied []api.GroupVersionKind) []kubernetes.APIResourceInfo {
+func filterDeniedAPIResources(resources []kubernetes.APIResourceInfo, denied []config.GroupVersionKind) []kubernetes.APIResourceInfo {
 	if len(denied) == 0 {
 		return resources
 	}
@@ -308,7 +309,7 @@ func filterDeniedAPIResources(resources []kubernetes.APIResourceInfo, denied []a
 	return filtered
 }
 
-func isDeniedAPIResource(resource kubernetes.APIResourceInfo, denied []api.GroupVersionKind) bool {
+func isDeniedAPIResource(resource kubernetes.APIResourceInfo, denied []config.GroupVersionKind) bool {
 	for _, deniedResource := range denied {
 		groupVersion := deniedResource.Version
 		if deniedResource.Group != "" {

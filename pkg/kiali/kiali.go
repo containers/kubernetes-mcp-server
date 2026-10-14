@@ -13,7 +13,6 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
@@ -30,21 +29,27 @@ type Kiali struct {
 }
 
 // NewKiali creates a new Kiali instance
-func NewKiali(configProvider api.BaseConfig, kubernetes *rest.Config) *Kiali {
-	kiali := &Kiali{
-		bearerToken:     kubernetes.BearerToken,
-		tlsMinVersion:   configProvider.GetTLSMinVersionConfig(),
-		tlsCipherSuites: configProvider.GetTLSCipherSuitesConfig(),
-		requireTLS:      configProvider.IsRequireTLS,
+func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is required")
 	}
-	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
-		if kc, ok := cfg.(*Config); ok && kc != nil {
+	if kubernetes == nil {
+		return nil, fmt.Errorf("kubernetes rest config is required")
+	}
+	kiali := &Kiali{
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
+		tlsMinVersion:   cfg.TLSMinVersion.Get(),
+		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
+		bearerToken:     kubernetes.BearerToken,
+	}
+	if tc, ok := cfg.GetToolsetConfig("kiali"); ok {
+		if kc, ok := tc.(*Config); ok && kc != nil {
 			kiali.kialiURL = kc.Url
 			kiali.kialiInsecure = kc.Insecure
 			kiali.certificateAuthority = kc.CertificateAuthority
 		}
 	}
-	return kiali
+	return kiali, nil
 }
 
 // validateAndGetURL validates the Kiali client configuration and returns the full URL

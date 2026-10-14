@@ -241,6 +241,7 @@ func NewMcpClient(t *testing.T, mcpHttpServer http.Handler, options ...McpClient
 				Params: req.Params,
 			})
 		},
+		// nolint:staticcheck // Keeping Logging handler while supporting both old and new MCP spec versions
 		LoggingMessageHandler: func(_ context.Context, req *mcp.LoggingMessageRequest) {
 			ret.notifications.capture(&CapturedNotification{
 				Method: "notifications/message",

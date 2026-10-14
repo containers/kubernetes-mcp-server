@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
 )
@@ -25,7 +25,7 @@ type McpHeadersSuite struct {
 func (s *McpHeadersSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 	s.pathHeaders = make(map[string]http.Header)
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		s.pathHeadersMux.Lock()
@@ -116,9 +116,9 @@ func (s *ServerInstructionsSuite) TestServerInstructionsEmpty() {
 }
 
 func (s *ServerInstructionsSuite) TestServerInstructionsFromConfiguration() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		server_instructions = "Always use YAML output format for kubectl commands."
-	`), s.Cfg), "Expected to parse server instructions config")
+	`)
 	s.InitMcpClient()
 	s.Run("returns configured instructions", func() {
 		s.Require().NotNil(s.InitializeResult)
@@ -141,7 +141,7 @@ type UserAgentPropagationSuite struct {
 func (s *UserAgentPropagationSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 	s.pathHeaders = make(map[string]http.Header)
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		s.pathHeadersMux.Lock()
@@ -209,7 +209,7 @@ func (s *UserAgentPropagationSuite) TestFallsBackToMCPClientInfoForUserAgent() {
 	// simulating a transport without HTTP User-Agent (like stdio).
 	provider, err := internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err)
-	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{Config: s.Cfg}, provider)
 	s.Require().NoError(err)
 	handler := s.mcpServer.ServeHTTP()
 	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +239,7 @@ func (s *UserAgentPropagationSuite) TestFallsBackToServerPrefixWhenNoClientInfo(
 	// and initialize with empty client info.
 	provider, err := internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err)
-	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{Config: s.Cfg}, provider)
 	s.Require().NoError(err)
 	handler := s.mcpServer.ServeHTTP()
 	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -275,7 +275,7 @@ func (s *UserAgentPropagationSuite) TestDoesNotPanicWhenClientInfoIsNil() {
 	// non-compliant clients gracefully by sending a raw initialize request without clientInfo.
 	provider, err := internalk8s.NewProvider(s.T().Context(), s.Cfg)
 	s.Require().NoError(err)
-	s.mcpServer, err = NewServer(s.T().Context(), Configuration{StaticConfig: s.Cfg}, provider)
+	s.mcpServer, err = NewServer(s.T().Context(), Configuration{Config: s.Cfg}, provider)
 	s.Require().NoError(err)
 	handler := s.mcpServer.ServeHTTP()
 	strippedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

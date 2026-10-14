@@ -36,7 +36,7 @@ minikube-create-cluster: minikube ## Create Minikube cluster for development
 	fi
 	@echo "Exporting kubeconfig to _output/kubeconfig..."
 	@mkdir -p _output
-	@$(MINIKUBE) kubectl --profile $(MINIKUBE_PROFILE) -- config view --flatten > _output/kubeconfig
+	@$(MINIKUBE) kubectl --profile $(MINIKUBE_PROFILE) -- config view --flatten --minify --context $(MINIKUBE_PROFILE) > _output/kubeconfig
 	@echo "Kubeconfig exported to _output/kubeconfig"
 
 .PHONY: minikube-delete-cluster

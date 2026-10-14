@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -11,7 +12,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitListOrGetResources() []api.ServerTool {
+func InitListOrGetResources(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_resource_details"
 	ret = append(ret, api.ServerTool{
@@ -51,14 +52,17 @@ func InitListOrGetResources() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listOrGetResourcesHandler,
+		}, RBAC: ResourcesRBAC(ctx, inspector), Handler: listOrGetResourcesHandler,
 	})
 
 	return ret
 }
 
 func listOrGetResourcesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	arguments := params.GetArguments()
 	content, err := kiali.ExecuteRequest(params.Context, KialiListOrGetResourcesEndpoint, remapMeshCluster(arguments))
 	if err != nil {

@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -28,7 +29,11 @@ func (s *ProviderKubeconfigTestSuite) SetupTest() {
 	s.mockServer = test.NewMockServer()
 	// Default discovery simulates a vanilla (non-OpenShift) cluster.
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
-	provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: s.mockServer.KubeconfigFile(s.T())})
+	provider, err := NewProvider(s.T().Context(), func() *config.Config {
+		c := config.New()
+		c.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
+		return c
+	}())
 	s.Require().NoError(err, "Expected no error creating provider with kubeconfig")
 	s.provider = provider
 }
@@ -48,9 +53,8 @@ func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 	s.mockServer.ResetHandlers()
 	s.mockServer.Handle(test.NewInOpenShiftHandler())
 	s.Run("has OpenShift Project GVK", func() {
-		hasProjects := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
-			{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-		})
+		hasProjects, err := hasDiscoveredProject(s.T().Context(), NewClusterInspector(s.provider))
+		s.Require().NoError(err)
 		s.True(hasProjects, "Expected provider to report OpenShift Project GVK available")
 	})
 }
@@ -58,18 +62,12 @@ func (s *ProviderKubeconfigTestSuite) TestWithOpenShiftCluster() {
 func (s *ProviderKubeconfigTestSuite) TestWithNonOpenShiftGVK() {
 	s.Run("does not have non-existent GVK", func() {
 		// Default (non-OpenShift) discovery returns a 404 for the missing GroupVersion.
-		hasGVK := s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
-			{Group: "nonexistent.example.com", Version: "v1", Kind: "Foo"},
-		})
-		s.False(hasGVK, "Expected provider to report no nonexistent GVK")
+		_, err := NewClusterInspector(s.provider).Discovery().ServerResourcesForGroupVersion(s.T().Context(), "nonexistent.example.com/v1").Default()
+		s.True(api.IsNotFound(err), "Expected provider to report no nonexistent group/version: %v", err)
 	})
 }
 
-func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
-	projectGVK := []schema.GroupVersionKind{
-		{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-	}
-
+func (s *ProviderKubeconfigTestSuite) TestAggregateGVKInspectionAcrossContexts() {
 	s.Run("returns true when one of several targets has the GVK", func() {
 		openshift := test.NewMockServer()
 		s.T().Cleanup(openshift.Close)
@@ -79,16 +77,21 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.T().Cleanup(vanilla.Close)
 		vanilla.Handle(test.NewDiscoveryClientHandler())
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
 				"openshift": openshift,
 				"vanilla":   vanilla,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
-		s.True(provider.AnyTargetHasGVKs(s.T().Context(), projectGVK), "Expected Project GVK when at least one target is OpenShift")
+		hasGVK, err := hasDiscoveredProject(s.T().Context(), NewClusterInspector(provider))
+		s.Require().NoError(err)
+		s.True(hasGVK, "Expected Project GVK when at least one target is OpenShift")
 	})
 
 	s.Run("returns false when no target has the GVK", func() {
@@ -100,19 +103,24 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.T().Cleanup(b.Close)
 		b.Handle(test.NewDiscoveryClientHandler())
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
 				"a": a,
 				"b": b,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
-		s.False(provider.AnyTargetHasGVKs(s.T().Context(), projectGVK), "Expected no Project GVK when no target is OpenShift")
+		hasGVK, err := hasDiscoveredProject(s.T().Context(), NewClusterInspector(provider))
+		s.True(api.IsNotFound(err), "Expected no Project group/version: %v", err)
+		s.False(hasGVK, "Expected no Project GVK when no target is OpenShift")
 	})
 
-	s.Run("returns true when the parent context is canceled", func() {
+	s.Run("does not fail open when the parent context is canceled", func() {
 		a := test.NewMockServer()
 		s.T().Cleanup(a.Close)
 		a.Handle(test.NewDiscoveryClientHandler())
@@ -121,19 +129,24 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 		s.T().Cleanup(b.Close)
 		b.Handle(test.NewDiscoveryClientHandler())
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "a", map[string]*test.MockServer{
 				"a": a,
 				"b": b,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
 		ctx, cancel := context.WithCancel(s.T().Context())
 		cancel()
 
-		s.True(provider.AnyTargetHasGVKs(ctx, projectGVK), "Expected fail-open when parent context is canceled")
+		hasGVK, err := hasDiscoveredProject(ctx, NewClusterInspector(provider))
+		s.False(hasGVK)
+		s.Error(err)
 	})
 
 	s.Run("returns true without waiting for a hanging target", func() {
@@ -150,19 +163,34 @@ func (s *ProviderKubeconfigTestSuite) TestAnyTargetHasGVKsAcrossContexts() {
 			<-hang
 		}))
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{
-			KubeConfig: kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(kubeconfigForMockServers(s.T(), "openshift", map[string]*test.MockServer{
 				"openshift": openshift,
 				"hanging":   hanging,
-			}),
-		})
+			}))
+			return c
+		}(),
+		)
 		s.Require().NoError(err, "Expected no error creating multi-context provider")
 		s.T().Cleanup(provider.Close)
 
 		start := time.Now()
-		has := provider.AnyTargetHasGVKs(s.T().Context(), projectGVK)
+		has, err := hasDiscoveredProject(s.T().Context(), NewClusterInspector(provider))
+		s.Require().NoError(err)
 		s.True(has, "Expected Project GVK from the OpenShift target")
 		s.Less(time.Since(start), 2*time.Second, "Expected to return before the hanging target's discovery timeout")
+	})
+}
+
+func hasDiscoveredProject(ctx context.Context, inspector api.ClusterInspector) (bool, error) {
+	return inspector.Discovery().ServerResourcesForGroupVersion(ctx, "project.openshift.io/v1").Any(func(list *metav1.APIResourceList) bool {
+		for _, resource := range list.APIResources {
+			if resource.Kind == "Project" {
+				return true
+			}
+		}
+		return false
 	})
 }
 
@@ -221,7 +249,11 @@ func (s *ProviderKubeconfigTestSuite) TestEmptyCurrentContext() {
 	s.Run("with single context auto-selects it as default target", func() {
 		kubeconfig := test.KubeConfigFake()
 		kubeconfig.CurrentContext = ""
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+			return c
+		}())
 		s.Require().NoError(err, "Expected no error creating provider with empty current-context and single context")
 		s.Equal("fake-context", provider.GetDefaultTarget(), "Expected auto-selected fake-context as default target")
 	})
@@ -229,7 +261,11 @@ func (s *ProviderKubeconfigTestSuite) TestEmptyCurrentContext() {
 		kubeconfig := test.KubeConfigFake()
 		kubeconfig.CurrentContext = ""
 		kubeconfig.Contexts["another-context"] = clientcmdapi.NewContext()
-		_, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		_, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+			return c
+		}())
 		s.Require().Error(err, "Expected error creating provider with empty current-context and multiple contexts")
 		s.ErrorContains(err, "current-context is not set")
 		s.ErrorContains(err, "kubectl config use-context")
@@ -251,9 +287,7 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentReads() {
 			func() { _ = s.provider.GetDefaultTarget() },
 			func() { _ = s.provider.IsMultiTarget() },
 			func() {
-				_ = s.provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
-					{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-				})
+				_, _ = hasDiscoveredProject(s.T().Context(), NewClusterInspector(s.provider))
 			},
 			func() { _, _ = s.provider.GetDerivedKubernetes(context.Background(), "fake-context") },
 			func() { _ = s.provider.GetTargetParameterName() },
@@ -287,7 +321,11 @@ func (s *ProviderKubeconfigTestSuite) TestConcurrentLazyManagerInit() {
 			kubeconfig.Contexts[fmt.Sprintf("lazy-context-%d", i)] = ctx
 		}
 
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)})
+		provider, err := NewProvider(s.T().Context(), func() *config.Config {
+			c := config.New()
+			c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+			return c
+		}())
 		s.Require().NoError(err, "Expected no error creating provider")
 
 		const goroutines = 20
@@ -323,12 +361,15 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 		}
 
 		kubeconfigPath := test.KubeconfigFile(s.T(), kubeconfig)
-		provider, err := NewProvider(s.T().Context(), &config.StaticConfig{KubeConfig: kubeconfigPath})
+		cfg, err := config.ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		cfg.KubeConfig.SetForTest(kubeconfigPath)
+		provider, err := NewProvider(s.T().Context(), cfg)
 		s.Require().NoError(err, "Expected no error creating provider")
 		s.T().Cleanup(provider.Close)
 
 		callback, waitForCallback := CallbackWaiter()
-		provider.WatchTargets(s.T().Context(), callback)
+		provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
 
 		const readers = 10
 		stop := make(chan struct{})
@@ -346,9 +387,7 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 						_, _ = provider.GetTargets(context.Background())
 						_ = provider.GetDefaultTarget()
 						_ = provider.IsMultiTarget()
-						_ = provider.AnyTargetHasGVKs(s.T().Context(), []schema.GroupVersionKind{
-							{Group: "project.openshift.io", Version: "v1", Kind: "Project"},
-						})
+						_, _ = hasDiscoveredProject(s.T().Context(), NewClusterInspector(provider))
 						_, _ = provider.GetDerivedKubernetes(context.Background(), "fake-context")
 					}
 				}
@@ -363,6 +402,20 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 
 		close(stop)
 		readerWg.Wait()
+	})
+}
+
+func (s *ProviderKubeconfigTestSuite) TestReloadConfigDoesNotRebuild() {
+	bad := config.New()
+	bad.KubeConfig.SetForTest("/no/such/kubeconfig")
+	s.Run("reload publishes config without rebuilding managers", func() {
+		err := s.provider.ReloadConfig(s.T().Context(), bad)
+		s.NoError(err)
+	})
+	s.Run("previous managers still serve after reload", func() {
+		k8s, err := s.provider.GetDerivedKubernetes(s.T().Context(), s.provider.GetDefaultTarget())
+		s.NoError(err)
+		s.NotNil(k8s)
 	})
 }
 

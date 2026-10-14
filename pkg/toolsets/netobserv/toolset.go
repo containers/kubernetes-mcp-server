@@ -1,6 +1,7 @@
 package netobserv
 
 import (
+	"context"
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -21,7 +22,7 @@ func (t *Toolset) GetDescription() string {
 	return defaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(_ context.Context, _ api.ToolsetContext) []api.ServerTool {
 	return slices.Concat(
 		netobservTools.InitListFlows(),
 		netobservTools.InitGetFlowMetrics(),
@@ -29,15 +30,15 @@ func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
 	)
 }
 
-func (t *Toolset) GetPrompts() []api.ServerPrompt {
+func (t *Toolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
 	return nil
 }
 
-func (t *Toolset) GetResources() []api.ServerResource {
+func (t *Toolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
-func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
 

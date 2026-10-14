@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
-func initNodes(p api.FilteringProvider) []api.ServerTool {
+func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "nodes_log",
@@ -134,7 +135,7 @@ func initNodes(p api.FilteringProvider) []api.ServerTool {
 			},
 		), Handler: nodesTop,
 			TargetCompatibilityFilters: []func() bool{
-				kubernetes.HasNodeMetrics(p),
+				kubernetes.HasNodeMetrics(ctx, inspector),
 			},
 		},
 	}

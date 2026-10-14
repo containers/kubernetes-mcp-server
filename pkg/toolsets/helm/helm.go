@@ -44,7 +44,7 @@ func initHelm() []api.ServerTool {
 				IdempotentHint:  nil, // TODO: consider replacing implementation with equivalent to: helm upgrade --install
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: helmInstall},
+		}, RBAC: api.RBACUnbounded("Permissions depend on resources contained in the referenced Helm chart"), Handler: helmInstall},
 		{Tool: api.Tool{
 			Name:        "helm_list",
 			Description: "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
@@ -67,7 +67,18 @@ func initHelm() []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: helmList},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:     []string{"list"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "secrets"}},
+				Namespace: &api.RBACNamespace{AllNamespaces: true},
+			},
+			api.RBACRequirement{
+				Verbs:     []string{"list"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "configmaps"}},
+				Namespace: &api.RBACNamespace{AllNamespaces: true},
+			},
+		), Handler: helmList},
 		{Tool: api.Tool{
 			Name:        "helm_uninstall",
 			Description: "Uninstall a Helm release in the current or provided namespace",
@@ -91,18 +102,21 @@ func initHelm() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: helmUninstall},
+		}, RBAC: api.RBACUnbounded("Permissions depend on resources contained in the installed Helm release"), Handler: helmUninstall},
 	}
 }
 
-func newHelmClient(params api.ToolHandlerParams) *helm.Helm {
+func newHelmClient(params api.ToolHandlerParams) (*helm.Helm, error) {
+	if params.Config == nil {
+		return nil, fmt.Errorf("config is required")
+	}
 	var cfg *helm.Config
-	if c, ok := params.GetToolsetConfig("helm"); ok {
+	if c, ok := params.Config.GetToolsetConfig("helm"); ok {
 		if hc, ok := c.(*helm.Config); ok {
 			cfg = hc
 		}
 	}
-	return helm.NewHelm(params, cfg)
+	return helm.NewHelm(params, cfg), nil
 }
 
 func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -123,7 +137,11 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := newHelmClient(params).Install(params, chart, values, name, namespace)
+	client, err := newHelmClient(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+	ret, err := client.Install(params, chart, values, name, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to install helm chart '%s': %w", chart, err)), nil
 	}
@@ -137,7 +155,11 @@ func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases: %w", err)), nil
 	}
-	ret, err := newHelmClient(params).List(params.Context, namespace, allNamespaces)
+	client, err := newHelmClient(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+	ret, err := client.List(params.Context, namespace, allNamespaces)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases in namespace '%s': %w", namespace, err)), nil
 	}
@@ -154,7 +176,11 @@ func helmUninstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["namespace"].(string); ok {
 		namespace = v
 	}
-	ret, err := newHelmClient(params).Uninstall(params.Context, name, namespace)
+	client, err := newHelmClient(params)
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
+	ret, err := client.Uninstall(params.Context, name, namespace)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to uninstall helm chart '%s': %w", name, err)), nil
 	}

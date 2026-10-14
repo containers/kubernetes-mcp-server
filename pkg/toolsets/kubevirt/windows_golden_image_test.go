@@ -49,7 +49,7 @@ func (s *WindowsGoldenImageSuite) TestRequiredArgument() {
 
 	s.Run("missing winImageDownloadURL returns error", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{},
 			},
 			Elicitor: acceptElicitor(),
@@ -67,7 +67,7 @@ func (s *WindowsGoldenImageSuite) TestURLSchemeValidation() {
 
 	s.Run("rejects http URL", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{"winImageDownloadURL": "http://example.com/win.iso"},
 			},
 			Elicitor: acceptElicitor(),
@@ -80,7 +80,7 @@ func (s *WindowsGoldenImageSuite) TestURLSchemeValidation() {
 
 	s.Run("rejects URL with no scheme", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{"winImageDownloadURL": "example.com/win.iso"},
 			},
 			Elicitor: acceptElicitor(),
@@ -92,7 +92,7 @@ func (s *WindowsGoldenImageSuite) TestURLSchemeValidation() {
 
 	s.Run("rejects URL with embedded credentials", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{"winImageDownloadURL": "https://user:pass@example.com/win.iso"},
 			},
 			Elicitor: acceptElicitor(),
@@ -105,7 +105,7 @@ func (s *WindowsGoldenImageSuite) TestURLSchemeValidation() {
 
 	s.Run("accepts https URL", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{"winImageDownloadURL": "https://example.com/win.iso"},
 			},
 			Elicitor: acceptElicitor(),
@@ -120,7 +120,7 @@ func (s *WindowsGoldenImageSuite) TestUnsupportedVersion() {
 	handler := initWindowsGoldenImage()[0].Handler
 
 	params := api.PromptHandlerParams{
-		PromptCallRequest: &mockPromptCallRequest{
+		Request: &mockPromptCallRequest{
 			args: map[string]string{
 				"winImageDownloadURL": "https://example.com/win.iso",
 				"windowsVersion":      "xp",
@@ -154,7 +154,7 @@ func (s *WindowsGoldenImageSuite) TestVersionDefaultsInOutput() {
 	for _, tc := range tests {
 		s.Run("version_"+tc.version, func() {
 			params := api.PromptHandlerParams{
-				PromptCallRequest: &mockPromptCallRequest{
+				Request: &mockPromptCallRequest{
 					args: map[string]string{
 						"winImageDownloadURL": "https://example.com/win.iso",
 						"windowsVersion":      tc.version,
@@ -177,7 +177,7 @@ func (s *WindowsGoldenImageSuite) TestDefaultVersion() {
 	handler := initWindowsGoldenImage()[0].Handler
 
 	params := api.PromptHandlerParams{
-		PromptCallRequest: &mockPromptCallRequest{
+		Request: &mockPromptCallRequest{
 			args: map[string]string{
 				"winImageDownloadURL": "https://example.com/win.iso",
 				"namespace":           "test-ns",
@@ -207,7 +207,7 @@ func (s *WindowsGoldenImageSuite) TestVersionParameter() {
 
 	s.Run("specific version appears in output YAML", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{
+			Request: &mockPromptCallRequest{
 				args: map[string]string{
 					"winImageDownloadURL": "https://example.com/win.iso",
 					"pipelineVersion":     "0.25.0",
@@ -226,7 +226,7 @@ func (s *WindowsGoldenImageSuite) TestVersionParameter() {
 		for _, badVersion := range []string{"latest", "0.25", "../../bad"} {
 			s.Run(badVersion, func() {
 				params := api.PromptHandlerParams{
-					PromptCallRequest: &mockPromptCallRequest{
+					Request: &mockPromptCallRequest{
 						args: map[string]string{
 							"winImageDownloadURL": "https://example.com/win.iso",
 							"pipelineVersion":     badVersion,
@@ -253,8 +253,8 @@ func (s *WindowsGoldenImageSuite) TestEULAElicitation() {
 
 	s.Run("accepted EULA returns PipelineRun with acceptEula true", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{args: baseArgs},
-			Elicitor:          acceptElicitor(),
+			Request:  &mockPromptCallRequest{args: baseArgs},
+			Elicitor: acceptElicitor(),
 		}
 		result, err := handler(params)
 		s.Require().NoError(err)
@@ -270,8 +270,8 @@ func (s *WindowsGoldenImageSuite) TestEULAElicitation() {
 
 	s.Run("declined EULA returns cancellation message", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{args: baseArgs},
-			Elicitor:          declineElicitor(),
+			Request:  &mockPromptCallRequest{args: baseArgs},
+			Elicitor: declineElicitor(),
 		}
 		result, err := handler(params)
 		s.Require().NoError(err)
@@ -283,8 +283,8 @@ func (s *WindowsGoldenImageSuite) TestEULAElicitation() {
 
 	s.Run("falls back to prose guide when elicitation not supported", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{args: baseArgs},
-			Elicitor:          noopElicitor(),
+			Request:  &mockPromptCallRequest{args: baseArgs},
+			Elicitor: noopElicitor(),
 		}
 		result, err := handler(params)
 		s.Require().NoError(err)
@@ -302,7 +302,7 @@ func (s *WindowsGoldenImageSuite) TestEULAElicitation() {
 
 	s.Run("falls back to prose guide when elicitor is nil", func() {
 		params := api.PromptHandlerParams{
-			PromptCallRequest: &mockPromptCallRequest{args: baseArgs},
+			Request: &mockPromptCallRequest{args: baseArgs},
 		}
 		result, err := handler(params)
 		s.Require().NoError(err)

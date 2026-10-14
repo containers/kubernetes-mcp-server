@@ -8,3 +8,7 @@ metadata:
 data:
   config.toml: |
     {{- regexReplaceAll "(?m)(= -?\\d+)\\.0$" (tpl (toToml .Values.config) .) "${1}" | nindent 4 }}
+    {{- if .Values.tls.enabled }}
+    tls_cert = "{{ .Values.tls.mountPath }}/{{ .Values.tls.certFile }}"
+    tls_key = "{{ .Values.tls.mountPath }}/{{ .Values.tls.keyFile }}"
+    {{- end }}
