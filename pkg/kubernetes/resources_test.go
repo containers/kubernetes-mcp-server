@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -22,13 +23,17 @@ import (
 
 type ResourcesTestSuite struct {
 	suite.Suite
-	mockServer *test.MockServer
-	core       *Core
-	paths      []string
+	mockServer       *test.MockServer
+	core             *Core
+	paths            []string
+	appliedNamespace string
+	applyBodyErr     error
 }
 
 func (s *ResourcesTestSuite) SetupTest() {
 	s.paths = nil
+	s.appliedNamespace = ""
+	s.applyBodyErr = nil
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Handle(test.NewDiscoveryClientHandler(metav1.APIResourceList{
 		GroupVersion: "apiextensions.k8s.io/v1",
@@ -64,6 +69,9 @@ func (s *ResourcesTestSuite) SetupTest() {
 				}}},
 			})
 		case "/api/v1/namespaces/test-namespace/pods/test-pod":
+			if r.Method == http.MethodPatch {
+				s.captureAppliedObject(r)
+			}
 			test.WriteObject(w, &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "Pod",
@@ -73,6 +81,9 @@ func (s *ResourcesTestSuite) SetupTest() {
 				},
 			}})
 		case "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/test.example.com":
+			if r.Method == http.MethodPatch {
+				s.captureAppliedObject(r)
+			}
 			test.WriteObject(w, &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "apiextensions.k8s.io/v1",
 				"kind":       "CustomResourceDefinition",
@@ -87,7 +98,7 @@ func (s *ResourcesTestSuite) SetupTest() {
 
 	k, err := NewKubernetes(
 		s.T().Context(),
-		config.New(),
+		config.BaseDefault(),
 		clientcmd.NewDefaultClientConfig(*s.mockServer.Kubeconfig(), &clientcmd.ConfigOverrides{}),
 		s.mockServer.Config(),
 	)
@@ -174,7 +185,32 @@ spec:
 `)
 
 	s.Require().NoError(err)
+	s.Require().NoError(s.applyBodyErr)
+	s.Empty(s.appliedNamespace)
 	s.assertLastPath("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/test.example.com")
+}
+
+func (s *ResourcesTestSuite) TestResourcesCreateOrUpdateNamespacedResourceUsesNamespace() {
+	_, err := s.core.ResourcesCreateOrUpdate(s.T().Context(), `apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+  namespace: test-namespace
+`)
+
+	s.Require().NoError(err)
+	s.Require().NoError(s.applyBodyErr)
+	s.Equal("test-namespace", s.appliedNamespace)
+	s.assertLastPath("/api/v1/namespaces/test-namespace/pods/test-pod")
+}
+
+func (s *ResourcesTestSuite) captureAppliedObject(r *http.Request) {
+	var obj unstructured.Unstructured
+	if err := json.NewDecoder(r.Body).Decode(&obj); err != nil {
+		s.applyBodyErr = err
+		return
+	}
+	s.appliedNamespace = obj.GetNamespace()
 }
 
 func (s *ResourcesTestSuite) TestScopeDiscoveryErrorIsReturned() {
