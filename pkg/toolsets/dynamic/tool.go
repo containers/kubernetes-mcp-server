@@ -491,14 +491,21 @@ func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscover
 			requirements = append(requirements, requirement)
 		}
 	}
+	var reason string
+	if len(urls) > 0 {
+		reason = "performs HTTP requests to " + strings.Join(urls, ", ") + " authenticated with the caller's bearer token"
+	}
 	if len(requirements) == 0 {
-		reason := "does not access the Kubernetes API"
-		if len(urls) > 0 {
-			reason = "performs HTTP requests to " + strings.Join(urls, ", ") + " authenticated with the caller's bearer token"
+		if reason == "" {
+			reason = "does not access the Kubernetes API"
 		}
 		return &api.RBACMetadata{Version: api.RBACVersionV1Alpha1, None: &api.NoRBAC{Reason: reason}}
 	}
-	return api.RBACBounded(requirements...)
+	// The Kubernetes requirements are complete, but a composed tool that also
+	// calls an external URL must not advertise itself as Kubernetes-only.
+	metadata := api.RBACBounded(requirements...)
+	metadata.Bounded.Reason = reason
+	return metadata
 }
 
 // rbacRequirement returns the requirement of one Kubernetes action, or the

@@ -265,7 +265,8 @@ The declaration is enough to derive the server's `_meta` RBAC advertisement
   **unbounded** when the kind cannot be resolved at registration time or when
   the subresource, namespace or name comes from a CEL expression.
 - `steps`: the **union** of every step's requirements; unbounded if any step
-  is.
+  is. When a step also calls an external `url`, the bounded declaration
+  carries a `reason` naming it.
 - `http` with `service`: **bounded** to `get`/`create` on `services/proxy`
   for that Service.
 - `http` with `url`: **none**, with a reason naming the URL.

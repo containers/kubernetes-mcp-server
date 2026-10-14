@@ -528,6 +528,34 @@ func (s *DynamicSuite) TestToolset() {
 	})
 }
 
+func (s *DynamicSuite) TestRBACOfMixedSteps() {
+	tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "mixed"}, Spec: ToolSpec{
+		Description: "d",
+		Steps: []Step{
+			{Name: "pods", Kubernetes: &KubernetesAction{Verb: "list", APIVersion: "v1", Resource: "pods", Namespace: &NamespaceRef{Value: "istio-system"}}},
+			{Name: "mesh", HTTP: &HTTPAction{URL: "https://kiali.example.com", Path: "/api/mesh"}},
+		},
+	}})
+	s.Require().NoError(err)
+	meta := tool.rbac(s.T().Context(), nil)
+	s.Require().NoError(meta.Validate())
+	s.Require().NotNil(meta.Bounded, "the Kubernetes requirements are fully known")
+	s.Len(meta.Bounded.Requirements, 1)
+	s.Contains(meta.Bounded.Reason, "https://kiali.example.com", "the external call must not be hidden behind the Kubernetes requirements")
+	s.Contains(meta.Bounded.Reason, "bearer token")
+	raw, _ := json.Marshal(meta)
+	s.Contains(string(raw), `"reason":"`)
+
+	s.Run("a purely Kubernetes tool has no reason", func() {
+		tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "k8s"}, Spec: ToolSpec{
+			Description: "d", Kubernetes: &KubernetesAction{Verb: "list", APIVersion: "v1", Resource: "pods"},
+		}})
+		s.Require().NoError(err)
+		raw, _ := json.Marshal(tool.rbac(s.T().Context(), nil))
+		s.NotContains(string(raw), `"reason"`)
+	})
+}
+
 func (s *DynamicSuite) TestHTTPTransport() {
 	s.Run("a url action builds its transport once, with proxy and idle reaping", func() {
 		action, err := compileAction(nil, &HTTPAction{URL: "https://kiali.example.com"})

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/cel-go/cel"
@@ -36,6 +37,21 @@ type evalVars struct {
 	response any
 	steps    map[string]any
 	item     any
+}
+
+var (
+	envOnce      sync.Once
+	sharedEnv    *cel.Env
+	sharedEnvErr error
+)
+
+// env returns the CEL environment shared by every expression. cel.Env is
+// safe for concurrent use and building it (extensions, custom functions) is
+// the expensive part of compiling, so it is done once per process rather
+// than once per expression of every Tool on every re-apply.
+func env() (*cel.Env, error) {
+	envOnce.Do(func() { sharedEnv, sharedEnvErr = newEnv() })
+	return sharedEnv, sharedEnvErr
 }
 
 // newEnv builds the CEL environment shared by every expression:
@@ -147,7 +163,7 @@ func rangeList(n ref.Val) ref.Val {
 }
 
 func compileExpression(source string) (*expression, error) {
-	env, err := newEnv()
+	env, err := env()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL environment: %w", err)
 	}
