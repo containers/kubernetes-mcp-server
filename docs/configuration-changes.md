@@ -126,7 +126,7 @@ behavioral differences:
 | `tekton_pipelinerun_logs`, `tekton_taskrun_logs` | One request per container instead of a stream; empty logs are not skipped; output is one header per container rather than grouped by TaskRun. |
 | `tekton_pipeline_start`, `tekton_task_start` | Do not check that the Pipeline or Task exists before creating the run. |
 | `windows-golden-image` prompt | The Tekton Hub catalog name is the upstream default; downstream overrides must edit the chart. |
-| NetObserv tools | Response size is capped at 8 MiB (previously 4 MiB for JSON and 2 MiB for exports, with a truncation note). |
+| NetObserv tools | Response size is capped at 8 MiB (previously 4 MiB for JSON and 2 MiB for exports, with a truncation note); a larger response is an error rather than a truncated body. |
 | Prompts | Titles declared in Prompt resources are not advertised; the server's prompt listing only forwards descriptions (pre-existing behavior). |
 
 ### Multi-cluster and reload

@@ -45,18 +45,7 @@ func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars
 		base = strings.TrimRight(host, "/") + "/api/v1/namespaces/" + url.PathEscape(a.Service.Namespace) +
 			"/services/" + url.PathEscape(proxyServiceName(a.Service)) + "/proxy"
 	} else {
-		tlsConfig := &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: a.InsecureSkipTLSVerify, //nolint:gosec // opt-in per Tool, mirrors the Kiali/NetObserv toolset configs
-		}
-		if a.CertificateAuthority != "" {
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM([]byte(a.CertificateAuthority)) {
-				return nil, fmt.Errorf("certificateAuthority does not contain a valid PEM certificate")
-			}
-			tlsConfig.RootCAs = pool
-		}
-		client = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+		client = &http.Client{Transport: action.transport}
 		if env.requireTLS != nil {
 			// Layer 2 of require_tls: refuse plain HTTP at request time, as the
 			// in-tree HTTP toolsets did.
@@ -117,15 +106,49 @@ func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
+	raw, readErr := readResponseBody(resp.Body)
 	if resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("%s %s returned HTTP %d: %s", method, u.Redacted(), resp.StatusCode, truncate(string(raw), 512))
 	}
+	if readErr != nil {
+		return nil, readErr
+	}
 	contentType, _, _ := strings.Cut(resp.Header.Get("Content-Type"), ";")
 	return decodeResponseAs(raw, a.Response, strings.TrimSpace(contentType), a.MIMEType, a.Redact), nil
+}
+
+// newHTTPTransport builds the transport of a url-mode action from the
+// system defaults (proxy from the environment, idle connection reaping,
+// handshake timeouts) and the action's TLS settings.
+func newHTTPTransport(a *HTTPAction) (*http.Transport, error) {
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: a.InsecureSkipTLSVerify, //nolint:gosec // opt-in per Tool, mirrors the Kiali/NetObserv toolset configs
+	}
+	if a.CertificateAuthority != "" {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(a.CertificateAuthority)) {
+			return nil, fmt.Errorf("certificateAuthority does not contain a valid PEM certificate")
+		}
+		tlsConfig.RootCAs = pool
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsConfig
+	return transport, nil
+}
+
+// readResponseBody reads at most maxResponseBytes. A larger body is an
+// error (returned together with what was read, for error messages) rather
+// than a silently truncated, no longer parseable document.
+func readResponseBody(r io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(r, maxResponseBytes+1))
+	if err != nil {
+		return raw, fmt.Errorf("failed to read response: %w", err)
+	}
+	if len(raw) > maxResponseBytes {
+		return raw[:maxResponseBytes], fmt.Errorf("response exceeds the maximum size of %d bytes", maxResponseBytes)
+	}
+	return raw, nil
 }
 
 func proxyServiceName(service *ServiceRef) string {

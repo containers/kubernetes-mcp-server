@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -44,8 +45,11 @@ func (b *binaryResult) summary() map[string]any {
 type compiledAction struct {
 	kubernetes *KubernetesAction
 	http       *HTTPAction
-	bodyExpr   *expression
-	queryExpr  *expression
+	// transport is the shared HTTP transport of a url-mode http action,
+	// built once so that calls reuse (and eventually reap) connections.
+	transport *http.Transport
+	bodyExpr  *expression
+	queryExpr *expression
 }
 
 // compiledStep is one step of a composed Tool or Prompt.
@@ -150,6 +154,11 @@ func compileAction(kubernetes *KubernetesAction, http *HTTPAction) (*compiledAct
 		body, query = http.Body, http.QueryExpression
 	}
 	var err error
+	if http != nil && http.Service == nil {
+		if a.transport, err = newHTTPTransport(http); err != nil {
+			return nil, err
+		}
+	}
 	if query != "" {
 		if a.queryExpr, err = compileExpression(query); err != nil {
 			return nil, fmt.Errorf("queryExpression: %w", err)

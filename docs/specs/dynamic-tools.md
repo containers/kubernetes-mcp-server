@@ -347,7 +347,7 @@ Prompt resource.
 - **Watch mechanism**: informer instead of polling; watching toolsets enabled
   by a later configuration reload (today only toolsets enabled at startup are
   watched).
-- **Limits**: response size (8 MiB cap today), timeouts. CEL evaluations
+- **Limits**: response size (8 MiB today, larger responses are rejected), timeouts. CEL evaluations
   are bounded by a per-call cost limit and `range(n)` by `MaxRange`.
 - **Composition** is now in (`steps`), bounded to 16 steps and 64 fan-out
   iterations, sequential, no recursion. The open question is whether that

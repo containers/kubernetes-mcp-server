@@ -53,7 +53,9 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 	logger := klogutil.FromContext(ctx)
 	definitions, err := listResources[Tool](ctx, toolsetContext.Inspector, GVR)
 	if err != nil {
-		logger.V(1).Info("dynamic toolset: unable to list Tool resources, exposing no dynamic tools", "error", err.Error())
+		// The usual cause is a missing ClusterRole on the server's ServiceAccount:
+		// say so at default verbosity, or the operator only sees missing tools.
+		logger.Error(err, "dynamic toolset: unable to list Tool resources, exposing no dynamic tools")
 		return nil
 	}
 	tools := make([]api.ServerTool, 0, len(definitions))
@@ -78,7 +80,7 @@ func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetCont
 	logger := klogutil.FromContext(ctx)
 	definitions, err := listResources[Prompt](ctx, toolsetContext.Inspector, PromptGVR)
 	if err != nil {
-		logger.V(1).Info("dynamic toolset: unable to list Prompt resources, exposing no dynamic prompts", "error", err.Error())
+		logger.Error(err, "dynamic toolset: unable to list Prompt resources, exposing no dynamic prompts")
 		return nil
 	}
 	var discovery api.AggregateDiscovery

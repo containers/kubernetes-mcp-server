@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
@@ -523,6 +526,54 @@ func (s *DynamicSuite) TestToolset() {
 	s.Run("exposes no tools without a cluster inspector", func() {
 		s.Empty(toolset.GetTools(s.T().Context(), api.ToolsetContext{}))
 	})
+}
+
+func (s *DynamicSuite) TestHTTPTransport() {
+	s.Run("a url action builds its transport once, with proxy and idle reaping", func() {
+		action, err := compileAction(nil, &HTTPAction{URL: "https://kiali.example.com"})
+		s.Require().NoError(err)
+		s.Require().NotNil(action.transport, "the transport must be built at compile time and reused by every call")
+		s.NotNil(action.transport.Proxy, "HTTPS_PROXY and friends must be honored")
+		s.Positive(action.transport.IdleConnTimeout, "idle keep-alive connections must be reaped")
+	})
+	s.Run("a bad certificate authority is rejected at compile time", func() {
+		_, err := compileAction(nil, &HTTPAction{URL: "https://kiali.example.com", CertificateAuthority: "not a pem"})
+		s.ErrorContains(err, "certificateAuthority")
+	})
+	s.Run("a service action uses the caller's REST transport instead", func() {
+		action, err := compileAction(nil, &HTTPAction{Service: &ServiceRef{Namespace: "istio-system", Name: "kiali"}})
+		s.Require().NoError(err)
+		s.Nil(action.transport)
+	})
+}
+
+func (s *DynamicSuite) TestReadResponseBody() {
+	s.Run("reads bodies up to the limit", func() {
+		raw, err := readResponseBody(strings.NewReader(strings.Repeat("x", maxResponseBytes)))
+		s.Require().NoError(err)
+		s.Len(raw, maxResponseBytes)
+	})
+	s.Run("rejects larger bodies instead of truncating them", func() {
+		_, err := readResponseBody(strings.NewReader(strings.Repeat("x", maxResponseBytes+1)))
+		s.ErrorContains(err, "exceeds the maximum")
+	})
+}
+
+func (s *DynamicSuite) TestListFailuresAreLoggedAtDefaultVerbosity() {
+	// An operator who forgot the ClusterRole for Tool/Prompt resources must
+	// see why no dynamic tools appear without raising the log verbosity.
+	var lines []string
+	logger := funcr.New(func(prefix, args string) { lines = append(lines, args) }, funcr.Options{Verbosity: 0})
+	ctx := klog.NewContext(s.T().Context(), logger)
+	inspector := &fakeInspector{names: map[string]string{"a": "1"}}
+	inspector.setErr(errors.New(`tools.tools.kubernetes-mcp-server.io is forbidden: User "system:serviceaccount:mcp:server" cannot list resource "tools"`))
+	toolsetContext := api.ToolsetContext{Inspector: inspector}
+	s.Empty((&Toolset{}).GetTools(ctx, toolsetContext))
+	s.Empty((&Toolset{}).GetPrompts(ctx, toolsetContext))
+	s.Require().Len(lines, 2, "one line per failed list: %v", lines)
+	s.Contains(lines[0], "unable to list Tool resources")
+	s.Contains(lines[0], "is forbidden")
+	s.Contains(lines[1], "unable to list Prompt resources")
 }
 
 func (s *DynamicSuite) TestWatchToolsetSkipsFailedPolls() {

@@ -256,13 +256,22 @@ spec:
 func (s *DynamicToolsSuite) TestHTTPTool() {
 	var mu sync.Mutex
 	var requests []string
+	var remoteAddrs []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		requests = append(requests, r.Method+" "+r.URL.RequestURI())
+		remoteAddrs = append(remoteAddrs, r.RemoteAddr)
 		mu.Unlock()
 		if strings.HasSuffix(r.URL.Path, "/fail") {
 			http.Error(w, "kaboom", http.StatusInternalServerError)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/huge") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":["`))
+			_, _ = w.Write([]byte(strings.Repeat("x", 9<<20)))
+			_, _ = w.Write([]byte(`"]}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -303,6 +312,19 @@ spec:
     url: ` + server.URL + `
     path: /fail
 `)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: mesh-huge
+spec:
+  description: Returns more than the server is willing to read
+  readOnly: true
+  http:
+    url: ` + server.URL + `
+    path: /huge
+  output: response.items.size()
+`)
 	s.InitMcpClient()
 	s.Run("declares no Kubernetes RBAC", func() {
 		meta, _ := json.Marshal(s.findTool("mesh_namespace_health").Meta)
@@ -317,6 +339,27 @@ spec:
 		mu.Lock()
 		defer mu.Unlock()
 		s.Equal([]string{"POST /api/mcp/namespace_health/istio-system?rateInterval=10m"}, requests)
+	})
+	s.Run("repeated calls reuse one keep-alive connection", func() {
+		// A transport per call would open a new connection every time and
+		// never reap it; the same remote address proves the transport is shared.
+		for range 3 {
+			result, err := s.CallTool("mesh_namespace_health", map[string]any{"namespace": "istio-system"})
+			s.Require().NoError(err)
+			s.Falsef(result.IsError, "call tool failed: %s", s.text(result))
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		s.Require().GreaterOrEqual(len(remoteAddrs), 4)
+		for _, addr := range remoteAddrs[1:] {
+			s.Equal(remoteAddrs[0], addr, "every call must come over the same connection: %v", remoteAddrs)
+		}
+	})
+	s.Run("oversized responses are an error, not a silently truncated body", func() {
+		result, err := s.CallTool("mesh_huge", nil)
+		s.Require().NoError(err)
+		s.True(result.IsError, "expected an error, got: %.200s", s.text(result))
+		s.Contains(s.text(result), "exceeds the maximum")
 	})
 	s.Run("non-2xx responses are reported as tool errors", func() {
 		result, err := s.CallTool("mesh_fail", map[string]any{})
