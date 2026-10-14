@@ -476,7 +476,7 @@ func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscover
 		switch {
 		case action.http != nil && action.http.Service != nil:
 			requirements = append(requirements, api.RBACRequirement{
-				Verbs:        []string{"get", "create"},
+				Verbs:        []string{proxyVerb(action.http.Method)},
 				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "services", Subresource: "proxy"}},
 				Namespace:    &api.RBACNamespace{Name: action.http.Service.Namespace},
 				ResourceName: &api.RBACResourceName{Name: action.http.Service.Name},
@@ -506,6 +506,24 @@ func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscover
 	metadata := api.RBACBounded(requirements...)
 	metadata.Bounded.Reason = reason
 	return metadata
+}
+
+// proxyVerb is the RBAC verb the API server checks for a services/proxy
+// request: it is derived from the HTTP method of the proxied request.
+func proxyVerb(method string) string {
+	switch strings.ToUpper(method) {
+	case "", http.MethodGet, http.MethodHead:
+		return "get"
+	case http.MethodPost:
+		return "create"
+	case http.MethodPut:
+		return "update"
+	case http.MethodPatch:
+		return "patch"
+	case http.MethodDelete:
+		return "delete"
+	}
+	return strings.ToLower(method)
 }
 
 // rbacRequirement returns the requirement of one Kubernetes action, or the

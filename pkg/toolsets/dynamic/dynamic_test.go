@@ -565,6 +565,20 @@ func (s *DynamicSuite) TestRBACOfMixedSteps() {
 		raw, _ := json.Marshal(tool.rbac(s.T().Context(), nil))
 		s.NotContains(string(raw), `"reason"`)
 	})
+	s.Run("a service action advertises the proxy verb of its HTTP method", func() {
+		// The API server maps the proxied method to the verb it authorizes,
+		// so a DELETE advertised as get/create would be granted the wrong one.
+		for method, verb := range map[string]string{"": "get", "get": "get", "POST": "create", "put": "update", "PATCH": "patch", "DELETE": "delete"} {
+			tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "svc"}, Spec: ToolSpec{
+				Description: "d", HTTP: &HTTPAction{Service: &ServiceRef{Namespace: "istio-system", Name: "kiali"}, Method: method},
+			}})
+			s.Require().NoError(err)
+			meta := tool.rbac(s.T().Context(), nil)
+			s.Require().NotNil(meta.Bounded)
+			s.Equal([]string{verb}, meta.Bounded.Requirements[0].Verbs, "method %q", method)
+			s.Equal("proxy", meta.Bounded.Requirements[0].Target.Resource.Subresource)
+		}
+	})
 }
 
 func (s *DynamicSuite) TestHTTPTransport() {
@@ -610,9 +624,39 @@ func (s *DynamicSuite) TestListFailuresAreLoggedAtDefaultVerbosity() {
 	s.Empty((&Toolset{}).GetTools(ctx, toolsetContext))
 	s.Empty((&Toolset{}).GetPrompts(ctx, toolsetContext))
 	s.Require().Len(lines, 2, "one line per failed list: %v", lines)
-	s.Contains(lines[0], "unable to list Tool resources")
+	s.Contains(lines[0], "unable to list resources, exposing none")
+	s.Contains(lines[0], `"resource"="tools"`)
 	s.Contains(lines[0], "is forbidden")
-	s.Contains(lines[1], "unable to list Prompt resources")
+	s.Contains(lines[1], `"resource"="prompts"`)
+}
+
+func (s *DynamicSuite) TestListFailuresKeepTheLastKnownResources() {
+	// A re-apply triggered by a kubeconfig change or a configuration reload
+	// calls GetTools directly: a transient list failure there must not
+	// deregister every dynamic tool, since the poller would not notice the
+	// loss (its fingerprint is unchanged) and nothing would bring them back.
+	var lines []string
+	logger := funcr.New(func(_, args string) { lines = append(lines, args) }, funcr.Options{Verbosity: 0})
+	ctx := klog.NewContext(s.T().Context(), logger)
+	inspector := &fakeInspector{names: map[string]string{"a": "1"}, prompts: map[string]string{"p": "1"}}
+	toolsetContext := api.ToolsetContext{Inspector: inspector}
+	toolset := &Toolset{}
+	s.Len(toolset.GetTools(ctx, toolsetContext), 1)
+	s.Len(toolset.GetPrompts(ctx, toolsetContext), 1)
+
+	inspector.setErr(errors.New("the server is currently unable to handle the request"))
+	s.Run("a list failure serves the last known tools and prompts", func() {
+		s.Len(toolset.GetTools(ctx, toolsetContext), 1)
+		s.Len(toolset.GetPrompts(ctx, toolsetContext), 1)
+		s.Require().Len(lines, 2, "%v", lines)
+		s.Contains(lines[0], "keeping the last known ones")
+		s.Contains(lines[0], `"count"=1`)
+	})
+	s.Run("the next successful list replaces them", func() {
+		inspector.setErr(nil)
+		inspector.set(map[string]string{"a": "1", "b": "1"})
+		s.Len(toolset.GetTools(ctx, toolsetContext), 2)
+	})
 }
 
 func (s *DynamicSuite) TestWatchToolsetSkipsFailedPolls() {
@@ -632,8 +676,12 @@ func (s *DynamicSuite) TestWatchToolsetSkipsFailedPolls() {
 	})
 
 	var changes atomic.Int32
+	var applyFails atomic.Bool
 	stop := (&Toolset{}).WatchToolset(s.T().Context(), api.ToolsetContext{Inspector: inspector}, func() error {
 		changes.Add(1)
+		if applyFails.Load() {
+			return errors.New("convert failed")
+		}
 		return nil
 	})
 	defer stop()
@@ -649,6 +697,17 @@ func (s *DynamicSuite) TestWatchToolsetSkipsFailedPolls() {
 		inspector.set(map[string]string{"a": "1", "b": "1"})
 		s.Eventually(func() bool { return changes.Load() == 1 }, 2*time.Second, 10*time.Millisecond)
 		s.Never(func() bool { return changes.Load() > 1 }, 100*time.Millisecond, 10*time.Millisecond)
+	})
+	s.Run("a failed re-apply is retried on the next poll, not forgotten", func() {
+		applyFails.Store(true)
+		inspector.set(map[string]string{"a": "2", "b": "1"})
+		s.Eventually(func() bool { return changes.Load() >= 3 }, 2*time.Second, 10*time.Millisecond, "the change must be retried while the re-apply fails")
+		applyFails.Store(false)
+		s.Eventually(func() bool {
+			before := changes.Load()
+			time.Sleep(50 * time.Millisecond)
+			return changes.Load() == before
+		}, 2*time.Second, 10*time.Millisecond, "once the re-apply succeeds the change is consumed")
 	})
 }
 
@@ -754,13 +813,49 @@ func (s *DynamicSuite) TestResourcesShadowingBuiltInsAreSkipped() {
 	s.Contains(lines[1], "built-in-test")
 }
 
+func (s *DynamicSuite) TestResourcesWithDuplicateNamesAreSkipped() {
+	// foo-bar and foo.bar both become foo_bar; the server refuses a duplicate
+	// name, which would take every toolset down, so only the first is kept.
+	var lines []string
+	logger := funcr.New(func(_, args string) { lines = append(lines, args) }, funcr.Options{Verbosity: 0})
+	ctx := klog.NewContext(s.T().Context(), logger)
+	inspector := &fakeInspector{
+		names:   map[string]string{"foo-bar": "1", "foo.bar": "1", "other": "1"},
+		prompts: map[string]string{"dup": "1", "dup-2": "1"},
+		// Prompt names are not normalized, so the duplicate is an explicit spec.name.
+		promptSpec: map[string]map[string]any{"dup-2": {"name": "dup"}},
+	}
+	toolsetContext := api.ToolsetContext{Inspector: inspector}
+
+	var toolNames []string
+	for _, tool := range (&Toolset{}).GetTools(ctx, toolsetContext) {
+		toolNames = append(toolNames, tool.Tool.Name)
+	}
+	s.Equal([]string{"foo_bar", "other"}, toolNames)
+	var promptNames []string
+	for _, prompt := range (&Toolset{}).GetPrompts(ctx, toolsetContext) {
+		promptNames = append(promptNames, prompt.Prompt.Name)
+	}
+	s.Equal([]string{"dup"}, promptNames)
+
+	s.Require().Len(lines, 2, "one line per skipped resource: %v", lines)
+	s.Contains(lines[0], "already taken")
+	s.Contains(lines[0], `"tool"="foo.bar"`)
+	s.Contains(lines[0], `"first"="foo-bar"`)
+	s.Contains(lines[1], "already taken")
+	s.Contains(lines[1], `"prompt"="dup-2"`)
+	s.Contains(lines[1], `"first"="dup"`)
+}
+
 // fakeInspector serves Tool and Prompt resources (name -> resourceVersion)
 // from memory and can be switched to fail every list.
 type fakeInspector struct {
 	mu      sync.Mutex
 	names   map[string]string
 	prompts map[string]string
-	err     error
+	// promptSpec overrides spec fields of the named prompts.
+	promptSpec map[string]map[string]any
+	err        error
 	// lists counts the list calls, so tests can wait for a number of polls.
 	lists atomic.Int32
 }
@@ -809,10 +904,14 @@ func (r *fakeResource) List(ctx context.Context, _ metav1.ListOptions) api.Resul
 		list := &unstructured.UnstructuredList{}
 		if r.gvr == PromptGVR {
 			for name, version := range r.inspector.prompts {
+				spec := map[string]any{"description": "d", "messages": []any{map[string]any{"role": "user", "text": "hi"}}}
+				for key, value := range r.inspector.promptSpec[name] {
+					spec[key] = value
+				}
 				list.Items = append(list.Items, unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": Group + "/" + Version, "kind": "Prompt",
 					"metadata": map[string]any{"name": name, "resourceVersion": version},
-					"spec":     map[string]any{"description": "d", "messages": []any{map[string]any{"role": "user", "text": "hi"}}},
+					"spec":     spec,
 				}})
 			}
 			return list, nil

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,7 +37,44 @@ func SetPollInterval(d time.Duration) {
 }
 
 // Toolset exposes Tool and Prompt custom resources as MCP tools and prompts.
-type Toolset struct{}
+//
+// The definitions of the last successful list are kept: a list failure while
+// the toolsets are re-applied (a kubeconfig or cluster-state change, a
+// configuration reload) must not deregister every dynamic tool until the
+// resources next change, which the poller would not notice either.
+type Toolset struct {
+	tools   lastListed[Tool]
+	prompts lastListed[Prompt]
+}
+
+// lastListed remembers the result of the last successful list of one kind.
+type lastListed[T named] struct {
+	mu     sync.Mutex
+	items  []T
+	listed bool
+}
+
+// listOrLast lists the resources of one kind, falling back to the last
+// successful list when the cluster cannot be asked. The error is logged at
+// default verbosity: the usual cause is a missing ClusterRole on the
+// server's ServiceAccount, and the operator would otherwise only see
+// missing tools.
+func listOrLast[T named](ctx context.Context, inspector api.ClusterInspector, gvr schema.GroupVersionResource, last *lastListed[T]) []T {
+	items, err := listResources[T](ctx, inspector, gvr)
+	last.mu.Lock()
+	defer last.mu.Unlock()
+	if err == nil {
+		last.items, last.listed = items, true
+		return items
+	}
+	logger := klogutil.FromContext(ctx)
+	if !last.listed {
+		logger.Error(err, "dynamic toolset: unable to list resources, exposing none", "resource", gvr.Resource)
+		return nil
+	}
+	logger.Error(err, "dynamic toolset: unable to list resources, keeping the last known ones", "resource", gvr.Resource, "count", len(last.items))
+	return last.items
+}
 
 var _ api.Toolset = (*Toolset)(nil)
 var _ api.ToolsetWatcher = (*Toolset)(nil)
@@ -51,14 +89,12 @@ func (t *Toolset) GetDescription() string {
 
 func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	logger := klogutil.FromContext(ctx)
-	definitions, err := listResources[Tool](ctx, toolsetContext.Inspector, GVR)
-	if err != nil {
-		// The usual cause is a missing ClusterRole on the server's ServiceAccount:
-		// say so at default verbosity, or the operator only sees missing tools.
-		logger.Error(err, "dynamic toolset: unable to list Tool resources, exposing no dynamic tools")
-		return nil
-	}
+	definitions := listOrLast(ctx, toolsetContext.Inspector, GVR, &t.tools)
 	builtIn := builtInNames(ctx, toolsetContext)
+	// Two resources may resolve to the same MCP name (foo-bar and foo.bar,
+	// or an explicit spec.name): the server refuses a duplicate, which would
+	// take every toolset down, so only the first (by resource name) is kept.
+	seen := map[string]string{}
 	tools := make([]api.ServerTool, 0, len(definitions))
 	for _, definition := range definitions {
 		// One broken definition must not take the others down: skip it and say why.
@@ -75,11 +111,17 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 				"tool", definition.Metadata.Name, "name", compiled.name, "toolset", owner)
 			continue
 		}
+		if first, taken := seen[compiled.name]; taken {
+			logger.Error(nil, "dynamic toolset: skipping Tool resource whose name is already taken by another Tool resource",
+				"tool", definition.Metadata.Name, "name", compiled.name, "first", first)
+			continue
+		}
 		serverTool, err := compiled.serverTool(ctx, toolsetContext.Inspector)
 		if err != nil {
 			logger.Info("dynamic toolset: skipping invalid Tool resource", "tool", definition.Metadata.Name, "error", err.Error())
 			continue
 		}
+		seen[compiled.name] = definition.Metadata.Name
 		tools = append(tools, serverTool)
 	}
 	return tools
@@ -87,16 +129,13 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 
 func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerPrompt {
 	logger := klogutil.FromContext(ctx)
-	definitions, err := listResources[Prompt](ctx, toolsetContext.Inspector, PromptGVR)
-	if err != nil {
-		logger.Error(err, "dynamic toolset: unable to list Prompt resources, exposing no dynamic prompts")
-		return nil
-	}
+	definitions := listOrLast(ctx, toolsetContext.Inspector, PromptGVR, &t.prompts)
 	var discovery api.AggregateDiscovery
 	if toolsetContext.Inspector != nil {
 		discovery = toolsetContext.Inspector.Discovery()
 	}
 	builtIn := builtInNames(ctx, toolsetContext)
+	seen := map[string]string{}
 	prompts := make([]api.ServerPrompt, 0, len(definitions))
 	for _, definition := range definitions {
 		compiled, err := newCompiledPrompt(definition)
@@ -109,6 +148,12 @@ func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetCont
 				"prompt", definition.Metadata.Name, "name", compiled.name, "toolset", owner)
 			continue
 		}
+		if first, taken := seen[compiled.name]; taken {
+			logger.Error(nil, "dynamic toolset: skipping Prompt resource whose name is already taken by another Prompt resource",
+				"prompt", definition.Metadata.Name, "name", compiled.name, "first", first)
+			continue
+		}
+		seen[compiled.name] = definition.Metadata.Name
 		prompts = append(prompts, compiled.serverPrompt(ctx, discovery))
 	}
 	return prompts
@@ -195,11 +240,15 @@ func (t *Toolset) WatchToolset(ctx context.Context, toolsetContext api.ToolsetCo
 			if current == last {
 				continue
 			}
-			last = current
 			logger.V(1).Info("dynamic toolset: Tool or Prompt resources changed, re-applying toolsets")
+			// The change counts as applied only once it is: a failed re-apply
+			// is retried on the next poll rather than forgotten until the
+			// resources change again.
 			if err := onChange(); err != nil {
-				logger.Error(err, "dynamic toolset: failed to re-apply toolsets")
+				logger.Error(err, "dynamic toolset: failed to re-apply toolsets, will retry on the next poll")
+				continue
 			}
+			last = current
 		}
 	}()
 	return cancel

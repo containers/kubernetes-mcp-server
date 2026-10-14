@@ -282,8 +282,10 @@ The declaration is enough to derive the server's `_meta` RBAC advertisement
 - `steps`: the **union** of every step's requirements; unbounded if any step
   is. When a step also calls an external `url`, the bounded declaration
   carries a `reason` naming it.
-- `http` with `service`: **bounded** to `get`/`create` on `services/proxy`
-  for that Service.
+- `http` with `service`: **bounded** to `services/proxy` for that Service,
+  with the verb the API server derives from the HTTP `method` (`get` for
+  GET/HEAD, `create` for POST, `update` for PUT, `patch` for PATCH, `delete`
+  for DELETE).
 - `http` with `url`: **none**, with a reason naming the URL.
 
 ## Reload

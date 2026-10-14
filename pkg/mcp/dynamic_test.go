@@ -1426,7 +1426,10 @@ spec:
   readOnly: true
   kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
 `)
-		s.Never(func() bool { return s.findTool("namespaces_names_2") != nil }, 500*time.Millisecond, 100*time.Millisecond)
+		// Not s.Never: its condition runs on another goroutine and a poll still
+		// in flight when the window closes meets a client that is closing.
+		time.Sleep(500 * time.Millisecond)
+		s.Nil(s.findTool("namespaces_names_2"), "a Tool created while the toolset is disabled must not appear")
 	})
 }
 
