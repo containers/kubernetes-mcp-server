@@ -22,6 +22,10 @@ func (s *RedactSuite) TestSecrets() {
 		out := Secrets("before\n-----BEGIN RSA PRIVATE KEY-----\nMIIEow\nAAAA\n-----END RSA PRIVATE KEY-----\nafter")
 		s.Equal("before\n-----BEGIN<REDACTED>\n<REDACTED>\n-----END RSA PRIVATE KEY-----\nafter", out)
 	})
+	s.Run("a PEM block that begins and ends on one line does not swallow following lines", func() {
+		out := Secrets(`{"cert":"-----BEGIN CERTIFICATE-----\nMIIEow\n-----END CERTIFICATE-----"}` + "\nafter\npassword=hunter2")
+		s.Equal("{\"cert\":\"-----BEGIN<REDACTED>\nafter\npassword=<REDACTED>", out)
+	})
 	s.Run("an unterminated PEM block redacts to the end of the text", func() {
 		s.Equal("-----BEGIN<REDACTED>\n<REDACTED>", Secrets("-----BEGIN CERTIFICATE-----\nMIIEow\nAAAA"))
 	})

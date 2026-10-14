@@ -43,8 +43,13 @@ func Secrets(text string) string {
 		}
 		for _, pattern := range secretPatterns {
 			if idx := strings.Index(lower, pattern); idx >= 0 {
+				rest := lower[idx+len(pattern):]
 				line = line[:idx+len(pattern)] + Redacted
-				if pattern == pemBegin {
+				// A PEM block that begins and ends on the same line (e.g. a
+				// JSON-escaped certificate) is fully covered by the single
+				// line redaction above; entering multi-line mode would swallow
+				// every following line.
+				if pattern == pemBegin && !strings.Contains(rest, pemEnd) {
 					inPEM = true
 					line += "\n" + Redacted
 				}
