@@ -1,7 +1,10 @@
 package kubernetes
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -70,6 +73,57 @@ func (s *ProviderInspectorTestSuite) TestDiscovery() {
 
 		s.Error(err)
 		s.Nil(resources)
+	})
+}
+
+func (s *ProviderInspectorTestSuite) TestBearerToken() {
+	s.Run("returns the token from the derived client", func() {
+		ctx := context.WithValue(s.T().Context(), OAuthAuthorizationHeader, "Bearer request-token")
+		results := s.inspector.BearerToken(ctx)
+
+		token, err := results.Default()
+
+		s.Require().NoError(err)
+		s.Equal("request-token", token)
+	})
+
+	s.Run("returns tokens through the aggregate results API", func() {
+		ctx := context.WithValue(s.T().Context(), OAuthAuthorizationHeader, "Bearer request-token")
+		tokens, err := s.inspector.BearerToken(ctx).Values()
+
+		s.Require().NoError(err)
+		s.Equal([]string{"request-token"}, tokens)
+	})
+
+	s.Run("reports a missing bearer token", func() {
+		token, err := s.inspector.BearerToken(s.T().Context()).Default()
+
+		s.Empty(token)
+		s.ErrorContains(err, "no bearer token available")
+	})
+
+	s.Run("reads a token file for kubeconfig credentials", func() {
+		path := filepath.Join(s.T().TempDir(), "token")
+		s.Require().NoError(os.WriteFile(path, []byte("file-token\n"), 0600))
+		cfg := rest.CopyConfig(s.mockServer.Config())
+		cfg.BearerTokenFile = path
+		InClusterConfig = func() (*rest.Config, error) { return cfg, nil }
+		provider, err := NewProvider(s.T().Context(), config.New())
+		s.Require().NoError(err)
+		defer provider.Close()
+
+		token, err := NewClusterInspector(provider).BearerToken(s.T().Context()).Default()
+
+		s.Require().NoError(err)
+		s.Equal("file-token", token)
+
+		s.Run("prefers a derived request token over the token file", func() {
+			ctx := context.WithValue(s.T().Context(), OAuthAuthorizationHeader, "Bearer exchanged-token")
+			token, err := NewClusterInspector(provider).BearerToken(ctx).Default()
+
+			s.Require().NoError(err)
+			s.Equal("exchanged-token", token)
+		})
 	})
 }
 

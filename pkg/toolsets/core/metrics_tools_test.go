@@ -21,6 +21,9 @@ type fakeInspector struct {
 
 func (f *fakeInspector) Discovery() api.AggregateDiscovery       { return f }
 func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, f, func(context.Context, string) (string, error) { return "", nil })
+}
 func (f *fakeInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
 		if f.err != nil {

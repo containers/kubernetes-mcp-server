@@ -2,6 +2,10 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -36,6 +40,30 @@ func (p *providerInspector) Discovery() api.AggregateDiscovery {
 
 func (p *providerInspector) Unstructured() api.AggregateUnstructured {
 	return p
+}
+
+func (p *providerInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, p.provider, func(ctx context.Context, target string) (string, error) {
+		client, err := p.provider.GetDerivedKubernetes(ctx, target)
+		if err != nil {
+			return "", err
+		}
+
+		cfg := client.RESTConfig()
+		if cfg.BearerToken != "" {
+			return cfg.BearerToken, nil
+		}
+		if cfg.BearerTokenFile != "" {
+			contents, err := os.ReadFile(cfg.BearerTokenFile)
+			if err != nil {
+				return "", fmt.Errorf("failed to read bearer token file: %w", err)
+			}
+			if token := strings.TrimSpace(string(contents)); token != "" {
+				return token, nil
+			}
+		}
+		return "", errors.New("no bearer token available for target")
+	})
 }
 
 func (p *providerInspector) Resource(resource schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {

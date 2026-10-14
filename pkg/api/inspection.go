@@ -13,6 +13,8 @@ import (
 type ClusterInspector interface {
 	Discovery() AggregateDiscovery
 	Unstructured() AggregateUnstructured
+	// BearerToken returns the bearer token of the derived Kubernetes client for each target.
+	BearerToken(ctx context.Context) Results[string]
 }
 
 type AggregateDiscovery interface {
