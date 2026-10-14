@@ -53,6 +53,30 @@ type TokenExchanger interface {
 	Exchange(ctx context.Context, cfg *TargetTokenExchangeConfig, subjectToken string) (*oauth2.Token, error)
 }
 
+func buildBaseExchangeForm(cfg *TargetTokenExchangeConfig, subjectToken, subjectTokenType string) url.Values {
+	data := url.Values{}
+	data.Set(FormKeyGrantType, GrantTypeTokenExchange)
+	data.Set(FormKeySubjectToken, subjectToken)
+	data.Set(FormKeySubjectTokenType, subjectTokenType)
+	data.Set(FormKeyAudience, cfg.Audience)
+	if len(cfg.Scopes) > 0 {
+		data.Set(FormKeyScope, strings.Join(cfg.Scopes, " "))
+	}
+	return data
+}
+
+func executeExchange(ctx context.Context, cfg *TargetTokenExchangeConfig, data url.Values) (*oauth2.Token, error) {
+	httpClient, err := cfg.HTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire http client to talk to IdP for target: %w", err)
+	}
+	headers := http.Header{}
+	if err := injectClientAuth(ctx, cfg, data, headers); err != nil {
+		return nil, err
+	}
+	return doTokenExchange(ctx, httpClient, cfg.GetTokenURL(), data, headers)
+}
+
 // injectClientAuth adds client credentials to the request based on auth style
 func injectClientAuth(ctx context.Context, cfg *TargetTokenExchangeConfig, data url.Values, header http.Header) error {
 	if cfg.ClientID == "" {

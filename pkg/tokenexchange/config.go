@@ -95,6 +95,12 @@ type TargetTokenExchangeConfig struct {
 	requireTLS func() bool `toml:"-"`
 }
 
+func (c *TargetTokenExchangeConfig) GetTokenURL() string {
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
+	return c.TokenURL
+}
+
 // SetRequireTLS installs the TLS enforcer. HTTPClient() always wraps its
 // transport to read it live per request, so this may be (re)set at any time —
 // before or after the client is memoized, e.g. on a SIGHUP toggle.
