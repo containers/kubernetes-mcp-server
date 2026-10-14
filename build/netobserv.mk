@@ -22,7 +22,8 @@ setup-netobserv: expose-netobserv ## Install mock NetObserv plugin and expose it
 run-netobserv-evals: build setup-netobserv ## Run full NetObserv mcpchecker suite (mock plugin + MCP server + evals)
 	@set -e; \
 	trap '$(MAKE) stop-server stop-netobserv' EXIT; \
-	$(MAKE) run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs; \
+	$(MAKE) dynamic-tools-install DYNAMIC_TOOLS_CHARTS=netobserv-mcp-tools; \
+	$(MAKE) run-server TOOLSETS=core,config,dynamic MCP_CONFIG_DIR=dev/config/mcp-configs; \
 	$(MAKE) run-evals EVAL_LABEL_SELECTOR=suite=netobserv; \
 	echo ""; \
 	echo "NetObserv evals finished. Target pass rate: >= 80% tasks and assertions."

@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-diagnose-degraded"
   difficulty: hard
   description: "Diagnose why HCO is reporting an issue by correlating conditions across managed components"

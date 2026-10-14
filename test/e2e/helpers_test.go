@@ -207,6 +207,59 @@ func viewClusterRoleBindingValues() map[string]any {
 	}
 }
 
+// dynamicToolsRBACValues lets the server's ServiceAccount list the Tool and
+// Prompt resources the dynamic toolset exposes.
+func dynamicToolsRBACValues() map[string]any {
+	return map[string]any{
+		"rbac": map[string]any{
+			"create": true,
+			"extraClusterRoles": []map[string]any{
+				{
+					"name": "dynamic-tools",
+					"rules": []map[string]any{
+						{
+							"apiGroups": []string{"tools.kubernetes-mcp-server.io"},
+							"resources": []string{"tools", "prompts"},
+							"verbs":     []string{"get", "list", "watch"},
+						},
+					},
+				},
+			},
+			"extraClusterRoleBindings": []map[string]any{
+				{
+					"name":    "dynamic-tools",
+					"roleRef": map[string]any{"name": "dynamic-tools"},
+				},
+			},
+		},
+	}
+}
+
+// installDynamicToolsChart returns a pre-install hook that applies the Tool
+// and Prompt CRDs and installs one of the examples/dynamic-tools charts with
+// the given --set values. The release is uninstalled on cleanup.
+func installDynamicToolsChart(chart string, values map[string]string) func(context.Context, *testing.T, kubernetes.Interface, string) {
+	return func(ctx context.Context, t *testing.T, _ kubernetes.Interface, namespace string) {
+		t.Helper()
+		kubeconfig := kubeconfigPath()
+		examples, err := filepath.Abs("../../examples/dynamic-tools")
+		require.NoError(t, err)
+		cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", filepath.Join(examples, "crd.yaml"), "--kubeconfig", kubeconfig)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "apply Tool/Prompt CRDs: %s", string(out))
+		release := namespace + "-" + chart
+		args := []string{"upgrade", "--install", release, filepath.Join(examples, "charts", chart), "--namespace", namespace}
+		for key, value := range values {
+			args = append(args, "--set", key+"="+value)
+		}
+		require.NoError(t, runHelm(helmPath(), kubeconfig, args...), "install %s", chart)
+		t.Cleanup(func() {
+			_ = runHelm(helmPath(), kubeconfig, "uninstall", release, "--namespace", namespace)
+		})
+		t.Logf("Installed dynamic tools chart %s as release %s", chart, release)
+	}
+}
+
 func createTestNamespace(ctx context.Context, t *testing.T, clientset kubernetes.Interface, prefix string) string {
 	t.Helper()
 	ns, err := clientset.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{

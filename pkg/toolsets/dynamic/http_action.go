@@ -1,0 +1,236 @@
+package dynamic
+
+import (
+	"bytes"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"regexp"
+	"strings"
+
+	"k8s.io/client-go/rest"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+)
+
+const maxResponseBytes = 8 << 20
+
+var pathPlaceholder = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
+
+// runHTTP performs the declared HTTP request. Requests to an in-cluster
+// Service go through the API server's service proxy using the caller's REST
+// config (so the access-control round tripper and the caller's identity
+// apply). Requests to a plain URL carry the caller's bearer token, exactly as
+// the Kiali and NetObserv toolsets do.
+func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars) (any, error) {
+	a := action.http
+	restConfig := env.client.RESTConfig()
+
+	var client *http.Client
+	var base string
+	if a.Service != nil {
+		var err error
+		if client, err = rest.HTTPClientFor(restConfig); err != nil {
+			return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+		}
+		host := restConfig.Host
+		if !strings.Contains(host, "://") {
+			host = "https://" + host
+		}
+		base = strings.TrimRight(host, "/") + "/api/v1/namespaces/" + url.PathEscape(a.Service.Namespace) +
+			"/services/" + url.PathEscape(proxyServiceName(a.Service)) + "/proxy"
+	} else {
+		client = &http.Client{Transport: action.transport}
+		if env.requireTLS != nil {
+			// Layer 2 of require_tls: refuse plain HTTP at request time, as the
+			// in-tree HTTP toolsets did.
+			client = config.NewTLSEnforcingClient(client, env.requireTLS)
+		}
+		base = a.URL
+		if action.urlExpr != nil {
+			value, err := action.urlExpr.eval(vars)
+			if err != nil {
+				return nil, err
+			}
+			if base = scalarString(value); !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+				return nil, fmt.Errorf("urlExpression produced %q, which is not an absolute http(s) URL", base)
+			}
+		}
+		base = strings.TrimRight(base, "/")
+	}
+
+	path, err := t.resolvePath(a.Path, vars)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(base + path)
+	if err != nil {
+		return nil, fmt.Errorf("invalid request URL: %w", err)
+	}
+	query := u.Query()
+	values, err := t.resolveQuery(a.Query, action.queryExpr, vars)
+	if err != nil {
+		return nil, err
+	}
+	for key, list := range values {
+		query.Del(key)
+		for _, value := range list {
+			query.Add(key, value)
+		}
+	}
+	u.RawQuery = query.Encode()
+
+	method := strings.ToUpper(a.Method)
+	if method == "" {
+		method = http.MethodGet
+	}
+	var body io.Reader
+	if a.Body != nil {
+		raw, err := t.resolveBody(a.Body, action.bodyExpr, vars)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequestWithContext(env.ctx, method, u.String(), body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for key, ref := range a.Headers {
+		value, err := t.resolveRef(&ref, vars)
+		if err != nil {
+			return nil, fmt.Errorf("header %s: %w", key, err)
+		}
+		if value != "" {
+			req.Header.Set(key, value)
+		}
+	}
+	if a.Service == nil {
+		if token := bearerToken(restConfig); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, readErr := readResponseBody(resp.Body)
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("%s %s returned HTTP %d: %s", method, u.Redacted(), resp.StatusCode, truncate(string(raw), 512))
+	}
+	if readErr != nil {
+		return nil, readErr
+	}
+	contentType, _, _ := strings.Cut(resp.Header.Get("Content-Type"), ";")
+	return decodeResponseAs(raw, a.Response, strings.TrimSpace(contentType), a.MIMEType, a.Redact), nil
+}
+
+// newHTTPTransport builds the transport of a url-mode action from the
+// system defaults (proxy from the environment, idle connection reaping,
+// handshake timeouts) and the action's TLS settings.
+func newHTTPTransport(a *HTTPAction) (*http.Transport, error) {
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: a.InsecureSkipTLSVerify, //nolint:gosec // opt-in per Tool, mirrors the Kiali/NetObserv toolset configs
+	}
+	if a.CertificateAuthority != "" {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(a.CertificateAuthority)) {
+			return nil, fmt.Errorf("certificateAuthority does not contain a valid PEM certificate")
+		}
+		tlsConfig.RootCAs = pool
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsConfig
+	return transport, nil
+}
+
+// readResponseBody reads at most maxResponseBytes. A larger body is an
+// error (returned together with what was read, for error messages) rather
+// than a silently truncated, no longer parseable document.
+func readResponseBody(r io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(r, maxResponseBytes+1))
+	if err != nil {
+		return raw, fmt.Errorf("failed to read response: %w", err)
+	}
+	if len(raw) > maxResponseBytes {
+		return raw[:maxResponseBytes], fmt.Errorf("response exceeds the maximum size of %d bytes", maxResponseBytes)
+	}
+	return raw, nil
+}
+
+func proxyServiceName(service *ServiceRef) string {
+	name := service.Name
+	if service.Scheme != "" {
+		name = service.Scheme + ":" + name
+	}
+	if service.Port != "" {
+		name += ":" + service.Port
+	}
+	return name
+}
+
+// resolvePath returns the request path: a plain string has its {argument}
+// placeholders replaced with the URL-escaped argument value; an argument or
+// expression reference is appended verbatim, so the definition escapes what
+// it interpolates.
+func (t *compiledTool) resolvePath(path *Ref, vars evalVars) (string, error) {
+	switch {
+	case path == nil:
+		return "", nil
+	case path.Argument != "" || path.Expression != "":
+		return t.resolveRef(path, vars)
+	default:
+		return expandPlaceholders(path.Value, vars.args, url.PathEscape)
+	}
+}
+
+// expandPlaceholders replaces {argument} placeholders with the argument
+// value passed through escape, and reports the arguments that are missing.
+func expandPlaceholders(template string, args map[string]any, escape func(string) string) (string, error) {
+	var missing []string
+	expanded := pathPlaceholder.ReplaceAllStringFunc(template, func(match string) string {
+		key := match[1 : len(match)-1]
+		value := argString(args, key)
+		if value == "" {
+			missing = append(missing, key)
+		}
+		return escape(value)
+	})
+	if len(missing) > 0 {
+		return "", fmt.Errorf("%s parameter required", strings.Join(missing, ", "))
+	}
+	return expanded, nil
+}
+
+func bearerToken(restConfig *rest.Config) string {
+	if restConfig == nil {
+		return ""
+	}
+	if token := strings.TrimSpace(restConfig.BearerToken); token != "" {
+		return token
+	}
+	if restConfig.BearerTokenFile != "" {
+		if raw, err := os.ReadFile(restConfig.BearerTokenFile); err == nil {
+			return strings.TrimSpace(string(raw))
+		}
+	}
+	return ""
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}

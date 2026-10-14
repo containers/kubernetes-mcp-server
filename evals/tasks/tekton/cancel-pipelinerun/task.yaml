@@ -5,7 +5,7 @@ metadata:
   difficulty: medium
   labels:
     suite: tekton
-    requires: tekton
+    requires: dynamic
 spec:
   requires:
     - extension: kubernetes

@@ -134,8 +134,8 @@ The kubevirt toolset demonstrates this well:
 - `vm_lifecycle` with `action: start | stop | restart` (3 operations, 1 tool)
 - `vm_guest_info` with `info_type: all | os | filesystem | users | network` (5 operations, 1 tool)
 
-See `pkg/toolsets/kubevirt/vm/lifecycle/tool.go` and
-`pkg/toolsets/kubevirt/vm/guestagent/tool.go` for implementation.
+See the `vm_lifecycle` and `vm_guest_info` Tool resources in
+`examples/dynamic-tools/charts/kubevirt-mcp-tools/templates/tools.yaml` for implementation.
 
 **When to consolidate:**
 - Operations share the same required parameters (namespace, name, etc.)
@@ -194,7 +194,7 @@ what `pods_exec` offers:
 **Required vs optional parameters:**
 - Make parameters required only when the tool cannot function without them
 - Use sensible defaults for optional parameters (e.g., head defaults to 100 lines)
-- Use `DependentRequired` for conditional requirements (see `pkg/toolsets/kiali/tools/list_or_get_resources.go`)
+- Use `DependentRequired` for conditional requirements (see `kiali_get_resource_details` in `examples/dynamic-tools/charts/kiali-mcp-tools/templates/tools.yaml`)
 
 **Parameter naming conventions:**
 - Use `snake_case` for parameter names

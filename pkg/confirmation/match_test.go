@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/utils/ptr"
 )
@@ -63,6 +64,35 @@ func (s *MatchSuite) TestMatchToolLevelRules() {
 		}
 		matched := MatchToolLevelRules(rules, "helm_uninstall", ptr.To(true))
 		s.Len(matched, 2)
+	})
+}
+
+func (s *MatchSuite) TestMatchKubeLevelRequest() {
+	ctx := s.T().Context()
+	windows := map[string]any{"spec": map[string]any{"pipelineRef": map[string]any{"params": []any{map[string]any{"name": "name", "value": "windows-efi-installer"}}}}}
+	s.Run("a true expression matches", func() {
+		rules := []config.ConfirmationRule{{Kind: "PipelineRun", Expression: "object.spec.pipelineRef.params.exists(p, p.value == 'windows-efi-installer')", Message: "EULA"}}
+		matched := MatchKubeLevelRequest(ctx, rules, rulexpr.Request{Verb: "create", Kind: "PipelineRun", Object: windows})
+		s.Require().Len(matched, 1)
+		s.Equal("EULA", matched[0].Message)
+	})
+	s.Run("a false expression does not match", func() {
+		rules := []config.ConfirmationRule{{Kind: "PipelineRun", Expression: "object.spec.pipelineRef.params.exists(p, p.value == 'other')", Message: "EULA"}}
+		s.Empty(MatchKubeLevelRequest(ctx, rules, rulexpr.Request{Verb: "create", Kind: "PipelineRun", Object: windows}))
+	})
+	s.Run("an expression that cannot be evaluated fails closed", func() {
+		// A typo outside a has() guard, or a body the rule did not expect, must
+		// require confirmation rather than silently disable the rule.
+		rules := []config.ConfirmationRule{{Kind: "PipelineRun", Expression: "object.spec.pipelinRef.params.size() > 0", Message: "EULA"}}
+		matched := MatchKubeLevelRequest(ctx, rules, rulexpr.Request{Verb: "create", Kind: "PipelineRun", Object: windows})
+		s.Require().Len(matched, 1)
+		s.Contains(matched[0].Message, "EULA")
+		s.Contains(matched[0].Message, "could not be evaluated")
+		s.Contains(matched[0].Message, "pipelinRef")
+	})
+	s.Run("the other fields still have to match before the expression counts", func() {
+		rules := []config.ConfirmationRule{{Kind: "TaskRun", Expression: "object.spec.pipelinRef.params.size() > 0", Message: "EULA"}}
+		s.Empty(MatchKubeLevelRequest(ctx, rules, rulexpr.Request{Verb: "create", Kind: "PipelineRun", Object: windows}))
 	})
 }
 

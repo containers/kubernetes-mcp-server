@@ -1,0 +1,16 @@
+# Confirmation rules that accompany the KubeVirt tools. Confirmation rules are
+# server configuration, not cluster resources: add this file to the server's
+# config drop-in directory (--config-dir) or merge it into its TOML.
+#
+# The Microsoft EULA check. It replaces the validator that used to be compiled
+# into the server: without this rule in the server's configuration, Windows
+# golden-image PipelineRuns are created without asking for EULA acceptance.
+# pkg/mcp/dynamic_test.go exercises this file against envtest.
+[[confirmation_rules]]
+kind = "PipelineRun"
+group = "tekton.dev"
+expression = """verb in ['create', 'update', 'patch'] &&
+  has(object.spec) && has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) &&
+  object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') &&
+  !(has(object.spec.params) && object.spec.params.exists(p, p.name == 'acceptEula' && p.value == 'true'))"""
+message = "Microsoft EULA Notice: This PipelineRun will create a Windows golden image. By proceeding, you agree to the Microsoft Software License Terms for the Windows operating system. Do you accept the Microsoft End User License Agreement (EULA)?"

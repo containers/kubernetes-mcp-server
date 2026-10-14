@@ -1,0 +1,9 @@
+apiVersion: v2
+name: loki-mcp-tools
+description: >-
+  The kubernetes-mcp-server observability/logs (Loki) toolset delivered as Tool
+  custom resources, versioned and released independently of the server.
+type: application
+version: 0.1.0
+appVersion: "3.0"
+keywords: [loki, lokistack, logs, observability, mcp, kubernetes-mcp-server]

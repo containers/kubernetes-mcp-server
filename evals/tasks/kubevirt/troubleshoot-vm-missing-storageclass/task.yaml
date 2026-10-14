@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "troubleshoot-vm-missing-storageclass"
   difficulty: medium
   description: "Diagnose a VM stuck in Provisioning due to a non-existent StorageClass"

@@ -337,12 +337,12 @@ func TestNetObservMock(t *testing.T) {
 			// Deploy MCP server configured to use mock plugin
 			dep := deployServer(ctx, t, cfg, "netobserv-mock",
 				withConfig(`
-toolsets = ["core", "netobserv"]
-
-[toolset_configs.netobserv]
-url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
+toolsets = ["core", "dynamic"]
 `),
-				withValues(viewClusterRoleBindingValues()),
+				withValues(mergeValues(viewClusterRoleBindingValues(), dynamicToolsRBACValues())),
+				withPreInstall(installDynamicToolsChart("netobserv-mcp-tools", map[string]string{
+					"url": "http://netobserv-plugin.netobserv.svc.cluster.local:9001",
+				})),
 			)
 			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
 			t.Cleanup(mcpClient.Close)
@@ -456,18 +456,20 @@ func TestNetObservReal(t *testing.T) {
 				t.Skipf("Invalid NETOBSERV_OPERATOR value: %s (use 'deploy' or 'use-existing')", operatorMode)
 			}
 
-			// Deploy MCP server configured to use real plugin service
-			configTOML := fmt.Sprintf(`
-toolsets = ["core", "netobserv"]
-
-[toolset_configs.netobserv]
-namespace = "%s"
-`, pluginNamespace)
-
+			// Deploy MCP server with the NetObserv tools installed as Tool
+			// resources pointing at the real plugin service. The plugin serves
+			// TLS with the OpenShift service-serving CA; the e2e skips
+			// verification rather than mounting the CA bundle.
 			dep := deployServer(ctx, t, cfg, "netobserv-real",
 				withNamespace("e2e-netobserv-real"),
-				withConfig(configTOML),
-				withValues(viewClusterRoleBindingValues()),
+				withConfig(`
+toolsets = ["core", "dynamic"]
+`),
+				withValues(mergeValues(viewClusterRoleBindingValues(), dynamicToolsRBACValues())),
+				withPreInstall(installDynamicToolsChart("netobserv-mcp-tools", map[string]string{
+					"url":                   fmt.Sprintf("https://netobserv-plugin.%s.svc:9001", pluginNamespace),
+					"insecureSkipTLSVerify": "true",
+				})),
 			)
 			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
 			t.Cleanup(mcpClient.Close)

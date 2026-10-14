@@ -127,9 +127,11 @@ regardless of which overrides are active:
 1. **Static config overrides** — `pkg/config/config_default_overrides.go`
    exposes a stub `defaultOverrides()` that downstream forks populate to
    change defaults such as `ReadOnly`, `Toolsets`, or `ToolOverrides`.
-2. **Per-toolset overrides** — toolsets like `kiali` and `kubevirt` carry an
+2. **Per-toolset overrides** — a toolset may carry an
    `internal/defaults/defaults_override.go` stub that downstream uses to
-   rebrand the toolset name and description (e.g. `kiali` → `ossm`).
+   rebrand its name and description. (The former Kiali and KubeVirt Go
+   toolsets did this; they are now Tool resources whose names are chart
+   values.)
 
 The rules below keep the test suite portable across both layers.
 
@@ -151,11 +153,11 @@ runtime fields the suite already set (`KubeConfig`, `ListOutput`,
 
 ```go
 s.Require().NoError(toml.Unmarshal([]byte(`
-    toolsets = [ "kubevirt" ]
+    toolsets = [ "helm" ]
 `), s.Cfg), "Expected to parse toolsets config")
 ```
 
-See `pkg/mcp/kubevirt_test.go`, `pkg/mcp/pods_exec_test.go`, and
+See `pkg/mcp/helm_test.go`, `pkg/mcp/pods_exec_test.go`, and
 `pkg/mcp/helm_test.go` for representative examples.
 
 ### When `config.ReadToml` is required
@@ -181,15 +183,14 @@ s.Cfg.ListOutput = listOutput
 s.Cfg.ReadOnly = readOnly
 ```
 
-`pkg/mcp/kiali_test.go` and the `TestToolHandlerReceivesToolsetConfig`
-case in `pkg/mcp/mcp_config_provider_test.go` follow this pattern.
+The `TestToolHandlerReceivesToolsetConfig` case in
+`pkg/mcp/mcp_config_provider_test.go` follows this pattern.
 
 Note that the **TOML key under `[toolset_configs.<key>]` is the literal
 name the toolset registers its parser under, not the toolset's exposed
-name**. The Kiali toolset registers its parser as `"kiali"`
-(see `pkg/kiali/config.go`), so even when downstream rebrands the
-toolset to `ossm`, the section is still `[toolset_configs.kiali]`
-and `params.Config.GetToolsetConfig("kiali")` is the correct lookup. Resolve
+name**. The Helm toolset registers its parser as `"helm"` (see
+`pkg/helm/config.go`), so `[toolset_configs.helm]` and
+`params.Config.GetToolsetConfig("helm")` is the correct lookup. Resolve
 the *toolset name* dynamically via `GetName()` (see below), but keep
 the *toolset_configs key* hardcoded — using the dynamic name there will
 silently produce `(nil, false)`.
@@ -226,14 +227,12 @@ s.Cfg.Toolsets = []string{"core", "config", "helm"}
 ### Resolve toolset names through the toolset's `GetName()`
 
 When a test invokes a tool from a rebrandable toolset, ask the toolset for
-its current name rather than hardcoding the upstream string. `kiali_test.go`
-does this so the same test works whether the toolset is exposed as `kiali`
-upstream or `ossm` downstream:
+its current name rather than hardcoding the upstream string, so the same
+test works whether the toolset is exposed under its upstream or a downstream
+(rebranded) name:
 
 ```go
-s.toolsetName = (&kialiToolset.Toolset{}).GetName()
-// ...
-s.CallTool(fmt.Sprintf("%s_get_trace_details", s.toolsetName), …)
+s.toolsetName = (&helm.Toolset{}).GetName()
 ```
 
 ### Never hardcode override-prone defaults
@@ -246,13 +245,12 @@ them at runtime — never assume the upstream value.
 
 Good examples of these patterns can be found in:
 - `internal/test/unstructured_test.go` - demonstrates proper use of testify/suite, nested subtests, and edge case testing
-- `pkg/mcp/kubevirt_test.go` - merges TOML into `s.Cfg` for toolset selection; behavior-based MCP-layer testing
+- `pkg/mcp/dynamic_test.go` - runs Tool and Prompt resources against envtest; behavior-based MCP-layer testing
 - `pkg/kubernetes/manager_test.go` - illustrates testing with proper setup/teardown and subtests
 - `pkg/mcp/pods_exec_test.go` - inline TOML for `denied_resources` configuration
 - `pkg/mcp/confirmation_test.go` - inline TOML for `confirmation_rules` and `confirmation_fallback`
 - `pkg/mcp/helm_test.go` - appends to `s.Cfg.Toolsets` instead of resetting it
-- `pkg/mcp/kiali_test.go` - resolves the toolset name dynamically via `GetName()` and uses `ReadToml` for `toolset_configs`
 - `pkg/mcp/toolsets_test.go` - uses `BaseDefault()` in `ToolsetsSuite.SetupTest()` to avoid downstream config leaking
 - `pkg/mcp/mcp_reload_test.go` - inherits `ReadOnly` from `s.Cfg` when building candidate configs for reload tests
 - `pkg/mcp/mcp_config_provider_test.go` - demonstrates inheriting `ReadOnly` from suite config when `toolset_configs` requires `ReadToml`
-- `pkg/mcp/require_tls_test.go` - shows both patterns side by side: `CoreRequireTLSSuite` merges plain `require_tls` into `s.Cfg`, while `KialiRequireTLSSuite` keeps `ReadToml` for `[toolset_configs.kiali]`
+- `pkg/mcp/require_tls_test.go` - `RequireTLSSuite` merges plain `require_tls` into `s.Cfg` and exercises it through a dynamic http Tool

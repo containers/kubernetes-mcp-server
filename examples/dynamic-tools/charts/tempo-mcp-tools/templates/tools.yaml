@@ -1,0 +1,361 @@
+# Tool resources of the Tempo chart. Converted by hand from the in-tree observability/traces toolset.
+{{- $instanceArgs := dict
+  "tempoNamespace" "The Kubernetes namespace where the Tempo instance is deployed. Use tempo_list_instances to discover available namespaces."
+  "tempoName" "The name of the Tempo instance to query. Use tempo_list_instances to discover available instance names."
+  "tenant" "The tenant to query. This parameter is required for multi-tenant instances. Use tempo_list_instances to discover available tenants for each instance." }}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-traces
+  name: tempo-list-instances
+spec:
+  name: tempo_list_instances
+  title: List Tempo instances
+  description: |-
+    List all Tempo instances available in the Kubernetes cluster.
+    Call this tool first to discover available Tempo instances before using other Tempo tools,
+    as the returned namespace, name, and tenant values are required parameters for all other Tempo tools.
+    Always print the output of this tool in a table.
+  readOnly: true
+  idempotent: true
+  requires:
+    - {apiVersion: tempo.grafana.com/v1alpha1, kind: TempoStack}
+  inputSchema:
+    type: object
+  steps:
+    - name: stacks
+      kubernetes:
+        verb: list
+        apiVersion: tempo.grafana.com/v1alpha1
+        kind: TempoStack
+        namespace: {all: true}
+    - name: monolithics
+      kubernetes:
+        verb: list
+        apiVersion: tempo.grafana.com/v1alpha1
+        kind: TempoMonolithic
+        namespace: {all: true}
+  output: >-
+    {'instances': steps.stacks.items.map(t, {{ include "tempo.stackInstance" "t" }}.transformMapEntry(k, v, k == 'service' ? {} : {k: v}))
+      + steps.monolithics.items.map(t, {{ include "tempo.monolithicInstance" "t" }}.transformMapEntry(k, v, k == 'service' ? {} : {k: v}))}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-traces
+  name: tempo-get-trace-by-id
+spec:
+  name: tempo_get_trace_by_id
+  title: Get trace by ID
+  description: |-
+    Retrieve a single distributed trace by its trace ID from Tempo.
+    Returns the full trace with all its spans, including service names, operation names, durations, and attributes.
+    Use this tool when you already have a specific trace ID, e.g. from search results or logs.
+  readOnly: true
+  idempotent: true
+  requires:
+    - {apiVersion: tempo.grafana.com/v1alpha1, kind: TempoStack}
+  inputSchema:
+    type: object
+    required: [tempoNamespace, tempoName, traceid]
+    properties:
+{{- range $name, $description := $instanceArgs }}
+      {{ $name }}:
+        type: string
+        description: {{ $description | quote }}
+{{- end }}
+      traceid:
+        type: string
+        description: 'The trace ID to retrieve, e.g. "26dad4a0e2b0dd9a440dd5ff203a24a4".'
+      start:
+        type: string
+        description: |-
+          Optional start of the time range in RFC 3339 format, e.g. "2025-01-01T00:00:00Z".
+          Narrows the time range to improve query performance.
+      end:
+        type: string
+        description: |-
+          Optional end of the time range in RFC 3339 format, e.g. "2025-01-02T00:00:00Z".
+          Narrows the time range to improve query performance.
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.traceid) && args.traceid != '') ? 'traceid parameter must not be empty' : {{ include "tempo.timeCheck" . }}
+    {{- include "tempo.resolve" . | nindent 4 }}
+    - name: trace
+      http:
+        {{- include "tempo.http" . | nindent 8 }}
+        path:
+          expression: >-
+            {{ include "tempo.prefix" . }} + '/api/v2/traces/' + args.traceid
+        query:
+          start: {expression: "{{ include "tempo.optionalTime" "start" }}"}
+          end: {expression: "{{ include "tempo.optionalTime" "end" }}"}
+    - name: exists
+      fail: "(type(steps.trace) != map || !has(steps.trace.trace) || steps.trace.trace == null) ? 'trace ' + args.traceid + ' not found' : ''"
+  output: steps.trace
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-traces
+  name: tempo-search-traces
+spec:
+  name: tempo_search_traces
+  title: Search traces
+  description: |-
+    Search for distributed traces in Tempo using TraceQL.
+    Use this tool to find traces matching specific criteria such as service name, HTTP status code, duration, or other span or resource attributes.
+    IMPORTANT — "slow" or "long" trace requests: Do NOT guess a duration threshold.
+    First call this tool WITHOUT a duration filter to establish a latency baseline, then use that baseline to set a sensible threshold.
+    Both steps are required — do NOT skip the second search with the duration filter.
+    Skip this two-step process only when the user provides an explicit duration (e.g. "find traces slower than 2s").
+  readOnly: true
+  idempotent: true
+  requires:
+    - {apiVersion: tempo.grafana.com/v1alpha1, kind: TempoStack}
+  inputSchema:
+    type: object
+    required: [tempoNamespace, tempoName, query]
+    properties:
+{{- range $name, $description := $instanceArgs }}
+      {{ $name }}:
+        type: string
+        description: {{ $description | quote }}
+{{- end }}
+      query:
+        type: string
+        description: |-
+          A TraceQL query expression. Format:
+          query: "{ <filters joined by &&> }"
+          Filters:
+          - service name:     resource.service.name="<value>" (string, use quotes)
+          - HTTP status code: span.http.response.status_code=<code> (number, no quotes)
+          - duration:         duration><value like 100ms, 2s, 5m> (no quotes)
+          - error status:     status=error (keyword, NO quotes — do NOT write status="error")
+          IMPORTANT: status values (error, ok, unset) are keywords, NOT strings. Write status=error, NEVER status="error".
+          Operators: =, !=, >, <, >=, <=
+          Common attributes:
+          - resource.service.name (service name)
+          - resource.k8s.namespace.name (Kubernetes namespace)
+          - resource.k8s.deployment.name (Kubernetes deployment)
+          - resource.k8s.statefulset.name (Kubernetes statefulset)
+          - resource.k8s.daemonset.name (Kubernetes daemonset)
+          - resource.k8s.replicaset.name (Kubernetes replicaset)
+          - resource.k8s.pod.name (Kubernetes pod)
+          - resource.k8s.container.name (Kubernetes container)
+          - resource.k8s.job.name (Kubernetes job)
+          - resource.k8s.cronjob.name (Kubernetes cronjob)
+          - resource.k8s.node.name (Kubernetes node)
+          - resource.k8s.cluster.name (Kubernetes cluster)
+          - span.http.response.status_code (HTTP response code)
+          - span.http.request.method (HTTP method like GET, POST)
+          - span.url.full (request URL)
+          - name (span name / operation name, e.g. "GET /api/users")
+          - duration (trace duration, e.g. 100ms, 2s)
+          - status (trace status: ok, error, unset)
+          Note: older instrumentation may use legacy HTTP attribute names (e.g. span.http.status_code instead of span.http.response.status_code).
+          If a query returns no results, try tempo_search_tags to check which attributes exist.
+          IMPORTANT:
+          - Always wrap filters in curly braces { }.
+          - Do NOT use SQL, PromQL, or Lucene syntax.
+          - Do NOT omit the "resource." or "span." prefix from attribute names
+          - When the user refers to a Kubernetes resource type (deployment, pod, namespace, etc.), use the matching resource.k8s.* attribute, NOT resource.service.name.
+          Examples:
+          - { resource.service.name="frontend" }
+          - { resource.k8s.deployment.name="checkout" && span.http.response.status_code>=500 }
+          - { status=error && duration>2s }
+          If unsure which attributes to filter on, use tempo_search_tags to discover available attributes before building a query.
+      limit:
+        type: integer
+        description: Maximum number of traces to return. Defaults to the server-side limit if not specified.
+      start:
+        type: string
+        description: |-
+          Start of the time range in RFC 3339 format, e.g. "2025-01-01T00:00:00Z".
+          Use "NOW" for current time.
+          Both start and end should be provided to search the full time range; if omitted, only a small window of recent data is searched.
+      end:
+        type: string
+        description: |-
+          End of the time range in RFC 3339 format, e.g. "2025-01-01T00:00:00Z".
+          Use "NOW" for current time.
+          Both start and end should be provided to search the full time range; if omitted, only a small window of recent data is searched.
+      spss:
+        type: integer
+        description: Maximum number of matching spans to return per trace.
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.query) && args.query != '') ? 'query parameter must not be empty'
+        : (has(args.limit) && int(args.limit) < 0) ? 'invalid limit: must be non-negative'
+        : (has(args.limit) && int(args.limit) > 1000) ? 'requested search results limit ' + string(int(args.limit)) + ' is greater than max limit 1000'
+        : (has(args.spss) && int(args.spss) < 0) ? 'invalid spss: must be non-negative'
+        : (has(args.spss) && int(args.spss) > 100) ? 'requested spss limit ' + string(int(args.spss)) + ' is greater than max limit 100'
+        : {{ include "tempo.timeCheck" . }}
+    {{- include "tempo.resolve" . | nindent 4 }}
+    - name: search
+      http:
+        {{- include "tempo.http" . | nindent 8 }}
+        path:
+          expression: >-
+            {{ include "tempo.prefix" . }} + '/api/search'
+        query:
+          q: {argument: query}
+          limit: {expression: "(has(args.limit) && int(args.limit) != 0) ? dyn(int(args.limit)) : dyn(null)"}
+          spss: {expression: "(has(args.spss) && int(args.spss) != 0) ? dyn(int(args.spss)) : dyn(null)"}
+          start: {expression: "{{ include "tempo.optionalTime" "start" }}"}
+          end: {expression: "{{ include "tempo.optionalTime" "end" }}"}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-traces
+  name: tempo-search-tags
+spec:
+  name: tempo_search_tags
+  title: Search tags
+  description: |-
+    List available tag names (attribute keys) in Tempo, grouped by scope.
+    Use this tool to discover which attributes are available for building TraceQL queries with tempo_search_traces.
+    For example, this tool may reveal tag names like "service.name" (in the "resource" scope) or "http.response.status_code" (in the "span" scope).
+    To use these in TraceQL queries, prefix them with their scope, e.g. "resource.service.name" or "span.http.response.status_code".
+  readOnly: true
+  idempotent: true
+  requires:
+    - {apiVersion: tempo.grafana.com/v1alpha1, kind: TempoStack}
+  inputSchema:
+    type: object
+    required: [tempoNamespace, tempoName]
+    properties:
+{{- range $name, $description := $instanceArgs }}
+      {{ $name }}:
+        type: string
+        description: {{ $description | quote }}
+{{- end }}
+      scope:
+        type: string
+        description: |-
+          Filter tags to a specific scope. One of:
+          "resource" (service-level attributes like service.name),
+          "span" (individual span attributes like http.response.status_code),
+          "intrinsic" (built-in fields like duration, status, name).
+          If omitted, tags from all scopes are returned.
+      query:
+        type: string
+        description: |-
+          Optional TraceQL query to filter which traces are considered when listing tags,
+          e.g. '{ resource.service.name="payment-service" }' to only show tags present in traces from the 'payment-service' service.
+      start:
+        type: string
+        description: Optional start of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing tags.
+      end:
+        type: string
+        description: Optional end of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing tags.
+      limit:
+        type: integer
+        description: Maximum number of tag names to return per scope.
+      maxStaleValues:
+        type: integer
+        description: Maximum number of consecutive blocks without new tag names before the search stops early. Higher values are more thorough but slower.
+  steps:
+    - name: check
+      fail: >-
+        (has(args.limit) && int(args.limit) < 0) ? 'invalid limit: must be non-negative'
+        : (has(args.limit) && int(args.limit) > 500) ? 'requested tag names limit ' + string(int(args.limit)) + ' is greater than max limit 500'
+        : (has(args.maxStaleValues) && int(args.maxStaleValues) < 0) ? 'invalid maxStaleValues: must be non-negative'
+        : {{ include "tempo.timeCheck" . }}
+    {{- include "tempo.resolve" . | nindent 4 }}
+    - name: tags
+      http:
+        {{- include "tempo.http" . | nindent 8 }}
+        path:
+          expression: >-
+            {{ include "tempo.prefix" . }} + '/api/v2/search/tags'
+        query:
+          scope: {argument: scope}
+          q: {argument: query}
+          limit: {expression: "(has(args.limit) && int(args.limit) != 0) ? dyn(int(args.limit)) : dyn(null)"}
+          maxStaleValues: {expression: "(has(args.maxStaleValues) && int(args.maxStaleValues) != 0) ? dyn(int(args.maxStaleValues)) : dyn(null)"}
+          start: {expression: "{{ include "tempo.optionalTime" "start" }}"}
+          end: {expression: "{{ include "tempo.optionalTime" "end" }}"}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-traces
+  name: tempo-search-tag-values
+spec:
+  name: tempo_search_tag_values
+  title: Search tag values
+  description: |-
+    List the known values for a specific tag (attribute key) in Tempo.
+    Use this tool to discover what values exist for a given tag, e.g. to find all service names (values of "resource.service.name") or all HTTP methods (values of "span.http.request.method").
+    This is useful for building accurate TraceQL queries with tempo_search_traces.
+  readOnly: true
+  idempotent: true
+  requires:
+    - {apiVersion: tempo.grafana.com/v1alpha1, kind: TempoStack}
+  inputSchema:
+    type: object
+    required: [tempoNamespace, tempoName, tag]
+    properties:
+{{- range $name, $description := $instanceArgs }}
+      {{ $name }}:
+        type: string
+        description: {{ $description | quote }}
+{{- end }}
+      tag:
+        type: string
+        description: |-
+          The fully qualified tag name to get values for, including its scope prefix, e.g. "resource.service.name" or "span.http.response.status_code".
+          Use tempo_search_tags to discover available tag names.
+      query:
+        type: string
+        description: |-
+          Optional TraceQL query to filter which traces are considered when listing values,
+          e.g. '{ resource.service.name="payment-service" }' to only show tag values from the 'payment-service' service.
+      start:
+        type: string
+        description: Optional start of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing values.
+      end:
+        type: string
+        description: Optional end of the time range (in RFC 3339 format, e.g. "2025-01-01T00:00:00Z") to filter which traces are considered when listing values.
+      limit:
+        type: integer
+        description: Maximum number of tag values to return.
+      maxStaleValues:
+        type: integer
+        description: Maximum number of consecutive blocks without new values before the search stops early. Higher values are more thorough but slower.
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.tag) && args.tag != '') ? 'tag parameter must not be empty'
+        : (has(args.limit) && int(args.limit) < 0) ? 'invalid limit: must be non-negative'
+        : (has(args.limit) && int(args.limit) > 1000) ? 'requested tag values limit ' + string(int(args.limit)) + ' is greater than max limit 1000'
+        : (has(args.maxStaleValues) && int(args.maxStaleValues) < 0) ? 'invalid maxStaleValues: must be non-negative'
+        : {{ include "tempo.timeCheck" . }}
+    {{- include "tempo.resolve" . | nindent 4 }}
+    - name: values
+      http:
+        {{- include "tempo.http" . | nindent 8 }}
+        path:
+          expression: >-
+            {{ include "tempo.prefix" . }} + '/api/v2/search/tag/' + args.tag + '/values'
+        query:
+          q: {argument: query}
+          limit: {expression: "(has(args.limit) && int(args.limit) != 0) ? dyn(int(args.limit)) : dyn(null)"}
+          maxStaleValues: {expression: "(has(args.maxStaleValues) && int(args.maxStaleValues) != 0) ? dyn(int(args.maxStaleValues)) : dyn(null)"}
+          start: {expression: "{{ include "tempo.optionalTime" "start" }}"}
+          end: {expression: "{{ include "tempo.optionalTime" "end" }}"}

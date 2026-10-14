@@ -83,6 +83,18 @@ Clients combine all resolved requirements when preparing RBAC. Declaring too few
 
 Bounded declarations should identify concrete resources after argument or manifest resolution. Broad wildcard permissions such as all API groups, all resources, or all subresources should not be used as a substitute for `unbounded`.
 
+An optional `reason` can describe what the tool does beyond the Kubernetes API, so that a complete set of requirements does not read as "Kubernetes only":
+
+```json
+{
+  "version": "v1alpha1",
+  "bounded": {
+    "requirements": [{"verbs": ["list"], "target": {"resource": {"resource": "pods"}}}],
+    "reason": "performs HTTP requests to https://kiali.example.com authenticated with the caller's bearer token"
+  }
+}
+```
+
 ### Unbounded RBAC
 
 Tools whose permissions cannot be determined from their arguments declare `unbounded`:

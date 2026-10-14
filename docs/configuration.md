@@ -458,20 +458,13 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset               | Description                                                                                                                                                                                                                             | Default |
-|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
-| core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
-| helm                  | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
-| kcp                   | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
-| kiali                 | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
-| kubevirt              | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
-| netobserv             | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
-| observability/logs    | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
-| observability/metrics | Toolset for querying Prometheus and Alertmanager endpoints in efficient ways.                                                                                                                                                           |         |
-| observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
-| observability/traces  | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
-| tekton                | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
+| Toolset               | Description                                                                                                                                                            | Default |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                | ✓       |
+| core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                    | ✓       |
+| dynamic               | Tools and prompts defined declaratively as Tool and Prompt custom resources (tools.kubernetes-mcp-server.io) installed in the cluster, see docs/specs/dynamic-tools.md |         |
+| helm                  | Tools for managing Helm charts and releases                                                                                                                            |         |
+| observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                             |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -817,9 +810,10 @@ If multiple rules match at the same level, their messages are merged into a sing
 | `version` | string | kube | API version (`"v1"`, `"v1beta1"`, etc.) |
 | `name` | string | kube | Resource name to match |
 | `namespace` | string | kube | Namespace to match |
+| `expression` | string | kube | [CEL](https://cel.dev) boolean over `verb`, `kind`, `group`, `version`, `name`, `namespace` and `object` (the decoded request body for create/update/patch; an empty map when there is no body or it is not a JSON object, such as a JSON-patch array). Evaluated after the other fields match. An expression that cannot be evaluated (e.g. a field access on a body that lacks it, outside a `has()` guard) fails closed: the rule matches, the failure is appended to its message and logged. `has(a.b.c)` only tests `c`, so guard every level: `has(object.spec) && has(object.spec.pipelineRef)`. Validated at startup. |
 | `message` | string | both | Message shown in the confirmation prompt |
 
-A rule must be either tool-level or kube-level. It must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`, `name`, `namespace`), and must set at least one of these fields.
+A rule must be either tool-level or kube-level. It must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`, `name`, `namespace`, `expression`), and must set at least one of these fields.
 
 **Examples:**
 
@@ -847,6 +841,17 @@ message = "Deleting in kube-system."
 verb = "get"
 kind = "Secret"
 message = "Accessing a Secret."
+
+# Inspect the request body: confirm Windows golden-image PipelineRuns
+# that do not carry acceptEula=true (the Microsoft EULA check)
+[[confirmation_rules]]
+kind = "PipelineRun"
+group = "tekton.dev"
+expression = """verb in ['create', 'update', 'patch'] &&
+  has(object.spec) && has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) &&
+  object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') &&
+  !(has(object.spec.params) && object.spec.params.exists(p, p.name == 'acceptEula' && p.value == 'true'))"""
+message = "Microsoft EULA Notice: this PipelineRun creates a Windows golden image. By proceeding you agree to the Microsoft Software License Terms. Do you accept the EULA?"
 ```
 
 ### Toolset-Specific Configuration
@@ -856,13 +861,6 @@ Some toolsets accept additional configuration via the `toolset_configs` map.
 | Field | Type | Description |
 |-------|------|-------------|
 | `toolset_configs` | map | Toolset-specific configuration sections. |
-
-**Example (Kiali):**
-```toml
-[toolset_configs.kiali]
-url = "https://kiali.example.com"
-token = "your-kiali-token"
-```
 
 **Example (Helm):**
 ```toml
@@ -1014,9 +1012,6 @@ traces_sampler = "traceidratio"
 traces_sampler_arg = 0.1
 
 # Toolset-specific configuration
-[toolset_configs.kiali]
-url = "https://kiali.example.com"
-
 [toolset_configs.helm]
 allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 ```
@@ -1026,6 +1021,6 @@ allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 - [configuration-changes.md](configuration-changes.md) - Versioned configuration migrations
 - [prompts.md](prompts.md) - MCP Prompts configuration
 - [OTEL.md](OTEL.md) - OpenTelemetry observability
-- [KIALI.md](KIALI.md) - Kiali toolset configuration
+- [KIALI.md](KIALI.md) - Kiali tools (delivered as Tool resources)
 - [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) - OAuth/OIDC setup guide
 - [getting-started-kubernetes.md](getting-started-kubernetes.md) - Kubernetes setup guide

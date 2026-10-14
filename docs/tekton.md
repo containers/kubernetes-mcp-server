@@ -1,41 +1,26 @@
-# Tekton Toolset
+# Tekton
 
-The `tekton` toolset adds Tekton-specific helpers on top of the generic Kubernetes resource tools.
+The Tekton tools are no longer compiled into the server. They are delivered
+as `Tool` and `Prompt` custom resources by the `tekton-mcp-tools` Helm chart in
+[`examples/dynamic-tools/charts/tekton-mcp-tools`](../examples/dynamic-tools/charts/tekton-mcp-tools),
+picked up by the `dynamic` toolset at runtime. See
+[`docs/specs/dynamic-tools.md`](specs/dynamic-tools.md) for the model.
 
-Enable it with:
+6 tools (start, restart, cancel, logs for Pipelines and Tasks) and the `pipeline-troubleshoot` prompt.
 
-```toml
-toolsets = ["core", "config", "tekton"]
+```bash
+# Install the Tool and Prompt CRDs once per cluster
+kubectl apply -f examples/dynamic-tools/crd.yaml
+
+# Install the Tekton tools (cluster-scoped resources)
+helm upgrade --install tekton-mcp-tools examples/dynamic-tools/charts/tekton-mcp-tools \
+  --set url=https://...   # http-backed charts only
+
+# Enable the dynamic toolset in the server configuration
+toolsets = ["core", "config", "dynamic"]
 ```
 
-## PipelineRun operations
-
-- `tekton_pipeline_start` starts a Pipeline by creating a PipelineRun.
-- `tekton_pipelinerun_lifecycle` restarts a PipelineRun from its existing spec or cancels it by setting `spec.status` to `Cancelled`.
-- `tekton_pipelinerun_logs` collects logs from TaskRuns owned by a PipelineRun. Use the optional `task` and `step` parameters to narrow the output.
-
-## TaskRun operations
-
-- `tekton_task_start` starts a Task by creating a TaskRun.
-- `tekton_taskrun_restart` creates a new TaskRun from an existing TaskRun spec.
-- `tekton_taskrun_logs` resolves a TaskRun pod and returns step/sidecar logs. Use the optional `step` parameter to return one step only.
-
-Pipeline-as-Code `Repository` and operator `TektonConfig` resources are ordinary Kubernetes resources; use `resources_list` and `resources_get` for those.
-
-List Pipeline-as-Code repositories in a namespace with `resources_list`:
-
-```json
-{"apiVersion":"pipelinesascode.tekton.dev/v1alpha1","kind":"Repository","namespace":"my-namespace"}
-```
-
-Get the usual cluster `TektonConfig` with `resources_get`:
-
-```json
-{"apiVersion":"operator.tekton.dev/v1alpha1","kind":"TektonConfig","name":"config"}
-```
-
-These tools are read-only except the start and lifecycle operations.
-
-## Troubleshooting prompt
-
-Use the `pipeline-troubleshoot` prompt with `namespace` and `name` to gather PipelineRun status, the exact resolved or embedded PipelineSpec when available, the referenced Pipeline otherwise, related TaskRuns, failed or errored step logs, warning events, Pipeline-as-Code repositories, and TektonConfig context into one diagnostic prompt. Missing definitions are reported without preventing the remaining data from being collected. The guide structures the response as PipelineRun Status, TaskRun Status, Failed Step Logs, Events, Troubleshooting Analysis, and Fix Suggestions.
+The server lists Tool and Prompt resources with its own identity, so its
+ServiceAccount needs `get`, `list` and `watch` on `tools` and `prompts` in
+the `tools.kubernetes-mcp-server.io` API group. Tool calls run with the
+caller's identity, as every built-in tool does.

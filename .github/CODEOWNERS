@@ -24,27 +24,21 @@
 *                           @manusa @Cali0707
 
 # toolset: kiali
-/pkg/toolsets/kiali/        @aljesusg @josunect
-/pkg/kiali/                 @aljesusg @josunect
-/pkg/mcp/kiali*             @aljesusg @josunect
+/examples/dynamic-tools/charts/kiali-mcp-tools/    @aljesusg @josunect
 /build/kiali.mk            @aljesusg @josunect
 /evals/tasks/kiali/         @aljesusg @josunect
 /docs/KIALI.md              @aljesusg @josunect
 
 # toolset: kubevirt
-/pkg/toolsets/kubevirt/     @ksimon1 @lyarwood
-/pkg/kubevirt/              @ksimon1 @lyarwood
-/pkg/mcp/kubevirt*          @ksimon1 @lyarwood
+/examples/dynamic-tools/charts/kubevirt-mcp-tools/ @ksimon1 @lyarwood
 /build/kubevirt.mk          @ksimon1 @lyarwood
 /evals/tasks/kubevirt/      @ksimon1 @lyarwood
 /docs/kubevirt.md           @ksimon1 @lyarwood
 
 # toolset: tekton
-/pkg/toolsets/tekton/       @ksimon1
-/pkg/mcp/tekton*            @ksimon1
+/examples/dynamic-tools/charts/tekton-mcp-tools/   @ksimon1
 /build/tekton.mk            @ksimon1
 /evals/tasks/tekton/        @ksimon1
 
 # toolset: kcp
-/pkg/toolsets/kcp/          @mjudeikis
 /pkg/kcp/                   @mjudeikis

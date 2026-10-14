@@ -14,6 +14,11 @@ e2e-setup: e2e-image minikube-create-cluster helm kubectl ## Create cluster, bui
 e2e-setup-kuadrant: e2e-setup ## E2E setup including Kuadrant stack
 	$(MAKE) kuadrant-setup
 
+.PHONY: e2e-build
+e2e-build: ## Compile the e2e tests (build tag e2e) without running them
+	go test -tags e2e -c -o /dev/null ./test/e2e/
+	go vet -tags e2e ./test/e2e/
+
 .PHONY: e2e-test
 e2e-test: helm kubectl ## Run all e2e tests against existing cluster
 	KUBECONFIG=$(shell pwd)/_output/kubeconfig \

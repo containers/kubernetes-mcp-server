@@ -1,0 +1,41 @@
+# A list with a CEL projection: the model sees five fields per Deployment
+# instead of the full objects.
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: deployments-summary
+spec:
+  title: "Deployments: Summary"
+  description: >-
+    Summarize the Deployments in a namespace (or all namespaces) with their desired,
+    ready and available replica counts. Use it to quickly spot rollouts that are not
+    fully available before drilling into a specific Deployment.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      namespace:
+        type: string
+        description: Namespace to inspect. Omit to inspect all namespaces.
+      label_selector:
+        type: string
+        description: Optional Kubernetes label selector (e.g. 'app=myapp,env=prod')
+  kubernetes:
+    verb: list
+    apiVersion: apps/v1
+    kind: Deployment
+    namespace:
+      argument: namespace
+      all: true
+    query:
+      labelSelector:
+        argument: label_selector
+  output: >-
+    response.items.map(d, {
+      'namespace': d.metadata.namespace,
+      'name': d.metadata.name,
+      'desired': has(d.spec.replicas) ? d.spec.replicas : 1,
+      'ready': has(d.status.readyReplicas) ? d.status.readyReplicas : 0,
+      'available': has(d.status.availableReplicas) ? d.status.availableReplicas : 0
+    })

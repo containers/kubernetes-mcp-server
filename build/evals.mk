@@ -117,6 +117,38 @@ diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
 	$(MCPCHECKER) diff --base "$$BASELINE" --current "$$RESULTS_FILE" --output markdown
 
 .PHONY: run-server
+# Charts under examples/dynamic-tools/charts to install as Tool/Prompt resources
+# before starting the server with the "dynamic" toolset (space separated,
+# e.g. "kiali-mcp-tools netobserv-mcp-tools"). Per-chart --set values come from
+# DYNAMIC_TOOLS_VALUES_<chart with - replaced by _>, e.g.
+# DYNAMIC_TOOLS_VALUES_kiali_mcp_tools="url=http://localhost:20001/kiali/".
+# The defaults below match the local exposure done by setup-kiali / setup-netobserv.
+DYNAMIC_TOOLS_CHARTS ?=
+DYNAMIC_TOOLS_VALUES_kiali_mcp_tools ?= url=http://localhost:20001/kiali/
+DYNAMIC_TOOLS_VALUES_netobserv_mcp_tools ?= url=http://127.0.0.1:9001
+export DYNAMIC_TOOLS_VALUES_kiali_mcp_tools DYNAMIC_TOOLS_VALUES_netobserv_mcp_tools
+# Confirmation rules are server configuration, not cluster resources: the
+# confirmation-rules.toml of every installed chart (e.g. the KubeVirt Windows
+# EULA rule) is collected here and run-server adds it to the server's drop-ins.
+# One file, because a later drop-in replaces (not appends to) confirmation_rules.
+DYNAMIC_TOOLS_CONFIG_DIR ?= _output/dynamic-tools-config.d
+
+.PHONY: dynamic-tools-install
+dynamic-tools-install: kubectl helm ## Install the Tool/Prompt CRDs, the charts in DYNAMIC_TOOLS_CHARTS and their confirmation rules
+	$(KUBECTL) apply -f examples/dynamic-tools/crd.yaml
+	@rm -rf $(DYNAMIC_TOOLS_CONFIG_DIR) && mkdir -p $(DYNAMIC_TOOLS_CONFIG_DIR)
+	@for chart in $(DYNAMIC_TOOLS_CHARTS); do \
+		key="DYNAMIC_TOOLS_VALUES_$$(printf '%s' "$$chart" | tr '-' '_')"; \
+		values="$$(eval printf '%s' \"\$$$$key\")"; \
+		echo "Installing $$chart$${values:+ --set $$values}"; \
+		$(HELM) upgrade --install "$$chart" "examples/dynamic-tools/charts/$$chart" $${values:+--set "$$values"}; \
+		rules="examples/dynamic-tools/charts/$$chart/confirmation-rules.toml"; \
+		if [ -f "$$rules" ]; then \
+			echo "Adding confirmation rules of $$chart to $(DYNAMIC_TOOLS_CONFIG_DIR)"; \
+			{ echo "# from $$rules"; cat "$$rules"; echo; } >> $(DYNAMIC_TOOLS_CONFIG_DIR)/500-dynamic-tools-confirmation-rules.toml; \
+		fi; \
+	done
+
 run-server: build ## Start MCP server in background and wait for health check (knobs: TOOLSETS, READ_ONLY, SUITE)
 	@case "$(READ_ONLY)" in true|false) ;; *) echo "ERROR: READ_ONLY must be true or false, got '$(READ_ONLY)'"; exit 1;; esac
 	@echo "Starting MCP server on port $(MCP_PORT) (read_only = $(READ_ONLY))..."
@@ -130,6 +162,8 @@ run-server: build ## Start MCP server in background and wait for health check (k
 	@# dir and add the eval knobs as the last file so they always take precedence.
 	@rm -rf $(MCP_EVAL_CONFIG_DIR) && mkdir -p $(MCP_EVAL_CONFIG_DIR)
 	@if ls $(MCP_CONFIG_DIR)/*.toml > /dev/null 2>&1; then cp $(MCP_CONFIG_DIR)/*.toml $(MCP_EVAL_CONFIG_DIR)/; fi
+	@# Confirmation rules shipped by the installed Tool/Prompt charts (see dynamic-tools-install).
+	@if ls $(DYNAMIC_TOOLS_CONFIG_DIR)/*.toml > /dev/null 2>&1; then cp $(DYNAMIC_TOOLS_CONFIG_DIR)/*.toml $(MCP_EVAL_CONFIG_DIR)/; fi
 	@printf 'read_only = %s\n' "$(READ_ONLY)" > $(MCP_EVAL_CONFIG_DIR)/zz-eval-overrides.toml
 	@if [ -n "$(TOOLSETS)" ]; then \
 		printf 'toolsets = [%s]\n' "$$(printf '%s' "$(TOOLSETS)" | sed 's/[[:space:]]*,[[:space:]]*/,/g; s/^/"/; s/,/", "/g; s/$$/"/')" >> $(MCP_EVAL_CONFIG_DIR)/zz-eval-overrides.toml; \

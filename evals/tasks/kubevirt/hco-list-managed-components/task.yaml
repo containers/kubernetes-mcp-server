@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-list-managed-components"
   difficulty: medium
   description: "List all components managed by HCO and their individual status and versions"

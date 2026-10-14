@@ -1,6 +1,10 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
+)
 
 const (
 	ClusterProviderKubeConfig = "kubeconfig"
@@ -88,6 +92,10 @@ type ConfirmationRule struct {
 	Version   string `toml:"version,omitempty"`
 	Name      string `toml:"name,omitempty"`
 	Namespace string `toml:"namespace,omitempty"`
+	// Expression is a CEL boolean over verb, kind, group, version, name,
+	// namespace and object (the decoded request body, when any). It is
+	// evaluated after the field matches above.
+	Expression string `toml:"expression,omitempty"`
 	// Common fields
 	Message string `toml:"message"`
 }
@@ -99,7 +107,7 @@ func (r *ConfirmationRule) IsToolLevel() bool {
 
 // IsKubeLevel returns true if the rule targets Kubernetes API requests.
 func (r *ConfirmationRule) IsKubeLevel() bool {
-	return r.Verb != "" || r.Kind != "" || r.Group != "" || r.Version != "" || r.Name != "" || r.Namespace != ""
+	return r.Verb != "" || r.Kind != "" || r.Group != "" || r.Version != "" || r.Name != "" || r.Namespace != "" || r.Expression != ""
 }
 
 // Validate checks that the rule is well-formed.
@@ -110,7 +118,12 @@ func (r *ConfirmationRule) Validate() error {
 		return fmt.Errorf("confirmation rule mixes tool-level fields (tool, destructive) with kube-level fields (verb, kind, group, version, name, namespace): %q", r.Message)
 	}
 	if !r.IsToolLevel() && !r.IsKubeLevel() {
-		return fmt.Errorf("confirmation rule must set at least one tool-level field (tool, destructive) or kube-level field (verb, kind, group, version, name, namespace): %q", r.Message)
+		return fmt.Errorf("confirmation rule must set at least one tool-level field (tool, destructive) or kube-level field (verb, kind, group, version, name, namespace, expression): %q", r.Message)
+	}
+	if r.Expression != "" {
+		if _, err := rulexpr.Compile(r.Expression); err != nil {
+			return fmt.Errorf("confirmation rule %q: %w", r.Message, err)
+		}
 	}
 	return nil
 }

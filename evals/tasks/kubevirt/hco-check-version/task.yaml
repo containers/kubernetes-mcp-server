@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-check-version"
   difficulty: easy
   description: "Determine the installed HCO version and the versions of components it manages"

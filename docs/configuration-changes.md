@@ -1,4 +1,11 @@
 # Configuration Changes
+- [Ecosystem toolsets as Tool and Prompt resources](#ecosystem-toolsets-as-tool-and-prompt-resources)
+  - [Removed toolsets and configuration keys](#removed-toolsets-and-configuration-keys)
+  - [Installing the replacement charts](#installing-the-replacement-charts)
+  - [Trust model](#trust-model)
+  - [Windows EULA confirmation](#windows-eula-confirmation)
+  - [Tool and prompt differences](#tool-and-prompt-differences)
+  - [Multi-cluster and reload](#multi-cluster-and-reload)
 - [Unified configuration surface](#unified-configuration-surface)
   - [Dropped CLI flags](#dropped-cli-flags)
   - [Drop-in directory](#drop-in-directory)
@@ -12,6 +19,131 @@
 - [Upgrading from 0.0.66](#upgrading-from-0066)
 
 This document records configuration changes that may require action when upgrading between releases. Add newer release transitions as separate sections so upgrade guidance remains available without cluttering the current [configuration reference](configuration.md).
+
+## Ecosystem toolsets as Tool and Prompt resources
+
+The Kiali, NetObserv, Tekton, KubeVirt and kcp toolsets are no longer compiled
+into the server. The same tools and prompts are delivered as cluster-scoped
+`Tool` and `Prompt` custom resources (`tools.kubernetes-mcp-server.io/v1alpha1`),
+served by the new opt-in `dynamic` toolset and packaged as Helm charts under
+[`examples/dynamic-tools/charts`](../examples/dynamic-tools/charts). The model is
+described in [`specs/dynamic-tools.md`](specs/dynamic-tools.md); the per-tool
+migration record is
+[`examples/dynamic-tools/conversion-report.md`](../examples/dynamic-tools/conversion-report.md).
+
+The `core`, `config` and `helm` toolsets are unchanged.
+
+> **Upgrade note.** Two things change silently for an existing deployment
+> that enabled one of these toolsets: the tools disappear until the
+> matching chart is installed and `dynamic` is enabled (an unknown toolset
+> name fails the configuration load, so the server does say so), and the
+> Windows EULA check is **no longer on by default**; see
+> [Windows EULA confirmation](#windows-eula-confirmation) for the rule that
+> has to be added to the server's configuration.
+
+### Removed toolsets and configuration keys
+
+| Removed | Replacement |
+|---------|-------------|
+| `toolsets = [..., "kiali"]` | `"dynamic"` plus the `kiali-mcp-tools` chart |
+| `toolsets = [..., "netobserv"]` | `"dynamic"` plus the `netobserv-mcp-tools` chart |
+| `toolsets = [..., "tekton"]` | `"dynamic"` plus the `tekton-mcp-tools` chart |
+| `toolsets = [..., "kubevirt"]` | `"dynamic"` plus the `kubevirt-mcp-tools` chart |
+| `toolsets = [..., "kcp"]` | nothing: `kcp_workspace_describe` ships in `examples/dynamic-tools/converted/kcp.yaml`; `kcp_workspaces_list` was redundant with the kcp provider's `workspace_list` |
+| `[toolset_configs.kiali]` (`url`, `insecure`, `certificate_authority`, ...) | chart values `url`, `insecureSkipTLSVerify`, `certificateAuthority` |
+| `[toolset_configs.netobserv]` (`url`, `namespace`, `service`, `port`, ...) | chart value `url` (the full plugin URL), plus the TLS values above |
+
+A configuration that still names a removed toolset fails validation
+(`invalid toolset name`), and a `toolset_configs.kiali` or
+`toolset_configs.netobserv` table fails the load as an unknown key. Downstream
+builds whose default overrides enable or rebrand these toolsets must switch to
+the charts; the rebranded names become chart values rather than Go overrides.
+
+### Installing the replacement charts
+
+```bash
+# once per cluster
+kubectl apply -f examples/dynamic-tools/crd.yaml
+
+# per project; http-backed charts take the backend URL
+helm upgrade --install kiali-mcp-tools examples/dynamic-tools/charts/kiali-mcp-tools \
+  --set url=https://kiali.istio-system.svc:20001/kiali
+helm upgrade --install netobserv-mcp-tools examples/dynamic-tools/charts/netobserv-mcp-tools \
+  --set url=https://netobserv-plugin.netobserv.svc:9001
+helm upgrade --install tekton-mcp-tools examples/dynamic-tools/charts/tekton-mcp-tools
+helm upgrade --install kubevirt-mcp-tools examples/dynamic-tools/charts/kubevirt-mcp-tools
+```
+
+```toml
+toolsets = ["core", "config", "dynamic"]
+```
+
+The server lists Tool and Prompt resources with **its own** identity, so its
+ServiceAccount needs `get`, `list` and `watch` on `tools` and `prompts` in the
+`tools.kubernetes-mcp-server.io` group (the server Helm chart's
+`rbac.extraClusterRoles` can carry this rule). Tool calls run with the
+**caller's** identity, as before. Tool names, descriptions, input schemas and
+annotations are unchanged, so `enabled_tools`, `disabled_tools`,
+`tool_overrides` and confirmation rules keyed by tool name keep working.
+`require_tls` still refuses plain-HTTP backends at request time.
+
+For `make run-server` based evaluation setups, `make dynamic-tools-install
+DYNAMIC_TOOLS_CHARTS="kiali-mcp-tools ..."` installs the CRDs and charts.
+
+### Trust model
+
+A Tool or Prompt resource is prompt text handed to every agent that connects,
+and an `http` Tool names a URL that receives the caller's bearer token.
+Previously those URLs came only from the server's own configuration. Treat
+the ability to create `tools` and `prompts` resources as cluster-admin level:
+restrict it with RBAC, review charts before installing them, and audit the
+`url` values of installed Tools. The resources are cluster-scoped on purpose
+so that namespace administrators cannot add them.
+
+### Windows EULA confirmation
+
+The compiled-in validator that asked for Microsoft EULA acceptance before a
+`windows-efi-installer` PipelineRun was created has been removed. The same
+check is now a kube-level confirmation rule that inspects the request body,
+using the new `expression` field of `confirmation_rules` (see
+[configuration.md](configuration.md#confirmation-rules)). It is **no longer
+on by default**: add
+[`examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml`](../examples/dynamic-tools/charts/kubevirt-mcp-tools/confirmation-rules.toml)
+to the server's `--config-dir` wherever the KubeVirt tools are used
+(`make dynamic-tools-install` does this for the eval and development server
+started by `make run-server`). Without it, a `windows-efi-installer`
+PipelineRun created without `acceptEula: "true"` is **not** challenged. The
+`windows-golden-image` prompt still asks for consent through elicitation
+before it renders a PipelineRun with `acceptEula: "true"`.
+
+A rule expression that cannot be evaluated against a request now fails
+closed: confirmation is required, the error is logged and appended to the
+prompt. Guard optional fields with `has()` to keep such requests silent.
+
+### Tool and prompt differences
+
+The ported definitions keep the previous contracts; these are the
+behavioral differences:
+
+| Where | Change |
+|-------|--------|
+| `vm_create` | Removed. The new `vm-create` prompt gathers the DataSources, instancetypes, preferences and templates and asks the model to choose; `vm_create_from_template` is the deterministic alternative. |
+| `vm_lifecycle` | `start`/`stop`/`restart` change `runStrategy` with a merge patch instead of a full-object update. |
+| `vm_troubleshoot` | Includes virt-launcher logs with secrets redacted and redacts cloud-init volumes wholesale; the PVC fallback and cloud-init field analysis are not reproduced. |
+| `vm_console_screenshot` | The text description no longer states the image dimensions. |
+| `tekton_pipelinerun_logs`, `tekton_taskrun_logs` | One request per container instead of a stream; empty logs are not skipped; output is one header per container rather than grouped by TaskRun. |
+| `tekton_pipeline_start`, `tekton_task_start` | Do not check that the Pipeline or Task exists before creating the run. |
+| `windows-golden-image` prompt | The Tekton Hub catalog name is the upstream default; downstream overrides must edit the chart. |
+| NetObserv tools | Response size is capped at 8 MiB (previously 4 MiB for JSON and 2 MiB for exports, with a truncation note); a larger response is an error rather than a truncated body. |
+| Prompts | Titles declared in Prompt resources are not advertised; the server's prompt listing only forwards descriptions (pre-existing behavior). |
+
+### Multi-cluster and reload
+
+Tool and Prompt resources are read from the default target only; in
+multi-cluster mode they are exposed for every target. Changes to the
+resources are picked up within the toolset's poll interval (15 seconds) and
+announced through `tools/list_changed`, whether the `dynamic` toolset was
+enabled at startup or by a later configuration reload.
 
 ## Unified configuration surface
 

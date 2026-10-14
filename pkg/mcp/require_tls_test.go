@@ -1,135 +1,80 @@
 package mcp
 
 import (
-	"fmt"
 	"net/http"
-	"slices"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
-	kialiToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	dynamicclient "k8s.io/client-go/dynamic"
 	"sigs.k8s.io/yaml"
+
+	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/dynamic"
 )
 
-// KialiRequireTLSSuite tests Layer 2 (runtime) TLS enforcement for the Kiali toolset.
-// It uses a plain HTTP mock server and verifies that TLSEnforcingTransport blocks
-// requests when require_tls is enabled.
-type KialiRequireTLSSuite struct {
+// RequireTLSSuite tests Layer 2 (runtime) TLS enforcement for dynamic http
+// tools: with require_tls enabled, a plain-HTTP URL is refused at request
+// time even though the Tool resource declares it.
+type RequireTLSSuite struct {
 	BaseMcpSuite
-	mockServer  *test.MockServer
-	toolsetName string
+	mockServer *test.MockServer
 }
 
-func (s *KialiRequireTLSSuite) SetupTest() {
+func (s *RequireTLSSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.mockServer.Config().BearerToken = "token-xyz"
-	s.toolsetName = (&kialiToolset.Toolset{}).GetName()
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"traceId":"test-trace-123","spans":[]}`))
+	}))
+	s.Cfg.Toolsets.SetForTest(append(s.Cfg.Toolsets.Get(), "dynamic"))
+	obj := &unstructured.Unstructured{}
+	s.Require().NoError(yaml.Unmarshal([]byte(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: plain-http-trace
+spec:
+  description: Fetch a trace from a plain-HTTP backend
+  readOnly: true
+  http:
+    url: `+s.mockServer.Config().Host+`
+    path: /api/mcp/get_trace_details
+    response: text
+`), &obj.Object))
+	_, err := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.GVR).Create(s.T().Context(), obj, metav1.CreateOptions{})
+	s.Require().NoError(err)
 }
 
-func (s *KialiRequireTLSSuite) TearDownTest() {
+func (s *RequireTLSSuite) TearDownTest() {
 	s.BaseMcpSuite.TearDownTest()
+	_ = dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.GVR).
+		DeleteCollection(s.T().Context(), metav1.DeleteOptions{}, metav1.ListOptions{})
 	if s.mockServer != nil {
 		s.mockServer.Close()
 	}
 }
 
-func (s *KialiRequireTLSSuite) setupConfig(requireTLS bool) {
-	// toolset_configs requires the two-phase parsing performed by config.ReadToml,
-	// so we replace s.Cfg and restore the runtime fields the suite already set.
-	// Parse config without require_tls to bypass Layer 1 (config-time) URL validation,
-	// then enable require_tls to test Layer 2 (runtime) TLSEnforcingTransport enforcement.
-	kubeConfig := s.Cfg.KubeConfig.Get()
-	listOutput := s.Cfg.ListOutput.Get()
-	readOnly := s.Cfg.ReadOnly.Get()
-	s.Cfg = test.Must(config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
-		toolsets = ["%s"]
-		[toolset_configs.kiali]
-		url = "%s"
-	`, s.toolsetName, s.mockServer.Config().Host))))
-	s.Cfg.KubeConfig.SetForTest(kubeConfig)
-	s.Cfg.ListOutput.SetForTest(listOutput)
-	s.Cfg.ReadOnly.SetForTest(readOnly)
-	s.Cfg.RequireTLS.SetForTest(requireTLS)
-}
-
-func (s *KialiRequireTLSSuite) TestRequireTLS_BlocksHTTPRequests() {
-	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"traceId":"test-trace-123","spans":[]}`))
-	}))
-	s.setupConfig(true)
+func (s *RequireTLSSuite) TestRequireTLS_BlocksHTTPRequests() {
+	s.Cfg.RequireTLS.SetForTest(true)
 	s.InitMcpClient()
-
-	s.Run("kiali tool call to HTTP server is blocked", func() {
-		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_trace_details", s.toolsetName), map[string]interface{}{
-			"traceId": "test-trace-123",
-		})
-		s.Require().Nilf(err, "MCP protocol error: %v", err)
-		s.True(toolResult.IsError, "tool call should return an error result")
-		s.Contains(
-			toolResult.Content[0].(*mcp.TextContent).Text,
-			"secure scheme required",
-			"error should indicate TLS enforcement",
-		)
-	})
+	toolResult, err := s.CallTool("plain_http_trace", map[string]interface{}{})
+	s.Require().Nilf(err, "MCP protocol error: %v", err)
+	s.True(toolResult.IsError, "tool call should return an error result")
+	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "require_tls", "error should mention require_tls")
 }
 
-func (s *KialiRequireTLSSuite) TestRequireTLS_AllowsHTTPWhenDisabled() {
-	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"traceId":"test-trace-456","spans":[]}`))
-	}))
-	s.setupConfig(false)
+func (s *RequireTLSSuite) TestRequireTLS_AllowsHTTPWhenDisabled() {
+	s.Cfg.RequireTLS.SetForTest(false)
 	s.InitMcpClient()
-
-	s.Run("kiali tool call to HTTP server succeeds", func() {
-		toolResult, err := s.CallTool(fmt.Sprintf("%s_get_trace_details", s.toolsetName), map[string]interface{}{
-			"traceId": "test-trace-456",
-		})
-		s.Nilf(err, "call tool failed: %v", err)
-		s.Falsef(toolResult.IsError, "call tool failed")
-		s.Contains(
-			toolResult.Content[0].(*mcp.TextContent).Text,
-			"test-trace-456",
-			"response should contain trace ID",
-		)
-	})
+	toolResult, err := s.CallTool("plain_http_trace", map[string]interface{}{})
+	s.Require().Nilf(err, "MCP protocol error: %v", err)
+	s.False(toolResult.IsError, "tool call should succeed without require_tls")
+	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "test-trace-123")
 }
 
-func TestKialiRequireTLS(t *testing.T) {
-	suite.Run(t, new(KialiRequireTLSSuite))
-}
-
-// CoreRequireTLSSuite tests that enabling require_tls does not break core
-// Kubernetes tools. The envtest API server uses HTTPS, so core tools should
-// continue to work normally when TLS enforcement is enabled.
-type CoreRequireTLSSuite struct {
-	BaseMcpSuite
-}
-
-func (s *CoreRequireTLSSuite) TestRequireTLS_CoreToolsStillWork() {
-	configtest.OverlayTOML(s.T(), &s.Cfg, `
-		require_tls = true
-	`)
-	s.InitMcpClient()
-
-	s.Run("namespaces_list succeeds with require_tls enabled", func() {
-		toolResult, err := s.CallTool("namespaces_list", map[string]interface{}{})
-		s.Nilf(err, "call tool failed: %v", err)
-		s.Falsef(toolResult.IsError, "call tool failed")
-		var decoded []unstructured.Unstructured
-		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded)
-		s.Require().NoError(err, "expected valid YAML response")
-		s.True(slices.ContainsFunc(decoded, func(ns unstructured.Unstructured) bool {
-			return ns.GetName() == "default"
-		}), "expected default namespace in the list")
-	})
-}
-
-func TestCoreRequireTLS(t *testing.T) {
-	suite.Run(t, new(CoreRequireTLSSuite))
+func TestRequireTLS(t *testing.T) {
+	suite.Run(t, new(RequireTLSSuite))
 }

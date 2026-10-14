@@ -222,7 +222,7 @@ jobs:
 
           # Helper: emit a single-entry matrix for the given suite/config/toolsets.
           single_matrix() {
-            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s"}]}' "$1" "$2" "$3"
+            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s","charts":"%s"}]}' "$1" "$2" "$3" "$4"
           }
 
           case "$SUITE" in
@@ -230,41 +230,41 @@ jobs:
               # Weekly schedule: run all individual suites in parallel.
               MATRIX=$(cat <<'EOFM'
           {"include":[
-            {"suite":"core","eval-config":"evals/core-eval-testing/builtin-openai/eval-core.yaml","toolsets":"core,config"},
-            {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm"},
-            {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
-            {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
-            {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
-            {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"},
-            {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"}
+            {"suite":"core","eval-config":"evals/core-eval-testing/builtin-openai/eval-core.yaml","toolsets":"core,config","charts":""},
+            {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm","charts":""},
+            {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,dynamic","charts":"kubevirt-mcp-tools tekton-mcp-tools"},
+            {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,dynamic","charts":"kiali-mcp-tools"},
+            {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,dynamic","charts":"tekton-mcp-tools"},
+            {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,dynamic","charts":"netobserv-mcp-tools"},
+            {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config","charts":""}
           ]}
           EOFM
           )
               ;;
             helm)
-              MATRIX=$(single_matrix helm "${EVAL_DIR}/eval-helm.yaml" "core,config,helm")
+              MATRIX=$(single_matrix helm "${EVAL_DIR}/eval-helm.yaml" "core,config,helm" "")
               ;;
             kubevirt)
-              MATRIX=$(single_matrix kubevirt "${EVAL_DIR}/eval-kubevirt.yaml" "core,config,kubevirt,tekton")
+              MATRIX=$(single_matrix kubevirt "${EVAL_DIR}/eval-kubevirt.yaml" "core,config,dynamic" "kubevirt-mcp-tools tekton-mcp-tools")
               ;;
             kiali)
-              MATRIX=$(single_matrix kiali "${EVAL_DIR}/eval-kiali.yaml" "core,config,kiali")
+              MATRIX=$(single_matrix kiali "${EVAL_DIR}/eval-kiali.yaml" "core,config,dynamic" "kiali-mcp-tools")
               ;;
             tekton)
-              MATRIX=$(single_matrix tekton "${EVAL_DIR}/eval-tekton.yaml" "core,config,tekton")
+              MATRIX=$(single_matrix tekton "${EVAL_DIR}/eval-tekton.yaml" "core,config,dynamic" "tekton-mcp-tools")
               ;;
             netobserv)
-              MATRIX=$(single_matrix netobserv "${EVAL_DIR}/eval-netobserv.yaml" "core,config,netobserv")
+              MATRIX=$(single_matrix netobserv "${EVAL_DIR}/eval-netobserv.yaml" "core,config,dynamic" "netobserv-mcp-tools")
               ;;
             argocd)
-              MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "core,config")
+              MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "core,config" "")
               ;;
             all)
-              MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")
+              MATRIX=$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,dynamic" "kiali-mcp-tools kubevirt-mcp-tools tekton-mcp-tools netobserv-mcp-tools")
               ;;
             *)
               # Default to core suite (matches 'core' or any unrecognized suite)
-              MATRIX=$(single_matrix core "${EVAL_DIR}/eval-core.yaml" "core,config")
+              MATRIX=$(single_matrix core "${EVAL_DIR}/eval-core.yaml" "core,config" "")
               ;;
           esac
 
@@ -280,7 +280,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.check-trigger.outputs.matrix) }}
     env:
-      MINIKUBE_DRIVER: ${{ contains(matrix.toolsets, 'kubevirt') && 'docker' || 'podman' }}
+      MINIKUBE_DRIVER: ${{ contains(matrix.charts, 'kubevirt') && 'docker' || 'podman' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -310,23 +310,29 @@ jobs:
         run: make csi-hostpath-install
 
       - name: Install Istio/Kiali and bookinfo demo
-        if: contains(matrix.toolsets, 'kiali')
+        if: contains(matrix.charts, 'kiali')
         run: make setup-kiali
 
       - name: Install KubeVirt
-        if: contains(matrix.toolsets, 'kubevirt')
+        if: contains(matrix.charts, 'kubevirt')
         run: make kubevirt-install
 
       - name: Install Tekton
-        if: contains(matrix.toolsets, 'tekton')
+        if: contains(matrix.charts, 'tekton')
         run: make tekton-install
 
       - name: Install NetObserv mock plugin
-        if: contains(matrix.toolsets, 'netobserv')
+        if: contains(matrix.charts, 'netobserv')
         run: make setup-netobserv
       - name: Install ArgoCD CRDs
         if: contains(matrix.toolsets, 'argocd')
         run: make argocd-install
+
+      - name: Install Tool/Prompt resources for the suite
+        if: matrix.charts != ''
+        run: make dynamic-tools-install
+        env:
+          DYNAMIC_TOOLS_CHARTS: ${{ matrix.charts }}
 
       - name: Start MCP server
         run: make run-server

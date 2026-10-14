@@ -1,5 +1,5 @@
 # Minimal NetObserv console plugin API mock for mcpchecker (Kind / local dev).
-# Matches paths in pkg/toolsets/netobserv/tools/endpoints.go.
+# Matches the paths of the netobserv-mcp-tools chart (examples/dynamic-tools/charts/netobserv-mcp-tools).
 apiVersion: v1
 kind: Namespace
 metadata:

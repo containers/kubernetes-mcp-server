@@ -109,6 +109,10 @@ func (s *ServerTool) IsTargetListProvider() bool {
 type ToolsetContext struct {
 	Inspector                         ClusterInspector
 	TargetCompatibilityFiltersEnabled bool
+	// Toolsets are the toolsets enabled by the configuration being applied,
+	// so that a toolset whose surface comes from outside the binary can
+	// avoid exposing names another enabled toolset already owns.
+	Toolsets []Toolset
 }
 
 type Toolset interface {
@@ -129,6 +133,16 @@ type Toolset interface {
 	// GetResourceTemplates returns the resource templates provided by this toolset.
 	// Returns nil if the toolset doesn't provide any resource templates.
 	GetResourceTemplates(ctx context.Context, toolsetContext ToolsetContext) []ServerResourceTemplate
+}
+
+// ToolsetWatcher is an optional interface a Toolset implements when the set
+// of capabilities it exposes can change at runtime (for example tools defined
+// by cluster resources). The server calls WatchToolset once for each enabled
+// toolset that implements it; onChange re-applies the installed configuration
+// the same way a cluster-state change does. The returned stop function ends
+// the watch and is called when the server closes.
+type ToolsetWatcher interface {
+	WatchToolset(ctx context.Context, toolsetContext ToolsetContext, onChange func() error) (stop func())
 }
 
 type ToolCallRequest interface {

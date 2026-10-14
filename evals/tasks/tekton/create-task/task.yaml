@@ -6,7 +6,7 @@ metadata:
   labels:
     suite: tekton
     project: tekton
-    requires: tekton
+    requires: dynamic
   annotations:
     project-name: "Tekton"
     project-url: "https://tekton.dev"

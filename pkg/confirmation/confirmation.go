@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -33,13 +34,20 @@ func CheckToolRules(ctx context.Context, rules []config.ConfirmationRule, fallba
 // Returns nil if no rules match or the user accepts.
 func CheckKubeRules(ctx context.Context, rules []config.ConfirmationRule, fallback string, elicitor api.Elicitor,
 	verb, kind, group, version, name, namespace string) error {
+	return CheckKubeRequest(ctx, rules, fallback, elicitor,
+		rulexpr.Request{Verb: verb, Kind: kind, Group: group, Version: version, Name: name, Namespace: namespace})
+}
 
-	matched := MatchKubeLevelRules(rules, verb, kind, group, version, name, namespace)
+// CheckKubeRequest is CheckKubeRules for a full request, so rule expressions
+// can inspect the request body.
+func CheckKubeRequest(ctx context.Context, rules []config.ConfirmationRule, fallback string, elicitor api.Elicitor,
+	request rulexpr.Request) error {
+	matched := MatchKubeLevelRequest(ctx, rules, request)
 	if len(matched) == 0 {
 		return nil
 	}
-	message, fb := MergeMatchedRules(matched, fallback)
-	return CheckConfirmation(ctx, elicitor, message, fb)
+	message, effectiveFallback := MergeMatchedRules(matched, fallback)
+	return CheckConfirmation(ctx, elicitor, message, effectiveFallback)
 }
 
 // CheckConfirmation prompts the user for confirmation via the elicitor.

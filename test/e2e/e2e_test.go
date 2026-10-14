@@ -17,11 +17,17 @@ import (
 
 var testenv env.Environment
 
-func TestMain(m *testing.M) {
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		kubeconfig = findKubeconfig()
+// kubeconfigPath resolves the kubeconfig the suite runs against: KUBECONFIG,
+// or the discovered default.
+func kubeconfigPath() string {
+	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
+		return kubeconfig
 	}
+	return findKubeconfig()
+}
+
+func TestMain(m *testing.M) {
+	kubeconfig := kubeconfigPath()
 
 	if kubeconfig != "" {
 		testenv = env.NewWithKubeConfig(kubeconfig)

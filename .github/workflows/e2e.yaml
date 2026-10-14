@@ -34,6 +34,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Build e2e tests
+        run: make e2e-build
+
       - name: Setup e2e environment
         run: make e2e-full-setup
 

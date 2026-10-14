@@ -1,0 +1,13 @@
+# Base URL of the Prometheus (or Thanos Querier) API. The MCP server calls it
+# with the caller's bearer token ([toolset_configs.observability/metrics]
+# prometheus_url).
+url: https://thanos-querier.openshift-monitoring.svc:9091
+# Base URL of the Alertmanager API (alertmanager_url). The get_alerts and
+# get_silences tools are only installed when it is set.
+alertmanagerUrl: ""
+# PEM bundle used to verify the server certificates (empty: system roots).
+certificateAuthority: ""
+insecureSkipTLSVerify: false
+# Return every sample of a range query instead of per-series summary
+# statistics (range_query_full_response).
+rangeQueryFullResponse: false

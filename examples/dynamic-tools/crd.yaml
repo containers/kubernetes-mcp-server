@@ -1,0 +1,467 @@
+# Tool custom resource definition for the kubernetes-mcp-server "dynamic" toolset.
+#
+# A Tool declares an MCP tool (name, description, input schema, annotations) and
+# exactly one action the server performs with the caller's own identity:
+# a single Kubernetes API request, or an HTTP request to a URL or an in-cluster
+# Service. See docs/specs/dynamic-tools.md.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tools.tools.kubernetes-mcp-server.io
+spec:
+  group: tools.kubernetes-mcp-server.io
+  scope: Cluster
+  names:
+    plural: tools
+    singular: tool
+    kind: Tool
+    shortNames: [mcptool]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Tool
+          type: string
+          jsonPath: .spec.name
+        - name: Read-only
+          type: boolean
+          jsonPath: .spec.readOnly
+        - name: Destructive
+          type: boolean
+          jsonPath: .spec.destructive
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [description]
+              x-kubernetes-validations:
+                - rule: "[has(self.kubernetes), has(self.http), has(self.steps)].filter(x, x).size() == 1"
+                  message: "exactly one of spec.kubernetes, spec.http or spec.steps must be set"
+              properties:
+                name:
+                  type: string
+                  description: MCP tool name. Defaults to metadata.name with '-' and '.' replaced by '_'.
+                  pattern: '^[a-z0-9][a-z0-9_]*$'
+                title:
+                  type: string
+                description:
+                  type: string
+                  description: Written for the model. First sentence what the tool does, second when to use it.
+                  minLength: 1
+                readOnly:
+                  type: boolean
+                destructive:
+                  type: boolean
+                idempotent:
+                  type: boolean
+                inputSchema:
+                  type: object
+                  description: JSON Schema (object) of the tool arguments.
+                  x-kubernetes-preserve-unknown-fields: true
+                output:
+                  type: string
+                  description: >-
+                    CEL expression over `response` (decoded action response), `args`
+                    (tool arguments) and `steps` (results of composed steps). Its result
+                    replaces the raw response.
+                requires:
+                  type: array
+                  description: API kinds the tool depends on; hidden when no target serves them (with target compatibility filters enabled).
+                  items:
+                    type: object
+                    required: [apiVersion, kind]
+                    properties:
+                      apiVersion: {type: string}
+                      kind: {type: string}
+                meta:
+                  type: object
+                  description: Passed through as the MCP tool's _meta (client-side extensions such as UI renderers).
+                  x-kubernetes-preserve-unknown-fields: true
+                kubernetes: &kubernetes
+                  type: object
+                  required: [verb, apiVersion]
+                  x-kubernetes-validations:
+                    - rule: "has(self.kind) != has(self.resource)"
+                      message: "exactly one of kind or resource must be set"
+                  properties:
+                    verb:
+                      type: string
+                      enum: [get, list, create, update, patch, delete]
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                      description: Resolved to a resource through discovery.
+                    resource:
+                      type: string
+                      description: The plural, bypassing discovery (aggregated APIs that only serve subresources).
+                    namespaced:
+                      type: boolean
+                      description: Only with resource; defaults to true.
+                    subresource:
+                      description: A reference (string shorthand, or {argument|expression|value}); may have several segments.
+                      x-kubernetes-preserve-unknown-fields: true
+                    namespace:
+                      type: object
+                      properties:
+                        argument: {type: string}
+                        expression: {type: string}
+                        value: {type: string}
+                        all: {type: boolean}
+                    name: &ref
+                      description: A reference (string shorthand, or {argument|expression|value}).
+                      x-kubernetes-preserve-unknown-fields: true
+                    query:
+                      type: object
+                      additionalProperties: *ref
+                    queryExpression:
+                      type: string
+                      description: CEL over args producing a map of query parameters.
+                    body: &body
+                      type: object
+                      properties:
+                        argument: {type: string}
+                        expression: {type: string}
+                        value:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                    response: &response
+                      type: string
+                      enum: [json, text, binary]
+                      description: How the body is decoded. binary yields an image/blob content block.
+                    mimeType: &mimeType
+                      type: string
+                      description: Media type of a binary response when the server does not say.
+                    redact: &redact
+                      type: boolean
+                      description: Remove secrets from a text response.
+                http: &http
+                  type: object
+                  x-kubernetes-validations:
+                    - rule: "[has(self.url), has(self.urlExpression), has(self.service)].filter(x, x).size() == 1"
+                      message: "exactly one of url, urlExpression or service must be set"
+                  properties:
+                    method:
+                      type: string
+                    url:
+                      type: string
+                      pattern: '^https?://'
+                    service:
+                      type: object
+                      required: [namespace, name]
+                      properties:
+                        namespace: {type: string}
+                        name: {type: string}
+                        port: {type: string}
+                        scheme: {type: string, enum: [http, https]}
+                    urlExpression:
+                      type: string
+                      description: CEL string over steps and item computing the base URL at run time (must not reference args).
+                    path: *ref
+                    query:
+                      type: object
+                      additionalProperties: *ref
+                    queryExpression:
+                      type: string
+                    headers:
+                      type: object
+                      additionalProperties: *ref
+                    body: *body
+                    certificateAuthority:
+                      type: string
+                    insecureSkipTLSVerify:
+                      type: boolean
+                    response: *response
+                    mimeType: *mimeType
+                    redact: *redact
+                steps: &steps
+                  type: array
+                  maxItems: 16
+                  description: Composed actions, run in order; each sees the previous results as steps.<name>.
+                  items:
+                    type: object
+                    required: [name]
+                    x-kubernetes-validations:
+                      - rule: "[has(self.kubernetes), has(self.http), has(self.expression), has(self.fail), has(self.elicit)].filter(x, x).size() == 1"
+                        message: "exactly one of kubernetes, http, expression, fail or elicit must be set"
+                    properties:
+                      name:
+                        type: string
+                        pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+                      kubernetes: *kubernetes
+                      http: *http
+                      expression:
+                        type: string
+                        description: A pure CEL step; its value is the result.
+                      fail:
+                        type: string
+                        description: CEL string; a non-empty result fails the tool with that message.
+                      elicit:
+                        type: object
+                        required: [message]
+                        description: Ask the user through MCP elicitation; the result has action accept/decline/cancel/unsupported.
+                        properties:
+                          message:
+                            type: string
+                            description: Text template with ${expression} placeholders.
+                      when:
+                        type: string
+                        description: CEL boolean; false skips the step (result null).
+                      forEach:
+                        type: string
+                        description: CEL list; the action runs per element with `item` bound.
+                      ignoreError:
+                        type: boolean
+---
+# Prompt custom resource: optional gathering steps (the same engine as Tool,
+# schema inlined because YAML anchors do not cross documents) followed by
+# messages rendered from text templates with ${expression} placeholders over
+# args and steps.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: prompts.tools.kubernetes-mcp-server.io
+spec:
+  group: tools.kubernetes-mcp-server.io
+  scope: Cluster
+  names:
+    plural: prompts
+    singular: prompt
+    kind: Prompt
+    shortNames:
+    - mcpprompt
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    additionalPrinterColumns:
+    - name: Prompt
+      type: string
+      jsonPath: .spec.name
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+    schema:
+      openAPIV3Schema:
+        type: object
+        required:
+        - spec
+        properties:
+          spec:
+            type: object
+            required:
+            - description
+            - messages
+            properties:
+              name:
+                type: string
+                description: MCP prompt name. Defaults to metadata.name.
+              title:
+                type: string
+              description:
+                type: string
+                minLength: 1
+              arguments:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                    description:
+                      type: string
+                    required:
+                      type: boolean
+              steps:
+                type: array
+                maxItems: 16
+                description: Composed actions, run in order; each sees the previous results as steps.<name>.
+                items:
+                  type: object
+                  required:
+                  - name
+                  x-kubernetes-validations:
+                  - rule: '[has(self.kubernetes), has(self.http), has(self.expression), has(self.fail),
+                      has(self.elicit)].filter(x, x).size() == 1'
+                    message: exactly one of kubernetes, http, expression, fail or elicit must be set
+                  properties:
+                    name:
+                      type: string
+                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                    kubernetes:
+                      type: object
+                      required:
+                      - verb
+                      - apiVersion
+                      x-kubernetes-validations:
+                      - rule: has(self.kind) != has(self.resource)
+                        message: exactly one of kind or resource must be set
+                      properties:
+                        verb:
+                          type: string
+                          enum:
+                          - get
+                          - list
+                          - create
+                          - update
+                          - patch
+                          - delete
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
+                          description: Resolved to a resource through discovery.
+                        resource:
+                          type: string
+                          description: The plural, bypassing discovery (aggregated APIs that only serve
+                            subresources).
+                        namespaced:
+                          type: boolean
+                          description: Only with resource; defaults to true.
+                        subresource:
+                          description: A reference (string shorthand, or {argument|expression|value});
+                            may have several segments.
+                          x-kubernetes-preserve-unknown-fields: true
+                        namespace:
+                          type: object
+                          properties:
+                            argument:
+                              type: string
+                            expression:
+                              type: string
+                            value:
+                              type: string
+                            all:
+                              type: boolean
+                        name: &id001
+                          description: A reference (string shorthand, or {argument|expression|value}).
+                          x-kubernetes-preserve-unknown-fields: true
+                        query:
+                          type: object
+                          additionalProperties: *id001
+                        queryExpression:
+                          type: string
+                          description: CEL over args producing a map of query parameters.
+                        body: &id002
+                          type: object
+                          properties:
+                            argument:
+                              type: string
+                            expression:
+                              type: string
+                            value:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                        response: &id003
+                          type: string
+                          enum:
+                          - json
+                          - text
+                          - binary
+                          description: How the body is decoded. binary yields an image/blob content block.
+                        mimeType: &id004
+                          type: string
+                          description: Media type of a binary response when the server does not say.
+                        redact: &id005
+                          type: boolean
+                          description: Remove secrets from a text response.
+                    http:
+                      type: object
+                      x-kubernetes-validations:
+                      - rule: "[has(self.url), has(self.urlExpression), has(self.service)].filter(x, x).size() == 1"
+                        message: exactly one of url, urlExpression or service must be set
+                      properties:
+                        method:
+                          type: string
+                        url:
+                          type: string
+                          pattern: ^https?://
+                        urlExpression:
+                          type: string
+                          description: CEL string over steps and item computing the base URL at run time (must not reference args).
+                        service:
+                          type: object
+                          required:
+                          - namespace
+                          - name
+                          properties:
+                            namespace:
+                              type: string
+                            name:
+                              type: string
+                            port:
+                              type: string
+                            scheme:
+                              type: string
+                              enum:
+                              - http
+                              - https
+                        path: *id001
+                        query:
+                          type: object
+                          additionalProperties: *id001
+                        queryExpression:
+                          type: string
+                        headers:
+                          type: object
+                          additionalProperties: *id001
+                        body: *id002
+                        certificateAuthority:
+                          type: string
+                        insecureSkipTLSVerify:
+                          type: boolean
+                        response: *id003
+                        mimeType: *id004
+                        redact: *id005
+                    expression:
+                      type: string
+                      description: A pure CEL step; its value is the result.
+                    fail:
+                      type: string
+                      description: CEL string; a non-empty result fails the tool with that message.
+                    elicit:
+                      type: object
+                      required:
+                      - message
+                      description: Ask the user through MCP elicitation; the result has action accept/decline/cancel/unsupported.
+                      properties:
+                        message:
+                          type: string
+                          description: Text template with ${expression} placeholders.
+                    when:
+                      type: string
+                      description: CEL boolean; false skips the step (result null).
+                    forEach:
+                      type: string
+                      description: CEL list; the action runs per element with `item` bound.
+                    ignoreError:
+                      type: boolean
+              messages:
+                type: array
+                minItems: 1
+                items:
+                  type: object
+                  required:
+                  - role
+                  - text
+                  properties:
+                    role:
+                      type: string
+                      enum:
+                      - user
+                      - assistant
+                    text:
+                      type: string
+                      description: Template with ${expression} placeholders; structures render as YAML.
+                    when:
+                      type: string
+                      description: CEL boolean; the message is dropped when false.
