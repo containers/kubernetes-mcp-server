@@ -1,0 +1,13 @@
+# Fixed Loki API URL ([toolset_configs.observability/logs] loki_url). When
+# set, the tools query it directly and lokiNamespace/lokiName are ignored.
+# When empty, the tools resolve the LokiStack named by lokiNamespace/lokiName
+# in the cluster, as the in-tree toolset did.
+url: ""
+# Resolve LokiStack gateways through OpenShift Routes (use_route): the Route
+# named after the LokiStack, then <name>-gateway-http, then any Route whose
+# target Service is <name>-gateway-http. Without a Route, or with useRoute
+# false, the gateway Service DNS name is used.
+useRoute: false
+# PEM bundle used to verify the Loki server certificate (empty: system roots).
+certificateAuthority: ""
+insecureSkipTLSVerify: false

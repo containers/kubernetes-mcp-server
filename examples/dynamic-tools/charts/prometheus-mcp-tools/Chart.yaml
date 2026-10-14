@@ -1,0 +1,10 @@
+apiVersion: v2
+name: prometheus-mcp-tools
+description: >-
+  The kubernetes-mcp-server observability/metrics (Prometheus and Alertmanager)
+  toolset delivered as Tool custom resources, versioned and released
+  independently of the server.
+type: application
+version: 0.1.0
+appVersion: "3.0"
+keywords: [prometheus, thanos, alertmanager, metrics, promql, observability, mcp, kubernetes-mcp-server]

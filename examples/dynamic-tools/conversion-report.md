@@ -72,6 +72,64 @@ Final report of the migration from in-tree Go toolsets to Tool and Prompt resour
 | `kcp_workspaces_list` | no | redundant: the kcp cluster provider already exposes every workspace as a target through `workspace_list` |
 | `kcp_workspace_describe` | yes |  |
 
+## observability/logs
+
+| Tool | Converted | Notes |
+|------|-----------|-------|
+| `loki_list_instances` | yes | Route lookup failures are skipped per LokiStack instead of failing the tool; a Route without a host is treated as absent instead of an error. |
+| `loki_label_names` | yes | Resolves the named LokiStack with a `get` instead of listing every LokiStack. `NOW±duration` accepts a single unit (`NOW-1h30m` is rejected). |
+| `loki_label_values` | yes | As `loki_label_names`. |
+| `loki_query_range` | yes | As `loki_label_names`. The `duration` argument accepts one unit, as its schema pattern always required. |
+
+The `auth_mode = "kubeconfig"` option (query Loki with the server's own
+token) has no equivalent: a Tool always sends the caller's token. The unused
+`ServerPrompt` instructions constant had no consumer in-tree and was dropped.
+
+## observability/metrics
+
+| Tool | Converted | Notes |
+|------|-----------|-------|
+| `list_metrics` | yes | The regex is not compiled before the request; Prometheus reports an invalid one. |
+| `execute_instant_query` | yes | No guardrails (see below). |
+| `execute_range_query` | yes | No guardrails. Per-series statistics are computed in CEL (`sum`, `math.least`/`greatest`); `rangeQueryFullResponse` is a chart value. |
+| `show_timeseries` | yes | The `olsUi` `_meta` travels through the new `spec.meta`. |
+| `get_label_names` | yes |  |
+| `get_label_values` | yes |  |
+| `get_series` | yes |  |
+| `get_alerts` | yes | Installed only when `alertmanagerUrl` is set (the in-tree tool failed at call time without `alertmanager_url`). The comma-separated `filter` becomes repeated `filter` parameters. |
+| `get_silences` | yes | As `get_alerts`. |
+
+Not converted: the PromQL **guardrails** (`guardrails`,
+`max_metric_cardinality`, `max_label_cardinality`) and the metric-existence
+check that ran before every query. Both parse PromQL with the Prometheus
+parser and consult `/api/v1/status/tsdb`; a Tool cannot parse PromQL. The
+tools are also cluster-aware now (they take the `context` argument in
+multi-cluster mode), where the in-tree tools were not. The unused
+`ServerPrompt` constant was dropped.
+
+## observability/traces
+
+| Tool | Converted | Notes |
+|------|-----------|-------|
+| `tempo_list_instances` | yes | Instances are listed even when their Route cannot be resolved (the in-tree tool skipped them). Service names are not DNS-sanitized (CR names already are). |
+| `tempo_get_trace_by_id` | yes | A missing trace is reported from the response body as before; a 404 is reported as an HTTP error. |
+| `tempo_search_traces` | yes | Limits are checked by `fail` steps with the in-tree messages. The 10 MiB response cap is the engine's 8 MiB. |
+| `tempo_search_tags` | yes |  |
+| `tempo_search_tag_values` | yes |  |
+
+The `text/html` response check ("invalid authentication token") is not
+replicated; such a response is returned as text. `auth_mode = "kubeconfig"`
+has no equivalent. The unused `ServerPrompt` constant was dropped.
+
+## observability/otelcol
+
+| Tool | Converted | Notes |
+|------|-----------|-------|
+| `otelcol_list_components` | no | validates collector configuration against JSON schemas embedded in a Go module; no request to express |
+| `otelcol_get_component_schema` | no | as above |
+| `otelcol_validate_config` | no | as above |
+| `otelcol_get_versions` | no | as above |
+
 ## core
 
 | Tool | Converted | Notes |
@@ -113,4 +171,4 @@ Final report of the migration from in-tree Go toolsets to Tool and Prompt resour
 | `helm_list` | no | reads Helm release storage |
 | `helm_uninstall` | no | Helm release storage |
 
-**55 of 70 tools and prompts converted.**
+**73 of 92 tools and prompts converted.**

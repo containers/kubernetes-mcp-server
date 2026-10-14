@@ -464,10 +464,7 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 | core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                    | ✓       |
 | dynamic               | Tools and prompts defined declaratively as Tool and Prompt custom resources (tools.kubernetes-mcp-server.io) installed in the cluster, see docs/specs/dynamic-tools.md |         |
 | helm                  | Tools for managing Helm charts and releases                                                                                                                            |         |
-| observability/logs    | Toolset for querying Loki logs                                                                                                                                         |         |
-| observability/metrics | Toolset for querying Prometheus and Alertmanager endpoints in efficient ways.                                                                                          |         |
 | observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                             |         |
-| observability/traces  | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                            |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 

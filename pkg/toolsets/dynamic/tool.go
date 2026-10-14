@@ -50,6 +50,7 @@ type compiledAction struct {
 	transport *http.Transport
 	bodyExpr  *expression
 	queryExpr *expression
+	urlExpr   *expression
 }
 
 // compiledStep is one step of a composed Tool or Prompt.
@@ -159,6 +160,17 @@ func compileAction(kubernetes *KubernetesAction, http *HTTPAction) (*compiledAct
 			return nil, err
 		}
 	}
+	if http != nil && http.URLExpression != "" {
+		if a.urlExpr, err = compileExpression(http.URLExpression); err != nil {
+			return nil, fmt.Errorf("urlExpression: %w", err)
+		}
+		// The base URL decides where the caller's bearer token goes. It may
+		// come from what the cluster says (a Route host, a CR's spec), never
+		// from what the model sends.
+		if a.urlExpr.references("args") {
+			return nil, fmt.Errorf("urlExpression %q must not reference args: derive the URL from steps instead", http.URLExpression)
+		}
+	}
 	if query != "" {
 		if a.queryExpr, err = compileExpression(query); err != nil {
 			return nil, fmt.Errorf("queryExpression: %w", err)
@@ -230,6 +242,7 @@ func (c *compiledTool) serverTool(ctx context.Context, inspector api.ClusterInsp
 				IdempotentHint:  ptr.To(c.spec.Idempotent),
 				OpenWorldHint:   ptr.To(true),
 			},
+			Meta: c.spec.Meta,
 		},
 		RBAC:    c.rbac(ctx, discovery),
 		Handler: c.handle,
@@ -481,6 +494,8 @@ func (c *compiledTool) rbac(ctx context.Context, discovery api.AggregateDiscover
 				Namespace:    &api.RBACNamespace{Name: action.http.Service.Namespace},
 				ResourceName: &api.RBACResourceName{Name: action.http.Service.Name},
 			})
+		case action.http != nil && action.http.URLExpression != "":
+			urls = append(urls, "the URL computed by "+action.http.URLExpression)
 		case action.http != nil:
 			urls = append(urls, action.http.URL)
 		default:

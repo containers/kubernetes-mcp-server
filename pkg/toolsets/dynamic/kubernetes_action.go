@@ -78,8 +78,10 @@ func (t *compiledTool) runKubernetes(action *compiledAction, env runEnv, vars ev
 	if err != nil {
 		return nil, err
 	}
-	for key, value := range query {
-		req = req.Param(key, value)
+	for key, values := range query {
+		for _, value := range values {
+			req = req.Param(key, value)
+		}
 	}
 	if a.Body != nil || a.Verb == "create" || a.Verb == "update" || a.Verb == "patch" {
 		body, err := t.resolveBody(a.Body, action.bodyExpr, vars)
@@ -159,8 +161,8 @@ func (a *KubernetesAction) resolveResource(client api.KubernetesClient, gv schem
 
 // resolveQuery merges the query produced by the expression (if any) with the
 // declared references; references win.
-func (t *compiledTool) resolveQuery(refs map[string]Ref, expr *expression, vars evalVars) (map[string]string, error) {
-	query := map[string]string{}
+func (t *compiledTool) resolveQuery(refs map[string]Ref, expr *expression, vars evalVars) (map[string][]string, error) {
+	query := map[string][]string{}
 	if expr != nil {
 		values, err := expr.evalStringMap(vars)
 		if err != nil {
@@ -174,7 +176,7 @@ func (t *compiledTool) resolveQuery(refs map[string]Ref, expr *expression, vars 
 			return nil, err
 		}
 		if value != "" {
-			query[key] = value
+			query[key] = []string{value}
 		}
 	}
 	return query, nil

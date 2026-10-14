@@ -143,6 +143,9 @@ type ToolSpec struct {
 	// Requires lists API kinds the tool depends on. When target compatibility
 	// filters are enabled, the tool is hidden if no target serves them.
 	Requires []GVKRef `json:"requires,omitempty"`
+	// Meta is passed through as the MCP tool's `_meta`, for client-side
+	// extensions such as UI renderers keyed by tool.
+	Meta map[string]any `json:"meta,omitempty"`
 }
 
 // Step is one action of a composed Tool. Exactly one of Kubernetes, HTTP,
@@ -290,18 +293,29 @@ type ServiceRef struct {
 }
 
 // HTTPAction performs one HTTP request authenticated with the caller's
-// bearer token. Exactly one of URL or Service must be set.
+// bearer token. Exactly one of URL, URLExpression or Service must be set.
 type HTTPAction struct {
-	Method  string      `json:"method,omitempty"`
-	URL     string      `json:"url,omitempty"`
-	Service *ServiceRef `json:"service,omitempty"`
-	// Path is appended to the base URL. `{argument}` placeholders are replaced
-	// with the URL-escaped tool argument of that name.
-	Path            string            `json:"path,omitempty"`
-	Query           map[string]Ref    `json:"query,omitempty"`
-	QueryExpression string            `json:"queryExpression,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	Body            *Body             `json:"body,omitempty"`
+	Method string `json:"method,omitempty"`
+	// URL is a fixed absolute base URL. URLExpression computes it at run time
+	// as a CEL string over `steps` and `item`, for backends discovered from
+	// cluster resources (a LokiStack's Route, a TempoStack's gateway); it must
+	// not reference `args`, so the model never chooses where the caller's
+	// token is sent. Service reaches an in-cluster Service through the API
+	// server proxy.
+	URL           string      `json:"url,omitempty"`
+	URLExpression string      `json:"urlExpression,omitempty"`
+	Service       *ServiceRef `json:"service,omitempty"`
+	// Path is appended to the base URL. As a plain string, `{argument}`
+	// placeholders are replaced with the URL-escaped tool argument of that
+	// name; as an {argument|expression} reference the resolved value is
+	// appended verbatim.
+	Path            *Ref           `json:"path,omitempty"`
+	Query           map[string]Ref `json:"query,omitempty"`
+	QueryExpression string         `json:"queryExpression,omitempty"`
+	// Headers maps header names to references; a header whose value resolves
+	// to the empty string is not sent.
+	Headers map[string]Ref `json:"headers,omitempty"`
+	Body    *Body          `json:"body,omitempty"`
 	// CertificateAuthority is a PEM bundle used to verify the URL's server.
 	CertificateAuthority  string `json:"certificateAuthority,omitempty"`
 	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify,omitempty"`
@@ -454,8 +468,18 @@ func validateResponse(path, response string) []error {
 
 func (a *HTTPAction) validate() []error {
 	var errs []error
-	if (a.URL == "") == (a.Service == nil) {
-		errs = append(errs, errors.New("exactly one of spec.http.url or spec.http.service is required"))
+	set := 0
+	if a.URL != "" {
+		set++
+	}
+	if a.URLExpression != "" {
+		set++
+	}
+	if a.Service != nil {
+		set++
+	}
+	if set != 1 {
+		errs = append(errs, errors.New("exactly one of spec.http.url, spec.http.urlExpression or spec.http.service is required"))
 	}
 	if a.URL != "" && !strings.HasPrefix(a.URL, "http://") && !strings.HasPrefix(a.URL, "https://") {
 		errs = append(errs, fmt.Errorf("spec.http.url %q must be an absolute http(s) URL", a.URL))
@@ -516,9 +540,13 @@ func (a *HTTPAction) refs() []*Ref {
 	if a == nil {
 		return nil
 	}
-	var refs []*Ref
+	refs := []*Ref{a.Path}
 	for key := range a.Query {
 		ref := a.Query[key]
+		refs = append(refs, &ref)
+	}
+	for key := range a.Headers {
+		ref := a.Headers[key]
 		refs = append(refs, &ref)
 	}
 	return refs

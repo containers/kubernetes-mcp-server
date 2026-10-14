@@ -80,6 +80,10 @@ spec:
                     properties:
                       apiVersion: {type: string}
                       kind: {type: string}
+                meta:
+                  type: object
+                  description: Passed through as the MCP tool's _meta (client-side extensions such as UI renderers).
+                  x-kubernetes-preserve-unknown-fields: true
                 kubernetes: &kubernetes
                   type: object
                   required: [verb, apiVersion]
@@ -141,8 +145,8 @@ spec:
                 http: &http
                   type: object
                   x-kubernetes-validations:
-                    - rule: "has(self.url) != has(self.service)"
-                      message: "exactly one of url or service must be set"
+                    - rule: "[has(self.url), has(self.urlExpression), has(self.service)].filter(x, x).size() == 1"
+                      message: "exactly one of url, urlExpression or service must be set"
                   properties:
                     method:
                       type: string
@@ -157,9 +161,10 @@ spec:
                         name: {type: string}
                         port: {type: string}
                         scheme: {type: string, enum: [http, https]}
-                    path:
+                    urlExpression:
                       type: string
-                      description: Appended to the base URL; {argument} placeholders are URL-escaped tool arguments.
+                      description: CEL string over steps and item computing the base URL at run time (must not reference args).
+                    path: *ref
                     query:
                       type: object
                       additionalProperties: *ref
@@ -167,7 +172,7 @@ spec:
                       type: string
                     headers:
                       type: object
-                      additionalProperties: {type: string}
+                      additionalProperties: *ref
                     body: *body
                     certificateAuthority:
                       type: string
@@ -372,14 +377,17 @@ spec:
                     http:
                       type: object
                       x-kubernetes-validations:
-                      - rule: has(self.url) != has(self.service)
-                        message: exactly one of url or service must be set
+                      - rule: "[has(self.url), has(self.urlExpression), has(self.service)].filter(x, x).size() == 1"
+                        message: exactly one of url, urlExpression or service must be set
                       properties:
                         method:
                           type: string
                         url:
                           type: string
                           pattern: ^https?://
+                        urlExpression:
+                          type: string
+                          description: CEL string over steps and item computing the base URL at run time (must not reference args).
                         service:
                           type: object
                           required:
@@ -397,10 +405,7 @@ spec:
                               enum:
                               - http
                               - https
-                        path:
-                          type: string
-                          description: Appended to the base URL; {argument} placeholders are URL-escaped
-                            tool arguments.
+                        path: *id001
                         query:
                           type: object
                           additionalProperties: *id001
@@ -408,8 +413,7 @@ spec:
                           type: string
                         headers:
                           type: object
-                          additionalProperties:
-                            type: string
+                          additionalProperties: *id001
                         body: *id002
                         certificateAuthority:
                           type: string

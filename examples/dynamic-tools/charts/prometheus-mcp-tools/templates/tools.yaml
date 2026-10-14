@@ -1,0 +1,444 @@
+# Tool resources of the Prometheus chart. Converted by hand from the in-tree observability/metrics toolset.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: list-metrics
+spec:
+  name: list_metrics
+  title: List Available Metrics
+  description: |-
+    MANDATORY FIRST STEP: List all available metric names in Prometheus.
+    YOU MUST CALL THIS TOOL BEFORE ANY OTHER QUERY TOOL
+    This tool MUST be called first for EVERY observability question to:
+    1. Discover what metrics actually exist in this environment
+    2. Find the EXACT metric name to use in queries
+    3. Avoid querying non-existent metrics
+    4. The 'name_regex' parameter should always be provided, and be a best guess of what the metric would be named like.
+    5. Do not use a blanket regex like .* or .+ in the 'name_regex' parameter. Use specific ones like kube.*, node.*, etc.
+    REGEX PATTERN GUIDANCE:
+    - Prometheus metrics are typically prefixed (e.g., 'prometheus_tsdb_head_series', 'kube_pod_status_phase')
+    - To match metrics CONTAINING a substring, use wildcards: '.*tsdb.*' matches 'prometheus_tsdb_head_series'
+    - Without wildcards, the pattern matches EXACTLY: 'tsdb' only matches a metric literally named 'tsdb' (which rarely exists)
+    - Common patterns: 'kube_pod.*' (pods), '.*memory.*' (memory-related), 'node_.*' (node metrics)
+    - If you get empty results, try adding '.*' before/after your search term
+    NEVER skip this step. NEVER guess metric names. Metric names vary between environments.
+    After calling this tool:
+    1. Search the returned list for relevant metrics
+    2. Use the EXACT metric name found in subsequent queries
+    3. If no relevant metric exists, inform the user
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [name_regex]
+    properties:
+      name_regex:
+        type: string
+        description: "Regex pattern to filter metric names. IMPORTANT: Metric names are typically prefixed (e.g., 'prometheus_tsdb_head_series'). Use wildcards to match substrings: '.*tsdb.*' matches any metric containing 'tsdb', while 'tsdb' only matches the exact string 'tsdb'. Examples: 'http_.*' (starts with http_), '.*memory.*' (contains memory), 'node_.*' (starts with node_). This parameter is required. Don't pass in blanket regex like '.*' or '.+'."
+  steps:
+    - name: check
+      fail: >-
+        !has(args.name_regex) ? 'name_regex parameter is required and must be a string'
+        : (args.name_regex.contains('"') || args.name_regex.contains('}')) ? 'invalid name_regex "' + args.name_regex + '": contains disallowed characters'
+        : ''
+    - name: names
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/label/__name__/values
+        queryExpression: >-
+          {'match[]': (args.name_regex == '.*' || args.name_regex == '.+' || args.name_regex == '') ? dyn(null) : dyn(['{__name__=~"' + args.name_regex + '"}']),
+           'start': int(now) - 3600, 'end': int(now)}
+  output: "{'metrics': steps.names.data}"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: execute-instant-query
+spec:
+  name: execute_instant_query
+  title: Execute Instant Query
+  description: |-
+    Execute a PromQL instant query to get current/point-in-time values.
+    PREREQUISITE: You MUST call list_metrics first to verify the metric exists
+    WHEN TO USE:
+    - Current state questions: "What is the current error rate?"
+    - Point-in-time snapshots: "How many pods are running?"
+    - Latest values: "Which pods are in Pending state?"
+    The 'query' parameter MUST use metric names that were returned by list_metrics.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [query]
+    properties:
+      query:
+        type: string
+        description: PromQL query string using metric names verified via list_metrics
+      time:
+        type: string
+        description: Evaluation time as RFC3339 or Unix timestamp. Omit or use 'NOW' for current time.
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.query) && args.query != '') ? 'query parameter is required and must be a string'
+        : (has(args.time) && args.time != '' && !{{ include "prom.timeValid" "args.time" }}) ? 'invalid time format: {{ include "prom.timeFormat" . }}'
+        : ''
+    - name: result
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/query
+        query:
+          query: {argument: query}
+          time: {expression: "(has(args.time) && args.time != '') ? {{ include "prom.time" "args.time" }} : int(now)"}
+  output: >-
+    {'resultType': steps.result.data.resultType,
+     'result': steps.result.data.resultType == 'vector' ? steps.result.data.result : [],
+     'warnings': has(steps.result.warnings) ? steps.result.warnings : []}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: execute-range-query
+spec:
+  name: execute_range_query
+  title: Execute Range Query
+  description: |-
+    Execute a PromQL range query to get time-series data over a period.
+    PREREQUISITE: You MUST call list_metrics first to verify the metric exists
+    WHEN TO USE:
+    - Trends over time: "What was CPU usage over the last hour?"
+    - Rate calculations: "How many requests per second?"
+    - Historical analysis: "Were there any restarts in the last 5 minutes?"
+    TIME PARAMETERS:
+    - 'duration': Look back from now (e.g., "5m", "1h", "24h")
+    - 'step': Data point resolution (e.g., "1m" for 1-hour duration, "5m" for 24-hour duration)
+    The 'query' parameter MUST use metric names that were returned by list_metrics.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [query, step]
+    properties:
+      {{- include "prom.rangeQueryArgs" . | nindent 6 }}
+  steps:
+    {{- include "prom.rangeQuerySteps" . | nindent 4 }}
+  output: >-
+    {{ include "prom.rangeQueryOutput" . }}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: show-timeseries
+spec:
+  name: show_timeseries
+  title: Show Timeseries Chart
+  description: |-
+    Display the results as an interactive timeseries chart.
+    This tool works like execute_range_query but renders the results as a visual chart in the UI clients.
+    Use it when the user wants to see a graph or visualization of time-series data and to use visuals to provide the answer.
+    Use the show_timeseries as the last tool call after all the other Prometheus tool calls where finalized.
+    TIME PARAMETERS:
+    - 'duration': Look back from now (e.g., "5m", "1h", "24h")
+    - 'step': Data point resolution (e.g., "1m" for 1-hour duration, "5m" for 24-hour duration)
+    - 'title': A descriptive chart title (e.g., "API Error Rate Over Last Hour")
+    - 'description': An explanation of the chart's meaning or context (e.g., "Shows the rate of HTTP 5xx errors per second, broken down by pod")
+    The 'query' parameter MUST be a range query and must use metric names that were returned by list_metrics.
+  readOnly: true
+  idempotent: true
+  meta:
+    olsUi:
+      id: mcp-obs/show-timeseries
+  inputSchema:
+    type: object
+    required: [query, step]
+    properties:
+      {{- include "prom.rangeQueryArgs" . | nindent 6 }}
+      title:
+        type: string
+        description: Human-readable chart title describing what the query shows (e.g., 'API Error Rate Over Last Hour'). Displayed above the chart when provided.
+      description:
+        type: string
+        description: Explanation of the chart's meaning or context (e.g., 'Shows the rate of HTTP 5xx errors per second, broken down by pod'). Displayed below the title when provided.
+  steps:
+    {{- include "prom.rangeQuerySteps" . | nindent 4 }}
+  # The query ran and was valid; the chart itself is rendered by the client from the arguments.
+  output: "{}"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: get-label-names
+spec:
+  name: get_label_names
+  title: Get Label Names
+  description: |-
+    Get all label names (dimensions) available for filtering a metric.
+    WHEN TO USE (after calling list_metrics):
+    - To discover how to filter metrics (by namespace, pod, service, etc.)
+    - Before constructing label matchers in PromQL queries
+    The 'metric' parameter should use a metric name from list_metrics output.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      metric:
+        type: string
+        description: Metric name (from list_metrics) to get label names for. Leave empty for all metrics.
+      start:
+        type: string
+        description: Start time for label discovery as RFC3339 or Unix timestamp (optional, defaults to 1 hour ago)
+      end:
+        type: string
+        description: End time for label discovery as RFC3339 or Unix timestamp (optional, defaults to now)
+  steps:
+    - name: check
+      fail: >-
+        {{ include "prom.rangeCheck" . }}
+    - name: range
+      expression: >-
+        {{ include "prom.range" . }}
+    - name: labels
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/labels
+        query:
+          match[]: {argument: metric}
+          start: {expression: steps.range.start}
+          end: {expression: steps.range.end}
+  output: "{'labels': steps.labels.data}"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: get-label-values
+spec:
+  name: get_label_values
+  title: Get Label Values
+  description: |-
+    Get all unique values for a specific label.
+    WHEN TO USE (after calling list_metrics and get_label_names):
+    - To find exact label values for filtering (namespace names, pod names, etc.)
+    - To see what values exist before constructing queries
+    The 'metric' parameter should use a metric name from list_metrics output.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [label]
+    properties:
+      label:
+        type: string
+        description: Label name (from get_label_names) to get values for
+      metric:
+        type: string
+        description: Metric name (from list_metrics) to scope the label values to. Leave empty for all metrics.
+      start:
+        type: string
+        description: Start time for label value discovery as RFC3339 or Unix timestamp (optional, defaults to 1 hour ago)
+      end:
+        type: string
+        description: End time for label value discovery as RFC3339 or Unix timestamp (optional, defaults to now)
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.label) && args.label != '') ? 'label parameter is required and must be a string' : {{ include "prom.rangeCheck" . }}
+    - name: range
+      expression: >-
+        {{ include "prom.range" . }}
+    - name: values
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/label/{label}/values
+        query:
+          match[]: {argument: metric}
+          start: {expression: steps.range.start}
+          end: {expression: steps.range.end}
+  output: "{'values': steps.values.data}"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: get-series
+spec:
+  name: get_series
+  title: Get Series
+  description: |-
+    Get time series matching selectors and preview cardinality.
+    WHEN TO USE (optional, after calling list_metrics):
+    - To verify label filters match expected series before querying
+    - To check cardinality and avoid slow queries
+    CARDINALITY GUIDANCE:
+    - <100 series: Safe
+    - 100-1000: Usually fine
+    - >1000: Add more label filters
+    The selector should use metric names from list_metrics output.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [matches]
+    properties:
+      matches:
+        type: string
+        description: PromQL series selector using metric names from list_metrics
+      start:
+        type: string
+        description: Start time for series discovery as RFC3339 or Unix timestamp (optional, defaults to 1 hour ago)
+      end:
+        type: string
+        description: End time for series discovery as RFC3339 or Unix timestamp (optional, defaults to now)
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.matches) && args.matches != '') ? 'matches parameter is required and must be a string' : {{ include "prom.rangeCheck" . }}
+    - name: range
+      expression: >-
+        {{ include "prom.range" . }}
+    - name: series
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/series
+        query:
+          match[]: {argument: matches}
+          start: {expression: steps.range.start}
+          end: {expression: steps.range.end}
+  output: "{'series': steps.series.data, 'cardinality': size(steps.series.data)}"
+{{- if .Values.alertmanagerUrl }}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: get-alerts
+spec:
+  name: get_alerts
+  title: Get Alerts
+  description: |-
+    Get alerts from Alertmanager.
+    WHEN TO USE:
+    - START HERE when investigating issues: if the user asks about things breaking, errors, failures, outages, services being down, or anything going wrong in the cluster
+    - When the user mentions a specific alert name - use this tool to get the alert's full labels (namespace, pod, service, etc.) which are essential for further investigation with other tools
+    - To see currently firing alerts in the cluster
+    - To check which alerts are active, silenced, or inhibited
+    - To understand what's happening before diving into metrics or logs
+    INVESTIGATION TIP: Alert labels often contain the exact identifiers (pod names, namespaces, job names) needed for targeted queries with prometheus tools.
+    FILTERING:
+    - Use 'active' to filter for only active alerts (not resolved)
+    - Use 'silenced' to filter for silenced alerts
+    - Use 'inhibited' to filter for inhibited alerts
+    - Use 'filter' to apply label matchers (e.g., "alertname=HighCPU")
+    - Use 'receiver' to filter alerts by receiver name
+    All filter parameters are optional. Without filters, all alerts are returned.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      active:
+        type: boolean
+        description: Filter for active alerts only (true/false, optional)
+      silenced:
+        type: boolean
+        description: Filter for silenced alerts only (true/false, optional)
+      inhibited:
+        type: boolean
+        description: Filter for inhibited alerts only (true/false, optional)
+      unprocessed:
+        type: boolean
+        description: Filter for unprocessed alerts only (true/false, optional)
+      filter:
+        type: string
+        description: Label matchers to filter alerts (e.g., 'alertname=HighCPU', optional)
+      receiver:
+        type: string
+        description: Receiver name to filter alerts (optional)
+  http:
+    {{- include "prom.alertmanagerHttp" . | nindent 4 }}
+    path: /api/v2/alerts
+    queryExpression: >-
+      {'active': has(args.active) ? dyn(string(args.active)) : dyn(null),
+       'silenced': has(args.silenced) ? dyn(string(args.silenced)) : dyn(null),
+       'inhibited': has(args.inhibited) ? dyn(string(args.inhibited)) : dyn(null),
+       'unprocessed': has(args.unprocessed) ? dyn(string(args.unprocessed)) : dyn(null),
+       'filter': (has(args.filter) && args.filter != '') ? dyn(args.filter.split(',').map(f, f.trim())) : dyn(null),
+       'receiver': (has(args.receiver) && args.receiver != '') ? dyn(args.receiver) : dyn(null)}
+  output: >-
+    {'alerts': response.map(a, {
+      'labels': has(a.labels) ? a.labels : {},
+      'annotations': has(a.annotations) ? a.annotations : {},
+      'startsAt': has(a.startsAt) ? a.startsAt : '',
+      'endsAt': has(a.endsAt) ? a.endsAt : '',
+      'status': {
+        'state': (has(a.status) && has(a.status.state)) ? a.status.state : '',
+        'silencedBy': (has(a.status) && has(a.status.silencedBy)) ? a.status.silencedBy : [],
+        'inhibitedBy': (has(a.status) && has(a.status.inhibitedBy)) ? a.status.inhibitedBy : []}})}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+    tools.kubernetes-mcp-server.io/source-toolset: observability-metrics
+  name: get-silences
+spec:
+  name: get_silences
+  title: Get Silences
+  description: |-
+    Get silences from Alertmanager.
+    WHEN TO USE:
+    - To see which alerts are currently silenced
+    - To check active, pending, or expired silences
+    - To investigate why certain alerts are not firing notifications
+    FILTERING:
+    - Use 'filter' to apply label matchers to find specific silences
+    Silences are used to temporarily mute alerts based on label matchers. This tool helps you understand what is currently silenced in your environment.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      filter:
+        type: string
+        description: Label matchers to filter silences (e.g., 'alertname=HighCPU', optional)
+  http:
+    {{- include "prom.alertmanagerHttp" . | nindent 4 }}
+    path: /api/v2/silences
+    queryExpression: >-
+      {'filter': (has(args.filter) && args.filter != '') ? dyn(args.filter.split(',').map(f, f.trim())) : dyn(null)}
+  output: >-
+    {'silences': response.map(s, {
+      'id': has(s.id) ? s.id : '',
+      'status': {'state': (has(s.status) && has(s.status.state)) ? s.status.state : ''},
+      'matchers': (has(s.matchers) ? s.matchers : []).map(m, {
+        'name': has(m.name) ? m.name : '', 'value': has(m.value) ? m.value : '',
+        'isRegex': has(m.isRegex) && m.isRegex, 'isEqual': !has(m.isEqual) || m.isEqual}),
+      'startsAt': has(s.startsAt) ? s.startsAt : '',
+      'endsAt': has(s.endsAt) ? s.endsAt : '',
+      'createdBy': has(s.createdBy) ? s.createdBy : '',
+      'comment': has(s.comment) ? s.comment : ''})}
+{{- end }}

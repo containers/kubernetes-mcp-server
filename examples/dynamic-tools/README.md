@@ -30,6 +30,9 @@ kubectl get tools
 | `charts/netobserv-mcp-tools` | The complete NetObserv toolset (3 tools) |
 | `charts/tekton-mcp-tools` | The complete Tekton toolset: 6 tools and the `pipeline-troubleshoot` prompt |
 | `charts/kubevirt-mcp-tools` | 6 of the 7 KubeVirt tools, its 3 prompts, a new `vm-create` prompt, and `confirmation-rules.toml` with the Windows EULA rule |
+| `charts/loki-mcp-tools` | The complete `observability/logs` toolset (4 tools): LokiStack discovery, optionally through OpenShift Routes (`useRoute`), or a fixed `url` |
+| `charts/tempo-mcp-tools` | The complete `observability/traces` toolset (5 tools): TempoStack and TempoMonolithic discovery with tenant checks, optionally through Routes, or a fixed `url` |
+| `charts/prometheus-mcp-tools` | The complete `observability/metrics` toolset (9 tools): Prometheus/Thanos at `url`, Alertmanager tools when `alertmanagerUrl` is set, `rangeQueryFullResponse` |
 | `converted/` | Generated manifests for the convertible `core` and `kcp` tools |
 | `conversion-report.md` | Final report of the migration: one row per former in-tree tool or prompt |
 
@@ -42,7 +45,9 @@ maintained by hand.
 `pkg/toolsets/dynamic` tests validate every file here, and
 `pkg/mcp/dynamic_test.go` runs the generated core, Tekton and KubeVirt tools,
 the KubeVirt and Tekton prompts, the CRD schemas and the EULA confirmation
-rule against envtest.
+rule against envtest. `pkg/mcp/dynamic_observability_test.go` renders the
+Loki, Tempo and Prometheus charts with helm and runs them against envtest
+(LokiStack, TempoStack and Route resources) and a fake backend.
 
 Confirmation rules are server configuration rather than cluster resources:
 the KubeVirt chart's `confirmation-rules.toml` goes into the server's

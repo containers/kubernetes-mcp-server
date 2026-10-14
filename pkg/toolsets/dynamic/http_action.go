@@ -28,7 +28,6 @@ var pathPlaceholder = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
 // the Kiali and NetObserv toolsets do.
 func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars) (any, error) {
 	a := action.http
-	args := vars.args
 	restConfig := env.client.RESTConfig()
 
 	var client *http.Client
@@ -51,10 +50,20 @@ func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars
 			// in-tree HTTP toolsets did.
 			client = config.NewTLSEnforcingClient(client, env.requireTLS)
 		}
-		base = strings.TrimRight(a.URL, "/")
+		base = a.URL
+		if action.urlExpr != nil {
+			value, err := action.urlExpr.eval(vars)
+			if err != nil {
+				return nil, err
+			}
+			if base = scalarString(value); !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+				return nil, fmt.Errorf("urlExpression produced %q, which is not an absolute http(s) URL", base)
+			}
+		}
+		base = strings.TrimRight(base, "/")
 	}
 
-	path, err := expandPath(a.Path, args)
+	path, err := t.resolvePath(a.Path, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +76,11 @@ func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars
 	if err != nil {
 		return nil, err
 	}
-	for key, value := range values {
-		query.Set(key, value)
+	for key, list := range values {
+		query.Del(key)
+		for _, value := range list {
+			query.Add(key, value)
+		}
 	}
 	u.RawQuery = query.Encode()
 
@@ -92,8 +104,14 @@ func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	for key, value := range a.Headers {
-		req.Header.Set(key, value)
+	for key, ref := range a.Headers {
+		value, err := t.resolveRef(&ref, vars)
+		if err != nil {
+			return nil, fmt.Errorf("header %s: %w", key, err)
+		}
+		if value != "" {
+			req.Header.Set(key, value)
+		}
 	}
 	if a.Service == nil {
 		if token := bearerToken(restConfig); token != "" {
@@ -162,10 +180,19 @@ func proxyServiceName(service *ServiceRef) string {
 	return name
 }
 
-// expandPath replaces {argument} placeholders with the URL-escaped argument
-// value, for HTTP paths that are sent verbatim.
-func expandPath(template string, args map[string]any) (string, error) {
-	return expandPlaceholders(template, args, url.PathEscape)
+// resolvePath returns the request path: a plain string has its {argument}
+// placeholders replaced with the URL-escaped argument value; an argument or
+// expression reference is appended verbatim, so the definition escapes what
+// it interpolates.
+func (t *compiledTool) resolvePath(path *Ref, vars evalVars) (string, error) {
+	switch {
+	case path == nil:
+		return "", nil
+	case path.Argument != "" || path.Expression != "":
+		return t.resolveRef(path, vars)
+	default:
+		return expandPlaceholders(path.Value, vars.args, url.PathEscape)
+	}
 }
 
 // expandPlaceholders replaces {argument} placeholders with the argument

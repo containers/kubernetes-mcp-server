@@ -93,7 +93,19 @@ func (s *DynamicSuite) TestValidate() {
 		tool := valid()
 		tool.Spec.Kubernetes = nil
 		tool.Spec.HTTP = &HTTPAction{URL: "https://example.com", Service: &ServiceRef{Namespace: "a", Name: "b"}}
-		s.ErrorContains(tool.Validate(), "exactly one of spec.http.url or spec.http.service")
+		s.ErrorContains(tool.Validate(), "exactly one of spec.http.url, spec.http.urlExpression or spec.http.service")
+	})
+	s.Run("rejects http with both url and urlExpression", func() {
+		tool := valid()
+		tool.Spec.Kubernetes = nil
+		tool.Spec.HTTP = &HTTPAction{URL: "https://example.com", URLExpression: "steps.cm.data.url"}
+		s.ErrorContains(tool.Validate(), "exactly one of spec.http.url, spec.http.urlExpression or spec.http.service")
+	})
+	s.Run("accepts http with a urlExpression", func() {
+		tool := valid()
+		tool.Spec.Kubernetes = nil
+		tool.Spec.HTTP = &HTTPAction{URLExpression: "steps.cm.data.url"}
+		s.NoError(tool.Validate())
 	})
 	s.Run("rejects a relative http url", func() {
 		tool := valid()
@@ -144,20 +156,83 @@ func (s *DynamicSuite) TestCompileExpression() {
 	})
 }
 
-func (s *DynamicSuite) TestExpandPath() {
+func (s *DynamicSuite) TestResolvePath() {
+	tool := &compiledTool{refExprs: map[string]*expression{}}
 	s.Run("substitutes and escapes arguments", func() {
-		path, err := expandPath("/namespaces/{namespace}/pods/{name}", map[string]any{"namespace": "a b", "name": "x/y"})
+		path, err := tool.resolvePath(&Ref{Value: "/namespaces/{namespace}/pods/{name}"}, evalVars{args: map[string]any{"namespace": "a b", "name": "x/y"}})
 		s.Require().NoError(err)
 		s.Equal("/namespaces/a%20b/pods/x%2Fy", path)
 	})
 	s.Run("fails on missing arguments", func() {
-		_, err := expandPath("/namespaces/{namespace}/pods/{name}", map[string]any{"namespace": "a"})
+		_, err := tool.resolvePath(&Ref{Value: "/namespaces/{namespace}/pods/{name}"}, evalVars{args: map[string]any{"namespace": "a"}})
 		s.ErrorContains(err, "name parameter required")
 	})
 	s.Run("leaves literal paths untouched", func() {
-		path, err := expandPath("/api/mcp/get_mesh_status", nil)
+		path, err := tool.resolvePath(&Ref{Value: "/api/mcp/get_mesh_status"}, evalVars{})
 		s.Require().NoError(err)
 		s.Equal("/api/mcp/get_mesh_status", path)
+	})
+	s.Run("appends an expression verbatim", func() {
+		ref := &Ref{Expression: "'/' + steps.tenant + '/loki/api/v1/labels'"}
+		s.Require().NoError(tool.compileRefs([]*Ref{ref}))
+		path, err := tool.resolvePath(ref, evalVars{steps: map[string]any{"tenant": "a b"}})
+		s.Require().NoError(err)
+		s.Equal("/a b/loki/api/v1/labels", path)
+	})
+	s.Run("no path is the empty path", func() {
+		path, err := tool.resolvePath(nil, evalVars{})
+		s.Require().NoError(err)
+		s.Empty(path)
+	})
+}
+
+func (s *DynamicSuite) TestURLExpression() {
+	s.Run("is compiled and must not read the arguments", func() {
+		_, err := compileAction(nil, &HTTPAction{URLExpression: "'https://' + args.host"})
+		s.ErrorContains(err, "must not reference args")
+		_, err = compileAction(nil, &HTTPAction{URLExpression: "steps.route.spec.host.size() > 0 ? 'https://' + steps.route.spec.host : 'http://fallback'"})
+		s.NoError(err)
+		_, err = compileAction(nil, &HTTPAction{URLExpression: "steps.route.spec."})
+		s.ErrorContains(err, "urlExpression")
+	})
+	s.Run("is reported as the RBAC reason", func() {
+		tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "t"}, Spec: ToolSpec{
+			Description: "d",
+			Steps: []Step{
+				{Name: "cm", Kubernetes: &KubernetesAction{Verb: "get", APIVersion: "v1", Resource: "configmaps", Name: &Ref{Value: "loki"}}},
+				{Name: "labels", HTTP: &HTTPAction{URLExpression: "steps.cm.data.url"}},
+			},
+		}})
+		s.Require().NoError(err)
+		meta := tool.rbac(s.T().Context(), nil)
+		s.Require().NotNil(meta.Bounded)
+		s.Contains(meta.Bounded.Reason, "the URL computed by steps.cm.data.url")
+	})
+}
+
+func (s *DynamicSuite) TestQueryListsAndSum() {
+	s.Run("list values become repeated parameters", func() {
+		expr, err := compileExpression("{'match[]': ['up', 'node_load1'], 'limit': 1, 'skip': null, 'empty': []}")
+		s.Require().NoError(err)
+		values, err := expr.evalStringMap(evalVars{})
+		s.Require().NoError(err)
+		s.Equal(map[string][]string{"match[]": {"up", "node_load1"}, "limit": {"1"}}, values)
+	})
+	s.Run("sum folds a list of numbers", func() {
+		expr, err := compileExpression("sum([1, 2.5, 3])")
+		s.Require().NoError(err)
+		value, err := expr.eval(evalVars{})
+		s.Require().NoError(err)
+		s.Equal(6.5, value)
+		expr, err = compileExpression("sum([])")
+		s.Require().NoError(err)
+		value, err = expr.eval(evalVars{})
+		s.Require().NoError(err)
+		s.Equal(0.0, value)
+		expr, err = compileExpression("sum(['a'])")
+		s.Require().NoError(err)
+		_, err = expr.eval(evalVars{})
+		s.ErrorContains(err, "must be numbers")
 	})
 }
 
@@ -256,7 +331,7 @@ func (s *DynamicSuite) TestResolveRef() {
 		s.Equal("proxy/stats/summary", value)
 		query, err := tool.resolveQuery(map[string]Ref{"labelSelector": {Value: "app in ({apps})"}}, nil, evalVars{args: map[string]any{"apps": "a, b"}})
 		s.Require().NoError(err)
-		s.Equal("app in (a, b)", query["labelSelector"])
+		s.Equal([]string{"app in (a, b)"}, query["labelSelector"])
 	})
 	s.Run("a plain YAML string is a fixed value", func() {
 		var ref Ref
@@ -290,8 +365,10 @@ func (s *DynamicSuite) TestCELExtensions() {
 		s.Require().NoError(err)
 		out, err := expr.evalStringMap(evalVars{})
 		s.Require().NoError(err)
-		s.Regexp(`^\d{10}$`, out["end"])
-		s.Regexp(`^\d{10}$`, out["start"])
+		s.Require().Len(out["end"], 1)
+		s.Require().Len(out["start"], 1)
+		s.Regexp(`^\d{10}$`, out["end"][0])
+		s.Regexp(`^\d{10}$`, out["start"][0])
 	})
 	s.Run("range refuses to allocate unbounded lists", func() {
 		expr, err := compileExpression("size(range(args.n))")
@@ -317,7 +394,7 @@ func (s *DynamicSuite) TestCELExtensions() {
 		s.Require().NoError(err)
 		out, err := expr.evalStringMap(evalVars{})
 		s.Require().NoError(err)
-		s.Equal(map[string]string{"a": "1", "b": "x", "e": "true", "f": "1.5"}, out)
+		s.Equal(map[string][]string{"a": {"1"}, "b": {"x"}, "e": {"true"}, "f": {"1.5"}}, out)
 	})
 }
 
@@ -536,7 +613,7 @@ func (s *DynamicSuite) TestRBACOfMixedSteps() {
 		Description: "d",
 		Steps: []Step{
 			{Name: "pods", Kubernetes: &KubernetesAction{Verb: "list", APIVersion: "v1", Resource: "pods", Namespace: &NamespaceRef{Value: "istio-system"}}},
-			{Name: "mesh", HTTP: &HTTPAction{URL: "https://kiali.example.com", Path: "/api/mesh"}},
+			{Name: "mesh", HTTP: &HTTPAction{URL: "https://kiali.example.com", Path: &Ref{Value: "/api/mesh"}}},
 		},
 	}})
 	s.Require().NoError(err)

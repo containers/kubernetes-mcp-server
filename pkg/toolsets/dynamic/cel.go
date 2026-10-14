@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
+	celast "github.com/google/cel-go/common/ast"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/common/types/traits"
@@ -23,6 +24,7 @@ import (
 // and `now`.
 type expression struct {
 	source  string
+	ast     *cel.Ast
 	program cel.Program
 }
 
@@ -96,6 +98,9 @@ func newEnv() (*cel.Env, error) {
 					}
 					return types.String(redact.Secrets(string(text)))
 				}))),
+		cel.Function("sum",
+			cel.Overload("sum_list", []*cel.Type{cel.ListType(cel.DynType)}, cel.DoubleType,
+				cel.UnaryBinding(sumList))),
 		cel.Function("range",
 			cel.Overload("range_int", []*cel.Type{cel.IntType}, cel.ListType(cel.IntType),
 				cel.UnaryBinding(rangeList)),
@@ -139,6 +144,30 @@ func renderValue(v ref.Val, render func(any) (string, error)) ref.Val {
 	return types.String(text)
 }
 
+// sumList adds the numbers of a list as a double (ints and doubles mix;
+// NaN and Inf propagate as they do in arithmetic). Series statistics need
+// it because CEL comprehensions cannot fold.
+func sumList(v ref.Val) ref.Val {
+	list, ok := v.(traits.Lister)
+	if !ok {
+		return types.NewErr("sum: argument must be a list")
+	}
+	total := 0.0
+	for it := list.Iterator(); it.HasNext() == types.True; {
+		switch n := it.Next().(type) {
+		case types.Double:
+			total += float64(n)
+		case types.Int:
+			total += float64(n)
+		case types.Uint:
+			total += float64(n)
+		default:
+			return types.NewErr("sum: list elements must be numbers, got %s", n.Type().TypeName())
+		}
+	}
+	return types.Double(total)
+}
+
 func rangeList(n ref.Val) ref.Val {
 	var count types.Int
 	switch v := n.(type) {
@@ -178,7 +207,20 @@ func compileExpression(source string) (*expression, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid CEL expression %q: %w", source, err)
 	}
-	return &expression{source: source, program: program}, nil
+	return &expression{source: source, ast: ast, program: program}, nil
+}
+
+// references reports whether the expression reads the given top-level
+// variable. It is a compile-time check, so a reference hidden behind a
+// branch that never runs still counts.
+func (e *expression) references(ident string) bool {
+	found := false
+	celast.PreOrderVisit(e.ast.NativeRep().Expr(), celast.NewExprVisitor(func(expr celast.Expr) {
+		if expr.Kind() == celast.IdentKind && expr.AsIdent() == ident {
+			found = true
+		}
+	}))
+	return found
 }
 
 // eval runs the expression and returns a plain JSON-compatible Go value
@@ -205,8 +247,9 @@ func (e *expression) eval(vars evalVars) (any, error) {
 
 // evalStringMap evaluates an expression that must produce a map and returns
 // its entries as query-parameter strings. Null and empty values are dropped;
-// whole numbers print without a fractional part.
-func (e *expression) evalStringMap(vars evalVars) (map[string]string, error) {
+// whole numbers print without a fractional part; a list value becomes a
+// repeated parameter (Prometheus' match[], Alertmanager's filter).
+func (e *expression) evalStringMap(vars evalVars) (map[string][]string, error) {
 	value, err := e.eval(vars)
 	if err != nil {
 		return nil, err
@@ -215,13 +258,32 @@ func (e *expression) evalStringMap(vars evalVars) (map[string]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("CEL expression %q must produce a map, got %T", e.source, value)
 	}
-	out := make(map[string]string, len(object))
+	out := make(map[string][]string, len(object))
 	for key, entry := range object {
-		if s := scalarString(entry); s != "" {
-			out[key] = s
+		if values := scalarStrings(entry); len(values) > 0 {
+			out[key] = values
 		}
 	}
 	return out, nil
+}
+
+// scalarStrings renders a scalar as a one-element list and a list as its
+// non-empty scalar elements.
+func scalarStrings(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		if s := scalarString(value); s != "" {
+			return []string{s}
+		}
+		return nil
+	}
+	var out []string
+	for _, item := range items {
+		if s := scalarString(item); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func scalarString(value any) string {

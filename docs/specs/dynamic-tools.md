@@ -89,6 +89,7 @@ spec:
   kubernetes: {...}                  # exactly one of kubernetes / http
   http: {...}
   output: <CEL>                      # optional projection of the response
+  meta: {...}                        # optional, passed through as the tool's _meta
 ```
 
 ### References
@@ -134,8 +135,9 @@ One HTTP request carrying the caller's identity.
 | Field | Meaning |
 |-------|---------|
 | `url` | Absolute base URL. The caller's bearer token is sent as `Authorization: Bearer`. This is what the Kiali and NetObserv toolsets do. |
+| `urlExpression` | CEL string computing the base URL at run time from `steps` and `item`: a LokiStack's Route host, a TempoStack's gateway Service. It must not reference `args`, so the model never chooses where the caller's token is sent; the result must be an absolute http(s) URL. The TLS settings below still apply. Mutually exclusive with `url` and `service`. |
 | `service` | `{namespace, name, port, scheme}`: reached through the API server's service proxy with the caller's `rest.Config`. No TLS or token plumbing, and `services/proxy` RBAC applies. Mutually exclusive with `url`. |
-| `method`, `path`, `query`, `queryExpression`, `headers`, `body` | `path` supports `{argument}` placeholders (URL-escaped, required). `query`/`queryExpression`/`body` as above; `{expression: args}` forwards all arguments. |
+| `method`, `path`, `query`, `queryExpression`, `headers`, `body` | `path` is a reference: a plain string supports `{argument}` placeholders (URL-escaped, required), an `{argument}`/`{expression}` reference is appended verbatim. `headers` values are references too (an empty value omits the header: a tenant header only when a tenant is given). A list value in `queryExpression` becomes a repeated parameter (`match[]`, Alertmanager's `filter`). `query`/`queryExpression`/`body` as above; `{expression: args}` forwards all arguments. |
 | `certificateAuthority`, `insecureSkipTLSVerify` | TLS verification for `url`. |
 | `response`, `mimeType`, `redact` | As for `kubernetes`. |
 
@@ -210,6 +212,7 @@ Every expression (output, body, query, references) sees the same environment:
 | `now` | the current time; `int(now)` is Unix seconds |
 | `merge(a, b)` | a map with the entries of `a` overridden by those of `b` |
 | `range(n)` | `[0, 1, ..., n-1]`, to walk a `forEach` result next to its input list |
+| `sum(list)` | the sum of a list of numbers as a double, since CEL comprehensions cannot fold (series statistics) |
 | `yaml(x)`, `json(x)` | render a value as YAML or JSON text (for embedding in prompts) |
 | `redact(s)` | remove secrets from a string |
 | cel-go extensions | strings, lists, math and two-variable comprehensions (`transformMapEntry` renames or drops keys) |
@@ -286,7 +289,8 @@ The declaration is enough to derive the server's `_meta` RBAC advertisement
   with the verb the API server derives from the HTTP `method` (`get` for
   GET/HEAD, `create` for POST, `update` for PUT, `patch` for PATCH, `delete`
   for DELETE).
-- `http` with `url`: **none**, with a reason naming the URL.
+- `http` with `url`: **none**, with a reason naming the URL; with
+  `urlExpression`, the reason names the expression instead.
 
 ## Reload
 
@@ -324,13 +328,18 @@ them valid). The figures below are the state at conversion time.
 | tekton | 6 / 6 | 1 / 1 | nothing |
 | kubevirt | 6 / 7 | 3 / 3 (+ `vm-create`) | `vm_create`, replaced by the `vm-create` prompt and `vm_create_from_template` |
 | kcp | 1 / 2 | | `kcp_workspaces_list`, redundant with the provider's `workspace_list` |
+| observability/logs | 4 / 4 | | nothing |
+| observability/metrics | 9 / 9 | | nothing; the PromQL guardrails are not enforced |
+| observability/traces | 5 / 5 | | nothing |
+| observability/otelcol | 0 / 4 | | schema validation against embedded JSON schemas, no request to express |
 | core | 13 / 19 | 0 / 1 | exec (stream), the generic `resources_*` family, `cluster-health-check` (base server) |
 | config, helm | 0 / 6 | | not Kubernetes API requests |
 
-55 of 70 tools and prompts. Every third-party toolset is now either fully
-converted (Kiali, NetObserv, Tekton) or converted except for one tool whose
-replacement is a prompt (KubeVirt). What remains is the base server, Helm,
-and a kcp tool the provider already covers. The core conversions are a
+73 of 92 tools and prompts. Every third-party toolset is now either fully
+converted (Kiali, NetObserv, Tekton, Loki, Tempo, Prometheus) or converted
+except for one tool whose replacement is a prompt (KubeVirt). What remains
+is the base server, Helm, a kcp tool the provider already covers, and the
+OpenTelemetry Collector schema tools, which make no request at all. The core conversions are a
 demonstration, not a proposal to move core out of the server. The generated
 Tekton, KubeVirt and core tools and the KubeVirt and Tekton prompts are
 exercised against envtest in `pkg/mcp/dynamic_test.go`, which also installs
@@ -341,7 +350,12 @@ Four generic features closed the gaps found in the previous round, none of
 them KubeVirt-specific: `response: binary` (screenshots), `redact` (pod logs
 in troubleshoot tools and prompts), `requires` (tool hiding when an API is
 absent), and `elicit`/`fail` steps (the EULA consent flow and argument
-checks). What a Tool or Prompt still cannot express:
+checks). The observability round added `urlExpression` (a backend found in
+the cluster: the LokiStack's Route, the TempoStack's gateway Service),
+`path` and `headers` as references (a tenant path segment and header only
+when a tenant is given), repeated query parameters (`match[]`, Alertmanager's
+`filter`), `sum` (series statistics) and `meta` (the `show_timeseries` UI
+hook). What a Tool or Prompt still cannot express:
 
 - **Heuristic matching** (`vm_create`): handed to the model as a prompt that
   lists the candidates, or to KubeVirt templates.
@@ -350,13 +364,19 @@ checks). What a Tool or Prompt still cannot express:
 - **Unbounded recursion** (`kcp_workspaces_list`), which the provider does.
 - **Pixel-level post-processing**: the screenshot description no longer
   states the image dimensions.
+- **Query-language parsing**: the Prometheus guardrails (reject a query
+  without label matchers, a blanket regex, or a metric above a cardinality
+  limit) and the metric-existence check parse PromQL; a Tool can only pattern
+  match. They stay unenforced in the chart.
+- **Pure computation**: the `otelcol` tools validate collector configuration
+  against JSON schemas embedded in the binary and never talk to a backend.
 
 ## What stays in the server
 
 Streaming (`pods_exec`, `port-forward`), Helm release storage, the cluster
-providers, the generic `resources_*` escape hatch, and the base prompts.
-Everything else that the in-tree toolsets do is now expressible as a Tool or
-Prompt resource.
+providers, the generic `resources_*` escape hatch, the base prompts, and the
+`observability/otelcol` schema tools. Everything else that the in-tree
+toolsets did is now expressible as a Tool or Prompt resource.
 
 ## Open questions
 

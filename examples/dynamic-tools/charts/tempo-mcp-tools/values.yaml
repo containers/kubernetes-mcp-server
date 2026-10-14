@@ -1,0 +1,13 @@
+# Fixed Tempo API URL ([toolset_configs.observability/traces] tempo_url).
+# When set, the tools query it directly and tempoNamespace/tempoName are only
+# checked for presence. When empty, the tools resolve the TempoStack or
+# TempoMonolithic named by tempoNamespace/tempoName in the cluster, as the
+# in-tree toolset did.
+url: ""
+# Resolve Tempo endpoints through the OpenShift Route named after the
+# instance's query frontend or gateway Service (use_route). Without a Route,
+# or with useRoute false, the Service DNS name is used.
+useRoute: false
+# PEM bundle used to verify the Tempo server certificate (empty: system roots).
+certificateAuthority: ""
+insecureSkipTLSVerify: false
