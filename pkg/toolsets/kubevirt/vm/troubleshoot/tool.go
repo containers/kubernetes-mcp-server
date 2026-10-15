@@ -127,62 +127,67 @@ func troubleshoot(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", err), nil
 	}
 
-	ctx := params.Context
-	dynamicClient := params.DynamicClient()
+	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
+	writeVMTroubleshootReport(params.Context, params.KubernetesClient, params.DynamicClient(), namespace, name, b)
+	return api.NewToolCallResult(b.String(), nil), nil
+}
+
+// writeVMTroubleshootReport writes the report into one result budget. Each
+// section is written as it is produced. The next pod is not formatted, and
+// the next DataVolume is not fetched, once that budget is spent.
+func writeVMTroubleshootReport(ctx context.Context, client api.KubernetesClient, dynamicClient dynamic.Interface, namespace, name string, b *api.BuilderWithBudget) {
+	if b == nil || b.Spent() {
+		return
+	}
+	b.WriteString(fmt.Sprintf("# VirtualMachine Diagnostic Report: %s/%s\n\n", namespace, name))
+	if b.Spent() {
+		return
+	}
 
 	vmYaml, vm := fetchVMStatus(ctx, dynamicClient, namespace, name)
 	vmiYaml, vmi := fetchVMIStatus(ctx, dynamicClient, namespace, name)
-	volumesYaml := fetchVolumes(namespace, name, vm, vmi)
-	cloudInitYaml := extractCloudInit(vm, vmi)
-	podYaml, podNames, podDiag := fetchVirtLauncherPod(ctx, dynamicClient, namespace, name)
-	issuesSection := analyzeIssues(ctx, dynamicClient, namespace, name, vm, vmi, podDiag)
-
-	// The prefix is one read per section. DataVolumes, logs, and events can
-	// fan out, so they share the bytes the prefix did not use and stop before
-	// the next fetch once that room is full.
-	// See docs/specs/memory-bounds.md#retention.
-	lim := api.ResultLimit(ctx)
-	prefix := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, "", cloudInitYaml, podYaml, "", "")
-	if lim > 0 && int64(len(prefix)) >= lim {
-		b := api.NewBuilderWithBudget(lim)
-		b.WriteString(prefix)
-		return api.NewToolCallResult(b.String(), nil), nil
+	podNames, podDiags, podSection := listVirtLauncherPods(ctx, dynamicClient, namespace, name)
+	b.WriteString(analyzeIssues(ctx, dynamicClient, namespace, name, vm, vmi, podDiags))
+	if b.Spent() {
+		return
 	}
-	var room int64
-	if lim > 0 {
-		room = lim - int64(len(prefix))
+	b.WriteString("\n\n")
+	b.WriteString(vmYaml)
+	if b.Spent() {
+		return
 	}
-	dvB := api.NewBuilderWithBudget(room)
-	fetchDataVolumeStatus(ctx, dynamicClient, namespace, vm, dvB)
-	logsB := dvB.Scratch(0)
-	fetchVirtLauncherPodLogs(ctx, params.KubernetesClient, namespace, podNames, logsB)
-	eventsB := logsB.Scratch(0)
-	fetchEvents(ctx, params.KubernetesClient, namespace, name, podNames, eventsB)
-	report := formatVMDiagnosticReport(namespace, name, issuesSection, vmYaml, vmiYaml, volumesYaml, dvB.String(), cloudInitYaml, podYaml, logsB.String(), eventsB.String())
-	return api.NewToolCallResult(report, nil), nil
-}
-
-func formatVMDiagnosticReport(namespace, name, issues, vm, vmi, volumes, dataVolume, cloudInit, pod, logs, events string) string {
-	return fmt.Sprintf(`# VirtualMachine Diagnostic Report: %s/%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-
-%s
-`, namespace, name, issues, vm, vmi, volumes, dataVolume, cloudInit, pod, logs, events)
+	b.WriteString("\n\n")
+	b.WriteString(vmiYaml)
+	if b.Spent() {
+		return
+	}
+	b.WriteString("\n\n")
+	b.WriteString(fetchVolumes(namespace, name, vm, vmi))
+	if b.Spent() {
+		return
+	}
+	b.WriteString("\n\n")
+	fetchDataVolumeStatus(ctx, dynamicClient, namespace, vm, b)
+	if b.Spent() {
+		return
+	}
+	b.WriteString("\n\n")
+	writeCloudInit(vm, vmi, b)
+	if b.Spent() {
+		return
+	}
+	b.WriteString("\n\n")
+	loggedPods := writeVirtLauncherPods(b, podNames, podDiags, podSection)
+	if b.Spent() {
+		return
+	}
+	b.WriteString("\n\n")
+	fetchVirtLauncherPodLogs(ctx, client, namespace, loggedPods, b)
+	if b.Spent() {
+		return
+	}
+	b.WriteString("\n\n")
+	fetchEvents(ctx, client, namespace, name, loggedPods, b)
 }
 
 func fetchVMStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (string, *unstructured.Unstructured) {
@@ -301,36 +306,52 @@ func stripCloudInitBodies(volumes []any) []any {
 	return result
 }
 
-func fetchVirtLauncherPod(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (string, []string, []map[string]interface{}) {
+// listVirtLauncherPods lists virt-launcher pods once. section is the pod
+// heading when the list fails or is empty. Diagnostics stay in memory for
+// the issues section; their YAML is written later, one pod at a time.
+func listVirtLauncherPods(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (names []string, diags []map[string]interface{}, section string) {
 	labelSelector := fmt.Sprintf("kubevirt.io=virt-launcher,vm.kubevirt.io/name=%s", name)
 	podList, err := dynamicClient.Resource(kubevirt.PodGVR).Namespace(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
 	if err != nil {
-		return fmt.Sprintf("## virt-launcher Pod\n\n*Error listing pods: %v*", err), nil, nil
+		return nil, nil, fmt.Sprintf("## virt-launcher Pod\n\n*Error listing pods: %v*", err)
 	}
-
 	if len(podList.Items) == 0 {
-		return "## virt-launcher Pod\n\n*No virt-launcher pod found (VM may be stopped or not yet scheduled)*", nil, nil
+		return nil, nil, "## virt-launcher Pod\n\n*No virt-launcher pod found (VM may be stopped or not yet scheduled)*"
 	}
-
-	var result strings.Builder
-	var podNames []string
-	var allDiags []map[string]interface{}
-	result.WriteString("## virt-launcher Pod\n\n")
 	for _, pod := range podList.Items {
-		podNames = append(podNames, pod.GetName())
-		summary := extractPodDiagnostics(&pod)
-		allDiags = append(allDiags, summary)
-		yamlStr, err := output.MarshalYaml(summary)
+		names = append(names, pod.GetName())
+		diags = append(diags, extractPodDiagnostics(&pod))
+	}
+	return names, diags, ""
+}
+
+// writeVirtLauncherPods writes each pod diagnostic into b and returns the
+// names that were written. Further pods are not formatted once b is spent.
+func writeVirtLauncherPods(b *api.BuilderWithBudget, names []string, diags []map[string]interface{}, section string) []string {
+	if b == nil || b.Spent() {
+		return nil
+	}
+	if section != "" {
+		b.WriteString(section)
+		return nil
+	}
+	b.WriteString("## virt-launcher Pod\n\n")
+	var wrote []string
+	for i, name := range names {
+		if b.Spent() {
+			break
+		}
+		wrote = append(wrote, name)
+		yamlStr, err := output.MarshalYaml(diags[i])
 		if err != nil {
-			fmt.Fprintf(&result, "*Error marshaling pod %s: %v*\n\n", pod.GetName(), err)
+			b.WriteString(fmt.Sprintf("*Error marshaling pod %s: %v*\n\n", name, err))
 			continue
 		}
-		fmt.Fprintf(&result, "### %s\n\n```yaml\n%s```\n\n", pod.GetName(), yamlStr)
+		b.WriteString(fmt.Sprintf("### %s\n\n```yaml\n%s```\n\n", name, yamlStr))
 	}
-
-	return result.String(), podNames, allDiags
+	return wrote
 }
 
 func extractPodDiagnostics(pod *unstructured.Unstructured) map[string]interface{} {
@@ -387,7 +408,7 @@ func extractPodDiagnostics(pod *unstructured.Unstructured) map[string]interface{
 }
 
 func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, namespace string, podNames []string, b *api.BuilderWithBudget) {
-	if b == nil || b.Truncated() {
+	if b == nil || b.Spent() {
 		return
 	}
 	if len(podNames) == 0 {
@@ -398,17 +419,21 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 	core := kubernetes.NewCore(client)
 	b.WriteString("## virt-launcher Pod Logs\n\n")
 
-	containerName := "compute"
+	const containerName = "compute"
 	for _, podName := range podNames {
-		if b.Truncated() {
+		if b.Spent() {
 			break
 		}
-		logs, err := core.PodsLog(ctx, namespace, podName, containerName, false, 50)
+		logs, err := core.PodsLogLimited(ctx, namespace, podName, containerName, false, 50, b.Remaining())
 		if err != nil {
 			b.WriteString(fmt.Sprintf("### %s\n\n*Error fetching logs: %v*\n\n", podName, err))
 			continue
 		}
-		b.WriteString(fmt.Sprintf("### %s (container: %s)\n\n```\n%s\n```\n\n", podName, containerName, redactLogSecrets(logs)))
+		b.WriteString(fmt.Sprintf("### %s (container: %s)\n\n```\n", podName, containerName))
+		writeRedactedLines(b, logs)
+		if !b.Truncated() {
+			b.WriteString("\n```\n\n")
+		}
 	}
 }
 
@@ -416,7 +441,7 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 // is written as it returns, and the next List does not start once b is
 // truncated. See docs/specs/memory-bounds.md#retention.
 func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vmName string, podNames []string, b *api.BuilderWithBudget) {
-	if b == nil || b.Truncated() {
+	if b == nil || b.Spent() {
 		return
 	}
 	core := kubernetes.NewCore(client)
@@ -426,7 +451,7 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 
 	wrote := false
 	for _, objName := range objectNames {
-		if b.Truncated() {
+		if b.Spent() {
 			break
 		}
 		if objName == "" {
@@ -480,7 +505,7 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 // start the next Get once b is truncated.
 // See docs/specs/memory-bounds.md#retention.
 func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace string, vm *unstructured.Unstructured, b *api.BuilderWithBudget) {
-	if b == nil || b.Truncated() {
+	if b == nil || b.Spent() {
 		return
 	}
 	if vm == nil {
@@ -497,7 +522,7 @@ func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface,
 	b.WriteString("## DataVolume/PVC Status\n\n")
 
 	for _, dvTemplate := range dvTemplates {
-		if b.Truncated() {
+		if b.Spent() {
 			break
 		}
 		dvMap, ok := dvTemplate.(map[string]interface{})
@@ -517,7 +542,7 @@ func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface,
 				continue
 			}
 			b.WriteString(fmt.Sprintf("### %s\n\n*DataVolume not found*\n\n", dvName))
-			if b.Truncated() {
+			if b.Spent() {
 				break
 			}
 			pvc, pvcErr := dynamicClient.Resource(kubevirt.PersistentVolumeClaimGVR).Namespace(namespace).Get(ctx, dvName, metav1.GetOptions{})
@@ -566,7 +591,10 @@ func fetchDataVolumeStatus(ctx context.Context, dynamicClient dynamic.Interface,
 	}
 }
 
-func extractCloudInit(vm, vmi *unstructured.Unstructured) string {
+func writeCloudInit(vm, vmi *unstructured.Unstructured, b *api.BuilderWithBudget) {
+	if b == nil || b.Spent() {
+		return
+	}
 	var volumes []interface{}
 	if vm != nil {
 		volumes, _, _ = unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
@@ -575,52 +603,56 @@ func extractCloudInit(vm, vmi *unstructured.Unstructured) string {
 		volumes, _, _ = unstructured.NestedSlice(vmi.Object, "spec", "volumes")
 	}
 	if len(volumes) == 0 {
-		return "## Cloud-Init Configuration\n\n*No volumes found*"
+		b.WriteString("## Cloud-Init Configuration\n\n*No volumes found*")
+		return
 	}
 
-	var result strings.Builder
 	found := false
-
 	for _, vol := range volumes {
+		if b.Spent() {
+			return
+		}
 		volMap, ok := vol.(map[string]interface{})
 		if !ok {
 			continue
 		}
 
 		for _, ciKey := range []string{"cloudInitNoCloud", "cloudInitConfigDrive"} {
+			if b.Spent() {
+				return
+			}
 			ciData, exists := volMap[ciKey].(map[string]interface{})
 			if !exists {
 				continue
 			}
-			found = true
-			if result.Len() == 0 {
-				result.WriteString("## Cloud-Init Configuration\n\n")
+			if !found {
+				b.WriteString("## Cloud-Init Configuration\n\n")
+				found = true
 			}
 
 			volName, _ := volMap["name"].(string)
-			fmt.Fprintf(&result, "### %s (type: %s)\n\n", volName, ciKey)
+			b.WriteString(fmt.Sprintf("### %s (type: %s)\n\n", volName, ciKey))
 
 			userData := cloudInitData(ciData, "userData", "userDataBase64")
 			if userData != "" {
-				fmt.Fprintf(&result, "```yaml\n%s\n```\n\n", redactCloudInitSensitiveFields(userData))
+				b.WriteString(fmt.Sprintf("```yaml\n%s\n```\n\n", redactCloudInitSensitiveFields(userData)))
 			}
 			networkData := cloudInitData(ciData, "networkData", "networkDataBase64")
 			if networkData != "" {
-				fmt.Fprintf(&result, "**networkData:**\n```yaml\n%s\n```\n\n", redactCloudInitSensitiveFields(networkData))
+				b.WriteString(fmt.Sprintf("**networkData:**\n```yaml\n%s\n```\n\n", redactCloudInitSensitiveFields(networkData)))
 			}
 			if userData == "" && networkData == "" {
 				secretRef, _ := ciData["userDataSecretRef"].(map[string]interface{})
 				if secretRef != nil {
-					fmt.Fprintf(&result, "*userData from Secret: %v*\n\n", secretRef["name"])
+					b.WriteString(fmt.Sprintf("*userData from Secret: %v*\n\n", secretRef["name"]))
 				}
 			}
 		}
 	}
 
 	if !found {
-		return "## Cloud-Init Configuration\n\n*No cloud-init volumes configured*"
+		b.WriteString("## Cloud-Init Configuration\n\n*No cloud-init volumes configured*")
 	}
-	return result.String()
 }
 
 // cloudInitData returns the cloud-init payload for a field, preferring the
@@ -741,25 +773,27 @@ var logSecretPatterns = []string{
 	"password=", "passwd=", "token=",
 }
 
-func redactLogSecrets(logs string) string {
-	lines := strings.Split(logs, "\n")
-	var result []string
-	for _, line := range lines {
-		lower := strings.ToLower(line)
-		redacted := false
-		for _, pat := range logSecretPatterns {
-			if strings.Contains(lower, pat) {
-				idx := strings.Index(lower, pat)
-				result = append(result, line[:idx+len(pat)]+"<REDACTED>")
-				redacted = true
-				break
-			}
-		}
-		if !redacted {
-			result = append(result, line)
+func redactLogLine(line string) string {
+	lower := strings.ToLower(line)
+	for _, pat := range logSecretPatterns {
+		if idx := strings.Index(lower, pat); idx >= 0 {
+			return line[:idx+len(pat)] + "<REDACTED>"
 		}
 	}
-	return strings.Join(result, "\n")
+	return line
+}
+
+func writeRedactedLines(b *api.BuilderWithBudget, logs string) {
+	rest := logs
+	for rest != "" {
+		line, next, found := strings.Cut(rest, "\n")
+		b.WriteString(redactLogLine(line))
+		if !found || b.Truncated() {
+			return
+		}
+		b.WriteString("\n")
+		rest = next
+	}
 }
 
 func leadingSpaces(s string) int {

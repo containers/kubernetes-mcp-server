@@ -47,13 +47,8 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 		return nil, err
 	}
 
-	istioContent := fetchKialiData(kiali, params, tools.KialiManageIstioConfigReadEndpoint,
-		map[string]any{"namespace": namespace, "action": "list"})
-
-	resourceContent := fetchKialiData(kiali, params, tools.KialiListOrGetResourcesEndpoint,
-		map[string]any{"namespaces": namespace, "resourceType": "service"})
-
-	promptText := buildIstioConfigReviewPrompt(namespace, istioContent, resourceContent)
+	b := api.NewPromptBudget(params.Context, istioConfigReviewAssistantText)
+	writeIstioConfigReviewPrompt(kiali, params, namespace, b)
 
 	return api.NewPromptCallResult(
 		"Istio configuration data gathered successfully",
@@ -62,14 +57,14 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 				Role: "user",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: promptText,
+					Text: b.String(),
 				},
 			},
 			{
 				Role: "assistant",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: "I'll review the Istio configuration and check for issues or misconfigurations.",
+					Text: istioConfigReviewAssistantText,
 				},
 			},
 		},
@@ -77,8 +72,12 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 	), nil
 }
 
-func buildIstioConfigReviewPrompt(namespace, istioData, resourceData string) string {
-	return fmt.Sprintf(`# Istio Configuration Review
+const istioConfigReviewAssistantText = "I'll review the Istio configuration and check for issues or misconfigurations."
+
+// writeIstioConfigReviewPrompt writes the review into one prompt budget.
+// The service list does not start once that budget is spent.
+func writeIstioConfigReviewPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespace string, b *api.BuilderWithBudget) {
+	b.WriteString(fmt.Sprintf(`# Istio Configuration Review
 
 ## Namespace: %s
 
@@ -88,13 +87,31 @@ Review the Istio configuration in this namespace for correctness, best practices
 
 ## Istio Resources
 
-%s
+`, namespace))
+	if b.Spent() {
+		return
+	}
+	writeKialiData(b, kiali, params, tools.KialiManageIstioConfigReadEndpoint,
+		map[string]any{"namespace": namespace, "action": "list"})
+	if b.Spent() {
+		return
+	}
+	b.WriteString(`
 
 ---
 
 ## Services in Namespace
 
-%s
+`)
+	if b.Spent() {
+		return
+	}
+	writeKialiData(b, kiali, params, tools.KialiListOrGetResourcesEndpoint,
+		map[string]any{"namespaces": namespace, "resourceType": "service"})
+	if b.Spent() {
+		return
+	}
+	b.WriteString(`
 
 ---
 
@@ -110,5 +127,5 @@ Analyze the configuration above and check for:
 6. **Best Practices**: Are there any configuration anti-patterns (e.g., overly broad host matches, missing retries)?
 
 Provide a summary of findings with severity (critical, warning, info) and recommendations.
-`, namespace, istioData, resourceData)
+`)
 }

@@ -1,11 +1,14 @@
 package tekton
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -15,9 +18,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes"
 	fakeclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
@@ -67,6 +73,73 @@ func (s *RetentionSuite) TestStepLogsStopBeforeTheNextContainer() {
 	s.True(b.Truncated())
 	s.Equal(1, strings.Count(b.String(), api.ResultTruncationNotice))
 }
+
+func (s *RetentionSuite) TestContainerLogReadStopsAtTheBudget() {
+	const budget = int64(40)
+	var written atomic.Int32
+	var once sync.Once
+	done := make(chan struct{})
+	cfg := &rest.Config{
+		Host: "https://apiserver",
+		Transport: rtFunc(func(req *http.Request) (*http.Response, error) {
+			if !strings.Contains(req.URL.Path, "/log") {
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Body:       io.NopCloser(strings.NewReader("missing")),
+					Header:     make(http.Header),
+					Request:    req,
+				}, nil
+			}
+			pr, pw := io.Pipe()
+			go func() {
+				defer once.Do(func() { close(done) })
+				defer func() { _ = pw.Close() }()
+				chunk := bytes.Repeat([]byte("x"), 1024)
+				for range 100 {
+					n, err := pw.Write(chunk)
+					written.Add(int32(n))
+					if err != nil {
+						return
+					}
+				}
+			}()
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       pipeBody{pr},
+				Header:     make(http.Header),
+				Request:    req,
+			}, nil
+		}),
+	}
+	cs, err := kubernetes.NewForConfig(cfg)
+	s.Require().NoError(err)
+	tr := &tektonv1.TaskRun{
+		ObjectMeta: metav1.ObjectMeta{Name: "run"},
+		Status: tektonv1.TaskRunStatus{
+			TaskRunStatusFields: tektonv1.TaskRunStatusFields{
+				PodName: "pod",
+				Steps: []tektonv1.StepState{
+					{Name: "one", Container: "one"},
+					{Name: "two", Container: "two"},
+				},
+			},
+		},
+	}
+	b := api.NewBuilderWithBudget(budget)
+	collectTaskRunLogsWithClient(s.T().Context(), coreClient{Interface: cs}, b, "ns", tr, "", 10)
+	<-done
+	s.LessOrEqual(written.Load(), int32(budget))
+	s.True(b.Truncated())
+	s.LessOrEqual(int64(b.Len()), budget+int64(len(api.ResultTruncationNotice)))
+}
+
+type rtFunc func(*http.Request) (*http.Response, error)
+
+func (f rtFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+type pipeBody struct{ *io.PipeReader }
+
+func (b pipeBody) Close() error { return b.PipeReader.Close() }
 
 func (s *RetentionSuite) TestAppendTaskBlockStopsTheScratch() {
 	dst := api.NewBuilderWithBudget(80)
@@ -139,3 +212,119 @@ func (coreClient) MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client {
 }
 
 var errCoreClientUnused = errors.New("unused")
+
+func (s *RetentionSuite) TestPipelinePrefixStopsBeforeTheNextList() {
+	s.Run("does not list TaskRuns once the PipelineRun section fills the budget", func() {
+		counts := map[string]int{}
+		params := pipelinePrefixParams(s.pipelinePrefixObjects(""), counts)
+		b := api.NewBuilderWithBudget(200)
+		writePipelineTroubleshootGuide(params, "ns", "run", b)
+
+		s.Contains(b.String(), api.ResultTruncationNotice)
+		s.NotContains(b.String(), "## TaskRun Status")
+		s.Equal(0, counts["taskruns"])
+		s.Equal(0, counts["repositories"])
+		s.Equal(0, counts["tektonconfigs"])
+	})
+
+	s.Run("does not list Pipeline-as-Code repositories once the TaskRun section fills the budget", func() {
+		counts := map[string]int{}
+		probe := api.NewBuilderWithBudget(0)
+		writePipelineTroubleshootGuide(pipelinePrefixParams(s.pipelinePrefixObjects(""), nil), "ns", "run", probe)
+		second := strings.Index(probe.String(), "### TaskRun: tr-b")
+		s.Require().Greater(second, 0)
+
+		params := pipelinePrefixParams(s.pipelinePrefixObjects(strings.Repeat("x", 8000)), counts)
+		b := api.NewBuilderWithBudget(int64(second))
+		writePipelineTroubleshootGuide(params, "ns", "run", b)
+
+		s.Contains(b.String(), api.ResultTruncationNotice)
+		s.NotContains(b.String(), "### TaskRun: tr-b")
+		s.Equal(1, counts["taskruns"])
+		s.Equal(0, counts["repositories"])
+		s.Equal(0, counts["tektonconfigs"])
+	})
+
+	s.Run("does not list TektonConfigs once the Pipeline-as-Code section fills the budget", func() {
+		counts := map[string]int{}
+		probe := api.NewBuilderWithBudget(0)
+		writePipelineTroubleshootGuide(pipelinePrefixParams(s.pipelinePrefixObjects(""), nil), "ns", "run", probe)
+		heading := strings.Index(probe.String(), "## TektonConfig")
+		s.Require().Greater(heading, 0)
+
+		params := pipelinePrefixParams(s.pipelinePrefixObjects(""), counts)
+		b := api.NewBuilderWithBudget(int64(heading))
+		writePipelineTroubleshootGuide(params, "ns", "run", b)
+
+		s.Contains(b.String(), api.ResultTruncationNotice)
+		s.Equal(1, counts["repositories"])
+		s.Equal(0, counts["tektonconfigs"])
+	})
+}
+
+func (s *RetentionSuite) pipelinePrefixObjects(taskMessage string) []runtime.Object {
+	pipelineRun := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "PipelineRun",
+		"metadata":   map[string]any{"name": "run", "namespace": "ns"},
+	}}
+	taskRun := func(name string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "tekton.dev/v1",
+			"kind":       "TaskRun",
+			"metadata": map[string]any{
+				"name":      name,
+				"namespace": "ns",
+				"labels":    map[string]any{"tekton.dev/pipelineRun": "run"},
+			},
+			"status": map[string]any{
+				"conditions": []any{map[string]any{
+					"type": "Succeeded", "status": "True", "reason": "Succeeded", "message": taskMessage,
+				}},
+			},
+		}}
+	}
+	repo := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "pipelinesascode.tekton.dev/v1alpha1",
+		"kind":       "Repository",
+		"metadata":   map[string]any{"name": "repo", "namespace": "ns"},
+	}}
+	config := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "operator.tekton.dev/v1alpha1",
+		"kind":       "TektonConfig",
+		"metadata":   map[string]any{"name": "config"},
+	}}
+	return []runtime.Object{pipelineRun, taskRun("tr-a"), taskRun("tr-b"), repo, config}
+}
+
+func pipelinePrefixParams(objects []runtime.Object, counts map[string]int) api.PromptHandlerParams {
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		pipelineRunGVR:   "PipelineRunList",
+		pipelineGVR:      "PipelineList",
+		taskRunGVR:       "TaskRunList",
+		pacRepositoryGVR: "RepositoryList",
+		tektonConfigGVR:  "TektonConfigList",
+	}, objects...)
+	if counts != nil {
+		dyn.PrependReactor("*", "*", func(action clienttesting.Action) (bool, runtime.Object, error) {
+			if action.GetVerb() == "list" || action.GetVerb() == "get" {
+				counts[action.GetResource().Resource]++
+			}
+			return false, nil, nil
+		})
+	}
+	return api.PromptHandlerParams{
+		Context: context.Background(),
+		KubernetesClient: pipelinePrefixClient{
+			coreClient: coreClient{Interface: fakeclient.NewSimpleClientset()},
+			dyn:        dyn,
+		},
+	}
+}
+
+type pipelinePrefixClient struct {
+	coreClient
+	dyn dynamic.Interface
+}
+
+func (c pipelinePrefixClient) DynamicClient() dynamic.Interface { return c.dyn }

@@ -1,8 +1,12 @@
 # Scaling
 
-The memory caps bound each piece of work. They do not bound the product. Up to `max_in_flight` calls can each hold a request body, a decoded backend response, and a tool result at the same time.
+The memory caps bound each piece of work.
+They do not bound the product.
+Up to `max_in_flight` calls can each hold a request body, a decoded backend response, and a tool result at the same time.
 
-A list is often smaller than this. One backend body stops at `max_backend_response_bytes`, and the YAML plus structured JSON of that body rarely fill `max_result_bytes`. The floor below is the overlap the caps still allow.
+A list is often smaller than this.
+One backend body stops at `max_backend_response_bytes`, and the YAML plus structured JSON of that body rarely fill `max_result_bytes`.
+The floor below is the overlap the caps still allow.
 
 ## Pod memory floor
 
@@ -20,7 +24,8 @@ floor = baseline + gc × max_in_flight × (amplify × max_backend_response_bytes
 | `gc` | Heap headroom before Go collects (`GOGC` 100) | 2 |
 | `baseline` | Process and client caches | 128 MiB |
 
-`0` disables that cap. This is not a floor for any term set to `0`.
+`0` disables that cap.
+This is not a floor for any term set to `0`.
 
 Defaults:
 
@@ -29,6 +34,11 @@ Defaults:
 floor ≈ 128 MiB + 2 × 4.5 GiB ≈ 9 GiB
 ```
 
-A limit around 2 GiB can be exhausted by the result bytes alone. Around 4 GiB is tight once the decoded objects exist. About 9 GiB covers the overlap above, including a GC spike.
+A limit around 2 GiB can be exhausted by the result bytes alone.
+Around 4 GiB is tight once the decoded objects exist.
+About 9 GiB covers the overlap above, including a GC spike.
 
-When `validation_enabled` is on, add one parsed OpenAPI document. Clients of one cluster share that copy. A refresh briefly holds a second copy. Discovery documents stay under `max_backend_response_bytes`.
+When `validation_enabled` is on, add one parsed OpenAPI document.
+Clients of one cluster share that copy.
+A refresh briefly holds a second copy.
+Discovery documents stay under `max_backend_response_bytes`.

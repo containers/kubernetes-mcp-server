@@ -120,21 +120,6 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 		logger.Info("Performing cluster-wide health check")
 	}
 
-	diagnostics, err := gatherClusterDiagnostics(params, namespace, checkEvents)
-	if err != nil {
-		return nil, fmt.Errorf("failed to gather cluster diagnostics: %w", err)
-	}
-
-	// Set namespace warning and requested namespace for display
-	diagnostics.NamespaceWarning = namespaceWarning
-	if requestedNamespace != "" && namespaceWarning != "" {
-		diagnostics.TargetNamespace = requestedNamespace
-		diagnostics.NamespaceScoped = false // Changed to cluster-wide due to error
-	}
-
-	// Format diagnostic data for LLM analysis
-	promptText := formatHealthCheckPrompt(diagnostics)
-
 	return api.NewPromptCallResult(
 		"Cluster health diagnostic data gathered successfully",
 		[]api.PromptMessage{
@@ -142,14 +127,14 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 				Role: "user",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: promptText,
+					Text: buildHealthCheckPrompt(params, namespace, namespaceWarning, checkEvents),
 				},
 			},
 			{
 				Role: "assistant",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: "I'll analyze the cluster health diagnostic data and provide a comprehensive assessment.",
+					Text: healthCheckAssistantText,
 				},
 			},
 		},
@@ -157,16 +142,11 @@ func clusterHealthCheckHandler(params api.PromptHandlerParams) (*api.PromptCallR
 	), nil
 }
 
-// clusterDiagnostics contains all diagnostic data gathered from the cluster
+// healthCheckAssistantText counts toward the same result as the user prompt.
+const healthCheckAssistantText = "I'll analyze the cluster health diagnostic data and provide a comprehensive assessment."
+
+// clusterDiagnostics is the preamble data known before section lists run.
 type clusterDiagnostics struct {
-	Nodes            string
-	Pods             string
-	Deployments      string
-	StatefulSets     string
-	DaemonSets       string
-	PVCs             string
-	ClusterOperators string
-	Events           string
 	CollectionTime   time.Time
 	TotalNamespaces  int
 	NamespaceScoped  bool
@@ -174,121 +154,202 @@ type clusterDiagnostics struct {
 	NamespaceWarning string
 }
 
-// gatherClusterDiagnostics collects comprehensive diagnostic data from the cluster
-func gatherClusterDiagnostics(params api.PromptHandlerParams, namespace string, checkEvents bool) (*clusterDiagnostics, error) {
+// buildHealthCheckPrompt gathers each section into one result budget. A section
+// List does not start once the bytes already kept fill that budget. The
+// assistant message is reserved up front because it counts toward the same
+// result. See docs/specs/memory-bounds.md#retention.
+func buildHealthCheckPrompt(params api.PromptHandlerParams, namespace, namespaceWarning string, checkEvents bool) string {
 	diag := &clusterDiagnostics{
-		CollectionTime:  time.Now(),
-		NamespaceScoped: namespace != "",
-		TargetNamespace: namespace,
+		CollectionTime:   time.Now(),
+		NamespaceScoped:  namespace != "",
+		TargetNamespace:  namespace,
+		NamespaceWarning: namespaceWarning,
 	}
-
+	b := api.NewPromptBudget(params.Context, healthCheckAssistantText)
 	logger := klogutil.FromContext(params.Context)
 
-	// Gather node diagnostics using ResourcesList
-	logger.Info("Collecting node diagnostics...")
-	nodeDiag, err := gatherNodeDiagnostics(params)
-	if err == nil {
-		diag.Nodes = nodeDiag
-		logger.Info("Node diagnostics collected")
-	} else {
-		klogutil.LogWarn(logger, "Failed to collect node diagnostics", klogutil.Err(err))
-	}
-
-	// Gather pod diagnostics
-	logger.Info("Collecting pod diagnostics...")
-	podDiag, err := gatherPodDiagnostics(params, namespace)
-	if err == nil {
-		diag.Pods = podDiag
-		logger.Info("Pod diagnostics collected")
-	} else {
-		klogutil.LogWarn(logger, "Failed to collect pod diagnostics", klogutil.Err(err))
-	}
-
-	// Gather workload diagnostics
-	logger.Info("Collecting deployment diagnostics...")
-	deployDiag, err := gatherWorkloadDiagnostics(params, "Deployment", namespace)
-	if err == nil {
-		diag.Deployments = deployDiag
-		logger.Info("Deployment diagnostics collected")
-	} else {
-		klogutil.LogWarn(logger, "Failed to collect deployment diagnostics", klogutil.Err(err))
-	}
-
-	logger.Info("Collecting statefulset diagnostics...")
-	stsDiag, err := gatherWorkloadDiagnostics(params, "StatefulSet", namespace)
-	if err == nil {
-		diag.StatefulSets = stsDiag
-		logger.Info("StatefulSet diagnostics collected")
-	} else {
-		klogutil.LogWarn(logger, "Failed to collect statefulset diagnostics", klogutil.Err(err))
-	}
-
-	logger.Info("Collecting daemonset diagnostics...")
-	dsDiag, err := gatherWorkloadDiagnostics(params, "DaemonSet", namespace)
-	if err == nil {
-		diag.DaemonSets = dsDiag
-		logger.Info("DaemonSet diagnostics collected")
-	} else {
-		klogutil.LogWarn(logger, "Failed to collect daemonset diagnostics", klogutil.Err(err))
-	}
-
-	// Gather PVC diagnostics
-	logger.Info("Collecting PVC diagnostics...")
-	pvcDiag, err := gatherPVCDiagnostics(params, namespace)
-	if err == nil {
-		diag.PVCs = pvcDiag
-		logger.Info("PVC diagnostics collected")
-	} else {
-		klogutil.LogWarn(logger, "Failed to collect PVC diagnostics", klogutil.Err(err))
-	}
-
-	// Gather cluster operator diagnostics (OpenShift only)
-	logger.Info("Checking for cluster operators (OpenShift)...")
-	operatorDiag, err := gatherClusterOperatorDiagnostics(params)
-	if err == nil {
-		diag.ClusterOperators = operatorDiag
-		logger.Info("Cluster operator diagnostics collected")
-	}
-
-	// Gather recent events if requested
-	if checkEvents {
-		logger.Info("Collecting recent events...")
-		eventDiag, err := gatherEventDiagnostics(params, namespace)
+	var knownNS []v1.Namespace
+	nsFetched := false
+	if !b.Truncated() {
+		logger.Info("Counting namespaces...")
+		namespaceList, err := params.CoreV1().Namespaces().List(params.Context, metav1.ListOptions{})
 		if err == nil {
-			diag.Events = eventDiag
-			logger.Info("Event diagnostics collected")
-		} else {
-			klogutil.LogWarn(logger, "Failed to collect event diagnostics", klogutil.Err(err))
+			nsFetched = true
+			knownNS = namespaceList.Items
+			diag.TotalNamespaces = len(knownNS)
+			logger.Info("Found namespaces", "kubernetes.namespaces.count", diag.TotalNamespaces)
 		}
 	}
 
-	// Count namespaces
-	logger.Info("Counting namespaces...")
-	namespaceList, err := params.CoreV1().Namespaces().List(params.Context, metav1.ListOptions{})
-	if err == nil {
-		diag.TotalNamespaces = len(namespaceList.Items)
-		logger.Info("Found namespaces", "kubernetes.namespaces.count", diag.TotalNamespaces)
+	writeHealthCheckPreamble(b, diag)
+
+	if body := beginSection(b, "## 1. Nodes\n\n"); body != nil {
+		logger.Info("Collecting node diagnostics...")
+		err := gatherNodeDiagnostics(params, body)
+		if err == nil {
+			commitSection(b, "## 1. Nodes\n\n", body)
+			logger.Info("Node diagnostics collected")
+		} else {
+			klogutil.LogWarn(logger, "Failed to collect node diagnostics", klogutil.Err(err))
+		}
 	}
 
+	if body := beginSection(b, "## 2. Cluster Operators (OpenShift)\n\n"); body != nil {
+		logger.Info("Checking for cluster operators (OpenShift)...")
+		err := gatherClusterOperatorDiagnostics(params, body)
+		if err == nil {
+			commitSection(b, "## 2. Cluster Operators (OpenShift)\n\n", body)
+			logger.Info("Cluster operator diagnostics collected")
+		}
+	}
+
+	if body := beginSection(b, "## 3. Pods\n\n"); body != nil {
+		logger.Info("Collecting pod diagnostics...")
+		err := gatherPodDiagnostics(params, namespace, body)
+		if err == nil {
+			commitSection(b, "## 3. Pods\n\n", body)
+			logger.Info("Pod diagnostics collected")
+		} else {
+			klogutil.LogWarn(logger, "Failed to collect pod diagnostics", klogutil.Err(err))
+		}
+	}
+
+	writeWorkloadSections(b, params, namespace)
+
+	if body := beginSection(b, "## 5. Persistent Volume Claims\n\n"); body != nil {
+		logger.Info("Collecting PVC diagnostics...")
+		err := gatherPVCDiagnostics(params, namespace, body)
+		if err == nil {
+			commitSection(b, "## 5. Persistent Volume Claims\n\n", body)
+			logger.Info("PVC diagnostics collected")
+		} else {
+			klogutil.LogWarn(logger, "Failed to collect PVC diagnostics", klogutil.Err(err))
+		}
+	}
+
+	header := "## 6. Recent Events (Last Hour)\n\n"
+	if checkEvents && b.Fits(len(header)) {
+		logger.Info("Collecting recent events...")
+		body := b.Scratch(len(header) + len("\n\n"))
+		writeEventBody(params, namespace, nsFetched, knownNS, body)
+		if b.CommitScratch(header, "\n\n", body) {
+			logger.Info("Event diagnostics collected")
+		}
+	}
+
+	if !b.Truncated() {
+		b.WriteString("---\n\n")
+		b.WriteString("**Please analyze the above diagnostic data and provide your comprehensive health assessment.**\n")
+	}
 	logger.Info("Cluster health check data collection completed")
-	return diag, nil
+	return b.String()
 }
 
-// gatherNodeDiagnostics collects node status using CoreV1 clientset
-func gatherNodeDiagnostics(params api.PromptHandlerParams) (string, error) {
+func beginSection(b *api.BuilderWithBudget, header string) *api.BuilderWithBudget {
+	if b == nil || !b.Fits(len(header)) {
+		return nil
+	}
+	body := b.Scratch(len(header) + len("\n\n"))
+	if body.Truncated() {
+		return nil
+	}
+	return body
+}
+
+func commitSection(b *api.BuilderWithBudget, header string, body *api.BuilderWithBudget) {
+	b.CommitScratch(header, "\n\n", body)
+}
+
+// sectionSummaryReserve leaves room for a short totals line in front of the
+// issue blocks. Callers also reserve ResultTruncationNotice so copying a cut
+// scratch back does not append a second notice.
+const sectionSummaryReserve = 80
+
+func appendIssueBlock(lines *api.BuilderWithBudget, block string) {
+	if lines == nil || lines.Truncated() || block == "" {
+		return
+	}
+	if lines.Len() > 0 {
+		lines.WriteString("\n\n")
+		if lines.Truncated() {
+			return
+		}
+	}
+	lines.WriteString(block)
+}
+
+func writeSummaryAndBlocks(b, lines *api.BuilderWithBudget, summary, emptyNote string) {
+	b.WriteString(summary)
+	if b.Truncated() {
+		return
+	}
+	if lines == nil || lines.Len() == 0 {
+		b.WriteString(emptyNote)
+		return
+	}
+	b.WriteString(lines.String())
+}
+
+func writeWorkloadSections(b *api.BuilderWithBudget, params api.PromptHandlerParams, namespace string) {
+	logger := klogutil.FromContext(params.Context)
+	wroteHeader := false
+	writeOne := func(title, kind, logName string) {
+		header := "### " + title + "\n\n"
+		need := header
+		reserve := len(header) + len("\n\n")
+		if !wroteHeader {
+			need = "## 4. Workload Controllers\n\n" + header
+			reserve += len("## 4. Workload Controllers\n\n")
+		}
+		if !b.Fits(len(need)) {
+			return
+		}
+		body := b.Scratch(reserve)
+		if body.Truncated() {
+			return
+		}
+		logger.Info("Collecting " + logName + " diagnostics...")
+		err := gatherWorkloadDiagnostics(params, kind, namespace, body)
+		if err != nil {
+			klogutil.LogWarn(logger, "Failed to collect "+logName+" diagnostics", klogutil.Err(err))
+			return
+		}
+		if body.Len() == 0 {
+			return
+		}
+		if !wroteHeader {
+			b.WriteString("## 4. Workload Controllers\n\n")
+			wroteHeader = true
+		}
+		b.CommitScratch(header, "\n\n", body)
+		logger.Info(title + " diagnostics collected")
+	}
+	writeOne("Deployments", "Deployment", "deployment")
+	writeOne("StatefulSets", "StatefulSet", "statefulset")
+	writeOne("DaemonSets", "DaemonSet", "daemonset")
+}
+
+// gatherNodeDiagnostics collects node status using CoreV1 clientset.
+// Issue lines share b. Further lines are not formatted once that budget is
+// full. Totals still count the rest of the already-fetched list.
+func gatherNodeDiagnostics(params api.PromptHandlerParams, b *api.BuilderWithBudget) error {
+	if b == nil || b.Truncated() {
+		return nil
+	}
 	nodeList, err := params.CoreV1().Nodes().List(params.Context, metav1.ListOptions{})
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(nodeList.Items) == 0 {
-		return "No nodes found", nil
+		b.WriteString("No nodes found")
+		return nil
 	}
 
-	var sb strings.Builder
+	lines := b.Scratch(sectionSummaryReserve + len(api.ResultTruncationNotice))
 	totalNodes := len(nodeList.Items)
 	healthyNodes := 0
-	var nodesWithIssues []string
+	withIssues := 0
 
 	for _, node := range nodeList.Items {
 		nodeStatus := "Unknown"
@@ -311,34 +372,44 @@ func gatherNodeDiagnostics(params api.PromptHandlerParams) (string, error) {
 		}
 
 		// Only report nodes with issues
-		if len(issues) > 0 {
-			nodesWithIssues = append(nodesWithIssues, fmt.Sprintf("- **%s** (Status: %s)\n%s", node.Name, nodeStatus, "  - "+strings.Join(issues, "\n  - ")))
+		if len(issues) == 0 {
+			continue
 		}
+		withIssues++
+		if lines.Truncated() {
+			continue
+		}
+		appendIssueBlock(lines, fmt.Sprintf("- **%s** (Status: %s)\n%s", node.Name, nodeStatus, "  - "+strings.Join(issues, "\n  - ")))
 	}
 
-	fmt.Fprintf(&sb, "**Total:** %d | **Healthy:** %d\n\n", totalNodes, healthyNodes)
-	if len(nodesWithIssues) > 0 {
-		sb.WriteString(strings.Join(nodesWithIssues, "\n\n"))
-	} else {
-		sb.WriteString("*All nodes are healthy*")
+	note := ""
+	if withIssues == 0 {
+		note = "*All nodes are healthy*"
 	}
-
-	return sb.String(), nil
+	writeSummaryAndBlocks(b, lines, fmt.Sprintf("**Total:** %d | **Healthy:** %d\n\n", totalNodes, healthyNodes), note)
+	return nil
 }
 
-// gatherPodDiagnostics collects pod status using CoreV1 clientset
-func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (string, error) {
+// gatherPodDiagnostics collects pod status using CoreV1 clientset.
+// Issue lines share b. Further lines are not formatted once that budget is
+// full. Totals still count the rest of the already-fetched list.
+func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string, b *api.BuilderWithBudget) error {
+	if b == nil || b.Truncated() {
+		return nil
+	}
 	podList, err := params.CoreV1().Pods(namespace).List(params.Context, metav1.ListOptions{})
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(podList.Items) == 0 {
-		return "No pods found", nil
+		b.WriteString("No pods found")
+		return nil
 	}
 
+	lines := b.Scratch(sectionSummaryReserve + len(api.ResultTruncationNotice))
 	totalPods := len(podList.Items)
-	var problemPods []string
+	withIssues := 0
 
 	for _, pod := range podList.Items {
 		var issues []string
@@ -376,35 +447,51 @@ func gatherPodDiagnostics(params api.PromptHandlerParams, namespace string) (str
 		}
 
 		// Report pods with issues or high restart count
-		if len(issues) > 0 || restarts > podHighRestartThreshold {
-			problemPods = append(problemPods, fmt.Sprintf("- **%s/%s** (Phase: %s, Ready: %d/%d, Restarts: %d)\n  - %s",
-				pod.Namespace, pod.Name, pod.Status.Phase, readyCount, totalContainers, restarts, strings.Join(issues, "\n  - ")))
+		if len(issues) == 0 && restarts <= podHighRestartThreshold {
+			continue
 		}
+		withIssues++
+		if lines.Truncated() {
+			continue
+		}
+		appendIssueBlock(lines, fmt.Sprintf("- **%s/%s** (Phase: %s, Ready: %d/%d, Restarts: %d)\n  - %s",
+			pod.Namespace, pod.Name, pod.Status.Phase, readyCount, totalContainers, restarts, strings.Join(issues, "\n  - ")))
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "**Total:** %d | **With Issues:** %d\n\n", totalPods, len(problemPods))
-	if len(problemPods) > 0 {
-		sb.WriteString(strings.Join(problemPods, "\n\n"))
-	} else {
-		sb.WriteString("*No pod issues detected*")
+	note := ""
+	if withIssues == 0 {
+		note = "*No pod issues detected*"
 	}
-
-	return sb.String(), nil
+	writeSummaryAndBlocks(b, lines, fmt.Sprintf("**Total:** %d | **With Issues:** %d\n\n", totalPods, withIssues), note)
+	return nil
 }
 
-// gatherWorkloadDiagnostics collects workload controller status using AppsV1 clientset
-func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, namespace string) (string, error) {
-	var workloadsWithIssues []string
+// gatherWorkloadDiagnostics collects workload controller status using AppsV1 clientset.
+// Issue lines share b. Further lines are not formatted once that budget is
+// full. Totals still count the rest of the already-fetched list.
+func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind, namespace string, b *api.BuilderWithBudget) error {
+	if b == nil || b.Truncated() {
+		return nil
+	}
+	lines := b.Scratch(sectionSummaryReserve + len(api.ResultTruncationNotice))
+	withIssues := 0
+	record := func(block string) {
+		withIssues++
+		if lines.Truncated() {
+			return
+		}
+		appendIssueBlock(lines, block)
+	}
 
 	switch kind {
 	case "Deployment":
 		deploymentList, err := params.AppsV1().Deployments(namespace).List(params.Context, metav1.ListOptions{})
 		if err != nil {
-			return "", err
+			return err
 		}
 		if len(deploymentList.Items) == 0 {
-			return "No Deployments found", nil
+			b.WriteString("No Deployments found")
+			return nil
 		}
 
 		for _, deployment := range deploymentList.Items {
@@ -416,7 +503,7 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 			}
 
 			if len(issues) > 0 {
-				workloadsWithIssues = append(workloadsWithIssues, fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
+				record(fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
 					deployment.Namespace, deployment.Name, ready, strings.Join(issues, "\n  - ")))
 			}
 		}
@@ -424,10 +511,11 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 	case "StatefulSet":
 		statefulSetList, err := params.AppsV1().StatefulSets(namespace).List(params.Context, metav1.ListOptions{})
 		if err != nil {
-			return "", err
+			return err
 		}
 		if len(statefulSetList.Items) == 0 {
-			return "No StatefulSets found", nil
+			b.WriteString("No StatefulSets found")
+			return nil
 		}
 
 		for _, sts := range statefulSetList.Items {
@@ -443,7 +531,7 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 			}
 
 			if len(issues) > 0 {
-				workloadsWithIssues = append(workloadsWithIssues, fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
+				record(fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
 					sts.Namespace, sts.Name, ready, strings.Join(issues, "\n  - ")))
 			}
 		}
@@ -451,10 +539,11 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 	case "DaemonSet":
 		daemonSetList, err := params.AppsV1().DaemonSets(namespace).List(params.Context, metav1.ListOptions{})
 		if err != nil {
-			return "", err
+			return err
 		}
 		if len(daemonSetList.Items) == 0 {
-			return "No DaemonSets found", nil
+			b.WriteString("No DaemonSets found")
+			return nil
 		}
 
 		for _, ds := range daemonSetList.Items {
@@ -466,59 +555,70 @@ func gatherWorkloadDiagnostics(params api.PromptHandlerParams, kind string, name
 			}
 
 			if len(issues) > 0 {
-				workloadsWithIssues = append(workloadsWithIssues, fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
+				record(fmt.Sprintf("- **%s/%s** (Ready: %s)\n  - %s",
 					ds.Namespace, ds.Name, ready, strings.Join(issues, "\n  - ")))
 			}
 		}
 
 	default:
-		return "", fmt.Errorf("unsupported workload kind: %s", kind)
+		return fmt.Errorf("unsupported workload kind: %s", kind)
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "**%ss with Issues:** %d\n\n", kind, len(workloadsWithIssues))
-	if len(workloadsWithIssues) > 0 {
-		sb.WriteString(strings.Join(workloadsWithIssues, "\n\n"))
-	} else {
-		fmt.Fprintf(&sb, "*No %s issues detected*", kind)
+	note := ""
+	if withIssues == 0 {
+		note = fmt.Sprintf("*No %s issues detected*", kind)
 	}
-
-	return sb.String(), nil
+	writeSummaryAndBlocks(b, lines, fmt.Sprintf("**%ss with Issues:** %d\n\n", kind, withIssues), note)
+	return nil
 }
 
-// gatherPVCDiagnostics collects PVC status using CoreV1 clientset
-func gatherPVCDiagnostics(params api.PromptHandlerParams, namespace string) (string, error) {
+// gatherPVCDiagnostics collects PVC status using CoreV1 clientset.
+// Issue lines share b. Further lines are not formatted once that budget is
+// full. Totals still count the rest of the already-fetched list.
+func gatherPVCDiagnostics(params api.PromptHandlerParams, namespace string, b *api.BuilderWithBudget) error {
+	if b == nil || b.Truncated() {
+		return nil
+	}
 	pvcList, err := params.CoreV1().PersistentVolumeClaims(namespace).List(params.Context, metav1.ListOptions{})
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(pvcList.Items) == 0 {
-		return "No PVCs found", nil
+		b.WriteString("No PVCs found")
+		return nil
 	}
 
-	var pvcsWithIssues []string
+	lines := b.Scratch(sectionSummaryReserve + len(api.ResultTruncationNotice))
+	withIssues := 0
 
 	for _, pvc := range pvcList.Items {
-		if pvc.Status.Phase != v1.ClaimBound {
-			pvcsWithIssues = append(pvcsWithIssues, fmt.Sprintf("- **%s/%s** (Status: %s)\n  - PVC not bound",
-				pvc.Namespace, pvc.Name, pvc.Status.Phase))
+		if pvc.Status.Phase == v1.ClaimBound {
+			continue
 		}
+		withIssues++
+		if lines.Truncated() {
+			continue
+		}
+		appendIssueBlock(lines, fmt.Sprintf("- **%s/%s** (Status: %s)\n  - PVC not bound",
+			pvc.Namespace, pvc.Name, pvc.Status.Phase))
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "**PVCs with Issues:** %d\n\n", len(pvcsWithIssues))
-	if len(pvcsWithIssues) > 0 {
-		sb.WriteString(strings.Join(pvcsWithIssues, "\n\n"))
-	} else {
-		sb.WriteString("*No PVC issues detected*")
+	note := ""
+	if withIssues == 0 {
+		note = "*No PVC issues detected*"
 	}
-
-	return sb.String(), nil
+	writeSummaryAndBlocks(b, lines, fmt.Sprintf("**PVCs with Issues:** %d\n\n", withIssues), note)
+	return nil
 }
 
-// gatherClusterOperatorDiagnostics collects ClusterOperator status (OpenShift only)
-func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, error) {
+// gatherClusterOperatorDiagnostics collects ClusterOperator status (OpenShift only).
+// Issue lines share b. Further lines are not formatted once that budget is
+// full. Totals still count the rest of the already-fetched list.
+func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams, b *api.BuilderWithBudget) error {
+	if b == nil || b.Truncated() {
+		return nil
+	}
 	gvk := &schema.GroupVersionKind{
 		Group:   "config.openshift.io",
 		Version: "v1",
@@ -528,15 +628,17 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 	operatorList, err := kubernetes.NewCore(params).ResourcesList(params, gvk, "", api.ListOptions{})
 	if err != nil {
 		// Not an OpenShift cluster
-		return "", err
+		return err
 	}
 
 	items, ok := operatorList.UnstructuredContent()["items"].([]interface{})
 	if !ok || len(items) == 0 {
-		return "No cluster operators found", nil
+		b.WriteString("No cluster operators found")
+		return nil
 	}
 
-	var operatorsWithIssues []string
+	lines := b.Scratch(sectionSummaryReserve + len(api.ResultTruncationNotice))
+	withIssues := 0
 
 	for _, item := range items {
 		opMap, ok := item.(map[string]interface{})
@@ -574,21 +676,23 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 			}
 		}
 
-		if len(issues) > 0 {
-			operatorsWithIssues = append(operatorsWithIssues, fmt.Sprintf("- **%s** (Available: %s, Degraded: %s)\n  - %s",
-				name, available, degraded, strings.Join(issues, "\n  - ")))
+		if len(issues) == 0 {
+			continue
 		}
+		withIssues++
+		if lines.Truncated() {
+			continue
+		}
+		appendIssueBlock(lines, fmt.Sprintf("- **%s** (Available: %s, Degraded: %s)\n  - %s",
+			name, available, degraded, strings.Join(issues, "\n  - ")))
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "**Operators with Issues:** %d\n\n", len(operatorsWithIssues))
-	if len(operatorsWithIssues) > 0 {
-		sb.WriteString(strings.Join(operatorsWithIssues, "\n\n"))
-	} else {
-		sb.WriteString("*All cluster operators are healthy*")
+	note := ""
+	if withIssues == 0 {
+		note = "*All cluster operators are healthy*"
 	}
-
-	return sb.String(), nil
+	writeSummaryAndBlocks(b, lines, fmt.Sprintf("**Operators with Issues:** %d\n\n", withIssues), note)
+	return nil
 }
 
 // healthCheckMaxEvents is how many warning and error lines the health-check
@@ -597,26 +701,42 @@ func gatherClusterOperatorDiagnostics(params api.PromptHandlerParams) (string, e
 const healthCheckMaxEvents = 20
 
 // gatherEventDiagnostics collects recent warning and error events.
-// Lines are written through the result budget, and the next namespace List
-// does not start once healthCheckMaxEvents lines are kept or the budget is
-// exhausted. Totals keep counting events already fetched. See
+// Lines share the caller's result budget. The next namespace List does not
+// start once healthCheckMaxEvents lines are kept or that budget is exhausted.
+// Totals keep counting events already fetched. See
 // docs/specs/memory-bounds.md#retention.
 func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (string, error) {
-	var namespaces []string
+	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
+	writeEventBody(params, namespace, false, nil, b)
+	return b.String(), nil
+}
 
-	if namespace != "" {
-		namespaces = append(namespaces, namespace)
-	} else {
-		// Important namespaces
+// eventTotalsReserve is room for "**Warnings:** %d | **Errors:** %d\n\n" so
+// the totals line stays in front of the event lines.
+const eventTotalsReserve = 80
+
+func writeEventBody(params api.PromptHandlerParams, namespace string, nsFetched bool, knownNS []v1.Namespace, b *api.BuilderWithBudget) {
+	if b == nil || b.Truncated() {
+		return
+	}
+	lines := b.Scratch(eventTotalsReserve)
+	if lines.Truncated() {
+		return
+	}
+
+	namespaces := []string{namespace}
+	if namespace == "" {
 		namespaces = []string{"default", "kube-system"}
-
-		// Add OpenShift namespaces using typed clientset
-		nsList, err := params.CoreV1().Namespaces().List(params.Context, metav1.ListOptions{})
-		if err == nil {
-			for _, ns := range nsList.Items {
-				if strings.HasPrefix(ns.Name, "openshift-") {
-					namespaces = append(namespaces, ns.Name)
-				}
+		items := knownNS
+		if !nsFetched {
+			nsList, err := params.CoreV1().Namespaces().List(params.Context, metav1.ListOptions{})
+			if err == nil {
+				items = nsList.Items
+			}
+		}
+		for _, ns := range items {
+			if strings.HasPrefix(ns.Name, "openshift-") {
+				namespaces = append(namespaces, ns.Name)
 			}
 		}
 	}
@@ -625,7 +745,6 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 	totalWarnings := 0
 	totalErrors := 0
 	retained := 0
-	lines := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
 
 	for _, ns := range namespaces {
 		if retained >= healthCheckMaxEvents || lines.Truncated() {
@@ -637,12 +756,10 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 		}
 
 		for _, event := range eventList.Items {
-			// Only include Warning and Error events
 			if event.Type != v1.EventTypeWarning && event.Type != "Error" {
 				continue
 			}
 
-			// Check timestamp
 			lastSeenTime := event.LastTimestamp.Time
 			if lastSeenTime.IsZero() {
 				lastSeenTime = event.EventTime.Time
@@ -660,7 +777,6 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 				continue
 			}
 
-			// Limit message length
 			message := event.Message
 			if len(message) > 150 {
 				message = message[:150] + "..."
@@ -674,100 +790,41 @@ func gatherEventDiagnostics(params api.PromptHandlerParams, namespace string) (s
 		}
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "**Warnings:** %d | **Errors:** %d\n\n", totalWarnings, totalErrors)
-	if lines.Len() > 0 {
-		sb.WriteString(lines.String())
-	} else {
-		sb.WriteString("*No recent warning/error events*")
+	b.WriteString(fmt.Sprintf("**Warnings:** %d | **Errors:** %d\n\n", totalWarnings, totalErrors))
+	if b.Truncated() {
+		return
 	}
-
-	return sb.String(), nil
+	if lines.Len() == 0 {
+		b.WriteString("*No recent warning/error events*")
+		return
+	}
+	b.WriteString(lines.String())
 }
 
-// formatHealthCheckPrompt formats diagnostic data into a prompt for LLM analysis
-func formatHealthCheckPrompt(diag *clusterDiagnostics) string {
-	var sb strings.Builder
+func writeHealthCheckPreamble(b *api.BuilderWithBudget, diag *clusterDiagnostics) {
+	b.WriteString("# Cluster Health Check Diagnostic Data\n\n")
+	b.WriteString(fmt.Sprintf("**Collection Time:** %s\n", diag.CollectionTime.Format(time.RFC3339)))
 
-	sb.WriteString("# Cluster Health Check Diagnostic Data\n\n")
-	fmt.Fprintf(&sb, "**Collection Time:** %s\n", diag.CollectionTime.Format(time.RFC3339))
-
-	// Show namespace warning prominently if present
 	if diag.NamespaceWarning != "" {
-		sb.WriteString("\n")
-		sb.WriteString("⚠️  **WARNING:** " + diag.NamespaceWarning + "\n")
-		sb.WriteString("\n")
-		sb.WriteString("**Note:** Please verify the namespace name and try again if you want namespace-specific diagnostics.\n")
+		b.WriteString("\n")
+		b.WriteString("⚠️  **WARNING:** " + diag.NamespaceWarning + "\n")
+		b.WriteString("\n")
+		b.WriteString("**Note:** Please verify the namespace name and try again if you want namespace-specific diagnostics.\n")
 	}
 
 	if diag.NamespaceScoped {
-		fmt.Fprintf(&sb, "**Scope:** Namespace `%s`\n", diag.TargetNamespace)
+		b.WriteString(fmt.Sprintf("**Scope:** Namespace `%s`\n", diag.TargetNamespace))
 	} else {
-		fmt.Fprintf(&sb, "**Scope:** All namespaces (Total: %d)\n", diag.TotalNamespaces)
+		b.WriteString(fmt.Sprintf("**Scope:** All namespaces (Total: %d)\n", diag.TotalNamespaces))
 	}
-	sb.WriteString("\n")
+	b.WriteString("\n")
 
-	sb.WriteString("## Your Task\n\n")
-	sb.WriteString("Analyze the following cluster diagnostic data and provide:\n")
-	sb.WriteString("1. **Overall Health Status**: Healthy, Warning, or Critical\n")
-	sb.WriteString("2. **Critical Issues**: Issues requiring immediate attention\n")
-	sb.WriteString("3. **Warnings**: Non-critical issues that should be addressed\n")
-	sb.WriteString("4. **Recommendations**: Suggested actions to improve cluster health\n")
-	sb.WriteString("5. **Summary**: Brief overview of findings by component\n\n")
-
-	sb.WriteString("---\n\n")
-
-	if diag.Nodes != "" {
-		sb.WriteString("## 1. Nodes\n\n")
-		sb.WriteString(diag.Nodes)
-		sb.WriteString("\n\n")
-	}
-
-	if diag.ClusterOperators != "" {
-		sb.WriteString("## 2. Cluster Operators (OpenShift)\n\n")
-		sb.WriteString(diag.ClusterOperators)
-		sb.WriteString("\n\n")
-	}
-
-	if diag.Pods != "" {
-		sb.WriteString("## 3. Pods\n\n")
-		sb.WriteString(diag.Pods)
-		sb.WriteString("\n\n")
-	}
-
-	if diag.Deployments != "" || diag.StatefulSets != "" || diag.DaemonSets != "" {
-		sb.WriteString("## 4. Workload Controllers\n\n")
-		if diag.Deployments != "" {
-			sb.WriteString("### Deployments\n\n")
-			sb.WriteString(diag.Deployments)
-			sb.WriteString("\n\n")
-		}
-		if diag.StatefulSets != "" {
-			sb.WriteString("### StatefulSets\n\n")
-			sb.WriteString(diag.StatefulSets)
-			sb.WriteString("\n\n")
-		}
-		if diag.DaemonSets != "" {
-			sb.WriteString("### DaemonSets\n\n")
-			sb.WriteString(diag.DaemonSets)
-			sb.WriteString("\n\n")
-		}
-	}
-
-	if diag.PVCs != "" {
-		sb.WriteString("## 5. Persistent Volume Claims\n\n")
-		sb.WriteString(diag.PVCs)
-		sb.WriteString("\n\n")
-	}
-
-	if diag.Events != "" {
-		sb.WriteString("## 6. Recent Events (Last Hour)\n\n")
-		sb.WriteString(diag.Events)
-		sb.WriteString("\n\n")
-	}
-
-	sb.WriteString("---\n\n")
-	sb.WriteString("**Please analyze the above diagnostic data and provide your comprehensive health assessment.**\n")
-
-	return sb.String()
+	b.WriteString("## Your Task\n\n")
+	b.WriteString("Analyze the following cluster diagnostic data and provide:\n")
+	b.WriteString("1. **Overall Health Status**: Healthy, Warning, or Critical\n")
+	b.WriteString("2. **Critical Issues**: Issues requiring immediate attention\n")
+	b.WriteString("3. **Warnings**: Non-critical issues that should be addressed\n")
+	b.WriteString("4. **Recommendations**: Suggested actions to improve cluster health\n")
+	b.WriteString("5. **Summary**: Brief overview of findings by component\n\n")
+	b.WriteString("---\n\n")
 }

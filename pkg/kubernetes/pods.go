@@ -124,6 +124,12 @@ func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, 
 }
 
 func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
+	return c.PodsLogLimited(ctx, namespace, name, container, previous, tail, 0)
+}
+
+// PodsLogLimited reads at most maxBytes of the log body. maxBytes <= 0 does
+// not add a limit; the cluster client still applies max_backend_response_bytes.
+func (c *Core) PodsLogLimited(ctx context.Context, namespace, name, container string, previous bool, tail, maxBytes int64) (string, error) {
 	namespace = c.NamespaceOrDefault(namespace)
 	pods := c.CoreV1().Pods(namespace)
 
@@ -149,15 +155,27 @@ func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, p
 	}
 
 	req := pods.GetLogs(name, logOptions)
-	res := req.Do(ctx)
-	if res.Error() != nil {
-		return "", res.Error()
+	if maxBytes <= 0 {
+		res := req.Do(ctx)
+		if res.Error() != nil {
+			return "", res.Error()
+		}
+		rawData, err := res.Raw()
+		if err != nil {
+			return "", err
+		}
+		return string(rawData), nil
 	}
-	rawData, err := res.Raw()
+	stream, err := req.Stream(ctx)
 	if err != nil {
 		return "", err
 	}
-	return string(rawData), nil
+	defer func() { _ = stream.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(stream, maxBytes))
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func (c *Core) PodsRun(ctx context.Context, namespace, name, image string, port int32) ([]*unstructured.Unstructured, error) {

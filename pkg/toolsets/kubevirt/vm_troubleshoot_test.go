@@ -332,21 +332,23 @@ func (s *VMTroubleshootSuite) TestFetchVirtLauncherPod() {
 		})
 
 		client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), gvrToListKind, testPod)
-		result, podNames := fetchVirtLauncherPod(ctx, client, "test-ns", "test-vm")
+		b := api.NewBuilderWithBudget(0)
+		podNames := fetchVirtLauncherPod(ctx, client, "test-ns", "test-vm", b)
 
-		s.Contains(result, "### virt-launcher Pod")
-		s.Contains(result, "#### virt-launcher-test-vm-abc123")
-		s.Contains(result, "kind: Pod")
+		s.Contains(b.String(), "### virt-launcher Pod")
+		s.Contains(b.String(), "#### virt-launcher-test-vm-abc123")
+		s.Contains(b.String(), "kind: Pod")
 		s.Len(podNames, 1)
 		s.Equal("virt-launcher-test-vm-abc123", podNames[0])
 	})
 
 	s.Run("returns message when no pod found", func() {
 		client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), gvrToListKind)
-		result, podNames := fetchVirtLauncherPod(ctx, client, "test-ns", "test-vm")
+		b := api.NewBuilderWithBudget(0)
+		podNames := fetchVirtLauncherPod(ctx, client, "test-ns", "test-vm", b)
 
-		s.Contains(result, "*No virt-launcher pod found*")
-		s.Contains(result, "This is expected if the VM is stopped")
+		s.Contains(b.String(), "*No virt-launcher pod found*")
+		s.Contains(b.String(), "This is expected if the VM is stopped")
 		s.Nil(podNames)
 	})
 
@@ -366,25 +368,61 @@ func (s *VMTroubleshootSuite) TestFetchVirtLauncherPod() {
 		})
 
 		client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), gvrToListKind, otherPod)
-		result, podNames := fetchVirtLauncherPod(ctx, client, "test-ns", "test-vm")
+		b := api.NewBuilderWithBudget(0)
+		podNames := fetchVirtLauncherPod(ctx, client, "test-ns", "test-vm", b)
 
-		s.Contains(result, "*No virt-launcher pod found*")
+		s.Contains(b.String(), "*No virt-launcher pod found*")
 		s.Nil(podNames)
+	})
+
+	s.Run("stops formatting the next pod once the budget is full", func() {
+		pod := func(name string) *unstructured.Unstructured {
+			item := &unstructured.Unstructured{}
+			item.SetUnstructuredContent(map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      name,
+					"namespace": "test-ns",
+					"labels": map[string]interface{}{
+						"kubevirt.io":         "virt-launcher",
+						"vm.kubevirt.io/name": "test-vm",
+					},
+					"annotations": map[string]interface{}{
+						"filler": strings.Repeat("x", 4000),
+					},
+				},
+			})
+			return item
+		}
+		client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), gvrToListKind, pod("pod-a"), pod("pod-b"))
+		b := api.NewBuilderWithBudget(80)
+		names := fetchVirtLauncherPod(ctx, client, "test-ns", "test-vm", b)
+
+		s.Contains(b.String(), api.ResultTruncationNotice)
+		s.Len(names, 1)
+		other := "pod-b"
+		if names[0] == "pod-b" {
+			other = "pod-a"
+		}
+		s.NotContains(b.String(), other)
 	})
 }
 
 func (s *VMTroubleshootSuite) TestFetchVirtLauncherPodLogs() {
 	s.Run("returns message when no pod names provided", func() {
-		result := fetchVirtLauncherPodLogs(context.Background(), nil, "test-ns", nil)
+		b := api.NewBuilderWithBudget(0)
+		fetchVirtLauncherPodLogs(context.Background(), nil, "test-ns", nil, b)
 
-		s.Contains(result, "### virt-launcher Pod Logs")
-		s.Contains(result, "*No virt-launcher pod found - no logs available*")
+		s.Contains(b.String(), "### virt-launcher Pod Logs")
+		s.Contains(b.String(), "*No virt-launcher pod found - no logs available*")
 	})
 
 	s.Run("returns message when empty pod names provided", func() {
-		result := fetchVirtLauncherPodLogs(context.Background(), nil, "test-ns", []string{})
+		b := api.NewBuilderWithBudget(0)
+		fetchVirtLauncherPodLogs(context.Background(), nil, "test-ns", []string{}, b)
 
-		s.Contains(result, "*No virt-launcher pod found - no logs available*")
+		s.Contains(b.String(), "*No virt-launcher pod found - no logs available*")
 	})
 
 	s.Run("keeps earlier logs when a later pod fails", func() {
@@ -401,14 +439,32 @@ func (s *VMTroubleshootSuite) TestFetchVirtLauncherPodLogs() {
 		cs, err := kubernetes.NewForConfig(&rest.Config{Host: srv.URL})
 		s.Require().NoError(err)
 
-		result := fetchVirtLauncherPodLogs(context.Background(), promptKubeClient{Interface: cs}, "test-ns", []string{"pod-a", "pod-b", "pod-c"})
+		b := api.NewBuilderWithBudget(0)
+		fetchVirtLauncherPodLogs(context.Background(), promptKubeClient{Interface: cs}, "test-ns", []string{"pod-a", "pod-b", "pod-c"}, b)
 
-		s.Contains(result, "log-from-")
-		s.Contains(result, "pod-a")
-		s.Contains(result, "*Error fetching logs:")
-		s.Contains(result, "boom")
-		s.Contains(result, "pod-c")
+		s.Contains(b.String(), "log-from-")
+		s.Contains(b.String(), "pod-a")
+		s.Contains(b.String(), "*Error fetching logs:")
+		s.Contains(b.String(), "boom")
+		s.Contains(b.String(), "pod-c")
 		s.GreaterOrEqual(len(pods), 3)
+	})
+
+	s.Run("does not fetch the next pod log once the budget is full", func() {
+		var paths []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			paths = append(paths, r.URL.Path)
+			_, _ = io.WriteString(w, strings.Repeat("x", 4000))
+		}))
+		s.T().Cleanup(srv.Close)
+		cs, err := kubernetes.NewForConfig(&rest.Config{Host: srv.URL})
+		s.Require().NoError(err)
+
+		b := api.NewBuilderWithBudget(64)
+		fetchVirtLauncherPodLogs(context.Background(), promptKubeClient{Interface: cs}, "test-ns", []string{"pod-a", "pod-b"}, b)
+
+		s.Contains(b.String(), api.ResultTruncationNotice)
+		s.NotContains(strings.Join(paths, " "), "pod-b")
 	})
 }
 
@@ -446,23 +502,25 @@ func (s *VMTroubleshootSuite) TestFetchEvents() {
 
 	s.Run("keeps VM events when the namespace list fails", func() {
 		calls := 0
-		result := fetchEvents(context.Background(), newClient(func(clienttesting.Action) (bool, runtime.Object, error) {
+		b := api.NewBuilderWithBudget(0)
+		fetchEvents(context.Background(), newClient(func(clienttesting.Action) (bool, runtime.Object, error) {
 			calls++
 			if calls == 1 {
 				return true, vmEvent("vm-event", "disk missing"), nil
 			}
 			return true, nil, errors.New("namespace list failed")
-		}), "test-ns", "test-vm")
+		}), "test-ns", "test-vm", b)
 
-		s.Contains(result, "disk missing")
-		s.Contains(result, "*Error listing events:")
-		s.Contains(result, "namespace list failed")
+		s.Contains(b.String(), "disk missing")
+		s.Contains(b.String(), "*Error listing events:")
+		s.Contains(b.String(), "namespace list failed")
 		s.Equal(2, calls)
 	})
 
 	s.Run("keeps launcher events when the VM list fails", func() {
 		calls := 0
-		result := fetchEvents(context.Background(), newClient(func(clienttesting.Action) (bool, runtime.Object, error) {
+		b := api.NewBuilderWithBudget(0)
+		fetchEvents(context.Background(), newClient(func(clienttesting.Action) (bool, runtime.Object, error) {
 			calls++
 			if calls == 1 {
 				return true, nil, errors.New("selector failed")
@@ -474,12 +532,24 @@ func (s *VMTroubleshootSuite) TestFetchEvents() {
 				"name":       "virt-launcher-test-vm-abc",
 			}
 			return true, list, nil
-		}), "test-ns", "test-vm")
+		}), "test-ns", "test-vm", b)
 
-		s.Contains(result, "launcher died")
-		s.Contains(result, "*Error listing events:")
-		s.Contains(result, "selector failed")
+		s.Contains(b.String(), "launcher died")
+		s.Contains(b.String(), "*Error listing events:")
+		s.Contains(b.String(), "selector failed")
 		s.Equal(2, calls)
+	})
+
+	s.Run("does not list namespace events once the budget is full", func() {
+		calls := 0
+		b := api.NewBuilderWithBudget(80)
+		fetchEvents(context.Background(), newClient(func(clienttesting.Action) (bool, runtime.Object, error) {
+			calls++
+			return true, vmEvent("vm-event", strings.Repeat("x", 4000)), nil
+		}), "test-ns", "test-vm", b)
+
+		s.Equal(1, calls)
+		s.Contains(b.String(), api.ResultTruncationNotice)
 	})
 }
 

@@ -55,13 +55,8 @@ func traceAnalysisHandler(params api.PromptHandlerParams) (*api.PromptCallResult
 		return nil, err
 	}
 
-	tracesContent := fetchKialiData(kiali, params, tools.KialiListTracesEndpoint,
-		map[string]any{"namespace": namespace, "serviceName": service, "limit": 20})
-
-	errorTracesContent := fetchKialiData(kiali, params, tools.KialiListTracesEndpoint,
-		map[string]any{"namespace": namespace, "serviceName": service, "errorOnly": true, "limit": 10})
-
-	promptText := buildTraceAnalysisPrompt(namespace, service, tracesContent, errorTracesContent)
+	b := api.NewPromptBudget(params.Context, traceAnalysisAssistantText)
+	writeTraceAnalysisPrompt(kiali, params, namespace, service, b)
 
 	return api.NewPromptCallResult(
 		"Trace data gathered successfully",
@@ -70,14 +65,14 @@ func traceAnalysisHandler(params api.PromptHandlerParams) (*api.PromptCallResult
 				Role: "user",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: promptText,
+					Text: b.String(),
 				},
 			},
 			{
 				Role: "assistant",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: "I'll analyze the trace data to identify latency issues and error patterns.",
+					Text: traceAnalysisAssistantText,
 				},
 			},
 		},
@@ -85,8 +80,12 @@ func traceAnalysisHandler(params api.PromptHandlerParams) (*api.PromptCallResult
 	), nil
 }
 
-func buildTraceAnalysisPrompt(namespace, service, tracesData, errorTracesData string) string {
-	return fmt.Sprintf(`# Trace and Latency Investigation
+const traceAnalysisAssistantText = "I'll analyze the trace data to identify latency issues and error patterns."
+
+// writeTraceAnalysisPrompt writes the investigation into one prompt budget.
+// The error-trace request does not start once that budget is spent.
+func writeTraceAnalysisPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespace, service string, b *api.BuilderWithBudget) {
+	b.WriteString(fmt.Sprintf(`# Trace and Latency Investigation
 
 ## Target: %s in namespace %s
 
@@ -96,13 +95,31 @@ Analyze distributed traces to find latency bottlenecks, error patterns, and perf
 
 ## Recent Traces
 
-%s
+`, service, namespace))
+	if b.Spent() {
+		return
+	}
+	writeKialiData(b, kiali, params, tools.KialiListTracesEndpoint,
+		map[string]any{"namespace": namespace, "serviceName": service, "limit": 20})
+	if b.Spent() {
+		return
+	}
+	b.WriteString(`
 
 ---
 
 ## Error Traces
 
-%s
+`)
+	if b.Spent() {
+		return
+	}
+	writeKialiData(b, kiali, params, tools.KialiListTracesEndpoint,
+		map[string]any{"namespace": namespace, "serviceName": service, "errorOnly": true, "limit": 10})
+	if b.Spent() {
+		return
+	}
+	b.WriteString(`
 
 ---
 
@@ -117,5 +134,5 @@ Based on the trace data above, provide:
 5. **Recommendations**: Suggest optimizations such as caching, connection pooling, retry tuning, or timeout adjustments.
 
 If a specific trace looks problematic, mention its trace ID so the user can drill into details using the get_trace_details tool.
-`, service, namespace, tracesData, errorTracesData)
+`)
 }

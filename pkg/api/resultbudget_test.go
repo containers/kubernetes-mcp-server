@@ -74,6 +74,48 @@ func (s *ResultBudgetSuite) TestLimitStringUsesTheContextCap() {
 	s.Equal(int64(0), ResultLimit(WithResultBudget(context.Background(), 0)))
 }
 
+func (s *ResultBudgetSuite) TestPromptBudgetReservesTheAssistant() {
+	ctx := WithResultBudget(context.Background(), 20)
+	b := NewPromptBudget(ctx, "assistant")
+	s.Equal(int64(20-len("assistant")), b.Remaining())
+	s.False(NewPromptBudget(context.Background(), "assistant").WriteString(strings.Repeat("a", 30)))
+}
+
+func (s *ResultBudgetSuite) TestSpentForcesOneNoticeOnAnExactFill() {
+	b := NewBuilderWithBudget(4)
+	s.False(b.WriteString("abcd"))
+	s.False(b.Truncated())
+	s.True(b.Spent())
+	s.Equal("abcd"+ResultTruncationNotice, b.String())
+	s.True(b.Spent())
+	s.Equal(1, strings.Count(b.String(), ResultTruncationNotice))
+
+	open := NewBuilderWithBudget(0)
+	s.False(open.Spent())
+	s.False((*BuilderWithBudget)(nil).Fits(1))
+	s.True((*BuilderWithBudget)(nil).Spent())
+}
+
+func (s *ResultBudgetSuite) TestFitsRequiresRoomBeyondTheHeader() {
+	b := NewBuilderWithBudget(4)
+	s.True(b.Fits(3))
+	s.False(b.Fits(4))
+	s.True(NewBuilderWithBudget(0).Fits(100))
+	s.False(b.WriteString("abcd"))
+	s.False(b.Fits(0))
+}
+
+func (s *ResultBudgetSuite) TestCommitScratchWritesOneNoticeAfterTheSuffix() {
+	parent := NewBuilderWithBudget(16)
+	inner := parent.Scratch(len("H") + len("\n"))
+	s.True(inner.WriteString(strings.Repeat("a", 100)))
+	s.False(parent.CommitScratch("H", "\n", inner))
+	s.Equal(1, strings.Count(parent.String(), ResultTruncationNotice))
+	s.True(strings.HasSuffix(parent.String(), ResultTruncationNotice))
+	s.Contains(parent.String(), "H")
+	s.False(parent.CommitScratch("H", "\n", parent.Scratch(1)))
+}
+
 func (s *ResultBudgetSuite) TestScratchCapsTheNestedCollect() {
 	parent := NewBuilderWithBudget(20)
 	s.Equal(int64(20), parent.Remaining())

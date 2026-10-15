@@ -289,7 +289,11 @@ rate_limit_burst = 10        # allow bursts of up to 10 requests
 
 ### Memory Bounds
 
-Process-wide caps on work this server holds in memory. They apply to stdio and HTTP. `0` disables a limit. Each option is reloadable. [Scaling](scaling.md) turns these caps into a pod memory floor.
+Process-wide caps on work this server holds in memory.
+They apply to stdio and HTTP.
+`0` disables a limit.
+Each option is reloadable.
+[Scaling](scaling.md) turns these caps into a pod memory floor.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -311,9 +315,17 @@ A failed fetch is not kept.
 `pods_exec` shares one counter across stdout and stderr; at the cap it cancels the exec, keeps the bytes already stored, and appends a truncation notice, including when the exec library reports a stream error instead of `context.Canceled`.
 A stream error before the cap drops those buffers.
 
-`max_result_bytes` is read on each call. An exact fit is allowed. `0` disables the check. Lowering it does not change a call already running. A write that does not fit is cut and a truncation notice is appended; that notice may exceed the cap by its own length. A collector that keeps several backend reads stops before the next read once that budget is exhausted.
+`max_result_bytes` is read on each call.
+An exact fit is allowed.
+`0` disables the check.
+Lowering it does not change a call already running.
+A write that does not fit is cut and a truncation notice is appended; that notice may exceed the cap by its own length.
+A collector that keeps several backend reads stops before the next read once that budget is exhausted.
 
-A running call keeps its slot until the handler returns. Lowering `max_in_flight` does not cancel calls already running; new calls are rejected until the number in flight drops below the new cap. Raising it, or setting `0`, takes effect on the next acquire. A call that started while the limit was `0` does not take a slot if the limit is raised before that call returns.
+A running call keeps its slot until the handler returns.
+Lowering `max_in_flight` does not cancel calls already running; new calls are rejected until the number in flight drops below the new cap.
+Raising it, or setting `0`, takes effect on the next acquire.
+A call that started while the limit was `0` does not take a slot if the limit is raised before that call returns.
 
 **Example:**
 ```toml

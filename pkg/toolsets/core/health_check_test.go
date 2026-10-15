@@ -164,6 +164,79 @@ func (s *ClusterHealthCheckSuite) TestEventLinesStopAtTwenty() {
 	s.Equal(healthCheckMaxEvents, strings.Count(text, "\n- **"))
 }
 
+func (s *ClusterHealthCheckSuite) TestIssueLinesStopWhenTheSectionBudgetIsFull() {
+	var nodeLists atomic.Int32
+	long := strings.Repeat("x", 4000)
+	node := func(name string) *corev1.Node {
+		return &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{
+				Type:    corev1.NodeDiskPressure,
+				Status:  corev1.ConditionTrue,
+				Message: long,
+			}}},
+		}
+	}
+	cs := fakeclient.NewSimpleClientset(
+		node("n1"),
+		node("n2"),
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+	)
+	cs.PrependReactor("list", "nodes", func(clienttesting.Action) (bool, runtime.Object, error) {
+		nodeLists.Add(1)
+		return false, nil, nil
+	})
+
+	params := api.PromptHandlerParams{
+		Context:          context.Background(),
+		KubernetesClient: healthCoreClient{Interface: cs},
+	}
+	// Room for the totals line and the start of one issue block. The second
+	// node's block is not formatted once that scratch is full.
+	b := api.NewBuilderWithBudget(220)
+	s.Require().NoError(gatherNodeDiagnostics(params, b))
+	text := b.String()
+	s.Equal(int32(1), nodeLists.Load())
+	s.Contains(text, api.ResultTruncationNotice)
+	s.NotContains(text, long)
+	names := 0
+	if strings.Contains(text, "n1") {
+		names++
+	}
+	if strings.Contains(text, "n2") {
+		names++
+	}
+	s.Equal(1, names)
+}
+
+func (s *ClusterHealthCheckSuite) TestLaterSectionsStopWhenTheBudgetIsFull() {
+	var nodeLists atomic.Int32
+	cs := fakeclient.NewSimpleClientset(
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+	)
+	cs.PrependReactor("list", "nodes", func(clienttesting.Action) (bool, runtime.Object, error) {
+		nodeLists.Add(1)
+		return false, nil, nil
+	})
+
+	params := api.PromptHandlerParams{
+		KubernetesClient: healthCoreClient{Interface: cs},
+	}
+	chrome := api.NewBuilderWithBudget(0)
+	writeHealthCheckPreamble(chrome, &clusterDiagnostics{
+		CollectionTime:  time.Unix(0, 0).UTC(),
+		TotalNamespaces: 1,
+	})
+	header := "## 1. Nodes\n\n"
+	limit := int64(len(healthCheckAssistantText) + chrome.Len() + len(header))
+	params.Context = api.WithResultBudget(context.Background(), limit)
+
+	text := buildHealthCheckPrompt(params, "", "", false)
+	s.Equal(int32(0), nodeLists.Load())
+	s.NotContains(text, header)
+}
+
 func TestClusterHealthCheckSuite(t *testing.T) {
 	suite.Run(t, new(ClusterHealthCheckSuite))
 }

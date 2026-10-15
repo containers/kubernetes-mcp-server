@@ -51,6 +51,12 @@ func NewBuilderWithBudget(limit int64) *BuilderWithBudget {
 	return &BuilderWithBudget{limit: limit, capped: true}
 }
 
+// NewPromptBudget returns the result budget with assistant reserved. The
+// assistant text counts toward the same result. A non-positive limit is uncapped.
+func NewPromptBudget(ctx context.Context, assistant string) *BuilderWithBudget {
+	return NewBuilderWithBudget(ResultLimit(ctx)).Scratch(len(assistant))
+}
+
 // WriteString appends s, or a prefix of s plus the truncation notice when s
 // does not fit. truncated is true when this or an earlier write was cut.
 func (b *BuilderWithBudget) WriteString(s string) (truncated bool) {
@@ -89,6 +95,79 @@ func (b *BuilderWithBudget) Len() int { return b.b.Len() }
 
 // Truncated reports whether a write has already been cut.
 func (b *BuilderWithBudget) Truncated() bool { return b.truncated }
+
+// Spent reports that another fetch must not start. An exact fill leaves
+// Remaining at 0 without Truncated; writing one byte forces the single notice.
+func (b *BuilderWithBudget) Spent() bool {
+	if b == nil || b.Truncated() {
+		return true
+	}
+	if b.Remaining() == 0 {
+		b.WriteString("\n")
+		return true
+	}
+	return false
+}
+
+// Fits reports whether n bytes plus at least one more still fit.
+// An uncapped builder always fits. A nil or truncated builder does not.
+func (b *BuilderWithBudget) Fits(n int) bool {
+	if b == nil || b.Truncated() {
+		return false
+	}
+	if b.Remaining() < 0 {
+		return true
+	}
+	if n < 0 {
+		n = 0
+	}
+	return b.Remaining() > int64(n)
+}
+
+// Prefix is the text written so far without a trailing truncation notice.
+// cut is true when this builder was truncated.
+func (b *BuilderWithBudget) Prefix() (text string, cut bool) {
+	if b == nil {
+		return "", false
+	}
+	text = b.String()
+	if b.Truncated() {
+		return strings.TrimSuffix(text, ResultTruncationNotice), true
+	}
+	return text, false
+}
+
+// WriteCut writes text, then one truncation notice when cut.
+// An empty text writes nothing. False means the caller should stop fetching.
+func (b *BuilderWithBudget) WriteCut(text string, cut bool) bool {
+	if b == nil || b.Truncated() {
+		return false
+	}
+	if text == "" {
+		return !cut
+	}
+	if b.WriteString(text) {
+		return false
+	}
+	if cut {
+		b.WriteString(ResultTruncationNotice)
+	}
+	return !b.Truncated()
+}
+
+// CommitScratch writes header, the scratch text, and suffix.
+// A notice on the scratch is written once, after suffix. An empty scratch
+// writes nothing. False means the caller should stop fetching.
+func (b *BuilderWithBudget) CommitScratch(header, suffix string, inner *BuilderWithBudget) bool {
+	if inner == nil {
+		return false
+	}
+	body, cut := inner.Prefix()
+	if strings.TrimSpace(body) == "" {
+		return !cut
+	}
+	return b.WriteCut(header+body+suffix, cut)
+}
 
 // Remaining is the bytes this builder can still accept.
 // An uncapped builder returns -1. A builder that has already been cut returns 0.

@@ -235,9 +235,9 @@ func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClie
 }
 
 func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *api.BuilderWithBudget, podName, namespace, kind, name, container string, tailLines int64) {
-	// The result budget is spent. Do not open another log stream.
+	// Do not open another log stream once the result budget is spent.
 	// See docs/specs/memory-bounds.md#retention.
-	if sb.Truncated() {
+	if sb.Spent() {
 		return
 	}
 
@@ -254,7 +254,15 @@ func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *
 		_ = stream.Close()
 	}()
 
-	logBytes, err := io.ReadAll(stream)
+	// Read at most the bytes sb can still hold. The header added below is
+	// cut by WriteString. An uncapped builder (Remaining < 0) reads the
+	// stream; that read is still bounded by max_backend_response_bytes on
+	// the cluster client. See docs/specs/memory-bounds.md#retention.
+	body := io.Reader(stream)
+	if rem := sb.Remaining(); rem > 0 {
+		body = io.LimitReader(stream, rem)
+	}
+	logBytes, err := io.ReadAll(body)
 	if err != nil {
 		sb.WriteString(fmt.Sprintf("[%s: %s] error reading logs: %v\n", kind, name, err))
 		return
@@ -281,12 +289,7 @@ func appendTaskBlock(dst *api.BuilderWithBudget, header, suffix string, collect 
 		return false
 	}
 	collect(inner)
-	body := inner.String()
-	cut := inner.Truncated()
-	if cut {
-		// dst appends the single notice after the block is committed.
-		body = strings.TrimSuffix(body, api.ResultTruncationNotice)
-	}
+	body, cut := inner.Prefix()
 	if strings.TrimSpace(body) == "" {
 		return !cut
 	}
@@ -294,12 +297,5 @@ func appendTaskBlock(dst *api.BuilderWithBudget, header, suffix string, collect 
 	if !strings.HasSuffix(block, "\n") {
 		block += "\n"
 	}
-	block += suffix
-	if dst.WriteString(block) {
-		return false
-	}
-	if cut {
-		dst.WriteString(api.ResultTruncationNotice)
-	}
-	return !dst.Truncated()
+	return dst.WriteCut(block+suffix, cut)
 }

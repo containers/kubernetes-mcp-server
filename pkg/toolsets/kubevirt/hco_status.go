@@ -57,6 +57,9 @@ func initHCOStatus() []api.ServerPrompt {
 	}
 }
 
+// hcoStatusAssistantText counts toward the same result as the user prompt.
+const hcoStatusAssistantText = "I'll analyze the HyperConverged Cluster Operator status report to assess the overall health and configuration."
+
 func hcoStatusHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 	ctx := params.Context
 	if ctx == nil {
@@ -70,12 +73,76 @@ func hcoStatusHandler(params api.PromptHandlerParams) (*api.PromptCallResult, er
 		return nil, err
 	}
 
-	hcoStatusYaml := fetchHCOConditionsAndVersions(hco)
-	hcoConfigYaml := fetchHCOConfiguration(hco)
-	componentsYaml := fetchManagedComponentStatus(ctx, dynamicClient, namespace)
-	eventsYaml := fetchHCOEvents(ctx, params.KubernetesClient, namespace)
+	// The assistant message is reserved because it counts toward the same
+	// result. Component lists and the event list stop once the budget is
+	// spent. See docs/specs/memory-bounds.md#retention.
+	b := api.NewPromptBudget(ctx, hcoStatusAssistantText)
+	writeHCOReport(ctx, dynamicClient, params.KubernetesClient, hco, namespace, b)
 
-	reportText := fmt.Sprintf(`# %s HyperConverged Cluster Operator Status Report
+	return api.NewPromptCallResult(
+		"HyperConverged status report generated",
+		[]api.PromptMessage{
+			{
+				Role: "user",
+				Content: api.PromptContent{
+					Type: "text",
+					Text: b.String(),
+				},
+			},
+			{
+				Role: "assistant",
+				Content: api.PromptContent{
+					Type: "text",
+					Text: hcoStatusAssistantText,
+				},
+			},
+		},
+		nil,
+	), nil
+}
+
+func writeHCOReport(ctx context.Context, dynamicClient dynamic.Interface, client api.KubernetesClient, hco *unstructured.Unstructured, namespace string, b *api.BuilderWithBudget) {
+	writeHCOBeforeComponents(b, hco, namespace)
+	if b.Spent() {
+		return
+	}
+	writeManagedComponentStatus(ctx, dynamicClient, namespace, b)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString(`
+
+---
+
+## Step 4: Events
+
+Review events in the HCO namespace for warnings or errors:
+
+`)
+	writeHCOEvents(ctx, client, namespace, b)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString(`
+
+---
+
+## Analysis
+
+Based on the data above, determine:
+
+1. **Overall Health**: Are all HCO conditions healthy (Available=True, Degraded=False)?
+2. **Component Health**: Are all managed components (KubeVirt, CDI, Network Addons) available?
+3. **Configuration**: Are there any non-default feature gates or virtualization settings?
+4. **Warnings**: Are there any Warning events or TaintedConfiguration conditions?
+5. **Versions**: What versions are installed for each component?
+`)
+}
+
+func writeHCOBeforeComponents(b *api.BuilderWithBudget, hco *unstructured.Unstructured, namespace string) {
+	b.WriteString(fmt.Sprintf(`# %s HyperConverged Cluster Operator Status Report
 
 ## HCO: %s (namespace: %s)
 
@@ -92,7 +159,13 @@ Check the HCO conditions:
 - **TaintedConfiguration** indicates manual modifications to managed CRs via jsonpatch annotations
 - **Upgradeable** indicates whether the operator can be safely upgraded
 
-%s
+`, defaults.ProductName(), hco.GetName(), namespace))
+	writeHCOConditionsAndVersions(b, hco)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString(`
 
 ---
 
@@ -100,7 +173,13 @@ Check the HCO conditions:
 
 Review the active configuration including feature gates and virtualization settings:
 
-%s
+`)
+	writeHCOConfiguration(b, hco)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString(`
 
 ---
 
@@ -108,49 +187,7 @@ Review the active configuration including feature gates and virtualization setti
 
 HCO manages several components. Each should have its own CR with conditions:
 
-%s
-
----
-
-## Step 4: Events
-
-Review events in the HCO namespace for warnings or errors:
-
-%s
-
----
-
-## Analysis
-
-Based on the data above, determine:
-
-1. **Overall Health**: Are all HCO conditions healthy (Available=True, Degraded=False)?
-2. **Component Health**: Are all managed components (KubeVirt, CDI, Network Addons) available?
-3. **Configuration**: Are there any non-default feature gates or virtualization settings?
-4. **Warnings**: Are there any Warning events or TaintedConfiguration conditions?
-5. **Versions**: What versions are installed for each component?
-`, defaults.ProductName(), hco.GetName(), namespace, hcoStatusYaml, hcoConfigYaml, componentsYaml, eventsYaml)
-
-	return api.NewPromptCallResult(
-		"HyperConverged status report generated",
-		[]api.PromptMessage{
-			{
-				Role: "user",
-				Content: api.PromptContent{
-					Type: "text",
-					Text: reportText,
-				},
-			},
-			{
-				Role: "assistant",
-				Content: api.PromptContent{
-					Type: "text",
-					Text: "I'll analyze the HyperConverged Cluster Operator status report to assess the overall health and configuration.",
-				},
-			},
-		},
-		nil,
-	), nil
+`)
 }
 
 func discoverHyperConvergedCR(ctx context.Context, dynamicClient dynamic.Interface) (*unstructured.Unstructured, string, error) {
@@ -167,88 +204,109 @@ func discoverHyperConvergedCR(ctx context.Context, dynamicClient dynamic.Interfa
 	return hco, hco.GetNamespace(), nil
 }
 
-func fetchHCOConditionsAndVersions(hco *unstructured.Unstructured) string {
-	var result strings.Builder
-
+func writeHCOConditionsAndVersions(b *api.BuilderWithBudget, hco *unstructured.Unstructured) {
+	if b == nil || b.Truncated() {
+		return
+	}
 	conditions, found, err := unstructured.NestedSlice(hco.Object, "status", "conditions")
 	if err != nil {
-		return fmt.Sprintf("### HCO Conditions\n\n*Error extracting conditions: %v*", err)
+		b.WriteString(fmt.Sprintf("### HCO Conditions\n\n*Error extracting conditions: %v*", err))
+		return
 	}
 	if !found || len(conditions) == 0 {
-		result.WriteString("### HCO Conditions\n\n*No conditions found*\n\n")
+		b.WriteString("### HCO Conditions\n\n*No conditions found*\n\n")
 	} else {
 		yamlStr, err := output.MarshalYaml(conditions)
 		if err != nil {
-			fmt.Fprintf(&result, "### HCO Conditions\n\n*Error marshaling conditions: %v*\n\n", err)
+			b.WriteString(fmt.Sprintf("### HCO Conditions\n\n*Error marshaling conditions: %v*\n\n", err))
 		} else {
-			fmt.Fprintf(&result, "### HCO Conditions\n\n```yaml\n%s```\n\n", yamlStr)
+			b.WriteString(fmt.Sprintf("### HCO Conditions\n\n```yaml\n%s```\n\n", yamlStr))
 		}
+	}
+	if b.Truncated() {
+		return
 	}
 
 	versions, found, err := unstructured.NestedSlice(hco.Object, "status", "versions")
 	if err != nil {
-		fmt.Fprintf(&result, "### Component Versions\n\n*Error extracting versions: %v*", err)
-		return result.String()
+		b.WriteString(fmt.Sprintf("### Component Versions\n\n*Error extracting versions: %v*", err))
+		return
 	}
 	if !found || len(versions) == 0 {
-		result.WriteString("### Component Versions\n\n*No version information found*")
-		return result.String()
+		b.WriteString("### Component Versions\n\n*No version information found*")
+		return
 	}
 
 	yamlStr, err := output.MarshalYaml(versions)
 	if err != nil {
-		fmt.Fprintf(&result, "### Component Versions\n\n*Error marshaling versions: %v*", err)
-	} else {
-		fmt.Fprintf(&result, "### Component Versions\n\n```yaml\n%s```", yamlStr)
+		b.WriteString(fmt.Sprintf("### Component Versions\n\n*Error marshaling versions: %v*", err))
+		return
 	}
-
-	return result.String()
+	b.WriteString(fmt.Sprintf("### Component Versions\n\n```yaml\n%s```", yamlStr))
 }
 
-func fetchHCOConfiguration(hco *unstructured.Unstructured) string {
-	var result strings.Builder
-
+func writeHCOConfiguration(b *api.BuilderWithBudget, hco *unstructured.Unstructured) {
+	if b == nil || b.Truncated() {
+		return
+	}
 	featureGates, found, err := unstructured.NestedSlice(hco.Object, "spec", "featureGates")
 	if err != nil {
-		fmt.Fprintf(&result, "### Feature Gates\n\n*Error extracting feature gates: %v*\n\n", err)
+		b.WriteString(fmt.Sprintf("### Feature Gates\n\n*Error extracting feature gates: %v*\n\n", err))
 	} else if !found || len(featureGates) == 0 {
-		result.WriteString("### Feature Gates\n\n*No feature gates configured*\n\n")
+		b.WriteString("### Feature Gates\n\n*No feature gates configured*\n\n")
 	} else {
 		yamlStr, err := output.MarshalYaml(featureGates)
 		if err != nil {
-			fmt.Fprintf(&result, "### Feature Gates\n\n*Error marshaling feature gates: %v*\n\n", err)
+			b.WriteString(fmt.Sprintf("### Feature Gates\n\n*Error marshaling feature gates: %v*\n\n", err))
 		} else {
-			fmt.Fprintf(&result, "### Feature Gates\n\n```yaml\n%s```\n\n", yamlStr)
+			b.WriteString(fmt.Sprintf("### Feature Gates\n\n```yaml\n%s```\n\n", yamlStr))
 		}
+	}
+	if b.Truncated() {
+		return
 	}
 
 	virtualization, found, err := unstructured.NestedMap(hco.Object, "spec", "virtualization")
 	if err != nil {
-		fmt.Fprintf(&result, "### Virtualization Configuration\n\n*Error extracting virtualization config: %v*", err)
-	} else if !found || len(virtualization) == 0 {
-		result.WriteString("### Virtualization Configuration\n\n*Using default virtualization settings*")
-	} else {
-		yamlStr, err := output.MarshalYaml(virtualization)
-		if err != nil {
-			fmt.Fprintf(&result, "### Virtualization Configuration\n\n*Error marshaling virtualization config: %v*", err)
-		} else {
-			fmt.Fprintf(&result, "### Virtualization Configuration\n\n```yaml\n%s```", yamlStr)
-		}
+		b.WriteString(fmt.Sprintf("### Virtualization Configuration\n\n*Error extracting virtualization config: %v*", err))
+		return
 	}
-
-	return result.String()
+	if !found || len(virtualization) == 0 {
+		b.WriteString("### Virtualization Configuration\n\n*Using default virtualization settings*")
+		return
+	}
+	yamlStr, err := output.MarshalYaml(virtualization)
+	if err != nil {
+		b.WriteString(fmt.Sprintf("### Virtualization Configuration\n\n*Error marshaling virtualization config: %v*", err))
+		return
+	}
+	b.WriteString(fmt.Sprintf("### Virtualization Configuration\n\n```yaml\n%s```", yamlStr))
 }
 
-func fetchManagedComponentStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace string) string {
-	var result strings.Builder
-
-	result.WriteString(fetchComponentCR(ctx, dynamicClient, "KubeVirt", kubevirt.KubeVirtCRGVR, namespace))
-	result.WriteString("\n\n")
-	result.WriteString(fetchComponentCR(ctx, dynamicClient, "CDI", kubevirt.CDIGVR, ""))
-	result.WriteString("\n\n")
-	result.WriteString(fetchComponentCR(ctx, dynamicClient, "NetworkAddonsConfig", kubevirt.NetworkAddonsConfigGVR, ""))
-
-	return result.String()
+// writeManagedComponentStatus lists KubeVirt, CDI, then NetworkAddonsConfig.
+// The next list does not start once the result budget is spent.
+func writeManagedComponentStatus(ctx context.Context, dynamicClient dynamic.Interface, namespace string, b *api.BuilderWithBudget) {
+	components := []struct {
+		name string
+		gvr  schema.GroupVersionResource
+		ns   string
+	}{
+		{name: "KubeVirt", gvr: kubevirt.KubeVirtCRGVR, ns: namespace},
+		{name: "CDI", gvr: kubevirt.CDIGVR},
+		{name: "NetworkAddonsConfig", gvr: kubevirt.NetworkAddonsConfigGVR},
+	}
+	for i, component := range components {
+		if b.Spent() {
+			return
+		}
+		if i > 0 {
+			b.WriteString("\n\n")
+			if b.Spent() {
+				return
+			}
+		}
+		b.WriteString(fetchComponentCR(ctx, dynamicClient, component.name, component.gvr, component.ns))
+	}
 }
 
 func fetchComponentCR(ctx context.Context, dynamicClient dynamic.Interface, name string, gvr schema.GroupVersionResource, namespace string) string {
@@ -298,30 +356,66 @@ func fetchComponentCR(ctx context.Context, dynamicClient dynamic.Interface, name
 	return fmt.Sprintf("### %s: %s/%s\n\n```yaml\n%s```", name, cr.GetNamespace(), cr.GetName(), yamlStr)
 }
 
-func fetchHCOEvents(ctx context.Context, client api.KubernetesClient, namespace string) string {
+// writeHCOEvents lists events once and writes each warning as it is seen.
+// Further warnings are not formatted once the budget is spent.
+func writeHCOEvents(ctx context.Context, client api.KubernetesClient, namespace string, b *api.BuilderWithBudget) {
+	if b.Spent() {
+		return
+	}
 	core := kubernetes.NewCore(client)
 
 	allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
 	if err != nil {
-		return fmt.Sprintf("### Events\n\n*Error listing events: %v*", err)
+		b.WriteString(fmt.Sprintf("### Events\n\n*Error listing events: %v*", err))
+		return
 	}
 
-	var warningEvents []map[string]any
+	wrote := false
 	for _, event := range allEvents {
 		eventType, _ := event["Type"].(string)
-		if eventType == "Warning" {
-			warningEvents = append(warningEvents, event)
+		if eventType != "Warning" {
+			continue
 		}
+		if b.Spent() {
+			return
+		}
+		item, err := yamlListItem(event)
+		if err != nil {
+			if !wrote {
+				b.WriteString(fmt.Sprintf("### Events\n\n*Error marshaling events: %v*", err))
+			}
+			return
+		}
+		if !wrote {
+			b.WriteString(fmt.Sprintf("### Warning Events in %s namespace\n\n```yaml\n", namespace))
+			wrote = true
+			if b.Truncated() {
+				return
+			}
+		}
+		b.WriteString(item)
 	}
-
-	if len(warningEvents) == 0 {
-		return "### Events\n\n*No warning events found in the HCO namespace*"
+	if !wrote {
+		b.WriteString("### Events\n\n*No warning events found in the HCO namespace*")
+		return
 	}
+	if !b.Truncated() {
+		b.WriteString("```")
+	}
+}
 
-	yamlStr, err := output.MarshalYaml(warningEvents)
+// yamlListItem renders one object as a YAML sequence entry so warnings can be
+// written one at a time and still form one list when every warning fits.
+func yamlListItem(v any) (string, error) {
+	raw, err := output.MarshalYaml(v)
 	if err != nil {
-		return fmt.Sprintf("### Events\n\n*Error marshaling events: %v*", err)
+		return "", err
 	}
-
-	return fmt.Sprintf("### Warning Events in %s namespace\n\n```yaml\n%s```", namespace, yamlStr)
+	raw = strings.TrimRight(raw, "\n")
+	lines := strings.Split(raw, "\n")
+	lines[0] = "- " + lines[0]
+	for i := 1; i < len(lines); i++ {
+		lines[i] = "  " + lines[i]
+	}
+	return strings.Join(lines, "\n") + "\n", nil
 }

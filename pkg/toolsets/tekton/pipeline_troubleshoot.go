@@ -79,19 +79,6 @@ func pipelineTroubleshootPrompts() []api.ServerPrompt {
 	}
 }
 
-type pipelineTroubleshootData struct {
-	namespace        string
-	name             string
-	pipelineRun      *unstructured.Unstructured
-	pipelineRunText  string
-	pipelineText     string
-	taskRunsText     string
-	logsText         string
-	eventsText       string
-	pacText          string
-	tektonConfigText string
-}
-
 const pipelineTroubleshootAssistantText = "I'll analyze the collected Tekton data to identify the PipelineRun issue."
 
 func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
@@ -105,60 +92,138 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 		return nil, fmt.Errorf("name argument is required")
 	}
 
+	b := api.NewPromptBudget(params.Context, pipelineTroubleshootAssistantText)
+	writePipelineTroubleshootGuide(params, namespace, name, b)
+	return pipelineTroubleshootResult(b.String(), true), nil
+}
+
+// writePipelineTroubleshootGuide writes the guide into one prompt budget.
+// Each get or list waits until the previous section still fits. The log and
+// event collectors are unchanged and write into the room that remains.
+func writePipelineTroubleshootGuide(params api.PromptHandlerParams, namespace, name string, b *api.BuilderWithBudget) {
+	if b == nil || b.Spent() {
+		return
+	}
 	pipelineRun, pipelineRunText := fetchPipelineRunForPrompt(params, namespace, name)
-	taskRuns, taskRunsText := fetchPipelineRunTaskRunsForPrompt(params, namespace, name)
-	data := pipelineTroubleshootData{
-		namespace:        namespace,
-		name:             name,
-		pipelineRun:      pipelineRun,
-		pipelineRunText:  pipelineRunText,
-		pipelineText:     fetchPipelineDefinitionForPrompt(params, namespace, pipelineRun),
-		taskRunsText:     taskRunsText,
-		pacText:          fetchPipelineRunPACRepositoriesForPrompt(params, namespace),
-		tektonConfigText: fetchTektonConfigsForPrompt(params),
+	b.WriteString(fmt.Sprintf(`# Tekton PipelineRun Troubleshooting Guide
+
+## PipelineRun: %s/%s
+
+**Collected:** %s
+**Current status hint:** %s
+
+Analyze the collected data and use these exact section headings in the response:
+1. PipelineRun Status - overall status, conditions, and timing
+2. TaskRun Status - per-task pass, failure, or blocked state
+3. Failed Step Logs - errors from failed or errored steps
+4. Events - related warnings and errors
+5. Troubleshooting Analysis - diagnosis based on the Pipeline definition and collected context
+6. Fix Suggestions - concrete next actions for the identified failure pattern
+
+---
+
+## PipelineRun Status
+
+`, namespace, name, time.Now().Format(time.RFC3339), pipelineRunStatusHint(pipelineRun)))
+	if b.Spent() {
+		return
+	}
+	b.WriteString(pipelineRunText)
+	if b.Spent() {
+		return
 	}
 
-	// guideLim reserves the assistant message, which counts toward the same
-	// result. Skeleton is the guide with the log and event holes empty. If
-	// that string is already over guideLim, return it cut to guideLim plus
-	// the truncation notice and leave the holes empty. If it fits,
-	// FitSections fills the holes in order. The first section that does not
-	// fit is cut and carries the notice; later sections are left empty. A
-	// section that fills the remaining room exactly leaves the next
-	// non-empty section as the notice alone.
-	lim := api.ResultLimit(params.Context)
-	room := int64(0)
-	if lim > 0 {
-		skeleton := buildPipelineTroubleshootPrompt(data)
-		guideLim := lim - int64(len(pipelineTroubleshootAssistantText))
-		if guideLim <= 0 || int64(len(skeleton)) > guideLim {
-			guide := ""
-			if guideLim > 0 {
-				b := api.NewBuilderWithBudget(guideLim)
-				b.WriteString(skeleton)
-				guide = b.String()
-			}
-			return pipelineTroubleshootResult(guide, true), nil
-		}
-		room = guideLim - int64(len(skeleton))
-		if room <= 0 {
-			data.logsText = api.ResultTruncationNotice
-			return pipelineTroubleshootResult(buildPipelineTroubleshootPrompt(data), true), nil
-		}
+	b.WriteString("\n\n---\n\n## Pipeline Definition\n\n")
+	if b.Spent() {
+		return
 	}
-	// If we get here with room == 0, it means we're uncapped. Otherwise,
-	// logs and events share room. The event scratch is what logs did not
-	// use, so the two sections together stay inside the result budget.
-	// See docs/specs/memory-bounds.md#retention.
-	logsB := api.NewBuilderWithBudget(room)
-	fetchPipelineRunLogsForPrompt(params, namespace, taskRuns, logsB)
-	// Uncapped if logsB was uncapped
-	eventsB := logsB.Scratch(0)
-	// Shorts out if eventsB.Truncated()
-	fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns, eventsB)
-	data.logsText = logsB.String()
-	data.eventsText = eventsB.String()
-	return pipelineTroubleshootResult(buildPipelineTroubleshootPrompt(data), true), nil
+	b.WriteString(fetchPipelineDefinitionForPrompt(params, namespace, pipelineRun))
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString("\n\n---\n\n## TaskRun Status\n\n")
+	if b.Spent() {
+		return
+	}
+	taskRuns := fetchPipelineRunTaskRunsForPrompt(params, namespace, name, b)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString("\n\n---\n\n## Failed Step Logs\n\n")
+	if b.Spent() {
+		return
+	}
+	fetchPipelineRunLogsForPrompt(params, namespace, taskRuns, b)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString("\n\n---\n\n## Pipeline-as-Code Repositories\n\n")
+	if b.Spent() {
+		return
+	}
+	writePipelineRunPACRepositoriesForPrompt(params, namespace, b)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString("\n\n---\n\n## TektonConfig\n\n")
+	if b.Spent() {
+		return
+	}
+	writeTektonConfigsForPrompt(params, b)
+	if b.Spent() {
+		return
+	}
+
+	b.WriteString("\n\n---\n\n## Events\n\n")
+	if b.Spent() {
+		return
+	}
+	fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns, b)
+	if b.Spent() {
+		return
+	}
+	b.WriteString(`
+
+---
+
+## Troubleshooting Analysis
+
+Use the collected data to identify:
+1. The first failed or blocked PipelineTask
+2. The failed step and its relevant log error
+3. Pipeline definition, parameter, workspace, dependency, or scheduling problems
+4. Warning events that confirm the failure path
+5. Pipeline-as-Code or TektonConfig settings that contributed to the failure
+
+---
+
+## Fix Suggestions
+
+Recommend only fixes supported by the collected evidence. Common actions include correcting missing Pipeline or Task references, invalid parameters or workspaces, image pull failures, insufficient permissions or resources, and timeout or cancellation settings.
+`)
+}
+
+func pipelineRunStatusHint(pipelineRun *unstructured.Unstructured) string {
+	statusHint := "unknown"
+	if pipelineRun == nil {
+		return statusHint
+	}
+	conditions, found, _ := unstructured.NestedSlice(pipelineRun.Object, "status", "conditions")
+	if !found || len(conditions) == 0 {
+		return statusHint
+	}
+	condition, ok := conditions[len(conditions)-1].(map[string]any)
+	if !ok {
+		return statusHint
+	}
+	if reason, ok := condition["reason"].(string); ok {
+		statusHint = reason
+	}
+	return statusHint
 }
 
 func pipelineTroubleshootResult(guide string, includeAssistant bool) *api.PromptCallResult {
@@ -233,26 +298,36 @@ func pipelineSpecBlock(source string, pipelineSpec map[string]interface{}) strin
 	return fmt.Sprintf("**%s PipelineSpec**\n\n```yaml\n%s```", source, yaml)
 }
 
-func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string) ([]tektonv1.TaskRun, string) {
+// fetchPipelineRunTaskRunsForPrompt lists TaskRuns once and writes each status
+// into b. Further statuses are not formatted once b is spent.
+func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, b *api.BuilderWithBudget) []tektonv1.TaskRun {
+	if b == nil || b.Spent() {
+		return nil
+	}
 	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "")
 	if err != nil {
-		return nil, fmt.Sprintf("*Error listing TaskRuns: %v*", err)
+		b.WriteString(fmt.Sprintf("*Error listing TaskRuns: %v*", err))
+		return nil
 	}
 	if len(taskRuns) == 0 {
-		return nil, "*No TaskRuns found for this PipelineRun*"
+		b.WriteString("*No TaskRuns found for this PipelineRun*")
+		return nil
 	}
 
-	var sb strings.Builder
 	for _, taskRun := range taskRuns {
-		fmt.Fprintf(&sb, "### TaskRun: %s\n\n", taskRun.Name)
-		if status, err := output.MarshalYaml(taskRun.Status); err == nil {
-			fmt.Fprintf(&sb, "```yaml\n%s```\n\n", status)
-		} else {
+		if b.Spent() {
+			break
+		}
+		b.WriteString(fmt.Sprintf("### TaskRun: %s\n\n", taskRun.Name))
+		status, err := output.MarshalYaml(taskRun.Status)
+		if err != nil {
 			klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to marshal TaskRun status for PipelineRun troubleshoot",
 				klogutil.Field("taskrun", taskRun.Name), klogutil.Err(err))
+			continue
 		}
+		b.WriteString(fmt.Sprintf("```yaml\n%s```\n\n", status))
 	}
-	return taskRuns, sb.String()
+	return taskRuns
 }
 
 func fetchPipelineRunLogsForPrompt(params api.PromptHandlerParams, namespace string, taskRuns []tektonv1.TaskRun, b *api.BuilderWithBudget) {
@@ -380,120 +455,46 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 	b.WriteString("```")
 }
 
-func fetchPipelineRunPACRepositoriesForPrompt(params api.PromptHandlerParams, namespace string) string {
+func writePipelineRunPACRepositoriesForPrompt(params api.PromptHandlerParams, namespace string, b *api.BuilderWithBudget) {
+	if b == nil || b.Spent() {
+		return
+	}
 	list, err := params.DynamicClient().Resource(pacRepositoryGVR).Namespace(namespace).List(params.Context, metav1.ListOptions{})
 	if err != nil {
-		return fmt.Sprintf("*Pipeline-as-Code Repository resources unavailable: %v*", err)
+		b.WriteString(fmt.Sprintf("*Pipeline-as-Code Repository resources unavailable: %v*", err))
+		return
 	}
 	if len(list.Items) == 0 {
-		return "*No Pipeline-as-Code Repository resources found in this namespace*"
+		b.WriteString("*No Pipeline-as-Code Repository resources found in this namespace*")
+		return
 	}
 	yaml, err := output.MarshalYaml(list)
 	if err != nil {
-		return fmt.Sprintf("*Error formatting Pipeline-as-Code Repository resources: %v*", err)
+		b.WriteString(fmt.Sprintf("*Error formatting Pipeline-as-Code Repository resources: %v*", err))
+		return
 	}
-	return fmt.Sprintf("```yaml\n%s```", yaml)
+	b.WriteString(fmt.Sprintf("```yaml\n%s```", yaml))
 }
 
-func fetchTektonConfigsForPrompt(params api.PromptHandlerParams) string {
+func writeTektonConfigsForPrompt(params api.PromptHandlerParams, b *api.BuilderWithBudget) {
+	if b == nil || b.Spent() {
+		return
+	}
 	list, err := params.DynamicClient().Resource(tektonConfigGVR).List(params.Context, metav1.ListOptions{})
 	if err != nil {
-		return fmt.Sprintf("*TektonConfig resources unavailable: %v*", err)
+		b.WriteString(fmt.Sprintf("*TektonConfig resources unavailable: %v*", err))
+		return
 	}
 	if len(list.Items) == 0 {
-		return "*No TektonConfig resources found*"
+		b.WriteString("*No TektonConfig resources found*")
+		return
 	}
 	yaml, err := output.MarshalYaml(list)
 	if err != nil {
-		return fmt.Sprintf("*Error formatting TektonConfig resources: %v*", err)
+		b.WriteString(fmt.Sprintf("*Error formatting TektonConfig resources: %v*", err))
+		return
 	}
-	return fmt.Sprintf("```yaml\n%s```", yaml)
-}
-
-func buildPipelineTroubleshootPrompt(data pipelineTroubleshootData) string {
-	statusHint := "unknown"
-	if data.pipelineRun != nil {
-		if conditions, found, _ := unstructured.NestedSlice(data.pipelineRun.Object, "status", "conditions"); found && len(conditions) > 0 {
-			if condition, ok := conditions[len(conditions)-1].(map[string]any); ok {
-				statusHint, _ = condition["reason"].(string)
-			}
-		}
-	}
-
-	return fmt.Sprintf(`# Tekton PipelineRun Troubleshooting Guide
-
-## PipelineRun: %s/%s
-
-**Collected:** %s
-**Current status hint:** %s
-
-Analyze the collected data and use these exact section headings in the response:
-1. PipelineRun Status - overall status, conditions, and timing
-2. TaskRun Status - per-task pass, failure, or blocked state
-3. Failed Step Logs - errors from failed or errored steps
-4. Events - related warnings and errors
-5. Troubleshooting Analysis - diagnosis based on the Pipeline definition and collected context
-6. Fix Suggestions - concrete next actions for the identified failure pattern
-
----
-
-## PipelineRun Status
-
-%s
-
----
-
-## Pipeline Definition
-
-%s
-
----
-
-## TaskRun Status
-
-%s
-
----
-
-## Failed Step Logs
-
-%s
-
----
-
-## Pipeline-as-Code Repositories
-
-%s
-
----
-
-## TektonConfig
-
-%s
-
----
-
-## Events
-
-%s
-
----
-
-## Troubleshooting Analysis
-
-Use the collected data to identify:
-1. The first failed or blocked PipelineTask
-2. The failed step and its relevant log error
-3. Pipeline definition, parameter, workspace, dependency, or scheduling problems
-4. Warning events that confirm the failure path
-5. Pipeline-as-Code or TektonConfig settings that contributed to the failure
-
----
-
-## Fix Suggestions
-
-Recommend only fixes supported by the collected evidence. Common actions include correcting missing Pipeline or Task references, invalid parameters or workspaces, image pull failures, insufficient permissions or resources, and timeout or cancellation settings.
-`, data.namespace, data.name, time.Now().Format(time.RFC3339), statusHint, data.pipelineRunText, data.pipelineText, data.taskRunsText, data.logsText, data.pacText, data.tektonConfigText, data.eventsText)
+	b.WriteString(fmt.Sprintf("```yaml\n%s```", yaml))
 }
 
 func yamlBlock(title string, obj *unstructured.Unstructured) string {
