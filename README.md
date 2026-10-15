@@ -193,7 +193,7 @@ uvx kubernetes-mcp-server@latest --help
 | Option         | Description |
 | -------------- | ----------- |
 | `--version`    | Print version information and quit. |
-| `--config`     | Path to the main TOML configuration file. See [Configuration Reference](docs/configuration.md) for all options (port, toolsets, read_only, kubeconfig, …). |
+| `--config`     | Path to the main TOML configuration file, or `-` to read it from stdin (HTTP mode only). See [Configuration Reference](docs/configuration.md) for all options (port, toolsets, read_only, kubeconfig, …). |
 | `--config-dir` | Directory of lexical `.toml` files. Usable alone or with `--config`. Omitted means no drop-ins. Relative paths are resolved against the working directory. |
 
 > **Note**: Runtime settings are TOML (or existing env names), not CLI flags. See [Configuration Changes](docs/configuration-changes.md) for the flag-to-TOML mapping.

@@ -10,6 +10,7 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
 
 - [Configuration Loading](#configuration-loading)
   - [Usage](#usage)
+  - [Reading the Configuration from stdin](#reading-the-configuration-from-stdin)
 - [Drop-in Configuration](#drop-in-configuration)
   - [How Drop-in Files Work](#how-drop-in-files-work)
   - [Example Directory Structure](#example-directory-structure)
@@ -48,7 +49,7 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
 Each option is resolved once per load. Later sources override earlier ones:
 
 1. **Defaults** — Built-in values (for example `list_output = "table"`)
-2. **Main configuration file** — `--config`, or `$MCP_CONFIG_PATH` if `--config` is unset. Optional when `--config-dir` supplies the files
+2. **Main configuration file** — `--config` (or stdin with `--config -`), or `$MCP_CONFIG_PATH` if `--config` is unset. Optional when `--config-dir` supplies the files
 3. **`--config-dir` files** — lexical `.toml` files. Can be the only file source. Omitted means no directory is read
 4. **Environment variables** — Only where an option declares an env name. An empty or unset variable does not override
 5. **CLI** — Only `--config` / `--config-dir` / `--version`. These select files; they are not runtime option overrides
@@ -57,7 +58,7 @@ Unknown TOML keys fail the load (startup and SIGHUP exit non-zero). Registered `
 
 String options (including each element of a string list, and duration strings) have surrounding whitespace stripped at load from TOML and env. `tls_cert = " /certs/tls.crt "` is the same as `tls_cert = "/certs/tls.crt"`.
 
-After validation (startup and SIGHUP, success or failure) the server logs every option with its resolved value and source (file path, `<Env>`, or `<Default>`). Sensitive values are redacted. Independent validation errors are all reported. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config. A failed SIGHUP reload dumps when a config was produced, then the process exits.
+After validation (startup and SIGHUP, success or failure) the server logs every option with its resolved value and source (file path, `<Stdin>`, `<Env>`, or `<Default>`). Sensitive values are redacted. Independent validation errors are all reported. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config. A failed SIGHUP reload dumps when a config was produced, then the process exits.
 
 Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-only; the default (`port=""`, `require_oauth=false`) still works.
 
@@ -75,7 +76,21 @@ kubernetes-mcp-server --config-dir /etc/kubernetes-mcp-server/conf.d/
 # Use both main config and explicit drop-in directory
 kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
                       --config-dir /etc/kubernetes-mcp-server/config.d/
+
+# Read the main configuration from stdin (HTTP mode only)
+cat <<EOF | kubernetes-mcp-server --config -
+port = "8080"
+read_only = true
+EOF
 ```
+
+### Reading the Configuration from stdin
+
+`--config -` reads the main configuration from stdin, up to end of input, instead of from a file. Everything else works as for a file: `--config-dir` drop-ins and environment variables still override it, and options it sets are logged with the source `<Stdin>`. Relative paths in it are resolved against the working directory.
+
+The stdio transport also uses stdin, so `--config -` only works in HTTP mode. If neither stdin nor a drop-in sets `port`, the server exits with an error instead of starting in stdio mode.
+
+The server reads stdin once, at startup. A `SIGHUP` reload applies the same stdin configuration again and re-reads the `--config-dir` files and environment variables.
 
 ## Drop-in Configuration
 
@@ -155,7 +170,7 @@ pkill -HUP kubernetes-mcp-server
 
 ### What Gets Reloaded
 
-SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change.
+SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change. A main configuration read from stdin (`--config -`) is not read again; the copy read at startup is applied with the reloaded drop-ins.
 
 Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
 
@@ -912,7 +927,7 @@ Empty or unset variables are ignored (they do not override TOML or defaults). No
 
 | Variable | TOML key | Notes |
 |----------|----------|-------|
-| `MCP_CONFIG_PATH` | — | Path to the main TOML file. Ignored if `--config` is set. |
+| `MCP_CONFIG_PATH` | — | Path to the main TOML file, or `-` to read it from stdin as with `--config -`. Ignored if `--config` is set. |
 | `TLS_MIN_VERSION` | `tls_min_version` | |
 | `TLS_CIPHER_SUITES` | `tls_cipher_suites` | Comma-separated list |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `telemetry.endpoint` | |
@@ -936,7 +951,7 @@ Empty or unset variables are ignored (they do not override TOML or defaults). No
 | Option | Description |
 |--------|-------------|
 | `--version` | Print version information and quit |
-| `--config` | Path of the main TOML configuration file. Overrides `$MCP_CONFIG_PATH` |
+| `--config` | Path of the main TOML configuration file, or `-` to read it from stdin (HTTP mode only). Overrides `$MCP_CONFIG_PATH` |
 | `--config-dir` | Directory of lexical `.toml` files. Usable alone or with `--config`. Omitted means no drop-ins. Relative paths are resolved against the working directory |
 
 HTTP mode, kubeconfig, toolsets, TLS, OAuth, and the rest of the runtime surface are TOML (and, where listed above, env). There are no runtime flags for those options.

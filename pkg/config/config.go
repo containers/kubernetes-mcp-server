@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -34,6 +35,10 @@ const (
 // main configuration TOML file. It is ignored if --config is provided.
 // Downstream builds may change this in defaultOverrides.
 var ConfigPathEnvName = "MCP_CONFIG_PATH"
+
+// StdinConfigPath is the config path that reads the main TOML config from
+// stdin instead of a file (--config -).
+const StdinConfigPath = "-"
 
 // ToolOverride contains per-tool configuration overrides.
 type ToolOverride struct {
@@ -365,7 +370,7 @@ type Config struct {
 	// Internal: which file last set toolset_configs
 	toolsetConfigsSource Source
 
-	// Internal: the config.toml directory, to help resolve relative file paths
+	// Internal: the directory relative file paths resolve against (see ConfigDirPath)
 	configDirPath string
 	// Internal: known provider strategies, set via WithProviderStrategies
 	providerStrategies []string
@@ -491,9 +496,10 @@ func (c *Config) tokenExchangeHasNonDefault() bool {
 	return found
 }
 
-// ConfigDirPath returns the directory of the main config file (or the drop-in
-// dir when --config-dir is used alone). Used to resolve relative paths in
-// extension parsers (e.g. Kiali CA files).
+// ConfigDirPath returns the directory of the main config file, the working
+// directory when the main config is read from stdin (--config -), or the
+// drop-in dir when --config-dir is used alone. Used to resolve relative paths
+// in extension parsers (e.g. Kiali CA files).
 func (c *Config) ConfigDirPath() string { return c.configDirPath }
 
 // ResolveClusterAuthMode returns the effective cluster auth mode.
@@ -562,6 +568,7 @@ type loadSettings struct {
 	dirPath     string
 	previous    *Config
 	baseDefault bool
+	stdin       io.Reader
 }
 
 // WithDirPath returns a ReadConfigOpt that sets the config directory path used
@@ -582,6 +589,12 @@ func WithPrevious(prev *Config) ReadConfigOpt {
 // Read / ReadToml (Complete with no file) still use New.
 func WithBaseDefault() ReadConfigOpt {
 	return func(s *loadSettings) { s.baseDefault = true }
+}
+
+// WithStdin returns a ReadConfigOpt that sets where Read reads the main
+// config from when configPath is StdinConfigPath. Read fails without it.
+func WithStdin(r io.Reader) ReadConfigOpt {
+	return func(s *loadSettings) { s.stdin = r }
 }
 
 // KeepPreviousIfDefault copies values from prev onto next when next still has
@@ -621,17 +634,33 @@ func applyReadOpts(opts []ReadConfigOpt) loadSettings {
 	return settings
 }
 
-// Read reads the toml file, applies drop-in configs from dropInConfigDir
-// (only if that path is non-empty), then applies env.
+// Read reads the toml file (or stdin when configPath is StdinConfigPath),
+// applies drop-in configs from dropInConfigDir (only if that path is
+// non-empty), then applies env.
 // Loading order: defaults → files → env. Empty dropInConfigDir means no drop-ins.
 func Read(ctx context.Context, configPath, dropInConfigDir string, opts ...ReadConfigOpt) (*Config, error) {
 	settings := applyReadOpts(opts)
 
+	var stdinConfig []byte
 	var configFiles []string
 	var configDir string
 	logger := klogutil.FromContext(ctx)
 
-	if configPath != "" {
+	if configPath == StdinConfigPath {
+		logger.V(2).Info("Loading main config from stdin")
+		if settings.stdin == nil {
+			return nil, errors.New("config path is stdin (-) but no WithStdin reader was given")
+		}
+		var err error
+		if stdinConfig, err = io.ReadAll(settings.stdin); err != nil {
+			return nil, fmt.Errorf("failed to read config from stdin: %w", err)
+		}
+		// There is no file to be relative to, so relative paths in the
+		// config resolve against the working directory.
+		if configDir, err = os.Getwd(); err != nil {
+			return nil, fmt.Errorf("failed to resolve working directory: %w", err)
+		}
+	} else if configPath != "" {
 		logger.V(2).Info("Loading main config", "path", configPath)
 		configFiles = append(configFiles, configPath)
 		absPath, err := filepath.Abs(configPath)
@@ -661,13 +690,13 @@ func Read(ctx context.Context, configPath, dropInConfigDir string, opts ...ReadC
 			logger.V(2).Info("Loading drop-in config file(s)", "num_config_files", len(dropInFiles), "config_dir", dropInConfigDir)
 		}
 		configFiles = append(configFiles, dropInFiles...)
-	} else if configDir != "" {
+	} else if configDir != "" && configPath != StdinConfigPath {
 		if err := rejectStaleImplicitConfD(ctx, configDir); err != nil {
 			return nil, err
 		}
 	}
 
-	merged, sources, err := mergeTOMLFiles(ctx, configFiles)
+	merged, sources, err := mergeTOMLFiles(ctx, stdinConfig, configFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -757,23 +786,38 @@ func getSortedConfigFiles(ctx context.Context, dir string) ([]string, error) {
 }
 
 // mergeTOMLFiles reads and deep-merges TOML files in order, with later files
-// overriding earlier ones. sources maps each dotted key to the file that last set it.
-func mergeTOMLFiles(ctx context.Context, files []string) (map[string]any, map[string]string, error) {
+// overriding earlier ones. A main config read from stdin is merged first.
+// sources maps each dotted key to the file that last set it.
+func mergeTOMLFiles(ctx context.Context, stdinConfig []byte, files []string) (map[string]any, map[string]string, error) {
 	merged := map[string]any{}
 	sources := map[string]string{}
+	if len(stdinConfig) > 0 {
+		if err := mergeTOML(merged, sources, stdinConfig, string(SourceStdin)); err != nil {
+			return nil, nil, err
+		}
+	}
 	for _, file := range files {
 		klogutil.FromContext(ctx).V(3).Info("Merging config", "file_name", filepath.Base(file))
 		data, err := os.ReadFile(file)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to read config %s: %w", file, err)
 		}
-		dropIn := make(map[string]any)
-		if _, err = toml.NewDecoder(bytes.NewReader(data)).Decode(&dropIn); err != nil {
-			return nil, nil, fmt.Errorf("failed to decode config %s: %w", file, err)
+		if err := mergeTOML(merged, sources, data, file); err != nil {
+			return nil, nil, err
 		}
-		deepMerge(merged, dropIn, file, sources, "")
 	}
 	return merged, sources, nil
+}
+
+// mergeTOML decodes data and deep-merges it into merged, recording src as the
+// origin of every key it sets.
+func mergeTOML(merged map[string]any, sources map[string]string, data []byte, src string) error {
+	doc := make(map[string]any)
+	if _, err := toml.NewDecoder(bytes.NewReader(data)).Decode(&doc); err != nil {
+		return fmt.Errorf("failed to decode config %s: %w", src, err)
+	}
+	deepMerge(merged, doc, src, sources, "")
+	return nil
 }
 
 // deepMerge recursively merges src into dst.
