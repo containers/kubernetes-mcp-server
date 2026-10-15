@@ -132,7 +132,7 @@ jobs:
         if: steps.check.outputs.should-report == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: eval-context-multicluster
+          name: kiali-multicluster-eval-context
           path: eval-context-multicluster/
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
