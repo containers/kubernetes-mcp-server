@@ -230,11 +230,12 @@
       return table;
     }
 
+    const isPod = data.kind === "Pod" && data.apiVersion === "v1";
     const overview = { Name: metadata.name, Kind: data.kind, "API version": data.apiVersion };
     if (metadata.namespace) overview.Namespace = metadata.namespace;
     if (metadata.creationTimestamp) overview.Created = metadata.creationTimestamp;
     if (data.status?.phase) overview.Status = data.status.phase;
-    if (data.kind === "Pod") {
+    if (isPod) {
       if (data.spec?.nodeName) overview.Node = data.spec.nodeName;
       if (data.status?.podIP) overview["Pod IP"] = data.status.podIP;
     }
@@ -242,7 +243,7 @@
     if (metadata.labels) section("Labels", fields(metadata.labels));
     if (metadata.annotations) section("Annotations", fields(metadata.annotations), true);
 
-    if (data.kind === "Pod") {
+    if (isPod) {
       for (const [name, specKey, statusKey] of [
         ["Containers", "containers", "containerStatuses"],
         ["Init containers", "initContainers", "initContainerStatuses"],

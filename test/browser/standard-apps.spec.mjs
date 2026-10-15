@@ -227,6 +227,30 @@ test("list and metrics tables wrap long headers and values in narrow frames", as
   }
 });
 
+test("wide tables keep short headers readable and scroll inside narrow app cards", async ({ page }) => {
+  for (const kind of ["table", "metrics"]) {
+    const app = await openApp(page, kind);
+    await page.locator("iframe").evaluate(frame => { frame.style.width = "320px"; });
+    const labels = "app.kubernetes.io/component=operator-controller,".repeat(15);
+    await result(page, {
+      columns: ["Name", "Status", "Age", "Labels", "apiVersion", "kind"],
+      items: ["kube-system", "default"].map(Name => ({
+        Name, Status: "Active", Age: "19m", Labels: labels, apiVersion: "v1", kind: "Namespace",
+      })),
+    });
+    await expect(app.locator("tbody tr")).toHaveCount(2);
+    for (const name of ["Name", "Status", "Age", "apiVersion", "kind"]) {
+      const button = app.getByRole("button", { name, exact: true });
+      expect((await button.boundingBox()).height).toBeLessThan(24);
+    }
+    expect(await app.locator("#app").evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
+    expect(await app.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+    await expect(app.locator("tbody tr:first-child td:nth-child(4)")).toHaveText(labels);
+    await app.getByRole("button", { name: "Name", exact: true }).click();
+    await expect(app.locator("tbody tr td:first-child")).toHaveText(["kube-system", "default"]);
+  }
+});
+
 test("metrics sort CPU and memory quantities numerically", async ({ page }) => {
   const app = await openApp(page, "metrics");
   await result(page, { columns: ["Name", "CPU", "Memory"], items: [

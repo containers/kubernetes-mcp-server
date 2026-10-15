@@ -30,8 +30,10 @@ body {
   color: var(--app-text);
   background: var(--app-background);
 }
+/* Narrow host cards scroll instead of squeezing short columns into letters. */
+#app { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 8px; text-align: left; border-bottom: 1px solid var(--app-border); overflow-wrap: anywhere; }
+th, td { min-width: 6rem; padding: 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--app-border); overflow-wrap: anywhere; }
 th, tr:nth-child(even) { background: var(--app-stripe); }
 th button {
   cursor: pointer;

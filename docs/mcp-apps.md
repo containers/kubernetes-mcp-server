@@ -50,6 +50,29 @@ All standard apps bundle `pkg/mcpapps/styles.css`, `standard.js`, and
 `standard.html`. Common styling changes belong in `styles.css` and apply to every
 standard app without changes to individual tools. The document is assembled from
 embedded assets when the app is constructed; there are no runtime asset requests.
+
+For toolset-specific styling, pass `WithStyles` to `Table`, `Metrics`, or
+`Resource`. It appends an inline stylesheet after the shared styles, retaining
+the standard rendering and behavior. Normal CSS cascade and specificity rules
+apply; multiple overrides are appended in option order. Other app instances
+keep their default styling.
+
+```go
+//go:embed ui/branding.css
+var brandingCSS string
+
+App: mcpapps.Table(
+    "ui://example/workloads",
+    "Workloads",
+    mcpapps.WithStyles(brandingCSS),
+)
+```
+
+Overrides must be trusted, bundled CSS, not cluster data or user input. Keep
+fonts and other assets embedded and avoid external imports or URLs for
+disconnected use. This customizes styling only; use `Custom` when different
+markup or UI components are needed.
+
 The shared runtime reports content-size changes to the host after initialization,
 including expanding and collapsing details, and stops observing on teardown.
 It also responds to host pings, displays tool cancellation, and applies the host's
