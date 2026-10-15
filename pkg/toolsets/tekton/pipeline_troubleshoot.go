@@ -262,9 +262,9 @@ type pipelineEventTarget struct {
 }
 
 func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun) string {
-	targets := []pipelineEventTarget{{kind: "PipelineRun", name: pipelineRunName}}
+	targets := []pipelineEventTarget{{kind: pipelineRunKind, name: pipelineRunName}}
 	for _, taskRun := range taskRuns {
-		targets = append(targets, pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
+		targets = append(targets, pipelineEventTarget{kind: taskRunKind, name: taskRun.Name})
 		if taskRun.Status.PodName != "" {
 			targets = append(targets, pipelineEventTarget{kind: "Pod", name: taskRun.Status.PodName})
 		}
