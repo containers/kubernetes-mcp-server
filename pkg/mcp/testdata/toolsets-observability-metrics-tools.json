@@ -1,0 +1,850 @@
+[
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Execute Instant Query"
+    },
+    "description": "Execute a PromQL instant query to get current/point-in-time values.\n\nPREREQUISITE: You MUST call list_metrics first to verify the metric exists\n\nWHEN TO USE:\n- Current state questions: \"What is the current error rate?\"\n- Point-in-time snapshots: \"How many pods are running?\"\n- Latest values: \"Which pods are in Pending state?\"\n\nThe 'query' parameter MUST use metric names that were returned by list_metrics.",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "PromQL query string using metric names verified via list_metrics",
+          "type": "string"
+        },
+        "time": {
+          "description": "Evaluation time as RFC3339 or Unix timestamp. Omit or use 'NOW' for current time.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "execute_instant_query",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "description": "The query results as an array of instant values",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "metric": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "The metric labels",
+                "type": "object"
+              },
+              "value": {
+                "description": "[timestamp, value] pair for the instant query",
+                "items": true,
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "metric",
+              "value"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "resultType": {
+          "description": "The type of result returned (e.g. vector, scalar, string)",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings generated during query execution",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "resultType",
+        "result"
+      ],
+      "type": "object"
+    },
+    "title": "Execute Instant Query"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Execute Range Query"
+    },
+    "description": "Execute a PromQL range query to get time-series data over a period.\n\nPREREQUISITE: You MUST call list_metrics first to verify the metric exists\n\nWHEN TO USE:\n- Trends over time: \"What was CPU usage over the last hour?\"\n- Rate calculations: \"How many requests per second?\"\n- Historical analysis: \"Were there any restarts in the last 5 minutes?\"\n\nTIME PARAMETERS:\n- 'duration': Look back from now (e.g., \"5m\", \"1h\", \"24h\")\n- 'step': Data point resolution (e.g., \"1m\" for 1-hour duration, \"5m\" for 24-hour duration)\n\nThe 'query' parameter MUST use metric names that were returned by list_metrics.",
+    "inputSchema": {
+      "properties": {
+        "duration": {
+          "description": "Duration to look back from now (e.g., '1h', '30m', '1d', '2w') (optional)",
+          "pattern": "^\\d+[smhdwy]$",
+          "type": "string"
+        },
+        "end": {
+          "description": "End time as RFC3339 or Unix timestamp (optional). Use `NOW` for current time.",
+          "type": "string"
+        },
+        "query": {
+          "description": "PromQL query string using metric names verified via list_metrics",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time as RFC3339 or Unix timestamp (optional)",
+          "type": "string"
+        },
+        "step": {
+          "description": "Query resolution step width (e.g., '15s', '1m', '1h'). Choose based on time range: shorter ranges use smaller steps.",
+          "pattern": "^\\d+[smhdwy]$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query",
+        "step"
+      ],
+      "type": "object"
+    },
+    "name": "execute_range_query",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "description": "The query results as an array of time series",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "metric": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "The metric labels",
+                "type": "object"
+              },
+              "values": {
+                "description": "Array of [timestamp, value] pairs",
+                "items": {
+                  "items": true,
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "metric",
+              "values"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "resultType": {
+          "description": "The type of result returned: matrix or vector or scalar",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Summary statistics for each time series (when summarize flag is enabled)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "avg": {
+                "description": "Average value of all finite samples in the series",
+                "type": "number"
+              },
+              "count": {
+                "description": "Total number of samples in the series",
+                "type": "integer"
+              },
+              "delta": {
+                "description": "Difference between last and first values (lastValue - firstValue)",
+                "type": "number"
+              },
+              "firstTimestamp": {
+                "description": "Timestamp of the first sample (Unix seconds)",
+                "type": "number"
+              },
+              "firstValue": {
+                "description": "Value of the first sample",
+                "type": "number"
+              },
+              "hasInf": {
+                "description": "Whether the series contains any Inf values",
+                "type": "boolean"
+              },
+              "hasNaN": {
+                "description": "Whether the series contains any NaN values",
+                "type": "boolean"
+              },
+              "lastTimestamp": {
+                "description": "Timestamp of the last sample (Unix seconds)",
+                "type": "number"
+              },
+              "lastValue": {
+                "description": "Value of the last sample",
+                "type": "number"
+              },
+              "max": {
+                "description": "Maximum value in the series (excluding NaN/Inf)",
+                "type": "number"
+              },
+              "min": {
+                "description": "Minimum value in the series (excluding NaN/Inf)",
+                "type": "number"
+              },
+              "nonFiniteCount": {
+                "description": "Count of NaN and Inf values in the series",
+                "type": "integer"
+              },
+              "series": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "The query result series labelset as a map of label names to values",
+                "type": "object"
+              }
+            },
+            "required": [
+              "series",
+              "max",
+              "min",
+              "avg",
+              "count",
+              "firstTimestamp",
+              "lastTimestamp",
+              "firstValue",
+              "lastValue",
+              "delta",
+              "hasNaN",
+              "hasInf",
+              "nonFiniteCount"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "warnings": {
+          "description": "Any warnings generated during query execution",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "resultType"
+      ],
+      "type": "object"
+    },
+    "title": "Execute Range Query"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Alerts"
+    },
+    "description": "Get alerts from Alertmanager.\n\nWHEN TO USE:\n- START HERE when investigating issues: if the user asks about things breaking, errors, failures, outages, services being down, or anything going wrong in the cluster\n- When the user mentions a specific alert name - use this tool to get the alert's full labels (namespace, pod, service, etc.) which are essential for further investigation with other tools\n- To see currently firing alerts in the cluster\n- To check which alerts are active, silenced, or inhibited\n- To understand what's happening before diving into metrics or logs\n\nINVESTIGATION TIP: Alert labels often contain the exact identifiers (pod names, namespaces, job names) needed for targeted queries with prometheus tools.\n\nFILTERING:\n- Use 'active' to filter for only active alerts (not resolved)\n- Use 'silenced' to filter for silenced alerts\n- Use 'inhibited' to filter for inhibited alerts\n- Use 'filter' to apply label matchers (e.g., \"alertname=HighCPU\")\n- Use 'receiver' to filter alerts by receiver name\n\nAll filter parameters are optional. Without filters, all alerts are returned.",
+    "inputSchema": {
+      "properties": {
+        "active": {
+          "description": "Filter for active alerts only (true/false, optional)",
+          "type": "boolean"
+        },
+        "filter": {
+          "description": "Label matchers to filter alerts (e.g., 'alertname=HighCPU', optional)",
+          "type": "string"
+        },
+        "inhibited": {
+          "description": "Filter for inhibited alerts only (true/false, optional)",
+          "type": "boolean"
+        },
+        "receiver": {
+          "description": "Receiver name to filter alerts (optional)",
+          "type": "string"
+        },
+        "silenced": {
+          "description": "Filter for silenced alerts only (true/false, optional)",
+          "type": "boolean"
+        },
+        "unprocessed": {
+          "description": "Filter for unprocessed alerts only (true/false, optional)",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_alerts",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alerts": {
+          "description": "List of alerts from Alertmanager",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "annotations": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Annotations of the alert",
+                "type": "object"
+              },
+              "endsAt": {
+                "description": "End time of the alert (if resolved)",
+                "type": "string"
+              },
+              "labels": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Labels of the alert",
+                "type": "object"
+              },
+              "startsAt": {
+                "description": "Start time of the alert",
+                "type": "string"
+              },
+              "status": {
+                "additionalProperties": false,
+                "description": "Current status of the alert",
+                "properties": {
+                  "inhibitedBy": {
+                    "description": "List of alerts that are inhibiting this alert",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "silencedBy": {
+                    "description": "List of silences that are silencing this alert",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "state": {
+                    "description": "State of the alert (active, suppressed, unprocessed)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "labels",
+              "annotations",
+              "startsAt",
+              "status"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "alerts"
+      ],
+      "type": "object"
+    },
+    "title": "Get Alerts"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Label Names"
+    },
+    "description": "Get all label names (dimensions) available for filtering a metric.\n\nWHEN TO USE (after calling list_metrics):\n- To discover how to filter metrics (by namespace, pod, service, etc.)\n- Before constructing label matchers in PromQL queries\n\nThe 'metric' parameter should use a metric name from list_metrics output.",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "End time for label discovery as RFC3339 or Unix timestamp (optional, defaults to now)",
+          "type": "string"
+        },
+        "metric": {
+          "description": "Metric name (from list_metrics) to get label names for. Leave empty for all metrics.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time for label discovery as RFC3339 or Unix timestamp (optional, defaults to 1 hour ago)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_label_names",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "description": "List of label names available for the specified metric or all metrics",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "labels"
+      ],
+      "type": "object"
+    },
+    "title": "Get Label Names"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Label Values"
+    },
+    "description": "Get all unique values for a specific label.\n\nWHEN TO USE (after calling list_metrics and get_label_names):\n- To find exact label values for filtering (namespace names, pod names, etc.)\n- To see what values exist before constructing queries\n\nThe 'metric' parameter should use a metric name from list_metrics output.",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "End time for label value discovery as RFC3339 or Unix timestamp (optional, defaults to now)",
+          "type": "string"
+        },
+        "label": {
+          "description": "Label name (from get_label_names) to get values for",
+          "type": "string"
+        },
+        "metric": {
+          "description": "Metric name (from list_metrics) to scope the label values to. Leave empty for all metrics.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time for label value discovery as RFC3339 or Unix timestamp (optional, defaults to 1 hour ago)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
+    "name": "get_label_values",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "description": "List of unique values for the specified label",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "type": "object"
+    },
+    "title": "Get Label Values"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Series"
+    },
+    "description": "Get time series matching selectors and preview cardinality.\n\nWHEN TO USE (optional, after calling list_metrics):\n- To verify label filters match expected series before querying\n- To check cardinality and avoid slow queries\n\nCARDINALITY GUIDANCE:\n- \u003c100 series: Safe\n- 100-1000: Usually fine\n- \u003e1000: Add more label filters\n\nThe selector should use metric names from list_metrics output.",
+    "inputSchema": {
+      "properties": {
+        "end": {
+          "description": "End time for series discovery as RFC3339 or Unix timestamp (optional, defaults to now)",
+          "type": "string"
+        },
+        "matches": {
+          "description": "PromQL series selector using metric names from list_metrics",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time for series discovery as RFC3339 or Unix timestamp (optional, defaults to 1 hour ago)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "matches"
+      ],
+      "type": "object"
+    },
+    "name": "get_series",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cardinality": {
+          "description": "Total number of series matching the selector",
+          "type": "integer"
+        },
+        "series": {
+          "description": "List of time series matching the selector, each series is a map of label names to values",
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "series",
+        "cardinality"
+      ],
+      "type": "object"
+    },
+    "title": "Get Series"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Get Silences"
+    },
+    "description": "Get silences from Alertmanager.\n\nWHEN TO USE:\n- To see which alerts are currently silenced\n- To check active, pending, or expired silences\n- To investigate why certain alerts are not firing notifications\n\nFILTERING:\n- Use 'filter' to apply label matchers to find specific silences\n\nSilences are used to temporarily mute alerts based on label matchers. This tool helps you understand what is currently silenced in your environment.",
+    "inputSchema": {
+      "properties": {
+        "filter": {
+          "description": "Label matchers to filter silences (e.g., 'alertname=HighCPU', optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_silences",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "silences": {
+          "description": "List of silences from Alertmanager",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "comment": {
+                "description": "Comment describing the silence",
+                "type": "string"
+              },
+              "createdBy": {
+                "description": "Creator of the silence",
+                "type": "string"
+              },
+              "endsAt": {
+                "description": "End time of the silence",
+                "type": "string"
+              },
+              "id": {
+                "description": "Unique identifier of the silence",
+                "type": "string"
+              },
+              "matchers": {
+                "description": "Label matchers for this silence",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "isEqual": {
+                      "description": "Whether the match is an equality match (true) or inequality match (false)",
+                      "type": "boolean"
+                    },
+                    "isRegex": {
+                      "description": "Whether the match is a regex match",
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "description": "Label name to match",
+                      "type": "string"
+                    },
+                    "value": {
+                      "description": "Label value to match",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "value",
+                    "isRegex",
+                    "isEqual"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "startsAt": {
+                "description": "Start time of the silence",
+                "type": "string"
+              },
+              "status": {
+                "additionalProperties": false,
+                "description": "Current status of the silence",
+                "properties": {
+                  "state": {
+                    "description": "State of the silence (active, pending, expired)",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "matchers",
+              "startsAt",
+              "endsAt",
+              "createdBy",
+              "comment"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "silences"
+      ],
+      "type": "object"
+    },
+    "title": "Get Silences"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Available Metrics"
+    },
+    "description": "MANDATORY FIRST STEP: List all available metric names in Prometheus.\n\nYOU MUST CALL THIS TOOL BEFORE ANY OTHER QUERY TOOL\n\nThis tool MUST be called first for EVERY observability question to:\n1. Discover what metrics actually exist in this environment\n2. Find the EXACT metric name to use in queries\n3. Avoid querying non-existent metrics\n4. The 'name_regex' parameter should always be provided, and be a best guess of what the metric would be named like.\n5. Do not use a blanket regex like .* or .+ in the 'name_regex' parameter. Use specific ones like kube.*, node.*, etc.\n\nREGEX PATTERN GUIDANCE:\n- Prometheus metrics are typically prefixed (e.g., 'prometheus_tsdb_head_series', 'kube_pod_status_phase')\n- To match metrics CONTAINING a substring, use wildcards: '.*tsdb.*' matches 'prometheus_tsdb_head_series'\n- Without wildcards, the pattern matches EXACTLY: 'tsdb' only matches a metric literally named 'tsdb' (which rarely exists)\n- Common patterns: 'kube_pod.*' (pods), '.*memory.*' (memory-related), 'node_.*' (node metrics)\n- If you get empty results, try adding '.*' before/after your search term\n\nNEVER skip this step. NEVER guess metric names. Metric names vary between environments.\n\nAfter calling this tool:\n1. Search the returned list for relevant metrics\n2. Use the EXACT metric name found in subsequent queries\n3. If no relevant metric exists, inform the user",
+    "inputSchema": {
+      "properties": {
+        "name_regex": {
+          "description": "Regex pattern to filter metric names. IMPORTANT: Metric names are typically prefixed (e.g., 'prometheus_tsdb_head_series'). Use wildcards to match substrings: '.*tsdb.*' matches any metric containing 'tsdb', while 'tsdb' only matches the exact string 'tsdb'. Examples: 'http_.*' (starts with http_), '.*memory.*' (contains memory), 'node_.*' (starts with node_). This parameter is required. Don't pass in blanket regex like '.*' or '.+'.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name_regex"
+      ],
+      "type": "object"
+    },
+    "name": "list_metrics",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "description": "List of all available metric names",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "metrics"
+      ],
+      "type": "object"
+    },
+    "title": "List Available Metrics"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      },
+      "olsUi": {
+        "id": "mcp-obs/show-timeseries"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Show Timeseries Chart"
+    },
+    "description": "Display the results as an interactive timeseries chart.\n\nThis tool works like execute_range_query but renders the results as a visual chart in the UI clients.\nUse it when the user wants to see a graph or visualization of time-series data and to use visuals to provide the answer.\nUse the show_timeseries as the last tool call after all the other Prometheus tool calls where finalized.\n\nTIME PARAMETERS:\n- 'duration': Look back from now (e.g., \"5m\", \"1h\", \"24h\")\n- 'step': Data point resolution (e.g., \"1m\" for 1-hour duration, \"5m\" for 24-hour duration)\n- 'title': A descriptive chart title (e.g., \"API Error Rate Over Last Hour\")\n- 'description': An explanation of the chart's meaning or context (e.g., \"Shows the rate of HTTP 5xx errors per second, broken down by pod\")\n\nThe 'query' parameter MUST be a range query and must use metric names that were returned by list_metrics.",
+    "inputSchema": {
+      "properties": {
+        "description": {
+          "description": "Explanation of the chart's meaning or context (e.g., 'Shows the rate of HTTP 5xx errors per second, broken down by pod'). Displayed below the title when provided.",
+          "type": "string"
+        },
+        "duration": {
+          "description": "Duration to look back from now (e.g., '1h', '30m', '1d', '2w') (optional)",
+          "pattern": "^\\d+[smhdwy]$",
+          "type": "string"
+        },
+        "end": {
+          "description": "End time as RFC3339 or Unix timestamp (optional). Use `NOW` for current time.",
+          "type": "string"
+        },
+        "query": {
+          "description": "PromQL query string using metric names verified via list_metrics",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time as RFC3339 or Unix timestamp (optional)",
+          "type": "string"
+        },
+        "step": {
+          "description": "Query resolution step width (e.g., '15s', '1m', '1h'). Choose based on time range: shorter ranges use smaller steps.",
+          "pattern": "^\\d+[smhdwy]$",
+          "type": "string"
+        },
+        "title": {
+          "description": "Human-readable chart title describing what the query shows (e.g., 'API Error Rate Over Last Hour'). Displayed above the chart when provided.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query",
+        "step"
+      ],
+      "type": "object"
+    },
+    "name": "show_timeseries",
+    "title": "Show Timeseries Chart"
+  }
+]

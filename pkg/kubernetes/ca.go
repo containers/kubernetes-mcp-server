@@ -23,7 +23,7 @@ import (
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
@@ -158,7 +158,7 @@ func caCacheFilePath(caURL string) string {
 // that keeps the cache file in sync, or nil when the cluster has no caURL.
 func applyClusterCAURL(
 	ctx context.Context,
-	config api.BaseConfig,
+	cfg *config.Config,
 	rawConfig *clientcmdapi.Config,
 	contextName string,
 	restConfig *rest.Config,
@@ -210,7 +210,7 @@ func applyClusterCAURL(
 	restConfig.CAFile = cacheFile
 	restConfig.CAData = nil
 
-	interval := config.GetCARefreshInterval()
+	interval := cfg.CARefreshInterval.Get()
 	if interval <= 0 {
 		logger.V(2).Info("CA auto-refresh disabled; cached CA refreshes on SIGHUP or when a manager is rebuilt", "context", contextName)
 	}

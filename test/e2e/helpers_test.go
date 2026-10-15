@@ -46,6 +46,7 @@ type serverDeployment struct {
 type deployOptions struct {
 	configTOML  string
 	extraValues map[string]any
+	namespace   string
 	// preInstall runs after the namespace is created but before Helm install,
 	// so a test can create secrets/config the pod must mount on first start.
 	preInstall func(ctx context.Context, t *testing.T, clientset kubernetes.Interface, namespace string)
@@ -61,6 +62,10 @@ func withConfig(configTOML string) deployOption {
 // withValues sets extra Helm values merged on top of the defaults.
 func withValues(extraValues map[string]any) deployOption {
 	return func(o *deployOptions) { o.extraValues = extraValues }
+}
+
+func withNamespace(namespace string) deployOption {
+	return func(o *deployOptions) { o.namespace = namespace }
 }
 
 // withPreInstall registers a hook that runs after namespace creation and before
@@ -97,7 +102,19 @@ func deployServer(
 	clientset, err := kubernetes.NewForConfig(restCfg)
 	require.NoError(t, err, "create clientset")
 
-	namespace := createTestNamespace(ctx, t, clientset, name)
+	var namespace string
+	if o.namespace == "" {
+		namespace = createTestNamespace(ctx, t, clientset, name)
+	} else {
+		ns, err := clientset.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   o.namespace,
+				Labels: map[string]string{"app.kubernetes.io/managed-by": "e2e-test"},
+			},
+		}, metav1.CreateOptions{})
+		require.NoError(t, err, "create namespace %s", o.namespace)
+		namespace = ns.Name
+	}
 	t.Cleanup(func() {
 		_ = clientset.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{})
 	})

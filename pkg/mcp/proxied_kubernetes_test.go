@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -62,7 +62,7 @@ func (s *ProxiedKubernetesSuite) SetupTest() {
 
 	data, err := clientcmd.Write(*kubeConfig)
 	s.Require().NoError(err, "Expected to serialize kubeconfig")
-	s.Require().NoError(os.WriteFile(s.Cfg.KubeConfig, data, 0600), "Expected to write kubeconfig file")
+	s.Require().NoError(os.WriteFile(s.Cfg.KubeConfig.Get(), data, 0600), "Expected to write kubeconfig file")
 }
 
 func (s *ProxiedKubernetesSuite) TearDownTest() {
@@ -86,9 +86,9 @@ func (s *ProxiedKubernetesSuite) TestPodsListThroughProxy() {
 }
 
 func (s *ProxiedKubernetesSuite) TestPodsListDeniedThroughProxy() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Pod" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("pods_list is denied through proxy", func() {
 		toolResult, err := s.CallTool("pods_list", map[string]interface{}{})

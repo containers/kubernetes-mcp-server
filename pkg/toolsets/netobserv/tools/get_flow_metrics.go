@@ -57,12 +57,16 @@ func InitGetFlowMetrics() []api.ServerTool {
 			InputSchema: toolInputSchema(props, []string{"aggregateBy"}),
 			Annotations: readOnlyAnnotations("Get NetObserv Flow Metrics"),
 		},
+		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
 		Handler: getFlowMetricsHandler,
 	}}
 }
 
 func getFlowMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client := netobservclient.NewNetObserv(params.Context, params, params.KubernetesClient, params.FilteringProvider)
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
+	if err != nil {
+		return jsonAPIResult("", err)
+	}
 	content, err := client.ExecuteGet(params.Context, NetObservFlowMetricsEndpoint, params.GetArguments())
 	return jsonAPIResult(content, wrapAPIError("get flow metrics", err))
 }

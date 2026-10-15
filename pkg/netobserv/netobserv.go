@@ -11,10 +11,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 )
 
@@ -31,24 +31,23 @@ type NetObserv struct {
 }
 
 // NewNetObserv creates a client using toolset config, cluster detection, and the Kubernetes REST config.
-func NewNetObserv(ctx context.Context, configProvider api.BaseConfig, k8s api.KubernetesClient, provider api.FilteringProvider) *NetObserv {
-	var restConfig *rest.Config
-	if k8s != nil {
-		restConfig = k8s.RESTConfig()
+func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface) (*NetObserv, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is required")
+	}
+	if restConfig == nil {
+		return nil, fmt.Errorf("kubernetes rest config is required")
 	}
 	client := &NetObserv{
-		bearerToken:     "",
-		tlsMinVersion:   configProvider.GetTLSMinVersionConfig(),
-		tlsCipherSuites: configProvider.GetTLSCipherSuitesConfig(),
-		requireTLS:      configProvider.IsRequireTLS,
-	}
-	if restConfig != nil {
-		client.bearerToken = strings.TrimSpace(restConfig.BearerToken)
-		client.bearerTokenFile = strings.TrimSpace(restConfig.BearerTokenFile)
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
+		tlsMinVersion:   cfg.TLSMinVersion.Get(),
+		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
+		bearerToken:     strings.TrimSpace(restConfig.BearerToken),
+		bearerTokenFile: strings.TrimSpace(restConfig.BearerTokenFile),
 	}
 	var shared *Config
-	if cfg, ok := configProvider.GetToolsetConfig("netobserv"); ok {
-		if parsed, ok := cfg.(*Config); ok && parsed != nil {
+	if tc, ok := cfg.GetToolsetConfig("netobserv"); ok {
+		if parsed, ok := tc.(*Config); ok && parsed != nil {
 			shared = parsed
 		}
 	}
@@ -56,12 +55,12 @@ func NewNetObserv(ctx context.Context, configProvider api.BaseConfig, k8s api.Ku
 	if shared != nil {
 		resolved = *shared
 	}
-	isOpenShift := isOpenShiftFromProvider(ctx, provider)
+	isOpenShift := clusterIsOpenShiftFromDiscovery(discoveryClient)
 	resolved.applyDefaults(ctx, isOpenShift)
 	client.pluginURL = resolved.ResolvedURL(isOpenShift)
 	client.insecure = resolved.Insecure
 	client.certificateAuthority = resolved.CertificateAuthority
-	return client
+	return client, nil
 }
 
 func (n *NetObserv) validateAndGetURL(endpoint string) (string, error) {

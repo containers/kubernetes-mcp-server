@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
@@ -22,11 +23,11 @@ const podHighRestartThreshold = 5
 func initHealthChecks() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "cluster-health-check",
 				Title:       "Cluster Health Check",
 				Description: "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Optional namespace to limit health check scope (default: all namespaces)",
@@ -39,6 +40,53 @@ func initHealthChecks() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:  []string{"list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "nodes"}},
+				},
+				api.RBACRequirement{
+					Verbs:  []string{"get", "list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "namespaces"}},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "apps", Resource: "deployments"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "apps", Resource: "statefulsets"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "apps", Resource: "daemonsets"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "persistentvolumeclaims"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs: []string{"list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+						APIGroup: "config.openshift.io",
+						Resource: "clusteroperators",
+					}},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "events"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+			),
 			Handler: clusterHealthCheckHandler,
 		},
 	}

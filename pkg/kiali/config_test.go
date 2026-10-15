@@ -26,7 +26,7 @@ func (s *ConfigSuite) SetupTest() {
 
 func (s *ConfigSuite) TestConfigParser_ResolvesRelativePath() {
 	// Read config with configDirPath set to tempDir to resolve relative paths
-	cfg := test.Must(config.ReadToml([]byte(`
+	cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
 		certificate_authority = "ca.crt"
@@ -46,10 +46,10 @@ func (s *ConfigSuite) TestConfigParser_PreservesAbsolutePath() {
 	// Convert backslashes to forward slashes for TOML compatibility on Windows
 	caFileForTOML := filepath.ToSlash(s.caFile)
 
-	cfg := test.Must(config.ReadToml([]byte(`
+	cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
-		certificate_authority = "` + caFileForTOML + `"
+		certificate_authority = "`+caFileForTOML+`"
 	`)))
 
 	kialiCfg, ok := cfg.GetToolsetConfig("kiali")
@@ -69,10 +69,10 @@ func (s *ConfigSuite) TestConfigParser_RejectsInvalidFile() {
 	// Convert backslashes to forward slashes for TOML compatibility on Windows
 	nonExistentFileForTOML := filepath.ToSlash(nonExistentFile)
 
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
-		certificate_authority = "` + nonExistentFileForTOML + `"
+		certificate_authority = "`+nonExistentFileForTOML+`"
 	`))
 
 	// Validate should reject invalid file path
@@ -84,12 +84,12 @@ func (s *ConfigSuite) TestConfigParser_RejectsInvalidFile() {
 func (s *ConfigSuite) TestConfigParser_RejectsInsecureWithRequireTLS() {
 	caFileForTOML := filepath.ToSlash(s.caFile)
 
-	_, err := config.ReadToml([]byte(`
+	_, err := config.ReadToml(s.T().Context(), []byte(`
 		require_tls = true
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
 		insecure = true
-		certificate_authority = "` + caFileForTOML + `"
+		certificate_authority = "`+caFileForTOML+`"
 	`))
 
 	s.Require().Error(err)
@@ -99,12 +99,12 @@ func (s *ConfigSuite) TestConfigParser_RejectsInsecureWithRequireTLS() {
 func (s *ConfigSuite) TestConfigParser_AllowsSecureWithRequireTLS() {
 	caFileForTOML := filepath.ToSlash(s.caFile)
 
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		require_tls = true
 		[toolset_configs.kiali]
 		url = "https://kiali.example/"
 		insecure = false
-		certificate_authority = "` + caFileForTOML + `"
+		certificate_authority = "`+caFileForTOML+`"
 	`))
 
 	s.Require().NoError(err)
@@ -113,6 +113,58 @@ func (s *ConfigSuite) TestConfigParser_AllowsSecureWithRequireTLS() {
 	kcfg, ok := kialiCfg.(*Config)
 	s.Require().True(ok)
 	s.False(kcfg.Insecure)
+}
+
+func (s *ConfigSuite) TestReloadRejectsRequireTLSChange() {
+	caFileForTOML := filepath.ToSlash(s.caFile)
+
+	s.Run("require_tls true to false fails the load", func() {
+		prev, err := config.ReadToml(s.T().Context(), []byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			certificate_authority = "`+caFileForTOML+`"
+		`))
+		s.Require().NoError(err)
+		_, err = config.ReadToml(s.T().Context(), []byte(`
+			require_tls = false
+			[toolset_configs.kiali]
+			url = "https://kiali.example/"
+			insecure = true
+			certificate_authority = "`+caFileForTOML+`"
+		`), config.WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
+	})
+
+	s.Run("require_tls false to true fails the load", func() {
+		prev, err := config.ReadToml(s.T().Context(), []byte(`
+			require_tls = false
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+		`))
+		s.Require().NoError(err)
+		_, err = config.ReadToml(s.T().Context(), []byte(`
+			require_tls = true
+			[toolset_configs.kiali]
+			url = "http://kiali.example/"
+		`), config.WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
+	})
+}
+
+func (s *ConfigSuite) TestValidate_RejectsInsecureWhenRequireTLSEnabledAfterParse() {
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		insecure = true
+	`))
+	s.Require().NoError(err)
+	cfg.RequireTLS.SetForTest(true)
+	err = cfg.ValidateRequireTLS()
+	s.Require().Error(err)
+	s.Contains(err.Error(), "insecure=true disables certificate verification")
 }
 
 func (s *ConfigSuite) TestValidate() {
@@ -167,7 +219,7 @@ func (s *ConfigSuite) TestValidate() {
 }
 
 func (s *ConfigSuite) TestConfigParser_HTTPUrl_NoCertRequired() {
-	cfg, err := config.ReadToml([]byte(`
+	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "http://kiali.example/"
 	`))
@@ -176,7 +228,7 @@ func (s *ConfigSuite) TestConfigParser_HTTPUrl_NoCertRequired() {
 }
 
 func (s *ConfigSuite) TestConfigParser_NoCertificateAuthority() {
-	cfg := test.Must(config.ReadToml([]byte(`
+	cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 		[toolset_configs.kiali]
 		url = "http://kiali.example/"
 	`)))

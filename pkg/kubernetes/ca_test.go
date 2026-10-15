@@ -172,7 +172,8 @@ func (s *ClusterCACASuite) TestCAURLFromClusterExtensions() {
 		// The kubeconfig path exercises the actual clientcmd decode of
 		// extensions (runtime.Unknown payloads).
 		path := kubeconfigWithCAURL(s.T(), "https://ca.example.com/")
-		cfg := &config.StaticConfig{KubeConfig: path}
+		cfg := config.New()
+		cfg.KubeConfig.SetForTest(path)
 		s.Equal("https://ca.example.com/", caURLOfResolvedCluster(s.T(), cfg))
 	})
 }
@@ -356,10 +357,9 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 		}
 		defer func() { CAFetchClientFactory = originalFetchClient }()
 
-		cfg := &config.StaticConfig{
-			KubeConfig:        kubeconfigWithCAURL(s.T(), srv.URL),
-			CARefreshInterval: config.Duration(100 * time.Millisecond),
-		}
+		cfg := config.New()
+		cfg.KubeConfig.SetForTest(kubeconfigWithCAURL(s.T(), srv.URL))
+		cfg.CARefreshInterval.SetForTest(100 * time.Millisecond)
 		manager, err := NewKubeconfigManager(s.T().Context(), cfg, "")
 		s.Require().NoError(err)
 		defer manager.Close()
@@ -411,10 +411,9 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 		}
 		defer func() { CAFetchClientFactory = originalFetchClient }()
 
-		cfg := &config.StaticConfig{
-			KubeConfig:        kubeconfigWithCAURL(s.T(), srv.URL),
-			CARefreshInterval: config.Duration(0), // no background re-fetch
-		}
+		cfg := config.New()
+		cfg.KubeConfig.SetForTest(kubeconfigWithCAURL(s.T(), srv.URL))
+		cfg.CARefreshInterval.SetForTest(0) // no background re-fetch
 		manager, err := NewKubeconfigManager(s.T().Context(), cfg, "")
 		s.Require().NoError(err)
 		defer manager.Close()
@@ -451,20 +450,19 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 		kc.Contexts["fake"] = &clientcmdapi.Context{Cluster: "fake", AuthInfo: "fake"}
 		kc.AuthInfos["fake"] = &clientcmdapi.AuthInfo{Token: "test-token"}
 		kc.CurrentContext = "fake"
-		cfg := &config.StaticConfig{
-			KubeConfig:        test.KubeconfigFile(s.T(), kc),
-			CARefreshInterval: config.Duration(0),
-		}
+		cfg := config.New()
+		cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kc))
+		cfg.CARefreshInterval.SetForTest(0)
 		_, err := NewKubeconfigManager(s.T().Context(), cfg, "")
 		s.Require().Error(err)
 		s.ErrorContains(err, "insecure-skip-tls-verify")
 	})
 	s.Run("leaves rest config untouched without an extension", func() {
 		path := s.mockServerKubeconfig()
-		manager, err := NewKubeconfigManager(s.T().Context(), &config.StaticConfig{
-			KubeConfig:        path,
-			CARefreshInterval: config.Duration(time.Minute),
-		}, "")
+		cfg := config.New()
+		cfg.KubeConfig.SetForTest(path)
+		cfg.CARefreshInterval.SetForTest(time.Minute)
+		manager, err := NewKubeconfigManager(s.T().Context(), cfg, "")
 		s.Require().NoError(err)
 		defer manager.Close()
 		s.Empty(manager.kubernetes.RESTConfig().CAFile)
@@ -473,9 +471,9 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 
 // caURLOfResolvedCluster loads the kubeconfig behind cfg and returns the caURL
 // of its current context's cluster, exercising the real decode path.
-func caURLOfResolvedCluster(t testing.TB, cfg *config.StaticConfig) string {
+func caURLOfResolvedCluster(t testing.TB, cfg *config.Config) string {
 	t.Helper()
-	raw, err := loadKubeconfigRaw(cfg.GetKubeConfigPath())
+	raw, err := loadKubeconfigRaw(cfg.KubeConfig.Get())
 	require.NoError(t, err)
 	ctxInfo := raw.Contexts[raw.CurrentContext]
 	require.NotNil(t, ctxInfo)

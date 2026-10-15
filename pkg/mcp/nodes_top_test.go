@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +20,7 @@ type NodesTopSuite struct {
 func (s *NodesTopSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 
 	s.discoveryHandler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.discoveryHandler)
@@ -214,9 +214,9 @@ func (s *NodesTopSuite) TestNodesTopMetricsUnavailable() {
 }
 
 func (s *NodesTopSuite) TestNodesTopDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { group = "metrics.k8s.io", version = "v1beta1" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.WithMetricsServer()
 	s.InitMcpClient()
 	s.Run("nodes_top (denied)", func() {

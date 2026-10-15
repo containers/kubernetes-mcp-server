@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initPods(p api.FilteringProvider) []api.ServerTool {
+func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "pods_list",
@@ -40,7 +41,11 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsListInAllNamespaces},
+		}, RBAC: api.RBACBounded(api.RBACRequirement{
+			Verbs:     []string{"list"},
+			Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+			Namespace: &api.RBACNamespace{AllNamespaces: true},
+		}), Handler: podsListInAllNamespaces},
 		{Tool: api.Tool{
 			Name:        "pods_list_in_namespace",
 			Description: "List all the Kubernetes pods in the specified namespace in the current cluster",
@@ -70,7 +75,11 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsListInNamespace},
+		}, RBAC: api.RBACBounded(api.RBACRequirement{
+			Verbs:     []string{"list"},
+			Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+			Namespace: &api.RBACNamespace{Argument: "namespace"},
+		}), Handler: podsListInNamespace},
 		{Tool: api.Tool{
 			Name:        "pods_get",
 			Description: "Get a Kubernetes Pod in the current or provided namespace with the provided name",
@@ -94,7 +103,12 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsGet},
+		}, RBAC: api.RBACBounded(api.RBACRequirement{
+			Verbs:        []string{"get"},
+			Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+			Namespace:    &api.RBACNamespace{Argument: "namespace"},
+			ResourceName: &api.RBACResourceName{Argument: "name"},
+		}), Handler: podsGet},
 		{Tool: api.Tool{
 			Name:        "pods_delete",
 			Description: "Delete a Kubernetes Pod in the current or provided namespace with the provided name",
@@ -118,7 +132,27 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsDelete},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:        []string{"get", "delete"},
+				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+				Namespace:    &api.RBACNamespace{Argument: "namespace"},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+			api.RBACRequirement{
+				Verbs:     []string{"list", "delete"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "services"}},
+				Namespace: &api.RBACNamespace{Argument: "namespace"},
+			},
+			api.RBACRequirement{
+				Verbs: []string{"list", "delete"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+					APIGroup: "route.openshift.io",
+					Resource: "routes",
+				}},
+				Namespace: &api.RBACNamespace{Argument: "namespace"},
+			},
+		), Handler: podsDelete},
 		{Tool: api.Tool{
 			Name:        "pods_top",
 			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace",
@@ -152,9 +186,18 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsTop,
+		}, RBAC: api.RBACBounded(api.RBACRequirement{
+			Verbs: []string{"get", "list"},
+			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+				APIGroup: "metrics.k8s.io",
+				Resource: "pods",
+			}},
+			// Keep the v1alpha1 contract conservative and simple. A future version can
+			// narrow this based on namespace and all_namespaces arguments.
+			Namespace: &api.RBACNamespace{AllNamespaces: true},
+		}), Handler: podsTop,
 			TargetCompatibilityFilters: []func() bool{
-				kubernetes.HasPodMetrics(p),
+				kubernetes.HasPodMetrics(ctx, inspector),
 			},
 		},
 		{Tool: api.Tool{
@@ -190,7 +233,23 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(true), // Depending on the Pod's entrypoint, executing certain commands may kill the Pod
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsExec},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:        []string{"get"},
+				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+				Namespace:    &api.RBACNamespace{Argument: "namespace"},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+			api.RBACRequirement{
+				Verbs: []string{"get", "create"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+					Resource:    "pods",
+					Subresource: "exec",
+				}},
+				Namespace:    &api.RBACNamespace{Argument: "namespace"},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+		), Handler: podsExec},
 		{Tool: api.Tool{
 			Name:        "pods_log",
 			Description: "Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name",
@@ -228,7 +287,23 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsLog},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:        []string{"get"},
+				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+				Namespace:    &api.RBACNamespace{Argument: "namespace"},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+			api.RBACRequirement{
+				Verbs: []string{"get"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+					Resource:    "pods",
+					Subresource: "log",
+				}},
+				Namespace:    &api.RBACNamespace{Argument: "namespace"},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+		), Handler: podsLog},
 		{Tool: api.Tool{
 			Name:        "pods_run",
 			Description: "Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name",
@@ -259,7 +334,26 @@ func initPods(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: podsRun},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:     []string{"create", "patch"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+				Namespace: &api.RBACNamespace{Argument: "namespace"},
+			},
+			api.RBACRequirement{
+				Verbs:     []string{"create", "patch"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "services"}},
+				Namespace: &api.RBACNamespace{Argument: "namespace"},
+			},
+			api.RBACRequirement{
+				Verbs: []string{"create", "patch"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+					APIGroup: "route.openshift.io",
+					Resource: "routes",
+				}},
+				Namespace: &api.RBACNamespace{Argument: "namespace"},
+			},
+		), Handler: podsRun},
 	}
 }
 

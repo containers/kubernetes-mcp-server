@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
@@ -13,27 +14,69 @@ import (
 // target (context, workspace, etc.) does not exist or cannot be used.
 var ErrUnknownTarget = errors.New("unknown target")
 
-// McpReload is a function type that defines a callback for reloading MCP toolsets (including tools, prompts, or other configurations)
-type McpReload func() error
+// McpReloader serializes kubeconfig/cluster-state WatchTargets callbacks
+// with SIGHUP. Construct with NewMcpReloader; fields are unexported so
+// callers cannot omit Apply and deadlock inside Run.
+type McpReloader struct {
+	withLock    func(fn func() error) error
+	applyLocked func() error
+}
 
-// ManagerProvider provides access to the underlying Manager instances for each target.
-type ManagerProvider interface {
-	// GetTargetManagers returns managers for all targets.
-	// Returns an error if managers for any target cannot be retrieved.
-	GetTargetManagers(ctx context.Context) ([]*Manager, error)
+// NewMcpReloader builds a reloader.
+// withLock runs fn while holding the server reload lock.
+// applyLocked recomputes toolsets; the caller must already hold that lock.
+func NewMcpReloader(withLock func(fn func() error) error, applyLocked func() error) McpReloader {
+	return McpReloader{withLock: withLock, applyLocked: applyLocked}
+}
+
+// McpReloaderFromCallback builds a reloader for tests that only need a
+// change notification. Run runs fn without extra locking.
+func McpReloaderFromCallback(cb func() error) McpReloader {
+	return NewMcpReloader(func(fn func() error) error { return fn() }, cb)
+}
+
+func (r McpReloader) Run(fn func() error) error {
+	if r.withLock != nil {
+		return r.withLock(fn)
+	}
+	return fn()
+}
+
+func (r McpReloader) ApplyToolsets() error {
+	if r.applyLocked != nil {
+		return r.applyLocked()
+	}
+	return nil
+}
+
+func (r McpReloader) ClusterStateCallback() func() error {
+	if r.withLock == nil && r.applyLocked == nil {
+		return func() error { return nil }
+	}
+	return func() error {
+		return r.Run(r.ApplyToolsets)
+	}
 }
 
 type Provider interface {
-	// Embed the base TargetProvider and FilteringProvider interfaces
+	// Embed the base TargetProvider interface.
 	api.TargetProvider
-	api.FilteringProvider
 	// GetDerivedKubernetes returns a Kubernetes client for the specified target
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
-	// WatchTargets sets up a watcher for changes in the cluster targets and calls the provided McpReload function when changes are detected
-	WatchTargets(ctx context.Context, reload McpReload)
+	// WatchTargets sets up a watcher for changes in the cluster targets and
+	// invokes reload when changes are detected.
+	WatchTargets(ctx context.Context, reload McpReloader)
+	// ReloadConfig replaces the provider's Config pointer used for tool
+	// filtering and lazy manager construction. It does not change live
+	// access-control on existing Kubernetes clients; call
+	// PublishKubernetesConfig at the same commit as the MCP surface.
+	ReloadConfig(ctx context.Context, cfg *config.Config) error
+	// PublishKubernetesConfig pushes cfg into existing managers so the
+	// access-control round tripper and RequireOAuth checks observe it.
+	PublishKubernetesConfig(cfg *config.Config)
 	// RefreshCAs re-fetches every held manager's cluster CA now, so a
 	// rotated cluster CA is picked up on SIGHUP config reload without
-	// waiting out the refresh interval. It lives on the interface rather
+	// waiting out ca_refresh_interval. It lives on the interface rather
 	// than as an optional capability so no provider can silently miss the
 	// refresh.
 	RefreshCAs()
@@ -60,8 +103,8 @@ type TokenExchangeProvider interface {
 type ProviderOption func(*providerOptions)
 
 type providerOptions struct {
-	oauthState         *oauth.State
-	baseConfigProvider func() api.BaseConfig
+	oauthState     *oauth.State
+	configProvider func() *config.Config
 }
 
 func WithTokenExchange(oauthState *oauth.State) ProviderOption {
@@ -70,13 +113,13 @@ func WithTokenExchange(oauthState *oauth.State) ProviderOption {
 	}
 }
 
-func WithBaseConfigProvider(baseConfigProvider func() api.BaseConfig) ProviderOption {
+func WithConfigProvider(configProvider func() *config.Config) ProviderOption {
 	return func(opts *providerOptions) {
-		opts.baseConfigProvider = baseConfigProvider
+		opts.configProvider = configProvider
 	}
 }
 
-func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption) (Provider, error) {
+func NewProvider(ctx context.Context, cfg *config.Config, opts ...ProviderOption) (Provider, error) {
 	var providerOpts providerOptions
 	for _, opt := range opts {
 		opt(&providerOpts)
@@ -95,15 +138,15 @@ func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption
 	}
 
 	if providerOpts.oauthState != nil {
-		baseConfigProvider := providerOpts.baseConfigProvider
-		if baseConfigProvider == nil {
-			baseConfigProvider = func() api.BaseConfig {
+		configProvider := providerOpts.configProvider
+		if configProvider == nil {
+			configProvider = func() *config.Config {
 				return cfg
 			}
 		}
 		provider = newTokenExchangingProvider(
 			provider,
-			baseConfigProvider,
+			configProvider,
 			providerOpts.oauthState,
 		)
 	}
@@ -111,18 +154,18 @@ func NewProvider(ctx context.Context, cfg api.BaseConfig, opts ...ProviderOption
 	return provider, nil
 }
 
-func resolveStrategy(cfg api.BaseConfig) string {
-	if cfg.GetClusterProviderStrategy() != "" {
-		return cfg.GetClusterProviderStrategy()
+func resolveStrategy(cfg *config.Config) string {
+	if cfg.ClusterProviderStrategy.Get() != "" {
+		return cfg.ClusterProviderStrategy.Get()
 	}
 
-	if cfg.GetKubeConfigPath() != "" {
-		return api.ClusterProviderKubeConfig
+	if cfg.KubeConfig.Get() != "" {
+		return config.ClusterProviderKubeConfig
 	}
 
 	if _, inClusterConfigErr := InClusterConfig(); inClusterConfigErr == nil {
-		return api.ClusterProviderInCluster
+		return config.ClusterProviderInCluster
 	}
 
-	return api.ClusterProviderKubeConfig
+	return config.ClusterProviderKubeConfig
 }

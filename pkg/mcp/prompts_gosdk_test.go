@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 func TestPromptCallRequestAdapter_GetArguments(t *testing.T) {
@@ -65,10 +66,11 @@ func TestPromptCallRequestAdapter_GetArguments(t *testing.T) {
 
 func TestServerPromptToGoSdkPrompt_Conversion(t *testing.T) {
 	serverPrompt := api.ServerPrompt{
-		Prompt: api.Prompt{
+		Prompt: config.Prompt{
 			Name:        "test-prompt",
+			Title:       "Test Prompt",
 			Description: "Test description",
-			Arguments: []api.PromptArgument{
+			Arguments: []config.PromptArgument{
 				{
 					Name:        "arg1",
 					Description: "First argument",
@@ -103,6 +105,7 @@ func TestServerPromptToGoSdkPrompt_Conversion(t *testing.T) {
 	require.NotNil(t, handler)
 
 	assert.Equal(t, "test-prompt", mcpPrompt.Name)
+	assert.Equal(t, "Test Prompt", mcpPrompt.Title)
 	assert.Equal(t, "Test description", mcpPrompt.Description)
 	require.Len(t, mcpPrompt.Arguments, 2)
 
@@ -117,10 +120,10 @@ func TestServerPromptToGoSdkPrompt_Conversion(t *testing.T) {
 
 func TestServerPromptToGoSdkPrompt_EmptyArguments(t *testing.T) {
 	serverPrompt := api.ServerPrompt{
-		Prompt: api.Prompt{
+		Prompt: config.Prompt{
 			Name:        "no-args-prompt",
 			Description: "Prompt with no arguments",
-			Arguments:   []api.PromptArgument{},
+			Arguments:   []config.PromptArgument{},
 		},
 		Handler: func(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 			return api.NewPromptCallResult("Result", []api.PromptMessage{}, nil), nil
@@ -137,4 +140,20 @@ func TestServerPromptToGoSdkPrompt_EmptyArguments(t *testing.T) {
 
 	assert.Equal(t, "no-args-prompt", mcpPrompt.Name)
 	assert.Len(t, mcpPrompt.Arguments, 0)
+}
+
+func TestServerPromptToGoSdkPrompt_RBACMetadata(t *testing.T) {
+	rbac := api.RBACNone()
+	serverPrompt := api.ServerPrompt{
+		Prompt: config.Prompt{Name: "rbac-prompt"},
+		RBAC:   rbac,
+	}
+
+	mcpPrompt, _, err := ServerPromptToGoSdkPrompt(nil, serverPrompt)
+	require.NoError(t, err)
+	assert.Same(t, rbac, mcpPrompt.Meta[api.RBACMetadataKey])
+
+	serverPrompt.RBAC = api.RBACBounded()
+	_, _, err = ServerPromptToGoSdkPrompt(nil, serverPrompt)
+	require.ErrorContains(t, err, "invalid RBAC metadata")
 }

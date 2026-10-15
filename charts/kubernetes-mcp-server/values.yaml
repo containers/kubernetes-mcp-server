@@ -207,7 +207,7 @@ initContainers: []
 
 # -- TLS configuration for the MCP server.
 # -- When enabled, the server will serve HTTPS and health probes will use the HTTPS scheme.
-# -- This is the recommended way to enable TLS instead of using extraArgs.
+# -- Certificate paths are written to the ConfigMap as tls_cert / tls_key.
 tls:
   # -- Enable TLS for the MCP server
   enabled: false
@@ -222,8 +222,7 @@ tls:
   keyFile: tls.key
 
 # -- Extra arguments to pass to the kubernetes-mcp-server command line.
-# -- Useful for passing additional configuration options. It can also be configured using ConfigMap.
-# -- Note: For TLS configuration, use the tls section above instead of extraArgs.
+# -- Only bootstrap flags exist (`--config`, `--config-dir`, `--version`). Runtime settings go in `config` or the `tls` section.
 extraArgs: []
 
 # -- Additional containers to add to the pod (sidecars).

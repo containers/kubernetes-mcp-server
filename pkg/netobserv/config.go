@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
@@ -26,7 +25,10 @@ type Config struct {
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
 }
 
-var _ api.ExtendedConfig = (*Config)(nil)
+var (
+	_ config.ExtendedConfig      = (*Config)(nil)
+	_ config.RequireTLSValidator = (*Config)(nil)
+)
 
 // ResolvedURL returns the plugin base URL, applying operator-aligned defaults when url is unset.
 func (c *Config) ResolvedURL(isOpenShift bool) string {
@@ -102,7 +104,25 @@ func (c *Config) validate(isOpenShift bool) error {
 	return nil
 }
 
-func netobservToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func (c *Config) ValidateRequireTLS(requireTLS bool) error {
+	if !requireTLS {
+		return nil
+	}
+	if c == nil {
+		return errors.New("netobserv config is nil")
+	}
+	// Config is validated without a live cluster; assume non-OpenShift (HTTP synthesized URL).
+	const configLoadOpenShift = false
+	if err := config.ValidateURLRequiresTLS(c.ResolvedURL(configLoadOpenShift), "NetObserv URL"); err != nil {
+		return err
+	}
+	if c.Insecure {
+		return errors.New("require_tls is enabled but NetObserv insecure=true disables certificate verification")
+	}
+	return nil
+}
+
+func netobservToolsetParser(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (config.ExtendedConfig, error) {
 	var cfg Config
 	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
 		return nil, err
@@ -115,16 +135,10 @@ func netobservToolsetParser(ctx context.Context, primitive toml.Primitive, md to
 		}
 	}
 
-	requireTLS := config.RequireTLSFromContext(ctx)
 	// Config is validated without a live cluster; assume non-OpenShift (HTTP synthesized URL).
 	const configLoadOpenShift = false
-	if requireTLS {
-		if err := config.ValidateURLRequiresTLS(cfg.ResolvedURL(configLoadOpenShift), "NetObserv URL"); err != nil {
-			return nil, err
-		}
-		if cfg.Insecure {
-			return nil, errors.New("require_tls is enabled but NetObserv insecure=true disables certificate verification")
-		}
+	if err := cfg.ValidateRequireTLS(config.RequireTLSFromContext(ctx)); err != nil {
+		return nil, err
 	}
 
 	cfg.applyDefaults(ctx, configLoadOpenShift)

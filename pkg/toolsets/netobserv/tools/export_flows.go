@@ -29,6 +29,7 @@ func InitExportFlows() []api.ServerTool {
 			InputSchema: toolInputSchema(props, nil),
 			Annotations: readOnlyAnnotations("Export NetObserv Flows as CSV"),
 		},
+		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
 		Handler: exportFlowsHandler,
 	}}
 }
@@ -41,7 +42,10 @@ func exportFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if _, ok := args["format"]; !ok {
 		args["format"] = DefaultExportFormat
 	}
-	client := netobservclient.NewNetObserv(params.Context, params, params.KubernetesClient, params.FilteringProvider)
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
+	if err != nil {
+		return jsonAPIResult("", err)
+	}
 	response, err := client.ExecuteGetAccept(params.Context, NetObservExportFlowsEndpoint, args, "text/csv,*/*", DefaultExportMaxBodyBytes)
 	content := response.Body
 	if response.Truncated {

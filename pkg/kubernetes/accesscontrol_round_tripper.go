@@ -17,31 +17,46 @@ import (
 	authv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 // AccessControlRoundTripper intercepts HTTP requests to enforce access control
 // and optionally run validators before they reach the Kubernetes API.
 type AccessControlRoundTripper struct {
-	delegate                http.RoundTripper
-	deniedResourcesProvider api.DeniedResourcesProvider
-	restMapperProvider      func() meta.RESTMapper
-	rawDiscovery            *rawDiscoveryCache
-	apiPathPrefix           string
-	validators              []api.HTTPValidator
+	delegate           http.RoundTripper
+	deniedResources    []config.GroupVersionKind
+	restMapperProvider func() meta.RESTMapper
+	rawDiscovery       *rawDiscoveryCache
+	apiPathPrefix      string
+	configProvider     func() *config.Config
+	validatorProviders ValidatorProviders
+	// snapshotValidators is used when ConfigProvider is nil (tests that
+	// construct the round tripper directly).
+	snapshotValidators []api.HTTPValidator
+
+	validatorsMu   sync.Mutex
+	validatorsCfg  *config.Config
+	liveValidators []api.HTTPValidator
 }
 
 // AccessControlRoundTripperConfig configures the AccessControlRoundTripper.
 type AccessControlRoundTripperConfig struct {
-	Delegate                  http.RoundTripper
-	DeniedResourcesProvider   api.DeniedResourcesProvider
-	RestMapperProvider        func() meta.RESTMapper
-	HostURL                   string
-	DiscoveryProvider         func() discovery.DiscoveryInterface
-	RawDiscoveryProvider      func() discovery.DiscoveryInterface
-	AuthClientProvider        func() authv1client.AuthorizationV1Interface
-	ValidationEnabled         bool
-	ConfirmationRulesProvider api.ConfirmationRulesProvider
+	Delegate             http.RoundTripper
+	DeniedResources      []config.GroupVersionKind
+	RestMapperProvider   func() meta.RESTMapper
+	HostURL              string
+	DiscoveryProvider    func() discovery.DiscoveryInterface
+	RawDiscoveryProvider func() discovery.DiscoveryInterface
+	AuthClientProvider   func() authv1client.AuthorizationV1Interface
+	ValidationEnabled    bool
+	ConfirmationRules    []config.ConfirmationRule
+	ConfirmationFallback string
+	// ConfigProvider, when set, is read on every request so SIGHUP can
+	// update denied_resources, validation, and confirmation without
+	// rebuilding Kubernetes clients. Snapshot fields are the fallback
+	// when it is nil.
+	ConfigProvider func() *config.Config
 }
 
 // NewAccessControlRoundTripper creates a new AccessControlRoundTripper.
@@ -65,30 +80,79 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 		}
 	}
 	rt := &AccessControlRoundTripper{
-		delegate:                cfg.Delegate,
-		deniedResourcesProvider: cfg.DeniedResourcesProvider,
-		restMapperProvider:      cfg.RestMapperProvider,
-		rawDiscovery:            rawDisc,
-		apiPathPrefix:           apiPathPrefix,
+		delegate:           cfg.Delegate,
+		deniedResources:    cfg.DeniedResources,
+		restMapperProvider: cfg.RestMapperProvider,
+		rawDiscovery:       rawDisc,
+		apiPathPrefix:      apiPathPrefix,
+		configProvider:     cfg.ConfigProvider,
+		validatorProviders: ValidatorProviders{
+			Discovery:  cfg.DiscoveryProvider,
+			AuthClient: cfg.AuthClientProvider,
+		},
+		snapshotValidators: validatorsFromAccessControlConfig(cfg),
 	}
 
+	return rt
+}
+
+func validatorsFromAccessControlConfig(cfg AccessControlRoundTripperConfig) []api.HTTPValidator {
+	var validators []api.HTTPValidator
 	// Schema/RBAC validators run first so the user isn't prompted for
 	// confirmation on an operation that would fail anyway.
 	if cfg.ValidationEnabled {
-		rt.validators = append(rt.validators, CreateValidators(ValidatorProviders{
+		validators = append(validators, CreateValidators(ValidatorProviders{
 			Discovery:  cfg.DiscoveryProvider,
 			AuthClient: cfg.AuthClientProvider,
 		})...)
 	}
-
-	if cfg.ConfirmationRulesProvider != nil && len(cfg.ConfirmationRulesProvider.GetConfirmationRules()) > 0 {
-		rt.validators = append(rt.validators, &ConfirmationValidator{rulesProvider: cfg.ConfirmationRulesProvider})
+	if len(cfg.ConfirmationRules) > 0 {
+		validators = append(validators, &ConfirmationValidator{
+			rules:    cfg.ConfirmationRules,
+			fallback: cfg.ConfirmationFallback,
+		})
 	}
-
 	// Always enable Windows EULA validator for windows-efi-installer PipelineRuns
-	rt.validators = append(rt.validators, &WindowsEULAValidator{})
+	validators = append(validators, &WindowsEULAValidator{})
+	return validators
+}
 
-	return rt
+func validatorsFromConfig(cfg *config.Config, providers ValidatorProviders) []api.HTTPValidator {
+	return validatorsFromAccessControlConfig(AccessControlRoundTripperConfig{
+		ValidationEnabled:    cfg.ValidationEnabled.Get(),
+		ConfirmationRules:    cfg.ConfirmationRules.Get(),
+		ConfirmationFallback: cfg.ConfirmationFallback.Get(),
+		DiscoveryProvider:    providers.Discovery,
+		AuthClientProvider:   providers.AuthClient,
+	})
+}
+
+func (rt *AccessControlRoundTripper) liveConfig() *config.Config {
+	if rt.configProvider == nil {
+		return nil
+	}
+	return rt.configProvider()
+}
+
+func (rt *AccessControlRoundTripper) currentDeniedResources(cfg *config.Config) []config.GroupVersionKind {
+	if cfg != nil {
+		return cfg.DeniedResources.Get()
+	}
+	return rt.deniedResources
+}
+
+func (rt *AccessControlRoundTripper) currentValidators(cfg *config.Config) []api.HTTPValidator {
+	if cfg == nil {
+		return rt.snapshotValidators
+	}
+	rt.validatorsMu.Lock()
+	defer rt.validatorsMu.Unlock()
+	if rt.liveValidators != nil && rt.validatorsCfg == cfg {
+		return rt.liveValidators
+	}
+	rt.validatorsCfg = cfg
+	rt.liveValidators = validatorsFromConfig(cfg, rt.validatorProviders)
+	return rt.liveValidators
 }
 
 func (rt *AccessControlRoundTripper) WrappedRoundTripper() http.RoundTripper {
@@ -109,7 +173,8 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 		return nil, err
 	}
 
-	if !rt.isAllowed(gvk) {
+	cfg := rt.liveConfig()
+	if !rt.isAllowed(gvk, cfg) {
 		return nil, fmt.Errorf("resource not allowed: %s", gvk.String())
 	}
 
@@ -142,7 +207,7 @@ func (rt *AccessControlRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	}
 
 	logger := klogutil.FromContext(req.Context())
-	for _, v := range rt.validators {
+	for _, v := range rt.currentValidators(cfg) {
 		if validationErr := v.Validate(req.Context(), validationReq); validationErr != nil {
 			if ve, ok := validationErr.(*api.ValidationError); ok {
 				klogutil.LogInfo(logger.V(4), "Validation failed", klogutil.Field("validator_name", v.Name()), klogutil.Err(ve))
@@ -205,12 +270,14 @@ func (rt *AccessControlRoundTripper) getGVK(
 // If it is in denied list, this function returns false.
 func (rt *AccessControlRoundTripper) isAllowed(
 	gvk schema.GroupVersionKind,
+	cfg *config.Config,
 ) bool {
-	if rt.deniedResourcesProvider == nil {
+	denied := rt.currentDeniedResources(cfg)
+	if len(denied) == 0 {
 		return true
 	}
 
-	for _, val := range rt.deniedResourcesProvider.GetDeniedResources() {
+	for _, val := range denied {
 		// If kind is empty, that means Group/Version pair is denied entirely
 		if val.Kind == "" {
 			if gvk.Group == val.Group && gvk.Version == val.Version {

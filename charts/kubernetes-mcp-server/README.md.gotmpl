@@ -47,6 +47,26 @@ httpRoute:
             value: /
 ```
 
+### Configured Prompts
+
+Prompts declared under `config.prompts` are rendered into the server's `config.toml` through Helm's `tpl`, so `{{"{{"}}argument{{"}}"}}` placeholders in message content must be escaped as `` {{"{{"}}`{{"{{"}}argument{{"}}"}}`{{"}}"}} `` or Helm tries to evaluate them as template actions. See [docs/prompts.md](../../docs/prompts.md) for the prompt schema.
+
+```yaml
+config:
+  prompts:
+    - name: check-pod-logs
+      title: Check Pod Logs
+      description: Show the logs for a pod
+      arguments:
+        - name: name
+          required: true
+        - name: namespace
+          required: false
+      messages:
+        - role: user
+          content: 'Show me the logs for pod {{"{{"}}`{{"{{"}}name{{"}}"}}`{{"}}"}} in {{"{{"}}`{{"{{"}}namespace{{"}}"}}`{{"}}"}}'
+```
+
 ### Optimized OpenShift Deployment
 
 Functionality has been added to the Chart to simplify the deployment to OpenShift Cluster.

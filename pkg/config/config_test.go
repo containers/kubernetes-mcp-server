@@ -1,22 +1,27 @@
 package config
 
 import (
+	"bytes"
 	"errors"
+	"flag"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/textlogger"
 )
 
-type BaseConfigSuite struct {
+type ConfigFileSuite struct {
 	suite.Suite
 }
 
-func (s *BaseConfigSuite) writeConfig(content string) string {
+func (s *ConfigFileSuite) writeConfig(content string) string {
 	s.T().Helper()
 	tempDir := s.T().TempDir()
 	path := filepath.Join(tempDir, "config.toml")
@@ -28,34 +33,82 @@ func (s *BaseConfigSuite) writeConfig(content string) string {
 }
 
 type ConfigSuite struct {
-	BaseConfigSuite
-	defaults *StaticConfig
+	ConfigFileSuite
+	defaults *Config
 }
 
 func (s *ConfigSuite) SetupTest() {
-	s.defaults = Default()
+	s.defaults = New()
 }
 
 func (s *ConfigSuite) TestBaseDefaultValues() {
 	base := BaseDefault()
 	s.Run("ListOutput is table", func() {
-		s.Equal("table", base.ListOutput)
+		s.Equal("table", base.ListOutput.Get())
 	})
 	s.Run("Toolsets are core, config", func() {
-		s.Equal([]string{"core", "config"}, base.Toolsets)
+		s.Equal([]string{"core", "config"}, base.Toolsets.Get())
 	})
 	s.Run("ReadOnly is false", func() {
-		s.False(base.ReadOnly)
+		s.False(base.ReadOnly.Get())
 	})
 	s.Run("DisableDestructive is false", func() {
-		s.False(base.DisableDestructive)
+		s.False(base.DisableDestructive.Get())
 	})
 	s.Run("Stateless is false", func() {
-		s.False(base.Stateless)
+		s.False(base.Stateless.Get())
+	})
+	s.Run("AppsEnabled is false", func() {
+		s.False(base.AppsEnabled.Get())
 	})
 	s.Run("LogLevel is 0", func() {
-		s.Equal(0, base.LogLevel)
+		s.Equal(0, base.LogLevel.Get())
 	})
+}
+
+func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
+	s.Run("unspecified keys match BaseDefault", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`log_level = 1`), WithBaseDefault())
+		s.Require().NoError(err)
+		s.Equal(1, cfg.LogLevel.Get())
+		base := BaseDefault()
+		s.Equal(base.ReadOnly.Get(), cfg.ReadOnly.Get())
+		s.Equal(base.Toolsets.Get(), cfg.Toolsets.Get())
+		s.Equal(SourceDefault, cfg.ReadOnly.Source())
+	})
+	s.Run("production ReadToml still starts from New", func() {
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(New().ReadOnly.Get(), cfg.ReadOnly.Get())
+		s.Equal(New().Toolsets.Get(), cfg.Toolsets.Get())
+	})
+}
+
+func (s *ConfigSuite) TestDocumentedOptions() {
+	opts := DocumentedOptions()
+	s.Require().NotEmpty(opts)
+	paths := make(map[string]DocumentedOption, len(opts))
+	for _, o := range opts {
+		s.NotEmpty(o.Path, "documented option must have a TOML path")
+		s.NotEmpty(o.Description, "documented option %s must have a description", o.Path)
+		_, dup := paths[o.Path]
+		s.False(dup, "duplicate documented path %s", o.Path)
+		paths[o.Path] = o
+	}
+	s.Contains(paths, "port")
+	s.Contains(paths, "disable_localhost_protection")
+	s.Contains(paths, "http.rate_limit_burst")
+	s.Contains(paths, "telemetry.endpoint")
+	s.Equal("OTEL_EXPORTER_OTLP_ENDPOINT", paths["telemetry.endpoint"].EnvName)
+	s.False(paths["port"].Reloadable)
+	s.False(paths["apps_enabled"].Reloadable)
+	s.False(paths["disable_localhost_protection"].Reloadable)
+	s.True(paths["log_level"].Reloadable)
+	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
+}
+
+func (s *ConfigSuite) TestConfigPathEnvName() {
+	s.Equal("MCP_CONFIG_PATH", ConfigPathEnvName)
 }
 
 func (s *ConfigSuite) TestReadConfigMissingFile() {
@@ -95,7 +148,13 @@ func (s *ConfigSuite) TestReadConfigInvalid() {
 }
 
 func (s *ConfigSuite) TestReadConfigValid() {
-	validConfigPath := s.writeConfig(`
+	tmpDir := s.T().TempDir()
+	certPath := filepath.Join(tmpDir, "cert.pem")
+	keyPath := filepath.Join(tmpDir, "key.pem")
+	s.Require().NoError(os.WriteFile(certPath, []byte("test"), 0o644))
+	s.Require().NoError(os.WriteFile(keyPath, []byte("test"), 0o644))
+
+	validConfigPath := s.writeConfig(fmt.Sprintf(`
 		log_level = 1
 		port = "9999"
 		kubeconfig = "./path/to/config"
@@ -103,6 +162,8 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		read_only = true
 		disable_destructive = true
 		stateless = true
+		apps_enabled = true
+		disable_localhost_protection = true
 
 		toolsets = ["core", "config", "helm", "metrics"]
 		
@@ -115,8 +176,8 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		]
 
 		# TLS configuration
-		tls_cert = "/path/to/cert.pem"
-		tls_key = "/path/to/key.pem"
+		tls_cert = %q
+		tls_key = %q
 
 		[[prompts]]
 		name = "k8s-troubleshoot"
@@ -130,96 +191,74 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			{role = "user", content = "Check the health of resources in namespace {{namespace}}{{resource}}"}
 		]
 
-	`)
+	`, certPath, keyPath))
 
-	config, err := Read(s.T().Context(), validConfigPath, "")
-	s.Require().NotNil(config)
-	s.Run("reads and unmarshalls file", func() {
-		s.Nil(err, "Expected nil error for valid file")
-		s.Require().NotNil(config, "Expected non-nil config for valid file")
-	})
-	s.Run("log_level parsed correctly", func() {
-		s.Equalf(1, config.LogLevel, "Expected LogLevel to be 1, got %d", config.LogLevel)
-	})
-	s.Run("port parsed correctly", func() {
-		s.Equalf("9999", config.Port, "Expected Port to be 9999, got %s", config.Port)
-	})
-	s.Run("kubeconfig parsed correctly", func() {
-		s.Equalf("./path/to/config", config.KubeConfig, "Expected KubeConfig to be ./path/to/config, got %s", config.KubeConfig)
-	})
-	s.Run("list_output parsed correctly", func() {
-		s.Equalf("yaml", config.ListOutput, "Expected ListOutput to be yaml, got %s", config.ListOutput)
-	})
-	s.Run("read_only parsed correctly", func() {
-		s.Truef(config.ReadOnly, "Expected ReadOnly to be true, got %v", config.ReadOnly)
-	})
-	s.Run("disable_destructive parsed correctly", func() {
-		s.Truef(config.DisableDestructive, "Expected DisableDestructive to be true, got %v", config.DisableDestructive)
-	})
-	s.Run("stateless parsed correctly", func() {
-		s.Truef(config.Stateless, "Expected Stateless to be true, got %v", config.Stateless)
-	})
-	s.Run("tls_cert parsed correctly", func() {
-		s.Equalf("/path/to/cert.pem", config.TLSCert, "Expected TLSCert to be /path/to/cert.pem, got %s", config.TLSCert)
-	})
-	s.Run("tls_key parsed correctly", func() {
-		s.Equalf("/path/to/key.pem", config.TLSKey, "Expected TLSKey to be /path/to/key.pem, got %s", config.TLSKey)
-	})
-	s.Run("toolsets", func() {
-		s.Require().Lenf(config.Toolsets, 4, "Expected 4 toolsets, got %d", len(config.Toolsets))
-		for _, toolset := range []string{"core", "config", "helm", "metrics"} {
-			s.Containsf(config.Toolsets, toolset, "Expected toolsets to contain %s", toolset)
+	cfg, err := Read(s.T().Context(), validConfigPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(cfg)
+
+	s.Run("scalars", func() {
+		cases := []struct {
+			name string
+			got  any
+			want any
+		}{
+			{"log_level", cfg.LogLevel.Get(), 1},
+			{"port", cfg.Port.Get(), "9999"},
+			{"kubeconfig", cfg.KubeConfig.Get(), "./path/to/config"},
+			{"list_output", cfg.ListOutput.Get(), "yaml"},
+			{"read_only", cfg.ReadOnly.Get(), true},
+			{"disable_destructive", cfg.DisableDestructive.Get(), true},
+			{"stateless", cfg.Stateless.Get(), true},
+			{"apps_enabled", cfg.AppsEnabled.Get(), true},
+			{"disable_localhost_protection", cfg.DisableLocalhostProtection.Get(), true},
+			{"tls_cert", cfg.TLSCert.Get(), certPath},
+			{"tls_key", cfg.TLSKey.Get(), keyPath},
+		}
+		for _, tc := range cases {
+			s.Run(tc.name, func() {
+				s.Equal(tc.want, tc.got)
+			})
 		}
 	})
-	s.Run("enabled_tools", func() {
-		s.Require().Lenf(config.EnabledTools, 8, "Expected 8 enabled tools, got %d", len(config.EnabledTools))
-		for _, tool := range []string{"configuration_view", "events_list", "namespaces_list", "pods_list", "resources_list", "resources_get", "resources_create_or_update", "resources_delete"} {
-			s.Containsf(config.EnabledTools, tool, "Expected enabled tools to contain %s", tool)
+
+	s.Run("slices", func() {
+		cases := []struct {
+			name string
+			got  []string
+			want []string
+		}{
+			{"toolsets", cfg.Toolsets.Get(), []string{"core", "config", "helm", "metrics"}},
+			{"enabled_tools", cfg.EnabledTools.Get(), []string{"configuration_view", "events_list", "namespaces_list", "pods_list", "resources_list", "resources_get", "resources_create_or_update", "resources_delete"}},
+			{"disabled_tools", cfg.DisabledTools.Get(), []string{"pods_delete", "pods_top", "pods_log", "pods_run", "pods_exec"}},
+		}
+		for _, tc := range cases {
+			s.Run(tc.name, func() {
+				s.Equal(tc.want, tc.got)
+			})
 		}
 	})
-	s.Run("disabled_tools", func() {
-		s.Require().Lenf(config.DisabledTools, 5, "Expected 5 disabled tools, got %d", len(config.DisabledTools))
-		for _, tool := range []string{"pods_delete", "pods_top", "pods_log", "pods_run", "pods_exec"} {
-			s.Containsf(config.DisabledTools, tool, "Expected disabled tools to contain %s", tool)
-		}
-	})
+
 	s.Run("denied_resources", func() {
-		s.Require().Lenf(config.DeniedResources, 2, "Expected 2 denied resources, got %d", len(config.DeniedResources))
-		s.Run("contains apps/v1/Deployment", func() {
-			s.Contains(config.DeniedResources, api.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
-				"Expected denied resources to contain apps/v1/Deployment")
-		})
-		s.Run("contains rbac.authorization.k8s.io/v1/Role", func() {
-			s.Contains(config.DeniedResources, api.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-				"Expected denied resources to contain rbac.authorization.k8s.io/v1/Role")
-		})
+		s.Equal([]GroupVersionKind{
+			{Group: "apps", Version: "v1", Kind: "Deployment"},
+			{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
+		}, cfg.DeniedResources.Get())
 	})
+
 	s.Run("prompts", func() {
-		s.Require().Lenf(config.Prompts, 1, "Expected 1 prompt, got %d", len(config.Prompts))
-		prompt := config.Prompts[0]
-		s.Run("name parsed correctly", func() {
-			s.Equal("k8s-troubleshoot", prompt.Name)
-		})
-		s.Run("title parsed correctly", func() {
-			s.Equal("Troubleshoot Kubernetes", prompt.Title)
-		})
-		s.Run("description parsed correctly", func() {
-			s.Equal("Troubleshoot common Kubernetes issues", prompt.Description)
-		})
-		s.Run("arguments parsed correctly", func() {
-			s.Require().Len(prompt.Arguments, 2)
-			s.Equal("namespace", prompt.Arguments[0].Name)
-			s.Equal("Target namespace", prompt.Arguments[0].Description)
-			s.True(prompt.Arguments[0].Required)
-			s.Equal("resource", prompt.Arguments[1].Name)
-			s.Equal("Resource type to check", prompt.Arguments[1].Description)
-			s.False(prompt.Arguments[1].Required)
-		})
-		s.Run("messages parsed correctly", func() {
-			s.Require().Len(prompt.Templates, 1)
-			s.Equal("user", prompt.Templates[0].Role)
-			s.Equal("Check the health of resources in namespace {{namespace}}{{resource}}", prompt.Templates[0].Content)
-		})
+		s.Require().Len(cfg.Prompts.Get(), 1)
+		prompt := cfg.Prompts.Get()[0]
+		s.Equal("k8s-troubleshoot", prompt.Name)
+		s.Equal("Troubleshoot Kubernetes", prompt.Title)
+		s.Equal("Troubleshoot common Kubernetes issues", prompt.Description)
+		s.Equal([]PromptArgument{
+			{Name: "namespace", Description: "Target namespace", Required: true},
+			{Name: "resource", Description: "Resource type to check", Required: false},
+		}, prompt.Arguments)
+		s.Require().Len(prompt.Templates, 1)
+		s.Equal("user", prompt.Templates[0].Role)
+		s.Equal("Check the health of resources in namespace {{namespace}}{{resource}}", prompt.Templates[0].Content)
 	})
 }
 
@@ -235,7 +274,10 @@ func (s *ConfigSuite) TestReadConfigStatelessDefaults() {
 	s.Require().NotNil(config)
 
 	s.Run("stateless defaults to false", func() {
-		s.Falsef(config.Stateless, "Expected Stateless to default to false, got %v", config.Stateless)
+		s.Falsef(config.Stateless.Get(), "Expected Stateless to default to false, got %v", config.Stateless.Get())
+	})
+	s.Run("disable_localhost_protection defaults to false", func() {
+		s.Falsef(config.DisableLocalhostProtection.Get(), "Expected DisableLocalhostProtection to default to false, got %v", config.DisableLocalhostProtection.Get())
 	})
 }
 
@@ -252,7 +294,23 @@ func (s *ConfigSuite) TestReadConfigStatelessExplicitFalse() {
 	s.Require().NotNil(config)
 
 	s.Run("stateless explicit false", func() {
-		s.Falsef(config.Stateless, "Expected Stateless to be false, got %v", config.Stateless)
+		s.Falsef(config.Stateless.Get(), "Expected Stateless to be false, got %v", config.Stateless.Get())
+	})
+}
+
+func (s *ConfigSuite) TestReadConfigDisableLocalhostProtectionExplicitTrue() {
+	configPath := s.writeConfig(`
+		log_level = 1
+		port = "8080"
+		disable_localhost_protection = true
+	`)
+
+	config, err := Read(s.T().Context(), configPath, "")
+	s.Require().NoError(err)
+	s.Require().NotNil(config)
+
+	s.Run("disable_localhost_protection explicit true", func() {
+		s.Truef(config.DisableLocalhostProtection.Get(), "Expected DisableLocalhostProtection to be true, got %v", config.DisableLocalhostProtection.Get())
 	})
 }
 
@@ -268,16 +326,16 @@ func (s *ConfigSuite) TestReadConfigValidPreservesDefaultsForMissingFields() {
 		s.Require().NotNil(config, "Expected non-nil config for valid file")
 	})
 	s.Run("log_level defaulted correctly", func() {
-		s.Equalf(0, config.LogLevel, "Expected LogLevel to be 0, got %d", config.LogLevel)
+		s.Equalf(0, config.LogLevel.Get(), "Expected LogLevel to be 0, got %d", config.LogLevel.Get())
 	})
 	s.Run("port parsed correctly", func() {
-		s.Equalf("1337", config.Port, "Expected Port to be 1337, got %s", config.Port)
+		s.Equalf("1337", config.Port.Get(), "Expected Port to be 1337, got %s", config.Port.Get())
 	})
 	s.Run("list_output defaulted correctly", func() {
-		s.Equalf(s.defaults.ListOutput, config.ListOutput, "Expected ListOutput to be %s, got %s", s.defaults.ListOutput, config.ListOutput)
+		s.Equalf(s.defaults.ListOutput.Get(), config.ListOutput.Get(), "Expected ListOutput to be %s, got %s", s.defaults.ListOutput.Get(), config.ListOutput.Get())
 	})
 	s.Run("toolsets defaulted correctly", func() {
-		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should match defaults")
+		s.Equal(s.defaults.Toolsets.Get(), config.Toolsets.Get(), "toolsets should match defaults")
 	})
 }
 
@@ -373,91 +431,40 @@ func (s *ConfigSuite) TestDropInConfigPrecedence() {
 	s.Require().NotNil(config)
 
 	s.Run("drop-in overrides main config", func() {
-		s.Equal(5, config.LogLevel, "log_level from 10-override.toml should override main")
+		s.Equal(5, config.LogLevel.Get(), "log_level from 10-override.toml should override main")
 	})
 
 	s.Run("later drop-in overrides earlier drop-in", func() {
-		s.Equal("7777", config.Port, "port from 20-final.toml should override 10-override.toml")
+		s.Equal("7777", config.Port.Get(), "port from 20-final.toml should override 10-override.toml")
 	})
 
 	s.Run("preserves values not in drop-in files", func() {
-		s.Equal([]string{"core", "config"}, config.Toolsets, "toolsets from main config should be preserved")
+		s.Equal([]string{"core", "config"}, config.Toolsets.Get(), "toolsets from main config should be preserved")
 	})
 
 	s.Run("applies all drop-in changes", func() {
-		s.Equal("yaml", config.ListOutput, "list_output from 20-final.toml should be applied")
+		s.Equal("yaml", config.ListOutput.Get(), "list_output from 20-final.toml should be applied")
 	})
 }
 
-func (s *ConfigSuite) TestDropInConfigMissingDirectory() {
+func (s *ConfigSuite) TestDropInConfigDirAbsent() {
 	mainConfigPath := s.writeConfig(`
 		log_level = 3
 		port = "8080"
 	`)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "/non/existent/directory")
-	s.Require().NoError(err, "Should not error for missing drop-in directory")
-	s.Require().NotNil(config)
-
-	s.Run("loads main config successfully", func() {
-		s.Equal(3, config.LogLevel)
-		s.Equal("8080", config.Port)
-	})
-}
-
-func (s *ConfigSuite) TestDropInConfigEmptyDirectory() {
-	mainConfigPath := s.writeConfig(`
-		log_level = 2
-	`)
-
-	dropInDir := s.T().TempDir()
-
-	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("loads main config successfully", func() {
-		s.Equal(2, config.LogLevel)
-	})
-}
-
-func (s *ConfigSuite) TestDropInConfigPartialOverride() {
-	tempDir := s.T().TempDir()
-
-	mainConfigPath := s.writeConfig(`
-		log_level = 1
-		port = "8080"
-		list_output = "table"
-		read_only = false
-		toolsets = ["core", "config", "helm"]
-	`)
-
-	dropInDir := filepath.Join(tempDir, "config.d")
-	err := os.Mkdir(dropInDir, 0755)
-	s.Require().NoError(err)
-
-	// Drop-in file with partial config
-	dropIn := filepath.Join(dropInDir, "10-partial.toml")
-	err = os.WriteFile(dropIn, []byte(`
-		read_only = true
-		stateless = true
-	`), 0644)
-	s.Require().NoError(err)
-
-	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("overrides specified field", func() {
-		s.True(config.ReadOnly, "read_only should be overridden to true")
-		s.True(config.Stateless, "stateless should be overridden to true")
+	s.Run("missing directory is skipped", func() {
+		config, err := Read(s.T().Context(), mainConfigPath, "/non/existent/directory")
+		s.Require().NoError(err)
+		s.Equal(3, config.LogLevel.Get())
+		s.Equal("8080", config.Port.Get())
 	})
 
-	s.Run("preserves all other fields", func() {
-		s.Equal(1, config.LogLevel)
-		s.Equal("8080", config.Port)
-		s.Equal("table", config.ListOutput)
-		s.Equal([]string{"core", "config", "helm"}, config.Toolsets)
+	s.Run("empty directory is skipped", func() {
+		config, err := Read(s.T().Context(), mainConfigPath, s.T().TempDir())
+		s.Require().NoError(err)
+		s.Equal(3, config.LogLevel.Get())
+		s.Equal("8080", config.Port.Get())
 	})
 }
 
@@ -484,62 +491,57 @@ func (s *ConfigSuite) TestDropInConfigWithArrays() {
 	s.Require().NotNil(config)
 
 	s.Run("replaces arrays completely", func() {
-		s.Equal([]string{"helm", "logs"}, config.Toolsets, "toolsets should be completely replaced")
-		s.Equal([]string{"tool1", "tool2"}, config.EnabledTools, "enabled_tools should be preserved")
+		s.Equal([]string{"helm", "logs"}, config.Toolsets.Get(), "toolsets should be completely replaced")
+		s.Equal([]string{"tool1", "tool2"}, config.EnabledTools.Get(), "enabled_tools should be preserved")
 	})
 }
 
-func (s *ConfigSuite) TestDefaultConfDResolution() {
-	// Create a temp directory structure:
-	// tempDir/
-	//   config.toml
-	//   conf.d/
-	//     10-override.toml
+func (s *ConfigSuite) TestSiblingConfDNotLoadedWithoutConfigDir() {
 	tempDir := s.T().TempDir()
 
-	// Create main config file
 	mainConfigPath := filepath.Join(tempDir, "config.toml")
 	s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
 		log_level = 1
 		port = "8080"
 	`), 0644))
 
-	// Create default conf.d directory
 	confDDir := filepath.Join(tempDir, "conf.d")
 	s.Require().NoError(os.Mkdir(confDDir, 0755))
 
-	// Create drop-in file in conf.d
-	dropIn := filepath.Join(confDDir, "10-override.toml")
-	s.Require().NoError(os.WriteFile(dropIn, []byte(`
-		log_level = 5
-		port = "9090"
-	`), 0644))
-
-	// Read config WITHOUT specifying drop-in directory - should auto-discover conf.d
-	config, err := Read(s.T().Context(), mainConfigPath, "")
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("auto-discovers conf.d relative to config file", func() {
-		s.Equal(5, config.LogLevel, "log_level should be overridden by conf.d/10-override.toml")
-		s.Equal("9090", config.Port, "port should be overridden by conf.d/10-override.toml")
+	s.Run("empty sibling conf.d is ignored", func() {
+		cfg, err := Read(s.T().Context(), mainConfigPath, "")
+		s.Require().NoError(err)
+		s.Equal(1, cfg.LogLevel.Get())
+		s.Equal("8080", cfg.Port.Get())
 	})
-}
 
-func (s *ConfigSuite) TestDefaultConfDNotExist() {
-	// When conf.d doesn't exist, config should still load without error
-	mainConfigPath := s.writeConfig(`
-		log_level = 3
-		port = "8080"
-	`)
+	s.Run("ignored files in sibling conf.d do not fail the load", func() {
+		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "README.md"), []byte("notes"), 0644))
+		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, ".hidden.toml"), []byte(`port = "1111"`), 0644))
+		cfg, err := Read(s.T().Context(), mainConfigPath, "")
+		s.Require().NoError(err)
+		s.Equal("8080", cfg.Port.Get())
+	})
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
-	s.Require().NoError(err, "Should not error when default conf.d doesn't exist")
-	s.Require().NotNil(config)
+	s.Run("leftover .toml files fail the load", func() {
+		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "10-override.toml"), []byte(`
+			log_level = 5
+			port = "9090"
+		`), 0644))
+		cfg, err := Read(s.T().Context(), mainConfigPath, "")
+		s.Require().Error(err)
+		s.Nil(cfg)
+		s.Contains(err.Error(), "no longer loaded automatically")
+		s.Contains(err.Error(), "--config-dir")
+		s.Contains(err.Error(), "10-override.toml")
+		s.Contains(err.Error(), confDDir)
+	})
 
-	s.Run("loads main config when conf.d doesn't exist", func() {
-		s.Equal(3, config.LogLevel)
-		s.Equal("8080", config.Port)
+	s.Run("explicit --config-dir still loads sibling conf.d", func() {
+		cfg, err := Read(s.T().Context(), mainConfigPath, confDDir)
+		s.Require().NoError(err)
+		s.Equal(5, cfg.LogLevel.Get())
+		s.Equal("9090", cfg.Port.Get())
 	})
 }
 
@@ -568,94 +570,34 @@ func (s *ConfigSuite) TestStandaloneConfigDir() {
 	s.Require().NotNil(config)
 
 	s.Run("loads config from drop-in directory only", func() {
-		s.Equal(5, config.LogLevel, "log_level should be from 20-override.toml")
-		s.Equal("8080", config.Port, "port should be from 10-base.toml")
-		s.Equal("yaml", config.ListOutput, "list_output should be from 20-override.toml")
-		s.Equal([]string{"core"}, config.Toolsets, "toolsets should be from 10-base.toml")
+		s.Equal(5, config.LogLevel.Get(), "log_level should be from 20-override.toml")
+		s.Equal("8080", config.Port.Get(), "port should be from 10-base.toml")
+		s.Equal("yaml", config.ListOutput.Get(), "list_output should be from 20-override.toml")
+		s.Equal([]string{"core"}, config.Toolsets.Get(), "toolsets should be from 10-base.toml")
+		s.Equal(s.defaults.ReadOnly.Get(), config.ReadOnly.Get(), "unset fields keep defaults")
 	})
 }
 
-func (s *ConfigSuite) TestStandaloneConfigDirPreservesDefaults() {
-	// Test that defaults are preserved when using standalone --config-dir
-	tempDir := s.T().TempDir()
-
-	// Create a drop-in file with only partial config
-	dropIn := filepath.Join(tempDir, "10-partial.toml")
-	s.Require().NoError(os.WriteFile(dropIn, []byte(`
-		port = "9999"
-	`), 0644))
-
-	config, err := Read(s.T().Context(), "", tempDir)
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("preserves default values", func() {
-		s.Equal("9999", config.Port, "port should be from drop-in")
-		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
-		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should be default")
+func (s *ConfigSuite) TestStandaloneConfigDirAbsent() {
+	s.Run("empty directory returns defaults", func() {
+		config, err := Read(s.T().Context(), "", s.T().TempDir())
+		s.Require().NoError(err)
+		s.Equal(s.defaults.ListOutput.Get(), config.ListOutput.Get())
+		s.Equal(s.defaults.Toolsets.Get(), config.Toolsets.Get())
 	})
-}
 
-func (s *ConfigSuite) TestStandaloneConfigDirEmpty() {
-	// Test standalone --config-dir with empty directory
-	tempDir := s.T().TempDir()
-
-	config, err := Read(s.T().Context(), "", tempDir)
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("returns defaults for empty directory", func() {
-		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
-		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should be default")
+	s.Run("missing directory returns defaults", func() {
+		config, err := Read(s.T().Context(), "", "/non/existent/directory")
+		s.Require().NoError(err)
+		s.Equal(s.defaults.ListOutput.Get(), config.ListOutput.Get())
 	})
-}
 
-func (s *ConfigSuite) TestStandaloneConfigDirNonExistent() {
-	// Test standalone --config-dir with non-existent directory
-	config, err := Read(s.T().Context(), "", "/non/existent/directory")
-	s.Require().NoError(err, "Should not error for non-existent directory")
-	s.Require().NotNil(config)
-
-	s.Run("returns defaults for non-existent directory", func() {
-		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
-	})
-}
-
-func (s *ConfigSuite) TestConfigDirOverridesDefaultConfD() {
-	// Test that explicit --config-dir overrides default conf.d
-	tempDir := s.T().TempDir()
-
-	// Create main config file
-	mainConfigPath := filepath.Join(tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
-		log_level = 1
-		port = "8080"
-	`), 0644))
-
-	// Create default conf.d directory with a drop-in
-	confDDir := filepath.Join(tempDir, "conf.d")
-	s.Require().NoError(os.Mkdir(confDDir, 0755))
-	s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "10-default.toml"), []byte(`
-		log_level = 99
-		port = "1111"
-	`), 0644))
-
-	// Create custom drop-in directory
-	customDir := filepath.Join(tempDir, "custom.d")
-	s.Require().NoError(os.Mkdir(customDir, 0755))
-	s.Require().NoError(os.WriteFile(filepath.Join(customDir, "10-custom.toml"), []byte(`
-		log_level = 5
-		port = "9090"
-	`), 0644))
-
-	// Read with explicit config-dir (should override default conf.d)
-	config, err := Read(s.T().Context(), mainConfigPath, customDir)
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("uses explicit config-dir instead of default conf.d", func() {
-		s.Equal(5, config.LogLevel, "log_level should be from custom.d, not conf.d")
-		s.Equal("9090", config.Port, "port should be from custom.d, not conf.d")
+	s.Run("both paths empty returns defaults", func() {
+		config, err := Read(s.T().Context(), "", "")
+		s.Require().NoError(err)
+		s.Equal(s.defaults.ListOutput.Get(), config.ListOutput.Get())
+		s.Equal(s.defaults.Toolsets.Get(), config.Toolsets.Get())
+		s.Equal(s.defaults.LogLevel.Get(), config.LogLevel.Get())
 	})
 }
 
@@ -721,8 +663,8 @@ func (s *ConfigSuite) TestAbsoluteDropInConfigDir() {
 	s.Require().NotNil(config)
 
 	s.Run("loads from absolute drop-in path", func() {
-		s.Equal(9, config.LogLevel, "log_level should be from absolute path drop-in")
-		s.Equal("7777", config.Port, "port should be from absolute path drop-in")
+		s.Equal(9, config.LogLevel.Get(), "log_level should be from absolute path drop-in")
+		s.Equal("7777", config.Port.Get(), "port should be from absolute path drop-in")
 	})
 }
 
@@ -760,7 +702,7 @@ func (s *ConfigSuite) TestDeepMerge() {
 			"key3": "value3",
 		}
 
-		deepMerge(dst, src)
+		deepMerge(dst, src, "src.toml", map[string]string{}, "")
 
 		s.Equal("value1", dst["key1"], "existing key should be preserved")
 		s.Equal("overridden", dst["key2"], "overlapping key should be overridden")
@@ -781,7 +723,7 @@ func (s *ConfigSuite) TestDeepMerge() {
 			},
 		}
 
-		deepMerge(dst, src)
+		deepMerge(dst, src, "src.toml", map[string]string{}, "")
 
 		nested := dst["nested"].(map[string]interface{})
 		s.Equal("original-a", nested["a"], "nested key not in src should be preserved")
@@ -797,7 +739,7 @@ func (s *ConfigSuite) TestDeepMerge() {
 			"key": "now-a-string",
 		}
 
-		deepMerge(dst, src)
+		deepMerge(dst, src, "src.toml", map[string]string{}, "")
 
 		s.Equal("now-a-string", dst["key"], "map should be replaced by string")
 	})
@@ -810,7 +752,7 @@ func (s *ConfigSuite) TestDeepMerge() {
 			"array": []interface{}{"x", "y"},
 		}
 
-		deepMerge(dst, src)
+		deepMerge(dst, src, "src.toml", map[string]string{}, "")
 
 		s.Equal([]interface{}{"x", "y"}, dst["array"], "arrays should be replaced, not merged")
 	})
@@ -836,7 +778,7 @@ func (s *ConfigSuite) TestDeepMerge() {
 			},
 		}
 
-		deepMerge(dst, src)
+		deepMerge(dst, src, "src.toml", map[string]string{}, "")
 
 		level3 := dst["level1"].(map[string]interface{})["level2"].(map[string]interface{})["level3"].(map[string]interface{})
 		s.Equal("overridden", level3["deep"], "deeply nested key should be overridden")
@@ -868,154 +810,50 @@ func (s *ConfigSuite) TestDropInWithDeniedResources() {
 		]
 	`), 0644))
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
 	s.Run("drop-in replaces denied_resources array", func() {
-		s.Len(config.DeniedResources, 2, "denied_resources should have 2 entries from drop-in")
-		s.Contains(config.DeniedResources, api.GroupVersionKind{
+		s.Len(config.DeniedResources.Get(), 2, "denied_resources should have 2 entries from drop-in")
+		s.Contains(config.DeniedResources.Get(), GroupVersionKind{
 			Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole",
 		})
-		s.Contains(config.DeniedResources, api.GroupVersionKind{
+		s.Contains(config.DeniedResources.Get(), GroupVersionKind{
 			Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding",
 		})
 	})
 
 	s.Run("original denied_resources from main config are replaced", func() {
-		s.NotContains(config.DeniedResources, api.GroupVersionKind{
+		s.NotContains(config.DeniedResources.Get(), GroupVersionKind{
 			Group: "apps", Version: "v1", Kind: "Deployment",
 		}, "original entry should be replaced by drop-in")
 	})
 }
 
-func (s *ConfigSuite) TestRelativeConfigDirPath() {
-	// Test that relative --config-dir paths are resolved relative to --config file
+func (s *ConfigSuite) TestRelativeConfigAndConfigDirAreIndependent() {
 	tempDir := s.T().TempDir()
+	s.T().Chdir(tempDir)
 
-	// Create main config in a subdirectory
-	configSubDir := filepath.Join(tempDir, "etc", "kmcp")
+	configSubDir := filepath.Join("etc", "kmcp")
 	s.Require().NoError(os.MkdirAll(configSubDir, 0755))
-	mainConfigPath := filepath.Join(configSubDir, "config.toml")
-	s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
+	s.Require().NoError(os.WriteFile(filepath.Join(configSubDir, "config.toml"), []byte(`
 		log_level = 1
 	`), 0644))
 
-	// Create a custom drop-in dir relative to config (sibling directory)
-	customDropInDir := filepath.Join(configSubDir, "overrides.d")
-	s.Require().NoError(os.Mkdir(customDropInDir, 0755))
-	s.Require().NoError(os.WriteFile(filepath.Join(customDropInDir, "10-override.toml"), []byte(`
+	s.Require().NoError(os.Mkdir("dropins", 0755))
+	s.Require().NoError(os.WriteFile(filepath.Join("dropins", "10-override.toml"), []byte(`
 		log_level = 7
 		port = "3333"
 	`), 0644))
 
-	// Use relative path for config-dir
-	config, err := Read(s.T().Context(), mainConfigPath, "overrides.d")
+	config, err := Read(s.T().Context(), filepath.Join("etc", "kmcp", "config.toml"), "dropins")
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
-	s.Run("resolves relative config-dir against config file directory", func() {
-		s.Equal(7, config.LogLevel, "log_level should be from overrides.d")
-		s.Equal("3333", config.Port, "port should be from overrides.d")
-	})
-}
-
-func (s *ConfigSuite) TestBothConfigAndConfigDirEmpty() {
-	// Edge case: Read("", "") should return defaults
-	config, err := Read(s.T().Context(), "", "")
-	s.Require().NoError(err, "Should not error when both config and config-dir are empty")
-	s.Require().NotNil(config)
-
-	s.Run("returns default configuration", func() {
-		s.Equal(s.defaults.ListOutput, config.ListOutput)
-		s.Equal(s.defaults.Toolsets, config.Toolsets)
-		s.Equal(s.defaults.LogLevel, config.LogLevel)
-	})
-}
-
-func (s *ConfigSuite) TestMultipleDropInFilesInOrder() {
-	// Comprehensive test of file ordering with many files
-	tempDir := s.T().TempDir()
-
-	// Create main config
-	mainConfigPath := filepath.Join(tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
-		log_level = 0
-		port = "initial"
-		list_output = "table"
-	`), 0644))
-
-	// Create conf.d with multiple files
-	confDDir := filepath.Join(tempDir, "conf.d")
-	s.Require().NoError(os.Mkdir(confDDir, 0755))
-
-	// Create files in non-alphabetical order to ensure sorting works
-	files := map[string]string{
-		"50-middle.toml": `port = "fifty"`,
-		"10-first.toml":  `log_level = 10`,
-		"90-last.toml":   `log_level = 90`,
-		"30-third.toml":  `list_output = "yaml"`,
-		"70-seven.toml":  `port = "seventy"`,
-	}
-
-	for name, content := range files {
-		s.Require().NoError(os.WriteFile(filepath.Join(confDDir, name), []byte(content), 0644))
-	}
-
-	config, err := Read(s.T().Context(), mainConfigPath, "")
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("processes files in lexical order", func() {
-		// log_level: main(0) -> 10-first(10) -> 90-last(90) = 90
-		s.Equal(90, config.LogLevel, "log_level should be from 90-last.toml (last to set it)")
-	})
-
-	s.Run("last file wins for each field", func() {
-		// port: main("initial") -> 50-middle("fifty") -> 70-seven("seventy") = "seventy"
-		s.Equal("seventy", config.Port, "port should be from 70-seven.toml (last to set it)")
-		// list_output: main("table") -> 30-third("yaml") = "yaml"
-		s.Equal("yaml", config.ListOutput, "list_output should be from 30-third.toml")
-	})
-}
-
-func (s *ConfigSuite) TestDropInWithNestedConfig() {
-	// Test that nested config structures (like cluster_provider_configs) merge correctly
-	tempDir := s.T().TempDir()
-
-	mainConfigPath := filepath.Join(tempDir, "config.toml")
-	s.Require().NoError(os.WriteFile(mainConfigPath, []byte(`
-		log_level = 1
-		cluster_provider_strategy = "kubeconfig"
-
-		[cluster_provider_configs.kubeconfig]
-		setting1 = "from-main"
-		setting2 = "from-main"
-	`), 0644))
-
-	confDDir := filepath.Join(tempDir, "conf.d")
-	s.Require().NoError(os.Mkdir(confDDir, 0755))
-
-	// First drop-in overrides one nested setting
-	s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "10-partial.toml"), []byte(`
-		[cluster_provider_configs.kubeconfig]
-		setting1 = "from-drop-in-1"
-	`), 0644))
-
-	// Second drop-in overrides another nested setting
-	s.Require().NoError(os.WriteFile(filepath.Join(confDDir, "20-partial.toml"), []byte(`
-		[cluster_provider_configs.kubeconfig]
-		setting2 = "from-drop-in-2"
-		setting3 = "new-in-drop-in-2"
-	`), 0644))
-
-	config, err := Read(s.T().Context(), mainConfigPath, "")
-	s.Require().NoError(err)
-	s.Require().NotNil(config)
-
-	s.Run("merges nested config from multiple drop-ins", func() {
-		// The raw ClusterProviderConfigs should have all merged keys
-		s.NotNil(config.ClusterProviderConfigs["kubeconfig"])
+	s.Run("resolves both flags against the working directory", func() {
+		s.Equal(7, config.LogLevel.Get())
+		s.Equal("3333", config.Port.Get())
 	})
 }
 
@@ -1035,16 +873,16 @@ func (s *ConfigSuite) TestEmptyConfigFile() {
 		port = "9999"
 	`), 0644))
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, confDDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
 	s.Run("applies drop-in on top of defaults when main config is empty", func() {
-		s.Equal(5, config.LogLevel, "log_level should be from drop-in")
-		s.Equal("9999", config.Port, "port should be from drop-in")
+		s.Equal(5, config.LogLevel.Get(), "log_level should be from drop-in")
+		s.Equal("9999", config.Port.Get(), "port should be from drop-in")
 		// Defaults should still be applied for unset values
-		s.Equal(s.defaults.ListOutput, config.ListOutput, "list_output should be default")
-		s.Equal(s.defaults.Toolsets, config.Toolsets, "toolsets should be default")
+		s.Equal(s.defaults.ListOutput.Get(), config.ListOutput.Get(), "list_output should be default")
+		s.Equal(s.defaults.Toolsets.Get(), config.Toolsets.Get(), "toolsets should be default")
 	})
 }
 
@@ -1062,10 +900,10 @@ func (s *ConfigSuite) TestToolOverridesParsed() {
 	s.Require().NotNil(config)
 
 	s.Run("parses tool_overrides with multiple entries", func() {
-		s.Require().Contains(config.ToolOverrides, "pods_list")
-		s.Require().Contains(config.ToolOverrides, "resources_get")
-		s.Equal("Custom pods list description", config.ToolOverrides["pods_list"].Description)
-		s.Equal("Custom resources get description", config.ToolOverrides["resources_get"].Description)
+		s.Require().Contains(config.ToolOverrides.Get(), "pods_list")
+		s.Require().Contains(config.ToolOverrides.Get(), "resources_get")
+		s.Equal("Custom pods list description", config.ToolOverrides.Get()["pods_list"].Description)
+		s.Equal("Custom resources get description", config.ToolOverrides.Get()["resources_get"].Description)
 	})
 }
 
@@ -1079,7 +917,7 @@ func (s *ConfigSuite) TestToolOverridesMatchDefaultsWhenNotSpecified() {
 	s.Require().NotNil(config)
 
 	s.Run("ToolOverrides matches defaults when not specified", func() {
-		s.Equal(s.defaults.ToolOverrides, config.ToolOverrides)
+		s.Equal(s.defaults.ToolOverrides.Get(), config.ToolOverrides.Get())
 	})
 }
 
@@ -1106,45 +944,433 @@ func (s *ConfigSuite) TestToolOverridesDropInMerge() {
 		description = "New events description"
 	`), 0644))
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, confDDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
 	s.Run("drop-in overrides existing tool override", func() {
-		s.Equal("Overridden pods description", config.ToolOverrides["pods_list"].Description)
+		s.Equal("Overridden pods description", config.ToolOverrides.Get()["pods_list"].Description)
 	})
 
 	s.Run("drop-in adds new tool override", func() {
-		s.Equal("New events description", config.ToolOverrides["events_list"].Description)
+		s.Equal("New events description", config.ToolOverrides.Get()["events_list"].Description)
 	})
 
 	s.Run("preserves tool overrides not in drop-in", func() {
-		s.Equal("Main resources description", config.ToolOverrides["resources_get"].Description)
+		s.Equal("Main resources description", config.ToolOverrides.Get()["resources_get"].Description)
 	})
 }
 
-func (s *ConfigSuite) TestStsTokenTypesParsing() {
-	s.Run("explicit values are parsed and exposed via getters", func() {
+func (s *ConfigSuite) TestTokenExchangeParsing() {
+	s.Run("nested configuration is parsed through the declarative accessor", func() {
 		configPath := s.writeConfig(`
-			sts_subject_token_type = "urn:ietf:params:oauth:token-type:jwt"
-			sts_requested_token_type = "urn:ietf:params:oauth:token-type:jwt"
+			[token_exchange]
+			strategy = "rfc8693"
+			audience = "kubernetes-api"
+			scopes = ["scope"]
+			subject_token_type = "urn:ietf:params:oauth:token-type:access_token"
+			requested_token_type = "urn:ietf:params:oauth:token-type:access_token"
+
+			[token_exchange.client_auth]
+			method = "client_secret_basic"
+			client_id = "mcp-server"
+			client_secret = "secret"
 		`)
-		config, err := Read(s.T().Context(), configPath, "")
+		cfg, err := Read(s.T().Context(), configPath, "")
 		s.Require().NoError(err)
-		s.Require().NotNil(config)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.StsSubjectTokenType)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.StsRequestedTokenType)
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.GetStsSubjectTokenType())
-		s.Equal("urn:ietf:params:oauth:token-type:jwt", config.GetStsRequestedTokenType())
+		exchange := cfg.GetTokenExchangeConfig()
+		s.Require().NotNil(exchange)
+		s.Equal("rfc8693", exchange.Strategy.Get())
+		s.Equal("kubernetes-api", exchange.Audience.Get())
+		s.Equal([]string{"scope"}, exchange.Scopes.Get())
+		s.Equal("urn:ietf:params:oauth:token-type:access_token", exchange.SubjectTokenType.Get())
+		s.Equal("urn:ietf:params:oauth:token-type:access_token", exchange.RequestedTokenType.Get())
+		s.Require().NotNil(exchange.GetClientAuth())
+		s.Equal("mcp-server", exchange.GetClientAuth().ClientID.Get())
+		s.Equal("secret", exchange.GetClientAuth().ClientSecret.Get())
 	})
 
-	s.Run("default to empty when omitted", func() {
-		configPath := s.writeConfig(``)
-		config, err := Read(s.T().Context(), configPath, "")
+	s.Run("absent block leaves token exchange disabled", func() {
+		configPath := s.writeConfig("")
+		cfg, err := Read(s.T().Context(), configPath, "")
 		s.Require().NoError(err)
-		s.Require().NotNil(config)
-		s.Empty(config.StsSubjectTokenType, "sts_subject_token_type should default to empty (rfc8693 exchanger applies access_token default)")
-		s.Empty(config.StsRequestedTokenType, "sts_requested_token_type should default to empty (rfc8693 exchanger applies access_token default)")
+		s.True(cfg.GetTokenExchangeConfig() == nil)
+	})
+
+	s.Run("removed keys identify their replacement", func() {
+		configPath := s.writeConfig(`sts_client_id = "mcp-server"`)
+		_, err := Read(s.T().Context(), configPath, "")
+		s.Require().Error(err)
+		s.Contains(err.Error(), "removed config key")
+		s.Contains(err.Error(), "sts_client_id")
+		s.Contains(err.Error(), "token_exchange.client_auth.client_id")
+	})
+
+	s.Run("unknown nested keys are rejected", func() {
+		configPath := s.writeConfig(`
+			[token_exchange]
+			strategy = "rfc8693"
+
+			[token_exchange.client_auth]
+			methd = "client_secret_basic"
+		`)
+		_, err := Read(s.T().Context(), configPath, "")
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "token_exchange.client_auth.methd")
+	})
+
+	s.Run("unknown top-level key parked in a table is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`
+[http]
+read_header_timeout = "10s"
+port = "8080"
+`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "http.port")
+	})
+
+	s.Run("unknown field in prompts is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`
+[[prompts]]
+name = "k8s-troubleshoot"
+typo = "oops"
+`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "typo")
+	})
+
+	s.Run("unknown field in confirmation_rules is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`
+[[confirmation_rules]]
+tool = "helm_uninstall"
+message = "uninstall"
+typo = "oops"
+`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "typo")
+	})
+
+	s.Run("unknown field in tool_overrides is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`
+[tool_overrides.pods_list]
+description = "list pods"
+typo = "oops"
+`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "typo")
+	})
+}
+
+func (s *ConfigSuite) TestWrongTableTypes() {
+	s.Run("http string is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`http = "invalid"`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), `config key "http"`)
+		s.Contains(err.Error(), "expected a table")
+		s.Contains(err.Error(), "string")
+	})
+	s.Run("toolset_configs string is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`toolset_configs = "invalid"`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), `config key "toolset_configs"`)
+		s.Contains(err.Error(), "expected a table")
+	})
+	s.Run("cluster_provider_configs string is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`cluster_provider_configs = "invalid"`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), `config key "cluster_provider_configs"`)
+		s.Contains(err.Error(), "expected a table")
+	})
+	s.Run("telemetry integer is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`telemetry = 1`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), `config key "telemetry"`)
+		s.Contains(err.Error(), "expected a table")
+	})
+	s.Run("token_exchange string is rejected at load, not later validation", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`token_exchange = "invalid"`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), `config key "token_exchange"`)
+		s.Contains(err.Error(), "expected a table")
+	})
+	s.Run("token_exchange.client_auth string is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`
+[token_exchange]
+client_auth = "invalid"
+`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), `config key "token_exchange.client_auth"`)
+		s.Contains(err.Error(), "expected a table")
+	})
+	s.Run("extension entry string is rejected", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`
+[toolset_configs]
+kiali = "invalid"
+`))
+		s.Require().Error(err)
+		s.Contains(err.Error(), `config key "toolset_configs.kiali"`)
+		s.Contains(err.Error(), "expected a table")
+	})
+	s.Run("empty http table is accepted", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`[http]`))
+		s.Require().NoError(err)
+		s.Equal(s.defaults.HTTP.ReadHeaderTimeout.Get(), cfg.HTTP.ReadHeaderTimeout.Get())
+	})
+	s.Run("empty http inline table is accepted", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`http = {}`))
+		s.Require().NoError(err)
+		s.Equal(s.defaults.HTTP.ReadHeaderTimeout.Get(), cfg.HTTP.ReadHeaderTimeout.Get())
+	})
+}
+
+func (s *ConfigSuite) TestClientAndWatcherEnvVars() {
+	s.Run("KUBE_CLIENT_QPS maps to kube_client_qps", func() {
+		s.T().Setenv("KUBE_CLIENT_QPS", "1000")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(float32(1000), cfg.KubeClientQPS.Get())
+		s.Equal(SourceEnv, cfg.KubeClientQPS.Source())
+	})
+	s.Run("KUBE_CLIENT_BURST maps to kube_client_burst", func() {
+		s.T().Setenv("KUBE_CLIENT_BURST", "2000")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(2000, cfg.KubeClientBurst.Get())
+		s.Equal(SourceEnv, cfg.KubeClientBurst.Source())
+	})
+	s.Run("KUBECONFIG_DEBOUNCE_WINDOW_MS maps to kubeconfig_debounce_window", func() {
+		s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(10*time.Millisecond, cfg.KubeconfigDebounceWindow.Get())
+		s.Equal(SourceEnv, cfg.KubeconfigDebounceWindow.Source())
+	})
+	s.Run("CLUSTER_STATE_POLL_INTERVAL_MS maps to cluster_state_poll_interval", func() {
+		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(50*time.Millisecond, cfg.ClusterStatePollInterval.Get())
+		s.Equal(SourceEnv, cfg.ClusterStatePollInterval.Source())
+	})
+	s.Run("CLUSTER_STATE_DEBOUNCE_WINDOW_MS maps to cluster_state_debounce_window", func() {
+		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(10*time.Millisecond, cfg.ClusterStateDebounceWindow.Get())
+		s.Equal(SourceEnv, cfg.ClusterStateDebounceWindow.Source())
+	})
+	s.Run("WORKSPACE_POLL_INTERVAL_MS maps to workspace_poll_interval", func() {
+		s.T().Setenv("WORKSPACE_POLL_INTERVAL_MS", "25")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(25*time.Millisecond, cfg.WorkspacePollInterval.Get())
+		s.Equal(SourceEnv, cfg.WorkspacePollInterval.Source())
+	})
+	s.Run("WORKSPACE_DEBOUNCE_WINDOW_MS maps to workspace_debounce_window", func() {
+		s.T().Setenv("WORKSPACE_DEBOUNCE_WINDOW_MS", "15")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal(15*time.Millisecond, cfg.WorkspaceDebounceWindow.Get())
+		s.Equal(SourceEnv, cfg.WorkspaceDebounceWindow.Source())
+	})
+}
+
+func (s *ConfigSuite) TestEnvAndSource() {
+	s.Run("env overrides TOML and records SourceEnv", func() {
+		s.T().Setenv("KUBE_CLIENT_QPS", "50")
+		cfg, err := ReadToml(s.T().Context(), []byte(`kube_client_qps = 10.0`))
+		s.Require().NoError(err)
+		s.Equal(float32(50), cfg.KubeClientQPS.Get())
+		s.Equal(SourceEnv, cfg.KubeClientQPS.Source())
+		s.Contains(cfg.KubeClientQPS.Describe(), "<Env>")
+	})
+
+	s.Run("empty env does not override TOML", func() {
+		s.T().Setenv("KUBE_CLIENT_QPS", "")
+		cfg, err := ReadToml(s.T().Context(), []byte(`kube_client_qps = 10.0`))
+		s.Require().NoError(err)
+		s.Equal(float32(10), cfg.KubeClientQPS.Get())
+		s.NotEqual(SourceEnv, cfg.KubeClientQPS.Source())
+	})
+
+	s.Run("file source is the path", func() {
+		path := s.writeConfig(`port = "9090"`)
+		cfg, err := Read(s.T().Context(), path, "")
+		s.Require().NoError(err)
+		s.Equal("9090", cfg.Port.Get())
+		s.Equal(Source(path), cfg.Port.Source())
+		s.Contains(cfg.Port.Describe(), path)
+	})
+
+	s.Run("sensitive values are redacted", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+[token_exchange.client_auth]
+client_secret = "super-secret"
+`))
+		s.Require().NoError(err)
+		s.Equal("<redacted>", cfg.TokenExchange.ClientAuth.ClientSecret.String())
+		s.Contains(cfg.TokenExchange.ClientAuth.ClientSecret.Describe(), "<redacted>")
+	})
+}
+
+func (s *ConfigSuite) TestStringValuesTrimmedOnLoad() {
+	s.Run("TOML scalar strings are trimmed", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+			port = " 8080 "
+			list_output = " yaml "
+		`))
+		s.Require().NoError(err)
+		s.Equal("8080", cfg.Port.Get())
+		s.Equal("yaml", cfg.ListOutput.Get())
+	})
+
+	s.Run("TOML string slices trim each element", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+			toolsets = [" core ", " config "]
+		`))
+		s.Require().NoError(err)
+		s.Equal([]string{"core", "config"}, cfg.Toolsets.Get())
+	})
+
+	s.Run("TOML durations trim before parse", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+			[http]
+			read_header_timeout = " 5s "
+		`))
+		s.Require().NoError(err)
+		s.Equal(5*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
+	})
+
+	s.Run("env strings are trimmed", func() {
+		s.T().Setenv(EnvTLSMinVersion, " 1.3 ")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal("1.3", cfg.TLSMinVersion.Get())
+	})
+
+	s.Run("whitespace-only difference is not a non-reloadable change", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`port = " 8080 "`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal("8080", next.Port.Get())
+	})
+}
+
+func (s *ConfigSuite) TestRejectNonReloadable() {
+	prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
+	s.Require().NoError(err)
+	_, err = ReadToml(s.T().Context(), []byte(`port = "9090"`), WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option port changed")
+	s.Contains(err.Error(), "8080")
+	s.Contains(err.Error(), "9090")
+}
+
+func (s *ConfigSuite) TestRejectNonReloadableDisableLocalhostProtection() {
+	prev, err := ReadToml(s.T().Context(), []byte(`port = "8080"`))
+	s.Require().NoError(err)
+	_, err = ReadToml(s.T().Context(), []byte(`
+		port = "8080"
+		disable_localhost_protection = true
+	`), WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option disable_localhost_protection changed")
+}
+
+func (s *ConfigSuite) TestAppsEnabledChangeRequiresRestart() {
+	prev, err := ReadToml(s.T().Context(), []byte(`apps_enabled = false`))
+	s.Require().NoError(err)
+
+	_, err = ReadToml(s.T().Context(), []byte(`apps_enabled = true`), WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option apps_enabled changed")
+}
+
+func (s *ConfigSuite) TestReloadableChangeWithPreviousSucceeds() {
+	prev, err := ReadToml(s.T().Context(), []byte(`list_output = "table"`))
+	s.Require().NoError(err)
+	next, err := ReadToml(s.T().Context(), []byte(`list_output = "yaml"`), WithPrevious(prev))
+	s.Require().NoError(err)
+	s.Equal("yaml", next.ListOutput.Get())
+}
+
+func (s *ConfigSuite) TestDump() {
+	klogState := klog.CaptureState()
+	s.T().Cleanup(klogState.Restore)
+	fs := flag.NewFlagSet("klog", flag.ContinueOnError)
+	klog.InitFlags(fs)
+	s.Require().NoError(fs.Set("v", "1"))
+	buf := &bytes.Buffer{}
+	logger := textlogger.NewLogger(textlogger.NewConfig(
+		textlogger.Verbosity(1),
+		textlogger.Output(buf),
+	))
+	klog.SetLogger(logger)
+	ctx := klog.NewContext(s.T().Context(), logger)
+
+	cfg, err := ReadToml(s.T().Context(), []byte(`
+		port = "8080"
+		[token_exchange.client_auth]
+		client_secret = "super-secret"
+	`))
+	s.Require().NoError(err)
+
+	s.Run("logs every option with sources and redacts secrets", func() {
+		cfg.Dump(ctx, nil)
+		klog.Flush()
+		logs := buf.String()
+		s.Contains(logs, "config option")
+		s.Contains(logs, `option="port"`)
+		s.Contains(logs, "8080")
+		s.Contains(logs, `option="disable_localhost_protection"`)
+		s.Contains(logs, `option="token_exchange.client_auth.client_secret"`)
+		s.Contains(logs, "<redacted>")
+		s.NotContains(logs, "super-secret")
+		s.NotContains(logs, "changed=true")
+		s.Contains(logs, `option="toolset_configs"`)
+		s.Contains(logs, `option="cluster_provider_configs"`)
+	})
+
+	s.Run("marks values that differ from previous", func() {
+		buf.Reset()
+		next, err := ReadToml(s.T().Context(), []byte(`
+			port = "8080"
+			list_output = "yaml"
+		`), WithPrevious(cfg))
+		s.Require().NoError(err)
+		next.Dump(ctx, cfg)
+		klog.Flush()
+		logs := buf.String()
+		s.Contains(logs, `option="list_output"`)
+		s.Contains(logs, "changed=true")
+		s.Contains(logs, "previous")
+		s.Contains(logs, "yaml")
+	})
+
+	s.Run("logs toolset_configs with parse source", func() {
+		buf.Reset()
+		if _, ok := toolsetConfigRegistry.parsers["dump-ext"]; !ok {
+			RegisterToolsetConfig("dump-ext", toolsetConfigForTestParser)
+		}
+		loaded, err := ReadToml(s.T().Context(), []byte(`
+[toolset_configs.dump-ext]
+enabled = true
+endpoint = "https://example.com"
+timeout = 1
+`))
+		s.Require().NoError(err)
+		loaded.Dump(ctx, nil)
+		klog.Flush()
+		logs := buf.String()
+		s.Contains(logs, `option="toolset_configs"`)
+		s.Contains(logs, "dump-ext")
+		s.Contains(logs, "<toml>")
 	})
 }
 
@@ -1153,10 +1379,10 @@ func (s *ConfigSuite) TestConfirmationRulesDefaults() {
 	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Run("default fallback is allow", func() {
-		s.Equal("allow", config.GetConfirmationFallback())
+		s.Equal("allow", config.ConfirmationFallback.Get())
 	})
 	s.Run("default rules is empty", func() {
-		s.Empty(config.GetConfirmationRules())
+		s.Empty(config.ConfirmationRules.Get())
 	})
 }
 
@@ -1185,28 +1411,28 @@ func (s *ConfigSuite) TestConfirmationRulesParsing() {
 	config, err := Read(s.T().Context(), configPath, "")
 	s.Require().NoError(err)
 	s.Run("confirmation_fallback parsed correctly", func() {
-		s.Equal("deny", config.GetConfirmationFallback())
+		s.Equal("deny", config.ConfirmationFallback.Get())
 	})
 	s.Run("all rules parsed", func() {
-		s.Len(config.GetConfirmationRules(), 4)
+		s.Len(config.ConfirmationRules.Get(), 4)
 	})
 	s.Run("tool-level rule parsed", func() {
-		r := config.GetConfirmationRules()[0]
+		r := config.ConfirmationRules.Get()[0]
 		s.Equal("helm_uninstall", r.Tool)
 		s.Equal("This will uninstall a Helm release.", r.Message)
 	})
 	s.Run("destructive rule parsed", func() {
-		r := config.GetConfirmationRules()[1]
+		r := config.ConfirmationRules.Get()[1]
 		s.Require().NotNil(r.Destructive)
 		s.True(*r.Destructive)
 	})
 	s.Run("kube-level rule parsed", func() {
-		r := config.GetConfirmationRules()[2]
+		r := config.ConfirmationRules.Get()[2]
 		s.Equal("delete", r.Verb)
 		s.Equal("kube-system", r.Namespace)
 	})
 	s.Run("kube-level rule with kind parsed", func() {
-		r := config.GetConfirmationRules()[3]
+		r := config.ConfirmationRules.Get()[3]
 		s.Equal("get", r.Verb)
 		s.Equal("Secret", r.Kind)
 	})
@@ -1216,41 +1442,37 @@ func (s *ConfigSuite) TestGetTLSConfig() {
 	s.Run("returns TOML value when env is unset", func() {
 		s.Require().NoError(os.Unsetenv(EnvTLSMinVersion))
 		s.Require().NoError(os.Unsetenv(EnvTLSCipherSuites))
-		cfg := BaseDefault()
-		cfg.TLSMinVersion = "1.3"
-		cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
-		s.Equal("1.3", cfg.GetTLSMinVersionConfig())
-		s.Equal(cfg.TLSCipherSuites, cfg.GetTLSCipherSuitesConfig())
+		cfg := New()
+		cfg.TLSMinVersion.SetForTest("1.3")
+		cfg.TLSCipherSuites.SetForTest([]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"})
+		s.Equal("1.3", cfg.TLSMinVersion.Get())
+		s.Equal(cfg.TLSCipherSuites.Get(), cfg.TLSCipherSuites.Get())
 	})
 
-	s.Run("env overrides TOML in getters", func() {
-		s.Require().NoError(os.Setenv(EnvTLSMinVersion, "1.3"))
-		s.Require().NoError(os.Setenv(EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"))
-		defer func() {
-			_ = os.Unsetenv(EnvTLSMinVersion)
-			_ = os.Unsetenv(EnvTLSCipherSuites)
-		}()
-		cfg := BaseDefault()
-		cfg.TLSMinVersion = "1.2"
-		cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
-		s.Equal("1.3", cfg.GetTLSMinVersionConfig())
-		s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, cfg.GetTLSCipherSuitesConfig())
+	s.Run("env overrides TOML at load", func() {
+		s.T().Setenv(EnvTLSMinVersion, "1.3")
+		s.T().Setenv(EnvTLSCipherSuites, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+tls_min_version = "1.2"
+tls_cipher_suites = ["TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"]
+`))
+		s.Require().NoError(err)
+		s.Equal("1.3", cfg.TLSMinVersion.Get())
+		s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, cfg.TLSCipherSuites.Get())
 	})
 
 	s.Run("parses comma-separated TLS_CIPHER_SUITES env var", func() {
-		s.Require().NoError(os.Setenv(EnvTLSCipherSuites, "SUITE_A,SUITE_B"))
-		defer func() { _ = os.Unsetenv(EnvTLSCipherSuites) }()
-
-		cfg := BaseDefault()
-		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.GetTLSCipherSuitesConfig())
+		s.T().Setenv(EnvTLSCipherSuites, "SUITE_A,SUITE_B")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.TLSCipherSuites.Get())
 	})
 
 	s.Run("trims whitespace from TLS_CIPHER_SUITES env var", func() {
-		s.Require().NoError(os.Setenv(EnvTLSCipherSuites, " SUITE_A , SUITE_B "))
-		defer func() { _ = os.Unsetenv(EnvTLSCipherSuites) }()
-
-		cfg := BaseDefault()
-		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.GetTLSCipherSuitesConfig())
+		s.T().Setenv(EnvTLSCipherSuites, " SUITE_A , SUITE_B ")
+		cfg, err := ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		s.Equal([]string{"SUITE_A", "SUITE_B"}, cfg.TLSCipherSuites.Get())
 	})
 }
 

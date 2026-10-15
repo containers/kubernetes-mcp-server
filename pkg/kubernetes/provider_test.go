@@ -60,14 +60,14 @@ func (s *ProviderTestSuite) TestNewProviderInCluster() {
 		return &rest.Config{}, nil
 	}
 	s.Run("With no cluster_provider_strategy, returns single-cluster provider", func() {
-		cfg := test.Must(config.ReadToml([]byte{}))
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte{}))
 		provider, err := NewProvider(s.T().Context(), cfg)
 		s.Require().NoError(err, "Expected no error for in-cluster provider")
 		s.NotNil(provider, "Expected provider instance")
 		s.IsType(&singleClusterProvider{}, provider, "Expected singleClusterProvider type")
 	})
 	s.Run("With cluster_provider_strategy=in-cluster, returns single-cluster provider", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "in-cluster"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
@@ -76,20 +76,30 @@ func (s *ProviderTestSuite) TestNewProviderInCluster() {
 		s.IsType(&singleClusterProvider{}, provider, "Expected singleClusterProvider type")
 	})
 	s.Run("With cluster_provider_strategy=kubeconfig, returns error", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "kubeconfig"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
 		s.Require().Error(err, "Expected error for kubeconfig strategy")
 		s.ErrorContains(err, "kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments")
-		s.ErrorContains(err, "--kubeconfig /path/to/kubeconfig --cluster-provider kubeconfig")
+		s.ErrorContains(err, "kubeconfig = \"/path/to/kubeconfig\"")
+		s.ErrorContains(err, "cluster_provider_strategy is optional")
 		s.ErrorContains(err, "docs/configuration.md#cross-cluster-access-from-a-pod")
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
 	})
+	s.Run("With kubeconfig set to valid path and no cluster_provider_strategy, returns kubeconfig provider", func() {
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+s.kubeconfigPath+`"
+		`)))
+		provider, err := NewProvider(s.T().Context(), cfg)
+		s.Require().NoError(err, "Expected no error when kubeconfig path is set")
+		s.NotNil(provider, "Expected provider instance")
+		s.IsType(&kubeConfigClusterProvider{}, provider, "Expected kubeConfigClusterProvider type")
+	})
 	s.Run("With cluster_provider_strategy=kubeconfig and kubeconfig set to valid path, returns kubeconfig provider", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "kubeconfig"
-			kubeconfig = "` + s.kubeconfigPath + `"
+			kubeconfig = "`+s.kubeconfigPath+`"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
 		s.Require().NoError(err, "Expected no error for kubeconfig strategy")
@@ -97,7 +107,7 @@ func (s *ProviderTestSuite) TestNewProviderInCluster() {
 		s.IsType(&kubeConfigClusterProvider{}, provider, "Expected kubeConfigClusterProvider type")
 	})
 	s.Run("With cluster_provider_strategy=non-existent, returns error", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "i-do-not-exist"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
@@ -113,14 +123,14 @@ func (s *ProviderTestSuite) TestNewProviderLocal() {
 	}
 	s.Require().NoError(os.Setenv("KUBECONFIG", s.kubeconfigPath))
 	s.Run("With no cluster_provider_strategy, returns kubeconfig provider", func() {
-		cfg := test.Must(config.ReadToml([]byte{}))
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte{}))
 		provider, err := NewProvider(s.T().Context(), cfg)
 		s.Require().NoError(err, "Expected no error for kubeconfig provider")
 		s.NotNil(provider, "Expected provider instance")
 		s.IsType(&kubeConfigClusterProvider{}, provider, "Expected kubeConfigClusterProvider type")
 	})
 	s.Run("With cluster_provider_strategy=kubeconfig, returns kubeconfig provider", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "kubeconfig"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
@@ -129,7 +139,7 @@ func (s *ProviderTestSuite) TestNewProviderLocal() {
 		s.IsType(&kubeConfigClusterProvider{}, provider, "Expected kubeConfigClusterProvider type")
 	})
 	s.Run("With cluster_provider_strategy=disabled, returns single-cluster provider", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "disabled"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
@@ -138,7 +148,7 @@ func (s *ProviderTestSuite) TestNewProviderLocal() {
 		s.IsType(&singleClusterProvider{}, provider, "Expected singleClusterProvider type")
 	})
 	s.Run("With cluster_provider_strategy=in-cluster, returns error", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "in-cluster"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
@@ -147,8 +157,8 @@ func (s *ProviderTestSuite) TestNewProviderLocal() {
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
 	})
 	s.Run("With cluster_provider_strategy=in-cluster and kubeconfig set to valid path, returns error", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
-			kubeconfig = "` + s.kubeconfigPath + `"
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+s.kubeconfigPath+`"
 			cluster_provider_strategy = "in-cluster"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)
@@ -157,7 +167,7 @@ func (s *ProviderTestSuite) TestNewProviderLocal() {
 		s.Nilf(provider, "Expected no provider instance, got %v", provider)
 	})
 	s.Run("With cluster_provider_strategy=non-existent, returns error", func() {
-		cfg := test.Must(config.ReadToml([]byte(`
+		cfg := test.Must(config.ReadToml(s.T().Context(), []byte(`
 			cluster_provider_strategy = "i-do-not-exist"
 		`)))
 		provider, err := NewProvider(s.T().Context(), cfg)

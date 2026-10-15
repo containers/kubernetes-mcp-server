@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/confirmation"
@@ -31,11 +32,28 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 	if inputSchema.Properties == nil {
 		inputSchema.Properties = make(map[string]*jsonschema.Schema)
 	}
+
+	meta := tool.Tool.Meta
+	if _, exists := meta[api.RBACMetadataKey]; exists {
+		return nil, nil, fmt.Errorf("tool %q: %q metadata must be declared through ServerTool.RBAC", tool.Tool.Name, api.RBACMetadataKey)
+	}
+
+	if tool.RBAC != nil {
+		if err := tool.RBAC.Validate(); err != nil {
+			return nil, nil, fmt.Errorf("tool %q: invalid RBAC metadata: %w", tool.Tool.Name, err)
+		}
+		meta = maps.Clone(meta)
+		if meta == nil {
+			meta = make(map[string]any)
+		}
+		meta[api.RBACMetadataKey] = tool.RBAC
+	}
+
 	goSdkTool := &mcp.Tool{
 		Name:        tool.Tool.Name,
 		Description: tool.Tool.Description,
 		Title:       tool.Tool.Annotations.Title,
-		Meta:        mcp.Meta(tool.Tool.Meta),
+		Meta:        mcp.Meta(meta),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           tool.Tool.Annotations.Title,
 			ReadOnlyHint:    ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false),
@@ -66,11 +84,11 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 			return nil, fmt.Errorf("%v for tool %s", err, tool.Tool.Name)
 		}
 		// Snapshot the live configuration once so a concurrent reload
-		// can't split BaseConfig and ListOutput across two configs.
+		// can't split Config and ListOutput across two configs.
 		cfg := s.configuration.Load()
 		// Check confirmation rules before executing the tool
 		if confirmErr := confirmation.CheckToolRules(
-			ctx, cfg, &sessionElicitor{},
+			ctx, cfg.ConfirmationRules.Get(), cfg.ConfirmationFallback.Get(), &sessionElicitor{},
 			tool.Tool.Name, tool.Tool.Annotations.DestructiveHint,
 		); confirmErr != nil {
 			return NewTextResult("", confirmErr), nil
@@ -78,7 +96,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 
 		// get the correct derived Kubernetes client for the target specified in the request
 		cluster := toolCallRequest.GetString(s.p.GetTargetParameterName(), s.p.GetDefaultTarget())
-		k, err := s.p.GetDerivedKubernetes(ctx, cluster)
+		params, err := newHandlerParams(s, ctx, cfg, api.ToolCallRequest(toolCallRequest), cluster)
 		if err != nil {
 			if errors.Is(err, kubernetes.ErrUnknownTarget) {
 				return NewTextResult("", fmt.Errorf("target %q: %w", cluster, err)), nil
@@ -86,20 +104,17 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 			return nil, err
 		}
 
-		result, err := tool.Handler(api.ToolHandlerParams{
-			Context:           ctx,
-			BaseConfig:        cfg,
-			KubernetesClient:  k,
-			FilteringProvider: s.p,
-			ToolCallRequest:   toolCallRequest,
-			ListOutput:        cfg.ListOutput(),
-			Elicitor:          &sessionElicitor{},
-		})
+		result, err := tool.Handler(api.ToolHandlerParams(params))
 		if err != nil {
 			return nil, err
 		}
 		if result.Error != nil {
 			mcplog.HandleK8sError(ctx, result.Error, tool.Tool.Name)
+		}
+		// If result has multi-content blocks, use the multi-content converter;
+		// otherwise fall back to legacy Content field.
+		if len(result.ContentBlocks) > 0 {
+			return NewMultiContentResult(result.ContentBlocks, result.StructuredContent, result.Error), nil
 		}
 		return NewStructuredResult(result.Content, result.StructuredContent, result.Error), nil
 	}

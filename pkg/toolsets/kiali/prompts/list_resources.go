@@ -1,22 +1,24 @@
 package prompts
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
-func InitListApplications() []api.ServerPrompt {
+func InitListApplications(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "mesh-list-applications",
 				Title:       "List Mesh Applications",
 				Description: "List applications in the mesh namespaces",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Optional namespace to filter applications (default: all namespaces)",
@@ -24,32 +26,34 @@ func InitListApplications() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("app"),
 		},
 	}
 }
 
-func InitListNamespaces() []api.ServerPrompt {
+func InitListNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "mesh-list-namespaces",
 				Title:       "List Mesh Namespaces",
 				Description: "List all namespaces with their sidecar injection status and Istio labels",
 			},
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("namespace"),
 		},
 	}
 }
 
-func InitListServices() []api.ServerPrompt {
+func InitListServices(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "mesh-list-services",
 				Title:       "List Mesh Services",
 				Description: "List services in the mesh namespaces",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Optional namespace to filter services (default: all namespaces)",
@@ -57,19 +61,20 @@ func InitListServices() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("service"),
 		},
 	}
 }
 
-func InitListWorkloads() []api.ServerPrompt {
+func InitListWorkloads(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "mesh-list-workloads",
 				Title:       "List Mesh Workloads",
 				Description: "List workloads in the mesh namespaces",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Optional namespace to filter workloads (default: all namespaces)",
@@ -77,6 +82,7 @@ func InitListWorkloads() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:    tools.ResourcesRBAC(ctx, inspector),
 			Handler: listResourceHandler("workload"),
 		},
 	}
@@ -85,11 +91,11 @@ func InitListWorkloads() []api.ServerPrompt {
 func InitListIstioConfig() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "list-istio-config",
 				Title:       "List Istio Configuration",
 				Description: "List Istio configuration resources in the mesh namespaces",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Optional namespace to filter Istio configuration (default: all namespaces)",
@@ -97,6 +103,7 @@ func InitListIstioConfig() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:    tools.IstioConfigReadRBAC(),
 			Handler: listIstioConfigHandler,
 		},
 	}
@@ -113,7 +120,10 @@ func listIstioConfigHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 		reqArgs["namespace"] = namespace
 	}
 
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return nil, err
+	}
 	content, err := kiali.ExecuteRequest(params.Context, tools.KialiManageIstioConfigReadEndpoint, reqArgs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list istio config: %w", err)
@@ -156,11 +166,12 @@ Summarize the Istio configuration listed above. Highlight any that need attentio
 func InitMeshTopology() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "mesh-topology",
 				Title:       "Mesh Topology Overview",
 				Description: "Show the mesh topology including control plane components and cluster connectivity",
 			},
+			RBAC:    tools.MeshStatusRBAC(),
 			Handler: meshTopologyHandler,
 		},
 	}
@@ -178,7 +189,10 @@ func listResourceHandler(resourceType string) api.PromptHandlerFunc {
 			reqArgs["namespaces"] = namespace
 		}
 
-		kiali := kialiclient.NewKiali(params, params.RESTConfig())
+		kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+		if err != nil {
+			return nil, err
+		}
 		content, err := kiali.ExecuteRequest(params.Context, tools.KialiListOrGetResourcesEndpoint, reqArgs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list %s: %w", resourceType, err)
@@ -222,7 +236,10 @@ Summarize the %s listed above. Highlight any that need attention.
 func meshTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 	klogutil.FromContext(params.Context).Info("Starting mesh topology prompt...")
 
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return nil, err
+	}
 
 	statusContent := fetchKialiData(kiali, params, tools.KialiGetMeshStatusEndpoint, nil)
 

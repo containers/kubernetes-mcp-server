@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -19,11 +20,11 @@ import (
 func pipelineTroubleshootPrompts() []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "pipeline-troubleshoot",
 				Title:       "Tekton PipelineRun Troubleshoot",
 				Description: "Gather PipelineRun status, its Pipeline definition, TaskRuns, failed or errored step logs, warning events, Pipeline-as-Code Repository, and TektonConfig context for Tekton troubleshooting",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Namespace of the PipelineRun to troubleshoot",
@@ -36,6 +37,43 @@ func pipelineTroubleshootPrompts() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelineruns"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"get"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelines"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "taskruns"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"get"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods", Subresource: "log"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "events"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "pipelinesascode.tekton.dev", Resource: "repositories"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:  []string{"list"},
+					Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "operator.tekton.dev", Resource: "tektonconfigs"}},
+				},
+			),
 			Handler: pipelineTroubleshootHandler,
 		},
 	}

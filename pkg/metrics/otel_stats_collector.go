@@ -78,33 +78,29 @@ type CollectorConfig struct {
 	Telemetry *config.TelemetryConfig
 }
 
-// createMetricsExporter creates an OTLP metrics exporter.
-// If cfg is provided and enabled, uses config values; otherwise falls back to env vars.
+// createMetricsExporter creates an OTLP metrics exporter from the loaded TelemetryConfig.
 // Returns nil if:
-//   - OTEL_METRICS_EXPORTER is set to "none" (env var always takes precedence)
-//   - No endpoint is configured (neither in config nor env vars)
+//   - metrics exporter is set to "none"
+//   - telemetry is not enabled or no endpoint is configured
 //
 // When nil is returned, metrics will only be collected in-memory for the /stats endpoint.
 func createMetricsExporter(ctx context.Context, cfg *config.TelemetryConfig) (sdkmetric.Exporter, error) {
 	logger := klogutil.FromContext(ctx)
 
-	if strings.ToLower(os.Getenv("OTEL_METRICS_EXPORTER")) == "none" {
+	if cfg == nil {
+		return nil, nil
+	}
+	if strings.ToLower(cfg.MetricsExporter.Get()) == "none" {
 		logger.V(2).Info("OTLP metrics export disabled via OTEL_METRICS_EXPORTER=none")
 		return nil, nil
 	}
-
-	// use config if provided and enabled, otherwise env vars
-	var protocol string
-	var endpoint string
-	if cfg != nil && cfg.IsEnabled() {
-		protocol = strings.ToLower(cfg.GetProtocol())
-		endpoint = cfg.GetEndpoint()
-	} else {
-		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-		if endpoint == "" {
-			return nil, nil // No export configured
-		}
-		protocol = strings.ToLower(os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
+	if !cfg.IsEnabled() {
+		return nil, nil
+	}
+	protocol := strings.ToLower(cfg.Protocol.Get())
+	endpoint := cfg.Endpoint.Get()
+	if endpoint == "" {
+		return nil, nil
 	}
 
 	switch protocol {
@@ -129,7 +125,6 @@ func createMetricsExporter(ctx context.Context, cfg *config.TelemetryConfig) (sd
 }
 
 // NewOtelStatsCollector creates a new OtelStatsCollector with ManualReader.
-// If OTEL_EXPORTER_OTLP_ENDPOINT is set, metrics will also be exported to OTLP.
 func NewOtelStatsCollector(meterName string) (*OtelStatsCollector, error) {
 	return NewOtelStatsCollectorWithConfig(context.Background(), CollectorConfig{
 		MeterName:      meterName,

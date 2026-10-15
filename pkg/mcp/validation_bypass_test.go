@@ -2,9 +2,9 @@ package mcp
 
 import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,9 +29,9 @@ type ValidationBypassSuite struct {
 }
 
 func (s *ValidationBypassSuite) TestValidationDisabledPassesToAPIServer() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		validation_enabled = false
-	`), s.Cfg), "Expected to parse validation config")
+	`)
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
 	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
@@ -50,9 +50,9 @@ func (s *ValidationBypassSuite) TestValidationDisabledPassesToAPIServer() {
 }
 
 func (s *ValidationBypassSuite) TestValidationEnabledCatchesRBACDenial() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		validation_enabled = true
-	`), s.Cfg), "Expected to parse validation config")
+	`)
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
 	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -60,9 +59,13 @@ func (s *ProviderCloseTestSuite) SetupTest() {
 		kubeconfig.Contexts[name].Cluster = "fake"
 		kubeconfig.Contexts[name].AuthInfo = "fake"
 	}
-	cfg := &config.StaticConfig{KubeConfig: test.KubeconfigFile(s.T(), kubeconfig)}
+	cfg := func() *config.Config {
+		c := config.New()
+		c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+		return c
+	}()
 
-	singleProvider, err := newSingleClusterProvider(api.ClusterProviderDisabled)(s.T().Context(), cfg)
+	singleProvider, err := newSingleClusterProvider(config.ClusterProviderDisabled)(s.T().Context(), cfg)
 	s.Require().NoError(err)
 	kubeconfigProvider, err := newKubeConfigClusterProvider(s.T().Context(), cfg)
 	s.Require().NoError(err)

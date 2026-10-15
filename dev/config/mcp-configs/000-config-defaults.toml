@@ -1,3 +1,7 @@
 # !CAUTION! Destructive mode enabled by default for development.
 read_only = false
 disable_destructive = false
+
+# Evals run the server out-of-cluster; pin the kubeconfig provider so an
+# in-cluster environment cannot take over. Override in a later drop-in if needed.
+cluster_provider_strategy = "kubeconfig"

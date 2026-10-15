@@ -84,7 +84,7 @@ func getHTTPRoute(path string) string {
 // SIGHUP-reloaded values take effect immediately. When enabled, X-Forwarded-*
 // and X-Real-IP headers are used for client IP and scheme detection. Only
 // enable when behind a trusted reverse proxy.
-func RequestMiddleware(cfgState *config.StaticConfigState) func(http.Handler) http.Handler {
+func RequestMiddleware(cfgState *config.ConfigState) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip tracing for health checks
@@ -93,7 +93,7 @@ func RequestMiddleware(cfgState *config.StaticConfigState) func(http.Handler) ht
 				return
 			}
 
-			trustProxy := cfgState.Load().TrustProxyHeaders
+			trustProxy := cfgState.Load().TrustProxyHeaders.Get()
 
 			// Skip all tracing work if telemetry is not enabled
 			if !telemetry.Enabled() {
@@ -245,7 +245,7 @@ func (lrw *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) 
 // Requests exceeding the limit receive a 413 Request Entity Too Large response.
 // The max_body_bytes limit is read per request from cfgState so SIGHUP-reloaded
 // values take effect immediately.
-func MaxBodyMiddleware(cfgState *config.StaticConfigState) func(http.Handler) http.Handler {
+func MaxBodyMiddleware(cfgState *config.ConfigState) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip for methods that typically don't have bodies
@@ -254,7 +254,7 @@ func MaxBodyMiddleware(cfgState *config.StaticConfigState) func(http.Handler) ht
 				return
 			}
 
-			maxBytes := cfgState.Load().HTTP.MaxBodyBytes
+			maxBytes := cfgState.Load().HTTP.MaxBodyBytes.Get()
 			// Skip if maxBytes is 0 or negative (disabled)
 			if maxBytes <= 0 {
 				next.ServeHTTP(w, r)

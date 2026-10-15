@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
 
@@ -19,9 +19,8 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
-	mu sync.RWMutex
-	api.BaseConfig
-	*ProviderGVKFilter
+	mu                  sync.RWMutex
+	cfg                 *config.Config
 	defaultContext      string
 	managers            map[string]*Manager
 	kubeconfigWatcher   *watcher.Kubeconfig
@@ -31,34 +30,36 @@ type kubeConfigClusterProvider struct {
 var _ Provider = &kubeConfigClusterProvider{}
 
 func init() {
-	RegisterProvider(api.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
+	RegisterProvider(config.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
 }
 
 // newKubeConfigClusterProvider creates a provider that manages multiple clusters
 // via kubeconfig contexts.
 // Internally, it leverages a KubeconfigManager for each context, initializing them
 // lazily when requested.
-func newKubeConfigClusterProvider(ctx context.Context, cfg api.BaseConfig) (Provider, error) {
-	ret := &kubeConfigClusterProvider{BaseConfig: cfg}
+func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Provider, error) {
+	ret := &kubeConfigClusterProvider{cfg: cfg}
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
-	ret.ProviderGVKFilter = NewProviderGVKFilter(ret)
 	return ret, nil
 }
 
 func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.resetLocked(ctx)
+}
 
-	m, err := NewKubeconfigManager(ctx, p, "")
+func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
+	m, err := NewKubeconfigManager(ctx, p.cfg, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
 			return fmt.Errorf( //nolint:ST1005 // user-facing error with actionable multi-line guidance
 				"kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %w\n\n"+
-					"If you intend to connect to a different cluster from within a pod, provide the kubeconfig path explicitly:\n"+
-					"  --kubeconfig /path/to/kubeconfig --cluster-provider kubeconfig\n\n"+
-					"This overrides the in-cluster detection and uses the specified kubeconfig file instead.\n"+
+					"If you intend to connect to a different cluster from within a pod, set in your TOML config:\n"+
+					"  kubeconfig = \"/path/to/kubeconfig\"\n\n"+
+					"An explicit kubeconfig path overrides in-cluster detection; cluster_provider_strategy is optional.\n"+
 					"See https://github.com/containers/kubernetes-mcp-server/blob/main/docs/configuration.md#cross-cluster-access-from-a-pod",
 				err,
 			)
@@ -99,8 +100,8 @@ func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 		p.managers[name] = nil
 	}
 
-	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig)
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient())
+	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
+	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	p.defaultContext = defaultContext
 
 	return nil
@@ -130,9 +131,7 @@ func (p *kubeConfigClusterProvider) managerForContext(ctx context.Context, kubeC
 		}
 	}
 
-	baseManager := p.managers[p.defaultContext]
-
-	m, err := NewKubeconfigManager(ctx, baseManager.config, kubeContext)
+	m, err := NewKubeconfigManager(ctx, p.cfg, kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUnknownTarget, err)
 	}
@@ -163,32 +162,23 @@ func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, err
 	return p.getTargetsUnsync()
 }
 
-func (p *kubeConfigClusterProvider) GetTargetManagers(ctx context.Context) ([]*Manager, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	contextNames, err := p.getTargetsUnsync()
-	if err != nil {
-		return nil, err
-	}
-	managers := make([]*Manager, 0, len(contextNames))
-	for _, cn := range contextNames {
-		mgr, err := p.managerForContext(ctx, cn, true)
-		if err != nil {
-			return nil, err
-		}
-		managers = append(managers, mgr)
-	}
-
-	return managers, nil
-}
-
 func (p *kubeConfigClusterProvider) GetTargetParameterName() string {
 	return KubeConfigTargetParameterName
 }
 
-func (p *kubeConfigClusterProvider) GetDerivedKubernetes(ctx context.Context, context string) (*Kubernetes, error) {
-	m, err := p.managerForContext(ctx, context, false)
+func (p *kubeConfigClusterProvider) GetDerivedKubernetes(ctx context.Context, kubeContext string) (*Kubernetes, error) {
+	p.mu.RLock()
+	m, ok := p.managers[kubeContext]
+	if ok && m != nil {
+		k8s, err := m.Derived(ctx)
+		p.mu.RUnlock()
+		return k8s, err
+	}
+	p.mu.RUnlock()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	m, err := p.managerForContext(ctx, kubeContext, true)
 	if err != nil {
 		return nil, err
 	}
@@ -201,23 +191,47 @@ func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
 	return p.defaultContext
 }
 
-func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload McpReload) {
-	reloadWithReset := func() error {
-		if err := p.reset(ctx); err != nil {
-			return err
+func (p *kubeConfigClusterProvider) ReloadConfig(_ context.Context, cfg *config.Config) error {
+	if cfg == nil {
+		return errors.New("config cannot be nil")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cfg = cfg
+	return nil
+}
+
+func (p *kubeConfigClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, m := range p.managers {
+		if m != nil {
+			m.SetConfig(cfg)
 		}
-		p.WatchTargets(ctx, reload)
-		return reload()
+	}
+}
+
+func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload McpReloader) {
+	reloadWithReset := func() error {
+		return reload.Run(func() error {
+			if err := p.reset(ctx); err != nil {
+				return err
+			}
+			p.WatchTargets(ctx, reload)
+			return reload.ApplyToolsets()
+		})
 	}
 	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload)
+	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
 }
 
 // Close stops the watchers and releases every manager's HTTP transport and
-// background CA refresh loop. reset() closes replaced managers on reload;
-// this ensures shutdown (and tests that only call Close) leave nothing
-// running behind. Manager.Close is idempotent, so calling it here and in
-// reset() is safe.
+// background CA refresh loop, so shutdown (and tests that only call Close)
+// leave nothing running behind. reset() drops replaced managers through
+// this same path.
 func (p *kubeConfigClusterProvider) Close() {
 	for _, w := range []watcher.Watcher{p.kubeconfigWatcher, p.clusterStateWatcher} {
 		if !reflect.ValueOf(w).IsNil() {

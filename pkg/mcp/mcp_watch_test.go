@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,11 +25,11 @@ type WatchKubeConfigSuite struct {
 
 func (s *WatchKubeConfigSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
+	s.Cfg.KubeconfigDebounceWindow.SetForTest(10 * time.Millisecond)
 	s.mockServer = test.NewMockServer()
 	// Set up default discovery handler for non-OpenShift cluster
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		[[prompts]]
 		name = "test-prompt"
 		title = "Test Prompt"
@@ -43,8 +43,8 @@ func (s *WatchKubeConfigSuite) SetupTest() {
 		[[prompts.messages]]
 		role = "user"
 		content = "Test message with {{test_arg}}"
-	`), s.Cfg), "Expected to parse prompts config")
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	`)
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 }
 
 func (s *WatchKubeConfigSuite) TearDownTest() {
@@ -55,7 +55,7 @@ func (s *WatchKubeConfigSuite) TearDownTest() {
 }
 
 func (s *WatchKubeConfigSuite) WriteKubeconfig() {
-	f, _ := os.OpenFile(s.Cfg.KubeConfig, os.O_APPEND|os.O_WRONLY, 0644)
+	f, _ := os.OpenFile(s.Cfg.KubeConfig.Get(), os.O_APPEND|os.O_WRONLY, 0644)
 	_, _ = f.WriteString("\n")
 	_ = f.Close()
 }
@@ -111,7 +111,7 @@ func (s *WatchKubeConfigSuite) TestNotifiesPromptsChangeMultipleTimes() {
 func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
 	s.Run("with target compatibility filtering disabled", func() {
 		// When filtering is disabled, OpenShift tools are always present
-		s.Cfg.EnableTargetCompatibilityToolFilters = false
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
 		s.mockServer.Handle(test.NewInOpenShiftHandler())
 		s.InitMcpClient()
 
@@ -154,7 +154,7 @@ func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
 
 	s.Run("with target compatibility filtering enabled", func() {
 		// When filtering is enabled, OpenShift tools are dynamically filtered
-		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
 		s.mockServer.Handle(test.NewInOpenShiftHandler())
 		s.InitMcpClient()
 
@@ -205,13 +205,12 @@ type WatchClusterStateSuite struct {
 
 func (s *WatchClusterStateSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	// Configure fast polling for tests
-	s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
-	s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
+	s.Cfg.ClusterStatePollInterval.SetForTest(50 * time.Millisecond)
+	s.Cfg.ClusterStateDebounceWindow.SetForTest(10 * time.Millisecond)
 	s.mockServer = test.NewMockServer()
 	s.handler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.handler)
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 }
 
 func (s *WatchClusterStateSuite) TearDownTest() {
@@ -255,7 +254,7 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeMultipleTimes() {
 func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 	s.Run("with target compatibility filtering disabled", func() {
 		// When filtering is disabled, OpenShift tools are always present
-		s.Cfg.EnableTargetCompatibilityToolFilters = false
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
 		s.InitMcpClient()
 
 		s.Run("OpenShift tool is available even on non-OpenShift", func() {
@@ -275,7 +274,7 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 
 	s.Run("with target compatibility filtering enabled", func() {
 		// When filtering is enabled, OpenShift tools are dynamically filtered
-		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
 		s.InitMcpClient()
 
 		s.Run("OpenShift tool is not available initially", func() {
@@ -315,7 +314,7 @@ func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
 
 func (s *WatchClusterStateSuite) TestDetectsMetricsServerClusterStateChange() {
 	s.Run("with target compatibility filtering enabled", func() {
-		s.Cfg.EnableTargetCompatibilityToolFilters = true
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
 		s.InitMcpClient()
 
 		s.Run("metrics tools are not available initially", func() {

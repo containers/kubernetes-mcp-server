@@ -7,6 +7,7 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 - [Core tasks](core/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
 - [Config tasks](config/) – workflows that exercise the configuration toolset (contexts, current config).
 - [Helm tasks](helm/) – workflows that exercise the Helm toolset (install, list, uninstall releases).
+- [ArgoCD tasks](argocd/) – GitOps workflows that exercise ArgoCD CRDs (Application, AppProject, ApplicationSet, ArgoCD instance management).
 - [Kiali tasks](kiali/) – service-mesh and observability workflows that exercise the Kiali MCP toolset (Istio config, topology, mesh health, tracing).
 - [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
 - [Tekton tasks](tekton/) – CI/CD workflows that exercise the Tekton toolset (pipelines, tasks, pipeline runs).
@@ -42,3 +43,19 @@ When a new MCP toolset lands, keep its evaluations isolated by creating a siblin
 3. Any shared fixtures the stack needs (place them in a `shared/` subdirectory if multiple scenarios reuse them).
 
 This structure keeps task stacks discoverable and lets eval harnesses target toolset-specific workflows without mixing concerns from the core Kubernetes or Kiali libraries.
+
+## Reusing Tasks Across Suites
+
+Tasks are selected by `metadata.labels`, which is a map — a task can carry
+more than one label, so it can belong to its primary `suite` (`core`,
+`config`, ...) and *also* be picked up by an orthogonal eval config without
+duplicating its content into a new file.
+
+The `core-readonly` suite (see `../core-eval-testing/*/eval-core-readonly.yaml`)
+uses this pattern: read-only-compatible tasks from `core` and `config` are
+tagged with an additional `readonly: "true"` label, and the `core-readonly`
+eval config selects on that label alone (not `suite`). The task files
+themselves are unmodified except for the one extra label line — no copies are
+made. See [Read-only suite](../README.md#read-only-suite-core-readonly) for
+the full pattern, including why write-blocking itself is verified by a Go
+test (`pkg/mcp/mcp_tools_test.go`) rather than an eval task.

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
-func initNodes(p api.FilteringProvider) []api.ServerTool {
+func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "nodes_log",
@@ -47,7 +48,21 @@ func initNodes(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: nodesLog},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:        []string{"get"},
+				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "nodes"}},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+			api.RBACRequirement{
+				Verbs: []string{"get"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+					Resource:    "nodes",
+					Subresource: "proxy",
+				}},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+		), Handler: nodesLog},
 		{Tool: api.Tool{
 			Name:        "nodes_stats_summary",
 			Description: "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
@@ -67,7 +82,21 @@ func initNodes(p api.FilteringProvider) []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: nodesStatsSummary},
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs:        []string{"get"},
+				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "nodes"}},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+			api.RBACRequirement{
+				Verbs: []string{"get"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+					Resource:    "nodes",
+					Subresource: "proxy",
+				}},
+				ResourceName: &api.RBACResourceName{Argument: "name"},
+			},
+		), Handler: nodesStatsSummary},
 		{Tool: api.Tool{
 			Name:        "nodes_top",
 			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster",
@@ -92,9 +121,21 @@ func initNodes(p api.FilteringProvider) []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: nodesTop,
+		}, RBAC: api.RBACBounded(
+			api.RBACRequirement{
+				Verbs: []string{"get", "list"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{
+					APIGroup: "metrics.k8s.io",
+					Resource: "nodes",
+				}},
+			},
+			api.RBACRequirement{
+				Verbs:  []string{"list"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "nodes"}},
+			},
+		), Handler: nodesTop,
 			TargetCompatibilityFilters: []func() bool{
-				kubernetes.HasNodeMetrics(p),
+				kubernetes.HasNodeMetrics(ctx, inspector),
 			},
 		},
 	}

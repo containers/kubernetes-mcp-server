@@ -133,12 +133,12 @@ regardless of which overrides are active:
 
 The rules below keep the test suite portable across both layers.
 
-### Start from `BaseDefault()`, not `Default()`
+### Start from `BaseDefault()`, not `New()`
 
 `BaseMcpSuite.SetupTest()` initializes `s.Cfg` from `config.BaseDefault()`
 (pure upstream defaults), then layers test-specific tweaks like
 `ListOutput = "yaml"` on top. Any custom suite (`ToolsetsSuite`, etc.) must
-do the same — using `config.Default()` would let downstream overrides leak
+do the same — using `config.New()` would let downstream overrides leak
 into the test environment.
 
 ### Prefer merging TOML into `s.Cfg`
@@ -173,7 +173,7 @@ In that case, use `ReadToml` and restore the runtime fields explicitly:
 kubeConfig := s.Cfg.KubeConfig
 listOutput := s.Cfg.ListOutput
 readOnly := s.Cfg.ReadOnly
-cfg, err := config.ReadToml([]byte(tomlStr))
+cfg, err := config.ReadToml(s.T().Context(), []byte(tomlStr))
 s.Require().NoError(err)
 s.Cfg = cfg
 s.Cfg.KubeConfig = kubeConfig
@@ -189,23 +189,23 @@ name the toolset registers its parser under, not the toolset's exposed
 name**. The Kiali toolset registers its parser as `"kiali"`
 (see `pkg/kiali/config.go`), so even when downstream rebrands the
 toolset to `ossm`, the section is still `[toolset_configs.kiali]`
-and `params.GetToolsetConfig("kiali")` is the correct lookup. Resolve
+and `params.Config.GetToolsetConfig("kiali")` is the correct lookup. Resolve
 the *toolset name* dynamically via `GetName()` (see below), but keep
 the *toolset_configs key* hardcoded — using the dynamic name there will
 silently produce `(nil, false)`.
 
 ### Inherit runtime fields when building secondary configs
 
-Reload tests sometimes need a separate `*StaticConfig` derived from
-`config.Default()`. This is the deliberate exception to the "start from
+Reload tests sometimes need a separate `*config.Config` derived from
+`config.New()`. This is the deliberate exception to the "start from
 `BaseDefault()`" rule above: a reload simulates the SIGHUP path the
-running server takes, which goes through `Default()` and therefore sees
+running server takes, which goes through `New()` and therefore sees
 any downstream overrides. Carry across the runtime fields from `s.Cfg`
 so the candidate config still points at the test kubeconfig and respects
 the suite's `ReadOnly` value (see `pkg/mcp/mcp_reload_test.go`):
 
 ```go
-candidateStatic := config.Default()
+candidateStatic := config.New()
 candidateStatic.KubeConfig = s.Cfg.KubeConfig
 candidateStatic.ReadOnly = s.Cfg.ReadOnly
 ```

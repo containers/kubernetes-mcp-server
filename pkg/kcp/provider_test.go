@@ -100,10 +100,10 @@ func (s *KcpProviderSuite) TestResetKeepsDefaultWorkspaceCARefresherAlive() {
 	kc.CurrentContext = "fake"
 	kubeconfigPath := test.KubeconfigFile(s.T(), kc)
 
-	provider, err := newKcpClusterProvider(s.T().Context(), &config.StaticConfig{
-		KubeConfig:        kubeconfigPath,
-		CARefreshInterval: config.Duration(100 * time.Millisecond),
-	})
+	cfg := config.New()
+	cfg.KubeConfig.SetForTest(kubeconfigPath)
+	cfg.CARefreshInterval.SetForTest(100 * time.Millisecond)
+	provider, err := newKcpClusterProvider(s.T().Context(), cfg)
 	s.Require().NoError(err)
 	defer provider.Close()
 

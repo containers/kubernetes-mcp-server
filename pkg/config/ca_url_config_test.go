@@ -8,7 +8,7 @@ import (
 )
 
 type CAURLConfigSuite struct {
-	BaseConfigSuite
+	suite.Suite
 }
 
 func TestCAURLConfigSuite(t *testing.T) {
@@ -17,23 +17,19 @@ func TestCAURLConfigSuite(t *testing.T) {
 
 func (s *CAURLConfigSuite) TestDefaultRefreshInterval() {
 	s.Run("refreshes cached CAs daily by default", func() {
-		s.Equal(Duration(24*time.Hour), Default().CARefreshInterval)
+		s.Equal(24*time.Hour, New().CARefreshInterval.Get())
 	})
 }
 
 func (s *CAURLConfigSuite) TestCAURLConfigFromTOML() {
 	s.Run("parses ca_refresh_interval", func() {
-		path := s.writeConfig(`
-ca_refresh_interval = "30m"
-`)
-		cfg, err := Read(s.T().Context(), path, "")
+		cfg, err := ReadToml(s.T().Context(), []byte(`ca_refresh_interval = "30m"`), WithBaseDefault())
 		s.Require().NoError(err)
-		s.Equal(30*time.Minute, cfg.GetCARefreshInterval())
+		s.Equal(30*time.Minute, cfg.CARefreshInterval.Get())
 	})
 	s.Run("zero refresh interval disables refresh", func() {
-		path := s.writeConfig(`ca_refresh_interval = "0s"`)
-		cfg, err := Read(s.T().Context(), path, "")
+		cfg, err := ReadToml(s.T().Context(), []byte(`ca_refresh_interval = "0s"`), WithBaseDefault())
 		s.Require().NoError(err)
-		s.Zero(cfg.GetCARefreshInterval())
+		s.Zero(cfg.CARefreshInterval.Get())
 	})
 }

@@ -13,13 +13,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type TokenExchangingProviderSuite struct {
@@ -58,47 +56,45 @@ func (fakeDerivedProvider) IsMultiTarget() bool                          { retur
 func (fakeDerivedProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
 func (fakeDerivedProvider) GetDefaultTarget() string                     { return "" }
 func (fakeDerivedProvider) GetTargetParameterName() string               { return "" }
-func (fakeDerivedProvider) WatchTargets(context.Context, McpReload)      {}
-func (fakeDerivedProvider) RefreshCAs()                                  {}
-func (fakeDerivedProvider) Close()                                       {}
+func (fakeDerivedProvider) WatchTargets(context.Context, McpReloader)    {}
+func (fakeDerivedProvider) ReloadConfig(context.Context, *config.Config) error {
+	return nil
+}
+func (fakeDerivedProvider) PublishKubernetesConfig(*config.Config) {}
+func (fakeDerivedProvider) RefreshCAs()                            {}
+func (fakeDerivedProvider) Close()                                 {}
 func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kubernetes, error) {
 	return &Kubernetes{}, nil
 }
-func (fakeDerivedProvider) AnyTargetHasGVKs(context.Context, []schema.GroupVersionKind) bool {
-	return true
-}
-func (fakeDerivedProvider) IsTargetCompatibilityToolFiltersEnabled() bool {
-	return false
+func applyExchange(cfg *config.Config, clientID, clientSecret, audience string, scopes []string) {
+	cfg.TokenExchange.Strategy.SetForTest(tokenexchange.StrategyRFC8693)
+	cfg.TokenExchange.Audience.SetForTest(audience)
+	cfg.TokenExchange.Scopes.SetForTest(scopes)
+	cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodSecretPost))
+	cfg.TokenExchange.ClientAuth.ClientID.SetForTest(clientID)
+	cfg.TokenExchange.ClientAuth.ClientSecret.SetForTest(clientSecret)
 }
 
 func (s *TokenExchangingProviderSuite) TestGetDerivedKubernetes() {
 	s.Run("uses reloaded STS config from live config provider", func() {
 		authServer := s.newExchangeTestOIDCServer()
-		cfg := config.Default()
-		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-		cfg.StsClientId = "old-client"
-		cfg.StsClientSecret = "old-secret"
-		cfg.StsAudience = "old-audience"
-		cfg.StsScopes = []string{"old-scope"}
+		cfg := config.New()
+		applyExchange(cfg, "old-client", "old-secret", "old-audience", []string{"old-scope"})
 
 		provider, err := oidc.NewProvider(context.Background(), authServer.server.URL)
 		s.Require().NoError(err)
 		oauthState := oauth.NewState(&oauth.Snapshot{OIDCProvider: provider})
-		baseConfigProvider := func() api.BaseConfig {
+		configProvider := func() *config.Config {
 			return cfg
 		}
-		wrapped := newTokenExchangingProvider(fakeDerivedProvider{}, baseConfigProvider, oauthState)
+		wrapped := newTokenExchangingProvider(fakeDerivedProvider{}, configProvider, oauthState)
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
 		_, err = wrapped.GetDerivedKubernetes(ctx, "")
 		s.Require().NoError(err)
 
-		cfg = config.Default()
-		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-		cfg.StsClientId = "new-client"
-		cfg.StsClientSecret = "new-secret"
-		cfg.StsAudience = "new-audience"
-		cfg.StsScopes = []string{"new-scope"}
+		cfg = config.New()
+		applyExchange(cfg, "new-client", "new-secret", "new-audience", []string{"new-scope"})
 
 		_, err = wrapped.GetDerivedKubernetes(ctx, "")
 		s.Require().NoError(err)
@@ -123,9 +119,9 @@ func (s *TokenExchangingProviderSuite) TestGetDerivedKubernetes() {
 }
 
 func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
-	newProvider := func(cfg *config.StaticConfig) *tokenExchangingProvider {
+	newProvider := func(cfg *config.Config) *tokenExchangingProvider {
 		return &tokenExchangingProvider{
-			baseConfigProvider: func() api.BaseConfig {
+			configProvider: func() *config.Config {
 				return cfg
 			},
 		}
@@ -133,40 +129,31 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 
 	s.Run("reuses the cached config when nothing changes", func() {
 		snap := s.newSnapshot()
-		cfg := config.Default()
-		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-		cfg.StsClientId = "client"
-		cfg.StsAudience = "audience"
+		cfg := config.New()
+		applyExchange(cfg, "client", "", "audience", nil)
 		p := newProvider(cfg)
 
-		first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(first)
-		second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+		second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Same(first, second, "unchanged config must reuse the cached struct so assertion caching stays effective")
 	})
 
 	s.Run("rebuilds cached config when STS fields change without token URL change", func() {
 		snap := s.newSnapshot()
-		cfg := config.Default()
-		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-		cfg.StsClientId = "old-client"
-		cfg.StsClientSecret = "old-secret"
-		cfg.StsAudience = "old-audience"
-		cfg.StsScopes = []string{"old-scope"}
-		cfg.CertificateAuthority = "/old-ca.pem"
+		cfg := config.New()
+		applyExchange(cfg, "old-client", "old-secret", "old-audience", []string{"old-scope"})
+		cfg.CertificateAuthority.SetForTest("/old-ca.pem")
 		p := newProvider(cfg)
 
-		first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(first)
 		s.Equal("old-client", first.ClientID)
 
-		cfg.StsClientId = "new-client"
-		cfg.StsClientSecret = "new-secret"
-		cfg.StsAudience = "new-audience"
-		cfg.StsScopes = []string{"new-scope"}
-		cfg.CertificateAuthority = "/new-ca.pem"
+		applyExchange(cfg, "new-client", "new-secret", "new-audience", []string{"new-scope"})
+		cfg.CertificateAuthority.SetForTest("/new-ca.pem")
 
-		second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+		second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(second)
 		s.NotSame(first, second)
 		s.Equal("new-client", second.ClientID)
@@ -177,63 +164,56 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 	})
 
 	s.Run("rebuilds when a single rotated field changes", func() {
-		s.Run("sts_auth_style", func() {
+		s.Run("client authentication method", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.StsAuthStyle = tokenexchange.AuthStyleParams
+			cfg := config.New()
+			applyExchange(cfg, "client", "secret", "audience", nil)
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.StsAuthStyle = tokenexchange.AuthStyleHeader
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodSecretBasic))
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal(tokenexchange.AuthStyleHeader, second.AuthStyle)
 		})
 
-		s.Run("sts_client_cert_file and sts_client_key_file", func() {
+		s.Run("private key client authentication files", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.StsAuthStyle = tokenexchange.AuthStyleAssertion
-			cfg.StsClientCertFile = "/old-cert.pem"
-			cfg.StsClientKeyFile = "/old-key.pem"
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodPrivateKey))
+			cfg.TokenExchange.ClientAuth.CertificateFile.SetForTest("/old-cert.pem")
+			cfg.TokenExchange.ClientAuth.PrivateKeyFile.SetForTest("/old-key.pem")
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.StsClientCertFile = "/new-cert.pem"
-			cfg.StsClientKeyFile = "/new-key.pem"
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.TokenExchange.ClientAuth.CertificateFile.SetForTest("/new-cert.pem")
+			cfg.TokenExchange.ClientAuth.PrivateKeyFile.SetForTest("/new-key.pem")
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal("/new-cert.pem", second.ClientCertFile)
 			s.Equal("/new-key.pem", second.ClientKeyFile)
 		})
 
-		s.Run("sts_federated_token_file", func() {
+		s.Run("JWT file client authentication", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.StsAuthStyle = tokenexchange.AuthStyleFederated
-			cfg.StsFederatedTokenFile = "/old-token"
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			cfg.TokenExchange.ClientAuth.Method.SetForTest(string(config.TokenExchangeClientAuthMethodJWTFile))
+			cfg.TokenExchange.ClientAuth.TokenFile.SetForTest("/old-token")
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.StsFederatedTokenFile = "/new-token"
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.TokenExchange.ClientAuth.TokenFile.SetForTest("/new-token")
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal("/new-token", second.FederatedTokenFile)
@@ -241,37 +221,33 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 
 		s.Run("require_tls", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.RequireTLS = false
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			cfg.RequireTLS.SetForTest(false)
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.RequireTLS = true
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.RequireTLS.SetForTest(true)
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 		})
 
 		s.Run("tls_min_version", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.TLSMinVersion = "1.2"
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			cfg.TLSMinVersion.SetForTest("1.2")
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 			s.Equal("1.2", first.TLSMinVersion)
 
-			cfg.TLSMinVersion = "1.3"
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.TLSMinVersion.SetForTest("1.3")
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal("1.3", second.TLSMinVersion)
@@ -279,59 +255,69 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 
 		s.Run("tls_cipher_suites", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			cfg.TLSCipherSuites.SetForTest([]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"})
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.TLSCipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.TLSCipherSuites.SetForTest([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"})
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
 			s.NotSame(first, second)
 			s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, second.TLSCipherSuites)
 		})
 
-		s.Run("sts_subject_token_type", func() {
+		s.Run("subject token type", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.StsSubjectTokenType = "urn:ietf:params:oauth:token-type:access_token"
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			cfg.TokenExchange.SubjectTokenType.SetForTest("urn:ietf:params:oauth:token-type:access_token")
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.StsSubjectTokenType = "urn:ietf:params:oauth:token-type:jwt"
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.TokenExchange.SubjectTokenType.SetForTest("urn:ietf:params:oauth:token-type:jwt")
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
-			s.NotSame(first, second, "a reload that only changes sts_subject_token_type must not reuse the stale cached config")
+			s.NotSame(first, second, "a reload that only changes token_exchange.subject_token_type must not reuse the stale cached config")
 			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.SubjectTokenType)
 		})
 
-		s.Run("sts_requested_token_type", func() {
+		s.Run("requested token type", func() {
 			snap := s.newSnapshot()
-			cfg := config.Default()
-			cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-			cfg.StsClientId = "client"
-			cfg.StsAudience = "audience"
-			cfg.StsRequestedTokenType = "urn:ietf:params:oauth:token-type:access_token"
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			cfg.TokenExchange.RequestedTokenType.SetForTest("urn:ietf:params:oauth:token-type:access_token")
 			p := newProvider(cfg)
 
-			first := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(first)
 
-			cfg.StsRequestedTokenType = "urn:ietf:params:oauth:token-type:jwt"
-			second := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+			cfg.TokenExchange.RequestedTokenType.SetForTest("urn:ietf:params:oauth:token-type:jwt")
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 			s.Require().NotNil(second)
-			s.NotSame(first, second, "a reload that only changes sts_requested_token_type must not reuse the stale cached config")
+			s.NotSame(first, second, "a reload that only changes token_exchange.requested_token_type must not reuse the stale cached config")
 			s.Equal("urn:ietf:params:oauth:token-type:jwt", second.RequestedTokenType)
+		})
+
+		s.Run("token_url", func() {
+			snap := s.newSnapshot()
+			cfg := config.New()
+			applyExchange(cfg, "client", "", "audience", nil)
+			p := newProvider(cfg)
+
+			first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+			s.Require().NotNil(first)
+
+			cfg.TokenExchange.TokenURL.SetForTest("https://sts-gateway.example.com/oauth/token")
+			second := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+			s.Require().NotNil(second)
+			s.NotSame(first, second, "a reload that only sets token_exchange.token_url must not reuse the stale cached config")
+			s.Equal("https://sts-gateway.example.com/oauth/token", second.TokenURL)
 		})
 	})
 
@@ -342,22 +328,50 @@ func (s *TokenExchangingProviderSuite) TestGetOrBuildStsConfig() {
 		defer server.Close()
 
 		snap := s.newSnapshot()
-		cfg := config.Default()
-		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-		cfg.StsClientId = "client"
-		cfg.RequireTLS = true
+		cfg := config.New()
+		applyExchange(cfg, "client", "", "audience", nil)
+		cfg.RequireTLS.SetForTest(true)
 		p := newProvider(cfg)
 
-		built := p.getOrBuildStsConfig(context.Background(), snap, cfg)
+		built := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
 		s.Require().NotNil(built)
 
-		// getOrBuildStsConfig must wire the enforcer into the config it returns,
+		// getOrBuildTokenExchangeConfig must wire the enforcer into the config it returns,
 		// or the http token endpoint slips through when require_tls is on.
 		client, err := built.HTTPClient()
 		s.Require().NoError(err)
 		_, err = client.Get(server.URL)
 		s.Require().Error(err)
 		s.Contains(err.Error(), "require_tls is enabled")
+	})
+
+	s.Run("clears cached config when token exchange is disabled", func() {
+		snap := s.newSnapshot()
+		cfg := config.New()
+		applyExchange(cfg, "client", "secret", "audience", nil)
+		p := newProvider(cfg)
+
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.Require().NotNil(first)
+		cfg.TokenExchange = config.New().TokenExchange
+		s.Nil(p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg))
+		applyExchange(cfg, "client", "secret", "audience", nil)
+		rebuilt := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.NotSame(first, rebuilt)
+	})
+
+	s.Run("Close clears cached config", func() {
+		snap := s.newSnapshot()
+		cfg := config.New()
+		applyExchange(cfg, "client", "secret", "audience", nil)
+		p := newProvider(cfg)
+		p.provider = fakeDerivedProvider{}
+
+		first := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.Require().NotNil(first)
+		p.Close()
+		rebuilt := p.getOrBuildTokenExchangeConfig(s.T().Context(), snap, cfg)
+		s.NotSame(first, rebuilt)
 	})
 }
 
@@ -436,14 +450,12 @@ func (s *TokenExchangingProviderSuite) TestGetDerivedKubernetesCAFile() {
 		caFile := s.writeCAFile(tokenServer.server.Certificate())
 		oidcProvider := s.newOIDCProviderWithTokenEndpoint(tokenServer.server.URL + "/token")
 
-		cfg := config.Default()
-		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-		cfg.StsClientId = "client"
-		cfg.StsAudience = "audience"
-		cfg.CertificateAuthority = caFile
+		cfg := config.New()
+		applyExchange(cfg, "client", "", "audience", nil)
+		cfg.CertificateAuthority.SetForTest(caFile)
 
 		oauthState := oauth.NewState(&oauth.Snapshot{OIDCProvider: oidcProvider})
-		wrapped := newTokenExchangingProvider(fakeDerivedProvider{}, func() api.BaseConfig { return cfg }, oauthState)
+		wrapped := newTokenExchangingProvider(fakeDerivedProvider{}, func() *config.Config { return cfg }, oauthState)
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
 		_, err := wrapped.GetDerivedKubernetes(ctx, "")
@@ -455,14 +467,12 @@ func (s *TokenExchangingProviderSuite) TestGetDerivedKubernetesCAFile() {
 		tokenServer := s.newTLSTokenServer()
 		oidcProvider := s.newOIDCProviderWithTokenEndpoint(tokenServer.server.URL + "/token")
 
-		cfg := config.Default()
-		cfg.TokenExchangeStrategy = tokenexchange.StrategyRFC8693
-		cfg.StsClientId = "client"
-		cfg.StsAudience = "audience"
+		cfg := config.New()
+		applyExchange(cfg, "client", "", "audience", nil)
 		// CertificateAuthority deliberately unset: the self-signed endpoint is untrusted.
 
 		oauthState := oauth.NewState(&oauth.Snapshot{OIDCProvider: oidcProvider})
-		wrapped := newTokenExchangingProvider(fakeDerivedProvider{}, func() api.BaseConfig { return cfg }, oauthState)
+		wrapped := newTokenExchangingProvider(fakeDerivedProvider{}, func() *config.Config { return cfg }, oauthState)
 
 		ctx := context.WithValue(context.Background(), OAuthAuthorizationHeader, "Bearer original-token")
 		_, err := wrapped.GetDerivedKubernetes(ctx, "")

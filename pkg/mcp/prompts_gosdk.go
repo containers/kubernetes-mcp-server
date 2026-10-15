@@ -23,6 +23,14 @@ func (p *promptCallRequestAdapter) GetArguments() map[string]string {
 
 // ServerPromptToGoSdkPrompt converts an api.ServerPrompt to MCP SDK types
 func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.Prompt, mcp.PromptHandler, error) {
+	var meta mcp.Meta
+	if serverPrompt.RBAC != nil {
+		if err := serverPrompt.RBAC.Validate(); err != nil {
+			return nil, nil, fmt.Errorf("prompt %q: invalid RBAC metadata: %w", serverPrompt.Prompt.Name, err)
+		}
+		meta = mcp.Meta{api.RBACMetadataKey: serverPrompt.RBAC}
+	}
+
 	// Convert arguments
 	var args []*mcp.PromptArgument
 	for _, arg := range serverPrompt.Prompt.Arguments {
@@ -35,7 +43,9 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 
 	// Create the MCP SDK prompt
 	mcpPrompt := &mcp.Prompt{
+		Meta:        meta,
 		Name:        serverPrompt.Prompt.Name,
+		Title:       serverPrompt.Prompt.Title,
 		Description: serverPrompt.Prompt.Description,
 		Arguments:   args,
 	}
@@ -50,20 +60,13 @@ func ServerPromptToGoSdkPrompt(s *Server, serverPrompt api.ServerPrompt) (*mcp.P
 			}
 		}
 
-		k8s, err := s.p.GetDerivedKubernetes(ctx, cluster)
+		cfg := s.configuration.Load()
+		params, err := newHandlerParams(s, ctx, cfg, api.PromptCallRequest(&promptCallRequestAdapter{request: request}), cluster)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get kubernetes client: %w", err)
 		}
 
-		params := api.PromptHandlerParams{
-			Context:           ctx,
-			BaseConfig:        s.configuration.Load(),
-			KubernetesClient:  k8s,
-			PromptCallRequest: &promptCallRequestAdapter{request: request},
-			Elicitor:          &sessionElicitor{},
-		}
-
-		result, err := serverPrompt.Handler(params)
+		result, err := serverPrompt.Handler(api.PromptHandlerParams(params))
 		if err != nil {
 			return nil, err
 		}

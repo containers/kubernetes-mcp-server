@@ -7,19 +7,20 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
-func InitTrafficTopology() []api.ServerPrompt {
+func InitTrafficTopology(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "traffic-topology",
 				Title:       "Traffic Topology Analysis",
 				Description: "Analyze the service mesh traffic topology showing service dependencies, traffic flow, and communication patterns",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespaces",
 						Description: "Comma-separated list of namespaces to include in the graph, or 'all' to include all accessible mesh namespaces",
@@ -27,6 +28,7 @@ func InitTrafficTopology() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:    tools.GraphRBAC(ctx, inspector),
 			Handler: trafficTopologyHandler,
 		},
 	}
@@ -42,7 +44,10 @@ func trafficTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 
 	klogutil.FromContext(params.Context).Info("Starting traffic topology analysis prompt...")
 
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return nil, err
+	}
 
 	resolvedNamespaces, err := resolveNamespaces(kiali, params, namespaces)
 	if err != nil {

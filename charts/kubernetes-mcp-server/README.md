@@ -47,6 +47,26 @@ httpRoute:
             value: /
 ```
 
+### Configured Prompts
+
+Prompts declared under `config.prompts` are rendered into the server's `config.toml` through Helm's `tpl`, so `{{argument}}` placeholders in message content must be escaped as `` {{`{{argument}}`}} `` or Helm tries to evaluate them as template actions. See [docs/prompts.md](../../docs/prompts.md) for the prompt schema.
+
+```yaml
+config:
+  prompts:
+    - name: check-pod-logs
+      title: Check Pod Logs
+      description: Show the logs for a pod
+      arguments:
+        - name: name
+          required: true
+        - name: namespace
+          required: false
+      messages:
+        - role: user
+          content: 'Show me the logs for pod {{`{{name}}`}} in {{`{{namespace}}`}}'
+```
+
 ### Optimized OpenShift Deployment
 
 Functionality has been added to the Chart to simplify the deployment to OpenShift Cluster.
@@ -113,7 +133,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | configFilePath | string | `"/etc/kubernetes-mcp-server/config.toml"` |  |
 | defaultPodSecurityContext | object | `{"seccompProfile":{"type":"RuntimeDefault"}}` | Default Security Context for the Pod when one is not provided |
 | defaultSecurityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsNonRoot":true}` | Default Security Context for the Container when one is not provided |
-| extraArgs | list | `[]` | Note: For TLS configuration, use the tls section above instead of extraArgs. |
+| extraArgs | list | `[]` | Only bootstrap flags exist (`--config`, `--config-dir`, `--version`). Runtime settings go in `config` or the `tls` section. |
 | extraContainers | list | `[]` | Note: sidecars do not inherit defaultSecurityContext or the /tmp emptyDir mount; configure them per-container if needed. |
 | extraVolumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | extraVolumes | list | `[]` | Additional volumes on the output Deployment definition. |
@@ -171,7 +191,7 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | serviceAccount.automountToken | bool | `true` | Whether to auto-mount the ServiceAccount token into the pod. Required for in-cluster Kubernetes API access (default). Set to false for OAuth passthrough deployments where the server uses the user's token instead of the ServiceAccount token. |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | If not set and create is true, a name is generated using the fullname template |
-| tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | This is the recommended way to enable TLS instead of using extraArgs. |
+| tls | object | `{"certFile":"tls.crt","enabled":false,"keyFile":"tls.key","mountPath":"/etc/tls","secretName":""}` | Certificate paths are written to the ConfigMap as tls_cert / tls_key. |
 | tls.certFile | string | `"tls.crt"` | Name of the certificate file within the secret (default: tls.crt) |
 | tls.enabled | bool | `false` | Enable TLS for the MCP server |
 | tls.keyFile | string | `"tls.key"` | Name of the key file within the secret (default: tls.key) |

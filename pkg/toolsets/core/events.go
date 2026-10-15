@@ -36,7 +36,11 @@ func initEvents() []api.ServerTool {
 				DestructiveHint: ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: eventsList},
+		}, RBAC: api.RBACBounded(api.RBACRequirement{
+			Verbs:     []string{"list"},
+			Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "events"}},
+			Namespace: &api.RBACNamespace{Argument: "namespace"},
+		}), Handler: eventsList},
 	}
 }
 

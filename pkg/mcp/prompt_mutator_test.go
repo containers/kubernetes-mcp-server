@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/utils/ptr"
@@ -11,10 +12,10 @@ import (
 
 func createTestPrompt(name string) api.ServerPrompt {
 	return api.ServerPrompt{
-		Prompt: api.Prompt{
+		Prompt: config.Prompt{
 			Name:        name,
 			Description: "A test prompt",
-			Arguments: []api.PromptArgument{
+			Arguments: []config.PromptArgument{
 				{
 					Name:        "namespace",
 					Description: "Optional namespace",

@@ -2,11 +2,11 @@ package mcp
 
 import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	v1 "k8s.io/api/core/v1"
@@ -123,9 +123,9 @@ func (s *EventsSuite) TestEventsList() {
 }
 
 func (s *EventsSuite) TestEventsListDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Event" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("events_list (denied)", func() {
 		toolResult, err := s.CallTool("events_list", map[string]interface{}{})

@@ -2,11 +2,14 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
@@ -44,7 +47,7 @@ var ParameterCodec = runtime.NewParameterCodec(Scheme)
 // apiVersion and kinds are checked for allowed access
 type Kubernetes struct {
 	kubernetes.Interface
-	config             api.BaseConfig
+	cfg                *atomic.Pointer[config.Config]
 	clientCmdConfig    clientcmd.ClientConfig
 	restConfig         *rest.Config
 	httpClient         *http.Client
@@ -59,12 +62,27 @@ var _ api.KubernetesClient = (*Kubernetes)(nil)
 
 func NewKubernetes(
 	ctx context.Context,
-	baseConfig api.BaseConfig,
+	cfg *config.Config,
 	clientCmdConfig clientcmd.ClientConfig,
 	restConfig *rest.Config,
 ) (*Kubernetes, error) {
+	live := &atomic.Pointer[config.Config]{}
+	live.Store(cfg)
+	return newKubernetesFromLive(ctx, live, clientCmdConfig, restConfig)
+}
+
+func newKubernetesFromLive(
+	ctx context.Context,
+	live *atomic.Pointer[config.Config],
+	clientCmdConfig clientcmd.ClientConfig,
+	restConfig *rest.Config,
+) (*Kubernetes, error) {
+	if live == nil || live.Load() == nil {
+		return nil, errors.New("config cannot be nil")
+	}
+	cfg := live.Load()
 	k := &Kubernetes{
-		config:          baseConfig,
+		cfg:             live,
 		clientCmdConfig: clientCmdConfig,
 		restConfig:      rest.CopyConfig(restConfig),
 	}
@@ -74,15 +92,17 @@ func NewKubernetes(
 
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return NewAccessControlRoundTripper(ctx, AccessControlRoundTripperConfig{
-			Delegate:                  original,
-			DeniedResourcesProvider:   baseConfig,
-			RestMapperProvider:        func() meta.RESTMapper { return k.restMapper },
-			HostURL:                   k.restConfig.Host,
-			DiscoveryProvider:         func() discovery.DiscoveryInterface { return k.discoveryClient },
-			RawDiscoveryProvider:      func() discovery.DiscoveryInterface { return k.rawDiscoveryClient },
-			AuthClientProvider:        func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
-			ValidationEnabled:         baseConfig.IsValidationEnabled(),
-			ConfirmationRulesProvider: baseConfig,
+			Delegate:             original,
+			ConfigProvider:       k.Config,
+			DeniedResources:      cfg.DeniedResources.Get(),
+			RestMapperProvider:   func() meta.RESTMapper { return k.restMapper },
+			HostURL:              k.restConfig.Host,
+			DiscoveryProvider:    func() discovery.DiscoveryInterface { return k.discoveryClient },
+			RawDiscoveryProvider: func() discovery.DiscoveryInterface { return k.rawDiscoveryClient },
+			AuthClientProvider:   func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
+			ValidationEnabled:    cfg.ValidationEnabled.Get(),
+			ConfirmationRules:    cfg.ConfirmationRules.Get(),
+			ConfirmationFallback: cfg.ConfirmationFallback.Get(),
 		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
@@ -130,6 +150,13 @@ func (k *Kubernetes) close() {
 		return
 	}
 	utilnet.CloseIdleConnectionsFor(k.httpClient.Transport)
+}
+
+func (k *Kubernetes) Config() *config.Config {
+	if k == nil || k.cfg == nil {
+		return nil
+	}
+	return k.cfg.Load()
 }
 
 func (k *Kubernetes) RESTConfig() *rest.Config {

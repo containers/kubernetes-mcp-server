@@ -3,8 +3,9 @@
 Cluster-backed end-to-end tests for `kubernetes-mcp-server`, built on
 [`sigs.k8s.io/e2e-framework`](https://github.com/kubernetes-sigs/e2e-framework).
 Each test deploys the server (via its Helm chart) into a fresh namespace on a real
-Minikube cluster, drives it through the MCP protocol, and cross-checks the results
-against the Kubernetes API.
+Kubernetes cluster, drives it through the MCP protocol, and cross-checks the results
+against the Kubernetes API. The standard local setup uses Minikube; the optional
+NetObserv real-plugin test requires OpenShift and OLM.
 
 This document is **living documentation**: it describes what the suite covers today.
 Update it when you add or change tests.
@@ -39,6 +40,30 @@ Lighter setups exist when you don't need every component:
 `MCP_SERVER_IMAGE`, `CHART_PATH`, `HELM_PATH`, `KUBECTL_PATH`, and (for Kuadrant)
 `GATEWAY_NAMESPACE`, `GATEWAY_SERVICE`, `GATEWAY_HOST`.
 
+### NetObserv tests
+
+`TestNetObservMock` deploys the mock plugin and runs as part of the normal E2E suite.
+`TestNetObservReal` is skipped unless `NETOBSERV_OPERATOR` is set:
+
+- `NETOBSERV_OPERATOR=use-existing` uses an installed NetObserv operator and skips
+  if its plugin service is unavailable.
+- `NETOBSERV_OPERATOR=deploy` installs the operator and FlowCollector from the
+  NetObserv Konflux catalog, then tests the live plugin.
+
+Run the real-plugin test against an OpenShift cluster with OLM, `kubectl`, and
+`helm` available. The server image must be pullable by the cluster:
+
+```bash
+KUBECONFIG=/path/to/openshift-kubeconfig \
+NETOBSERV_OPERATOR=deploy \
+MCP_SERVER_IMAGE=registry.example.com/project/kubernetes-mcp-server:tag \
+go test -tags e2e -run '^TestNetObservReal$' -v -count=1 ./test/e2e/
+```
+
+The test deploys the MCP server in `e2e-netobserv-real`. Deploy mode is intended for
+a disposable test cluster: cleanup removes the test FlowCollector, operator
+subscription/group/namespaces, and the `netobserv-konflux-fbc` CatalogSource.
+
 Keycloak fixtures (realm, clients, users, groups) live in
 `dev/config/keycloak/realm-import.yaml`; RBAC bindings for OIDC identities live in
 `dev/config/keycloak/rbac.yaml`. After editing either, run `make keycloak-install` to
@@ -50,7 +75,7 @@ realm's `mcp-server-jwt` client — the private key is never committed.
 
 Tests **skip** (not fail) when an optional dependency is absent — e.g.
 `TestKeycloakOIDC` and every `TestOAuth*` test skip if the `keycloak/keycloak` service
-is missing, and `TestKuadrantGatewayTools` skips without the gateway service.
+is missing, and `TestKuadrantGateway` skips without the gateway service.
 
 ## Layout
 
@@ -60,11 +85,13 @@ is missing, and `TestKuadrantGatewayTools` skips without the gateway service.
 | `setup_test.go` | clientset + `helm` shell helpers |
 | `helpers_test.go` | `deployServer` + Helm/port-forward/healthz plumbing, value helpers |
 | `helpers_unit_test.go` | pure unit tests (e.g. `TestImageSpec`) — compile-check the package without a cluster |
+| `netobserv_test.go`, `netobserv_helpers.go` | mock and real NetObserv plugin E2E tests and response assertions |
 | `oauth_test.go` | OAuth toolkit: token/discovery/CA helpers, JWT minting, identity discriminator, `requireUnauthorized` |
 | `oauth_flows_test.go` | OAuth flow tests: rejection surface, server modes, forwarded identity, STS variants, groups→RBAC |
 | `smoke_test.go` | `TestSmoke` — baseline deploy + tool calls |
+| `prompts_test.go` | `TestPrompts` — built-in and configured prompts over MCP; shared prompt assertion helpers |
 | `keycloak_test.go` | `TestKeycloakOIDC` — OIDC + STS token-exchange chain |
-| `kuadrant_test.go` | `TestKuadrantGatewayTools` — server behind the Kuadrant MCP Gateway |
+| `kuadrant_test.go` | `TestKuadrantGateway` — server behind the Kuadrant MCP Gateway (tools and prompts) |
 
 `TestImageSpec` is a fast way to force a compile of every `e2e`-tagged file without a
 cluster: `go test -tags e2e -run TestImageSpec ./test/e2e/`.
@@ -77,6 +104,8 @@ cleanup. The generated namespace doubles as the Helm release name and `fullnameO
 so cluster-scoped resources (e.g. ClusterRoleBindings) are unique per run. Options:
 
 - `withConfig(toml)` — server config TOML, rendered into the chart's `config` value.
+  Because the chart renders `config` through `tpl`, prompt placeholders must be
+  escaped as `` {{`{{name}}`}} `` (see `configuredPromptsTOML` in `prompts_test.go`).
   (An `[http]` section is rejected — Helm's `toToml` mangles large ints, helm/helm#32040.)
 - `withValues(map)` — extra Helm values, shallow-merged over the defaults.
 - `withPreInstall(fn)` — hook run after namespace creation but **before** Helm install,
@@ -103,7 +132,9 @@ Value composition helpers: `mergeValues(...)` (shallow, top-level keys must be d
 - `requireWellKnown` + `requireHTTPStatus` — assert well-known metadata endpoints.
 - `callResourcesListSecrets(...)` — identity discriminator: cluster-admin lists Secrets
   (`IsError=false`); a `view`-bound identity cannot (`IsError=true`).
-- `oidcServerConfig(scopes)` — shared OIDC + STS server config (scopes overridable).
+- `oidcServerConfig(scopes, clientAuthMethod)` — shared OIDC + token-exchange server
+  config with overridable scopes and client authentication. The flow matrix uses both
+  `client_secret_post` and `client_secret_basic` to cover body and HTTP Basic credentials.
 - `copyKeycloakCASecret` (`withPreInstall` hook) + `keycloakCAVolumeValues()` — copy the
   cert-manager self-signed CA into the namespace and mount it so the server trusts
   Keycloak's TLS.
@@ -118,13 +149,14 @@ Value composition helpers: `mergeValues(...)` (shallow, top-level keys must be d
 | Test | What it exercises |
 |------|-------------------|
 | `TestSmoke` | Deploy → `ListTools` → `namespaces_list` / `pods_list_in_namespace`, cross-checked against the K8s API |
+| `TestPrompts` | Deploy with two configured prompts → `prompts/list` exposes built-in and configured prompts with titles and argument metadata → `prompts/get` matrix: no-argument prompt, required-only (optional placeholder dropped), required+optional, missing required rejected; built-in `cluster-health-check` with no arguments, namespace-scoped with `check_events` true/false, and unknown namespace fallback warning |
 | `TestKeycloakOIDC` | OIDC discovery; password-grant token issuance; full chain: user token → server → STS exchange (RFC 8693) → kube-apiserver OIDC → tool call. Includes a `missing_token` negative assertion |
-| `TestKuadrantGatewayTools` | Server behind the Kuadrant MCP Gateway: `MCPServerRegistration`, tool-name prefixing, tool call through the gateway |
+| `TestKuadrantGateway` | Server behind the Kuadrant MCP Gateway with two registrations on one deployment: `userSpecificList=Enabled` (`k8s_`) for tool-name prefixing and a tool call through the gateway; `userSpecificList=Disabled` (`k8sp_`, via a second HTTPRoute) for prompt-name prefixing, the same configured and `cluster-health-check` prompt matrix as `TestPrompts` through the gateway, and gateway/direct `prompts/get` parity. The gateway skips prompt discovery for user-specific registrations, so prompts are only asserted on the second one, and it drops prompt titles in transit, so titles are only asserted on the direct path |
 | `TestOAuthOIDCFlows` | OIDC-mode rejection surface (A1–A8) and unauthenticated well-known metadata (E1–E5, E7, E8), plus the scope-not-enforced guard (F1) |
 | `TestOAuthServerModes` | Unprotected anonymous tool call (C1); passthrough rejects a missing token and hides well-known (C4, E6) |
 | `TestOAuthForwardedIdentity` | Forwarded-token identity: `require_oauth=false` (C2) and passthrough (C3) act as the cluster-admin user, not the `view` SA (Secrets discriminator) |
-| `TestOAuthSTSVariants` | STS variant D3: `rfc8693` strategy + `sts_auth_style=header` (Basic client auth) completes the exchange chain and preserves identity |
-| `TestOAuthSTSAssertion` | STS variant D4: `sts_auth_style=assertion` — the server signs an RFC 7523 `client_assertion` (mounted throwaway cert/key) to the `mcp-server-jwt` `client-jwt` Keycloak client, completing the exchange and preserving cluster-admin identity |
+| `TestOAuthSTSVariants` | Token-exchange variant D3: `rfc8693` strategy + `client_secret_basic` completes the exchange chain and preserves identity |
+| `TestOAuthSTSAssertion` | Token-exchange variant D4: `private_key_jwt` signs an RFC 7523 `client_assertion` with a mounted throwaway cert/key to the `mcp-server-jwt` `client-jwt` Keycloak client, completing the exchange and preserving cluster-admin identity |
 | `TestOAuthGroupRBAC` | OIDC groups claim drives K8s RBAC (G1): `mcp-viewer` (group `mcp-viewers` → `view`) is denied Secrets while `mcp` (cluster-admin) is allowed, through the same server |
 
 ## Server auth contract (reference)
@@ -213,13 +245,13 @@ Legend — ✅ covered · ⊘ not testable through a healthy e2e-deployed server
 | # | Scenario | Config | | |
 |---|----------|--------|---|---|
 | D1 | `rfc8693` + `params` (defaults) | current | implicit in C5 | ✅ |
-| D3 | `rfc8693` strategy + `sts_auth_style="header"` | client creds in Basic header | `TestOAuthSTSVariants` | ✅ |
-| D4 | `sts_auth_style="assertion"` (private-key-JWT, RFC 7523) | client cert/key + Keycloak `client-jwt` client | `TestOAuthSTSAssertion` | ✅ |
-| D2 | `keycloak-v1` strategy | `token_exchange_strategy="keycloak-v1"` | needs legacy exchange feature | deferred |
-| D5 | `sts_auth_style="federated"` (SPIRE JWT-SVID) | federated token file | needs real SPIRE | deferred |
+| D3 | `rfc8693` + `client_secret_basic` | client creds in Basic header | `TestOAuthSTSVariants` | ✅ |
+| D4 | `private_key_jwt` (RFC 7523) | client cert/key + Keycloak `client-jwt` client | `TestOAuthSTSAssertion` | ✅ |
+| D2 | `keycloak-v1` strategy | `token_exchange.strategy="keycloak-v1"` | needs legacy exchange feature | deferred |
+| D5 | `jwt_file` (SPIRE JWT-SVID) | federated token file | needs real SPIRE | deferred |
 | D6 | `entra-obo` strategy | Entra ID only | Azure-specific | ⊘ |
 
-> **D4 uses a dedicated Keycloak client.** `sts_auth_style="assertion"` is private-key-JWT
+> **D4 uses a dedicated Keycloak client.** `token_exchange.client_auth.method="private_key_jwt"` uses private-key-JWT
 > client authentication (RFC 7523): the server signs a `client_assertion` JWT with a private
 > key instead of sending a client secret. A Keycloak client has exactly one
 > `clientAuthenticatorType`, and `mcp-server` uses `client-secret` (relied on by
@@ -246,8 +278,8 @@ Legend — ✅ covered · ⊘ not testable through a healthy e2e-deployed server
 > behavior for the existing standard-exchange clients that C5/D3/D4 depend on, so a dedicated
 > client would be needed to contain the blast radius.
 >
-> **D5 (`federated`) is deferred.** `sts_auth_style="federated"` re-reads a JWT from
-> `sts_federated_token_file` on every request and sends it as the `client_assertion`
+> **D5 (`jwt_file`) is deferred.** `token_exchange.client_auth.method="jwt_file"` re-reads a JWT from
+> `token_exchange.client_auth.token_file` on every request and sends it as the `client_assertion`
 > (`exchanger.go`). Against Keycloak's `client-jwt` authenticator the file JWT would have to be
 > trusted (as in D4) *and* carry a single-use `jti` — but a static file is reused on the second
 > exchange, which Keycloak rejects ("Token reuse detected"). Exercising this honestly needs
