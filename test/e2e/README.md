@@ -42,9 +42,6 @@ Lighter setups exist when you don't need every component:
 ### NetObserv tests
 
 `TestNetObservMock` deploys the mock plugin and runs as part of the normal E2E suite.
-The `netobserv-contract.yaml` workflow runs the backend contract tests against the mock
-plugin in a dedicated Minikube cluster when NetObserv code, fixtures, or workflow setup
-changes.
 
 Keycloak fixtures (realm, clients, users, groups) live in
 `dev/config/keycloak/realm-import.yaml`; RBAC bindings for OIDC identities live in
