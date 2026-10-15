@@ -103,7 +103,10 @@ func vmTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCallResul
 // not start once the budget is spent.
 func writeVMTroubleshootGuide(ctx context.Context, client api.KubernetesClient, dynamicClient dynamic.Interface, namespace, name string, b *api.BuilderWithBudget) {
 	product := defaults.ProductName()
-	b.WriteString(fmt.Sprintf(`# %s VirtualMachine Troubleshooting Guide
+	var vm, vmi *unstructured.Unstructured
+	var podNames []string
+	_ = b.Sections(
+		api.Text(fmt.Sprintf(`# %s VirtualMachine Troubleshooting Guide
 
 ## VM: %s (namespace: %s)
 
@@ -118,17 +121,14 @@ Check the VirtualMachine status:
 - ready (should be true)
 - conditions for any errors
 
-`, product, name, namespace, product))
-	if b.Spent() {
-		return
-	}
-	vmYaml, vm := fetchVirtualMachineStatus(ctx, dynamicClient, namespace, name)
-	b.WriteString(vmYaml)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString(`
+`, product, name, namespace, product)),
+		func(b *api.BuilderWithBudget) error {
+			vmYaml, obj := fetchVirtualMachineStatus(ctx, dynamicClient, namespace, name)
+			vm = obj
+			b.WriteString(vmYaml)
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -138,17 +138,14 @@ Check the VirtualMachineInstance status:
 - phase (should be "Running")
 - conditions for "Ready" condition
 
-`)
-	if b.Spent() {
-		return
-	}
-	vmiYaml, vmi := fetchVirtualMachineInstanceStatus(ctx, dynamicClient, namespace, name)
-	b.WriteString(vmiYaml)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			vmiYaml, obj := fetchVirtualMachineInstanceStatus(ctx, dynamicClient, namespace, name)
+			vmi = obj
+			b.WriteString(vmiYaml)
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -156,15 +153,12 @@ Check the VirtualMachineInstance status:
 
 Review the VM volumes for any configuration issues:
 
-`)
-	if b.Spent() {
-		return
-	}
-	b.WriteString(fetchVirtualMachineVolumes(namespace, name, vm, vmi))
-	if b.Spent() {
-		return
-	}
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			b.WriteString(fetchVirtualMachineVolumes(namespace, name, vm, vmi))
+			return nil
+		},
+		api.Text(`
 
 **Common volume types to check:**
 - **containerDisk**: Verify the image URL is accessible and the image exists
@@ -187,16 +181,12 @@ Check the virt-launcher pod:
 - Check for container restart counts
 - Review pod conditions for issues
 
-`)
-	if b.Spent() {
-		return
-	}
-	podNames := fetchVirtLauncherPod(ctx, dynamicClient, namespace, name, b)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			podNames = fetchVirtLauncherPod(ctx, dynamicClient, namespace, name, b)
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -206,16 +196,12 @@ Review the logs from the virt-launcher pod containers:
 - Look for error messages or stack traces
 - Check for VM boot issues or QEMU errors
 
-`)
-	if b.Spent() {
-		return
-	}
-	fetchVirtLauncherPodLogs(ctx, client, namespace, podNames, b)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			fetchVirtLauncherPodLogs(ctx, client, namespace, podNames, b)
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -225,15 +211,12 @@ Review events related to the VM and its components:
 - Look for Warning events
 - Check for scheduling, storage, or network issues
 
-`)
-	if b.Spent() {
-		return
-	}
-	fetchEvents(ctx, client, namespace, name, b)
-	if b.Spent() {
-		return
-	}
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			fetchEvents(ctx, client, namespace, name, b)
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -271,7 +254,8 @@ After completing troubleshooting and attempting fixes, report:
 - **Root Cause:** Description or "None found"
 - **Action Taken:** What was done to fix the issue (or "None" if no fix was needed/possible)
 - **Result:** Whether the fix was successful or further action is needed
-`)
+`),
+	)
 }
 
 func vmTroubleshootResult(guide string, includeAssistant bool) *api.PromptCallResult {
@@ -386,7 +370,7 @@ func fetchVirtualMachineInstanceStatus(ctx context.Context, dynamicClient dynami
 // b. Further pods are not formatted once b is spent. The returned names are
 // the pods that were written, for the log section.
 func fetchVirtLauncherPod(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string, b *api.BuilderWithBudget) []string {
-	if b == nil || b.Spent() {
+	if b == nil {
 		return nil
 	}
 	labelSelector := fmt.Sprintf("kubevirt.io=virt-launcher,vm.kubevirt.io/name=%s", name)
@@ -403,20 +387,21 @@ func fetchVirtLauncherPod(ctx context.Context, dynamicClient dynamic.Interface, 
 		return nil
 	}
 
-	b.WriteString("### virt-launcher Pod\n\n")
 	var podNames []string
+	steps := []api.Step{api.Text("### virt-launcher Pod\n\n")}
 	for _, pod := range podList.Items {
-		if b.Spent() {
-			break
-		}
-		podNames = append(podNames, pod.GetName())
-		yamlStr, err := output.MarshalYaml(&pod)
-		if err != nil {
-			b.WriteString(fmt.Sprintf("*Error marshaling pod %s: %v*\n\n", pod.GetName(), err))
-			continue
-		}
-		b.WriteString(fmt.Sprintf("#### %s\n\n```yaml\n%s```\n\n", pod.GetName(), yamlStr))
+		steps = append(steps, func(b *api.BuilderWithBudget) error {
+			podNames = append(podNames, pod.GetName())
+			yamlStr, err := output.MarshalYaml(&pod)
+			if err != nil {
+				b.WriteString(fmt.Sprintf("*Error marshaling pod %s: %v*\n\n", pod.GetName(), err))
+				return nil
+			}
+			b.WriteString(fmt.Sprintf("#### %s\n\n```yaml\n%s```\n\n", pod.GetName(), yamlStr))
+			return nil
+		})
 	}
+	_ = b.Sections(steps...)
 	return podNames
 }
 
@@ -424,7 +409,7 @@ func fetchVirtLauncherPod(ctx context.Context, dynamicClient dynamic.Interface, 
 // limited to the bytes b can still accept. The next pod is not requested once
 // b is spent.
 func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, namespace string, podNames []string, b *api.BuilderWithBudget) {
-	if b == nil || b.Spent() {
+	if b == nil {
 		return
 	}
 	if len(podNames) == 0 {
@@ -433,24 +418,24 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 	}
 
 	core := kubernetes.NewCore(client)
-	b.WriteString("### virt-launcher Pod Logs\n\n")
-
 	const containerName = "compute"
+	steps := []api.Step{api.Text("### virt-launcher Pod Logs\n\n")}
 	for _, podName := range podNames {
-		if b.Spent() {
-			return
-		}
-		logs, err := core.PodsLogLimited(ctx, namespace, podName, containerName, false, 50, b.Remaining())
-		if err != nil {
-			b.WriteString(fmt.Sprintf("#### Pod: %s\n\n*Error fetching logs: %v*\n\n", podName, err))
-			continue
-		}
-		b.WriteString(fmt.Sprintf("#### Pod: %s\n\n**Container: %s**\n\n```\n", podName, containerName))
-		b.WriteString(logs)
-		if !b.Truncated() {
-			b.WriteString("\n```\n\n")
-		}
+		steps = append(steps, func(b *api.BuilderWithBudget) error {
+			logs, err := core.PodsLogLimited(ctx, namespace, podName, containerName, false, 50, b.Remaining())
+			if err != nil {
+				b.WriteString(fmt.Sprintf("#### Pod: %s\n\n*Error fetching logs: %v*\n\n", podName, err))
+				return nil
+			}
+			b.WriteString(fmt.Sprintf("#### Pod: %s\n\n**Container: %s**\n\n```\n", podName, containerName))
+			b.WriteString(logs)
+			if !b.Truncated() {
+				b.WriteString("\n```\n\n")
+			}
+			return nil
+		})
 	}
+	_ = b.Sections(steps...)
 }
 
 // fetchEvents writes events related to the VM into b. A list error is recorded
@@ -458,7 +443,7 @@ func fetchVirtLauncherPodLogs(ctx context.Context, client api.KubernetesClient, 
 // already written stay in the section. The second list does not start once b
 // is spent.
 func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vmName string, b *api.BuilderWithBudget) {
-	if b == nil || b.Spent() {
+	if b == nil {
 		return
 	}
 	core := kubernetes.NewCore(client)
@@ -466,72 +451,83 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 	opened := false
 
 	writeMatches := func(events []map[string]any, keep func(map[string]string) bool) {
+		steps := make([]api.Step, 0, len(events))
 		for _, event := range events {
-			if b.Spent() {
-				return
-			}
 			involved, ok := event["InvolvedObject"].(map[string]string)
 			if !ok || !keep(involved) {
 				continue
 			}
-			if !opened {
-				b.WriteString(fmt.Sprintf("### Events (related to %s)\n\n```yaml\n", vmName))
-				opened = true
-				if b.Spent() {
-					return
+			steps = append(steps, func(b *api.BuilderWithBudget) error {
+				if !opened {
+					b.WriteString(fmt.Sprintf("### Events (related to %s)\n\n```yaml\n", vmName))
+					opened = true
 				}
-			}
-			item, err := yamlListItem(event)
-			if err != nil {
-				b.WriteString(fmt.Sprintf("*Error marshaling events: %v*", err))
-				return
-			}
-			b.WriteString(item)
+				return b.Sections(func(b *api.BuilderWithBudget) error {
+					item, err := yamlListItem(event)
+					if err != nil {
+						b.WriteString(fmt.Sprintf("*Error marshaling events: %v*", err))
+						return err
+					}
+					b.WriteString(item)
+					return nil
+				})
+			})
 		}
+		// A marshal error stops the rest of this list. The other list still
+		// runs when the budget is not spent.
+		_ = b.Sections(steps...)
 	}
 
-	// Server-side filter: events whose involvedObject.name exactly matches the VM name.
-	vmEvents, err := core.EventsList(ctx, namespace, api.ListOptions{
-		ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + vmName},
-	})
-	if err != nil {
-		problems = append(problems, fmt.Sprintf("*Error listing events: %v*", err))
-	} else {
-		writeMatches(vmEvents, func(obj map[string]string) bool {
-			kind := obj["Kind"]
-			return kind == "VirtualMachine" || kind == "VirtualMachineInstance"
-		})
-	}
-
-	// Prefix matches (virt-launcher pods, vmName-suffixed objects) are not a
-	// field selector. List the namespace only when the budget still has room.
-	if !b.Spent() {
-		allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
-		if err != nil {
-			problems = append(problems, fmt.Sprintf("*Error listing events: %v*", err))
-		} else {
+	_ = b.Sections(
+		func(b *api.BuilderWithBudget) error {
+			// Server-side filter: events whose involvedObject.name exactly matches the VM name.
+			vmEvents, err := core.EventsList(ctx, namespace, api.ListOptions{
+				ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + vmName},
+			})
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("*Error listing events: %v*", err))
+				return nil
+			}
+			writeMatches(vmEvents, func(obj map[string]string) bool {
+				kind := obj["Kind"]
+				return kind == "VirtualMachine" || kind == "VirtualMachineInstance"
+			})
+			return nil
+		},
+		func(b *api.BuilderWithBudget) error {
+			// Prefix matches (virt-launcher pods, vmName-suffixed objects) are not a
+			// field selector. List the namespace only when the budget still has room.
+			allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("*Error listing events: %v*", err))
+				return nil
+			}
 			writeMatches(allEvents, func(obj map[string]string) bool {
 				objName := obj["Name"]
 				return strings.HasPrefix(objName, vmName+"-") || strings.HasPrefix(objName, "virt-launcher-"+vmName)
 			})
-		}
-	}
-
-	if !opened {
-		b.WriteString("### Events\n\n")
-		if len(problems) == 0 {
-			b.WriteString("*No events found related to this VM*")
-			return
-		}
-		b.WriteString(problems[0])
-		problems = problems[1:]
-	} else if !b.Truncated() {
-		b.WriteString("```")
-	}
-	for _, problem := range problems {
-		if b.Spent() {
-			return
-		}
-		b.WriteString("\n\n" + problem)
-	}
+			return nil
+		},
+		func(b *api.BuilderWithBudget) error {
+			if !opened {
+				b.WriteString("### Events\n\n")
+				if len(problems) == 0 {
+					b.WriteString("*No events found related to this VM*")
+					return nil
+				}
+				b.WriteString(problems[0])
+				problems = problems[1:]
+				return nil
+			}
+			b.WriteString("```")
+			return nil
+		},
+		func(b *api.BuilderWithBudget) error {
+			steps := make([]api.Step, 0, len(problems))
+			for _, problem := range problems {
+				steps = append(steps, api.Text("\n\n"+problem))
+			}
+			return b.Sections(steps...)
+		},
+	)
 }

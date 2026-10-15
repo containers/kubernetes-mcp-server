@@ -77,7 +77,8 @@ const istioConfigReviewAssistantText = "I'll review the Istio configuration and 
 // writeIstioConfigReviewPrompt writes the review into one prompt budget.
 // The service list does not start once that budget is spent.
 func writeIstioConfigReviewPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespace string, b *api.BuilderWithBudget) {
-	b.WriteString(fmt.Sprintf(`# Istio Configuration Review
+	_ = b.Sections(
+		api.Text(fmt.Sprintf(`# Istio Configuration Review
 
 ## Namespace: %s
 
@@ -87,31 +88,25 @@ Review the Istio configuration in this namespace for correctness, best practices
 
 ## Istio Resources
 
-`, namespace))
-	if b.Spent() {
-		return
-	}
-	writeKialiData(b, kiali, params, tools.KialiManageIstioConfigReadEndpoint,
-		map[string]any{"namespace": namespace, "action": "list"})
-	if b.Spent() {
-		return
-	}
-	b.WriteString(`
+`, namespace)),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiManageIstioConfigReadEndpoint,
+				map[string]any{"namespace": namespace, "action": "list"})
+			return nil
+		},
+		api.Text(`
 
 ---
 
 ## Services in Namespace
 
-`)
-	if b.Spent() {
-		return
-	}
-	writeKialiData(b, kiali, params, tools.KialiListOrGetResourcesEndpoint,
-		map[string]any{"namespaces": namespace, "resourceType": "service"})
-	if b.Spent() {
-		return
-	}
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiListOrGetResourcesEndpoint,
+				map[string]any{"namespaces": namespace, "resourceType": "service"})
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -127,5 +122,6 @@ Analyze the configuration above and check for:
 6. **Best Practices**: Are there any configuration anti-patterns (e.g., overly broad host matches, missing retries)?
 
 Provide a summary of findings with severity (critical, warning, info) and recommendations.
-`)
+`),
+	)
 }

@@ -96,9 +96,10 @@ func (b *BuilderWithBudget) Len() int { return b.b.Len() }
 // Truncated reports whether a write has already been cut.
 func (b *BuilderWithBudget) Truncated() bool { return b.truncated }
 
-// Spent reports that another fetch must not start. An exact fill leaves
+// spent reports that another fetch must not start. An exact fill leaves
 // Remaining at 0 without Truncated; writing one byte forces the single notice.
-func (b *BuilderWithBudget) Spent() bool {
+// Callers use Sections or TrySection. They do not call spent.
+func (b *BuilderWithBudget) spent() bool {
 	if b == nil || b.Truncated() {
 		return true
 	}
@@ -167,6 +168,65 @@ func (b *BuilderWithBudget) CommitScratch(header, suffix string, inner *BuilderW
 		return !cut
 	}
 	return b.WriteCut(header+body+suffix, cut)
+}
+
+// Step is one section of a budgeted report. It writes into the builder.
+// A non-nil error skips the remaining steps. The caller decides whether that
+// error fails the report.
+type Step func(*BuilderWithBudget) error
+
+// Text is a step that writes s and does not fetch.
+func Text(s string) Step {
+	return func(b *BuilderWithBudget) error {
+		if b != nil {
+			b.WriteString(s)
+		}
+		return nil
+	}
+}
+
+// Sections runs steps in order. It does not start the next step once the
+// budget is spent. A nil builder or a nil step is skipped. A step error is
+// returned as-is.
+func (b *BuilderWithBudget) Sections(steps ...Step) error {
+	if b == nil {
+		return nil
+	}
+	for _, step := range steps {
+		if step == nil {
+			continue
+		}
+		if b.spent() {
+			return nil
+		}
+		if err := step(b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TrySection gathers into a scratch when header and suffix still fit.
+// A gather error is returned and nothing is written. The parent is not truncated.
+// written is true only when the commit added bytes.
+// A header that does not fit writes nothing, so a later shorter header can still run.
+func (b *BuilderWithBudget) TrySection(header, suffix string, gather func(*BuilderWithBudget) error) (written bool, err error) {
+	if b == nil || gather == nil {
+		return false, nil
+	}
+	if !b.Fits(len(header)) {
+		return false, nil
+	}
+	body := b.Scratch(len(header) + len(suffix))
+	if body.Truncated() {
+		return false, nil
+	}
+	if err = gather(body); err != nil {
+		return false, err
+	}
+	before := b.Len()
+	b.CommitScratch(header, suffix, body)
+	return b.Len() > before, nil
 }
 
 // Remaining is the bytes this builder can still accept.

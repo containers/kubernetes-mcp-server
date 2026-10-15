@@ -101,11 +101,13 @@ func pipelineTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCal
 // Each get or list waits until the previous section still fits. The log and
 // event collectors are unchanged and write into the room that remains.
 func writePipelineTroubleshootGuide(params api.PromptHandlerParams, namespace, name string, b *api.BuilderWithBudget) {
-	if b == nil || b.Spent() {
-		return
-	}
-	pipelineRun, pipelineRunText := fetchPipelineRunForPrompt(params, namespace, name)
-	b.WriteString(fmt.Sprintf(`# Tekton PipelineRun Troubleshooting Guide
+	var pipelineRun *unstructured.Unstructured
+	var pipelineRunText string
+	var taskRuns []tektonv1.TaskRun
+	_ = b.Sections(
+		func(b *api.BuilderWithBudget) error {
+			pipelineRun, pipelineRunText = fetchPipelineRunForPrompt(params, namespace, name)
+			b.WriteString(fmt.Sprintf(`# Tekton PipelineRun Troubleshooting Guide
 
 ## PipelineRun: %s/%s
 
@@ -125,68 +127,43 @@ Analyze the collected data and use these exact section headings in the response:
 ## PipelineRun Status
 
 `, namespace, name, time.Now().Format(time.RFC3339), pipelineRunStatusHint(pipelineRun)))
-	if b.Spent() {
-		return
-	}
-	b.WriteString(pipelineRunText)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString("\n\n---\n\n## Pipeline Definition\n\n")
-	if b.Spent() {
-		return
-	}
-	b.WriteString(fetchPipelineDefinitionForPrompt(params, namespace, pipelineRun))
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString("\n\n---\n\n## TaskRun Status\n\n")
-	if b.Spent() {
-		return
-	}
-	taskRuns := fetchPipelineRunTaskRunsForPrompt(params, namespace, name, b)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString("\n\n---\n\n## Failed Step Logs\n\n")
-	if b.Spent() {
-		return
-	}
-	fetchPipelineRunLogsForPrompt(params, namespace, taskRuns, b)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString("\n\n---\n\n## Pipeline-as-Code Repositories\n\n")
-	if b.Spent() {
-		return
-	}
-	writePipelineRunPACRepositoriesForPrompt(params, namespace, b)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString("\n\n---\n\n## TektonConfig\n\n")
-	if b.Spent() {
-		return
-	}
-	writeTektonConfigsForPrompt(params, b)
-	if b.Spent() {
-		return
-	}
-
-	b.WriteString("\n\n---\n\n## Events\n\n")
-	if b.Spent() {
-		return
-	}
-	fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns, b)
-	if b.Spent() {
-		return
-	}
-	b.WriteString(`
+			return nil
+		},
+		func(b *api.BuilderWithBudget) error {
+			b.WriteString(pipelineRunText)
+			return nil
+		},
+		api.Text("\n\n---\n\n## Pipeline Definition\n\n"),
+		func(b *api.BuilderWithBudget) error {
+			b.WriteString(fetchPipelineDefinitionForPrompt(params, namespace, pipelineRun))
+			return nil
+		},
+		api.Text("\n\n---\n\n## TaskRun Status\n\n"),
+		func(b *api.BuilderWithBudget) error {
+			taskRuns = fetchPipelineRunTaskRunsForPrompt(params, namespace, name, b)
+			return nil
+		},
+		api.Text("\n\n---\n\n## Failed Step Logs\n\n"),
+		func(b *api.BuilderWithBudget) error {
+			fetchPipelineRunLogsForPrompt(params, namespace, taskRuns, b)
+			return nil
+		},
+		api.Text("\n\n---\n\n## Pipeline-as-Code Repositories\n\n"),
+		func(b *api.BuilderWithBudget) error {
+			writePipelineRunPACRepositoriesForPrompt(params, namespace, b)
+			return nil
+		},
+		api.Text("\n\n---\n\n## TektonConfig\n\n"),
+		func(b *api.BuilderWithBudget) error {
+			writeTektonConfigsForPrompt(params, b)
+			return nil
+		},
+		api.Text("\n\n---\n\n## Events\n\n"),
+		func(b *api.BuilderWithBudget) error {
+			fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns, b)
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -204,7 +181,8 @@ Use the collected data to identify:
 ## Fix Suggestions
 
 Recommend only fixes supported by the collected evidence. Common actions include correcting missing Pipeline or Task references, invalid parameters or workspaces, image pull failures, insufficient permissions or resources, and timeout or cancellation settings.
-`)
+`),
+	)
 }
 
 func pipelineRunStatusHint(pipelineRun *unstructured.Unstructured) string {
@@ -301,7 +279,7 @@ func pipelineSpecBlock(source string, pipelineSpec map[string]interface{}) strin
 // fetchPipelineRunTaskRunsForPrompt lists TaskRuns once and writes each status
 // into b. Further statuses are not formatted once b is spent.
 func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, b *api.BuilderWithBudget) []tektonv1.TaskRun {
-	if b == nil || b.Spent() {
+	if b == nil {
 		return nil
 	}
 	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "")
@@ -314,19 +292,23 @@ func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace
 		return nil
 	}
 
+	steps := make([]api.Step, 0, len(taskRuns))
 	for _, taskRun := range taskRuns {
-		if b.Spent() {
-			break
-		}
-		b.WriteString(fmt.Sprintf("### TaskRun: %s\n\n", taskRun.Name))
-		status, err := output.MarshalYaml(taskRun.Status)
-		if err != nil {
-			klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to marshal TaskRun status for PipelineRun troubleshoot",
-				klogutil.Field("taskrun", taskRun.Name), klogutil.Err(err))
-			continue
-		}
-		b.WriteString(fmt.Sprintf("```yaml\n%s```\n\n", status))
+		steps = append(steps, func(b *api.BuilderWithBudget) error {
+			b.WriteString(fmt.Sprintf("### TaskRun: %s\n\n", taskRun.Name))
+			status, err := output.MarshalYaml(taskRun.Status)
+			if err != nil {
+				klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to marshal TaskRun status for PipelineRun troubleshoot",
+					klogutil.Field("taskrun", taskRun.Name), klogutil.Err(err))
+				return nil
+			}
+			return b.Sections(func(b *api.BuilderWithBudget) error {
+				b.WriteString(fmt.Sprintf("```yaml\n%s```\n\n", status))
+				return nil
+			})
+		})
 	}
+	_ = b.Sections(steps...)
 	return taskRuns
 }
 
@@ -456,7 +438,7 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 }
 
 func writePipelineRunPACRepositoriesForPrompt(params api.PromptHandlerParams, namespace string, b *api.BuilderWithBudget) {
-	if b == nil || b.Spent() {
+	if b == nil {
 		return
 	}
 	list, err := params.DynamicClient().Resource(pacRepositoryGVR).Namespace(namespace).List(params.Context, metav1.ListOptions{})
@@ -477,7 +459,7 @@ func writePipelineRunPACRepositoriesForPrompt(params api.PromptHandlerParams, na
 }
 
 func writeTektonConfigsForPrompt(params api.PromptHandlerParams, b *api.BuilderWithBudget) {
-	if b == nil || b.Spent() {
+	if b == nil {
 		return
 	}
 	list, err := params.DynamicClient().Resource(tektonConfigGVR).List(params.Context, metav1.ListOptions{})

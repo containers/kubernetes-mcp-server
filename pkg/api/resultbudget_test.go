@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -85,15 +86,149 @@ func (s *ResultBudgetSuite) TestSpentForcesOneNoticeOnAnExactFill() {
 	b := NewBuilderWithBudget(4)
 	s.False(b.WriteString("abcd"))
 	s.False(b.Truncated())
-	s.True(b.Spent())
+	s.True(b.spent())
 	s.Equal("abcd"+ResultTruncationNotice, b.String())
-	s.True(b.Spent())
+	s.True(b.spent())
 	s.Equal(1, strings.Count(b.String(), ResultTruncationNotice))
 
 	open := NewBuilderWithBudget(0)
-	s.False(open.Spent())
+	s.False(open.spent())
 	s.False((*BuilderWithBudget)(nil).Fits(1))
-	s.True((*BuilderWithBudget)(nil).Spent())
+	s.True((*BuilderWithBudget)(nil).spent())
+}
+
+func (s *ResultBudgetSuite) TestSectionsStopsBeforeTheNextStep() {
+	s.Run("an over-cap write skips the next step", func() {
+		b := NewBuilderWithBudget(4)
+		called := false
+		err := b.Sections(
+			Text("abcdef"),
+			func(*BuilderWithBudget) error {
+				called = true
+				return nil
+			},
+		)
+		s.NoError(err)
+		s.False(called)
+		s.Equal("abcd"+ResultTruncationNotice, b.String())
+	})
+
+	s.Run("an exact fill skips the next step and writes one notice", func() {
+		b := NewBuilderWithBudget(4)
+		called := false
+		err := b.Sections(
+			Text("abcd"),
+			func(*BuilderWithBudget) error {
+				called = true
+				return nil
+			},
+		)
+		s.NoError(err)
+		s.False(called)
+		s.Equal("abcd"+ResultTruncationNotice, b.String())
+		s.Equal(1, strings.Count(b.String(), ResultTruncationNotice))
+	})
+
+	s.Run("a step error skips the rest", func() {
+		b := NewBuilderWithBudget(100)
+		called := false
+		err := b.Sections(
+			Text("keep"),
+			func(*BuilderWithBudget) error { return errors.New("boom") },
+			func(*BuilderWithBudget) error {
+				called = true
+				return nil
+			},
+		)
+		s.EqualError(err, "boom")
+		s.False(called)
+		s.Equal("keep", b.String())
+	})
+
+	s.Run("an uncapped builder runs every step", func() {
+		b := NewBuilderWithBudget(0)
+		n := 0
+		err := b.Sections(
+			Text("a"),
+			func(*BuilderWithBudget) error { n++; return nil },
+			Text("b"),
+		)
+		s.NoError(err)
+		s.Equal(1, n)
+		s.Equal("ab", b.String())
+	})
+
+	s.Run("a nil builder and a nil step do nothing", func() {
+		s.NoError((*BuilderWithBudget)(nil).Sections(Text("x")))
+		b := NewBuilderWithBudget(10)
+		s.NoError(b.Sections(nil, Text("ok")))
+		s.Equal("ok", b.String())
+	})
+}
+
+func (s *ResultBudgetSuite) TestTrySectionSkipsWithoutSpending() {
+	s.Run("a header that does not fit leaves room for a shorter one", func() {
+		b := NewBuilderWithBudget(13)
+		ran := false
+		written, err := b.TrySection(strings.Repeat("h", 13), "", func(*BuilderWithBudget) error {
+			ran = true
+			return nil
+		})
+		s.NoError(err)
+		s.False(written)
+		s.False(ran)
+		s.False(b.Truncated())
+		s.Empty(b.String())
+
+		written, err = b.TrySection(strings.Repeat("s", 12), "", func(body *BuilderWithBudget) error {
+			body.WriteString("p")
+			return nil
+		})
+		s.NoError(err)
+		s.True(written)
+		s.Equal(strings.Repeat("s", 12)+"p", b.String())
+	})
+
+	s.Run("a gather error writes nothing", func() {
+		b := NewBuilderWithBudget(100)
+		written, err := b.TrySection("H", "\n", func(*BuilderWithBudget) error {
+			return errors.New("nope")
+		})
+		s.False(written)
+		s.EqualError(err, "nope")
+		s.Empty(b.String())
+		s.False(b.Truncated())
+	})
+
+	s.Run("an empty body writes nothing", func() {
+		b := NewBuilderWithBudget(100)
+		written, err := b.TrySection("H", "\n", func(*BuilderWithBudget) error { return nil })
+		s.NoError(err)
+		s.False(written)
+		s.Empty(b.String())
+	})
+
+	s.Run("a truncated commit stops the next section", func() {
+		b := NewBuilderWithBudget(10)
+		called := false
+		err := b.Sections(
+			func(b *BuilderWithBudget) error {
+				_, err := b.TrySection("H", "\n", func(body *BuilderWithBudget) error {
+					body.WriteString(strings.Repeat("a", 100))
+					return nil
+				})
+				return err
+			},
+			func(*BuilderWithBudget) error {
+				called = true
+				return nil
+			},
+		)
+		s.NoError(err)
+		s.False(called)
+		s.True(b.Truncated())
+		s.Contains(b.String(), ResultTruncationNotice)
+	})
 }
 
 func (s *ResultBudgetSuite) TestFitsRequiresRoomBeyondTheHeader() {

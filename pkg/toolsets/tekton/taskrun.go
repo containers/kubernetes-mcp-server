@@ -216,28 +216,30 @@ func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClie
 		sb.WriteString(fmt.Sprintf("TaskRun '%s' in namespace '%s' has not started a pod yet\n", tr.Name, namespace))
 		return
 	}
+	var steps []api.Step
 	for _, step := range tr.Status.Steps {
-		if sb.Truncated() {
-			return
-		}
 		if stepName == "" || step.Name == stepName {
-			collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailLines)
+			steps = append(steps, func(b *api.BuilderWithBudget) error {
+				collectContainerLogs(ctx, client, b, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailLines)
+				return nil
+			})
 		}
 	}
 	if stepName == "" {
 		for _, sidecar := range tr.Status.Sidecars {
-			if sb.Truncated() {
-				return
-			}
-			collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailLines)
+			steps = append(steps, func(b *api.BuilderWithBudget) error {
+				collectContainerLogs(ctx, client, b, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailLines)
+				return nil
+			})
 		}
 	}
+	_ = sb.Sections(steps...)
 }
 
 func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *api.BuilderWithBudget, podName, namespace, kind, name, container string, tailLines int64) {
-	// Do not open another log stream once the result budget is spent.
+	// Sections decides whether this stream starts.
 	// See docs/specs/memory-bounds.md#retention.
-	if sb.Spent() {
+	if sb == nil {
 		return
 	}
 

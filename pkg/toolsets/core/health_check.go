@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -181,83 +182,72 @@ func buildHealthCheckPrompt(params api.PromptHandlerParams, namespace, namespace
 		}
 	}
 
-	writeHealthCheckPreamble(b, diag)
-
-	if body := beginSection(b, "## 1. Nodes\n\n"); body != nil {
-		logger.Info("Collecting node diagnostics...")
-		err := gatherNodeDiagnostics(params, body)
-		if err == nil {
-			commitSection(b, "## 1. Nodes\n\n", body)
-			logger.Info("Node diagnostics collected")
-		} else {
-			klogutil.LogWarn(logger, "Failed to collect node diagnostics", klogutil.Err(err))
-		}
-	}
-
-	if body := beginSection(b, "## 2. Cluster Operators (OpenShift)\n\n"); body != nil {
-		logger.Info("Checking for cluster operators (OpenShift)...")
-		err := gatherClusterOperatorDiagnostics(params, body)
-		if err == nil {
-			commitSection(b, "## 2. Cluster Operators (OpenShift)\n\n", body)
-			logger.Info("Cluster operator diagnostics collected")
-		}
-	}
-
-	if body := beginSection(b, "## 3. Pods\n\n"); body != nil {
-		logger.Info("Collecting pod diagnostics...")
-		err := gatherPodDiagnostics(params, namespace, body)
-		if err == nil {
-			commitSection(b, "## 3. Pods\n\n", body)
-			logger.Info("Pod diagnostics collected")
-		} else {
-			klogutil.LogWarn(logger, "Failed to collect pod diagnostics", klogutil.Err(err))
-		}
-	}
-
-	writeWorkloadSections(b, params, namespace)
-
-	if body := beginSection(b, "## 5. Persistent Volume Claims\n\n"); body != nil {
-		logger.Info("Collecting PVC diagnostics...")
-		err := gatherPVCDiagnostics(params, namespace, body)
-		if err == nil {
-			commitSection(b, "## 5. Persistent Volume Claims\n\n", body)
-			logger.Info("PVC diagnostics collected")
-		} else {
-			klogutil.LogWarn(logger, "Failed to collect PVC diagnostics", klogutil.Err(err))
-		}
-	}
-
-	header := "## 6. Recent Events (Last Hour)\n\n"
-	if checkEvents && b.Fits(len(header)) {
-		logger.Info("Collecting recent events...")
-		body := b.Scratch(len(header) + len("\n\n"))
-		writeEventBody(params, namespace, nsFetched, knownNS, body)
-		if b.CommitScratch(header, "\n\n", body) {
-			logger.Info("Event diagnostics collected")
-		}
-	}
-
-	if !b.Truncated() {
-		b.WriteString("---\n\n")
-		b.WriteString("**Please analyze the above diagnostic data and provide your comprehensive health assessment.**\n")
-	}
+	_ = b.Sections(
+		func(b *api.BuilderWithBudget) error {
+			writeHealthCheckPreamble(b, diag)
+			return nil
+		},
+		healthSection(logger, "## 1. Nodes\n\n", "Collecting node diagnostics...", "Node diagnostics collected", "Failed to collect node diagnostics",
+			func(body *api.BuilderWithBudget) error {
+				return gatherNodeDiagnostics(params, body)
+			}),
+		healthSection(logger, "## 2. Cluster Operators (OpenShift)\n\n", "Checking for cluster operators (OpenShift)...", "Cluster operator diagnostics collected", "",
+			func(body *api.BuilderWithBudget) error {
+				return gatherClusterOperatorDiagnostics(params, body)
+			}),
+		healthSection(logger, "## 3. Pods\n\n", "Collecting pod diagnostics...", "Pod diagnostics collected", "Failed to collect pod diagnostics",
+			func(body *api.BuilderWithBudget) error {
+				return gatherPodDiagnostics(params, namespace, body)
+			}),
+		func(b *api.BuilderWithBudget) error {
+			writeWorkloadSections(b, params, namespace)
+			return nil
+		},
+		healthSection(logger, "## 5. Persistent Volume Claims\n\n", "Collecting PVC diagnostics...", "PVC diagnostics collected", "Failed to collect PVC diagnostics",
+			func(body *api.BuilderWithBudget) error {
+				return gatherPVCDiagnostics(params, namespace, body)
+			}),
+		func(b *api.BuilderWithBudget) error {
+			if !checkEvents {
+				return nil
+			}
+			header := "## 6. Recent Events (Last Hour)\n\n"
+			written, err := b.TrySection(header, "\n\n", func(body *api.BuilderWithBudget) error {
+				logger.Info("Collecting recent events...")
+				writeEventBody(params, namespace, nsFetched, knownNS, body)
+				return nil
+			})
+			if written && !b.Truncated() {
+				logger.Info("Event diagnostics collected")
+			}
+			return err
+		},
+		api.Text("---\n\n**Please analyze the above diagnostic data and provide your comprehensive health assessment.**\n"),
+	)
 	logger.Info("Cluster health check data collection completed")
 	return b.String()
 }
 
-func beginSection(b *api.BuilderWithBudget, header string) *api.BuilderWithBudget {
-	if b == nil || !b.Fits(len(header)) {
+// healthSection gathers one diagnostic when its header still fits.
+// A gather error omits the section. An empty failLog skips the warning.
+// The step returns nil so a later section still runs.
+func healthSection(logger klog.Logger, header, startLog, doneLog, failLog string, gather func(*api.BuilderWithBudget) error) api.Step {
+	return func(b *api.BuilderWithBudget) error {
+		written, err := b.TrySection(header, "\n\n", func(body *api.BuilderWithBudget) error {
+			logger.Info(startLog)
+			return gather(body)
+		})
+		if err != nil {
+			if failLog != "" {
+				klogutil.LogWarn(logger, failLog, klogutil.Err(err))
+			}
+			return nil
+		}
+		if written {
+			logger.Info(doneLog)
+		}
 		return nil
 	}
-	body := b.Scratch(len(header) + len("\n\n"))
-	if body.Truncated() {
-		return nil
-	}
-	return body
-}
-
-func commitSection(b *api.BuilderWithBudget, header string, body *api.BuilderWithBudget) {
-	b.CommitScratch(header, "\n\n", body)
 }
 
 // sectionSummaryReserve leaves room for a short totals line in front of the
@@ -293,40 +283,32 @@ func writeSummaryAndBlocks(b, lines *api.BuilderWithBudget, summary, emptyNote s
 func writeWorkloadSections(b *api.BuilderWithBudget, params api.PromptHandlerParams, namespace string) {
 	logger := klogutil.FromContext(params.Context)
 	wroteHeader := false
-	writeOne := func(title, kind, logName string) {
-		header := "### " + title + "\n\n"
-		need := header
-		reserve := len(header) + len("\n\n")
-		if !wroteHeader {
-			need = "## 4. Workload Controllers\n\n" + header
-			reserve += len("## 4. Workload Controllers\n\n")
+	one := func(title, kind, logName string) api.Step {
+		return func(b *api.BuilderWithBudget) error {
+			header := "### " + title + "\n\n"
+			if !wroteHeader {
+				header = "## 4. Workload Controllers\n\n" + header
+			}
+			written, err := b.TrySection(header, "\n\n", func(body *api.BuilderWithBudget) error {
+				logger.Info("Collecting " + logName + " diagnostics...")
+				return gatherWorkloadDiagnostics(params, kind, namespace, body)
+			})
+			if err != nil {
+				klogutil.LogWarn(logger, "Failed to collect "+logName+" diagnostics", klogutil.Err(err))
+				return nil
+			}
+			if written {
+				wroteHeader = true
+				logger.Info(title + " diagnostics collected")
+			}
+			return nil
 		}
-		if !b.Fits(len(need)) {
-			return
-		}
-		body := b.Scratch(reserve)
-		if body.Truncated() {
-			return
-		}
-		logger.Info("Collecting " + logName + " diagnostics...")
-		err := gatherWorkloadDiagnostics(params, kind, namespace, body)
-		if err != nil {
-			klogutil.LogWarn(logger, "Failed to collect "+logName+" diagnostics", klogutil.Err(err))
-			return
-		}
-		if body.Len() == 0 {
-			return
-		}
-		if !wroteHeader {
-			b.WriteString("## 4. Workload Controllers\n\n")
-			wroteHeader = true
-		}
-		b.CommitScratch(header, "\n\n", body)
-		logger.Info(title + " diagnostics collected")
 	}
-	writeOne("Deployments", "Deployment", "deployment")
-	writeOne("StatefulSets", "StatefulSet", "statefulset")
-	writeOne("DaemonSets", "DaemonSet", "daemonset")
+	_ = b.Sections(
+		one("Deployments", "Deployment", "deployment"),
+		one("StatefulSets", "StatefulSet", "statefulset"),
+		one("DaemonSets", "DaemonSet", "daemonset"),
+	)
 }
 
 // gatherNodeDiagnostics collects node status using CoreV1 clientset.

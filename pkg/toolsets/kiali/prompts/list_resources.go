@@ -264,35 +264,35 @@ func meshTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResult,
 // writeMeshTopologyPrompt writes the overview into one prompt budget.
 // Namespace discovery and the traffic graph do not start once that budget is spent.
 func writeMeshTopologyPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, b *api.BuilderWithBudget) error {
-	b.WriteString(`# Mesh Topology Overview
+	var resolved string
+	return b.Sections(
+		api.Text(`# Mesh Topology Overview
 
 ## Mesh Status
-`)
-	if b.Spent() {
-		return nil
-	}
-	writeKialiData(b, kiali, params, tools.KialiGetMeshStatusEndpoint, nil)
-	if b.Spent() {
-		return nil
-	}
-	resolved, err := resolveNamespaces(kiali, params, allNamespacesKeyword)
-	if err != nil {
-		return fmt.Errorf("failed to resolve mesh namespaces: %w", err)
-	}
-	b.WriteString("\n\n## Traffic Graph\n")
-	if b.Spent() {
-		return nil
-	}
-	writeKialiData(b, kiali, params, tools.KialiGetMeshTrafficGraphEndpoint,
-		map[string]any{"namespaces": resolved})
-	if b.Spent() {
-		return nil
-	}
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiGetMeshStatusEndpoint, nil)
+			return nil
+		},
+		func(b *api.BuilderWithBudget) error {
+			var err error
+			resolved, err = resolveNamespaces(kiali, params, allNamespacesKeyword)
+			if err != nil {
+				return fmt.Errorf("failed to resolve mesh namespaces: %w", err)
+			}
+			return nil
+		},
+		api.Text("\n\n## Traffic Graph\n"),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiGetMeshTrafficGraphEndpoint,
+				map[string]any{"namespaces": resolved})
+			return nil
+		},
+		api.Text(`
 
 ## Instructions
 
 Summarize the mesh topology covering control plane components, cluster connectivity, and data plane overview.
-`)
-	return nil
+`),
+	)
 }

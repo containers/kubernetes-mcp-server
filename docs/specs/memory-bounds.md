@@ -69,6 +69,15 @@ It does not bound memory a handler has already accumulated.
 
 A collector is not done until every builder, retained slice, and join on that path writes through [`BuilderWithBudget`](../../pkg/api/resultbudget.go) or a `Scratch`.
 
+A multi-section collector runs [`Sections`](../../pkg/api/resultbudget.go).
+Each step writes into the builder.
+The next step does not start once the budget is spent.
+An item loop builds a `[]Step` from data already in hand and runs that slice through `Sections`.
+The List or Get that produced the items stays in front of that slice.
+A gather that must omit its header when the header does not fit, or when the gather fails, uses [`TrySection`](../../pkg/api/resultbudget.go).
+That step returns nil so a later section still runs.
+Health-check issue lines and event totals still walk the rest of a fetched list after the scratch is full, so those totals stay accurate.
+
 Stopping the next fetch leaves the prefix already retained and the truncation notice.
 The call is not failed after those bytes have been kept.
 

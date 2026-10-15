@@ -96,7 +96,8 @@ const serviceTroubleshootAssistantText = "I'll analyze the collected data to dia
 // writeServiceTroubleshootPrompt writes the guide into one prompt budget.
 // The Istio config request does not start once that budget is spent.
 func writeServiceTroubleshootPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespace, service, logTarget string, b *api.BuilderWithBudget) {
-	b.WriteString(fmt.Sprintf(`# Service Troubleshooting Guide
+	_ = b.Sections(
+		api.Text(fmt.Sprintf(`# Service Troubleshooting Guide
 
 ## Target: %s in namespace %s
 
@@ -108,16 +109,13 @@ Use this guide to diagnose issues with the service. The relevant data has been c
 
 Review the workload logs for error messages, stack traces, or unusual patterns:
 
-`, service, namespace))
-	if b.Spent() {
-		return
-	}
-	writeKialiData(b, kiali, params, tools.KialiGetLogsEndpoint,
-		map[string]any{"namespace": namespace, "name": logTarget})
-	if b.Spent() {
-		return
-	}
-	b.WriteString(`
+`, service, namespace)),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiGetLogsEndpoint,
+				map[string]any{"namespace": namespace, "name": logTarget})
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -125,16 +123,13 @@ Review the workload logs for error messages, stack traces, or unusual patterns:
 
 Review the Istio configuration (VirtualServices, DestinationRules, etc.) for routing issues, fault injection, or misconfiguration:
 
-`)
-	if b.Spent() {
-		return
-	}
-	writeKialiData(b, kiali, params, tools.KialiManageIstioConfigReadEndpoint,
-		map[string]any{"namespace": namespace, "action": "list"})
-	if b.Spent() {
-		return
-	}
-	b.WriteString(`
+`),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiManageIstioConfigReadEndpoint,
+				map[string]any{"namespace": namespace, "action": "list"})
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -146,14 +141,15 @@ Based on the data above, provide:
 2. **Istio Impact**: Are there any Istio configurations (fault injection, traffic routing, retries) that could cause or contribute to the errors?
 3. **Root Cause**: What is the most likely root cause?
 4. **Recommendations**: What actions should be taken to resolve the issue?
-`)
+`),
+	)
 }
 
 // writeKialiData calls a Kiali endpoint and writes the body into b.
 // On error it writes a placeholder instead of failing the prompt.
-// It does not call the endpoint once b is spent.
+// Sections decides whether this call starts.
 func writeKialiData(b *api.BuilderWithBudget, kiali *kialiclient.Kiali, params api.PromptHandlerParams, endpoint string, args map[string]any) {
-	if b == nil || b.Spent() {
+	if b == nil {
 		return
 	}
 	content, err := kiali.ExecuteRequest(params.Context, endpoint, args)
