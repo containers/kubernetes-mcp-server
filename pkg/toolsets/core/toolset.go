@@ -27,12 +27,13 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
+	compatibilityFiltersEnabled := toolsetContext.Config != nil && toolsetContext.Config.EnableTargetCompatibilityToolFilters.Get()
 	return slices.Concat(
 		initEvents(),
 		initNamespaces(ctx, toolsetContext.Inspector),
 		initNodes(ctx, toolsetContext.Inspector),
 		initPods(ctx, toolsetContext.Inspector),
-		initResources(ctx, toolsetContext.Inspector, toolsetContext.TargetCompatibilityFiltersEnabled),
+		initResources(ctx, toolsetContext.Inspector, compatibilityFiltersEnabled),
 	)
 }
 
