@@ -46,7 +46,7 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 		bearerTokenFile: strings.TrimSpace(restConfig.BearerTokenFile),
 	}
 	var shared *Config
-	if tc, ok := cfg.GetToolsetConfig("netobserv"); ok {
+	if tc, ok := cfg.GetToolsetConfig(ToolsetConfigKey); ok {
 		if parsed, ok := tc.(*Config); ok && parsed != nil {
 			shared = parsed
 		}

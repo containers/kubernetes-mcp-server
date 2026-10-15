@@ -39,10 +39,10 @@ func flowsRBAC(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) *
 	}
 	if len(cfg) > 0 && cfg[0].Found && !cfg[0].Unknown {
 		if !cfg[0].LokiEnabled {
-			return nil
+			return api.RBACUnbounded(unboundedFlowsReason)
 		}
 		if !strings.EqualFold(cfg[0].LokiMode, "LokiStack") {
-			return nil
+			return api.RBACUnbounded(unboundedFlowsReason)
 		}
 		return api.RBACBounded(api.RBACRequirement{
 			Verbs: []string{"get"},
@@ -74,7 +74,7 @@ func metricsRBAC(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig)
 	}
 	if len(cfg) > 0 && cfg[0].Found && !cfg[0].Unknown {
 		if !cfg[0].PrometheusEnabled || !strings.EqualFold(cfg[0].PrometheusMode, "Auto") {
-			return nil
+			return api.RBACUnbounded(unboundedMetricsReason)
 		}
 	}
 	if p != nil && api.AnyTargetHasGVK(context.Background(), p, openshiftProjectGVK) {

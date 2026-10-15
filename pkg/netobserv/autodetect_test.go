@@ -13,7 +13,7 @@ func TestEffectiveConfigFromFlowCollector(t *testing.T) {
 			"loki":          map[string]any{"enable": false, "mode": "Manual"},
 			"prometheus":    map[string]any{"querier": map[string]any{"enable": true, "mode": "Auto"}},
 			"namespace":     "observability",
-			"consolePlugin": map[string]any{"port": int64(9001)},
+			"consolePlugin": map[string]any{"advanced": map[string]any{"port": int64(9001)}},
 		},
 	}})
 	require.NoError(t, err)

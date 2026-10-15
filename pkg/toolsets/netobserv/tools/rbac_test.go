@@ -102,18 +102,28 @@ func (s *RBACSuite) TestDetectedBackendRBAC() {
 		s.Nil(meta.Unbounded)
 	})
 
-	s.Run("other Loki modes skip RBAC declaration", func() {
+	s.Run("other Loki modes are unbounded", func() {
 		meta := flowsRBAC(&stubInspector{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: true, LokiMode: "Manual"})
-		s.Nil(meta)
+		s.Require().NotNil(meta)
+		s.NotNil(meta.Unbounded)
 	})
 
-	s.Run("disabled Loki skips flow RBAC declaration", func() {
+	s.Run("disabled Loki is unbounded", func() {
 		meta := flowsRBAC(&stubInspector{isOpenShift: true}, netobservclient.EffectiveConfig{Found: true, LokiEnabled: false})
-		s.Nil(meta)
+		s.Require().NotNil(meta)
+		s.NotNil(meta.Unbounded)
 	})
 
 	s.Run("unknown detection remains fail open", func() {
 		meta := flowsRBAC(&stubInspector{isOpenShift: true}, netobservclient.EffectiveConfig{Unknown: true})
+		s.Require().NotNil(meta)
+		s.NotNil(meta.Unbounded)
+	})
+
+	s.Run("non-Auto Prometheus is unbounded", func() {
+		meta := metricsRBAC(&stubInspector{isOpenShift: true}, netobservclient.EffectiveConfig{
+			Found: true, PrometheusEnabled: true, PrometheusMode: "Manual",
+		})
 		s.Require().NotNil(meta)
 		s.NotNil(meta.Unbounded)
 	})

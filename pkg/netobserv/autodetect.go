@@ -80,7 +80,7 @@ func effectiveConfigFromFlowCollector(object *unstructured.Unstructured) (Effect
 	} else if ok {
 		result.Namespace = namespace
 	}
-	if port, ok, err := unstructured.NestedInt64(object.Object, "spec", "consolePlugin", "port"); err != nil {
+	if port, ok, err := unstructured.NestedInt64(object.Object, "spec", "consolePlugin", "advanced", "port"); err != nil {
 		return EffectiveConfig{}, err
 	} else if ok {
 		result.Port = int(port)

@@ -30,6 +30,9 @@ type Config struct {
 	PrometheusMode    string `toml:"prometheus_mode,omitempty"`
 }
 
+// ToolsetConfigKey is the stable configuration key, independent of any toolset name override.
+const ToolsetConfigKey = "netobserv"
+
 // MergeEffectiveConfig applies explicit backend settings over detected FlowCollector values.
 // Explicit settings take precedence while unspecified fields retain detection results.
 func MergeEffectiveConfig(detected EffectiveConfig, manual *Config) EffectiveConfig {

@@ -29,7 +29,7 @@ func (t *Toolset) GetTools(ctx context.Context, tc api.ToolsetContext) []api.Ser
 		cfg.Unknown = true
 	}
 	if tc.Config != nil {
-		if configValue, ok := tc.Config.GetToolsetConfig(defaults.ToolsetName()); ok {
+		if configValue, ok := tc.Config.GetToolsetConfig(netobserv.ToolsetConfigKey); ok {
 			if netobservCfg, ok := configValue.(*netobserv.Config); ok {
 				cfg = netobserv.MergeEffectiveConfig(cfg, netobservCfg)
 			}
