@@ -30,6 +30,12 @@ func (m *stubInspector) ServerResourcesForGroupVersion(ctx context.Context, _ st
 	})
 }
 
+func (m *stubInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, stubTargetProvider{}, func(ctx context.Context, s string) (string, error) {
+		return "", nil
+	})
+}
+
 type stubTargetProvider struct{}
 
 func (stubTargetProvider) IsMultiTarget() bool { return false }
