@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	netobservToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -123,6 +124,58 @@ func (s *NetObservSuite) TestGetFlowMetrics() {
 		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "data")
 		s.NotNil(toolResult.StructuredContent)
 	})
+}
+
+func (s *NetObservSuite) TestManualBackendConfigUsesStableToolsetKey() {
+	kubeConfig := s.Cfg.KubeConfig.Get()
+	listOutput := s.Cfg.ListOutput.Get()
+	readOnly := s.Cfg.ReadOnly.Get()
+	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+		toolsets = ["%s"]
+		[toolset_configs.netobserv]
+		url = "%s"
+		loki_enabled = true
+		loki_mode = "LokiStack"
+		prometheus_enabled = true
+		prometheus_mode = "Manual"
+	`, s.toolsetName, s.mockServer.Config().Host)))
+	s.Require().NoError(err)
+	s.Cfg = cfg
+	s.Cfg.KubeConfig.SetForTest(kubeConfig)
+	s.Cfg.ListOutput.SetForTest(listOutput)
+	s.Cfg.ReadOnly.SetForTest(readOnly)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	byName := make(map[string]*mcp.Tool, len(tools.Tools))
+	for _, tool := range tools.Tools {
+		byName[tool.Name] = tool
+	}
+
+	listName := s.toolsetName + "_list_flows"
+	exportName := s.toolsetName + "_export_flows"
+	metricsName := s.toolsetName + "_get_flow_metrics"
+	s.Require().Contains(byName, listName)
+	s.Require().Contains(byName, exportName)
+	s.Require().Contains(byName, metricsName)
+
+	for _, name := range []string{listName, exportName} {
+		meta, _ := byName[name].Meta[api.RBACMetadataKey].(map[string]any)
+		bounded, _ := meta["bounded"].(map[string]any)
+		reqs, _ := bounded["requirements"].([]any)
+		s.Require().Len(reqs, 1, name)
+		req, _ := reqs[0].(map[string]any)
+		s.Equal([]any{"get"}, req["verbs"], name)
+		target, _ := req["target"].(map[string]any)
+		resource, _ := target["resource"].(map[string]any)
+		s.Equal("loki.grafana.com", resource["apiGroup"], name)
+		s.Equal("network", resource["resource"], name)
+		resourceName, _ := req["resourceName"].(map[string]any)
+		s.Equal("logs", resourceName["name"], name)
+	}
+	_, hasMetricsRBAC := byName[metricsName].Meta[api.RBACMetadataKey]
+	s.False(hasMetricsRBAC)
 }
 
 func TestNetObservMcp(t *testing.T) {
