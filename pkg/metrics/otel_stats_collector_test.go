@@ -210,6 +210,70 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 	})
 }
 
+func (s *OtelStatsCollectorSuite) TestRecordInFlightRequest() {
+	type change struct {
+		method string
+		delta  int64
+	}
+	tests := []struct {
+		name     string
+		changes  []change
+		expected map[string]int64
+	}{
+		{
+			name:     "increment sets the in-flight count for the method",
+			changes:  []change{{"tools/call", 1}, {"tools/call", 1}},
+			expected: map[string]int64{"tools/call": 2},
+		},
+		{
+			name:     "decrement returns the in-flight count to zero",
+			changes:  []change{{"tools/call", 1}, {"tools/call", -1}},
+			expected: map[string]int64{"tools/call": 0},
+		},
+		{
+			name:     "methods are tracked independently",
+			changes:  []change{{"tools/call", 1}, {"resources/read", 1}, {"resources/read", 1}, {"resources/read", -1}},
+			expected: map[string]int64{"tools/call": 1, "resources/read": 1},
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			collector, err := NewOtelStatsCollector("test-meter-in-flight")
+			s.Require().NoError(err)
+			ctx := context.Background()
+			for _, c := range tt.changes {
+				collector.RecordInFlightRequest(ctx, c.method, c.delta)
+			}
+
+			var rm metricdata.ResourceMetrics
+			s.Require().NoError(collector.reader.Collect(ctx, &rm))
+			actual := map[string]int64{}
+			var found bool
+			for _, scopeMetrics := range rm.ScopeMetrics {
+				for _, m := range scopeMetrics.Metrics {
+					if m.Name != "k8s_mcp.requests.in_flight" {
+						continue
+					}
+					found = true
+					sum, ok := m.Data.(metricdata.Sum[int64])
+					s.Require().True(ok, "k8s_mcp.requests.in_flight should be an int64 sum")
+					s.False(sum.IsMonotonic, "k8s_mcp.requests.in_flight should be an up-down counter")
+					for _, dp := range sum.DataPoints {
+						method, _ := dp.Attributes.Value("mcp.method.name")
+						actual[method.AsString()] = dp.Value
+					}
+				}
+			}
+			s.Require().True(found, "k8s_mcp.requests.in_flight should exist")
+			s.Equal(tt.expected, actual)
+
+			rec := httptest.NewRecorder()
+			collector.PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+			s.Contains(rec.Body.String(), "# TYPE k8s_mcp_requests_in_flight gauge")
+		})
+	}
+}
+
 func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
 	s.Run("serves metrics in Prometheus format", func() {
 		collector, err := NewOtelStatsCollectorWithConfig(s.T().Context(), CollectorConfig{
