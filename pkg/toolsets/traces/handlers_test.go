@@ -81,6 +81,19 @@ func TestSearchTracesHandler_Success(t *testing.T) {
 	require.Len(t, output.Traces, 1)
 }
 
+func TestSearchTracesHandler_BackendCap(t *testing.T) {
+	const body = `{"traces":[],"metrics":{}}`
+	srv := tempoServer(t, map[string]mockResponse{
+		"search": {body: body},
+	})
+	params := handlerParams(t, srv.URL, map[string]any{"query": "{}"})
+	params.Config.MaxBackendResponseBytes.SetForTest(int64(len(body) - 1))
+
+	result, err := searchTracesHandler(params)
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "max_backend_response_bytes")
+}
+
 func TestSearchTracesHandler_EmptyQuery(t *testing.T) {
 	srv := tempoServer(t, nil)
 	result, err := searchTracesHandler(handlerParams(t, srv.URL, map[string]any{"query": ""}))

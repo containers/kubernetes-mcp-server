@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/prometheus/common/model"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/auth"
@@ -226,7 +227,7 @@ func getLokiClient(params api.ToolHandlerParams) (loki.Loader, error) {
 		Timeout:   loki.RequestTimeout,
 		Transport: rt,
 	}
-	return loki.NewHTTPLoader(httpClient, url, tenant), nil
+	return loki.NewHTTPLoader(httpClient, url, tenant, kubernetes.LiveBackendLimit(params.Config)), nil
 }
 
 func resolveLokiURL(params api.ToolHandlerParams) (string, error) {

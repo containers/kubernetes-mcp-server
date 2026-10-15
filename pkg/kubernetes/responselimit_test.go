@@ -55,6 +55,36 @@ func (s *BackendLimitSuite) readAll(body io.ReadCloser) ([]byte, error) {
 	return io.ReadAll(body)
 }
 
+func (s *BackendLimitSuite) TestBackendLimitRequiresConfig() {
+	_, err := BackendLimit(nil)
+	s.ErrorIs(err, ErrBackendLimitUnavailable)
+	_, err = LiveBackendLimit(nil)()
+	s.ErrorIs(err, ErrBackendLimitUnavailable)
+}
+
+func (s *BackendLimitSuite) TestReadCappedDropsOverCapBytes() {
+	src := &trackCloser{Reader: strings.NewReader("abcdef")}
+	data, err := ReadCapped(src, 4)
+	s.Empty(data)
+	s.True(IsResponseTooLarge(err))
+	s.True(src.closed)
+
+	data, err = ReadCapped(&trackCloser{Reader: strings.NewReader("abcd")}, 4)
+	s.Require().NoError(err)
+	s.Equal("abcd", string(data))
+}
+
+func (s *BackendLimitSuite) TestReadLimitedKeepsPrefix() {
+	src := &trackCloser{Reader: strings.NewReader("abcdef")}
+	data, err := ReadLimited(src, 4)
+	s.Equal("abcd", string(data))
+	s.True(IsResponseTooLarge(err))
+	text, truncated, err := AcceptTruncated(data, err)
+	s.Require().NoError(err)
+	s.True(truncated)
+	s.Equal("abcd"+BackendTruncationNotice, text)
+}
+
 func (s *BackendLimitSuite) TestUnderCap() {
 	src := &trackCloser{Reader: strings.NewReader("abcd")}
 	data, err := s.readAll(LimitResponseBody(src, 8))

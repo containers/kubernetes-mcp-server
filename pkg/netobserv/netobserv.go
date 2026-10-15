@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -180,10 +179,10 @@ func (n *NetObserv) authorizationHeader(ctx context.Context) string {
 func (n *NetObserv) backendLimit() (int64, error) {
 	// Unreachable today: NewNetObserv rejects a nil config and stores it. The
 	// error is defense against a future bug that builds a NetObserv without one.
-	if n == nil || n.cfg == nil {
-		return 0, kubernetes.ErrBackendLimitUnavailable
+	if n == nil {
+		return kubernetes.BackendLimit(nil)
 	}
-	return n.cfg.MaxBackendResponseBytes.Get(), nil
+	return kubernetes.BackendLimit(n.cfg)
 }
 
 // ExecuteGet performs a GET request against the plugin API with query parameters derived from arguments.
@@ -238,14 +237,13 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		return GetResponse{}, fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, readErr := io.ReadAll(kubernetes.LimitResponseBody(resp.Body, limit))
-	var tooLarge *kubernetes.BackendResponseTooLargeError
-	if readErr != nil && !errors.As(readErr, &tooLarge) {
+	respBody, readErr := kubernetes.ReadLimited(resp.Body, limit)
+	if readErr != nil && !kubernetes.IsResponseTooLarge(readErr) {
 		return GetResponse{}, fmt.Errorf("failed to read response body: %w", readErr)
 	}
 	// Flow export keeps the prefix. JSON calls still fail closed.
-	if tooLarge != nil && !truncate {
-		return GetResponse{}, tooLarge
+	if kubernetes.IsResponseTooLarge(readErr) && !truncate {
+		return GetResponse{}, readErr
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {
@@ -253,8 +251,8 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		}
 		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
 	}
-	if tooLarge != nil {
-		text, _, err := kubernetes.AcceptTruncated(respBody, tooLarge)
+	if kubernetes.IsResponseTooLarge(readErr) {
+		text, _, err := kubernetes.AcceptTruncated(respBody, readErr)
 		return GetResponse{Body: text}, err
 	}
 	return GetResponse{Body: string(respBody)}, nil

@@ -17,7 +17,7 @@ floor = baseline + gc × max_in_flight × (amplify × max_backend_response_bytes
 | Symbol | Meaning | Planning value |
 |--------|---------|----------------|
 | `max_in_flight` | Concurrent `tools/call`, `prompts/get`, and `resources/read` | config, default 64 |
-| `max_backend_response_bytes` | One Kubernetes, Kiali, or NetObserv body | config, default 4 MiB |
+| `max_backend_response_bytes` | One Kubernetes, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager body | config, default 4 MiB |
 | `max_result_bytes` | One tool, prompt, or resource result | config, default 16 MiB |
 | `max_body_bytes` | One inbound HTTP body. A stdio frame uses the same number | `http.max_body_bytes`, default 16 MiB |
 | `amplify` | Decoded unstructured object versus the raw JSON. Small objects cost more than one big string | 10 |

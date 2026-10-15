@@ -297,11 +297,13 @@ Each option is reloadable.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `max_backend_response_bytes` | integer | `4194304` | Maximum bytes read from one Kubernetes API, Kiali, or NetObserv response. `pods_exec` counts stdout and stderr together. An exact fit is allowed. The next byte closes the body and the call returns an error. `0` disables the cap. HTTP `101` upgrades are not capped. The schema fetch skips the cap so the aggregated spec can be parsed whole. Every other request stays capped. `pods_exec` keeps the bytes already stored and appends a truncation notice even if the exec library returns a stream error after the cap. A stream error before the cap drops that output. |
+| `max_backend_response_bytes` | integer | `4194304` | Maximum bytes read from one Kubernetes API, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager response. `pods_exec` counts stdout and stderr together. An exact fit is allowed. The next byte closes the body and the call returns an error. `0` disables the cap. HTTP `101` upgrades are not capped. The schema fetch skips the cap so the aggregated spec can be parsed whole. Every other request stays capped. `pods_exec` keeps the bytes already stored and appends a truncation notice even if the exec library returns a stream error after the cap. A stream error before the cap drops that output. |
 | `max_result_bytes` | integer | `16777216` | Maximum bytes of one tool, prompt, or resource result. A tool counts `Content` plus the JSON size of `StructuredContent` when that field is set. When `ContentBlocks` is set, those block bytes replace `Content`, including image data. A tool error counts the error text. A prompt counts message text. A resource counts its text or blob. Log and event assembly stops at the cap and appends a truncation notice. The notice may make the result longer than the cap by the length of that notice. A result larger than the cap plus that notice is rejected and is not sent. |
 | `max_in_flight` | integer | `64` | Maximum number of `tools/call`, `prompts/get`, and `resources/read` requests running at once in this process. When every slot is in use, another of those requests is rejected with JSON-RPC error `-32030` (`max_in_flight limit exceeded`). Other methods are not counted. Every session shares one pool. |
 
 `max_backend_response_bytes` is read from the live config on each backend call.
+Kubernetes, Prometheus, and Alertmanager apply it on the round tripper, so the client stops reading and does not decode the rest.
+Kiali, NetObserv, Loki, and Tempo apply it when they read the body.
 An exact fit is allowed.
 The next byte closes the body and returns an error, so client-go does not decode the rest.
 A list over that cap is the same error, with no partial page.

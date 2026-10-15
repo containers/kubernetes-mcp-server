@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	promapi "github.com/prometheus/client_golang/api"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/auth"
@@ -79,6 +80,9 @@ func buildAPIConfig(params api.ToolHandlerParams, prometheusURL string, insecure
 	if err != nil {
 		return promapi.Config{}, fmt.Errorf("failed to create round tripper: %w", err)
 	}
+	// Prometheus and Alertmanager read the body inside their client libraries.
+	// The wrapper stops that read at max_backend_response_bytes.
+	rt = kubernetes.NewBackendResponseRoundTripper(rt, kubernetes.LiveBackendLimit(params.Config))
 
 	return promapi.Config{
 		Address:      prometheusURL,

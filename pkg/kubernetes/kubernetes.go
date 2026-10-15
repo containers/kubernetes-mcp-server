@@ -116,15 +116,10 @@ func newKubernetesFromLive(
 		return &UserAgentRoundTripper{delegate: original}
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
-		return newBackendResponseRoundTripper(original, func() (int64, error) {
-			cfg := k.Config()
-			// Unreachable today: newKubernetesFromLive stores cfg before this
-			// client serves traffic. The error is defense against a future bug
-			// that wraps a client with no config.
-			if cfg == nil {
-				return 0, ErrBackendLimitUnavailable
-			}
-			return cfg.MaxBackendResponseBytes.Get(), nil
+		// Read the live config on each request. newKubernetesFromLive stores
+		// one before this client serves traffic.
+		return NewBackendResponseRoundTripper(original, func() (int64, error) {
+			return BackendLimit(k.Config())
 		})
 	})
 	var err error

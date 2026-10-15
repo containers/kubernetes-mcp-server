@@ -291,10 +291,10 @@ func (c *Core) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metric
 func (c *Core) PodsExec(ctx context.Context, cfg *config.Config, namespace, name, container string, command []string) (string, string, error) {
 	// Unreachable today: pods_exec passes params.Config, which the server sets
 	// on every handler. The error is defense against a future caller that omits it.
-	if cfg == nil {
-		return "", "", ErrBackendLimitUnavailable
+	limit, err := BackendLimit(cfg)
+	if err != nil {
+		return "", "", err
 	}
-	limit := cfg.MaxBackendResponseBytes.Get()
 	namespace = c.NamespaceOrDefault(namespace)
 	pods := c.CoreV1().Pods(namespace)
 	pod, err := pods.Get(ctx, name, metav1.GetOptions{})

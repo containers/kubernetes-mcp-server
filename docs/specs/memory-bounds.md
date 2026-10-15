@@ -9,13 +9,13 @@ Document them together in [`docs/configuration.md`](../configuration.md).
 
 | TOML field | Default | What it limits |
 |------------|---------|----------------|
-| `max_backend_response_bytes` | `4194304` | Bytes read from one Kubernetes API, Kiali, or NetObserv response, and combined stdout+stderr retained by one `pods_exec` |
+| `max_backend_response_bytes` | `4194304` | Bytes read from one Kubernetes API, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager response, and combined stdout+stderr retained by one `pods_exec` |
 | `max_result_bytes` | `16777216` | Bytes of one tool, prompt, or resource result |
 | `max_in_flight` | `64` | `tools/call`, `prompts/get`, and `resources/read` running in this process |
 
 ## Backend response
 
-Read `max_backend_response_bytes` from the live config on each call.
+Read `max_backend_response_bytes` from the live config on each call through [`BackendLimit`](../../pkg/kubernetes/responselimit.go).
 Allow exactly that many bytes.
 The next byte closes the body and returns a typed error.
 `0` leaves the read uncapped.
@@ -28,10 +28,13 @@ Clients of one manager share one parsed model ([`openAPISchemaCache`](../../pkg/
 Concurrent validations wait on one fetch.
 A failed fetch is not kept.
 
-Apply the same read limit in [`Kiali.ExecuteRequest`](../../pkg/kiali/kiali.go) and [`NetObserv.executeGetAbsolute`](../../pkg/netobserv/netobserv.go).
-Remove the existing hardcoded limits.
-Kiali and NetObserv JSON calls return the over-cap error.
-NetObserv flow export keeps the bytes already read and appends a truncation notice at that same cap.
+JSON calls read through [`ReadCapped`](../../pkg/kubernetes/responselimit.go): [`Kiali.ExecuteRequest`](../../pkg/kiali/kiali.go), Loki `getJSON`, and Tempo `doRequest`.
+An over-cap body returns the typed error and no bytes.
+[`NetObserv.executeGetAbsolute`](../../pkg/netobserv/netobserv.go) reads through [`ReadLimited`](../../pkg/kubernetes/responselimit.go).
+Its JSON calls return that same error.
+Flow export keeps the bytes already read and appends a truncation notice at that same cap.
+Prometheus and Alertmanager read the body inside their client libraries.
+Their round tripper is [`NewBackendResponseRoundTripper`](../../pkg/kubernetes/responselimit.go), the same wrapper as the Kubernetes client, so those reads stop at the same cap and return the same error.
 
 A list whose body exceeds the cap is that error.
 There is no partial page.
@@ -95,7 +98,7 @@ Reject with a JSON-RPC error when a slot is not available.
 For tools that is `Content` plus the JSON form of `StructuredContent`, or the `ContentBlocks` bytes when those are set, including when text and structured content are the same data twice.
 (The limit exists to protect the server, which must hold both fields in memory regardless of what the client uses or cares about.)
 
-The client can see less than the backend cap because an over-cap list, get, log, Kiali call, or NetObserv JSON call becomes an error, because NetObserv flow export and exec return one prefix plus a notice, and because `limit` and `tail` still apply.
+The client can see less than the backend cap because an over-cap list, get, log, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager call becomes an error, because NetObserv flow export and exec return one prefix plus a notice, and because `limit` and `tail` still apply.
 The measured result can be larger than the backend cap because YAML can be larger than the JSON that was counted, because text and structured content are added together, and because several under-cap reads can be combined until the result cap.
 A collector stops the next fetch once that cap is reached.
 MCP JSON framing adds more on the wire.
@@ -110,7 +113,7 @@ Cover:
 - a chunked over-cap body
 - a skipped upgrade
 - a disabled cap
-- the same over-cap error for Kiali and NetObserv JSON
+- the same over-cap error for Kiali, NetObserv, Loki, Tempo, Prometheus, and Alertmanager JSON
 - a NetObserv flow export that keeps a prefix
 - exec truncation
 - an append that stops at the result budget

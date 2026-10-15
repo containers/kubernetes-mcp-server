@@ -4,9 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -172,10 +170,10 @@ func (k *Kiali) authorizationHeader() string {
 func (k *Kiali) backendLimit() (int64, error) {
 	// Unreachable today: NewKiali rejects a nil config and stores it. The error
 	// is defense against a future bug that builds a Kiali without one.
-	if k == nil || k.cfg == nil {
-		return 0, kubernetes.ErrBackendLimitUnavailable
+	if k == nil {
+		return kubernetes.BackendLimit(nil)
 	}
-	return k.cfg.MaxBackendResponseBytes.Get(), nil
+	return kubernetes.BackendLimit(k.cfg)
 }
 
 // ExecuteRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
@@ -218,11 +216,10 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(kubernetes.LimitResponseBody(resp.Body, limit))
+	respBody, err := kubernetes.ReadCapped(resp.Body, limit)
 	if err != nil {
-		var tooLarge *kubernetes.BackendResponseTooLargeError
-		if errors.As(err, &tooLarge) {
-			return "", tooLarge
+		if kubernetes.IsResponseTooLarge(err) {
+			return "", err
 		}
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
