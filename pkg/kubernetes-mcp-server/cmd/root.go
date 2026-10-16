@@ -111,6 +111,8 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 		},
 	}
 
+	cmd.AddCommand(newCheckCommand(streams))
+	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.Flags().BoolVar(&o.Version, flagVersion, o.Version, "Print version information and quit")
 	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
 	cmd.Flags().StringVar(&o.ConfigDir, flagConfigDir, o.ConfigDir, "Directory of lexical .toml files. Usable alone or with --config. Omitted means no drop-ins. Relative paths are resolved against the working directory.")
