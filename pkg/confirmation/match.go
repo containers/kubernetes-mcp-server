@@ -1,10 +1,13 @@
 package confirmation
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 // MatchToolLevelRules returns all tool-level rules that match the given tool call.
@@ -39,7 +42,18 @@ func MatchToolLevelRules(rules []config.ConfirmationRule, toolName string, destr
 //   - version: exact match on the API version
 //   - name: exact match on the resource name
 //   - namespace: exact match on the namespace
-func MatchKubeLevelRules(rules []config.ConfirmationRule, verb, kind, group, version, name, namespace string) []config.ConfirmationRule {
+//
+// MatchKubeLevelRequest is for a full request: rules with
+// an expression additionally evaluate it against the request, including the
+// decoded body (`object`) for create/update/patch.
+//
+// A rule whose expression cannot be evaluated (a field access the request
+// body does not satisfy, a type mismatch, a typo outside a has() guard)
+// fails closed: it counts as matched, with the failure appended to its
+// message, and the error is logged. Silently skipping it would disable the
+// guard exactly when the request is not what the rule's author expected.
+func MatchKubeLevelRequest(ctx context.Context, rules []config.ConfirmationRule, request rulexpr.Request) []config.ConfirmationRule {
+	verb, kind, group, version, name, namespace := request.Verb, request.Kind, request.Group, request.Version, request.Name, request.Namespace
 	var matched []config.ConfirmationRule
 	for i := range rules {
 		r := &rules[i]
@@ -64,7 +78,18 @@ func MatchKubeLevelRules(rules []config.ConfirmationRule, verb, kind, group, ver
 		if r.Namespace != "" && r.Namespace != namespace {
 			continue
 		}
-		matched = append(matched, *r)
+		rule := *r
+		if rule.Expression != "" {
+			ok, err := rulexpr.Matches(rule.Expression, request)
+			if err != nil {
+				klogutil.FromContext(ctx).Error(err, "confirmation rule expression could not be evaluated, requiring confirmation",
+					"verb", verb, "kind", kind, "group", group, "name", name, "namespace", namespace)
+				rule.Message = fmt.Sprintf("%s (the rule's expression could not be evaluated, so confirmation is required: %v)", rule.Message, err)
+			} else if !ok {
+				continue
+			}
+		}
+		matched = append(matched, rule)
 	}
 	return matched
 }

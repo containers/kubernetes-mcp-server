@@ -7,6 +7,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/confirmation/rulexpr"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -92,28 +93,28 @@ func (s *ConfirmationSuite) TestCheckToolRules() {
 	})
 }
 
-func (s *ConfirmationSuite) TestCheckKubeRules() {
+func (s *ConfirmationSuite) TestCheckKubeRequest() {
 	ctx := context.Background()
 
 	s.Run("no matching rules returns nil", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckKubeRules(ctx, []config.ConfirmationRule{
+		err := CheckKubeRequest(ctx, []config.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
-		}, "deny", elicitor, "get", "Pod", "", "v1", "", "default")
+		}, "deny", elicitor, rulexpr.Request{Verb: "get", Kind: "Pod", Version: "v1", Namespace: "default"})
 		s.NoError(err)
 	})
 	s.Run("matching rule with accept returns nil", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionAccept}}
-		err := CheckKubeRules(ctx, []config.ConfirmationRule{
+		err := CheckKubeRequest(ctx, []config.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
-		}, "deny", elicitor, "delete", "Pod", "", "v1", "", "kube-system")
+		}, "deny", elicitor, rulexpr.Request{Verb: "delete", Kind: "Pod", Version: "v1", Namespace: "kube-system"})
 		s.NoError(err)
 	})
 	s.Run("matching rule with decline returns error", func() {
 		elicitor := &mockElicitor{result: &api.ElicitResult{Action: api.ElicitActionDecline}}
-		err := CheckKubeRules(ctx, []config.ConfirmationRule{
+		err := CheckKubeRequest(ctx, []config.ConfirmationRule{
 			{Verb: "delete", Namespace: "kube-system", Message: "delete in kube-system"},
-		}, "deny", elicitor, "delete", "Pod", "", "v1", "", "kube-system")
+		}, "deny", elicitor, rulexpr.Request{Verb: "delete", Kind: "Pod", Version: "v1", Namespace: "kube-system"})
 		s.ErrorIs(err, ErrConfirmationDenied)
 	})
 }

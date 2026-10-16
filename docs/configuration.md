@@ -817,9 +817,10 @@ If multiple rules match at the same level, their messages are merged into a sing
 | `version` | string | kube | API version (`"v1"`, `"v1beta1"`, etc.) |
 | `name` | string | kube | Resource name to match |
 | `namespace` | string | kube | Namespace to match |
+| `expression` | string | kube | [CEL](https://cel.dev) boolean over `verb`, `kind`, `group`, `version`, `name`, `namespace` and `object` (the decoded request body for create/update/patch; an empty map when there is no body or it is not a JSON object, such as a JSON-patch array). Evaluated after the other fields match. An expression that cannot be evaluated (e.g. a field access on a body that lacks it, outside a `has()` guard) fails closed: the rule matches, the failure is appended to its message and logged. `has(a.b.c)` only tests `c`, so guard every level: `has(object.spec) && has(object.spec.pipelineRef)`. Validated at startup. |
 | `message` | string | both | Message shown in the confirmation prompt |
 
-A rule must be either tool-level or kube-level. It must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`, `name`, `namespace`), and must set at least one of these fields.
+A rule must be either tool-level or kube-level. It must not mix tool-level fields (`tool`, `destructive`) with kube-level fields (`verb`, `kind`, `group`, `version`, `name`, `namespace`, `expression`), and must set at least one of these fields.
 
 **Examples:**
 
@@ -847,6 +848,17 @@ message = "Deleting in kube-system."
 verb = "get"
 kind = "Secret"
 message = "Accessing a Secret."
+
+# Inspect the request body: confirm Windows golden-image PipelineRuns
+# that do not carry acceptEula=true (the Microsoft EULA check)
+[[confirmation_rules]]
+kind = "PipelineRun"
+group = "tekton.dev"
+expression = """verb in ['create', 'update', 'patch'] &&
+  has(object.spec) && has(object.spec.pipelineRef) && has(object.spec.pipelineRef.params) &&
+  object.spec.pipelineRef.params.exists(p, p.name == 'name' && p.value == 'windows-efi-installer') &&
+  !(has(object.spec.params) && object.spec.params.exists(p, p.name == 'acceptEula' && p.value == 'true'))"""
+message = "Microsoft EULA Notice: this PipelineRun creates a Windows golden image. By proceeding you agree to the Microsoft Software License Terms. Do you accept the EULA?"
 ```
 
 ### Toolset-Specific Configuration
