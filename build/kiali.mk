@@ -11,6 +11,7 @@ KIALI_VERSION = v2.33
 # MC, so a released -kv (e.g. v2.27) still tries to push a local image without
 # building it unless KIALI_BUILD_DEV_IMAGE=true (set below when this is "dev").
 KIALI_MC_VERSION = dev
+KIND ?= kind
 # Release version without patch (e.g. 1.28.0 -> 1.28)
 
 # Download and install istioctl (also copies samples/addons for install-istio)
@@ -116,7 +117,7 @@ setup-kiali-multicluster: ## Setup primary-remote multicluster Kind + Istio/Kial
 	@set -euo pipefail; \
 	ROOTDIR="$$(pwd)"; \
 	KIALI_HACK_DIR="$(KIALI_HACK_DIR)"; \
-	for cmd in git curl kubectl docker helm yq envsubst jq; do \
+	for cmd in git curl kubectl docker helm yq envsubst jq $(KIND); do \
 		command -v "$$cmd" >/dev/null 2>&1 || { echo "ERROR: required command not found: $$cmd" >&2; exit 1; }; \
 	done; \
 	if [ ! -f "$${KIALI_HACK_DIR}/hack/setup-kind-in-ci.sh" ]; then \
@@ -254,7 +255,7 @@ kind-delete-multicluster: ## Delete primary-remote multicluster Kind clusters (e
 	$(KIND) delete cluster --name east 2>/dev/null || true; \
 	$(KIND) delete cluster --name west 2>/dev/null || true
 
-KIALI_MC_EVAL_CONFIG ?= evals/tasks/kiali/multicluster/eval.yaml
+KIALI_MC_EVAL_CONFIG ?= evals/core-eval-testing/builtin-openai/eval-kiali-multicluster.yaml
 KIALI_MC_EVAL_RESULTS ?= evals/results/openai-agent-multicluster-latest.json
 
 .PHONY: run-evals-multicluster

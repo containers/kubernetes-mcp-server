@@ -227,7 +227,7 @@ jobs:
 
           kiali_multicluster_entry='{
             "suite":"kiali-multicluster",
-            "eval-config":"evals/tasks/kiali/multicluster/eval.yaml",
+            "eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali-multicluster.yaml",
             "toolsets":"core,config,kiali",
             "mcp-config-dir":"dev/config/mcp-configs-multicluster",
             "baseline-result":"openai-agent-multicluster-latest.json",
@@ -247,7 +247,7 @@ jobs:
             {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm"},
             {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
             {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
-            {"suite":"kiali-multicluster","eval-config":"evals/tasks/kiali/multicluster/eval.yaml","toolsets":"core,config,kiali","mcp-config-dir":"dev/config/mcp-configs-multicluster","baseline-result":"openai-agent-multicluster-latest.json","job-display-name":"Run MCP Multicluster Evaluation"},
+            {"suite":"kiali-multicluster","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali-multicluster.yaml","toolsets":"core,config,kiali","mcp-config-dir":"dev/config/mcp-configs-multicluster","baseline-result":"openai-agent-multicluster-latest.json","job-display-name":"Run MCP Multicluster Evaluation"},
             {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
             {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"},
             {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"}

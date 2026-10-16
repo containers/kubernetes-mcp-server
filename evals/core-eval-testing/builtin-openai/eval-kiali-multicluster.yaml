@@ -7,17 +7,17 @@ config:
     cleanupTimeout: 2m
   agent:
     type: "file"
-    path: ../../../core-eval-testing/builtin-openai/agent.yaml
-  mcpConfigFile: ../../../mcp-config.yaml
+    path: agent.yaml
+  mcpConfigFile: ../../mcp-config.yaml
   extensions:
     kubernetes:
       package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
   llmJudge:
     ref:
       type: file
-      path: ../../../core-eval-testing/builtin-openai/agent.yaml
+      path: agent.yaml
   taskSets:
-    - glob: "*/*.yaml"
+    - glob: ../../tasks/kiali/multicluster/*/*.yaml
       labelSelector:
         suite: kiali
         multicluster: "true"
