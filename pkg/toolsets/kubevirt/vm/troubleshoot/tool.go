@@ -145,6 +145,12 @@ func writeVMTroubleshootReport(ctx context.Context, client api.KubernetesClient,
 	_ = b.Sections(
 		api.Text(fmt.Sprintf("# VirtualMachine Diagnostic Report: %s/%s\n\n", namespace, name)),
 		func(b *api.BuilderWithBudget) error {
+			// Why aren't these interim calls done under the budgeter?
+			// Because they accumulate data that isn't necessarily going to end up in the result,
+			// and we won't know that until `analyzeIssues()` runs; so if we tried to count them
+			// against the budget, we might fail even though the actual result would be under.
+			// Each backend call is still bounded by `max_backend_response_bytes`, and the extras
+			// are small and bounded (mostly static strings).
 			vmYaml, vm = fetchVMStatus(ctx, dynamicClient, namespace, name)
 			vmiYaml, vmi = fetchVMIStatus(ctx, dynamicClient, namespace, name)
 			podNames, podDiags, podSection = listVirtLauncherPods(ctx, dynamicClient, namespace, name)
