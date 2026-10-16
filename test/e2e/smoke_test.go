@@ -65,7 +65,7 @@ func TestSmoke(t *testing.T) {
 		Assess("pods_list returns the server pod", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := smokeTS.get(ctx)
 
-			output := requireToolCallSuccess(t, s.mcpClient, "pods_list_in_namespace", map[string]any{
+			output := requireToolCallSuccess(t, s.mcpClient, "pods_list", map[string]any{
 				"namespace": s.dep.namespace,
 			})
 			require.Contains(t, output, s.dep.name,

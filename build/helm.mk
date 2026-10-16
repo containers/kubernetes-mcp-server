@@ -69,6 +69,10 @@ kubeconform:
 
 .PHONY: helm-validate
 helm-validate: helm kubeconform ## Validate Helm chart manifests with kubeconform
+	@echo "Validating with the dynamic-tools ClusterRole..."
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) --set ingress.host=localhost --set rbac.dynamicTools=true | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
+	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) --set ingress.host=localhost --set rbac.dynamicTools=true | grep -q "tools/status"'
+	@echo ""
 	@echo "Validating with default values..."
 	@bash -o pipefail -c '$(HELM) template test-release $(HELM_CHART_DIR) --set ingress.host=localhost | $(KUBECONFORM) -strict -summary -ignore-missing-schemas'
 	@echo ""

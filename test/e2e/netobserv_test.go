@@ -337,12 +337,12 @@ func TestNetObservMock(t *testing.T) {
 			// Deploy MCP server configured to use mock plugin
 			dep := deployServer(ctx, t, cfg, "netobserv-mock",
 				withConfig(`
-toolsets = ["core", "netobserv"]
-
-[toolset_configs.netobserv]
-url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
+toolsets = ["core", "dynamic"]
 `),
-				withValues(viewClusterRoleBindingValues()),
+				withValues(mergeValues(viewClusterRoleBindingValues(), dynamicToolsRBACValues())),
+				withPreInstall(installDynamicToolsChart("netobserv-mcp-tools", map[string]string{
+					"url": "http://netobserv-plugin.netobserv.svc.cluster.local:9001",
+				})),
 			)
 			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
 			t.Cleanup(mcpClient.Close)
@@ -356,9 +356,13 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 			require.NoError(t, err)
 			names := toolNames(result.Tools)
 
-			require.Contains(t, names, "netobserv_list_flows", "list_flows tool should be registered")
-			require.Contains(t, names, "netobserv_get_flow_metrics", "get_flow_metrics tool should be registered")
-			require.Contains(t, names, "netobserv_export_flows", "export_flows tool should be registered")
+			require.Contains(t, names, "netobserv_flows", "netobserv_flows tool should be registered")
+			require.Contains(t, names, "netobserv_metrics", "netobserv_metrics tool should be registered")
+			require.Contains(t, names, "netobserv_export", "netobserv_export tool should be registered")
+
+			// The server reports what it did with each resource in its status,
+			// which needs update on tools/status (dynamicToolsRBACValues).
+			requireToolStatus(ctx, t, "netobserv-flows", "netobserv_flows")
 
 			return ctx
 		}).
@@ -366,7 +370,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 			s := netobservTS.get(ctx)
 
 			assertNetobservListFlows(t, s.mcpClient, map[string]any{
-				"timeRange": makeTimeRange(5),
+				"duration":  makeTimeRange(5),
 				"namespace": "default",
 			})
 
@@ -376,7 +380,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 			s := netobservTS.get(ctx)
 
 			assertNetobservGetMetrics(t, s.mcpClient, map[string]any{
-				"timeRange":   makeTimeRange(5),
+				"duration":    makeTimeRange(5),
 				"aggregateBy": "namespace",
 				"type":        "Bytes",
 			})
@@ -387,7 +391,7 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 			s := netobservTS.get(ctx)
 
 			assertNetobservExportFlows(t, s.mcpClient, map[string]any{
-				"timeRange": makeTimeRange(5),
+				"duration":  makeTimeRange(5),
 				"namespace": "default",
 			})
 
@@ -398,8 +402,8 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 			s := netobservTS.get(ctx)
 
 			assertNetobservListFlows(t, s.mcpClient, map[string]any{
-				"timeRange": makeTimeRange(5),
-				"filters":   makeFilters("SrcK8S_Namespace=default"),
+				"duration": makeTimeRange(5),
+				"filter":   makeFilters("SrcK8S_Namespace=default"),
 			})
 
 			return ctx
@@ -407,9 +411,9 @@ url = "http://netobserv-plugin.netobserv.svc.cluster.local:9001"
 		Assess("invalid filter returns error", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			assertNetobservToolCallError(t, s.mcpClient, "netobserv_list_flows", map[string]any{
-				"timeRange": makeTimeRange(5),
-				"filters":   makeFilters("InvalidFilter"),
+			assertNetobservToolCallError(t, s.mcpClient, "netobserv_flows", map[string]any{
+				"duration": makeTimeRange(5),
+				"filter":   makeFilters("InvalidFilter"),
 			})
 
 			return ctx
@@ -456,18 +460,20 @@ func TestNetObservReal(t *testing.T) {
 				t.Skipf("Invalid NETOBSERV_OPERATOR value: %s (use 'deploy' or 'use-existing')", operatorMode)
 			}
 
-			// Deploy MCP server configured to use real plugin service
-			configTOML := fmt.Sprintf(`
-toolsets = ["core", "netobserv"]
-
-[toolset_configs.netobserv]
-namespace = "%s"
-`, pluginNamespace)
-
+			// Deploy MCP server with the NetObserv tools installed as Tool
+			// resources pointing at the real plugin service. The plugin serves
+			// TLS with the OpenShift service-serving CA; the e2e skips
+			// verification rather than mounting the CA bundle.
 			dep := deployServer(ctx, t, cfg, "netobserv-real",
 				withNamespace("e2e-netobserv-real"),
-				withConfig(configTOML),
-				withValues(viewClusterRoleBindingValues()),
+				withConfig(`
+toolsets = ["core", "dynamic"]
+`),
+				withValues(mergeValues(viewClusterRoleBindingValues(), dynamicToolsRBACValues())),
+				withPreInstall(installDynamicToolsChart("netobserv-mcp-tools", map[string]string{
+					"url":                   fmt.Sprintf("https://netobserv-plugin.%s.svc:9001", pluginNamespace),
+					"insecureSkipTLSVerify": "true",
+				})),
 			)
 			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
 			t.Cleanup(mcpClient.Close)
@@ -478,7 +484,7 @@ namespace = "%s"
 			s := netobservTS.get(ctx)
 
 			assertNetobservListFlows(t, s.mcpClient, map[string]any{
-				"timeRange": makeTimeRange(15),
+				"duration": makeTimeRange(15),
 			})
 
 			return ctx
@@ -487,7 +493,7 @@ namespace = "%s"
 			s := netobservTS.get(ctx)
 
 			assertNetobservGetMetrics(t, s.mcpClient, map[string]any{
-				"timeRange":   makeTimeRange(15),
+				"duration":    makeTimeRange(15),
 				"aggregateBy": "namespace",
 				"type":        "Bytes",
 				"function":    "rate",
@@ -499,9 +505,9 @@ namespace = "%s"
 		Assess("DNS enrichment is available in flows", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			s := netobservTS.get(ctx)
 
-			result, err := s.mcpClient.CallTool("netobserv_list_flows", map[string]any{
-				"timeRange": makeTimeRange(30),
-				"filters":   makeFilters("DnsFlagsResponseCode!="),
+			result, err := s.mcpClient.CallTool("netobserv_flows", map[string]any{
+				"duration": makeTimeRange(30),
+				"filter":   makeFilters("DnsFlagsResponseCode!="),
 			})
 
 			// This may return empty if no DNS flows exist, which is okay

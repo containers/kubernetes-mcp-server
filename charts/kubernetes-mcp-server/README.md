@@ -170,8 +170,9 @@ Each container accepts any valid Kubernetes container field including `image`, `
 | podAnnotations | object | `{}` | For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/ |
 | podLabels | object | `{}` | For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ |
 | podSecurityContext | object | `{}` | Define the Security Context for the Pod |
-| rbac | object | `{"create":true,"extraClusterRoleBindings":[],"extraClusterRoles":[],"extraRoleBindings":[],"extraRoles":[]}` | When using long names, they will be automatically truncated. |
+| rbac | object | `{"create":true,"dynamicTools":false,"extraClusterRoleBindings":[],"extraClusterRoles":[],"extraRoleBindings":[],"extraRoles":[]}` | When using long names, they will be automatically truncated. |
 | rbac.create | bool | `true` | contents of extraClusterRoles, extraClusterRoleBindings, extraRoles, and extraRoleBindings. |
+| rbac.dynamicTools | bool | `false` | with each (see charts/dynamic-tools). |
 | rbac.extraClusterRoleBindings | list | `[]` | without prefixing the release fullname. |
 | rbac.extraClusterRoles | list | `[]` | "<release-fullname>-<name>" with the specified rules. |
 | rbac.extraRoleBindings | list | `[]` | Use roleRef.external: true to reference existing roles without prefixing the release fullname. |

@@ -45,6 +45,13 @@ rbac:
   # -- contents of extraClusterRoles, extraClusterRoleBindings, extraRoles, and extraRoleBindings.
   create: true
 
+  # -- Grant the server what the `dynamic` toolset needs: get, list and watch
+  # -- on tools, prompts and toolsets in tools.kubernetes-mcp-server.io, and
+  # -- update on their status subresources, so it can list Tool, Prompt and
+  # -- ToolSet resources with its own ServiceAccount and report what it did
+  # -- with each (see charts/dynamic-tools).
+  dynamicTools: false
+
   # -- Extra ClusterRoles to create. Each entry creates a ClusterRole named
   # -- "<release-fullname>-<name>" with the specified rules.
   extraClusterRoles: []

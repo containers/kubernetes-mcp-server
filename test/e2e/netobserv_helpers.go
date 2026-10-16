@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,11 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// assertNetobservListFlows calls netobserv_list_flows and validates response structure
+// assertNetobservListFlows calls netobserv_flows and validates response structure
 func assertNetobservListFlows(t *testing.T, mcpClient *test.McpClient, args map[string]any) {
 	t.Helper()
 
-	result, err := mcpClient.CallTool("netobserv_list_flows", args)
+	result, err := mcpClient.CallTool("netobserv_flows", args)
 	require.NoError(t, err, "list_flows should succeed")
 	require.False(t, result.IsError, "list_flows should not return error; response: %v", result.Content)
 	require.NotEmpty(t, result.Content, "should return content")
@@ -29,11 +30,11 @@ func assertNetobservListFlows(t *testing.T, mcpClient *test.McpClient, args map[
 	require.Contains(t, flows, "result", "response should have 'result' field")
 }
 
-// assertNetobservGetMetrics calls netobserv_get_flow_metrics and validates response structure
+// assertNetobservGetMetrics calls netobserv_metrics and validates response structure
 func assertNetobservGetMetrics(t *testing.T, mcpClient *test.McpClient, args map[string]any) {
 	t.Helper()
 
-	result, err := mcpClient.CallTool("netobserv_get_flow_metrics", args)
+	result, err := mcpClient.CallTool("netobserv_metrics", args)
 	require.NoError(t, err, "get_flow_metrics should succeed")
 	require.False(t, result.IsError, "get_flow_metrics should not return error; response: %v", result.Content)
 	require.NotEmpty(t, result.Content, "should return content")
@@ -52,11 +53,11 @@ func assertNetobservGetMetrics(t *testing.T, mcpClient *test.McpClient, args map
 	require.NotEmpty(t, metricResult, "metrics result should contain data")
 }
 
-// assertNetobservExportFlows calls netobserv_export_flows and validates CSV response
+// assertNetobservExportFlows calls netobserv_export and validates CSV response
 func assertNetobservExportFlows(t *testing.T, mcpClient *test.McpClient, args map[string]any) {
 	t.Helper()
 
-	result, err := mcpClient.CallTool("netobserv_export_flows", args)
+	result, err := mcpClient.CallTool("netobserv_export", args)
 	require.NoError(t, err, "export_flows should succeed")
 	require.False(t, result.IsError, "export_flows should not return error")
 	require.NotEmpty(t, result.Content, "should return content")
@@ -79,11 +80,11 @@ func assertNetobservToolCallError(t *testing.T, mcpClient *test.McpClient, toolN
 }
 
 // makeTimeRange creates a time range value for the last N minutes (in seconds)
-func makeTimeRange(minutes int) int {
-	return minutes * 60
+func makeTimeRange(minutes int) string {
+	return fmt.Sprintf("%dm", minutes)
 }
 
 // makeFilters creates a filters array from key-value pairs
-func makeFilters(filters ...string) []string {
-	return filters
+func makeFilters(filters ...string) string {
+	return strings.Join(filters, "&")
 }

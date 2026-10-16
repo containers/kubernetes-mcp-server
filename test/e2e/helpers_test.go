@@ -207,6 +207,89 @@ func viewClusterRoleBindingValues() map[string]any {
 	}
 }
 
+// dynamicToolsRBACValues lets the server's ServiceAccount list the Tool and
+// Prompt resources the dynamic toolset exposes.
+func dynamicToolsRBACValues() map[string]any {
+	// rbac.dynamicTools renders the ClusterRole the dynamic toolset needs:
+	// list on tools, prompts and toolsets, update on their status.
+	return map[string]any{"rbac": map[string]any{"create": true, "dynamicTools": true}}
+}
+
+// requireToolStatus asserts the server wrote the Tool resource's status: a
+// Ready condition and the MCP name it is exposed as.
+func requireToolStatus(ctx context.Context, t *testing.T, resource, exposed string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		cmd := exec.CommandContext(ctx, "kubectl", "get", "tools.tools.kubernetes-mcp-server.io", resource,
+			"-o", `jsonpath={.status.name} {.status.conditions[?(@.type=="Ready")].status}`, "--kubeconfig", kubeconfigPath())
+		out, err := cmd.CombinedOutput()
+		return err == nil && strings.TrimSpace(string(out)) == exposed+" True"
+	}, 30*time.Second, 2*time.Second, "Tool %s should report status.name=%s and Ready=True", resource, exposed)
+}
+
+// kubernetesInterface is the clientset type pre-install hooks receive.
+type kubernetesInterface = kubernetes.Interface
+
+// applyDynamicToolsCRDs applies the Tool, Prompt and ToolSet CRDs.
+func applyDynamicToolsCRDs(ctx context.Context, t *testing.T) {
+	t.Helper()
+	examples, err := filepath.Abs("../../charts/dynamic-tools")
+	require.NoError(t, err)
+	kubectlApply(ctx, t, "-f", filepath.Join(examples, "crd.yaml"))
+}
+
+// kubectlApply runs kubectl apply with the given arguments; what it created
+// is deleted on cleanup.
+func kubectlApply(ctx context.Context, t *testing.T, args ...string) {
+	t.Helper()
+	kubeconfig := kubeconfigPath()
+	cmd := exec.CommandContext(ctx, "kubectl", append(append([]string{"apply"}, args...), "--kubeconfig", kubeconfig)...)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "kubectl apply %v: %s", args, string(out))
+	t.Cleanup(func() {
+		del := exec.Command("kubectl", append(append([]string{"delete", "--ignore-not-found", "--wait=false"}, args...), "--kubeconfig", kubeconfig)...)
+		_, _ = del.CombinedOutput()
+	})
+}
+
+// kubectlApplyManifest applies a manifest given as text; it is deleted on cleanup.
+func kubectlApplyManifest(ctx context.Context, t *testing.T, manifest string) {
+	t.Helper()
+	kubeconfig := kubeconfigPath()
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", "-", "--kubeconfig", kubeconfig)
+	cmd.Stdin = strings.NewReader(manifest)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "kubectl apply: %s", string(out))
+	t.Cleanup(func() {
+		del := exec.Command("kubectl", "delete", "--ignore-not-found", "--wait=false", "-f", "-", "--kubeconfig", kubeconfig)
+		del.Stdin = strings.NewReader(manifest)
+		_, _ = del.CombinedOutput()
+	})
+}
+
+// installDynamicToolsChart returns a pre-install hook that applies the Tool
+// and Prompt CRDs and installs one of the charts/dynamic-tools charts with
+// the given --set values. The release is uninstalled on cleanup.
+func installDynamicToolsChart(chart string, values map[string]string) func(context.Context, *testing.T, kubernetes.Interface, string) {
+	return func(ctx context.Context, t *testing.T, _ kubernetes.Interface, namespace string) {
+		t.Helper()
+		kubeconfig := kubeconfigPath()
+		examples, err := filepath.Abs("../../charts/dynamic-tools")
+		require.NoError(t, err)
+		applyDynamicToolsCRDs(ctx, t)
+		release := namespace + "-" + chart
+		args := []string{"upgrade", "--install", release, filepath.Join(examples, chart), "--namespace", namespace}
+		for key, value := range values {
+			args = append(args, "--set", key+"="+value)
+		}
+		require.NoError(t, runHelm(helmPath(), kubeconfig, args...), "install %s", chart)
+		t.Cleanup(func() {
+			_ = runHelm(helmPath(), kubeconfig, "uninstall", release, "--namespace", namespace)
+		})
+		t.Logf("Installed dynamic tools chart %s as release %s", chart, release)
+	}
+}
+
 func createTestNamespace(ctx context.Context, t *testing.T, clientset kubernetes.Interface, prefix string) string {
 	t.Helper()
 	ns, err := clientset.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{

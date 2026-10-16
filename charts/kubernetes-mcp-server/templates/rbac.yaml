@@ -10,6 +10,40 @@ modifying upstream templates. Define your RBAC needs in values.yaml under:
 
 {{- if .Values.rbac.create }}
 
+{{- if .Values.rbac.dynamicTools }}
+---
+# What the dynamic toolset needs: it lists Tool, Prompt and ToolSet
+# resources with the server's own identity and reports their status.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" . "suffix" "dynamic-tools") }}
+  labels:
+    {{- include "kubernetes-mcp-server.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["tools.kubernetes-mcp-server.io"]
+    resources: ["tools", "prompts", "toolsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["tools.kubernetes-mcp-server.io"]
+    resources: ["tools/status", "prompts/status", "toolsets/status"]
+    verbs: ["update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" . "suffix" "dynamic-tools") }}
+  labels:
+    {{- include "kubernetes-mcp-server.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kubernetes-mcp-server.fullname.suffixed" (dict "root" . "suffix" "dynamic-tools") }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kubernetes-mcp-server.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+
 {{- range .Values.rbac.extraClusterRoles }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
