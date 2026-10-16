@@ -29,6 +29,23 @@ func createTestVM(name, namespace string, runStrategy RunStrategy) *unstructured
 	return vm
 }
 
+// createTestVMWithRunning creates a test VirtualMachine that uses the deprecated spec.running field
+func createTestVMWithRunning(name, namespace string, running bool) *unstructured.Unstructured {
+	vm := &unstructured.Unstructured{}
+	vm.SetUnstructuredContent(map[string]interface{}{
+		"apiVersion": "kubevirt.io/v1",
+		"kind":       "VirtualMachine",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"spec": map[string]interface{}{
+			"running": running,
+		},
+	})
+	return vm
+}
+
 func TestStartVM(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -512,4 +529,71 @@ func TestUnpauseVM(t *testing.T) {
 			}
 		})
 	}
+}
+
+// KubeVirt rejects a VirtualMachine that sets both spec.running and
+// spec.runStrategy ("Running and RunStrategy are mutually exclusive"), so the
+// lifecycle helpers must drop spec.running when they set spec.runStrategy.
+func TestLifecycleWithDeprecatedRunning(t *testing.T) {
+	assertRunStrategyOnly := func(t *testing.T, vm *unstructured.Unstructured, want RunStrategy) {
+		t.Helper()
+		if _, found, _ := unstructured.NestedFieldNoCopy(vm.Object, "spec", "running"); found {
+			t.Errorf("spec.running is still set, KubeVirt would reject the update")
+		}
+		strategy, found, err := unstructured.NestedString(vm.Object, "spec", "runStrategy")
+		if err != nil || !found {
+			t.Fatalf("runStrategy not found: %v", err)
+		}
+		if RunStrategy(strategy) != want {
+			t.Errorf("Strategy = %q, want %q", strategy, want)
+		}
+	}
+
+	t.Run("Start VM with running: false", func(t *testing.T) {
+		initialVM := createTestVMWithRunning("test-vm", "default", false)
+		client := fake.NewSimpleDynamicClient(runtime.NewScheme(), initialVM)
+		vm, wasStarted, err := StartVM(context.Background(), client, "default", "test-vm")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if !wasStarted {
+			t.Errorf("wasStarted = false, want true")
+		}
+		assertRunStrategyOnly(t, vm, RunStrategyAlways)
+	})
+
+	t.Run("Start VM with running: true is a no-op", func(t *testing.T) {
+		initialVM := createTestVMWithRunning("test-vm", "default", true)
+		client := fake.NewSimpleDynamicClient(runtime.NewScheme(), initialVM)
+		_, wasStarted, err := StartVM(context.Background(), client, "default", "test-vm")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if wasStarted {
+			t.Errorf("wasStarted = true, want false for a VM that is already running")
+		}
+	})
+
+	t.Run("Stop VM with running: true", func(t *testing.T) {
+		initialVM := createTestVMWithRunning("test-vm", "default", true)
+		client := fake.NewSimpleDynamicClient(runtime.NewScheme(), initialVM)
+		vm, wasStopped, err := StopVM(context.Background(), client, "default", "test-vm")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if !wasStopped {
+			t.Errorf("wasStopped = false, want true")
+		}
+		assertRunStrategyOnly(t, vm, RunStrategyHalted)
+	})
+
+	t.Run("Restart VM with running: true", func(t *testing.T) {
+		initialVM := createTestVMWithRunning("test-vm", "default", true)
+		client := fake.NewSimpleDynamicClient(runtime.NewScheme(), initialVM)
+		vm, err := RestartVM(context.Background(), client, "default", "test-vm")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		assertRunStrategyOnly(t, vm, RunStrategyAlways)
+	})
 }
