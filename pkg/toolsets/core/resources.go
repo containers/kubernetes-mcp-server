@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -274,7 +275,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	ret, err := kubernetes.NewCore(params).ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", ListErr(err))), nil
+		return kubernetesErrorResult(fmt.Errorf("failed to list resources: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
@@ -317,7 +318,7 @@ func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	ret, err := kubernetes.NewCore(params).ResourcesGet(params, gvk, ns, n)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get resource: %w", err)), nil
+		return kubernetesErrorResult(fmt.Errorf("failed to get resource: %w", err)), nil
 	}
 	printed, err := output.Yaml.PrintObjStructured(ret)
 	if err != nil {
@@ -339,7 +340,7 @@ func resourcesCreateOrUpdate(params api.ToolHandlerParams) (*api.ToolCallResult,
 
 	resources, err := kubernetes.NewCore(params).ResourcesCreateOrUpdate(params, r)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to create or update resources: %w", err)), nil
+		return kubernetesErrorResult(fmt.Errorf("failed to create or update resources: %w", err)), nil
 	}
 	marshalledYaml, err := output.MarshalYaml(resources)
 	if err != nil {
@@ -383,7 +384,7 @@ func resourcesDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) 
 
 	err = kubernetes.NewCore(params).ResourcesDelete(params, gvk, ns, n, gracePeriodSecondsPtr)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to delete resource: %w", err)), nil
+		return kubernetesErrorResult(fmt.Errorf("failed to delete resource: %w", err)), nil
 	}
 	return api.NewToolCallResult("Resource deleted successfully", err), nil
 }
@@ -425,7 +426,7 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	scale, err := kubernetes.NewCore(params).ResourcesScale(params.Context, gvk, ns, n, desiredScale, shouldScale)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get/update resource scale: %w", err)), nil
+		return kubernetesErrorResult(fmt.Errorf("failed to get/update resource scale: %w", err)), nil
 	}
 
 	marshalled, err := output.MarshalYaml(scale)
@@ -434,6 +435,19 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	return api.NewToolCallResult("# Current resource scale (YAML) is below\n"+marshalled, err), nil
+}
+
+// kubernetesErrorResult keeps the text error and attaches the Kubernetes Status
+// (when err wraps an API status error) as structured content.
+func kubernetesErrorResult(err error) *api.ToolCallResult {
+	result := api.NewToolCallResult("", err)
+	var apiStatus apierrors.APIStatus
+	if errors.As(err, &apiStatus) {
+		status := apiStatus.Status()
+		status.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "Status"}
+		result.StructuredContent = status
+	}
+	return result
 }
 
 func parseScaleValue(desiredScale interface{}) (int64, error) {
