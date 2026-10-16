@@ -216,7 +216,7 @@ func getLokiClient(params api.ToolHandlerParams) (loki.Loader, error) {
 	tenant := api.WrapParams(params).OptionalString("tenant", "")
 
 	tls := strings.HasPrefix(url, "https://")
-	rt, err := auth.BuildRoundTripper(params.Context, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
+	rt, err := auth.BuildRoundTripper(params.Context, params.Config, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}
