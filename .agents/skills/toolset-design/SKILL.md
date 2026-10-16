@@ -132,10 +132,10 @@ consolidate them into a single tool with an enum parameter.
 
 The kubevirt toolset demonstrates this well:
 - `vm_lifecycle` with `action: start | stop | restart` (3 operations, 1 tool)
-- `vm_guest_info` with `info_type: all | os | filesystem | users | network` (5 operations, 1 tool)
+- `vm_guest` with `info: all | os | filesystem | users | network` (5 operations, 1 tool)
 
-See `pkg/toolsets/kubevirt/vm/lifecycle/tool.go` and
-`pkg/toolsets/kubevirt/vm/guestagent/tool.go` for implementation.
+See the `vm_lifecycle` and `vm_guest` Tool resources in
+`charts/dynamic-tools/kubevirt-mcp-tools/templates/tools.yaml` for implementation.
 
 **When to consolidate:**
 - Operations share the same required parameters (namespace, name, etc.)
@@ -194,10 +194,12 @@ what `pods_exec` offers:
 **Required vs optional parameters:**
 - Make parameters required only when the tool cannot function without them
 - Use sensible defaults for optional parameters (e.g., head defaults to 100 lines)
-- Use `DependentRequired` for conditional requirements (see `pkg/toolsets/kiali/tools/list_or_get_resources.go`)
+- Use `DependentRequired` for conditional requirements (see `kiali_istio_config` in `charts/dynamic-tools/kiali-mcp-tools/templates/tools.yaml`)
 
 **Parameter naming conventions:**
-- Use `snake_case` for parameter names
+- Use `camelCase` for parameter names (`labelSelector`, `traceId`), the
+  Kubernetes spelling when there is one; never snake_case, never a unit or
+  a type in the name (`lookbackSeconds`, `name_regex`)
 - Use the same name as the upstream CLI flag where possible
 - Common shared parameters: `namespace`, `name`, `container`, `pattern`, `head`, `tail`
 
@@ -219,11 +221,15 @@ See `pkg/api/toolsets.go` for annotation definitions.
 
 ### Tool descriptions
 
-Write descriptions for the LLM, not for humans reading docs:
+Write descriptions for the model, not for humans reading docs, in this
+order: the question the tool answers; when to prefer a sibling; the shape
+of the result; the defaults (see `docs/specs/tools-for-models.md` for the
+house style, which `api.LintTool` checks). The description consumes tokens
+on every call.
 
-- **First sentence**: What the tool does (verb phrase)
-- **Second sentence**: When/why to use it (context)
-- **Keep it concise**: The description consumes tokens on every LLM call
+Every parameter has a description, every fixed set is an `enum`, every
+default is declared, and every tool carries one or two `examples`, the
+first being the common call.
 
 ### Returning results
 

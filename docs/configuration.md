@@ -458,20 +458,13 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset               | Description                                                                                                                                                                                                                             | Default |
-|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
-| core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
-| helm                  | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
-| kcp                   | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
-| kiali                 | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
-| kubevirt              | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
-| netobserv             | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
-| observability/logs    | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
-| observability/metrics | Toolset for querying Prometheus and Alertmanager endpoints in efficient ways.                                                                                                                                                           |         |
-| observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
-| observability/traces  | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
-| tekton                | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
+| Toolset               | Description                                                                                                                                                            | Default |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                | ✓       |
+| core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                    | ✓       |
+| dynamic               | Tools and prompts defined declaratively as Tool and Prompt custom resources (tools.kubernetes-mcp-server.io) installed in the cluster, see docs/specs/dynamic-tools.md |         |
+| helm                  | Tools for managing Helm charts and releases                                                                                                                            |         |
+| observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                             |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -869,13 +862,6 @@ Some toolsets accept additional configuration via the `toolset_configs` map.
 |-------|------|-------------|
 | `toolset_configs` | map | Toolset-specific configuration sections. |
 
-**Example (Kiali):**
-```toml
-[toolset_configs.kiali]
-url = "https://kiali.example.com"
-token = "your-kiali-token"
-```
-
 **Example (Helm):**
 ```toml
 [toolset_configs.helm]
@@ -1026,9 +1012,6 @@ traces_sampler = "traceidratio"
 traces_sampler_arg = 0.1
 
 # Toolset-specific configuration
-[toolset_configs.kiali]
-url = "https://kiali.example.com"
-
 [toolset_configs.helm]
 allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 ```
@@ -1038,6 +1021,6 @@ allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 - [configuration-changes.md](configuration-changes.md) - Versioned configuration migrations
 - [prompts.md](prompts.md) - MCP Prompts configuration
 - [OTEL.md](OTEL.md) - OpenTelemetry observability
-- [KIALI.md](KIALI.md) - Kiali toolset configuration
+- [KIALI.md](KIALI.md) - Kiali tools (delivered as Tool resources)
 - [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) - OAuth/OIDC setup guide
 - [getting-started-kubernetes.md](getting-started-kubernetes.md) - Kubernetes setup guide

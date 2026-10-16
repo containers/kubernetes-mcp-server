@@ -1,4 +1,12 @@
 # Configuration Changes
+- [Ecosystem toolsets as Tool and Prompt resources](#ecosystem-toolsets-as-tool-and-prompt-resources)
+  - [Removed toolsets and configuration keys](#removed-toolsets-and-configuration-keys)
+  - [Installing the replacement charts](#installing-the-replacement-charts)
+  - [Trust model](#trust-model)
+  - [Windows EULA confirmation](#windows-eula-confirmation)
+  - [Tool and prompt differences](#tool-and-prompt-differences)
+  - [Built-in tool changes](#built-in-tool-changes)
+  - [Multi-cluster and reload](#multi-cluster-and-reload)
 - [Unified configuration surface](#unified-configuration-surface)
   - [Dropped CLI flags](#dropped-cli-flags)
   - [Drop-in directory](#drop-in-directory)
@@ -12,6 +20,168 @@
 - [Upgrading from 0.0.66](#upgrading-from-0066)
 
 This document records configuration changes that may require action when upgrading between releases. Add newer release transitions as separate sections so upgrade guidance remains available without cluttering the current [configuration reference](configuration.md).
+
+## Ecosystem toolsets as Tool and Prompt resources
+
+The Kiali, NetObserv, Tekton, KubeVirt, observability and kcp toolsets are no
+longer compiled into the server. The same tools and prompts are delivered as
+cluster-scoped `Tool` and `Prompt` custom resources
+(`tools.kubernetes-mcp-server.io/v1alpha1`), served by the new opt-in
+`dynamic` toolset and packaged as Helm charts under
+[`charts/dynamic-tools`](../charts/dynamic-tools). The model
+is described in [`specs/dynamic-tools.md`](specs/dynamic-tools.md).
+
+The `core`, `config` and `helm` toolsets keep their names, but their tool
+contracts change with the house style; see
+[Built-in tool changes](#built-in-tool-changes).
+
+> **Upgrade note.** Two things change silently for an existing deployment
+> that enabled one of these toolsets: the tools disappear until the
+> matching chart is installed and `dynamic` is enabled (an unknown toolset
+> name fails the configuration load, so the server does say so), and the
+> Windows EULA check is **no longer on by default**; see
+> [Windows EULA confirmation](#windows-eula-confirmation) for the rule that
+> has to be added to the server's configuration.
+
+### Removed toolsets and configuration keys
+
+| Removed | Replacement |
+|---------|-------------|
+| `toolsets = [..., "kiali"]` | `"dynamic"` plus the `kiali-mcp-tools` chart |
+| `toolsets = [..., "netobserv"]` | `"dynamic"` plus the `netobserv-mcp-tools` chart |
+| `toolsets = [..., "tekton"]` | `"dynamic"` plus the `tekton-mcp-tools` chart |
+| `toolsets = [..., "kubevirt"]` | `"dynamic"` plus the `kubevirt-mcp-tools` chart |
+| `toolsets = [..., "observability/logs"]` | `"dynamic"` plus the `loki-mcp-tools` chart |
+| `toolsets = [..., "observability/metrics"]` | `"dynamic"` plus the `prometheus-mcp-tools` chart |
+| `toolsets = [..., "observability/traces"]` | `"dynamic"` plus the `tempo-mcp-tools` chart |
+| `toolsets = [..., "kcp"]` | nothing: `kcp_workspaces_list` was redundant with the kcp provider's `workspace_list`, and `kcp_workspace_describe` is `resources_get` with `apiVersion: tenancy.kcp.io/v1alpha1`, `kind: Workspace` |
+| `[toolset_configs.kiali]` (`url`, `insecure`, `certificate_authority`, ...) | chart values `url`, `insecureSkipTLSVerify`, `certificateAuthority` |
+| `[toolset_configs.netobserv]` (`url`, `namespace`, `service`, `port`, ...) | chart value `url` (the full plugin URL), plus the TLS values above |
+
+A configuration that still names a removed toolset fails validation
+(`invalid toolset name`), and a `toolset_configs.kiali` or
+`toolset_configs.netobserv` table fails the load as an unknown key. Downstream
+builds whose default overrides enable or rebrand these toolsets must switch to
+the charts; the rebranded names become chart values rather than Go overrides.
+
+### Installing the replacement charts
+
+```bash
+# once per cluster
+kubectl apply -f charts/dynamic-tools/crd.yaml
+
+# per project; http-backed charts take the backend URL
+helm upgrade --install kiali-mcp-tools charts/dynamic-tools/kiali-mcp-tools \
+  --set url=https://kiali.istio-system.svc:20001/kiali
+helm upgrade --install netobserv-mcp-tools charts/dynamic-tools/netobserv-mcp-tools \
+  --set url=https://netobserv-plugin.netobserv.svc:9001
+helm upgrade --install tekton-mcp-tools charts/dynamic-tools/tekton-mcp-tools
+helm upgrade --install kubevirt-mcp-tools charts/dynamic-tools/kubevirt-mcp-tools
+```
+
+```toml
+toolsets = ["core", "config", "dynamic"]
+```
+
+The server lists Tool and Prompt resources with **its own** identity, so its
+ServiceAccount needs `get`, `list` and `watch` on `tools`, `prompts` and
+`toolsets` (and, to report each resource's status, `update` on `tools/status`,
+`prompts/status` and `toolsets/status`) in the
+`tools.kubernetes-mcp-server.io` group (the server Helm chart's
+`rbac.dynamicTools: true` renders this ClusterRole). Tool calls run with the
+**caller's** identity, as before. The ported tools follow the house style of
+[`specs/tools-for-models.md`](specs/tools-for-models.md): their names,
+arguments and descriptions changed with it, so `enabled_tools`,
+`tool_overrides` and confirmation rules keyed by a tool name must be
+updated — see [Tool and prompt differences](#tool-and-prompt-differences).
+`require_tls` still refuses plain-HTTP backends at request time.
+
+For `make run-server` based evaluation setups, `make dynamic-tools-install
+DYNAMIC_TOOLS_CHARTS="kiali-mcp-tools ..."` installs the CRDs and charts.
+
+### Trust model
+
+A Tool or Prompt resource is prompt text handed to every agent that connects,
+and an `http` Tool names a URL that receives the caller's bearer token.
+Previously those URLs came only from the server's own configuration. Treat
+the ability to create `tools` and `prompts` resources as cluster-admin level:
+restrict it with RBAC, review charts before installing them, and audit the
+`url` values of installed Tools. The resources are cluster-scoped on purpose
+so that namespace administrators cannot add them.
+
+### Windows EULA confirmation
+
+The compiled-in validator that asked for Microsoft EULA acceptance before a
+`windows-efi-installer` PipelineRun was created has been removed. The same
+check is now a kube-level confirmation rule that inspects the request body,
+using the new `expression` field of `confirmation_rules` (see
+[configuration.md](configuration.md#confirmation-rules)). It is **no longer
+on by default**: add
+[`charts/dynamic-tools/kubevirt-mcp-tools/confirmation-rules.toml`](../charts/dynamic-tools/kubevirt-mcp-tools/confirmation-rules.toml)
+to the server's `--config-dir` wherever the KubeVirt tools are used
+(`make dynamic-tools-install` does this for the eval and development server
+started by `make run-server`). Without it, a `windows-efi-installer`
+PipelineRun created without `acceptEula: "true"` is **not** challenged. The
+`vm-windows-golden-image` prompt still asks for consent through elicitation
+before it renders a PipelineRun with `acceptEula: "true"`.
+
+A rule expression that cannot be evaluated against a request now fails
+closed: confirmation is required, the error is logged and appended to the
+prompt. Guard optional fields with `has()` to keep such requests silent.
+
+### Tool and prompt differences
+
+The ported definitions keep the previous contracts; these are the
+behavioral differences:
+
+| Where | Change |
+|-------|--------|
+| Kiali tools | Renamed to the house style: `kiali_get_mesh_status`→`kiali_mesh`, `kiali_list_mesh_clusters`→`kiali_clusters`, `kiali_get_mesh_traffic_graph`→`kiali_graph`, `kiali_get_resource_details`→`kiali_resources`, `kiali_manage_istio_config_read`→`kiali_istio_config`, `kiali_manage_istio_config`→`kiali_istio_config_write`, `kiali_list_traces`→`kiali_traces`, `kiali_get_trace_details`→`kiali_trace`, `kiali_get_pod_performance`→`kiali_pod_usage`, `kiali_get_logs`→`kiali_logs`, `kiali_get_metrics`→`kiali_metrics`; the prompts carry the `kiali-` prefix. Their RBAC metadata becomes the generic http-action reason (the URL) instead of the per-tool hand-derived requirements. |
+| NetObserv tools | Renamed and reshaped: `netobserv_list_flows`→`netobserv_flows`, `netobserv_get_flow_metrics`→`netobserv_metrics`, `netobserv_export_flows`→`netobserv_export`; the `timeRange` argument (Unix seconds) is `duration` (`5m`), the `filters` array is one `filter` string joined with `&`. |
+| `vm_create` | Removed. The new `vm-create` prompt gathers the DataSources, instancetypes, preferences and templates and asks the model to choose; `vm_create_from_template` is the deterministic alternative. |
+| `vm_lifecycle` | `start`/`stop`/`restart` change `runStrategy` with a merge patch instead of a full-object update. |
+| `vm_troubleshoot` | Includes virt-launcher logs with secrets redacted and redacts cloud-init volumes wholesale; the PVC fallback and cloud-init field analysis are not reproduced. |
+| `vm_screenshot` (formerly `vm_console_screenshot`) | The text description no longer states the image dimensions. |
+| `tekton_start`, `tekton_restart`, `tekton_cancel` | Formerly separate Pipeline and Task tools each; one tool with a `kind` argument now. `tekton_start` no longer checks that the Pipeline or Task exists before creating the run. |
+| `tekton_logs` (formerly `tekton_pipelinerun_logs` and `tekton_taskrun_logs`) | One request per container instead of a stream; empty logs are not skipped; output is one header per container rather than grouped by TaskRun. |
+| `loki_labels` (formerly `loki_label_names` and `loki_label_values`), `tempo_tags`, `prom_labels` | One tool: label or tag names, or the values of the `label`/`tag` given. |
+| `prom_query` | An instant query, or a range query when given a time range (`step` defaults to a sixtieth of it). |
+| `vm-windows-golden-image` prompt | The Tekton Hub catalog name is the upstream default; downstream overrides must edit the chart. |
+| NetObserv tools | Response size is capped at 8 MiB (previously 4 MiB for JSON and 2 MiB for exports, with a truncation note); a larger response is an error rather than a truncated body. |
+
+### Built-in tool changes
+
+The `core`, `config` and `helm` toolsets follow the same house style
+([`specs/tools-for-models.md`](specs/tools-for-models.md)), which breaks
+their previous contracts on purpose:
+
+- `pods_list` takes an optional `namespace` (every namespace when omitted)
+  and `pods_list_in_namespace` is gone.
+- `pods_top` and `helm_list` drop `all_namespaces`: omitting `namespace`
+  means every namespace, as it does on `pods_list`, `events_list` and
+  `resources_list`.
+- Arguments are spelled the same way on every tool: `labelSelector` on
+  `pods_top` and `nodes_top` (was `label_selector`), `tail` on `nodes_log`
+  (was `tailLines`, matching `pods_log`), `source` on `nodes_log` (was
+  `query`, which everywhere else is a query language string), `replicas` on
+  `resources_scale` (was `scale`), `componentType` and `componentName` on
+  the otelcol tools.
+- `otelcol_get_component_schema` and `otelcol_validate_config` declare
+  `componentType` and `format` as enums instead of listing the values in
+  prose.
+- One target list tool for every cluster provider: `<target>_list`
+  (`context_list` for a kubeconfig, `cluster_list` for ACM) lists the
+  targets with the default marked and, when the provider knows it, the
+  server each points at; `configuration_contexts_list` is gone. The target
+  argument the server adds to every tool says where the names come from.
+
+### Multi-cluster and reload
+
+Tool and Prompt resources are read from the default target only; in
+multi-cluster mode they are exposed for every target. Changes to the
+resources are picked up within the toolset's poll interval (15 seconds) and
+announced through `tools/list_changed`, whether the `dynamic` toolset was
+enabled at startup or by a later configuration reload.
 
 ## Unified configuration surface
 

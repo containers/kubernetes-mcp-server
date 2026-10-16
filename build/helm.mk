@@ -39,6 +39,17 @@ helm-docs: helm-docs-install ## Generate Helm chart documentation using helm-doc
 helm-lint: helm ## Lint the Helm chart
 	$(HELM) lint $(HELM_CHART_DIR)
 
+# The trailing-slash wildcard matches directories only, skipping the CRD,
+# the README and the hand-written tools that live next to the charts.
+DYNAMIC_TOOLS_CHART_DIRS = $(wildcard charts/dynamic-tools/*/)
+
+.PHONY: dynamic-tools-lint
+dynamic-tools-lint: helm ## Lint every dynamic-tools chart under charts/dynamic-tools
+	@for chart in $(DYNAMIC_TOOLS_CHART_DIRS); do \
+		echo "Linting $$chart"; \
+		$(HELM) lint "$$chart" --set url=https://example.invalid --set alertmanagerUrl=https://example.invalid || exit 1; \
+	done
+
 .PHONY: helm-template
 helm-template: helm ## Render Helm chart templates (dry run)
 	$(HELM) template test-release $(HELM_CHART_DIR) --set ingress.host=localhost --debug

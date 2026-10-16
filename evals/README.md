@@ -70,8 +70,10 @@ export KUBECONFIG="$PWD/_output/kubeconfig"
 #    via virt-operator, so instancetype tasks work without a separate step.
 make kubevirt-install
 
-# 4. Start the MCP server with the toolsets the suite needs
-make run-server TOOLSETS=core,config,kubevirt
+# 4. Install the KubeVirt (and Tekton) tools as Tool/Prompt resources, then start
+#    the MCP server with the dynamic toolset
+make dynamic-tools-install DYNAMIC_TOOLS_CHARTS="kubevirt-mcp-tools tekton-mcp-tools"
+make run-server TOOLSETS=core,config,dynamic
 
 # 5. Run the suite. AGENT selects the agent, SUITE selects the tasks, MODEL sets
 #    ANTHROPIC_MODEL for ACP agents. Add EVAL_TASK_FILTER=<name> to run one task.
