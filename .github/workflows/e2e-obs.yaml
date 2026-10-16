@@ -1,0 +1,81 @@
+name: E2E Obs Toolset Tests
+
+on:
+  pull_request:
+    branches: ['main']
+    paths:
+      # Obs toolsets and library
+      - 'pkg/toolsets/metrics/**'
+      - 'pkg/toolsets/logs/**'
+      - 'pkg/toolsets/traces/**'
+      - 'pkg/toolsets/otelcol/**'
+      - 'pkg/obs/**'
+      # Obs e2e fixtures and helpers
+      - 'test/e2e/obs_*'
+      - 'test/e2e/manifests/obs/**'
+      - 'hack/e2e/obs/**'
+      - 'build/obs.mk'
+      - '.github/workflows/e2e-obs.yaml'
+      # Shared e2e / deploy surface the obs tests depend on
+      - 'test/e2e/helpers_test.go'
+      - 'charts/kubernetes-mcp-server/**'
+      - 'pkg/mcp/**'
+      - 'pkg/config/**'
+      - 'pkg/kubernetes/**'
+      - 'cmd/kubernetes-mcp-server/**'
+      - 'build/e2e.mk'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  e2e-obs:
+    name: Run Obs Toolset E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup e2e environment with obs stacks
+        run: make e2e-setup-obs
+
+      - name: Run e2e tests
+        # Match TestObsMetricsTools / TestObsLogsTools / … but not TestObservability*
+        run: make e2e-test E2E_ARGS="-run '^TestObs[A-Z]'"
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Pod status ==="
+          kubectl --kubeconfig _output/kubeconfig get pods -A
+          echo "=== Prometheus logs ==="
+          kubectl --kubeconfig _output/kubeconfig logs -n monitoring -l app.kubernetes.io/name=prometheus --tail=50 || true
+          echo "=== Tempo operator logs ==="
+          kubectl --kubeconfig _output/kubeconfig logs -n tempo-operator-system -l app.kubernetes.io/name=tempo-operator --tail=50 || true
+          echo "=== Loki operator logs ==="
+          kubectl --kubeconfig _output/kubeconfig logs -n loki-operator -l app.kubernetes.io/name=loki-operator --tail=50 || true
+          echo "=== Events (tracing) ==="
+          kubectl --kubeconfig _output/kubeconfig get events -n tracing --sort-by='.lastTimestamp' || true
+          echo "=== Events (obs-loki) ==="
+          kubectl --kubeconfig _output/kubeconfig get events -n obs-loki --sort-by='.lastTimestamp' || true
+
+      - name: Cleanup
+        if: always()
+        run: make e2e-teardown

@@ -1,6 +1,6 @@
 // Package toolcfg resolves per-toolset ExtendedConfig for tool handlers.
 //
-// Standalone obs-mcp injects configs via context; embedders rely on
+// Configs can be injected via context or resolved from
 // params.Config populated from TOML.
 package toolcfg
 

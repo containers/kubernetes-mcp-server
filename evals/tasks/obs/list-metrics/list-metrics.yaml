@@ -1,0 +1,22 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "list-kube-metrics"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: metrics
+    suite: obs
+    requires: obs
+    toolType: discovery
+  description: |
+    Tests if the agent can discover the list_metrics tool to find Kubernetes-related
+    metrics. The agent should use the name_regex parameter to filter for kube metrics.
+spec:
+  verify:
+    - llmJudge:
+        contains: "kube_pod_info"
+  prompt:
+    inline: |
+      List all available Prometheus metrics that contain 'kube' in the name.

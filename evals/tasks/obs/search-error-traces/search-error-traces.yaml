@@ -1,0 +1,22 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: search-error-traces
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: traces
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent can discover Tempo instances and search for
+    traces with errors using TraceQL.
+spec:
+  prompt:
+    inline: |
+      Find traces with errors in the last hour. Use instance tempo1.
+  verify:
+    - llmJudge:
+        contains: "status=error"
