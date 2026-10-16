@@ -1,0 +1,252 @@
+# Tool resources of the NetObserv chart: the console plugin API, in the house style of docs/specs/tools-for-models.md.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: netobserv-flows
+spec:
+  toolset: netobserv
+  title: 'NetObserv: Flows'
+  description: >-
+    List individual network flow records: who talked to whom, on which ports and protocol, how many bytes and packets, and the drops and DNS details when enabled. Scope it with namespace or filter and a short window first. Defaults to the last 5 minutes and 100 records.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      namespace:
+        type: string
+        description: >-
+          Only flows whose source or destination namespace is this one.
+      filter:
+        type: string
+        description: >-
+          NetObserv filter expression, e.g. 'SrcK8S_Namespace=default&Proto=6' or 'SrcK8S_Name=pod-a|SrcK8S_Name=pod-b'; the syntax and the field names are in the netobserv instructions.
+      packetLoss:
+        type: string
+        enum: ["all", "dropped", "hasDrops", "sent"]
+        default: all
+        description: >-
+          Only flows with this packet loss state.
+      recordType:
+        type: string
+        enum: ["flowLog", "allConnections", "newConnection", "heartbeat", "endConnection"]
+        default: flowLog
+        description: >-
+          Kind of flow record.
+      limit:
+        type: integer
+        default: 100
+        description: >-
+          Maximum number of records.
+      start:
+        type: string
+      end:
+        type: string
+      duration:
+        type: string
+        default: 5m
+  examples:
+    - summary: "Dropped flows of a namespace in the last 5 minutes"
+      arguments: {"namespace": "payments", "packetLoss": "dropped", "duration": "5m", "limit": 50}
+  http:
+    {{- include "netobserv.http" . | nindent 4 }}
+    path: /api/loki/flow/records
+    headers: {X-Kubernetes-MCP-Server: "true"}
+    queryExpression: >-
+      {'startTime': (has(args.start) && args.start != '') ? time(args.start) : ((has(args.end) && args.end != '') ? time(args.end) : int(now)) - ((has(args.duration) && args.duration != '') ? seconds(args.duration) : 300), 'endTime': (has(args.end) && args.end != '') ? time(args.end) : int(now)}
+    query:
+      filters: {argument: filter}
+      namespace: {argument: namespace}
+      packetLoss: {argument: packetLoss}
+      recordType: {argument: recordType}
+      limit: {argument: limit}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: netobserv-metrics
+spec:
+  toolset: netobserv
+  title: 'NetObserv: Metrics'
+  description: >-
+    Aggregate the flows over time: bytes, packets, flow counts, drops, DNS latency or RTT, grouped by a topology scope (namespace, owner, host, ...) or by one flow field (TLS version, DNS response code, ...). Use it for throughput, breakdown charts and traffic analysis; netobserv_flows is for individual records.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      aggregateBy:
+        type: string
+        enum: ["app", "namespace", "owner", "resource", "host", "zone", "cluster", "network", "TLSVersion", "TLSCipherSuite", "TLSGroup", "TLSTypes", "DnsName", "DnsFlagsResponseCode", "DnsErrno", "PktDropLatestState", "PktDropLatestDropCause", "Proto", "SrcPort", "DstPort", "FlowDirection", "Dscp", "SrcK8S_Namespace", "DstK8S_Namespace", "SrcK8S_Name", "DstK8S_Name", "SrcK8S_Type", "DstK8S_Type", "SrcK8S_OwnerName", "DstK8S_OwnerName", "SrcK8S_HostName", "DstK8S_HostName", "SrcK8S_Zone", "DstK8S_Zone", "K8S_ClusterName", "SrcK8S_NetworkName", "DstK8S_NetworkName"]
+        default: namespace
+        description: >-
+          The dimension to group by: a topology scope (app, namespace, owner, resource, host, zone, cluster, network) or one flow field (PascalCase, as in filter).
+      type:
+        type: string
+        enum: ["Flows", "Bytes", "Packets", "PktDropBytes", "PktDropPackets", "DnsLatencyMs", "DnsFlows", "TimeFlowRttNs"]
+        default: Bytes
+        description: >-
+          What to aggregate.
+      function:
+        type: string
+        enum: ["count", "sum", "avg", "min", "max", "p90", "p99", "rate"]
+        default: rate
+        description: >-
+          How to aggregate it.
+      groups:
+        type: string
+        description: >-
+          Parent scopes to break a topology scope down by, e.g. 'clusters', 'zones+hosts', 'namespaces+owners'. Ignored for a flow field.
+      dataSource:
+        type: string
+        enum: ["auto", "prom", "loki"]
+        default: auto
+        description: >-
+          Metrics backend: auto prefers Prometheus and falls back to Loki.
+      rateInterval:
+        type: string
+        default: 1m
+        description: >-
+          Prometheus rate interval, e.g. '1m', '5m'.
+      step:
+        type: string
+        default: 30s
+        description: >-
+          Resolution of the series, e.g. '30s', '1m'.
+      namespace:
+        type: string
+        description: >-
+          Only flows whose source or destination namespace is this one.
+      filter:
+        type: string
+        description: >-
+          NetObserv filter expression, e.g. 'SrcK8S_Namespace=default&Proto=6' or 'SrcK8S_Name=pod-a|SrcK8S_Name=pod-b'; the syntax and the field names are in the netobserv instructions.
+      packetLoss:
+        type: string
+        enum: ["all", "dropped", "hasDrops", "sent"]
+        default: all
+        description: >-
+          Only flows with this packet loss state.
+      recordType:
+        type: string
+        enum: ["flowLog", "allConnections", "newConnection", "heartbeat", "endConnection"]
+        default: flowLog
+        description: >-
+          Kind of flow record.
+      limit:
+        type: integer
+        default: 100
+        description: >-
+          Maximum number of records.
+      start:
+        type: string
+      end:
+        type: string
+      duration:
+        type: string
+        default: 5m
+  examples:
+    - summary: "Bytes per namespace over the last 5 minutes"
+      arguments: {"aggregateBy": "namespace", "type": "Bytes", "function": "rate", "duration": "5m"}
+    - summary: "Traffic by TLS version"
+      arguments: {"aggregateBy": "TLSVersion", "type": "Bytes", "function": "rate", "filter": "TLSTypes!~\"\""}
+  http:
+    {{- include "netobserv.http" . | nindent 4 }}
+    path: /api/flow/metrics
+    headers: {X-Kubernetes-MCP-Server: "true"}
+    queryExpression: >-
+      {'startTime': (has(args.start) && args.start != '') ? time(args.start) : ((has(args.end) && args.end != '') ? time(args.end) : int(now)) - ((has(args.duration) && args.duration != '') ? seconds(args.duration) : 300), 'endTime': (has(args.end) && args.end != '') ? time(args.end) : int(now)}
+    query:
+      filters: {argument: filter}
+      namespace: {argument: namespace}
+      packetLoss: {argument: packetLoss}
+      recordType: {argument: recordType}
+      limit: {argument: limit}
+      aggregateBy: {argument: aggregateBy}
+      type: {argument: type}
+      function: {argument: function}
+      groups: {argument: groups}
+      dataSource: {argument: dataSource}
+      rateInterval: {argument: rateInterval}
+      step: {argument: step}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: netobserv-export
+spec:
+  toolset: netobserv
+  title: 'NetObserv: Export'
+  description: >-
+    Export flow records as CSV, with the same scoping as netobserv_flows, for a file the user asked for or for offline analysis. columns picks the fields; the default is every field present.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      columns:
+        type: string
+        description: >-
+          Comma-separated columns to include, e.g. 'SrcK8S_Namespace,DstK8S_Namespace,Bytes'. Omit it for every column.
+      format:
+        type: string
+        enum: ["csv"]
+        default: csv
+        description: >-
+          Export format.
+      namespace:
+        type: string
+        description: >-
+          Only flows whose source or destination namespace is this one.
+      filter:
+        type: string
+        description: >-
+          NetObserv filter expression, e.g. 'SrcK8S_Namespace=default&Proto=6' or 'SrcK8S_Name=pod-a|SrcK8S_Name=pod-b'; the syntax and the field names are in the netobserv instructions.
+      packetLoss:
+        type: string
+        enum: ["all", "dropped", "hasDrops", "sent"]
+        default: all
+        description: >-
+          Only flows with this packet loss state.
+      recordType:
+        type: string
+        enum: ["flowLog", "allConnections", "newConnection", "heartbeat", "endConnection"]
+        default: flowLog
+        description: >-
+          Kind of flow record.
+      limit:
+        type: integer
+        default: 100
+        description: >-
+          Maximum number of records.
+      start:
+        type: string
+      end:
+        type: string
+      duration:
+        type: string
+        default: 5m
+  examples:
+    - summary: "CSV of a namespace's flows with three columns"
+      arguments: {"namespace": "payments", "columns": "SrcK8S_Namespace,DstK8S_Namespace,Bytes", "limit": 100}
+  http:
+    {{- include "netobserv.http" . | nindent 4 }}
+    path: /api/loki/export
+    headers: {Accept: "text/csv,*/*", X-Kubernetes-MCP-Server: "true"}
+    queryExpression: >-
+      {'startTime': (has(args.start) && args.start != '') ? time(args.start) : ((has(args.end) && args.end != '') ? time(args.end) : int(now)) - ((has(args.duration) && args.duration != '') ? seconds(args.duration) : 300), 'endTime': (has(args.end) && args.end != '') ? time(args.end) : int(now)}
+    query:
+      filters: {argument: filter}
+      namespace: {argument: namespace}
+      packetLoss: {argument: packetLoss}
+      recordType: {argument: recordType}
+      limit: {argument: limit}
+      columns: {argument: columns}
+      format: {argument: format}

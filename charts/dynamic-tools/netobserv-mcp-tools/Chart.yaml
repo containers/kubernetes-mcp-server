@@ -1,0 +1,9 @@
+apiVersion: v2
+name: netobserv-mcp-tools
+description: >-
+  The kubernetes-mcp-server NetObserv toolset delivered as Tool custom
+  resources, versioned and released independently of the server.
+type: application
+version: 0.1.0
+appVersion: "1.9"
+keywords: [netobserv, network-observability, mcp, kubernetes-mcp-server]

@@ -9,7 +9,6 @@ import (
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/logs"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/metrics"
-	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/otelcol"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 	_ "github.com/containers/kubernetes-mcp-server/pkg/toolsets/traces"

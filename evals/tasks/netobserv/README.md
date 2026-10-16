@@ -1,6 +1,6 @@
 # NetObserv evaluation tasks
 
-These tasks exercise the **netobserv** MCP toolset (`netobserv_list_flows`, `netobserv_get_flow_metrics`, `netobserv_export_flows`) against the NetObserv console plugin HTTP API (Loki flow records, Prometheus metrics, CSV export).
+These tasks exercise the **netobserv** MCP toolset (`netobserv_flows`, `netobserv_metrics`, `netobserv_export`) against the NetObserv console plugin HTTP API (Loki flow records, Prometheus metrics, CSV export).
 
 ## Eval-first methodology
 
@@ -42,18 +42,17 @@ make run-netobserv-evals
 ```bash
 make minikube-create-cluster
 make setup-netobserv          # deploy mock + port-forward :9001
-make run-server TOOLSETS=core,netobserv MCP_CONFIG_DIR=dev/config/mcp-configs
+make dynamic-tools-install DYNAMIC_TOOLS_CHARTS=netobserv-mcp-tools
+make run-server TOOLSETS=core,config,dynamic MCP_CONFIG_DIR=dev/config/mcp-configs
 make run-evals EVAL_LABEL_SELECTOR=suite=netobserv
 make stop-server stop-netobserv teardown-netobserv
 ```
 
-Ensure `dev/config/mcp-configs/netobserv.toml` points at the port-forward:
-
-```toml
-[toolset_configs.netobserv]
-url = "http://127.0.0.1:9001"
-insecure = true
-```
+The NetObserv tools are Tool resources installed from the `netobserv-mcp-tools`
+chart; `make dynamic-tools-install DYNAMIC_TOOLS_CHARTS=netobserv-mcp-tools`
+installs them pointing at the port-forward (`url=http://127.0.0.1:9001` by
+default, override with `DYNAMIC_TOOLS_VALUES_netobserv_mcp_tools`), and the
+server runs with `TOOLSETS=core,config,dynamic`.
 
 ### Pass rate target
 
@@ -83,10 +82,10 @@ LLM judge strings in tasks assume the **mock** responses (`netobserv-eval`, `eva
 
 | Task | Tool exercised | Mock expectation |
 |------|----------------|------------------|
-| list-flows | `netobserv_list_flows` | includes `eval-flow-1` |
-| get-flow-metrics | `netobserv_get_flow_metrics` | status `success` |
-| export-flows | `netobserv_export_flows` | CSV header `TimeFlowStartMs` |
-| tls-breakdown | `netobserv_get_flow_metrics` | includes `TLS 1.3` |
+| list-flows | `netobserv_flows` | includes `eval-flow-1` |
+| get-flow-metrics | `netobserv_metrics` | status `success` |
+| export-flows | `netobserv_export` | CSV header `TimeFlowStartMs` |
+| tls-breakdown | `netobserv_metrics` | includes `TLS 1.3` |
 
 ## Maintainer trigger
 

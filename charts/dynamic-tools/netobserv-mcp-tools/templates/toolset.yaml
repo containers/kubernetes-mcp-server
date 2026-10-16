@@ -1,0 +1,39 @@
+# The ToolSet resource of the netobserv-mcp-tools chart: the family operators enable as
+# "dynamic/netobserv", the prefix of every tool, and the instructions the
+# server contributes to its MCP instructions (see docs/specs/tools-for-models.md).
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: ToolSet
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: netobserv
+spec:
+  description: Network flows and metrics through the NetObserv console plugin API
+  prefix: netobserv
+  instructions: |
+    NetObserv tools query the network flows recorded by the NetObserv
+    operator. Scope every query with namespace or filter and a short window
+    first, then widen: unfiltered listings are large. netobserv_flows lists
+    individual records, netobserv_metrics aggregates them over time, and
+    netobserv_export is only for a file the user asks for.
+
+    The filter expression: key=value matches exactly, key=a,b matches any of
+    the values, key~pattern is a regex (key!~pattern its negation),
+    key!=value excludes, key>number compares; & joins conditions, | joins
+    alternatives, e.g. SrcK8S_Namespace=default&Proto=6 or
+    SrcK8S_Name=pod-a|SrcK8S_Name=pod-b. Fields (Src and Dst mirror each
+    other): SrcK8S_Namespace, SrcK8S_Name, SrcK8S_Type (Pod, Service, Node),
+    SrcK8S_OwnerName, SrcK8S_OwnerType, SrcK8S_HostName, SrcK8S_Zone,
+    K8S_ClusterName; SrcAddr, SrcPort, Proto (IANA number: 6 TCP, 17 UDP),
+    FlowDirection (0 ingress, 1 egress, 2 inner), Bytes, Packets, Dscp,
+    Flags; PktDropPackets, PktDropBytes, PktDropLatestState,
+    PktDropLatestDropCause; DnsName, DnsId, DnsLatencyMs, DnsErrno,
+    DnsFlagsResponseCode; TLSVersion, TLSCipherSuite, TLSGroup, TLSTypes.
+    Discover values with the Kubernetes list tools.
+
+    netobserv_metrics pairs aggregateBy with type and function: throughput
+    is Bytes or Packets with rate; flow counts are Flows with count or
+    rate; DNS volume is DnsFlows with count and DNS latency DnsLatencyMs
+    with avg, p90 or max; RTT is TimeFlowRttNs with avg, min or p90; drops
+    are PktDropPackets or PktDropBytes with rate, usually with
+    packetLoss=dropped.
