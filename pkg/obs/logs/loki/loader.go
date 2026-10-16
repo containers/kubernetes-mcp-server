@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 const (
@@ -220,7 +220,7 @@ func (l *RealLoader) getJSON(ctx context.Context, endpoint string, params url.Va
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	slog.Debug("Backend call completed",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed",
 		"backend", "loki",
 		"endpoint", endpoint,
 		"status_code", resp.StatusCode,
