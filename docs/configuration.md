@@ -191,7 +191,7 @@ SIGHUP is not available on Windows; restart the process.
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
-| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, OAuth, token exchange, well-known metadata). |
+| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata). |
 | `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Overridden by `TLS_CIPHER_SUITES` (comma-separated) when that env var is non-empty. Applies to inbound HTTPS and outbound clients. |
 
 The Streamable HTTP handler (go-sdk) rejects requests accepted on a loopback address (`127.0.0.1`, `::1`) when `Host` is not localhost. That blocks browser DNS rebinding against a local MCP server. It also 403s the usual in-pod sidecar pattern: kube-rbac-proxy `--upstream=http://127.0.0.1:8080/` keeps `Host: <service>:<port>`. Set `disable_localhost_protection = true` in that case.
@@ -235,14 +235,14 @@ tls_cipher_suites = [
 
 `TLS_MIN_VERSION` and `TLS_CIPHER_SUITES` configure TLS for **both** inbound and outbound connections. They are applied at load time (startup and SIGHUP) and override the corresponding TOML values when set:
 
-| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, OAuth, token exchange, well-known metadata) |
+| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata) |
 |---------|----------------------|-------------------------------------------------------------------------|
 | `tls_min_version` / `tls_cipher_suites` (TOML) | ✅ | ✅ |
 | `TLS_MIN_VERSION` / `TLS_CIPHER_SUITES` (env) | ✅ overrides TOML | ✅ overrides TOML |
 
 When neither TOML nor env is set, both inbound and outbound default to TLS 1.2 with Go's default cipher suites.
 
-Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali and NetObserv re-read TLS settings on each tool invocation.
+Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali, NetObserv, and observability backends re-read TLS settings on each tool invocation. Observability backends verify certificates and hostnames against the system trust store and the CA from the Kubernetes REST config (CA data or CA file, or the mounted service CA when neither is set); setting an observability toolset's `insecure = true` is rejected.
 
 ```bash
 # Example: Enforce TLS 1.3 minimum version (inbound + outbound)
